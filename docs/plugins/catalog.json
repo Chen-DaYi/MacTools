@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-07-03T15:09:14Z",
-  "minimumHostVersion": "1.0.27",
+  "generatedAt": "2026-07-05T16:02:06Z",
+  "minimumHostVersion": "1.0.28",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -401,16 +401,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "54e25eafdf124aa69ea4620d518d6ce1d02db1356cf2f748ee0105de62abc3d2",
-        "size": 286408,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/battery-charge-limit.mactoolsplugin.zip"
+        "sha256": "b48c180ba0e3ddb9064059a13bd3e52ed7b3560b7a0c6e6844d33d47fd98af6b",
+        "size": 288411,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/battery-charge-limit.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
       "summary": "设置电池充电上限，达到上限后停止充电；不自动恢复，由用户决定何时继续充电",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -608,16 +608,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "c5668bd0905cd1907e3098699438bc9e463b5342fa5f077a3b714261c264ac7d",
-        "size": 727502,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/device-battery.mactoolsplugin.zip"
+        "sha256": "a3e106cb313a52ce931f3e73f1c968db9cc7b42520fb9ad98f1c55b250214cf1",
+        "size": 728017,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/device-battery.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
       "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量",
-      "version": "1.0.5"
+      "version": "1.0.6"
     },
     {
       "capabilities": {
@@ -1084,16 +1084,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "06aa84f025c52e181798885842db3378640ae9b25cdd802c926f4cfd2aa16da9",
-        "size": 82338,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/empty-trash.mactoolsplugin.zip"
+        "sha256": "cb4fdbf6a4e08c11d4ca7fdaa60785a7bbd8421bf7d6283f464ef4d0c5c66550",
+        "size": 84895,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/empty-trash.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
       "summary": "清空废纸篓中的所有项目",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -1152,16 +1152,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "63df3bd0b25dcffd65a0e0f1fb041108f70cc5c0a1459672c65209a3bd88279d",
-        "size": 365981,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/fan-control.mactoolsplugin.zip"
+        "sha256": "2348c0856f28dd229989e5cdd64d3646797fad9edde178ebcd40410faa3b1ebe",
+        "size": 367287,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/fan-control.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
       "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -1696,9 +1696,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "74ac32cc24a01ded8b7ed44b7a313cae17617fdb2ea3d5d5bc04c0ab58517018",
-        "size": 822043,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/menu-bar-hidden.mactoolsplugin.zip"
+        "sha256": "c77e5ced10b1f69781064ce32117defbbec1f6d7030ca82bbbd8ea19bd211c82",
+        "size": 822879,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/menu-bar-hidden.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1706,9 +1706,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
       "summary": "菜单栏图标隐藏功能的设置与弹窗界面",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -1803,9 +1803,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "1b1c512a97b95617d3c7fc4e8839a72297f18ff3e281d5d99ead67bf1c4d3a58",
-        "size": 204210,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.29/mouse-enhancer.mactoolsplugin.zip"
+        "sha256": "6336d59105c43042b99ce4122a0145687dabca91895d602a4a611cfa6b43d7e3",
+        "size": 209747,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/mouse-enhancer.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1813,9 +1813,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.29",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
       "summary": "增强鼠标与触控板控制",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "capabilities": {
@@ -2284,16 +2284,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "3d7bb42200f3c82291b5d06e44a79e7535756c5538143f76b6de6e5375f4525f",
-        "size": 518220,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/system-status.mactoolsplugin.zip"
+        "sha256": "7b1bb470bfd96bda0bb9c88feb92908851f76967e4276acc1e17f4999d7050d3",
+        "size": 518153,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
       "summary": "实时查看系统状态",
-      "version": "1.0.10"
+      "version": "1.0.11"
     },
     {
       "capabilities": {
@@ -2508,6 +2508,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "8IGpzaPbd/Kot1sJxQAfzR4rv5M/Ic6QHBK2DvQkiaRc7na1E18ykudHttyfeNps1xEliNmwHVlQTNXD6WrxCA=="
+    "value": "xyJG2pIWmigue6n3ls1SrAqzQFYk6pSyA+SvUlOPvKQrekPoWZTfwfzCuWDoWoplmoj0aVq92Ya6AZ6P7ppACw=="
   }
 }
