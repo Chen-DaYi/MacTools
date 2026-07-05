@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [plugins-1.0.30] - 2026-07-05
+
+### Changed
+
+- Stop Battery Charge Limit background monitoring while the charging limit is disabled.
+- Pause Menu Bar Hidden background observers when the feature is hidden or not actively in use.
+- Reduce System Status background sampling to lower idle energy use while keeping foreground updates responsive.
+
+### Fixed
+
+- Prevent repeated low-battery notifications when device battery readings switch sources or briefly disappear.
+- Refresh Empty Trash availability when opening the feature panel.
+- Fixed Mouse Enhancer settings switches rendering incorrectly on first open.
+- Avoid administrator password prompts on quit when Fan Control or Battery Charge Limit did not apply SMC changes.
+
 ## [v1.0.28] - 2026-07-03
 
 ### Fixed
