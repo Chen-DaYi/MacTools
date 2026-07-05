@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.0.29] - 2026-07-05
+
+### Fixed
+
+- Kept panel position stable and feature panel height accurate as controls expand.
+
 ## [plugins-1.0.30] - 2026-07-05
 
 ### Changed
