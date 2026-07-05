@@ -5,21 +5,17 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.28</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.28</link>
-            <sparkle:version>58</sparkle:version>
-            <sparkle:shortVersionString>1.0.28</sparkle:shortVersionString>
+            <title>Version 1.0.29</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.29</link>
+            <sparkle:version>59</sparkle:version>
+            <sparkle:shortVersionString>1.0.29</sparkle:shortVersionString>
             <description sparkle:format="markdown"><![CDATA[### Fixed
 
-- Finder right-click menu items now stay hidden while the Right Click plugin is disabled.
-
-### Maintenance
-
-- App release notes now come from concise changelog fragments that are compiled into CHANGELOG.md during release.
+- Kept panel position stable and feature panel height accurate as controls expand.
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Fri, 03 Jul 2026 15:14:32 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.28/MacTools.dmg" length="6550623" type="application/octet-stream" sparkle:edSignature="4YJUvzctTvluCZNydN3FqN03FU9SgQIAfoexD7re8LvU4GDqU3tn5jovYbbTwPB+kfwO0QTZrTcQc0IWSkbUAw==" />
+            <pubDate>Sun, 05 Jul 2026 16:05:07 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.29/MacTools.dmg" length="6554059" type="application/octet-stream" sparkle:edSignature="Z80Rjn6ABvgqak2Z7sAJQbJl58N1atds8OJtl0/8Cq2PQc92ES+aqO/n/ddeovIXKQZ+HJ6jVgZD7xgBsAteCQ==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
