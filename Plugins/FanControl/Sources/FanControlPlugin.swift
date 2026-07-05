@@ -59,6 +59,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var isExpanded = false
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
+    private var requiresAutoRestore = false
     private var monitoringTask: Task<Void, Never>?
     private var sleepObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
@@ -105,9 +106,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         unregisterSleepWakeObservers()
         stopMonitoring()
         if reason.requiresStateCleanup {
-            let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
-            smcWriter.apply(strategy: .auto, snapshot: snapshot)
-            FanControlLog.plugin.info("Deactivated (\(String(describing: reason), privacy: .public)) — restored fan control to auto")
+            restoreAutomaticControlIfNeeded(reason: String(describing: reason))
         }
     }
 
@@ -212,6 +211,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let preset = presetStore.activePreset
         let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
         let result = smcWriter.apply(strategy: preset.strategy, snapshot: snapshot)
+        updateAutoRestoreRequirement(afterApplying: preset.strategy, result: result)
         if let err = result {
             lastErrorMessage = err.localizedDescription(localization: localization)
             FanControlLog.plugin.error("Apply preset failed: \(err.localizedDescription, privacy: .public)")
@@ -268,9 +268,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private func handleSystemWillSleep() {
         let preset = presetStore.activePreset
         guard case .auto = preset.strategy else {
-            let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
-            smcWriter.apply(strategy: .auto, snapshot: snapshot)
-            FanControlLog.plugin.info("System will sleep — restored fan control to auto")
+            restoreAutomaticControlIfNeeded(reason: "system sleep")
             return
         }
     }
@@ -415,5 +413,50 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case .fixed(let rpm):
             return "\(rpm) RPM"
         }
+    }
+
+    private func updateAutoRestoreRequirement(afterApplying strategy: FanControlStrategy, result: FanWriteError?) {
+        switch strategy {
+        case .auto:
+            if result == nil {
+                requiresAutoRestore = false
+            }
+        case .fullSpeed, .fixed:
+            if result == nil || result?.mayHaveChangedFanState == true {
+                requiresAutoRestore = true
+            }
+        }
+    }
+
+    private func restoreAutomaticControlIfNeeded(reason: String) {
+        guard requiresAutoRestore else {
+            FanControlLog.plugin.info("Skipped fan auto restore for \(reason, privacy: .public); no successful manual fan write in this session")
+            return
+        }
+
+        guard smcWriter.isInstalledHelperAvailable else {
+            FanControlLog.plugin.info("Skipped fan auto restore for \(reason, privacy: .public); SMC helper is not installed")
+            return
+        }
+
+        let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
+        let result = smcWriter.apply(strategy: .auto, snapshot: snapshot)
+        updateAutoRestoreRequirement(afterApplying: .auto, result: result)
+
+        if let result {
+            FanControlLog.plugin.error("Failed to restore fan control to auto for \(reason, privacy: .public): \(result.localizedDescription, privacy: .public)")
+        } else {
+            FanControlLog.plugin.info("Restored fan control to auto for \(reason, privacy: .public)")
+        }
+    }
+}
+
+private extension FanWriteError {
+    var mayHaveChangedFanState: Bool {
+        if case .writeFailed = self {
+            return true
+        }
+
+        return false
     }
 }

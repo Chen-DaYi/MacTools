@@ -28,6 +28,14 @@ final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
 
     var isHelperAvailable: Bool { bundledHelperURL != nil }
 
+    var isInstalledHelperAvailable: Bool {
+        guard let bundledHelperURL else {
+            return false
+        }
+
+        return installedHelperPath(matching: bundledHelperURL) != nil
+    }
+
     func probeCapabilities() -> BatterySMCCapabilities {
         if let cached = cachedCapabilities { return cached }
 

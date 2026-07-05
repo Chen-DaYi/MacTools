@@ -126,6 +126,7 @@ protocol FanControlSMCReading: AnyObject {
 
 protocol FanControlSMCWriting: AnyObject {
     @MainActor var isHelperAvailable: Bool { get }
+    @MainActor var isInstalledHelperAvailable: Bool { get }
     @MainActor @discardableResult
     func apply(strategy: FanControlStrategy, snapshot: FanSnapshot) -> FanWriteError?
 }

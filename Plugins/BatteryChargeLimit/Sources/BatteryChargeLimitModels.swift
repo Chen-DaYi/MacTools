@@ -175,6 +175,7 @@ protocol BatteryChargeLimitReading: AnyObject {
 
 protocol BatteryChargeLimitWriting: AnyObject {
     @MainActor var isHelperAvailable: Bool { get }
+    @MainActor var isInstalledHelperAvailable: Bool { get }
     @MainActor func probeCapabilities() -> BatterySMCCapabilities
     @MainActor @discardableResult func inhibitCharging(limitPercent: Int) -> BatteryChargeWriteError?
     @MainActor @discardableResult func resumeCharging() -> BatteryChargeWriteError?

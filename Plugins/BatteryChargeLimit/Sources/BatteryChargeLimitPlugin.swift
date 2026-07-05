@@ -66,6 +66,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var batterySnapshot: BatterySnapshot = .empty
     private var capabilities: BatterySMCCapabilities = .none
     private var lastErrorMessage: String?
+    private var requiresSMCCleanup = false
     private var monitoringTask: Task<Void, Never>?
     private var sleepObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
@@ -112,11 +113,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func deactivate(reason: PluginDeactivationReason) {
         stopActiveMonitoring()
         if reason.requiresStateCleanup {
-            // Restore unrestricted charging so the user isn't left with the
-            // SMC stuck in inhibit after disabling/uninstalling the plugin.
-            _ = writer.resumeCharging()
-            _ = writer.setForceDischarge(false)
-            BatteryChargeLimitLog.plugin.info("Deactivated (\(String(describing: reason), privacy: .public)) — cleared SMC charge inhibit")
+            restoreUnrestrictedChargingIfNeeded(reason: String(describing: reason), requireInstalledHelper: true)
         }
     }
 
@@ -204,8 +201,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             applyCurrentMode(reason: "user-enable")
         } else {
             store.setMode(.holdAtLimit)
-            _ = writer.setForceDischarge(false)
-            _ = writer.resumeCharging()
+            _ = restoreUnrestrictedCharging(reason: "user-disable", requireInstalledHelper: false)
             stopActiveMonitoring()
             lastErrorMessage = nil
         }
@@ -283,15 +279,14 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func applyCurrentMode(reason: String) {
         guard store.isEnabled else {
-            _ = writer.setForceDischarge(false)
-            _ = writer.resumeCharging()
+            _ = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: false)
             return
         }
 
         switch store.mode {
         case .holdAtLimit:
-            _ = writer.setForceDischarge(false)
-            if let err = writer.inhibitCharging(limitPercent: store.limitPercent) {
+            _ = setForceDischarge(false)
+            if let err = inhibitCharging(limitPercent: store.limitPercent) {
                 lastErrorMessage = localizedDescription(for: err)
                 BatteryChargeLimitLog.plugin.error("inhibit failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
             } else {
@@ -299,8 +294,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             }
 
         case .charging:
-            _ = writer.setForceDischarge(false)
-            if let err = writer.resumeCharging() {
+            if let err = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: false) {
                 lastErrorMessage = localizedDescription(for: err)
                 BatteryChargeLimitLog.plugin.error("resume failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
             } else {
@@ -310,10 +304,10 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case .discharging:
             // Force-discharge implies the inhibit keys must also be set so
             // the adapter doesn't fight us by charging back up.
-            if let err = writer.inhibitCharging(limitPercent: store.limitPercent) {
+            if let err = inhibitCharging(limitPercent: store.limitPercent) {
                 BatteryChargeLimitLog.plugin.error("inhibit-for-discharge failed: \(self.localizedDescription(for: err), privacy: .public)")
             }
-            if let err = writer.setForceDischarge(true) {
+            if let err = setForceDischarge(true) {
                 lastErrorMessage = localizedDescription(for: err)
                 BatteryChargeLimitLog.plugin.error("force-discharge failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
             } else {
@@ -602,5 +596,69 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func localizedDescription(for error: BatteryChargeWriteError) -> String {
         error.localizedDescription(localization: localization)
+    }
+
+    @discardableResult
+    private func inhibitCharging(limitPercent: Int) -> BatteryChargeWriteError? {
+        let error = writer.inhibitCharging(limitPercent: limitPercent)
+        markCleanupRequiredIfNeeded(after: error)
+        return error
+    }
+
+    @discardableResult
+    private func setForceDischarge(_ on: Bool) -> BatteryChargeWriteError? {
+        let error = writer.setForceDischarge(on)
+        if on {
+            markCleanupRequiredIfNeeded(after: error)
+        }
+        return error
+    }
+
+    private func markCleanupRequiredIfNeeded(after error: BatteryChargeWriteError?) {
+        if error == nil || error?.mayHaveChangedSMCState == true {
+            requiresSMCCleanup = true
+        }
+    }
+
+    private func restoreUnrestrictedChargingIfNeeded(reason: String, requireInstalledHelper: Bool) {
+        guard requiresSMCCleanup else {
+            BatteryChargeLimitLog.plugin.info("Skipped SMC charge cleanup for \(reason, privacy: .public); no active charge-control state")
+            return
+        }
+
+        _ = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: requireInstalledHelper)
+    }
+
+    @discardableResult
+    private func restoreUnrestrictedCharging(
+        reason: String,
+        requireInstalledHelper: Bool
+    ) -> BatteryChargeWriteError? {
+        guard !requireInstalledHelper || writer.isInstalledHelperAvailable else {
+            BatteryChargeLimitLog.plugin.info("Skipped SMC charge cleanup for \(reason, privacy: .public); helper is not installed")
+            return nil
+        }
+
+        let dischargeError = writer.setForceDischarge(false)
+        let resumeError = writer.resumeCharging()
+
+        if resumeError == nil && dischargeError == nil {
+            requiresSMCCleanup = false
+            BatteryChargeLimitLog.plugin.info("Cleared SMC charge-control state for \(reason, privacy: .public)")
+            return nil
+        } else {
+            BatteryChargeLimitLog.plugin.error("Failed to fully clear SMC charge-control state for \(reason, privacy: .public)")
+            return dischargeError ?? resumeError
+        }
+    }
+}
+
+private extension BatteryChargeWriteError {
+    var mayHaveChangedSMCState: Bool {
+        if case .writeFailed = self {
+            return true
+        }
+
+        return false
     }
 }

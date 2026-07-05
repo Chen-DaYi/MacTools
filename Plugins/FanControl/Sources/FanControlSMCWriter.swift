@@ -40,6 +40,14 @@ final class FanControlSMCWriter: FanControlSMCWriting {
         bundledHelperURL != nil
     }
 
+    var isInstalledHelperAvailable: Bool {
+        guard let bundledHelperURL else {
+            return false
+        }
+
+        return installedHelperPath(matching: bundledHelperURL) != nil
+    }
+
     /// Apply `strategy` to all fans described by `snapshot`.
     /// - Returns: `nil` on success, or an error description on failure.
     @discardableResult

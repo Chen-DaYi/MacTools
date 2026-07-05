@@ -71,6 +71,58 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertEqual(writer.appliedStrategy, .auto)
     }
 
+    func testDeactivateWithoutSuccessfulManualPresetDoesNotRestoreAuto() {
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertTrue(writer.appliedStrategies.isEmpty)
+    }
+
+    func testDeactivateAfterSuccessfulManualPresetRestoresAuto() {
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.appliedStrategies, [.fullSpeed, .auto])
+    }
+
+    func testDeactivateAfterHelperInstallFailureDoesNotRestoreAuto() {
+        let writer = MockSMCWriter()
+        writer.writeError = .helperInstallFailed("用户取消了授权")
+        let plugin = makePlugin(writer: writer)
+
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.appliedStrategies, [.fullSpeed])
+    }
+
+    func testDeactivateAfterManualPresetSkipsRestoreWhenInstalledHelperIsUnavailable() {
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
+        writer.isInstalledHelperAvailable = false
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.appliedStrategies, [.fullSpeed])
+    }
+
+    func testSelectingAutoClearsDeactivateRestoreRequirement() {
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.auto))
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.appliedStrategies, [.fullSpeed, .auto])
+    }
+
     private func makePlugin(
         reader: MockSMCReader? = nil,
         writer: MockSMCWriter? = nil
@@ -99,11 +151,14 @@ private final class MockSMCReader: FanControlSMCReading {
 @MainActor
 private final class MockSMCWriter: FanControlSMCWriting {
     var isHelperAvailable = true
+    var isInstalledHelperAvailable = true
     var appliedStrategy: FanControlStrategy?
+    var appliedStrategies: [FanControlStrategy] = []
     var writeError: FanWriteError?
 
     func apply(strategy: FanControlStrategy, snapshot _: FanSnapshot) -> FanWriteError? {
         appliedStrategy = strategy
+        appliedStrategies.append(strategy)
         return writeError
     }
 }
