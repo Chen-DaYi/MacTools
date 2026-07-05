@@ -8,12 +8,16 @@ import MacToolsPluginKit
 @MainActor
 private final class MockBatteryReader: BatteryChargeLimitReading {
     var snapshot: BatterySnapshot
+    private(set) var readCount = 0
 
     init(snapshot: BatterySnapshot = .empty) {
         self.snapshot = snapshot
     }
 
-    func readSnapshot() -> BatterySnapshot { snapshot }
+    func readSnapshot() -> BatterySnapshot {
+        readCount += 1
+        return snapshot
+    }
 }
 
 @MainActor
@@ -125,6 +129,30 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
 
         XCTAssertFalse(plugin.store.isEnabled)
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testActivateWhenDisabledReadsOnceWithoutStartingMonitoring() async {
+        let reader = MockBatteryReader(snapshot: makeSnapshot(level: 60))
+        let plugin = makePlugin(reader: reader)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "battery-charge-limit"))
+        await Task.yield()
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(reader.readCount, 1)
+    }
+
+    func testActivateWhenEnabledStartsMonitoring() async {
+        let reader = MockBatteryReader(snapshot: makeSnapshot(level: 60))
+        let plugin = makePlugin(reader: reader)
+        plugin.store.setEnabled(true)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "battery-charge-limit"))
+        await Task.yield()
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertGreaterThanOrEqual(reader.readCount, 2)
+        plugin.deactivate(reason: .updating)
     }
 
     // MARK: Limit Changes

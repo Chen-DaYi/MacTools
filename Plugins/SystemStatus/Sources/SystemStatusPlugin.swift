@@ -131,13 +131,13 @@ struct SystemStatusSamplingSchedule: Sendable {
     let foregroundHistoryInterval: TimeInterval
 
     static let production = SystemStatusSamplingSchedule(
-        backgroundFastInterval: .seconds(10),
-        foregroundFastInterval: .seconds(2),
-        backgroundSlowInterval: 30,
-        foregroundSlowInterval: 5,
-        backgroundProcessInterval: 60,
-        foregroundProcessInterval: 5,
-        backgroundHistoryInterval: 60,
+        backgroundFastInterval: .seconds(30),
+        foregroundFastInterval: .seconds(3),
+        backgroundSlowInterval: 300,
+        foregroundSlowInterval: 15,
+        backgroundProcessInterval: 300,
+        foregroundProcessInterval: 15,
+        backgroundHistoryInterval: 300,
         foregroundHistoryInterval: 60
     )
 }

@@ -266,6 +266,7 @@ final class PluginHost: ObservableObject {
             self?.refreshAccessibilityPermissionNow()
         }
 
+        pauseHiddenBuiltInVisibilityLifecyclePlugins()
         refreshAll()
     }
 
@@ -558,15 +559,20 @@ final class PluginHost: ObservableObject {
             for: pluginID,
             defaultPluginIDs: defaultPluginIDs
         )
+
         // For dynamic plugins, pause/resume side effects with visibility.
         // The plugin stays loaded so it remains visible in the installed list.
-        if dynamicPlugins.contains(where: { $0.metadata.id == pluginID }) {
+        let isDynamicPlugin = dynamicPlugins.contains(where: { $0.metadata.id == pluginID })
+        if isDynamicPlugin {
             if isVisible {
                 dynamicPluginManager?.resumePlugin(pluginID)
             } else {
                 dynamicPluginManager?.pausePlugin(pluginID)
             }
+        } else if let plugin = activePlugins.first(where: { $0.metadata.id == pluginID }) {
+            notifyFeatureVisibilityLifecycle(isVisible, for: plugin)
         }
+
         rebuildDerivedState()
     }
 
@@ -1012,6 +1018,23 @@ final class PluginHost: ObservableObject {
             )
         {
             dynamicPluginManager?.pausePlugin(plugin.metadata.id)
+        }
+    }
+
+    private func pauseHiddenBuiltInVisibilityLifecyclePlugins() {
+        for plugin in builtInPlugins
+            where !pluginDisplayPreferencesStore.isVisible(
+                plugin.metadata.id, defaultPluginIDs: defaultPluginIDs
+            )
+        {
+            notifyFeatureVisibilityLifecycle(false, for: plugin)
+        }
+    }
+
+    private func notifyFeatureVisibilityLifecycle(_ isVisible: Bool, for plugin: any MacToolsPlugin) {
+        guard let visibilityLifecycle = plugin as? any PluginFeatureVisibilityLifecycleHandling else { return }
+        guardPluginCall(plugin, operation: "feature visibility lifecycle") {
+            visibilityLifecycle.featureVisibilityDidChange(isVisible)
         }
     }
 

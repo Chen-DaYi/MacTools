@@ -22,6 +22,7 @@ final class MenuBarHiddenController: ObservableObject {
     private let observer: MenuBarHiddenObserver
     private var cancellables = Set<AnyCancellable>()
     private var popupPanel: MenuBarHiddenPopupPanel?
+    private var isActivated = false
     private var isSettingsVisible = false
     private var isHiddenIconsPanelVisible = false
 
@@ -73,11 +74,14 @@ final class MenuBarHiddenController: ObservableObject {
     // MARK: - Lifecycle
 
     func activate() {
-        observer.start()
+        guard !isActivated else { return }
+        isActivated = true
         manager.activate()
+        updateObservation()
     }
 
     func deactivate() {
+        isActivated = false
         observer.stop()
         manager.deactivate()
         popupPanel?.orderOut(nil)
@@ -114,7 +118,10 @@ final class MenuBarHiddenController: ObservableObject {
 
     var isEnabled: Bool {
         get { manager.isEnabled }
-        set { manager.isEnabled = newValue }
+        set {
+            manager.isEnabled = newValue
+            updateObservation()
+        }
     }
 
     var isAlwaysHiddenEnabled: Bool {
@@ -145,7 +152,7 @@ final class MenuBarHiddenController: ObservableObject {
         if visible {
             manager.refreshPermissions()
         }
-        updateUIPolling()
+        updateObservation()
     }
 
     func setHiddenIconsPanelVisible(_ visible: Bool) {
@@ -154,7 +161,7 @@ final class MenuBarHiddenController: ObservableObject {
         if visible {
             manager.refreshPermissions()
         }
-        updateUIPolling()
+        updateObservation()
     }
 
     func refreshPermissions() {
@@ -200,12 +207,24 @@ final class MenuBarHiddenController: ObservableObject {
         popupPanel?.orderOut(nil)
         setHiddenIconsPanelVisible(false)
         if popupPanel != nil {
-            updateUIPolling()
+            updateObservation()
         }
     }
 
-    private func updateUIPolling() {
-        if isSettingsVisible || isHiddenIconsPanelVisible {
+    private func updateObservation() {
+        guard isActivated else {
+            observer.stop()
+            return
+        }
+
+        let uiVisible = isSettingsVisible || isHiddenIconsPanelVisible
+        if isEnabled || uiVisible {
+            observer.start()
+        } else {
+            observer.stop()
+        }
+
+        if uiVisible {
             observer.startPolling()
         } else {
             observer.stopPolling()

@@ -59,13 +59,13 @@ final class SystemStatusPluginTests: XCTestCase {
     func testProductionSamplingScheduleBalancesForegroundDetailAndBackgroundCost() {
         let schedule = SystemStatusSamplingSchedule.production
 
-        XCTAssertEqual(schedule.backgroundFastInterval, .seconds(10))
-        XCTAssertEqual(schedule.foregroundFastInterval, .seconds(2))
-        XCTAssertEqual(schedule.backgroundSlowInterval, 30)
-        XCTAssertEqual(schedule.foregroundSlowInterval, 5)
-        XCTAssertEqual(schedule.backgroundProcessInterval, 60)
-        XCTAssertEqual(schedule.foregroundProcessInterval, 5)
-        XCTAssertEqual(schedule.backgroundHistoryInterval, 60)
+        XCTAssertEqual(schedule.backgroundFastInterval, .seconds(30))
+        XCTAssertEqual(schedule.foregroundFastInterval, .seconds(3))
+        XCTAssertEqual(schedule.backgroundSlowInterval, 300)
+        XCTAssertEqual(schedule.foregroundSlowInterval, 15)
+        XCTAssertEqual(schedule.backgroundProcessInterval, 300)
+        XCTAssertEqual(schedule.foregroundProcessInterval, 15)
+        XCTAssertEqual(schedule.backgroundHistoryInterval, 300)
         XCTAssertEqual(schedule.foregroundHistoryInterval, 60)
     }
 

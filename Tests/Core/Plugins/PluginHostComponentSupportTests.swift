@@ -32,6 +32,38 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.featureManagementItems.first?.isVisible, false)
     }
 
+    func testBuiltInVisibilityLifecycleReceivesHideShowChanges() {
+        let plugin = MockVisibilityLifecyclePlugin(id: "visibility-lifecycle")
+        let host = makeHost(plugins: [plugin])
+
+        host.setFeatureVisibility(false, for: "visibility-lifecycle")
+        host.setFeatureVisibility(true, for: "visibility-lifecycle")
+
+        XCTAssertEqual(plugin.visibilityChanges, [false, true])
+    }
+
+    func testHiddenBuiltInVisibilityLifecycleIsPausedOnLaunch() {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let displayPreferencesStore = PluginDisplayPreferencesStore(userDefaults: defaults)
+        displayPreferencesStore.setVisibility(
+            false,
+            for: "visibility-lifecycle",
+            defaultPluginIDs: ["visibility-lifecycle"]
+        )
+        let plugin = MockVisibilityLifecyclePlugin(id: "visibility-lifecycle")
+
+        let host = PluginHost(
+            plugins: [plugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: displayPreferencesStore,
+            globalShortcutManager: GlobalShortcutManager()
+        )
+
+        XCTAssertEqual(plugin.visibilityChanges, [false])
+        XCTAssertEqual(host.featureManagementItems.first?.isVisible, false)
+    }
+
     func testComponentOrderUsesSharedDisplayPreferences() {
         let first = MockComponentPanelPlugin(id: "first", order: 1)
         let second = MockComponentPanelPlugin(id: "second", order: 2)
@@ -620,6 +652,48 @@ private final class MockDisplayConfigurationObserver: DisplayConfigurationObserv
 
     func triggerChange() {
         onConfigurationChange?()
+    }
+}
+
+@MainActor
+private final class MockVisibilityLifecyclePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureVisibilityLifecycleHandling {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        controlStyle: .switch,
+        menuActionBehavior: .keepPresented
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var visibilityChanges: [Bool] = []
+
+    init(id: String) {
+        self.metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "sparkles",
+            iconTint: Color(nsColor: .systemPurple),
+            order: 1,
+            defaultDescription: "Visibility lifecycle \(id)"
+        )
+    }
+
+    var primaryPanelState: PluginPanelState {
+        PluginPanelState(
+            subtitle: "Visible",
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    func handleAction(_ action: PluginPanelAction) {}
+
+    func featureVisibilityDidChange(_ isVisible: Bool) {
+        visibilityChanges.append(isVisible)
     }
 }
 

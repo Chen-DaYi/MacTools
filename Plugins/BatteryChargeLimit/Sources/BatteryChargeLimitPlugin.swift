@@ -99,20 +99,18 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func activate(context: PluginRuntimeContext) {
         batterySnapshot = reader.readSnapshot()
-        startMonitoring()
-        registerSleepWakeObservers()
 
         // Re-assert the persisted mode after app restart. SMC keys can be
         // reset by firmware across sleep/hibernation, so on launch we
         // re-apply whatever the user last had configured.
         if store.isEnabled {
+            startActiveMonitoring()
             applyCurrentMode(reason: "activate")
         }
     }
 
     func deactivate(reason: PluginDeactivationReason) {
-        unregisterSleepWakeObservers()
-        stopMonitoring()
+        stopActiveMonitoring()
         if reason.requiresStateCleanup {
             // Restore unrestricted charging so the user isn't left with the
             // SMC stuck in inhibit after disabling/uninstalling the plugin.
@@ -202,11 +200,13 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             // Enabling always starts in holdAtLimit — the core behavior is
             // "don't auto-charge; user must explicitly resume."
             store.setMode(.holdAtLimit)
+            startActiveMonitoring()
             applyCurrentMode(reason: "user-enable")
         } else {
             store.setMode(.holdAtLimit)
             _ = writer.setForceDischarge(false)
             _ = writer.resumeCharging()
+            stopActiveMonitoring()
             lastErrorMessage = nil
         }
         onStateChange?()
@@ -353,6 +353,16 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: - Monitoring
 
+    private func startActiveMonitoring() {
+        startMonitoring()
+        registerSleepWakeObservers()
+    }
+
+    private func stopActiveMonitoring() {
+        unregisterSleepWakeObservers()
+        stopMonitoring()
+    }
+
     private func startMonitoring() {
         guard monitoringTask == nil else { return }
         monitoringTask = Task { @MainActor [weak self] in
@@ -371,6 +381,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private func registerSleepWakeObservers() {
+        guard sleepObserver == nil, wakeObserver == nil else { return }
         let center = NSWorkspace.shared.notificationCenter
         sleepObserver = center.addObserver(
             forName: NSWorkspace.willSleepNotification,
