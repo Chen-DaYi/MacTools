@@ -5,7 +5,13 @@ import OSLog
 import MacToolsPluginKit
 
 @MainActor
-final class KeepAwakeSession {
+protocol KeepAwakeSessionManaging: AnyObject {
+    func start(until endDate: Date?) throws
+    func requestStop(reason: KeepAwakeSession.EndReason)
+}
+
+@MainActor
+final class KeepAwakeSession: KeepAwakeSessionManaging {
     enum EndReason {
         case userRequested
         case completed
