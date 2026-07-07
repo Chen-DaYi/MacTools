@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 import MacToolsPluginKit
 @testable import ActivityBarPlugin
@@ -56,6 +57,20 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(stateChangeCount, 0)
     }
 
+    func testAppTerminationFlushesPendingInputStats() {
+        let harness = makeHarness()
+
+        harness.inputMonitor.emit(.keystroke(app: "Terminal"))
+        NotificationCenter.default.post(
+            name: NSApplication.willTerminateNotification,
+            object: nil
+        )
+
+        let reloaded = ActivityBarStatsStore(storage: harness.storage)
+
+        XCTAssertEqual(reloaded.todayInputCountForTests, 1)
+    }
+
     func testResetActionClearsToday() {
         let harness = makeHarness()
 
@@ -87,6 +102,7 @@ final class ActivityBarPluginTests: XCTestCase {
         return Harness(
             plugin: plugin,
             controller: controller,
+            storage: storage,
             inputMonitor: inputMonitor,
             socketServer: socketServer
         )
@@ -95,7 +111,14 @@ final class ActivityBarPluginTests: XCTestCase {
     private struct Harness {
         let plugin: ActivityBarPlugin
         let controller: ActivityBarController
+        let storage: ActivityBarMemoryStorage
         let inputMonitor: ActivityBarFakeInputMonitor
         let socketServer: ActivityBarFakeSocketServer
+    }
+}
+
+private extension ActivityBarStatsStore {
+    var todayInputCountForTests: Int {
+        today.totalInputs
     }
 }

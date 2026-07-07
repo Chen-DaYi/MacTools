@@ -26,6 +26,7 @@ final class ActivityBarController: ObservableObject {
     private let socketServer: any ActivityBarSocketServing
     private var hookInstallerPaths: ActivityBarHookInstallerPaths
     private var inputStatsRefreshTask: Task<Void, Never>?
+    private var terminateObserver: NSObjectProtocol?
 
     private enum Timing {
         static let inputStatsRefreshInterval: Duration = .seconds(1)
@@ -69,6 +70,25 @@ final class ActivityBarController: ObservableObject {
 
         if let installedAt = context.storage.string(forKey: StorageKey.hooksInstalledAt) {
             hookStatusMessage = "已安装：\(installedAt)"
+        }
+
+        terminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.inputStats.flushPendingChanges()
+            }
+        }
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            inputStatsRefreshTask?.cancel()
+            if let terminateObserver {
+                NotificationCenter.default.removeObserver(terminateObserver)
+            }
         }
     }
 

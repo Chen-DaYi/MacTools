@@ -335,6 +335,41 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertEqual(stateChangeCount, 2)
     }
 
+    func testFeaturePanelVisibilityAndDisclosureControlActiveMonitoring() async throws {
+        let snapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3600],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45.0
+        )
+        let reader = MockSMCReader(snapshot: snapshot)
+        let plugin = makeFanControlPlugin(
+            reader: reader,
+            monitoringActiveInterval: .milliseconds(10),
+            monitoringIdleInterval: .milliseconds(200)
+        )
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "fan-control"))
+        try await Task.sleep(for: .milliseconds(40))
+        let idleReadCount = reader.readCount
+
+        plugin.setFeaturePanelVisible(true)
+        plugin.handleAction(.setDisclosureExpanded(true))
+        try await Task.sleep(for: .milliseconds(45))
+        let activeReadCount = reader.readCount
+
+        plugin.setFeaturePanelVisible(false)
+        try await Task.sleep(for: .milliseconds(45))
+        let closedReadCount = reader.readCount
+
+        plugin.deactivate(reason: .disabled)
+
+        XCTAssertEqual(idleReadCount, 1)
+        XCTAssertGreaterThan(activeReadCount, idleReadCount + 1)
+        XCTAssertLessThanOrEqual(closedReadCount - activeReadCount, 1)
+    }
+
     // MARK: - Helpers
 
     private func makeFanControlPlugin(

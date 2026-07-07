@@ -386,6 +386,17 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.description), ["changed again", "Feature stable"])
     }
 
+    func testFeaturePanelVisibilityIsForwardedToObservingPlugins() {
+        let observingPlugin = MockFeaturePanelVisibilityPlugin(id: "observing")
+        let regularPlugin = MockPrimaryPanelPlugin(id: "regular")
+        let host = makeHost(plugins: [observingPlugin, regularPlugin])
+
+        host.setFeaturePanelVisible(true)
+        host.setFeaturePanelVisible(false)
+
+        XCTAssertEqual(observingPlugin.receivedVisibilityValues, [true, false])
+    }
+
     private func makeHost(
         plugins: [any MacToolsPlugin] = [],
         dynamicPluginManager: DynamicPluginManager? = nil,
@@ -645,6 +656,48 @@ private final class CountingPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPan
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+}
+
+@MainActor
+private final class MockFeaturePanelVisibilityPlugin: MacToolsPlugin, PluginPrimaryPanel, FeaturePanelVisibilityObserving {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        controlStyle: .disclosure,
+        menuActionBehavior: .keepPresented
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var receivedVisibilityValues: [Bool] = []
+
+    init(id: String) {
+        self.metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "sparkles",
+            iconTint: Color(nsColor: .systemBlue),
+            order: 1,
+            defaultDescription: "Feature \(id)"
+        )
+    }
+
+    var primaryPanelState: PluginPanelState {
+        PluginPanelState(
+            subtitle: "Feature subtitle",
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    func handleAction(_ action: PluginPanelAction) {}
+
+    func setFeaturePanelVisible(_ isVisible: Bool) {
+        receivedVisibilityValues.append(isVisible)
+    }
 }
 
 @MainActor

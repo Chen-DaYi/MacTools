@@ -32,7 +32,7 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, FeaturePanelVisibilityObserving {
 
     // MARK: Metadata
 
@@ -65,6 +65,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let monitoringIdleInterval: Duration
 
     private var isExpanded = false
+    private var isFeaturePanelVisible = false
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
     private var monitoringTask: Task<Void, Never>?
@@ -147,6 +148,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case let .setDisclosureExpanded(expanded):
             isExpanded = expanded
             if !expanded { lastErrorMessage = nil }
+            restartMonitoringIfRunning()
             onStateChange?()
 
         case let .setSelection(controlID, optionID):
@@ -181,6 +183,15 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+
+    func setFeaturePanelVisible(_ isVisible: Bool) {
+        guard isFeaturePanelVisible != isVisible else {
+            return
+        }
+
+        isFeaturePanelVisible = isVisible
+        restartMonitoringIfRunning()
+    }
 
     // MARK: - Actions
 
@@ -244,16 +255,10 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private var currentMonitoringInterval: Duration {
-        if isExpanded {
+        if isFeaturePanelVisible && isExpanded {
             return monitoringActiveInterval
         }
-
-        switch presetStore.activePreset.strategy {
-        case .auto:
-            return monitoringIdleInterval
-        case .fullSpeed, .fixed:
-            return monitoringActiveInterval
-        }
+        return monitoringIdleInterval
     }
 
     private func updateFanSnapshotIfNeeded(_ snapshot: FanSnapshot) -> Bool {
@@ -263,6 +268,15 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         fanSnapshot = snapshot
         return true
+    }
+
+    private func restartMonitoringIfRunning() {
+        guard monitoringTask != nil else {
+            return
+        }
+
+        stopMonitoring()
+        startMonitoring()
     }
 
     private func registerSleepWakeObservers() {

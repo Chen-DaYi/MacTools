@@ -109,6 +109,11 @@ public protocol DisplayTopologyRefreshing {
     func refreshDisplayTopology()
 }
 
+@MainActor
+public protocol FeaturePanelVisibilityObserving: AnyObject {
+    func setFeaturePanelVisible(_ isVisible: Bool)
+}
+
 /// 可选协议——仅需要浮动窗口锚点的插件才声明遵从。
 /// 不修改 `MacToolsPlugin` witness table，对已安装旧插件无影响。
 @MainActor

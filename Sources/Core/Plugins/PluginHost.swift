@@ -186,6 +186,18 @@ final class PluginHost: ObservableObject {
         refreshDisplayTopologyNow()
     }
 
+    func setFeaturePanelVisible(_ isVisible: Bool) {
+        for plugin in activePlugins {
+            guard let observer = plugin as? FeaturePanelVisibilityObserving else {
+                continue
+            }
+
+            guardPluginCall(plugin, operation: "set feature panel visibility") {
+                observer.setFeaturePanelVisible(isVisible)
+            }
+        }
+    }
+
     func isSwitchOn(for pluginID: String) -> Bool {
         panelItems.first(where: { $0.id == pluginID })?.isOn ?? false
     }

@@ -7,6 +7,8 @@ final class ActivityBarStatsStore: ObservableObject {
         static let days = "activity-bar.input.days.v1"
     }
 
+    // Direct observers receive every input mutation and bypass controller-level
+    // UI throttling; keep hot-path UI subscriptions on ActivityBarController.
     @Published private(set) var days: [String: ActivityBarDailyStats]
 
     private let storage: PluginStorage
@@ -15,6 +17,7 @@ final class ActivityBarStatsStore: ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var pendingPersistTask: Task<Void, Never>?
+    private var hasPendingChanges = false
 
     private enum Persistence {
         static let debounceDelay: Duration = .seconds(30)
@@ -102,6 +105,7 @@ final class ActivityBarStatsStore: ObservableObject {
 
     func resetToday() {
         days[dateKey(for: dateProvider())] = ActivityBarDailyStats(date: dateKey(for: dateProvider()))
+        hasPendingChanges = true
         persistNow()
     }
 
@@ -122,6 +126,7 @@ final class ActivityBarStatsStore: ObservableObject {
 
         day.perApp[app] = appStats
         days[key] = day
+        hasPendingChanges = true
         schedulePersist()
     }
 
@@ -155,6 +160,10 @@ final class ActivityBarStatsStore: ObservableObject {
     }
 
     private func persistNow() {
+        guard hasPendingChanges else {
+            return
+        }
+
         pendingPersistTask?.cancel()
         pendingPersistTask = nil
         days = Self.prunedDays(days)
@@ -162,6 +171,7 @@ final class ActivityBarStatsStore: ObservableObject {
         do {
             let data = try encoder.encode(days)
             storage.set(data, forKey: StorageKey.days)
+            hasPendingChanges = false
         } catch {
             ActivityBarLog.input.error("Failed to persist input stats: \(error.localizedDescription, privacy: .public)")
         }

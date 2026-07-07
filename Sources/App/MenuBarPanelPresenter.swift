@@ -123,6 +123,7 @@ final class MenuBarPanelPresenter: NSObject {
         )
         applyCurrentAppearance()
         show(featurePopover, relativeTo: button)
+        pluginHost.setFeaturePanelVisible(true)
     }
 
     func toggleComponentPanel(relativeTo button: NSStatusBarButton) {
@@ -248,6 +249,10 @@ final class MenuBarPanelPresenter: NSObject {
 
 extension MenuBarPanelPresenter: NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
+        if let popover = notification.object as? NSPopover, popover === featurePopover {
+            pluginHost.setFeaturePanelVisible(false)
+        }
+
         if let popover = notification.object as? NSPopover, popover === componentPopover {
             componentHostingController.rootView = ComponentPanelContent(
                 pluginHost: pluginHost,

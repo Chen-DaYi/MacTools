@@ -5,6 +5,7 @@ import MacToolsPluginKit
 @MainActor
 final class ActivityBarMemoryStorage: PluginStorage {
     private var values: [String: Any] = [:]
+    private var setCallCounts: [String: Int] = [:]
 
     func object(forKey key: String) -> Any? {
         values[key]
@@ -31,6 +32,7 @@ final class ActivityBarMemoryStorage: PluginStorage {
     }
 
     func set(_ value: Any?, forKey key: String) {
+        setCallCounts[key, default: 0] += 1
         values[key] = value
     }
 
@@ -45,6 +47,10 @@ final class ActivityBarMemoryStorage: PluginStorage {
 
         values[key] = value
         values.removeValue(forKey: legacyKey)
+    }
+
+    func setCallCount(forKey key: String) -> Int {
+        setCallCounts[key] ?? 0
     }
 }
 
