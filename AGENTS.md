@@ -47,7 +47,7 @@
 - 插件 UI 应通过 `PluginPanelState`、`PluginPanelDetail`、`PluginPanelControl` 等描述式模型表达；除 `PluginComponentPanel.makeView` 外，避免绕过现有面板框架自建菜单栏 UI。
 - 插件状态与 UI 相关代码默认在 `@MainActor`；耗时扫描、文件系统或系统调用应避免长时间阻塞主线程。`primaryPanelState`、`componentPanelState` 应尽量只读取已有快照，不要在 getter 中同步扫描硬件、文件系统或网络。
 - `PluginHost` 只负责派生面板项、组件项、设置项等通用展示状态，并会缓存组件视图和合并短时间内的状态重建；业务数据快照、缓存失效和刷新时机仍应由具体插件或组件负责。
-- 插件状态变化后调用 `onStateChange?()`，使宿主重建派生状态。若状态会被外部系统事件改变（如显示器热插拔、权限变化、文件系统变化、日历授权变化），需要接入明确的事件监听或刷新入口，并配合 debounce/节流更新快照，避免依赖用户展开面板、切换设置页或全量 `refreshAll()` 才拿到新数据。
+- 插件状态变化后调用 `onStateChange?()`，使宿主重建派生状态。若状态会被外部系统事件改变（如显示器热插拔、权限变化、文件系统变化、日历授权变化），需要接入明确的事件监听或刷新入口，并配合 debounce/节流更新快照，避免依赖用户展开面板、切换设置页或全量 `refreshAll()` 才拿到新数据。例外：输入统计、采样计数等高频事件源可以只更新插件自身快照，不对每个事件调用 `onStateChange?()`；这类插件必须按面板/组件可见性或固定时间窗口节流上报 UI 变化，并确保用户主动打开面板或 `refresh()` 时能读到最新快照。
 - 有跨插件通用意义的外部状态变化应优先抽象成 Core 层协议或观察器；例如显示器拓扑变化使用 `DisplayConfigurationObserving` 通知宿主，再由实现 `DisplayTopologyRefreshing` 的显示器相关插件刷新自身快照。
 - 控件 ID、插件 ID、快捷键 ID 要稳定、可读，并尽量集中在功能内的私有常量中。
 - 普通新增插件不需要更新根 `project.yml`；保持 `plugin.json.build.scheme` 指向对应 bundle scheme，生成器会自动创建 core target、bundle target、测试依赖和插件 scheme。若插件需要额外 framework、include path、bundle 资源或 target 覆盖，在 `Plugins/<PluginName>/project.yml` 中声明最小差异。
