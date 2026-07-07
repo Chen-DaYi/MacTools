@@ -336,6 +336,26 @@ struct MenuBarHiddenPermissionsStatus: Equatable {
     var canManageItems: Bool { hasAccessibility && hasScreenRecording }
 }
 
+enum MenuBarHiddenSourcePIDResolutionPolicy {
+    static func canResolve(permissions: MenuBarHiddenPermissionsStatus) -> Bool {
+        permissions.canManageItems
+    }
+}
+
+enum MenuBarHiddenRunningApplicationPolicy {
+    static func uniqueByProcessIdentifier<Value>(
+        _ values: [Value],
+        processIdentifier: (Value) -> pid_t
+    ) -> [Value] {
+        var seen = Set<pid_t>()
+        return values.compactMap { value in
+            let pid = processIdentifier(value)
+            guard seen.insert(pid).inserted else { return nil }
+            return value
+        }
+    }
+}
+
 // MARK: - Snapshot
 
 struct MenuBarHiddenSnapshot: Equatable {

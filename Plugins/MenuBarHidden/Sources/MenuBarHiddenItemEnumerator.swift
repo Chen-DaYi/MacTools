@@ -28,13 +28,18 @@ struct MenuBarHiddenEnumeratorResult {
 final class MenuBarHiddenItemEnumerator {
     private let sourcePIDResolver = MenuBarHiddenSourcePIDResolver()
 
-    func enumerate(hiddenDividerWindowID: CGWindowID?, hiddenDividerFrame: NSRect?) -> MenuBarHiddenEnumeratorResult {
+    func enumerate(
+        hiddenDividerWindowID: CGWindowID?,
+        hiddenDividerFrame: NSRect?,
+        canResolveSourcePIDs: Bool
+    ) -> MenuBarHiddenEnumeratorResult {
         enumerate(
             hiddenDividerWindowID: hiddenDividerWindowID,
             hiddenDividerFrame: hiddenDividerFrame,
             alwaysHiddenDividerWindowID: nil,
             alwaysHiddenDividerFrame: nil,
-            excludedWindowIDs: Set([hiddenDividerWindowID].compactMap { $0 })
+            excludedWindowIDs: Set([hiddenDividerWindowID].compactMap { $0 }),
+            canResolveSourcePIDs: canResolveSourcePIDs
         )
     }
 
@@ -43,7 +48,8 @@ final class MenuBarHiddenItemEnumerator {
         hiddenDividerFrame: NSRect?,
         alwaysHiddenDividerWindowID: CGWindowID?,
         alwaysHiddenDividerFrame: NSRect?,
-        excludedWindowIDs: Set<CGWindowID>
+        excludedWindowIDs: Set<CGWindowID>,
+        canResolveSourcePIDs: Bool
     ) -> MenuBarHiddenEnumeratorResult {
         let displayID = NSScreen.menuBarScreenDisplayID
         let windows = fetchMenuBarItemWindows()
@@ -56,7 +62,9 @@ final class MenuBarHiddenItemEnumerator {
             )
         }
 
-        let sourcePIDs = sourcePIDResolver.resolveSourcePIDs(for: windows)
+        let sourcePIDs = canResolveSourcePIDs
+            ? sourcePIDResolver.resolveSourcePIDs(for: windows)
+            : [:]
         var items = windows.map { makeItem(from: $0, sourcePID: sourcePIDs[$0.windowID]) }
 
         let hiddenDividerItem = Self.findControlItem(
@@ -469,7 +477,10 @@ private final class MenuBarHiddenSourcePIDResolver {
     }
 
     private func refreshRunningApplications() {
-        let runningApps = NSWorkspace.shared.runningApplications
+        let runningApps = MenuBarHiddenRunningApplicationPolicy.uniqueByProcessIdentifier(
+            NSWorkspace.shared.runningApplications,
+            processIdentifier: \.processIdentifier
+        )
         let currentPIDs = Set(runningApps.map(\.processIdentifier))
         let shouldResetNegativeCaches = Date().timeIntervalSince(lastNegativeCacheReset) >= Self.negativeCacheResetInterval
         if shouldResetNegativeCaches {
@@ -478,8 +489,14 @@ private final class MenuBarHiddenSourcePIDResolver {
 
         cachedPIDs = cachedPIDs.filter { currentPIDs.contains($0.value) }
 
-        let cachedByPID = Dictionary(uniqueKeysWithValues: cachedApps.map { ($0.processIdentifier, $0) })
-        cachedApps = runningApps.map { runningApp in
+        var cachedByPID: [pid_t: CachedApplication] = [:]
+        for cachedApp in cachedApps {
+            cachedByPID[cachedApp.processIdentifier] = cachedApp
+        }
+
+        var seenPIDs = Set<pid_t>()
+        cachedApps = runningApps.compactMap { runningApp in
+            guard seenPIDs.insert(runningApp.processIdentifier).inserted else { return nil }
             if let cached = cachedByPID[runningApp.processIdentifier] {
                 if shouldResetNegativeCaches {
                     cached.resetNegativeCache()

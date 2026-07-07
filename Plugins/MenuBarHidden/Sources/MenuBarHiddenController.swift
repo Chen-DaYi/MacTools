@@ -218,11 +218,7 @@ final class MenuBarHiddenController: ObservableObject {
         }
 
         let uiVisible = isSettingsVisible || isHiddenIconsPanelVisible
-        if isEnabled || uiVisible {
-            observer.start()
-        } else {
-            observer.stop()
-        }
+        observer.start()
 
         if uiVisible {
             observer.startPolling()

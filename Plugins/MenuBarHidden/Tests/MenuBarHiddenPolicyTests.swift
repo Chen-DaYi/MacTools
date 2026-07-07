@@ -106,6 +106,45 @@ final class MenuBarHiddenPolicyTests: XCTestCase {
         XCTAssertFalse(MenuBarHiddenPermissionsStatus(hasAccessibility: false, hasScreenRecording: true).canManageItems)
     }
 
+    func testSourcePIDResolutionRequiresBothSystemGrants() {
+        XCTAssertTrue(
+            MenuBarHiddenSourcePIDResolutionPolicy.canResolve(
+                permissions: MenuBarHiddenPermissionsStatus(hasAccessibility: true, hasScreenRecording: true)
+            )
+        )
+        XCTAssertFalse(
+            MenuBarHiddenSourcePIDResolutionPolicy.canResolve(
+                permissions: MenuBarHiddenPermissionsStatus(hasAccessibility: true, hasScreenRecording: false)
+            )
+        )
+        XCTAssertFalse(
+            MenuBarHiddenSourcePIDResolutionPolicy.canResolve(
+                permissions: MenuBarHiddenPermissionsStatus(hasAccessibility: false, hasScreenRecording: true)
+            )
+        )
+    }
+
+    func testRunningApplicationPolicyDropsDuplicateProcessIdentifiers() {
+        struct RunningApp {
+            let pid: pid_t
+            let name: String
+        }
+
+        let apps = [
+            RunningApp(pid: 42, name: "first"),
+            RunningApp(pid: 43, name: "middle"),
+            RunningApp(pid: 42, name: "duplicate"),
+        ]
+
+        let unique = MenuBarHiddenRunningApplicationPolicy.uniqueByProcessIdentifier(
+            apps,
+            processIdentifier: \.pid
+        )
+
+        XCTAssertEqual(unique.map(\.pid), [42, 43])
+        XCTAssertEqual(unique.map(\.name), ["first", "middle"])
+    }
+
     private func makeItem(
         pid: pid_t,
         title: String,

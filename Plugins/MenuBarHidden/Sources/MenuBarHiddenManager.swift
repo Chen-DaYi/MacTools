@@ -423,7 +423,7 @@ final class MenuBarHiddenManager: ObservableObject {
     private func rebuildSnapshot() {
         divider.refreshWindowID()
         alwaysHiddenDivider.refreshWindowID()
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.isInstalled ? divider.windowID : nil,
             hiddenDividerFrame: divider.isInstalled ? divider.screenFrame : nil,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
@@ -487,6 +487,25 @@ final class MenuBarHiddenManager: ObservableObject {
         return ids
     }
 
+    private func enumerateMenuBarItems(
+        hiddenDividerWindowID: CGWindowID?,
+        hiddenDividerFrame: NSRect?,
+        alwaysHiddenDividerWindowID: CGWindowID?,
+        alwaysHiddenDividerFrame: NSRect?,
+        excludedWindowIDs: Set<CGWindowID>
+    ) -> MenuBarHiddenEnumeratorResult {
+        enumerator.enumerate(
+            hiddenDividerWindowID: hiddenDividerWindowID,
+            hiddenDividerFrame: hiddenDividerFrame,
+            alwaysHiddenDividerWindowID: alwaysHiddenDividerWindowID,
+            alwaysHiddenDividerFrame: alwaysHiddenDividerFrame,
+            excludedWindowIDs: excludedWindowIDs,
+            canResolveSourcePIDs: MenuBarHiddenSourcePIDResolutionPolicy.canResolve(
+                permissions: permissions
+            )
+        )
+    }
+
     private func localizedDescription(for error: Error) -> String {
         if let eventError = error as? MenuBarHiddenEventError {
             return eventError.localizedDescription(localization: localization)
@@ -503,7 +522,7 @@ final class MenuBarHiddenManager: ObservableObject {
     ) async -> Bool {
         await events.waitForUserInputPause()
 
-        let live = enumerator.enumerate(
+        let live = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
@@ -1090,7 +1109,7 @@ final class MenuBarHiddenManager: ObservableObject {
     }
 
     private func liveClickResolution(matching item: MenuBarItem) -> LiveClickResolution? {
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
@@ -1280,7 +1299,7 @@ final class MenuBarHiddenManager: ObservableObject {
     ) async -> MenuBarItem {
         await waitForItemToLeavePreviousBounds(item, previousBounds: previousBounds)
         await waitForItemPositionToSettle(item)
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
@@ -1508,7 +1527,7 @@ final class MenuBarHiddenManager: ObservableObject {
     }
 
     private func returnTemporarilyShownItem(_ context: TemporarilyShownItemContext) async -> TemporaryRehideResult {
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
@@ -1568,7 +1587,7 @@ final class MenuBarHiddenManager: ObservableObject {
     }
 
     private func temporaryItemHasReturned(_ context: TemporarilyShownItemContext) -> Bool {
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
@@ -1709,7 +1728,7 @@ final class MenuBarHiddenManager: ObservableObject {
             return
         }
 
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
@@ -1764,7 +1783,7 @@ final class MenuBarHiddenManager: ObservableObject {
             return
         }
 
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.windowID,
@@ -1867,7 +1886,7 @@ final class MenuBarHiddenManager: ObservableObject {
     }
 
     private func menuBarFrameSignature() -> [String] {
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
@@ -2112,7 +2131,7 @@ final class MenuBarHiddenManager: ObservableObject {
                     }
                 }
 
-                let result = self.enumerator.enumerate(
+                let result = self.enumerateMenuBarItems(
                     hiddenDividerWindowID: self.divider.windowID,
                     hiddenDividerFrame: self.divider.screenFrame,
                     alwaysHiddenDividerWindowID: self.alwaysHiddenDivider.windowID,
@@ -2184,7 +2203,7 @@ final class MenuBarHiddenManager: ObservableObject {
     private func recordStoredLayoutAfterMenuBarDrag() {
         guard permissions.canManageItems else { return }
 
-        let result = enumerator.enumerate(
+        let result = enumerateMenuBarItems(
             hiddenDividerWindowID: divider.windowID,
             hiddenDividerFrame: divider.screenFrame,
             alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
