@@ -557,4 +557,3 @@ A 的 minors：AC-m1（虚拟页未满页跳动）并入 AR-M6 的统一语义�
 | BT-M3 | tests/major | FloatSpy/ClassifierSpy/注册表三类测试替身无对应 API 缝，13 个测试近半写不出 | **改设计**：floatingPresenterFactory + settle(to:completion:) 协议形状定义；分类挂起断言改基于真容器 externalGapIndex（放弃 ClassifierSpy，按审查建议改口）；注册表/目标容器暴露 internal 只读面（§10 缝清单） |
 
 B 的 minors：BC-m1（updateDirectDrag guard 位置）/ BR-m1（endDirectDrag guard 位置）→ §1.5 写死分支位置 + 测试 F 锁 guard 顺序；BC-m2（注册 hoist 安全）→ 注释锁 + 回归测试采纳；BC-m3（snapVisualSettle 余量临界）→ 保守取 0.65 + 真机实测项；BR-m2（.reorder(nil) 分支一致性）→ 快照清理入视觉通道、编辑性走冻结值、「末项可为 folder」点名（§1.3）；BT-m1（旧精度测试假安全感）→ 测试 F 补 carry 形态精度对仗用例 + 覆盖降格注释；BT-m2（步骤 5/6 clamp 过渡）→ §11 步骤 5 写明过渡 clamp。全部采纳。
-

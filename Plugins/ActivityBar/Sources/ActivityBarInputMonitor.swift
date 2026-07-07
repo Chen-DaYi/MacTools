@@ -133,19 +133,19 @@ final class ActivityBarInputMonitor: ActivityBarInputMonitoring {
             return
         }
 
-        let app = frontmostAppName
-
         switch type {
         case .keyDown:
-            onEvent?(.keystroke(app: app))
+            onEvent?(.keystroke(app: currentActiveAppName()))
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
-            onEvent?(.pointerClick(app: app))
+            onEvent?(.pointerClick(app: currentActiveAppName()))
         case .scrollWheel:
             let now = Date()
-            if now.timeIntervalSince(Self.lastScrollTime) > Timing.scrollGestureGap {
-                onEvent?(.scroll(app: app))
+            guard now.timeIntervalSince(Self.lastScrollTime) > Timing.scrollGestureGap else {
+                Self.lastScrollTime = now
+                return
             }
             Self.lastScrollTime = now
+            onEvent?(.scroll(app: currentActiveAppName()))
         default:
             break
         }
@@ -195,5 +195,9 @@ final class ActivityBarInputMonitor: ActivityBarInputMonitoring {
         if elapsed > Timing.minimumScreenTimeFlush {
             onEvent?(.screenTime(app: app, seconds: elapsed))
         }
+    }
+
+    private func currentActiveAppName() -> String {
+        activeApp ?? frontmostAppName
     }
 }

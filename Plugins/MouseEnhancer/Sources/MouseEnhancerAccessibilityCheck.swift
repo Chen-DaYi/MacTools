@@ -18,4 +18,3 @@ enum MouseEnhancerAccessibilityCheck {
         return AXIsProcessTrustedWithOptions(options)
     }
 }
-

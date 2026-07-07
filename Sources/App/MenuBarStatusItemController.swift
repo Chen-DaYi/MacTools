@@ -244,6 +244,7 @@ final class MenuBarStatusItemController: NSObject {
 
     private func observePluginHost() {
         pluginHost.$hasActivePlugin
+            .removeDuplicates()
             .sink { [weak self] _ in
                 self?.updateStatusIcon()
             }

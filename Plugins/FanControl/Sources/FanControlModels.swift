@@ -70,6 +70,36 @@ struct FanSnapshot: Equatable {
         fanMaxSpeeds: [],
         cpuTemperature: nil
     )
+
+    func isMeaningfullyEquivalent(
+        to other: FanSnapshot,
+        rpmTolerance: Int = 10,
+        temperatureTolerance: Double = 0.5
+    ) -> Bool {
+        guard
+            fanCount == other.fanCount,
+            fanMinSpeeds == other.fanMinSpeeds,
+            fanMaxSpeeds == other.fanMaxSpeeds,
+            fanSpeeds.count == other.fanSpeeds.count
+        else {
+            return false
+        }
+
+        for (lhs, rhs) in zip(fanSpeeds, other.fanSpeeds) {
+            if abs(lhs - rhs) > rpmTolerance {
+                return false
+            }
+        }
+
+        switch (cpuTemperature, other.cpuTemperature) {
+        case (.none, .none):
+            return true
+        case let (.some(lhs), .some(rhs)):
+            return abs(lhs - rhs) <= temperatureTolerance
+        case (.some, .none), (.none, .some):
+            return false
+        }
+    }
 }
 
 // MARK: - RPM Limits

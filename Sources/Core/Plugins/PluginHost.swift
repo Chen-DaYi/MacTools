@@ -154,7 +154,9 @@ final class PluginHost: ObservableObject {
     private var didLoadDynamicPlugins = false
     private var displayTopologyRefreshTask: Task<Void, Never>?
     private var pluginStateChangeRebuildTask: Task<Void, Never>?
-    private var isRunningScheduledPluginStateRebuild = false
+    private var dirtyPluginIDs: Set<String> = []
+    private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
+    private var cachedComponentStatesByID: [String: PluginComponentState] = [:]
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var componentItems: [PluginComponentItem] = []
@@ -956,7 +958,7 @@ final class PluginHost: ObservableObject {
             let pluginID = plugin.metadata.id
 
             plugin.onStateChange = { [weak self] in
-                self?.rebuildDerivedStateAfterPluginChange()
+                self?.rebuildDerivedStateAfterPluginChange(pluginID: pluginID)
             }
             plugin.requestPermissionGuidance = { [weak self] permissionID in
                 self?.requestPermissionGuidance(forPluginID: pluginID, permissionID: permissionID)
@@ -1046,66 +1048,65 @@ final class PluginHost: ObservableObject {
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
 
-    private func rebuildDerivedState() {
-        if !isRunningScheduledPluginStateRebuild {
-            pluginStateChangeRebuildTask?.cancel()
-            pluginStateChangeRebuildTask = nil
+    private func rebuildDerivedState(dirtyPluginIDs: Set<String>? = nil) {
+        if dirtyPluginIDs == nil {
+            cancelScheduledPluginStateRebuild()
         }
 
         let isolatedPluginCountAtStart = isolatedPluginFailures.count
         let orderedDescriptors = orderedPluginDescriptors()
-        let panelStatesByID = Dictionary(
-            uniqueKeysWithValues: orderedDescriptors.compactMap { descriptor -> (String, PluginPanelState)? in
-                guard descriptor.hasPrimaryPanel else {
-                    return nil
-                }
+        let descriptorIDs = Set(orderedDescriptors.map(\.metadata.id))
+        var panelStatesByID = dirtyPluginIDs == nil ? [:] : cachedPanelStatesByID.filter {
+            descriptorIDs.contains($0.key)
+        }
+        var componentStatesByID = dirtyPluginIDs == nil ? [:] : cachedComponentStatesByID.filter {
+            descriptorIDs.contains($0.key)
+        }
 
-                let plugin = descriptor.plugin
-                guard !isPluginIsolated(plugin) else {
-                    return nil
-                }
+        for descriptor in orderedDescriptors {
+            let pluginID = descriptor.metadata.id
+            let shouldReadPlugin = dirtyPluginIDs?.contains(pluginID) ?? true
+            let plugin = descriptor.plugin
 
-                guard let primaryPanel = plugin.primaryPanel else {
-                    return nil
+            if descriptor.hasPrimaryPanel,
+               !isPluginIsolated(plugin),
+               let primaryPanel = plugin.primaryPanel {
+                if shouldReadPlugin || panelStatesByID[pluginID] == nil {
+                    if let state = guardedValue(
+                        for: plugin,
+                        operation: "read primary panel state",
+                        primaryPanel.primaryPanelState
+                    ) {
+                        panelStatesByID[pluginID] = state
+                    } else {
+                        panelStatesByID.removeValue(forKey: pluginID)
+                    }
                 }
-
-                guard let state = guardedValue(
-                    for: plugin,
-                    operation: "read primary panel state",
-                    primaryPanel.primaryPanelState
-                ) else {
-                    return nil
-                }
-
-                return (plugin.metadata.id, state)
+            } else {
+                panelStatesByID.removeValue(forKey: pluginID)
             }
-        )
-        let componentStatesByID = Dictionary(
-            uniqueKeysWithValues: orderedDescriptors.compactMap { descriptor -> (String, PluginComponentState)? in
-                guard descriptor.hasComponentPanel else {
-                    return nil
-                }
 
-                let plugin = descriptor.plugin
-                guard !isPluginIsolated(plugin) else {
-                    return nil
+            if descriptor.hasComponentPanel,
+               !isPluginIsolated(plugin),
+               let componentPanel = plugin.componentPanel {
+                if shouldReadPlugin || componentStatesByID[pluginID] == nil {
+                    if let state = guardedValue(
+                        for: plugin,
+                        operation: "read component panel state",
+                        componentPanel.componentPanelState
+                    ) {
+                        componentStatesByID[pluginID] = state
+                    } else {
+                        componentStatesByID.removeValue(forKey: pluginID)
+                    }
                 }
-
-                guard let componentPanel = plugin.componentPanel else {
-                    return nil
-                }
-
-                guard let state = guardedValue(
-                    for: plugin,
-                    operation: "read component panel state",
-                    componentPanel.componentPanelState
-                ) else {
-                    return nil
-                }
-
-                return (plugin.metadata.id, state)
+            } else {
+                componentStatesByID.removeValue(forKey: pluginID)
             }
-        )
+        }
+
+        cachedPanelStatesByID = panelStatesByID
+        cachedComponentStatesByID = componentStatesByID
 
         panelItems = orderedDescriptors.compactMap { descriptor in
             guard descriptor.hasPrimaryPanel else {
@@ -1304,11 +1305,21 @@ final class PluginHost: ObservableObject {
             permissionCards: permissionCards,
             shortcutItems: shortcutItems
         )
+        if let dirtyPluginIDs {
+            for pluginID in dirtyPluginIDs {
+                configurationViewCache.removeValue(forKey: pluginID)
+            }
+        } else {
+            configurationViewCache.removeAll()
+        }
         trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
         syncSelectedFeatureSettingsPane()
 
-        hasActivePlugin = panelStatesByID.values.contains(where: \.isOn)
+        let newHasActivePlugin = panelStatesByID.values.contains(where: \.isOn)
             || componentStatesByID.values.contains(where: \.isActive)
+        if hasActivePlugin != newHasActivePlugin {
+            hasActivePlugin = newHasActivePlugin
+        }
 
         if isolatedPluginFailures.count > isolatedPluginCountAtStart {
             rebuildDerivedState()
@@ -1331,11 +1342,12 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func rebuildDerivedStateAfterPluginChange() {
+    private func rebuildDerivedStateAfterPluginChange(pluginID: String) {
         guard !isHandlingPluginAction else {
             return
         }
 
+        dirtyPluginIDs.insert(pluginID)
         schedulePluginStateChangeRebuild()
     }
 
@@ -1359,11 +1371,21 @@ final class PluginHost: ObservableObject {
                 return
             }
 
+            let pluginIDs = dirtyPluginIDs
+            dirtyPluginIDs.removeAll()
             pluginStateChangeRebuildTask = nil
-            isRunningScheduledPluginStateRebuild = true
-            rebuildDerivedState()
-            isRunningScheduledPluginStateRebuild = false
+            guard !pluginIDs.isEmpty else {
+                return
+            }
+
+            rebuildDerivedState(dirtyPluginIDs: pluginIDs)
         }
+    }
+
+    private func cancelScheduledPluginStateRebuild() {
+        pluginStateChangeRebuildTask?.cancel()
+        pluginStateChangeRebuildTask = nil
+        dirtyPluginIDs.removeAll()
     }
 
     private func guardedValue<T>(
@@ -1449,6 +1471,8 @@ final class PluginHost: ObservableObject {
 
         isolatedPluginFailures[pluginID] = message
         removePluginFromVisiblePanelSurfaces(pluginID, notify: false)
+        cachedPanelStatesByID.removeValue(forKey: pluginID)
+        cachedComponentStatesByID.removeValue(forKey: pluginID)
         componentViewCache.removeValue(forKey: pluginID)
         configurationViewCache.removeValue(forKey: pluginID)
         shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }

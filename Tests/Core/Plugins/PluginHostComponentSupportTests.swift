@@ -349,7 +349,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(configurationCounter.callCount, 1)
     }
 
-    func testPluginStateChangesAreCoalescedAndKeepConfigurationViewCache() async {
+    func testPluginStateChangesAreCoalescedAndInvalidateDirtyConfigurationViewCache() async {
         let configurationCounter = ConfigurationRenderCounter()
         let componentPanelPlugin = MutableComponentPanelPlugin(
             id: "component",
@@ -382,7 +382,30 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         _ = host.pluginConfigurationViewItem(for: "component")
 
-        XCTAssertEqual(configurationCounter.callCount, 1)
+        XCTAssertEqual(configurationCounter.callCount, 2)
+    }
+
+    func testPluginStateChangesOnlyReadDirtyPanelState() async throws {
+        let changingPlugin = CountingPrimaryPanelPlugin(id: "changing", order: 1)
+        let stablePlugin = CountingPrimaryPanelPlugin(id: "stable", order: 2)
+        let host = makeHost(
+            plugins: [changingPlugin, stablePlugin],
+            pluginStateChangeRebuildDelay: .milliseconds(20)
+        )
+        changingPlugin.panelStateReadCount = 0
+        stablePlugin.panelStateReadCount = 0
+
+        changingPlugin.primarySubtitle = "changed"
+        changingPlugin.onStateChange?()
+        changingPlugin.primarySubtitle = "changed again"
+        changingPlugin.onStateChange?()
+        changingPlugin.onStateChange?()
+
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertEqual(changingPlugin.panelStateReadCount, 1)
+        XCTAssertEqual(stablePlugin.panelStateReadCount, 0)
+        XCTAssertEqual(host.panelItems.map(\.description), ["changed again", "Feature stable"])
     }
 
     func testComponentActiveStateContributesToHasActivePlugin() {
@@ -877,6 +900,61 @@ private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func refresh() {
         refreshCallCount += 1
     }
+    func handleAction(_ action: PluginPanelAction) {}
+
+    func permissionState(for permissionID: String) -> PluginPermissionState {
+        PluginPermissionState(isGranted: true, footnote: nil)
+    }
+
+    func handlePermissionAction(id: String) {}
+    func handleSettingsAction(id: String) {}
+    func handleShortcutAction(id: String) {}
+}
+
+@MainActor
+private final class CountingPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var primarySubtitle: String
+    var panelStateReadCount = 0
+
+    init(id: String, order: Int) {
+        self.metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "sparkles",
+            iconTint: Color(nsColor: .systemBlue),
+            order: order,
+            defaultDescription: "Feature \(id)"
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .switch,
+            menuActionBehavior: .keepPresented
+        )
+        self.primarySubtitle = ""
+    }
+
+    var primaryPanelState: PluginPanelState {
+        panelStateReadCount += 1
+        return PluginPanelState(
+            subtitle: primarySubtitle,
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    var permissionRequirements: [PluginPermissionRequirement] { [] }
+    var settingsSections: [PluginSettingsSection] { [] }
+    var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    func refresh() {}
     func handleAction(_ action: PluginPanelAction) {}
 
     func permissionState(for permissionID: String) -> PluginPermissionState {

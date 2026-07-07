@@ -3,6 +3,8 @@ import XCTest
 
 @MainActor
 final class ActivityBarStatsStoreTests: XCTestCase {
+    private let inputDaysStorageKey = "activity-bar.input.days.v1"
+
     func testInputStatsAggregateByDayAndApp() {
         let storage = ActivityBarMemoryStorage()
         let store = ActivityBarStatsStore(
@@ -113,5 +115,27 @@ final class ActivityBarStatsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.today.date, "2026-05-18")
         XCTAssertEqual(reloaded.today.totalInputs, 0)
         XCTAssertTrue(reloaded.today.perApp.isEmpty)
+    }
+
+    func testFlushPendingChangesOnlyWritesWhenStatsAreDirty() {
+        let storage = ActivityBarMemoryStorage()
+        let store = ActivityBarStatsStore(
+            storage: storage,
+            calendar: activityBarTestCalendar(),
+            dateProvider: { activityBarTestDate() }
+        )
+
+        store.flushPendingChanges()
+
+        XCTAssertEqual(storage.setCallCount(forKey: inputDaysStorageKey), 0)
+
+        store.incrementKeystroke(app: "Terminal")
+        store.flushPendingChanges()
+
+        XCTAssertEqual(storage.setCallCount(forKey: inputDaysStorageKey), 1)
+
+        store.flushPendingChanges()
+
+        XCTAssertEqual(storage.setCallCount(forKey: inputDaysStorageKey), 1)
     }
 }

@@ -32,7 +32,7 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureVisibilityLifecycleHandling {
 
     // MARK: Metadata
 
@@ -55,8 +55,11 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let smcReader: any FanControlSMCReading
     private let smcWriter: any FanControlSMCWriting
     private let localization: PluginLocalization
+    private let monitoringActiveInterval: Duration
+    private let monitoringIdleInterval: Duration
 
     private var isExpanded = false
+    private var isFeaturePanelVisible = false
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
     private var requiresAutoRestore = false
@@ -70,7 +73,9 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "fan-control"),
         smcReader: any FanControlSMCReading = FanControlSMCReader(),
         smcWriter: (any FanControlSMCWriting)? = nil,
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        monitoringActiveInterval: Duration = .seconds(2),
+        monitoringIdleInterval: Duration = .seconds(10)
     ) {
         self.localization = localization
         self.presetStore = FanControlPresetStore(storage: context.storage, localization: localization)
@@ -79,6 +84,8 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
             resourceBundle: context.resourceBundle,
             localization: localization
         )
+        self.monitoringActiveInterval = monitoringActiveInterval
+        self.monitoringIdleInterval = monitoringIdleInterval
         self.metadata = PluginMetadata(
             id: "fan-control",
             title: localization.string("metadata.title", defaultValue: "风扇控制"),
@@ -146,8 +153,10 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleAction(_ action: PluginPanelAction) {
         switch action {
         case let .setDisclosureExpanded(expanded):
+            guard isExpanded != expanded else { return }
             isExpanded = expanded
             if !expanded { lastErrorMessage = nil }
+            restartMonitoringIfRunning()
             onStateChange?()
 
         case let .setSelection(controlID, optionID):
@@ -182,6 +191,15 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+
+    func featureVisibilityDidChange(_ isVisible: Bool) {
+        guard isFeaturePanelVisible != isVisible else {
+            return
+        }
+
+        isFeaturePanelVisible = isVisible
+        restartMonitoringIfRunning()
+    }
 
     // MARK: - Actions
 
@@ -227,9 +245,15 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         guard monitoringTask == nil else { return }
         monitoringTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                self?.fanSnapshot = self?.smcReader.readSnapshot() ?? .empty
-                self?.onStateChange?()
-                try? await Task.sleep(for: .seconds(2))
+                guard let self else {
+                    return
+                }
+
+                let snapshot = self.smcReader.readSnapshot()
+                if self.updateFanSnapshotIfNeeded(snapshot) {
+                    self.onStateChange?()
+                }
+                try? await Task.sleep(for: self.currentMonitoringInterval)
             }
         }
     }
@@ -237,6 +261,31 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private func stopMonitoring() {
         monitoringTask?.cancel()
         monitoringTask = nil
+    }
+
+    private var currentMonitoringInterval: Duration {
+        if isFeaturePanelVisible && isExpanded {
+            return monitoringActiveInterval
+        }
+        return monitoringIdleInterval
+    }
+
+    private func updateFanSnapshotIfNeeded(_ snapshot: FanSnapshot) -> Bool {
+        guard !fanSnapshot.isMeaningfullyEquivalent(to: snapshot) else {
+            return false
+        }
+
+        fanSnapshot = snapshot
+        return true
+    }
+
+    private func restartMonitoringIfRunning() {
+        guard monitoringTask != nil else {
+            return
+        }
+
+        stopMonitoring()
+        startMonitoring()
     }
 
     private func registerSleepWakeObservers() {

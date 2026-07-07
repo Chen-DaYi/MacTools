@@ -53,11 +53,24 @@ final class FanControlPluginTests: XCTestCase {
         writer.writeError = .writeFailed("硬件写入失败")
         let plugin = makePlugin(writer: writer)
 
+        plugin.handleAction(.setDisclosureExpanded(true))
         plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
 
         plugin.handleAction(.setDisclosureExpanded(false))
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testDisclosureNoOpDoesNotNotifyStateChange() {
+        let plugin = makePlugin()
+        var stateChangeCount = 0
+        plugin.onStateChange = {
+            stateChangeCount += 1
+        }
+
+        plugin.handleAction(.setDisclosureExpanded(false))
+
+        XCTAssertEqual(stateChangeCount, 0)
     }
 
     func testDeletingActiveCustomPresetResetsToAuto() {
@@ -123,14 +136,97 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertEqual(writer.appliedStrategies, [.fullSpeed, .auto])
     }
 
+    func testMonitoringOnlyPublishesMeaningfulSnapshotChanges() async throws {
+        let firstSnapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3600],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45
+        )
+        let equivalentSnapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3605],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45.2
+        )
+        let changedSnapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3900],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 49
+        )
+        let reader = MockSMCReader(
+            snapshot: changedSnapshot,
+            snapshots: [firstSnapshot, equivalentSnapshot, changedSnapshot]
+        )
+        let plugin = makePlugin(
+            reader: reader,
+            monitoringActiveInterval: .milliseconds(10),
+            monitoringIdleInterval: .milliseconds(10)
+        )
+        var stateChangeCount = 0
+        plugin.onStateChange = {
+            stateChangeCount += 1
+        }
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "fan-control"))
+        try await Task.sleep(for: .milliseconds(45))
+        plugin.deactivate(reason: .disabled)
+
+        XCTAssertGreaterThanOrEqual(reader.readCount, 3)
+        XCTAssertEqual(stateChangeCount, 2)
+    }
+
+    func testFeatureVisibilityAndDisclosureControlActiveMonitoring() async throws {
+        let snapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3600],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45
+        )
+        let reader = MockSMCReader(snapshot: snapshot)
+        let plugin = makePlugin(
+            reader: reader,
+            monitoringActiveInterval: .milliseconds(10),
+            monitoringIdleInterval: .milliseconds(200)
+        )
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "fan-control"))
+        try await Task.sleep(for: .milliseconds(40))
+        let idleReadCount = reader.readCount
+
+        plugin.featureVisibilityDidChange(true)
+        plugin.handleAction(.setDisclosureExpanded(true))
+        try await Task.sleep(for: .milliseconds(45))
+        let activeReadCount = reader.readCount
+
+        plugin.featureVisibilityDidChange(false)
+        try await Task.sleep(for: .milliseconds(45))
+        let closedReadCount = reader.readCount
+
+        plugin.deactivate(reason: .disabled)
+
+        XCTAssertLessThanOrEqual(idleReadCount, 2)
+        XCTAssertGreaterThanOrEqual(activeReadCount - idleReadCount, 3)
+        XCTAssertLessThanOrEqual(closedReadCount - activeReadCount, 2)
+    }
+
     private func makePlugin(
         reader: MockSMCReader? = nil,
-        writer: MockSMCWriter? = nil
+        writer: MockSMCWriter? = nil,
+        monitoringActiveInterval: Duration = .seconds(2),
+        monitoringIdleInterval: Duration = .seconds(10)
     ) -> FanControlPlugin {
         FanControlPlugin(
             context: PluginRuntimeContext(pluginID: "fan-control", storage: FanControlMemoryStorage()),
             smcReader: reader ?? MockSMCReader(),
-            smcWriter: writer ?? MockSMCWriter()
+            smcWriter: writer ?? MockSMCWriter(),
+            monitoringActiveInterval: monitoringActiveInterval,
+            monitoringIdleInterval: monitoringIdleInterval
         )
     }
 }
@@ -138,13 +234,20 @@ final class FanControlPluginTests: XCTestCase {
 @MainActor
 private final class MockSMCReader: FanControlSMCReading {
     var snapshot: FanSnapshot
+    var snapshots: [FanSnapshot]
+    private(set) var readCount = 0
 
-    init(snapshot: FanSnapshot = .empty) {
+    init(snapshot: FanSnapshot = .empty, snapshots: [FanSnapshot] = []) {
         self.snapshot = snapshot
+        self.snapshots = snapshots
     }
 
     func readSnapshot() -> FanSnapshot {
-        snapshot
+        readCount += 1
+        guard !snapshots.isEmpty else {
+            return snapshot
+        }
+        return snapshots.removeFirst()
     }
 }
 

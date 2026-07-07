@@ -7,6 +7,8 @@ final class ActivityBarStatsStore: ObservableObject {
         static let days = "activity-bar.input.days.v1"
     }
 
+    // Direct observers receive every input mutation and bypass controller-level
+    // UI throttling; keep hot-path UI subscriptions on ActivityBarController.
     @Published private(set) var days: [String: ActivityBarDailyStats]
 
     private let storage: PluginStorage
@@ -16,19 +18,24 @@ final class ActivityBarStatsStore: ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var persistenceTask: Task<Void, Never>?
-    private var hasPendingPersistence = false
+    private var hasPendingChanges = false
+
+    private enum Persistence {
+        static let debounceDelay: Duration = .seconds(30)
+        static let retainedDayCount = 370
+    }
 
     init(
         storage: PluginStorage,
         calendar: Calendar = .current,
         dateProvider: @escaping () -> Date = Date.init,
-        persistenceDelay: Duration = .seconds(2)
+        persistenceDelay: Duration = Persistence.debounceDelay
     ) {
         self.storage = storage
         self.calendar = calendar
         self.dateProvider = dateProvider
         self.persistenceDelay = persistenceDelay
-        self.days = Self.loadDays(storage: storage, decoder: decoder)
+        self.days = Self.prunedDays(Self.loadDays(storage: storage, decoder: decoder))
     }
 
     deinit {
@@ -105,6 +112,7 @@ final class ActivityBarStatsStore: ObservableObject {
 
     func resetToday() {
         days[dateKey(for: dateProvider())] = ActivityBarDailyStats(date: dateKey(for: dateProvider()))
+        hasPendingChanges = true
         persistPendingChanges(force: true)
     }
 
@@ -125,6 +133,7 @@ final class ActivityBarStatsStore: ObservableObject {
 
         day.perApp[app] = appStats
         days[key] = day
+        hasPendingChanges = true
         schedulePersistence()
     }
 
@@ -142,7 +151,6 @@ final class ActivityBarStatsStore: ObservableObject {
     }
 
     private func schedulePersistence() {
-        hasPendingPersistence = true
         guard persistenceTask == nil else {
             return
         }
@@ -170,15 +178,16 @@ final class ActivityBarStatsStore: ObservableObject {
         persistenceTask?.cancel()
         persistenceTask = nil
 
-        guard force || hasPendingPersistence else {
+        guard force || hasPendingChanges else {
             return
         }
 
-        hasPendingPersistence = false
+        days = Self.prunedDays(days)
 
         do {
             let data = try encoder.encode(days)
             storage.set(data, forKey: StorageKey.days)
+            hasPendingChanges = false
         } catch {
             ActivityBarLog.input.error("Failed to persist input stats: \(error.localizedDescription, privacy: .public)")
         }
@@ -195,5 +204,14 @@ final class ActivityBarStatsStore: ObservableObject {
             ActivityBarLog.input.error("Failed to load input stats: \(error.localizedDescription, privacy: .public)")
             return [:]
         }
+    }
+
+    private static func prunedDays(_ days: [String: ActivityBarDailyStats]) -> [String: ActivityBarDailyStats] {
+        guard days.count > Persistence.retainedDayCount else {
+            return days
+        }
+
+        let retainedKeys = Set(days.keys.sorted().suffix(Persistence.retainedDayCount))
+        return days.filter { retainedKeys.contains($0.key) }
     }
 }

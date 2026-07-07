@@ -34,6 +34,7 @@ final class ActivityBarController: ObservableObject {
     private let inputEventNotificationDelay: Duration
     private var hookInstallerPaths: ActivityBarHookInstallerPaths
     private var inputEventNotificationTask: Task<Void, Never>?
+    private var terminateObserver: NSObjectProtocol?
 
     init(
         context: PluginRuntimeContext,
@@ -77,6 +78,24 @@ final class ActivityBarController: ObservableObject {
 
         if let installedAt = context.storage.string(forKey: StorageKey.hooksInstalledAt) {
             hookInstallState = .installed(timestamp: installedAt)
+        }
+
+        terminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.inputStats.flushPendingChanges()
+                self?.codingStats.flushActiveDurations()
+            }
+        }
+    }
+
+    @MainActor deinit {
+        inputEventNotificationTask?.cancel()
+        if let terminateObserver {
+            NotificationCenter.default.removeObserver(terminateObserver)
         }
     }
 
@@ -172,6 +191,7 @@ final class ActivityBarController: ObservableObject {
     }
 
     func refresh() {
+        inputStats.flushPendingChanges()
         codingStats.flushActiveDurations()
         notifyChange()
     }
