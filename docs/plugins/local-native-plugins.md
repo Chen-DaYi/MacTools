@@ -26,6 +26,17 @@ Example.mactoolsplugin/
 {
   "id": "com.example.mactools.demo",
   "displayName": "Demo",
+  "summary": "示例插件",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "示例",
+      "summary": "示例插件"
+    },
+    "en": {
+      "displayName": "Demo",
+      "summary": "Demo plugin"
+    }
+  },
   "version": "1.0.0",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 2,
@@ -40,6 +51,8 @@ Example.mactoolsplugin/
   "category": "productivity"
 }
 ```
+
+`displayName` and `summary` are fallback marketplace metadata. Add `localizedMetadata` for every user-facing marketplace language the plugin supports. The host chooses the best match from the user's language preferences before the plugin bundle is loaded, but it does not own plugin translations.
 
 `category` is optional and is used by the marketplace and "已安装" list to group plugins. Supported values: `display`, `audio`, `system`, `storage`, `productivity`, `monitoring`. Unknown or omitted values fall back to "其他".
 
@@ -57,7 +70,7 @@ Plugins/Example/
   Resources/            # Optional plugin resources
 ```
 
-Only `plugin.json` and the built `.bundle` are copied into a `.mactoolsplugin` package. Bundle resources must therefore be copied into the built `.bundle` by the generated Xcode target. `Tests/` is included only by the host unit-test target during development and is never packaged into the app or plugin distribution.
+Only `plugin.json` and the built `.bundle` are copied into a `.mactoolsplugin` package. Bundle resources must therefore be copied into the built `.bundle` by the generated Xcode target. In this repository, `Plugins/<PluginName>/Resources` is automatically added to the generated bundle target, so plugin-owned `.xcstrings`, images, JSON files, and other runtime resources should live there. `Tests/` is included only by the host unit-test target during development and is never packaged into the app or plugin distribution.
 
 In this repository, plugin Xcode targets are generated before XcodeGen runs. The generator scans `Plugins/*/plugin.json` and applies a shared target template for `Sources/`, `Bundle/`, `Tests/`, plugin schemes, and the host test target. Most plugins do not need any root project changes. Add `Plugins/<PluginName>/project.yml` only for plugin-local build differences such as `OTHER_LDFLAGS`, `SWIFT_INCLUDE_PATHS`, extra bundle resources, helper/tool targets, or additional target dependencies. A helper/tool target can declare `bundleResourcePath` to have the generated bundle target copy its built executable into `Contents/Resources/<bundleResourcePath>/`.
 
@@ -71,9 +84,23 @@ To add a plugin, create `Plugins/<PluginName>/plugin.json`, `Sources/`, and `Bun
 make run
 ```
 
+Finder Sync, Share, Quick Look, and other macOS app extensions are host-level targets. A plugin may expose settings or status for that feature, but the extension target itself must be embedded by the main app through `project.yml`; it cannot be installed into Finder by a dynamic `.mactoolsplugin` bundle at runtime.
+
 In Debug development, `make run` builds the main `MacTools` scheme, then synchronizes the freshly built plugin bundles from `build/DerivedData/Build/Products/Debug` into `build/LocalPlugins/Packages`, generates `build/LocalPlugins/catalog.dev.json`, and updates `~/Library/Application Support/MacTools Dev/Plugins/Installed`. This keeps the local marketplace and installed plugins on the latest source code without running a separate plugin build.
 
 If the plugin needs extra frameworks, private include paths, bundle resources, helper/tool targets, or target dependencies, add only those differences in `Plugins/<PluginName>/project.yml`. If the plugin package contains an extra executable inside the bundle resources, declare it in `plugin.json.package.signPaths` so release packaging signs it before signing the bundle.
+
+Plugin UI copy should be localized by the plugin itself. Put plugin string catalogs under `Plugins/<PluginName>/Resources`, then look them up from the plugin bundle, for example:
+
+```swift
+private enum DemoL10n {
+    static let strings = PluginLocalization(bundle: Bundle(for: DemoPluginFactory.self))
+
+    static var title: String {
+        strings.string("metadata.title", defaultValue: "示例")
+    }
+}
+```
 
 To resynchronize already-built Debug plugin bundles without launching the app:
 

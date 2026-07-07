@@ -2,7 +2,53 @@
   "id": "disk-clean",
   "displayName": "磁盘清理",
   "summary": "缓存、开发者缓存和浏览器缓存清理",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "تنظيف القرص",
+      "summary": "تنظيف ذاكرة التخزين المؤقت، وذاكرة التخزين المؤقت للمطورين، وذاكرة التخزين المؤقت للمتصفح."
+    },
+    "de": {
+      "displayName": "Datenträgerbereinigung",
+      "summary": "Caches, Entwickler-Caches und Browser-Caches bereinigen."
+    },
+    "en": {
+      "displayName": "Disk Cleanup",
+      "summary": "Clean caches, developer caches, and browser caches."
+    },
+    "es": {
+      "displayName": "Limpieza de disco",
+      "summary": "Limpiar cachés, cachés de desarrolladores y cachés de navegador."
+    },
+    "fr": {
+      "displayName": "Nettoyage du disque",
+      "summary": "Nettoyer les caches, les caches des développeurs et les caches du navigateur."
+    },
+    "ja": {
+      "displayName": "ディスククリーンアップ",
+      "summary": "キャッシュ、開発者キャッシュ、ブラウザ キャッシュをクリーンアップします。"
+    },
+    "ko": {
+      "displayName": "디스크 정리",
+      "summary": "캐시, 개발자 캐시 및 브라우저 캐시를 정리합니다."
+    },
+    "pt": {
+      "displayName": "Limpeza de disco",
+      "summary": "Limpe caches, caches de desenvolvedores e caches de navegador."
+    },
+    "ru": {
+      "displayName": "Очистка диска",
+      "summary": "Очистка кеша, кеша разработчика и кеша браузера."
+    },
+    "zh-Hans": {
+      "displayName": "磁盘清理",
+      "summary": "缓存、开发者缓存和浏览器缓存清理"
+    },
+    "zh-Hant": {
+      "displayName": "磁碟清理",
+      "summary": "緩存、開發者緩存和瀏覽器緩存清理"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DiskClean.bundle",

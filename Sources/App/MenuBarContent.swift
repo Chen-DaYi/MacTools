@@ -3,7 +3,7 @@ import SwiftUI
 import MacToolsPluginKit
 
 enum MenuBarPanelLayout {
-    static let baseWidth: CGFloat = 288
+    static let baseWidth: CGFloat = 316
     static let secondaryPanelWidth: CGFloat = 216
     static let maximumPanelHeight: CGFloat = 720
     static let minimumPanelHeight: CGFloat = 220
@@ -13,15 +13,15 @@ enum MenuBarPanelLayout {
     static let cornerRadius: CGFloat = 12
     static let panelSpacing: CGFloat = 10
     static let outerPadding: CGFloat = 6
-    static let rootSpacing: CGFloat = 6
+    static let contentTopPadding: CGFloat = 4
+    static let rootSpacing: CGFloat = 0
+    static let toolbarHeight: CGFloat = 30
     static let featureRowSpacing: CGFloat = 5
-    static let rowHeaderHeight: CGFloat = 26
+    static let rowHeaderHeight: CGFloat = 31
     static let rowVerticalPadding: CGFloat = 16
     static let detailSpacing: CGFloat = 8
     static let detailControlSpacing: CGFloat = 8
     static let emptyContentHeight: CGFloat = 150
-    static let dividerHeight: CGFloat = 1
-    static let settingsRowHeight: CGFloat = 36
     static let actionRowVerticalPadding: CGFloat = 8
     static let selectRowVerticalPadding: CGFloat = 5
     static let sliderVerticalPadding: CGFloat = 9
@@ -30,6 +30,37 @@ enum MenuBarPanelLayout {
 
     static var surfaceWidth: CGFloat {
         baseWidth - (outerPadding * 2)
+    }
+
+    static var topChromeHeight: CGFloat {
+        outerPadding + toolbarHeight + rootSpacing
+    }
+
+    static var contentBottomPadding: CGFloat {
+        outerPadding
+    }
+
+    static var contentVerticalPadding: CGFloat {
+        contentTopPadding + contentBottomPadding
+    }
+
+    static func contentBodyHeight(forContentHeight contentHeight: CGFloat) -> CGFloat {
+        max(0, contentHeight - contentVerticalPadding)
+    }
+
+    static var minimumContentHeight: CGFloat {
+        max(0, minimumPanelHeight - topChromeHeight)
+    }
+
+    static func maximumContentHeight(for screen: NSScreen?) -> CGFloat {
+        max(
+            minimumContentHeight,
+            maximumPanelHeight(for: screen) - topChromeHeight
+        )
+    }
+
+    static func panelHeight(forContentHeight contentHeight: CGFloat) -> CGFloat {
+        topChromeHeight + contentHeight
     }
 
     static func width(for panelItems: [PluginPanelItem]) -> CGFloat {
@@ -44,7 +75,7 @@ enum MenuBarPanelLayout {
     }
 
     static func height(for panelItems: [PluginPanelItem]) -> CGFloat {
-        featureContentHeight(for: panelItems) + fixedFooterHeight
+        preferredPanelHeight(for: panelItems, screen: nil)
     }
 
     static func featureContentHeight(for panelItems: [PluginPanelItem]) -> CGFloat {
@@ -57,19 +88,21 @@ enum MenuBarPanelLayout {
             : rowContentHeight + featureSpacing
     }
 
-    static var fixedFooterHeight: CGFloat {
-        dividerHeight
-            + settingsRowHeight * 2
-            + rootSpacing * 2
-            + outerPadding * 2
-    }
-
     static func availableFeatureHeight(forPanelHeight panelHeight: CGFloat) -> CGFloat {
-        max(0, panelHeight - fixedFooterHeight)
+        max(0, panelHeight - topChromeHeight - contentVerticalPadding)
     }
 
     static func preferredPanelHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
-        featureListHeight(for: panelItems, screen: screen) + fixedFooterHeight
+        panelHeight(
+            forContentHeight: preferredFeatureContentHeight(for: panelItems, screen: screen)
+        )
+    }
+
+    static func preferredFeatureContentHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
+        max(
+            featureListHeight(for: panelItems, screen: screen) + contentVerticalPadding,
+            minimumContentHeight
+        )
     }
 
     static func featureListHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
@@ -84,10 +117,25 @@ enum MenuBarPanelLayout {
         featureContentHeight: CGFloat,
         maximumFeatureListHeight: CGFloat
     ) -> CGFloat {
-        featureListHeight(
-            featureContentHeight: featureContentHeight,
-            maximumFeatureListHeight: maximumFeatureListHeight
-        ) + fixedFooterHeight
+        panelHeight(
+            forContentHeight: preferredFeatureContentHeight(
+                featureContentHeight: featureContentHeight,
+                maximumFeatureListHeight: maximumFeatureListHeight
+            )
+        )
+    }
+
+    static func preferredFeatureContentHeight(
+        featureContentHeight: CGFloat,
+        maximumFeatureListHeight: CGFloat
+    ) -> CGFloat {
+        max(
+            featureListHeight(
+                featureContentHeight: featureContentHeight,
+                maximumFeatureListHeight: maximumFeatureListHeight
+            ) + contentVerticalPadding,
+            minimumContentHeight
+        )
     }
 
     static func maximumFeatureListHeight(for screen: NSScreen?) -> CGFloat {
@@ -100,7 +148,8 @@ enum MenuBarPanelLayout {
         }
 
         let screenMaximum = (visibleFrameHeight * featurePanelScreenHeightRatio)
-            - fixedFooterHeight
+            - topChromeHeight
+            - contentVerticalPadding
         return max(0, min(featureListMaximumHeight, screenMaximum))
     }
 
@@ -117,11 +166,7 @@ enum MenuBarPanelLayout {
     }
 
     private static func rowHeight(for item: PluginPanelItem) -> CGFloat {
-        guard
-            item.controlStyle == .disclosure,
-            item.isExpanded,
-            let detail = item.detail
-        else {
+        guard let detail = displayedDetail(for: item) else {
             return rowHeaderHeight + rowVerticalPadding
         }
 
@@ -129,6 +174,18 @@ enum MenuBarPanelLayout {
             + detailSpacing
             + detailHeight(for: detail.primaryControls)
             + rowVerticalPadding
+    }
+
+    private static func displayedDetail(for item: PluginPanelItem) -> PluginPanelDetail? {
+        guard let detail = item.detail else {
+            return nil
+        }
+
+        if item.controlStyle == .disclosure && !item.isExpanded {
+            return nil
+        }
+
+        return detail
     }
 
     private static func detailHeight(for controls: [PluginPanelControl]) -> CGFloat {
@@ -160,10 +217,13 @@ enum MenuBarPanelLayout {
             let titleHeight = control.sectionTitle == nil && control.valueLabel == nil ? CGFloat(0) : CGFloat(15)
             let titleSpacing = titleHeight > 0 ? CGFloat(6) : CGFloat(0)
             return titleHeight + titleSpacing + 18 + sliderVerticalPadding * 2
+        case .switchRow:
+            return 20 + actionRowVerticalPadding * 2
         case .actionRow:
             return 16 + actionRowVerticalPadding * 2
         }
     }
+
 }
 
 private enum FeatureRowLayout {
@@ -380,16 +440,16 @@ struct MenuBarContent: View {
     static let batteryChargeLimitPluginID = "battery-charge-limit"
     static let batteryChargeLimitManageSettingsActionID = "battery-manage-settings"
     static let ipOverviewPluginID = "ip-overview"
-    static let ipOverviewOpenDetailsActionID = "ip-overview-open-details"
+    static let ipOverviewCopyIPActionID = "ip-overview-copy-ip"
 
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
     @StateObject private var deferredActionDispatcher = DeferredPanelActionDispatcher()
-    @State private var measuredFeatureContentHeight: CGFloat?
 
     @ObservedObject var pluginHost: PluginHost
+    let contentBodyHeight: CGFloat
     let maximumFeatureListHeight: CGFloat
-    let onPreferredHeightChange: (CGFloat) -> Void
+    let isPanelVisible: Bool
     let onDismiss: () -> Void
     let onOpenSettings: () -> Void
     let onPresentDiskCleanConfiguration: () -> Void
@@ -397,15 +457,12 @@ struct MenuBarContent: View {
 
     var body: some View {
         content
-        .frame(
-            width: MenuBarPanelLayout.width(for: pluginHost.panelItems),
-            height: preferredPanelHeight,
-            alignment: .topLeading
-        )
         .background(
             MenuWindowAccessor { window in
-                secondaryPanelController.setHostWindow(window)
-                syncSecondaryPanelWindow()
+                secondaryPanelController.setHostWindow(isPanelVisible ? window : nil)
+                if isPanelVisible {
+                    syncSecondaryPanelWindow()
+                }
             }
         )
         .onAppear {
@@ -419,27 +476,32 @@ struct MenuBarContent: View {
             secondaryPanelController.onHostWindowDismissRequest = {
                 hoverCoordinator.dismissImmediately()
             }
-
-            onPreferredHeightChange(preferredPanelHeight)
         }
         .animation(.easeOut(duration: 0.18), value: activeSecondaryPanelSignature)
         .onChange(of: activeSecondaryPanelSignature) {
-            syncSecondaryPanelWindow()
+            syncSecondaryPanelWindowIfVisible()
         }
         .onChange(of: hoverCoordinator.selectedRowFrame) {
-            syncSecondaryPanelWindow()
+            syncSecondaryPanelWindowIfVisible()
         }
         .onChange(of: hoverCoordinator.activeActivation) {
-            syncSecondaryPanelWindow()
+            syncSecondaryPanelWindowIfVisible()
         }
         .onReceive(pluginHost.$settingsPresentationRequestCount.dropFirst()) { _ in
-            presentSettings()
+            if isPanelVisible {
+                presentSettings()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)) { _ in
             secondaryPanelController.applyCurrentAppearance()
         }
-        .onChange(of: preferredPanelHeight) { _, newHeight in
-            onPreferredHeightChange(newHeight)
+        .onChange(of: isPanelVisible) { _, isVisible in
+            if isVisible {
+                syncSecondaryPanelWindow()
+            } else {
+                hoverCoordinator.dismissImmediately()
+                secondaryPanelController.setHostWindow(nil)
+            }
         }
         .onDisappear {
             flushDeferredActionsIfNeeded()
@@ -450,16 +512,22 @@ struct MenuBarContent: View {
         }
     }
 
-    private var content: some View {
-        VStack(alignment: .leading, spacing: MenuBarPanelLayout.rootSpacing) {
-            featureList
-                .frame(height: featureListHeight, alignment: .topLeading)
-
-            Divider()
-            settingsCard
+    private func syncSecondaryPanelWindowIfVisible() {
+        guard isPanelVisible else {
+            return
         }
-        .padding(MenuBarPanelLayout.outerPadding)
-        .frame(width: MenuBarPanelLayout.width(for: pluginHost.panelItems), alignment: .leading)
+
+        syncSecondaryPanelWindow()
+    }
+
+    private var content: some View {
+        featureList
+            .frame(height: visibleFeatureListHeight, alignment: .topLeading)
+            .frame(
+                width: MenuBarPanelLayout.surfaceWidth,
+                height: contentBodyHeight,
+                alignment: .topLeading
+            )
     }
 
     @ViewBuilder
@@ -478,20 +546,16 @@ struct MenuBarContent: View {
         )
     }
 
+    private var visibleFeatureListHeight: CGFloat {
+        min(featureListHeight, contentBodyHeight)
+    }
+
     private var isFeatureListScrollable: Bool {
-        featureContentHeight > featureListHeight
+        featureContentHeight > visibleFeatureListHeight
     }
 
     private var featureContentHeight: CGFloat {
-        measuredFeatureContentHeight
-            ?? MenuBarPanelLayout.featureContentHeight(for: pluginHost.panelItems)
-    }
-
-    private var preferredPanelHeight: CGFloat {
-        MenuBarPanelLayout.preferredPanelHeight(
-            featureContentHeight: featureContentHeight,
-            maximumFeatureListHeight: maximumFeatureListHeight
-        )
+        MenuBarPanelLayout.featureContentHeight(for: pluginHost.panelItems)
     }
 
     private func presentSettings() {
@@ -542,17 +606,11 @@ struct MenuBarContent: View {
             return
         }
 
-        if isIPOverviewOpenDetailsAction(pluginID: item.id, controlID: controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.ipOverviewPluginID)
-            onDismiss()
-            return
-        }
-
         switch behavior {
         case .keepPresented:
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
         case .dismissBeforeHandling:
-            // 先收 popover 再执行，避免动作打开新窗口时菜单还浮在屏上挡视线。
+            // Dismiss the popover before running actions that may open a new window.
             deferredActionDispatcher.deferActionInvocation(
                 pluginID: item.id,
                 controlID: controlID
@@ -609,11 +667,6 @@ struct MenuBarContent: View {
             return
         }
 
-        if isIPOverviewOpenDetailsAction(pluginID: action.pluginID, controlID: action.controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.ipOverviewPluginID)
-            return
-        }
-
         pluginHost.invokePanelAction(
             controlID: action.controlID,
             for: action.pluginID
@@ -638,10 +691,6 @@ struct MenuBarContent: View {
 
     private func isBatteryChargeLimitManageSettingsAction(pluginID: String, controlID: String) -> Bool {
         pluginID == Self.batteryChargeLimitPluginID && controlID == Self.batteryChargeLimitManageSettingsActionID
-    }
-
-    private func isIPOverviewOpenDetailsAction(pluginID: String, controlID: String) -> Bool {
-        pluginID == Self.ipOverviewPluginID && controlID == Self.ipOverviewOpenDetailsActionID
     }
 
     private func presentDiskCleanDetails() {
@@ -736,7 +785,7 @@ struct MenuBarContent: View {
         VStack(spacing: MenuBarPanelLayout.featureRowSpacing) {
             if pluginHost.panelItems.isEmpty {
                 PanelPluginEmptyState(
-                    title: "暂无插件",
+                    title: AppL10n.plugins("plugin.panel.empty.title", defaultValue: "暂无插件"),
                     systemImage: "shippingbox",
                     iconTint: .blue,
                     onInstall: {
@@ -787,6 +836,9 @@ struct MenuBarContent: View {
                         onDateChange: { controlID, date in
                             pluginHost.setPanelDateValue(date, controlID: controlID, for: item.id)
                         },
+                        onSwitchChange: { newValue in
+                            handlePanelSwitchChange(newValue, for: item)
+                        },
                         onSliderChange: { controlID, value, phase in
                             pluginHost.setPanelSliderValue(
                                 value,
@@ -807,39 +859,8 @@ struct MenuBarContent: View {
             }
         }
         .frame(width: MenuBarPanelLayout.surfaceWidth, alignment: .leading)
-        .background(
-            HeightReader { height in
-                guard
-                    height > 0,
-                    measuredFeatureContentHeight == nil
-                        || abs((measuredFeatureContentHeight ?? 0) - height) > 0.5
-                else {
-                    return
-                }
-
-                measuredFeatureContentHeight = height
-            }
-        )
     }
 
-    private var settingsCard: some View {
-        VStack(spacing: 0) {
-            Button {
-                presentSettings()
-            } label: {
-                MenuActionRowLabel(title: "设置", systemImage: "gearshape")
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                MenuActionRowLabel(title: "退出", systemImage: "power")
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(width: MenuBarPanelLayout.surfaceWidth, alignment: .leading)
-    }
 }
 
 @MainActor
@@ -914,10 +935,11 @@ struct FeatureRowView: View {
     let onNavigationHoverChange: (String, String, Bool) -> Void
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
-    @State private var isHovered = false
-    @State private var didPushDisabledCursor = false
+    let onSwitchChange: (Bool) -> Void
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
+    @State private var isHovered = false
+    @State private var didPushDisabledCursor = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: detailToDisplay == nil ? 0 : MenuBarPanelLayout.detailSpacing) {
@@ -946,18 +968,7 @@ struct FeatureRowView: View {
                     }
                     .frame(width: FeatureRowLayout.iconSize, height: FeatureRowLayout.iconSize)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
-                            .font(.system(size: 13, weight: .semibold))
-                            .lineLimit(1)
-
-                        Text(item.description)
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .help(item.helpText)
-                    }
+                    rowText
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     Button {
@@ -965,7 +976,7 @@ struct FeatureRowView: View {
                             onActionInvoke(actionID, item.menuActionBehavior)
                         }
                     } label: {
-                        Text(item.buttonTitle ?? "操作")
+                        Text(item.buttonTitle ?? AppL10n.plugins("plugin.panel.actionFallback", defaultValue: "操作"))
                             .font(.system(size: 11))
                             .foregroundStyle(.white)
                             .frame(minWidth: 45, minHeight: 21)
@@ -983,12 +994,14 @@ struct FeatureRowView: View {
             if let detail = detailToDisplay {
                 PluginPanelDetailView(
                     detail: detail,
+                    isOn: $isOn,
                     showsSecondaryPanel: false,
                     onSelectionChange: onSelectionChange,
                     onNavigationSelectionChange: onNavigationSelectionChange,
                     onNavigationHoverChange: onNavigationHoverChange,
                     onNavigationRowFrameChange: onNavigationRowFrameChange,
                     onDateChange: onDateChange,
+                    onSwitchChange: onSwitchChange,
                     onSliderChange: onSliderChange,
                     onActionInvoke: onActionInvoke
                 )
@@ -1029,18 +1042,7 @@ struct FeatureRowView: View {
             }
             .frame(width: FeatureRowLayout.iconSize, height: FeatureRowLayout.iconSize)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-
-                Text(item.description)
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(item.helpText)
-            }
+            rowText
             .frame(maxWidth: .infinity, alignment: .leading)
 
             switch item.controlStyle {
@@ -1063,6 +1065,7 @@ struct FeatureRowView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: MenuBarPanelLayout.rowHeaderHeight, alignment: .center)
         .contentShape(Rectangle())
     }
 
@@ -1076,6 +1079,59 @@ struct FeatureRowView: View {
         }
 
         return detail
+    }
+
+    private var rowText: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.title)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+
+            HStack(spacing: 3) {
+                Text(item.description)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(item.helpText)
+
+                if showsIPOverviewCopyButton {
+                    Button {
+                        onActionInvoke(MenuBarContent.ipOverviewCopyIPActionID, .keepPresented)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 10.5, height: 10.5)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(isHovered ? 1 : 0)
+                    .help(AppL10n.plugins("plugin.panel.copyIP", defaultValue: "复制 IP"))
+                }
+            }
+        }
+    }
+
+    private var showsIPOverviewCopyButton: Bool {
+        item.id == MenuBarContent.ipOverviewPluginID
+            && !descriptionIsError
+            && Self.looksLikeIPAddress(item.description)
+    }
+
+    private var descriptionIsError: Bool {
+        switch item.descriptionTone {
+        case .error:
+            return true
+        case .secondary:
+            return false
+        }
+    }
+
+    private static func looksLikeIPAddress(_ value: String) -> Bool {
+        let allowedCharacters = CharacterSet(charactersIn: "0123456789abcdefABCDEF:.")
+        return !value.isEmpty
+            && value.rangeOfCharacter(from: allowedCharacters.inverted) == nil
+            && (value.contains(".") || value.contains(":"))
     }
 
     private func updateCursorForDisabledState(hovering: Bool) {
@@ -1099,12 +1155,14 @@ struct FeatureRowView: View {
 
 private struct PluginPanelDetailView: View {
     let detail: PluginPanelDetail
+    @Binding var isOn: Bool
     let showsSecondaryPanel: Bool
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
     let onNavigationHoverChange: (String, String, Bool) -> Void
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
+    let onSwitchChange: (Bool) -> Void
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
 
@@ -1199,6 +1257,12 @@ private struct PluginPanelDetailView: View {
                     onSliderChange(control.id, value, phase)
                 }
             )
+        case .switchRow:
+            SwitchRowControl(
+                control: control,
+                isOn: $isOn,
+                onChange: onSwitchChange
+            )
         case .actionRow:
             ActionRowControl(
                 control: control,
@@ -1207,6 +1271,54 @@ private struct PluginPanelDetailView: View {
                 }
             )
         }
+    }
+}
+
+private struct SwitchRowControl: View {
+    let control: PluginPanelControl
+    @Binding var isOn: Bool
+    let onChange: (Bool) -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let iconName = control.actionIconSystemName {
+                Image(systemName: iconName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14, height: 14)
+            }
+
+            Text(control.actionTitle ?? control.sectionTitle ?? "")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Toggle(String(), isOn: Binding(
+                get: { isOn },
+                set: { newValue in
+                    guard control.isEnabled else { return }
+                    onChange(newValue)
+                }
+            ))
+            .labelsHidden()
+            .controlSize(.small)
+            .toggleStyle(.switch)
+            .disabled(!control.isEnabled)
+        }
+        .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
+        .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .background(alignment: .center) {
+            RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
+                .inset(by: MenuBarHoverStyle.inset)
+                .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+        }
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -1491,7 +1603,10 @@ private struct SliderControl: View {
                 .labelsHidden()
                 .disabled(!control.isEnabled)
                 .tint(Color(nsColor: .controlAccentColor))
-                .accessibilityLabel(control.sectionTitle ?? "显示器亮度")
+                .accessibilityLabel(control.sectionTitle ?? AppL10n.plugins(
+                    "plugin.panel.displayBrightnessFallback",
+                    defaultValue: "显示器亮度"
+                ))
             }
         }
         .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
@@ -1559,12 +1674,14 @@ private struct SecondarySlidingPanel: View {
 
             PluginPanelDetailView(
                 detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: nil),
+                isOn: .constant(false),
                 showsSecondaryPanel: false,
                 onSelectionChange: onSelectionChange,
                 onNavigationSelectionChange: onNavigationSelectionChange,
                 onNavigationHoverChange: { _, _, _ in },
                 onNavigationRowFrameChange: { _, _, _ in },
                 onDateChange: onDateChange,
+                onSwitchChange: { _ in },
                 onSliderChange: onSliderChange,
                 onActionInvoke: { _, _ in }
             )
@@ -1615,23 +1732,23 @@ private struct PopoverMaterialBackground: NSViewRepresentable {
 
 @MainActor
 private final class SecondaryPanelController: ObservableObject {
-    // 侧栏窗口必须保持与 MenuBarExtra popover 的 *兄弟* 关系，而不是 child window。
+    // The secondary panel must remain a sibling of the MenuBarExtra popover, not a child window.
     //
-    // 背景：`NSWindow.addChildWindow(_:, ordered:)` 会把父子窗口的 key-status 绑成
-    // 同一个 focus group，导致父窗口在用户点击外部时收不到 `didResignKeyNotification`。
-    // 而 `MenuBarExtra(.window)` 的 dismiss 流程（由 SwiftUI 私有的
-    // `WindowMenuBarExtraBehavior` 实现）正是监听 popover 的 `didResignKey` 才触发
-    // 收起。所以一旦把本侧栏以 child window 形式挂上去，popover 永远不会自己关。
+    // Background: `NSWindow.addChildWindow(_:, ordered:)` binds parent and child key status into the
+    // same focus group, so the parent window does not receive `didResignKeyNotification` when the
+    // user clicks outside. `MenuBarExtra(.window)` dismissal, implemented by SwiftUI's private
+    // `WindowMenuBarExtraBehavior`, relies on the popover's `didResignKey` notification. Once this
+    // panel is attached as a child window, the popover never closes itself.
     //
-    // 解决：改为独立（sibling）NSPanel，不调用 `addChildWindow`。位置由
-    // `anchorRect` 直接算出；level 调到 `.popUpMenu` 以保证 Z 序高于 popover；
-    // 生命周期由 SwiftUI 视图的 `.onDisappear` → `hide()` 级联清理。
+    // Solution: keep it as an independent sibling NSPanel and never call `addChildWindow`. Position
+    // is computed directly from `anchorRect`; the level is raised above the popover; lifecycle
+    // cleanup is driven by the SwiftUI view's `.onDisappear` cascading to `hide()`.
     //
-    // 参考：
-    // - MenuBarExtraAccess 源码（对 MenuBarExtraWindow 做 didResignKey 观察）
+    // References:
+    // - MenuBarExtraAccess source, which observes `didResignKey` on `MenuBarExtraWindow`
     //   https://github.com/orchetect/MenuBarExtraAccess
-    // - Apple Feedback FB11984872（无法程序化关闭 window-style MenuBarExtra）
-    // - CocoaDev 「HowCanChildWindowBeKey」https://cocoadev.github.io/HowCanChildWindowBeKey/
+    // - Apple Feedback FB11984872: window-style MenuBarExtra cannot be closed programmatically
+    // - CocoaDev "HowCanChildWindowBeKey": https://cocoadev.github.io/HowCanChildWindowBeKey/
 
     private weak var hostWindow: NSWindow?
     private var panelWindow: SecondaryPanelWindow?
@@ -1665,9 +1782,9 @@ private final class SecondaryPanelController: ObservableObject {
         onSliderChange: @escaping (String, Double, PluginPanelAction.SliderPhase) -> Void
     ) {
         guard let hostWindow else { return }
-        // MenuWindowAccessor.updateNSView 会在 .onDisappear 之后仍派发 async 回调，
-        // 可能在 hide() 之后再次触发 show()。popover 被 dismiss 时 hostWindow 的
-        // isVisible 已经变为 false，以此拦截竞态导致的侧栏重新展示。
+        // `MenuWindowAccessor.updateNSView` can still dispatch async callbacks after `.onDisappear`,
+        // which may call `show()` again after `hide()`. When the popover is dismissed, `hostWindow`
+        // is already not visible; use that to block the race from re-showing the panel.
         guard hostWindow.isVisible else { return }
 
         let rootView = AnyView(
@@ -1684,10 +1801,9 @@ private final class SecondaryPanelController: ObservableObject {
         )
 
         let panelWindow = panelWindow ?? makePanel()
-        // 复用同一个 NSHostingView —— 如果每次 show() 都重建 contentView，
-        // 鼠标按下到释放之间命中的 SwiftUI Button 会被整棵销毁，导致点击丢失
-        // （现象：侧栏里点分辨率毫无反应）。保留原视图并就地更新 rootView，
-        // 既保住按钮的 pressed 状态，也保留 hover 追踪。
+        // Reuse one NSHostingView. Rebuilding `contentView` on every `show()` destroys the SwiftUI
+        // Button hit between mouseDown and mouseUp, dropping clicks such as display-resolution
+        // selections. Updating `rootView` in place preserves pressed state and hover tracking.
         let hostingView: NSHostingView<AnyView>
         if let existing = panelHostingView, panelWindow.contentView === existing {
             existing.rootView = rootView
@@ -1710,8 +1826,8 @@ private final class SecondaryPanelController: ObservableObject {
         let frame = CGRect(origin: origin, size: CGSize(width: width, height: height))
 
         panelWindow.setFrame(frame, display: true)
-        // 运行时把 panel level 动态对齐到 hostWindow.level + 1，保证 Z 序高于 popover。
-        // MenuBarExtra popover 的 level 是 SwiftUI 私有实现细节，不能硬编码。
+        // Align the panel level to `hostWindow.level + 1` at runtime so it stays above the popover.
+        // The MenuBarExtra popover level is a private SwiftUI implementation detail.
         panelWindow.level = NSWindow.Level(rawValue: hostWindow.level.rawValue + 1)
         panelWindow.orderFrontRegardless()
         self.panelWindow = panelWindow
@@ -1739,11 +1855,11 @@ private final class SecondaryPanelController: ObservableObject {
         )
         panel.isFloatingPanel = true
         MenuBarPanelWindowRegistry.markSecondaryPanel(panel)
-        // 必须保持为 false：对 LSUIElement 菜单栏应用来说，MenuBarExtra 展开时
-        // 应用常处于非激活态，但菜单本身仍可交互。若开启 hidesOnDeactivate，
-        // 侧栏会在展示后立即隐藏，甚至陷入 isVisible 仍为 true 但实际像素不上屏
-        // 的半死状态。侧栏生命周期统一由 MenuBarContent 的 onDisappear /
-        // syncSecondaryPanelWindow 来驱动 hide()。
+        // Keep this false. For an LSUIElement menu-bar app, the app is often inactive while
+        // MenuBarExtra is open, but the menu remains interactive. If `hidesOnDeactivate` is enabled,
+        // the panel hides immediately after showing, or can end up with `isVisible == true` while no
+        // pixels are on screen. Panel lifetime is driven by MenuBarContent's `onDisappear` and
+        // `syncSecondaryPanelWindow`.
         panel.hidesOnDeactivate = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -1802,11 +1918,11 @@ private struct MenuWindowAccessor: NSViewRepresentable {
         return view
     }
 
-    // 每次重渲染都把窗口回传给上层 ——上层会调用 syncSecondaryPanelWindow()，
-    // 充当侧栏的兜底刷新（屏幕分辨率切换、popover 短暂不可见等场景下，仅靠 onChange
-    // 钩子可能错过一次需要重新 show() 的时机）。
-    // 必须配合 SecondaryPanelController.show() 中的 NSHostingView 复用，否则会
-    // 在 mouseDown→mouseUp 之间反复重建 contentView，导致按钮点击丢失。
+    // Report the window on every re-render. The parent calls `syncSecondaryPanelWindow()`, which is
+    // the fallback refresh for cases where screen-resolution changes or short popover visibility
+    // gaps cause `onChange` hooks to miss a needed `show()`. This must be paired with NSHostingView
+    // reuse in `SecondaryPanelController.show()`; otherwise contentView rebuilds between mouseDown
+    // and mouseUp can drop button clicks.
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
             onWindowChange(nsView.window)
@@ -1843,29 +1959,6 @@ private struct NavigationRowFrameReader: NSViewRepresentable {
     }
 }
 
-private struct HeightReader: View {
-    let onChange: (CGFloat) -> Void
-
-    var body: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .preference(key: HeightPreferenceKey.self, value: proxy.size.height)
-        }
-        .onPreferenceChange(HeightPreferenceKey.self) { height in
-            guard height.isFinite else { return }
-            onChange(height)
-        }
-    }
-}
-
-private struct HeightPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 struct ScrollViewScrollerVisibilityConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
@@ -1894,6 +1987,10 @@ struct ScrollViewScrollerVisibilityConfigurator: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
+        scrollView.automaticallyAdjustsContentInsets = false
+        let zeroInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        scrollView.contentInsets = zeroInsets
+        scrollView.scrollerInsets = zeroInsets
     }
 
     private func nearestScrollView(from view: NSView) -> NSScrollView? {
@@ -1945,42 +2042,5 @@ private struct DateTimeCardPicker: View {
 
     private func sanitizedDate(_ candidate: Date) -> Date {
         max(candidate, minimumDate)
-    }
-}
-
-private struct MenuActionRowLabel: View {
-    let title: String
-    let systemImage: String
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovered = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 14, height: 14)
-
-            Text(title)
-                .font(.system(size: 12.5))
-                .foregroundStyle(.primary)
-
-            Spacer()
-        }
-        .padding(.horizontal, FeatureRowLayout.rowHorizontalPadding)
-        .frame(
-            minWidth: 0,
-            maxWidth: .infinity,
-            minHeight: MenuBarPanelLayout.settingsRowHeight,
-            maxHeight: MenuBarPanelLayout.settingsRowHeight,
-            alignment: .leading
-        )
-        .background(alignment: .center) {
-            RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous)
-                .inset(by: MenuBarHoverStyle.inset)
-                .fill(isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous))
-        .onHover { isHovered = $0 }
     }
 }

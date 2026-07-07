@@ -6,14 +6,16 @@ import MacToolsPluginKit
 
 public final class SystemMutePluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        SystemMutePluginProvider()
+        SystemMutePluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct SystemMutePluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [SystemMutePlugin()]
+        [SystemMutePlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -83,14 +85,7 @@ struct CoreAudioSystemOutputController: SystemAudioControlling {
 
 @MainActor
 final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "system-mute",
-        title: "系统静音",
-        iconName: "speaker.slash",
-        iconTint: Color(nsColor: .systemOrange),
-        order: 48,
-        defaultDescription: "快速静音或恢复系统音频输出"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -105,18 +100,36 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "SystemMutePlugin"
     )
+    private let localization: PluginLocalization
     private let controller: any SystemAudioControlling
     private var isMuted: Bool = false
     private var lastErrorMessage: String?
 
-    init(controller: any SystemAudioControlling = CoreAudioSystemOutputController()) {
+    init(
+        controller: any SystemAudioControlling = CoreAudioSystemOutputController(),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.localization = localization
         self.controller = controller
+        self.metadata = PluginMetadata(
+            id: "system-mute",
+            title: localization.string("metadata.title", defaultValue: "系统静音"),
+            iconName: "speaker.slash",
+            iconTint: Color(nsColor: .systemOrange),
+            order: 48,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "快速静音或恢复系统音频输出"
+            )
+        )
         self.isMuted = controller.readMuteState()
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: isMuted ? "已静音" : "未静音",
+            subtitle: isMuted
+                ? localization.string("panel.subtitle.muted", defaultValue: "已静音")
+                : localization.string("panel.subtitle.unmuted", defaultValue: "未静音"),
             isOn: isMuted,
             isExpanded: false,
             isEnabled: true,
@@ -167,7 +180,9 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
             lastErrorMessage = nil
         } else {
             logger.error("Failed to set system mute to \(muted, privacy: .public)")
-            lastErrorMessage = muted ? "静音操作失败" : "取消静音失败"
+            lastErrorMessage = muted
+                ? localization.string("error.muteFailed", defaultValue: "静音操作失败")
+                : localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
         }
         onStateChange?()
     }

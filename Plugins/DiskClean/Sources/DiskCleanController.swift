@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import MacToolsPluginKit
 
 enum DiskCleanControllerPhase: Equatable, Sendable {
     case idle
@@ -37,20 +38,30 @@ struct DiskCleanControllerSnapshot: Equatable, Sendable {
     }
 
     var subtitle: String {
+        subtitle()
+    }
+
+    func subtitle(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch phase {
         case .idle:
-            return "选择清理范围"
+            return localization.string("controller.subtitle.idle", defaultValue: "选择清理范围")
         case .scanning:
-            return "正在扫描"
+            return localization.string("controller.subtitle.scanning", defaultValue: "正在扫描")
         case .scanned:
             if isResultStale {
-                return "清理范围已变化"
+                return localization.string("controller.subtitle.stale", defaultValue: "清理范围已变化")
             }
-            return scanResult.map { "\($0.cleanableCandidates.count) 项可清理" } ?? "扫描完成"
+            return scanResult.map {
+                localization.format(
+                    "controller.subtitle.scannedCount",
+                    defaultValue: "%d 项可清理",
+                    $0.cleanableCandidates.count
+                )
+            } ?? localization.string("controller.subtitle.scanned", defaultValue: "扫描完成")
         case .cleaning:
-            return "正在清理"
+            return localization.string("controller.subtitle.cleaning", defaultValue: "正在清理")
         case .completed:
-            return "清理完成"
+            return localization.string("controller.subtitle.completed", defaultValue: "清理完成")
         }
     }
 
@@ -103,6 +114,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
 
     private let scanner: DiskCleanScanning
     private let executor: DiskCleanExecuting
+    private let localization: PluginLocalization
 
     private var currentTask: Task<Void, Never>?
     private var currentOperationID: UUID?
@@ -112,10 +124,12 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     init(
         scanner: DiskCleanScanning = DiskCleanScanner(),
         executor: DiskCleanExecuting = DiskCleanExecutor(),
-        initialSnapshot: DiskCleanControllerSnapshot = .initial
+        initialSnapshot: DiskCleanControllerSnapshot = .initial,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.scanner = scanner
         self.executor = executor
+        self.localization = localization
         snapshot = initialSnapshot
     }
 
@@ -154,8 +168,12 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         let scanLogBuffer = DiskCleanScanLogBuffer()
         let initialLogEntries = [
             makeLogEntry(
-                DiskCleanScanLogMessage(
-                    text: "开始扫描：\(selectedChoiceTitleList(selectedChoices))",
+                    DiskCleanScanLogMessage(
+                    text: localization.format(
+                        "scanLog.started",
+                        defaultValue: "开始扫描：%@",
+                        selectedChoiceTitleList(selectedChoices)
+                    ),
                     tone: .info
                 )
             )
@@ -215,7 +233,11 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
                     scanLogEntries: scanLogEntries(
                         adding: [
                             DiskCleanScanLogMessage(
-                                text: "扫描失败：\(Self.userFacingMessage(for: error))",
+                                text: localization.format(
+                                    "scanLog.failed",
+                                    defaultValue: "扫描失败：%@",
+                                    Self.userFacingMessage(for: error)
+                                ),
                                 tone: .error
                             )
                         ],
@@ -310,7 +332,12 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
                 isResultStale: false,
                 errorMessage: nil,
                 scanLogEntries: scanLogEntries + [
-                    makeLogEntry(DiskCleanScanLogMessage(text: "扫描已停止", tone: .warning))
+                    makeLogEntry(
+                        DiskCleanScanLogMessage(
+                            text: localization.string("scanLog.stopped", defaultValue: "扫描已停止"),
+                            tone: .warning
+                        )
+                    )
                 ]
             )
         case .cleaning:
@@ -408,8 +435,8 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     private func selectedChoiceTitleList(_ choices: Set<DiskCleanChoice>) -> String {
         DiskCleanChoice.allCases
             .filter { choices.contains($0) }
-            .map(\.title)
-            .joined(separator: "、")
+            .map { $0.title(localization: localization) }
+            .joined(separator: localization.string("list.separator", defaultValue: "、"))
     }
 
     private func isCurrentOperation(_ operationID: UUID) -> Bool {

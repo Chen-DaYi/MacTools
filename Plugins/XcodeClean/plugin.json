@@ -2,7 +2,53 @@
   "id": "xcode-clean",
   "displayName": "Xcode 清理",
   "summary": "分类清理 Xcode DerivedData、设备支持、归档与缓存",
-  "version": "1.0.1",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "تنظيف Xcode",
+      "summary": "تنظيف DerivedData ودعم الأجهزة والأرشيفات وذاكرات Xcode المؤقتة حسب الفئة."
+    },
+    "de": {
+      "displayName": "Xcode-Bereinigung",
+      "summary": "Xcode-DerivedData, Geräteunterstützung, Archive und Caches nach Kategorie bereinigen."
+    },
+    "en": {
+      "displayName": "Xcode Cleanup",
+      "summary": "Clean Xcode DerivedData, device support files, archives, and caches by category."
+    },
+    "es": {
+      "displayName": "Limpieza de Xcode",
+      "summary": "Limpia DerivedData, soporte de dispositivos, archivos y cachés de Xcode por categoría."
+    },
+    "fr": {
+      "displayName": "Nettoyage Xcode",
+      "summary": "Nettoie DerivedData, la prise en charge d’appareils, les archives et les caches Xcode par catégorie."
+    },
+    "ja": {
+      "displayName": "Xcode クリーンアップ",
+      "summary": "Xcode の DerivedData、デバイスサポート、アーカイブ、キャッシュをカテゴリ別に整理します。"
+    },
+    "ko": {
+      "displayName": "Xcode 정리",
+      "summary": "Xcode DerivedData, 기기 지원 파일, 아카이브 및 캐시를 분류별로 정리합니다."
+    },
+    "pt": {
+      "displayName": "Limpeza do Xcode",
+      "summary": "Limpa DerivedData, suporte de dispositivos, arquivos e caches do Xcode por categoria."
+    },
+    "ru": {
+      "displayName": "Очистка Xcode",
+      "summary": "Очищает DerivedData, файлы поддержки устройств, архивы и кэши Xcode по категориям."
+    },
+    "zh-Hans": {
+      "displayName": "Xcode 清理",
+      "summary": "分类清理 Xcode DerivedData、设备支持、归档与缓存"
+    },
+    "zh-Hant": {
+      "displayName": "Xcode 清理",
+      "summary": "分類清理 Xcode DerivedData、裝置支援、封存與快取"
+    }
+  },
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "XcodeClean.bundle",

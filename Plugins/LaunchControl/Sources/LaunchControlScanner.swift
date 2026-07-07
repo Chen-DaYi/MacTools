@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct LaunchControlScanResult: Sendable {
     let items: [LaunchControlItem]
@@ -15,15 +16,18 @@ struct LaunchControlScanner: @unchecked Sendable {
     private let fileManager: FileManager
     private let runner: any LaunchControlCommandRunning
     private let userIDProvider: @Sendable () -> uid_t
+    private let localization: PluginLocalization
 
     init(
         fileManager: FileManager = .default,
         runner: any LaunchControlCommandRunning = ProcessLaunchControlCommandRunner(),
-        userIDProvider: @escaping @Sendable () -> uid_t = { getuid() }
+        userIDProvider: @escaping @Sendable () -> uid_t = { getuid() },
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.fileManager = fileManager
         self.runner = runner
         self.userIDProvider = userIDProvider
+        self.localization = localization
     }
 
     func scan(progress: @escaping @Sendable (LaunchControlScanEvent) -> Void = { _ in }) -> LaunchControlScanResult {
@@ -31,8 +35,16 @@ struct LaunchControlScanner: @unchecked Sendable {
         let userDomain = "gui/\(userID)"
         let directories = launchDirectories(userDomain: userDomain)
         var warnings: [String] = []
-        progress(.message("读取 launchctl 禁用状态"))
+        progress(.message(localization.string("scanner.progress.disabledState", defaultValue: "读取 launchctl 禁用状态")))
         let disabledLabelsByDomain = loadDisabledLabels(domains: Set(directories.map(\.domain)))
+        // Fetch the whole user GUI domain in ONE `launchctl list` instead of one
+        // `launchctl print gui/<uid>/<label>` per item — the Status column is the
+        // last exit status and the PID column the running pid, so the data is
+        // equivalent. System-domain daemons are unaffected (handled per item below).
+        progress(.message(localization.string("scanner.progress.runningState", defaultValue: "读取 launchctl 运行状态")))
+        let userDomainStatuses = Self.parseLaunchctlList(
+            (try? runner.runLaunchctl(arguments: ["list"]))?.combinedOutput ?? ""
+        )
         var items: [LaunchControlItem] = []
 
         for directory in directories {
@@ -42,21 +54,32 @@ struct LaunchControlScanner: @unchecked Sendable {
                 includingPropertiesForKeys: [.isRegularFileKey],
                 options: [.skipsHiddenFiles]
             ) else {
-                progress(.message("跳过不可读取目录：\(directory.url.path)"))
+                progress(.message(localization.format(
+                    "scanner.progress.skipUnreadableDirectory",
+                    defaultValue: "跳过不可读取目录：%@",
+                    directory.url.path
+                )))
                 continue
             }
 
             for plistURL in plistURLs where plistURL.pathExtension == "plist" {
                 progress(.file(plistURL.path))
                 do {
-                    let summary = try Self.parsePlist(at: plistURL)
+                    let summary = try Self.parsePlist(at: plistURL, localization: localization)
                     let label = summary.label.isEmpty
                         ? plistURL.deletingPathExtension().lastPathComponent
                         : summary.label
                     let disabledLabels = disabledLabelsByDomain[directory.domain, default: []]
-                    let launchctlStatus = directory.scope == .system
-                        ? (exitCode: Int32(-2), pid: nil as Int?, lastExitStatus: nil as Int?)
-                        : loadLaunchctlStatus(domain: directory.domain, label: label)
+                    let launchctlStatus: (exitCode: Int32, pid: Int?, lastExitStatus: Int?)
+                    if directory.scope == .system {
+                        launchctlStatus = (exitCode: Int32(-2), pid: nil, lastExitStatus: nil)
+                    } else if directory.domain == userDomain {
+                        // User GUI domain: served by the single `launchctl list` above.
+                        launchctlStatus = Self.status(from: userDomainStatuses, label: label)
+                    } else {
+                        // System-domain daemons (e.g. /Library/LaunchDaemons): unchanged.
+                        launchctlStatus = loadLaunchctlStatus(domain: directory.domain, label: label)
+                    }
                     let isDisabled = disabledLabels.contains(label)
                     let state = Self.state(
                         isDisabled: isDisabled,
@@ -95,7 +118,11 @@ struct LaunchControlScanner: @unchecked Sendable {
                     progress(.found(item))
                 } catch {
                     warnings.append("\(plistURL.path): \(error.localizedDescription)")
-                    progress(.message("解析失败：\(plistURL.lastPathComponent)"))
+                    progress(.message(localization.format(
+                        "scanner.progress.parseFailed",
+                        defaultValue: "解析失败：%@",
+                        plistURL.lastPathComponent
+                    )))
                 }
             }
         }
@@ -117,7 +144,10 @@ struct LaunchControlScanner: @unchecked Sendable {
         )
     }
 
-    static func parsePlist(at url: URL) throws -> LaunchControlPlistSummary {
+    static func parsePlist(
+        at url: URL,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) throws -> LaunchControlPlistSummary {
         let data = try Data(contentsOf: url)
         let propertyList = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
         guard let dictionary = propertyList as? [String: Any] else {
@@ -134,7 +164,7 @@ struct LaunchControlScanner: @unchecked Sendable {
             label: label,
             programArguments: programArguments,
             runAtLoad: dictionary["RunAtLoad"] as? Bool ?? false,
-            keepAliveDescription: describe(dictionary["KeepAlive"]),
+            keepAliveDescription: describe(dictionary["KeepAlive"], localization: localization),
             startInterval: dictionary["StartInterval"] as? Int,
             startCalendarDescription: describeStartCalendar(dictionary["StartCalendarInterval"]),
             rawPlist: rawPlist
@@ -174,7 +204,11 @@ struct LaunchControlScanner: @unchecked Sendable {
             }
             _ = scanner.scanUpToString("=>")
             _ = scanner.scanString("=>")
-            if scanner.scanString("true") != nil {
+            // Modern macOS (14+) emits `=> disabled` / `=> enabled`; older output
+            // used `=> true` / `=> false`. Accept both so disabled items are
+            // detected on current systems (the previous code only matched "true",
+            // so on shipping macOS the disabled set was always empty).
+            if scanner.scanString("disabled") != nil || scanner.scanString("true") != nil {
                 labels.insert(label)
             } else {
                 _ = scanner.scanUpToCharacters(from: .newlines)
@@ -220,6 +254,36 @@ struct LaunchControlScanner: @unchecked Sendable {
             let result = try? runner.runLaunchctl(arguments: ["print-disabled", domain])
             return (domain, Self.parseDisabledLabels(result?.combinedOutput ?? ""))
         })
+    }
+
+    /// Parses `launchctl list` output (tab-separated `PID  Status  Label`, with a
+    /// header row) into a label → (pid, lastExitStatus) map. `-` becomes nil.
+    static func parseLaunchctlList(_ output: String) -> [String: (pid: Int?, lastExitStatus: Int?)] {
+        var result: [String: (pid: Int?, lastExitStatus: Int?)] = [:]
+        for line in output.split(separator: "\n") {
+            let columns = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard columns.count == 3 else { continue }
+            let label = columns[2].trimmingCharacters(in: .whitespaces)
+            guard !label.isEmpty, label != "Label" else { continue } // skip header / blanks
+            result[label] = (
+                pid: Int(columns[0].trimmingCharacters(in: .whitespaces)),
+                lastExitStatus: Int(columns[1].trimmingCharacters(in: .whitespaces))
+            )
+        }
+        return result
+    }
+
+    /// Maps a `launchctl list` entry to the same status tuple shape the per-item
+    /// `launchctl print` path produces: present → loaded (exitCode 0); absent →
+    /// not loaded (exitCode 1), matching a non-zero `launchctl print`.
+    static func status(
+        from map: [String: (pid: Int?, lastExitStatus: Int?)],
+        label: String
+    ) -> (exitCode: Int32, pid: Int?, lastExitStatus: Int?) {
+        guard let entry = map[label] else {
+            return (exitCode: 1, pid: nil, lastExitStatus: nil)
+        }
+        return (exitCode: 0, pid: entry.pid, lastExitStatus: entry.lastExitStatus)
     }
 
     private func loadLaunchctlStatus(domain: String, label: String) -> (exitCode: Int32, pid: Int?, lastExitStatus: Int?) {
@@ -311,17 +375,22 @@ struct LaunchControlScanner: @unchecked Sendable {
         }
     }
 
-    private static func describe(_ value: Any?) -> String? {
+    private static func describe(
+        _ value: Any?,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String? {
         switch value {
         case let bool as Bool:
-            return bool ? "持续保活" : nil
+            return bool ? localization.string("scanner.keepAlive.always", defaultValue: "持续保活") : nil
         case let dictionary as [String: Any]:
             let keys = dictionary.keys.sorted()
-            return keys.isEmpty ? "自定义条件" : keys.joined(separator: ", ")
+            return keys.isEmpty
+                ? localization.string("scanner.keepAlive.custom", defaultValue: "自定义条件")
+                : keys.joined(separator: ", ")
         case let string as String:
             return string
         case .some:
-            return "自定义条件"
+            return localization.string("scanner.keepAlive.custom", defaultValue: "自定义条件")
         case .none:
             return nil
         }

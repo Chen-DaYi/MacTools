@@ -17,10 +17,12 @@ final class MenuBarHiddenController: ObservableObject {
         hasScreenRecording: false
     )
 
+    let localization: PluginLocalization
     let manager: MenuBarHiddenManager
     private let observer: MenuBarHiddenObserver
     private var cancellables = Set<AnyCancellable>()
     private var popupPanel: MenuBarHiddenPopupPanel?
+    private var isActivated = false
     private var isSettingsVisible = false
     private var isHiddenIconsPanelVisible = false
 
@@ -28,6 +30,7 @@ final class MenuBarHiddenController: ObservableObject {
 
     init(
         context: PluginRuntimeContext,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         permissionProvider: @escaping () -> MenuBarHiddenPermissionsStatus = {
             MenuBarHiddenPermissionsStatus(
                 hasAccessibility: AXIsProcessTrusted(),
@@ -35,8 +38,13 @@ final class MenuBarHiddenController: ObservableObject {
             )
         }
     ) {
+        self.localization = localization
         let store = MenuBarHiddenStore(storage: context.storage)
-        self.manager = MenuBarHiddenManager(store: store, permissionProvider: permissionProvider)
+        self.manager = MenuBarHiddenManager(
+            store: store,
+            localization: localization,
+            permissionProvider: permissionProvider
+        )
         self.observer = MenuBarHiddenObserver()
 
         observer.onRefresh = { [weak self] reason in
@@ -66,11 +74,14 @@ final class MenuBarHiddenController: ObservableObject {
     // MARK: - Lifecycle
 
     func activate() {
-        observer.start()
+        guard !isActivated else { return }
+        isActivated = true
         manager.activate()
+        updateObservation()
     }
 
     func deactivate() {
+        isActivated = false
         observer.stop()
         manager.deactivate()
         popupPanel?.orderOut(nil)
@@ -107,7 +118,10 @@ final class MenuBarHiddenController: ObservableObject {
 
     var isEnabled: Bool {
         get { manager.isEnabled }
-        set { manager.isEnabled = newValue }
+        set {
+            manager.isEnabled = newValue
+            updateObservation()
+        }
     }
 
     var isAlwaysHiddenEnabled: Bool {
@@ -138,7 +152,7 @@ final class MenuBarHiddenController: ObservableObject {
         if visible {
             manager.refreshPermissions()
         }
-        updateUIPolling()
+        updateObservation()
     }
 
     func setHiddenIconsPanelVisible(_ visible: Bool) {
@@ -147,7 +161,7 @@ final class MenuBarHiddenController: ObservableObject {
         if visible {
             manager.refreshPermissions()
         }
-        updateUIPolling()
+        updateObservation()
     }
 
     func refreshPermissions() {
@@ -193,12 +207,24 @@ final class MenuBarHiddenController: ObservableObject {
         popupPanel?.orderOut(nil)
         setHiddenIconsPanelVisible(false)
         if popupPanel != nil {
-            updateUIPolling()
+            updateObservation()
         }
     }
 
-    private func updateUIPolling() {
-        if isSettingsVisible || isHiddenIconsPanelVisible {
+    private func updateObservation() {
+        guard isActivated else {
+            observer.stop()
+            return
+        }
+
+        let uiVisible = isSettingsVisible || isHiddenIconsPanelVisible
+        if isEnabled || uiVisible {
+            observer.start()
+        } else {
+            observer.stop()
+        }
+
+        if uiVisible {
             observer.startPolling()
         } else {
             observer.stopPolling()
@@ -210,13 +236,20 @@ final class MenuBarHiddenController: ObservableObject {
     var componentSubtitle: String {
         guard permissions.canManageItems else { return "" }
         let count = snapshot.hiddenItems.count + snapshot.alwaysHiddenItems.count
-        return count == 0 ? "暂无隐藏图标" : "\(count) 个隐藏图标"
+        switch count {
+        case 0:
+            return localization.string("component.subtitle.empty", defaultValue: "暂无隐藏图标")
+        case 1:
+            return localization.format("component.subtitle.count.singular", defaultValue: "%d 个隐藏图标", count)
+        default:
+            return localization.format("component.subtitle.count", defaultValue: "%d 个隐藏图标", count)
+        }
     }
 
     var panelSubtitle: String {
         if isEnabled {
-            return "已启用"
+            return localization.string("panel.subtitle.enabled", defaultValue: "已启用")
         }
-        return "已关闭"
+        return localization.string("panel.subtitle.disabled", defaultValue: "已关闭")
     }
 }

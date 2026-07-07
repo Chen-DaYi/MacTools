@@ -58,42 +58,6 @@ struct StubHideNotchDisplayCatalog: HideNotchDisplayCatalogProviding {
 }
 
 @MainActor
-final class MutableHideNotchDisplayCatalog: HideNotchDisplayCatalogProviding {
-    var records: [HideNotchDisplayRecord]
-
-    init(records: [HideNotchDisplayRecord]) {
-        self.records = records
-    }
-
-    func listDisplayRecords() -> [HideNotchDisplayRecord] {
-        records
-    }
-}
-
-@MainActor
-final class RecordingHideNotchDesktopMaskManager: HideNotchDesktopMaskManaging {
-    var managedDisplayIdentifiers: Set<String> = []
-    var synchronizeError: Error?
-
-    private(set) var synchronizeCalls: [[HideNotchDisplayContext]] = []
-    private(set) var hideAllCallCount = 0
-
-    func synchronizeMasks(for displays: [HideNotchDisplayContext]) throws {
-        if let synchronizeError {
-            throw synchronizeError
-        }
-
-        synchronizeCalls.append(displays)
-        managedDisplayIdentifiers = Set(displays.filter(\.isSupported).map(\.displayIdentifier))
-    }
-
-    func hideAllMasks() {
-        hideAllCallCount += 1
-        managedDisplayIdentifiers.removeAll()
-    }
-}
-
-@MainActor
 final class RecordingHideNotchDesktopMaskWindow: HideNotchDesktopMaskWindowing {
     private(set) var frames: [CGRect]
     private(set) var showCallCount = 0
@@ -174,23 +138,4 @@ func makeIsolatedUserDefaults() -> UserDefaults {
     let defaults = UserDefaults(suiteName: suiteName)!
     defaults.removePersistentDomain(forName: suiteName)
     return defaults
-}
-
-func waitUntil(
-    timeout: TimeInterval = 1,
-    pollInterval: TimeInterval = 0.02,
-    file: StaticString = #filePath,
-    line: UInt = #line,
-    condition: @escaping @MainActor () -> Bool
-) async {
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
-        if await condition() {
-            return
-        }
-
-        try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
-    }
-
-    XCTFail("Condition not satisfied before timeout", file: file, line: line)
 }

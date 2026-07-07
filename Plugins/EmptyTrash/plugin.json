@@ -2,7 +2,53 @@
   "id": "empty-trash",
   "displayName": "清空废纸篓",
   "summary": "清空废纸篓中的所有项目",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إفراغ سلة المهملات",
+      "summary": "إفراغ كافة العناصر الموجودة في سلة المهملات."
+    },
+    "de": {
+      "displayName": "Papierkorb leeren",
+      "summary": "Leeren Sie alle Elemente im Papierkorb."
+    },
+    "en": {
+      "displayName": "Empty Trash",
+      "summary": "Empty all items in the Trash."
+    },
+    "es": {
+      "displayName": "Vaciar papelera",
+      "summary": "Vaciar todos los elementos de la Papelera."
+    },
+    "fr": {
+      "displayName": "Vider la corbeille",
+      "summary": "Videz tous les éléments de la corbeille."
+    },
+    "ja": {
+      "displayName": "ゴミ箱を空にする",
+      "summary": "ゴミ箱内のすべてのアイテムを空にします。"
+    },
+    "ko": {
+      "displayName": "휴지통 비우기",
+      "summary": "휴지통의 모든 항목을 비웁니다."
+    },
+    "pt": {
+      "displayName": "Esvaziar Lixo",
+      "summary": "Esvazie todos os itens da Lixeira."
+    },
+    "ru": {
+      "displayName": "Очистить корзину",
+      "summary": "Очистить все элементы в корзине."
+    },
+    "zh-Hans": {
+      "displayName": "清空废纸篓",
+      "summary": "清空废纸篓中的所有项目"
+    },
+    "zh-Hant": {
+      "displayName": "清空垃圾桶",
+      "summary": "清空垃圾桶中的所有項目"
+    }
+  },
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "EmptyTrash.bundle",

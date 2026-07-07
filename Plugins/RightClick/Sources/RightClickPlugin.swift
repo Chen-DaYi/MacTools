@@ -1,0 +1,145 @@
+import AppKit
+import FinderSync
+import Foundation
+import OSLog
+import SwiftUI
+import MacToolsPluginKit
+
+public final class RightClickPluginFactory: NSObject, MacToolsPluginBundleFactory {
+    public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
+        RightClickPluginProvider(context: context)
+    }
+}
+
+@MainActor
+private struct RightClickPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
+    func makePlugins() -> [any MacToolsPlugin] {
+        [RightClickPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
+    }
+}
+
+private enum RightClickPermissionID {
+    static let finderExtension = "finder-extension"
+}
+
+@MainActor
+final class RightClickPlugin: MacToolsPlugin {
+    let metadata: PluginMetadata
+
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    private let localization: PluginLocalization
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
+        category: "RightClickPlugin"
+    )
+    private var activationObserver: NSObjectProtocol?
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "right-click",
+            title: localization.string("metadata.title", defaultValue: "右键工具"),
+            iconName: "contextualmenu.and.cursorarrow",
+            iconTint: Color(nsColor: .systemTeal),
+            order: 74,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "在 Finder 右键菜单中快速新建文件/文件夹、复制路径、在终端打开、用应用打开"
+            )
+        )
+    }
+
+    func activate(context _: PluginRuntimeContext) {
+        RightClickConfigurationStore.setMenuEnabled(true)
+
+        guard activationObserver == nil else {
+            return
+        }
+
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.onStateChange?()
+            }
+        }
+    }
+
+    func deactivate(reason: PluginDeactivationReason) {
+        if reason.requiresStateCleanup {
+            RightClickConfigurationStore.setMenuEnabled(false)
+        }
+
+        if let activationObserver {
+            NotificationCenter.default.removeObserver(activationObserver)
+            self.activationObserver = nil
+        }
+    }
+
+    var permissionRequirements: [PluginPermissionRequirement] {
+        [
+            PluginPermissionRequirement(
+                id: RightClickPermissionID.finderExtension,
+                kind: .automation,
+                title: localization.string("permission.finderExtension.title", defaultValue: "Finder 扩展"),
+                description: localization.string(
+                    "permission.finderExtension.description",
+                    defaultValue: "在系统设置中打开 MacTools 右键工具。"
+                )
+            )
+        ]
+    }
+
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(
+            description: localization.string(
+                "configuration.description",
+                defaultValue: "选择 Finder 右键菜单显示哪些项，并管理「用应用打开」的应用列表。"
+            ),
+            prefersFullHeight: false
+        ) { [localization] _ in
+            AnyView(RightClickMenuSettingsView(localization: localization))
+        }
+    }
+
+    func permissionState(for permissionID: String) -> PluginPermissionState {
+        guard permissionID == RightClickPermissionID.finderExtension else {
+            return PluginPermissionState(isGranted: true, footnote: nil)
+        }
+
+        let enabled = FIFinderSyncController.isExtensionEnabled
+        return PluginPermissionState(
+            isGranted: enabled,
+            footnote: localization.string(
+                "permission.finderExtension.footnote",
+                defaultValue: "入口：登录项与扩展 > Finder 扩展。"
+            ),
+            statusText: enabled
+                ? localization.string("permission.finderExtension.status.enabled", defaultValue: "已启用")
+                : localization.string("permission.finderExtension.status.disabled", defaultValue: "未启用"),
+            statusSystemImage: enabled ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+            statusTone: enabled ? .positive : .caution
+        )
+    }
+
+    func handlePermissionAction(id permissionID: String) {
+        guard permissionID == RightClickPermissionID.finderExtension else {
+            return
+        }
+
+        openExtensionManagementInterface()
+    }
+
+    private func openExtensionManagementInterface() {
+        logger.info("Opening Finder extension management interface")
+        FIFinderSyncController.showExtensionManagementInterface()
+        onStateChange?()
+    }
+}

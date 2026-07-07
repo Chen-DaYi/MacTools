@@ -2,7 +2,53 @@
   "id": "fan-control",
   "displayName": "风扇控制",
   "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-  "version": "1.0.6",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "التحكم بالمراوح",
+      "summary": "قم بإدارة الإعدادات المسبقة لسرعة المروحة باستخدام إستراتيجيات تلقائية وكاملة السرعة ومخصصة."
+    },
+    "de": {
+      "displayName": "Lüftersteuerung",
+      "summary": "Verwalten Sie Voreinstellungen für die Lüftergeschwindigkeit mit automatischen, Vollgeschwindigkeits- und benutzerdefinierten Strategien."
+    },
+    "en": {
+      "displayName": "Fan Control",
+      "summary": "Manage fan speed presets with automatic, full-speed, and custom strategies."
+    },
+    "es": {
+      "displayName": "Control de ventiladores",
+      "summary": "Administre los ajustes preestablecidos de velocidad del ventilador con estrategias automáticas, de velocidad máxima y personalizadas."
+    },
+    "fr": {
+      "displayName": "Contrôle des ventilateurs",
+      "summary": "Gérez les préréglages de vitesse du ventilateur avec des stratégies automatiques, à pleine vitesse et personnalisées."
+    },
+    "ja": {
+      "displayName": "ファン制御",
+      "summary": "自動、フルスピード、カスタム戦略を使用してファン速度のプリセットを管理します。"
+    },
+    "ko": {
+      "displayName": "팬 제어",
+      "summary": "자동, 최대 속도 및 사용자 정의 전략을 사용하여 팬 속도 사전 설정을 관리합니다."
+    },
+    "pt": {
+      "displayName": "Controle de ventoinhas",
+      "summary": "Gerencie predefinições de velocidade do ventilador com estratégias automáticas, de velocidade total e personalizadas."
+    },
+    "ru": {
+      "displayName": "Управление вентиляторами",
+      "summary": "Управляйте предустановками скорости вращения вентилятора с помощью автоматических, полноскоростных и пользовательских стратегий."
+    },
+    "zh-Hans": {
+      "displayName": "风扇控制",
+      "summary": "管理风扇转速预设，支持自动、全速和自定义策略"
+    },
+    "zh-Hant": {
+      "displayName": "風扇控制",
+      "summary": "管理風扇轉速預設，支持自動、全速和自定義策略"
+    }
+  },
+  "version": "1.0.9",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "FanControl.bundle",

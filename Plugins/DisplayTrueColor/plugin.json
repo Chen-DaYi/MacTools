@@ -2,7 +2,53 @@
   "id": "display-true-color",
   "displayName": "原彩显示",
   "summary": "自动调节显示器颜色以适应环境光",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "True Tone",
+      "summary": "ضبط ألوان العرض تلقائيًا لتتناسب مع الإضاءة المحيطة."
+    },
+    "de": {
+      "displayName": "True Tone",
+      "summary": "Passen Sie die Displayfarben automatisch an das Umgebungslicht an."
+    },
+    "en": {
+      "displayName": "True Tone",
+      "summary": "Automatically adjust display colors to match ambient light."
+    },
+    "es": {
+      "displayName": "True Tone",
+      "summary": "Ajuste automáticamente los colores de la pantalla para que coincidan con la luz ambiental."
+    },
+    "fr": {
+      "displayName": "True Tone",
+      "summary": "Ajustez automatiquement les couleurs de l’affichage en fonction de la lumière ambiante."
+    },
+    "ja": {
+      "displayName": "True Tone",
+      "summary": "周囲の光に合わせてディスプレイの色を自動的に調整します。"
+    },
+    "ko": {
+      "displayName": "True Tone",
+      "summary": "주변 조명에 맞게 디스플레이 색상을 자동으로 조정합니다."
+    },
+    "pt": {
+      "displayName": "True Tone",
+      "summary": "Ajuste automaticamente as cores da tela para corresponder à luz ambiente."
+    },
+    "ru": {
+      "displayName": "True Tone",
+      "summary": "Автоматически настраивайте цвета дисплея в соответствии с окружающим освещением."
+    },
+    "zh-Hans": {
+      "displayName": "原彩显示",
+      "summary": "自动调节显示器颜色以适应环境光"
+    },
+    "zh-Hant": {
+      "displayName": "原彩顯示",
+      "summary": "自動調節顯示器顏色以適應環境光"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayTrueColor.bundle",

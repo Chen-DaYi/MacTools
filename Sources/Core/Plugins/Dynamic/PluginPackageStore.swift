@@ -27,15 +27,15 @@ enum PluginPackageStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .packageNotFound(id):
-            return "未找到插件：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.store.notFoundFormat", defaultValue: "未找到插件：%@", id)
         case let .packageAlreadyInstalled(id):
-            return "插件已安装：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.store.alreadyInstalledFormat", defaultValue: "插件已安装：%@", id)
         case let .invalidPackage(url):
-            return "插件包无效：\(url.path)"
+            return AppL10n.pluginsFormat("plugin.error.store.invalidPackageFormat", defaultValue: "插件包无效：%@", url.path)
         case let .installFailed(reason):
-            return "插件安装失败：\(reason)"
+            return AppL10n.pluginsFormat("plugin.error.store.installFailedFormat", defaultValue: "插件安装失败：%@", reason)
         case let .removeFailed(reason):
-            return "插件移除失败：\(reason)"
+            return AppL10n.pluginsFormat("plugin.error.store.removeFailedFormat", defaultValue: "插件移除失败：%@", reason)
         }
     }
 }
@@ -99,16 +99,30 @@ final class PluginPackageStore {
 
                     if manifest.pluginKitVersion != PluginPackageManifestLoader.supportedPluginKitVersion {
                         state = .incompatible(
-                            "插件 SDK 版本不兼容，已安装版本为 \(manifest.pluginKitVersion)，当前支持版本为 \(PluginPackageManifestLoader.supportedPluginKitVersion)。请更新插件。"
+                            AppL10n.pluginsFormat(
+                                "plugin.error.store.installedSDKIncompatibleFormat",
+                                defaultValue: "插件 SDK 版本不兼容，已安装版本为 %d，当前支持版本为 %d。请更新插件。",
+                                manifest.pluginKitVersion,
+                                PluginPackageManifestLoader.supportedPluginKitVersion
+                            )
                         )
                     } else if !PluginVersionComparator.isVersion(hostVersion, atLeast: manifest.minHostVersion) {
                         state = .incompatible(
-                            "插件需要 MacTools \(manifest.minHostVersion) 或更高版本，当前版本为 \(hostVersion)。"
+                            AppL10n.pluginsFormat(
+                                "plugin.error.store.installedHostIncompatibleFormat",
+                                defaultValue: "插件需要 MacTools %@ 或更高版本，当前版本为 %@。",
+                                manifest.minHostVersion,
+                                hostVersion
+                            )
                         )
                     } else if fileManager.fileExists(atPath: bundleURL.path) {
                         state = disabledPluginIDs.contains(manifest.id) ? .disabled : .enabled
                     } else {
-                        state = .failed("插件入口不存在：\(bundleURL.path)")
+                        state = .failed(AppL10n.pluginsFormat(
+                            "plugin.error.store.bundleMissingFormat",
+                            defaultValue: "插件入口不存在：%@",
+                            bundleURL.path
+                        ))
                     }
 
                     return PluginPackageRecord(
@@ -138,7 +152,7 @@ final class PluginPackageStore {
                 }
             }
             .sorted { lhs, rhs in
-                lhs.manifest.displayName.localizedCompare(rhs.manifest.displayName) == .orderedAscending
+                lhs.manifest.localizedDisplayName.localizedCompare(rhs.manifest.localizedDisplayName) == .orderedAscending
             }
     }
 
@@ -158,6 +172,7 @@ final class PluginPackageStore {
             .appendingPathComponent("\(manifest.id)-backup-\(UUID().uuidString)", isDirectory: true)
             .appendingPathExtension("mactoolsplugin")
         let hadExistingPackage = fileManager.fileExists(atPath: destinationURL.path)
+        let wasDisabled = disabledPluginIDs.contains(manifest.id)
 
         if hadExistingPackage {
             guard replaceExisting else {
@@ -199,11 +214,16 @@ final class PluginPackageStore {
             throw PluginPackageStoreError.installFailed(error.localizedDescription)
         }
 
-        setEnabled(true, for: manifest.id)
+        if !hadExistingPackage || !wasDisabled {
+            setEnabled(true, for: manifest.id)
+        }
         clearPendingRestart(pluginID: manifest.id)
 
         guard let record = installedRecords().first(where: { $0.id == manifest.id }) else {
-            throw PluginPackageStoreError.installFailed("安装完成后无法读取插件记录。")
+            throw PluginPackageStoreError.installFailed(AppL10n.plugins(
+                "plugin.error.store.recordMissingAfterInstall",
+                defaultValue: "安装完成后无法读取插件记录。"
+            ))
         }
 
         return record

@@ -7,14 +7,16 @@ import MacToolsPluginKit
 
 public final class DisplayResolutionPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        DisplayResolutionPluginProvider()
+        DisplayResolutionPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct DisplayResolutionPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [DisplayResolutionPlugin()]
+        [DisplayResolutionPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -31,8 +33,8 @@ protocol DisplaySystemSettingsLauncher {
 
 @MainActor
 struct WorkspaceDisplaySystemSettingsLauncher: DisplaySystemSettingsLauncher {
-    // 直接打开「系统设置 → 显示器」，对 Ventura+ 的 System Settings 与
-    // 旧版 System Preferences 都有效。
+    // Opens System Settings > Displays. The URL works for Ventura+ System Settings and the
+    // legacy System Preferences app.
     private static let systemDisplaySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.displays")!
 
     @discardableResult
@@ -43,18 +45,9 @@ struct WorkspaceDisplaySystemSettingsLauncher: DisplaySystemSettingsLauncher {
 
 @MainActor
 final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, DisplayTopologyRefreshing {
-    private static let unavailableModesSubtitle = "未检测到可用分辨率"
-    private static let openSystemSettingsTitle = "打开系统显示器设置"
     private static let openSystemSettingsIcon = "gearshape"
 
-    let metadata = PluginMetadata(
-        id: "display-resolution",
-        title: "显示器分辨率",
-        iconName: "display",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 30,
-        defaultDescription: "查看并切换每个显示器的分辨率"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -70,15 +63,29 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
     private var lastErrorMessage: String?
     private let controller: DisplayResolutionControlling
     private let systemSettingsLauncher: DisplaySystemSettingsLauncher
+    private let localization: PluginLocalization
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayResolutionPlugin")
     private var snapshot = DisplayResolutionSnapshot(displays: [])
 
     init(
         controller: DisplayResolutionControlling = DisplayResolutionController(),
-        systemSettingsLauncher: DisplaySystemSettingsLauncher = WorkspaceDisplaySystemSettingsLauncher()
+        systemSettingsLauncher: DisplaySystemSettingsLauncher = WorkspaceDisplaySystemSettingsLauncher(),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
+        self.localization = localization
         self.controller = controller
         self.systemSettingsLauncher = systemSettingsLauncher
+        self.metadata = PluginMetadata(
+            id: "display-resolution",
+            title: localization.string("metadata.title", defaultValue: "显示器分辨率"),
+            iconName: "display",
+            iconTint: Color(nsColor: .systemBlue),
+            order: 30,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "查看并切换每个显示器的分辨率"
+            )
+        )
         refreshSnapshot()
     }
 
@@ -93,7 +100,7 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
         guard !displays.isEmpty else {
             selectedDisplayID = nil
             return PluginPanelState(
-                subtitle: "未检测到可用显示器",
+                subtitle: localization.string("panel.subtitle.noDisplays", defaultValue: "未检测到可用显示器"),
                 isOn: false,
                 isExpanded: false,
                 isEnabled: false,
@@ -106,7 +113,7 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
         guard !panelDisplays.isEmpty else {
             selectedDisplayID = nil
             return PluginPanelState(
-                subtitle: Self.unavailableModesSubtitle,
+                subtitle: localization.string("panel.subtitle.noModes", defaultValue: "未检测到可用分辨率"),
                 isOn: false,
                 isExpanded: false,
                 isEnabled: false,
@@ -229,12 +236,15 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
         }
     }
 
-    nonisolated static func optionTitle(for mode: DisplayResolutionInfo) -> String {
+    nonisolated static func optionTitle(
+        for mode: DisplayResolutionInfo,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String {
         var title = "\(mode.width)×\(mode.height)"
         if mode.isNative {
-            title += " (原生)"
+            title += localization.string("resolution.badge.native", defaultValue: " (原生)")
         } else if mode.isDefault {
-            title += " (默认)"
+            title += localization.string("resolution.badge.default", defaultValue: " (默认)")
         } else if mode.isHiDPI {
             title += " (HiDPI)"
         } else {
@@ -267,10 +277,13 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
         if displays.count == 1, let display = displays.first {
             let current = display.modes.first(where: { $0.isCurrent })
             return current.map {
-                "\(display.display.isMain ? "主屏" : display.display.name) \($0.displayTitle)"
+                let displayName = display.display.isMain
+                    ? localization.string("display.main", defaultValue: "主屏")
+                    : display.display.name
+                return "\(displayName) \($0.displayTitle)"
             } ?? metadata.defaultDescription
         }
-        return "\(displays.count) 个显示器"
+        return localization.format("panel.subtitle.displayCountFormat", defaultValue: "%d 个显示器", displays.count)
     }
 
     private func buildDetail(for displays: [PanelDisplay]) -> PluginPanelDetail {
@@ -278,7 +291,8 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
             id: ControlID.displayNavigation,
             kind: .navigationList,
             options: displays.map { display in
-                let currentSummary = display.modes.first(where: { $0.isCurrent })?.displayTitle ?? "未知"
+                let currentSummary = display.modes.first(where: { $0.isCurrent })?.displayTitle
+                    ?? localization.string("display.currentResolution.unknown", defaultValue: "未知")
 
                 return PluginPanelControlOption(
                     id: String(display.display.id),
@@ -305,7 +319,7 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: Self.openSystemSettingsTitle,
+            actionTitle: localization.string("panel.action.openSystemSettings", defaultValue: "打开系统显示器设置"),
             actionIconSystemName: Self.openSystemSettingsIcon,
             actionBehavior: .dismissBeforeHandling,
             showsLeadingDivider: true,
@@ -316,28 +330,28 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
             PluginPanelNavigationSecondaryPanel(
                 controlID: ControlID.displayNavigation,
                 optionID: String(display.display.id),
-                panel: Self.secondaryPanel(for: display)
+                panel: secondaryPanel(for: display)
             )
         }
-        let secondaryPanel = selectedDisplayID.flatMap { selectedID in
-            displays.first(where: { $0.display.id == selectedID }).map(Self.secondaryPanel(for:))
+        let selectedSecondaryPanel = selectedDisplayID.flatMap { selectedID in
+            displays.first(where: { $0.display.id == selectedID }).map(secondaryPanel(for:))
         }
 
         return PluginPanelDetail(
             primaryControls: [displayNavigation, openSystemSettings],
-            secondaryPanel: secondaryPanel,
+            secondaryPanel: selectedSecondaryPanel,
             navigationSecondaryPanels: navigationSecondaryPanels
         )
     }
 
-    private static func secondaryPanel(for display: PanelDisplay) -> PluginPanelSecondaryPanel {
+    private func secondaryPanel(for display: PanelDisplay) -> PluginPanelSecondaryPanel {
         let resolutionControl = PluginPanelControl(
             id: "display.\(display.display.id)",
             kind: .selectList,
             options: display.modes.map {
                 PluginPanelControlOption(
                     id: String($0.modeId),
-                    title: Self.optionTitle(for: $0),
+                    title: Self.optionTitle(for: $0, localization: localization),
                     subtitle: nil
                 )
             },
@@ -361,7 +375,11 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
         logger.error(
             "apply failed display=\(displayID) modeId=\(modeId) reason=\(error.localizedDescription, privacy: .public)"
         )
-        lastErrorMessage = "切换失败：\(error.localizedDescription)"
+        lastErrorMessage = localization.format(
+            "error.applyFailedFormat",
+            defaultValue: "切换失败：%@",
+            error.localizedDescription(localization: localization)
+        )
         onStateChange?()
     }
 }

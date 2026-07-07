@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 // MARK: - Charge Mode
 //
@@ -90,23 +91,78 @@ struct BatterySnapshot: Equatable {
 
 enum BatteryChargeWriteError: Error, LocalizedError, Equatable {
     case helperNotFound
-    case helperInstallFailed(String)
+    case helperInstallFailed(BatteryChargeHelperInstallFailure)
     case helperVerificationFailed
     case noSupportedSMCKey
-    case writeFailed(String)
+    case writeFailed(BatteryChargeWriteFailure)
 
     var errorDescription: String? {
+        localizedDescription(localization: BatteryChargeLimitLocalization.fallback)
+    }
+
+    func localizedDescription(localization: PluginLocalization) -> String {
         switch self {
         case .helperNotFound:
-            return "未找到内置电池控制组件。请重新安装电池充电上限插件。"
-        case .helperInstallFailed(let msg):
-            return "安装电池控制组件失败：\(msg)"
+            return localization.string(
+                "error.helperNotFound",
+                defaultValue: "未找到内置电池控制组件。请重新安装电池充电上限插件。"
+            )
+        case .helperInstallFailed(let failure):
+            return localization.format(
+                "error.helperInstallFailed",
+                defaultValue: "安装电池控制组件失败：%@",
+                failure.localizedDescription(localization: localization)
+            )
         case .helperVerificationFailed:
-            return "电池控制组件校验失败。请重新安装电池充电上限插件。"
+            return localization.string(
+                "error.helperVerificationFailed",
+                defaultValue: "电池控制组件校验失败。请重新安装电池充电上限插件。"
+            )
         case .noSupportedSMCKey:
-            return "当前 Mac 固件未提供可写的充电控制键。可能是 macOS 已升级到不支持的版本。"
-        case .writeFailed(let msg):
-            return "写入充电控制失败：\(msg)"
+            return localization.string(
+                "error.noSupportedSMCKey",
+                defaultValue: "当前 Mac 固件未提供可写的充电控制键。可能是 macOS 已升级到不支持的版本。"
+            )
+        case .writeFailed(let failure):
+            return localization.format(
+                "error.writeFailed",
+                defaultValue: "写入充电控制失败：%@",
+                failure.localizedDescription(localization: localization)
+            )
+        }
+    }
+}
+
+enum BatteryChargeHelperInstallFailure: Equatable {
+    case missingAfterInstall
+    case authorizationScriptUnavailable
+    case systemMessage(String)
+
+    func localizedDescription(localization: PluginLocalization) -> String {
+        switch self {
+        case .missingAfterInstall:
+            localization.string("error.helperInstall.missingAfterInstall", defaultValue: "安装后仍无法找到组件")
+        case .authorizationScriptUnavailable:
+            localization.string("error.helperInstall.authorizationScriptUnavailable", defaultValue: "无法创建授权脚本")
+        case .systemMessage(let message):
+            message
+        }
+    }
+}
+
+enum BatteryChargeWriteFailure: Equatable {
+    case inhibitCharging
+    case resumeCharging
+    case toggleDischarge
+
+    func localizedDescription(localization: PluginLocalization) -> String {
+        switch self {
+        case .inhibitCharging:
+            localization.string("error.write.inhibitCharging", defaultValue: "无法停止充电")
+        case .resumeCharging:
+            localization.string("error.write.resumeCharging", defaultValue: "无法恢复充电")
+        case .toggleDischarge:
+            localization.string("error.write.toggleDischarge", defaultValue: "无法切换放电模式")
         }
     }
 }
@@ -119,6 +175,7 @@ protocol BatteryChargeLimitReading: AnyObject {
 
 protocol BatteryChargeLimitWriting: AnyObject {
     @MainActor var isHelperAvailable: Bool { get }
+    @MainActor var isInstalledHelperAvailable: Bool { get }
     @MainActor func probeCapabilities() -> BatterySMCCapabilities
     @MainActor @discardableResult func inhibitCharging(limitPercent: Int) -> BatteryChargeWriteError?
     @MainActor @discardableResult func resumeCharging() -> BatteryChargeWriteError?

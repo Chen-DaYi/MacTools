@@ -113,25 +113,30 @@ run: sync-debug-plugins generate-icon-gallery
 	if [ -n "$$ICON_CATALOG_URL" ]; then \
 		echo "Using icon catalog: $$ICON_CATALOG_URL"; \
 	fi; \
+	RUN_ENV=(); \
+	if [ -n "$$CATALOG_URL" ]; then \
+		RUN_ENV+=("MACTOOLS_PLUGIN_CATALOG_URL=$$CATALOG_URL"); \
+	fi; \
+	if [ -n "$$ICON_CATALOG_URL" ]; then \
+		RUN_ENV+=("MACTOOLS_ICON_CATALOG_URL=$$ICON_CATALOG_URL"); \
+	fi; \
 	stop_app() { \
-		echo "Stopping $(APP_PRODUCT_NAME)..."; \
-		/usr/bin/pkill -TERM -x "$(APP_PRODUCT_NAME)" >/dev/null 2>&1 || true; \
+		if [ -n "$${APP_PID:-}" ]; then \
+			echo "Stopping $(APP_PRODUCT_NAME)..."; \
+			/bin/kill -TERM "$$APP_PID" >/dev/null 2>&1 || true; \
+			wait "$$APP_PID" >/dev/null 2>&1 || true; \
+		fi; \
 	}; \
 	trap 'stop_app; exit 130' INT TERM; \
-	OPEN_ARGS=(-n -W); \
-	if [ -n "$$CATALOG_URL" ] && [ -n "$$ICON_CATALOG_URL" ]; then \
-		OPEN_ARGS+=(--env "MACTOOLS_PLUGIN_CATALOG_URL=$$CATALOG_URL" --env "MACTOOLS_ICON_CATALOG_URL=$$ICON_CATALOG_URL"); \
-	elif [ -n "$$CATALOG_URL" ]; then \
-		OPEN_ARGS+=(--env "MACTOOLS_PLUGIN_CATALOG_URL=$$CATALOG_URL"); \
-	elif [ -n "$$ICON_CATALOG_URL" ]; then \
-		OPEN_ARGS+=(--env "MACTOOLS_ICON_CATALOG_URL=$$ICON_CATALOG_URL"); \
-	else \
+	if [ -z "$$CATALOG_URL" ] && [ -z "$$ICON_CATALOG_URL" ]; then \
 		echo "No local plugin catalog found. Run 'make build-plugin' or set MACTOOLS_PLUGIN_CATALOG_URL."; \
 	fi; \
-	open "$${OPEN_ARGS[@]}" "$(APP_PATH)"
+	env "$${RUN_ENV[@]}" "$(APP_EXECUTABLE)" & \
+	APP_PID=$$!; \
+	wait "$$APP_PID"
 
 run-open: build
-	@open "$(APP_PATH)"
+	@open -n -W "$(APP_PATH)"
 
 clean:
 	@rm -rf build $(PROJECT_FILE) $(WORKSPACE_FILE) "$(GENERATED_PLUGIN_PROJECT_CONFIG)"

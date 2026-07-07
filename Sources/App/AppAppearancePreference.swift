@@ -13,11 +13,11 @@ enum AppAppearancePreference: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .system:
-            return "自动"
+            return AppL10n.settings("appearance.system", defaultValue: "自动")
         case .dark:
-            return "深色"
+            return AppL10n.settings("appearance.dark", defaultValue: "深色")
         case .light:
-            return "浅色"
+            return AppL10n.settings("appearance.light", defaultValue: "浅色")
         }
     }
 

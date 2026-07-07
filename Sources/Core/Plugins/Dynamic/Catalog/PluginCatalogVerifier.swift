@@ -116,7 +116,8 @@ struct PluginCatalogVerifier {
                 pluginKitVersion: entry.pluginKitVersion,
                 bundleRelativePath: "Entry.bundle",
                 capabilities: entry.capabilities,
-                permissions: entry.permissions
+                permissions: entry.permissions,
+                releaseChannel: entry.releaseChannel
             )
             try PluginPackageManifestLoader.validate(manifest, hostVersion: hostVersion)
 
@@ -172,33 +173,38 @@ enum PluginCatalogVerifierError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .unsupportedSchemaVersion(version):
-            return "插件列表版本不支持：\(version)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.unsupportedSchemaFormat", defaultValue: "插件列表版本不支持：%d", version)
         case .invalidCatalogID:
-            return "插件列表 ID 不合法。"
+            return AppL10n.plugins("plugin.error.catalog.invalidID", defaultValue: "插件列表 ID 不合法。")
         case let .incompatibleHostVersion(required, current):
-            return "插件列表需要 MacTools \(required) 或更高版本，当前版本为 \(current)。"
+            return AppL10n.pluginsFormat(
+                "plugin.error.catalog.incompatibleHostFormat",
+                defaultValue: "插件列表需要 MacTools %@ 或更高版本，当前版本为 %@。",
+                required,
+                current
+            )
         case let .unsupportedPluginKitVersion(version):
-            return "插件列表 SDK 版本不支持：\(version)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.unsupportedSDKFormat", defaultValue: "插件列表 SDK 版本不支持：%d", version)
         case let .duplicatePluginID(id):
-            return "插件列表包含重复插件：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.duplicatePluginIDFormat", defaultValue: "插件列表包含重复插件：%@", id)
         case let .invalidChecksum(id):
-            return "插件包校验值不合法：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.invalidChecksumFormat", defaultValue: "插件包校验值不合法：%@", id)
         case let .invalidPackageSize(id):
-            return "插件包大小不合法：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.invalidPackageSizeFormat", defaultValue: "插件包大小不合法：%@", id)
         case let .invalidPackageURL(url):
-            return "插件包地址不支持：\(url.absoluteString)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.invalidPackageURLFormat", defaultValue: "插件包地址不支持：%@", url.absoluteString)
         case let .revokedPlugin(id):
-            return "插件已被撤回：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.revokedPluginFormat", defaultValue: "插件已被撤回：%@", id)
         case .missingSignature:
-            return "正式插件列表缺少签名。"
+            return AppL10n.plugins("plugin.error.catalog.missingSignature", defaultValue: "正式插件列表缺少签名。")
         case let .unsupportedSignatureAlgorithm(algorithm):
-            return "插件列表签名算法不支持：\(algorithm)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.unsupportedSignatureAlgorithmFormat", defaultValue: "插件列表签名算法不支持：%@", algorithm)
         case .missingPublicKey:
-            return "插件列表缺少内置公钥。"
+            return AppL10n.plugins("plugin.error.catalog.missingPublicKey", defaultValue: "插件列表缺少内置公钥。")
         case .signatureVerificationUnavailable:
-            return "插件列表签名无法校验。"
+            return AppL10n.plugins("plugin.error.catalog.signatureVerificationUnavailable", defaultValue: "插件列表签名无法校验。")
         case .invalidSignature:
-            return "插件列表签名不匹配。"
+            return AppL10n.plugins("plugin.error.catalog.invalidSignature", defaultValue: "插件列表签名不匹配。")
         }
     }
 }

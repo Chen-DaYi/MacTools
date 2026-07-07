@@ -30,6 +30,46 @@ final class PluginHostSliderActionTests: XCTestCase {
         )
     }
 
+    func testChangedSliderValueDoesNotRebuildAllDerivedState() {
+        let plugin = MockSliderPlugin()
+        let host = makeHost(plugin: plugin)
+        _ = host.panelItems
+        let readCountAfterInitialBuild = plugin.primaryPanelStateReadCount
+
+        host.setPanelSliderValue(
+            0.42,
+            controlID: "display.2.brightness",
+            for: plugin.metadata.id,
+            phase: .changed
+        )
+
+        XCTAssertEqual(
+            plugin.receivedActions,
+            [.setSlider(controlID: "display.2.brightness", value: 0.42, phase: .changed)]
+        )
+        XCTAssertEqual(plugin.primaryPanelStateReadCount, readCountAfterInitialBuild)
+    }
+
+    func testEndedSliderValueRebuildsDerivedState() {
+        let plugin = MockSliderPlugin()
+        let host = makeHost(plugin: plugin)
+        _ = host.panelItems
+        let readCountAfterInitialBuild = plugin.primaryPanelStateReadCount
+
+        host.setPanelSliderValue(
+            0.42,
+            controlID: "display.2.brightness",
+            for: plugin.metadata.id,
+            phase: .ended
+        )
+
+        XCTAssertEqual(
+            plugin.receivedActions,
+            [.setSlider(controlID: "display.2.brightness", value: 0.42, phase: .ended)]
+        )
+        XCTAssertGreaterThan(plugin.primaryPanelStateReadCount, readCountAfterInitialBuild)
+    }
+
     private func makeHost(plugin: MockSliderPlugin) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -63,9 +103,11 @@ private final class MockSliderPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var receivedActions: [PluginPanelAction] = []
+    var primaryPanelStateReadCount = 0
 
     var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+        primaryPanelStateReadCount += 1
+        return PluginPanelState(
             subtitle: "Mock",
             isOn: false,
             isExpanded: true,

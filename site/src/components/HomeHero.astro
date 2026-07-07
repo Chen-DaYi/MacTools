@@ -1,0 +1,107 @@
+---
+const base = import.meta.env.BASE_URL.endsWith("/")
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const withBase = (path: string) => `${base}${path.replace(/^\//, "")}`;
+
+const downloadURL = "https://github.com/ggbond268/MacTools/releases/latest/download/MacTools.dmg";
+const installCommand = "brew install --cask mactools";
+
+const heroShots = [
+  {
+    slot: "dashboard",
+    label: "系统状态面板",
+    variants: [
+      { lang: "zh", theme: "light", src: "/assets/screenshots/hero-dashboard-zh-light.png", width: 664, height: 1584 },
+      { lang: "zh", theme: "dark", src: "/assets/screenshots/hero-dashboard-zh-dark.png", width: 701, height: 1593 },
+      { lang: "en", theme: "light", src: "/assets/screenshots/hero-dashboard-en-light.png", width: 692, height: 1406 },
+      { lang: "en", theme: "dark", src: "/assets/screenshots/hero-dashboard-en-dark.png", width: 672, height: 1394 },
+    ],
+  },
+  {
+    slot: "actions",
+    label: "快捷控制面板",
+    variants: [
+      { lang: "zh", theme: "light", src: "/assets/screenshots/hero-actions-zh-light.png", width: 628, height: 1424 },
+      { lang: "zh", theme: "dark", src: "/assets/screenshots/hero-actions-zh-dark.png", width: 622, height: 1418 },
+      { lang: "en", theme: "light", src: "/assets/screenshots/hero-actions-en-light.png", width: 622, height: 1416 },
+      { lang: "en", theme: "dark", src: "/assets/screenshots/hero-actions-en-dark.png", width: 624, height: 1416 },
+    ],
+  },
+] as const;
+---
+
+<section class="home-hero" aria-labelledby="home-title">
+  <div class="home-hero-copy">
+    <div class="hero-lockup">
+      <img src={withBase("/assets/logo-mactools-rounded.png")} width="72" height="72" alt="" />
+      <p class="eyebrow">
+        <span data-i18n-zh>原生 macOS 菜单栏工具集</span>
+        <span data-i18n-en>Native macOS menu bar toolkit</span>
+      </p>
+    </div>
+    <h1 id="home-title">
+      <span class="hero-title-zh" data-i18n-zh>
+        <span>常用系统操作，</span>
+        <span>安静地留在菜单栏。</span>
+      </span>
+      <span data-i18n-en>Everyday system controls, kept quietly in the menu bar.</span>
+    </h1>
+    <p class="hero-lead">
+      <span data-i18n-zh>MacTools 把显示器、清理、休眠、启动台、插件市场和更多高频动作集中到一个轻量入口。</span>
+      <span data-i18n-en>MacTools collects display controls, cleanup, sleep, Launchpad, plugins, and other frequent actions in one lightweight native app.</span>
+    </p>
+    <div class="hero-actions">
+      <a class="button primary" href={downloadURL} target="_blank" rel="noopener noreferrer">
+        <span data-i18n-zh>立即下载</span>
+        <span data-i18n-en>Download MacTools</span>
+      </a>
+      <a class="button subtle" href="https://github.com/ggbond268/MacTools/releases" target="_blank" rel="noopener noreferrer">
+        <span data-i18n-zh>更新记录</span>
+        <span data-i18n-en>What's new</span>
+      </a>
+    </div>
+    <div class="homebrew-panel" id="install">
+      <p>
+        <span data-i18n-zh>也可以使用 Homebrew 安装</span>
+        <span data-i18n-en>Or install with Homebrew</span>
+      </p>
+      <div class="command-line">
+        <span>$</span>
+        <code>{installCommand}</code>
+        <button type="button" data-copy={installCommand}>
+          <span data-i18n-zh>复制</span>
+          <span data-i18n-en>Copy</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-product" aria-hidden="true">
+    <div class="hero-desktop">
+      <div class="desktop-menubar">
+        <span class="window-dots"><i></i><i></i><i></i></span>
+      </div>
+      <div class="hero-panel-stage">
+        {heroShots.map((shot) => (
+          <div class={`hero-panel-shot hero-panel-shot-${shot.slot}`}>
+            {shot.variants.map((variant) => (
+              <img
+                class="hero-panel-variant"
+                src={withBase(variant.src)}
+                width={variant.width}
+                height={variant.height}
+                alt=""
+                loading="eager"
+                decoding="async"
+                data-hero-lang={variant.lang}
+                data-hero-theme={variant.theme}
+                data-hero-label={`${variant.lang}-${variant.theme}-${shot.label}`}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+</section>

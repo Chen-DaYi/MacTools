@@ -2,7 +2,53 @@
   "id": "quit-apps",
   "displayName": "退出应用",
   "summary": "选择并退出正在运行的应用，或一键退出全部",
-  "version": "1.0.3",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إنهاء التطبيقات",
+      "summary": "اختر إنهاء التطبيقات قيد التشغيل، أو قم بإنهاءها جميعًا مرة واحدة."
+    },
+    "de": {
+      "displayName": "Apps beenden",
+      "summary": "Wählen Sie laufende Apps aus, die Sie beenden möchten, oder beenden Sie alle auf einmal."
+    },
+    "en": {
+      "displayName": "Quit Apps",
+      "summary": "Choose running apps to quit, or quit them all at once."
+    },
+    "es": {
+      "displayName": "Salir de apps",
+      "summary": "Elija aplicaciones en ejecución para cerrar o ciérrelas todas a la vez."
+    },
+    "fr": {
+      "displayName": "Quitter les apps",
+      "summary": "Choisissez les applications en cours d’exécution à quitter ou quittez-les toutes en même temps."
+    },
+    "ja": {
+      "displayName": "アプリを終了",
+      "summary": "実行中のアプリを選択して終了するか、すべてを一度に終了します。"
+    },
+    "ko": {
+      "displayName": "앱 종료",
+      "summary": "실행 중인 앱을 선택하여 종료하거나 한 번에 모두 종료하세요."
+    },
+    "pt": {
+      "displayName": "Encerrar apps",
+      "summary": "Escolha os aplicativos em execução para encerrar ou feche todos de uma vez."
+    },
+    "ru": {
+      "displayName": "Закрыть приложения",
+      "summary": "Выберите запущенные приложения, которые хотите закрыть, или закройте их все сразу."
+    },
+    "zh-Hans": {
+      "displayName": "退出应用",
+      "summary": "选择并退出正在运行的应用，或一键退出全部"
+    },
+    "zh-Hant": {
+      "displayName": "結束 App",
+      "summary": "選擇並退出正在運行的App，或一鍵退出全部"
+    }
+  },
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "QuitApps.bundle",

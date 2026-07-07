@@ -2,7 +2,53 @@
   "id": "microphone-mute",
   "displayName": "麦克风静音",
   "summary": "快速静音或恢复默认麦克风输入",
-  "version": "1.0.3",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "كتم الميكروفون",
+      "summary": "كتم صوت إدخال الميكروفون الافتراضي أو استعادته بسرعة."
+    },
+    "de": {
+      "displayName": "Mikrofon stummschalten",
+      "summary": "Schnell stummschalten oder den Standard-Mikrofoneingang wiederherstellen."
+    },
+    "en": {
+      "displayName": "Microphone Mute",
+      "summary": "Quickly mute or restore the default microphone input."
+    },
+    "es": {
+      "displayName": "Silenciar micrófono",
+      "summary": "Silencia o restablece rápidamente la entrada de micrófono predeterminada."
+    },
+    "fr": {
+      "displayName": "Couper le micro",
+      "summary": "Mettez rapidement en sourdine ou restaurez l'entrée microphone par défaut."
+    },
+    "ja": {
+      "displayName": "マイクをミュート",
+      "summary": "デフォルトのマイク入力を素早くミュートまたは復元します。"
+    },
+    "ko": {
+      "displayName": "마이크 음소거",
+      "summary": "기본 마이크 입력을 빠르게 음소거하거나 복원합니다."
+    },
+    "pt": {
+      "displayName": "Silenciar microfone",
+      "summary": "Silencie rapidamente ou restaure a entrada de microfone padrão."
+    },
+    "ru": {
+      "displayName": "Отключить микрофон",
+      "summary": "Быстро отключите звук или восстановите вход микрофона по умолчанию."
+    },
+    "zh-Hans": {
+      "displayName": "麦克风静音",
+      "summary": "快速静音或恢复默认麦克风输入"
+    },
+    "zh-Hant": {
+      "displayName": "麥克風靜音",
+      "summary": "快速靜音或恢復預設麥克風輸入"
+    }
+  },
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "MicrophoneMute.bundle",

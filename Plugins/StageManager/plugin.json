@@ -2,7 +2,53 @@
   "id": "stage-manager",
   "displayName": "台前调度",
   "summary": "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
-  "version": "1.0.0",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "Stage Manager",
+      "summary": "قم بتشغيل Stage Manager لتركيز النافذة الحالية وإبقاء النوافذ الأخرى جانبًا."
+    },
+    "de": {
+      "displayName": "Stage Manager",
+      "summary": "Aktivieren Sie Stage Manager, um das aktuelle Fenster zu fokussieren und andere auf der Seite zu halten."
+    },
+    "en": {
+      "displayName": "Stage Manager",
+      "summary": "Turn on Stage Manager to focus the current window and keep others on the side."
+    },
+    "es": {
+      "displayName": "Organizador Visual",
+      "summary": "Active Stage Manager para enfocar la ventana actual y mantener las demás a un lado."
+    },
+    "fr": {
+      "displayName": "Stage Manager",
+      "summary": "Activez Stage Manager pour concentrer la fenêtre actuelle et garder les autres de côté."
+    },
+    "ja": {
+      "displayName": "ステージマネージャ",
+      "summary": "Stage Manager をオンにすると、現在のウィンドウに焦点が当てられ、他のウィンドウは脇に表示されます。"
+    },
+    "ko": {
+      "displayName": "스테이지 매니저",
+      "summary": "현재 창에 초점을 맞추고 다른 창은 옆에 두려면 Stage Manager을 켜세요."
+    },
+    "pt": {
+      "displayName": "Organizador Visual",
+      "summary": "Ative Stage Manager para focar a janela atual e manter outras ao lado."
+    },
+    "ru": {
+      "displayName": "Stage Manager",
+      "summary": "Включите Stage Manager, чтобы сфокусировать текущее окно и оставить другие в стороне."
+    },
+    "zh-Hans": {
+      "displayName": "台前调度",
+      "summary": "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边"
+    },
+    "zh-Hant": {
+      "displayName": "幕前調度",
+      "summary": "開啟幕前調度，集中顯示當前窗口並把其他窗口收納到側邊"
+    }
+  },
+  "version": "1.0.2",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "StageManager.bundle",

@@ -7,6 +7,8 @@ final class MenuBarHiddenStore {
         static let isEnabled = "is-enabled"
         static let isAlwaysHiddenEnabled = "is-always-hidden-enabled"
         static let showsHiddenIconsInPanel = "shows-hidden-icons-in-panel"
+        static let visibleItemStableKeys = "visible-item-stable-keys"
+        static let hiddenItemStableKeys = "hidden-item-stable-keys"
         static let alwaysHiddenItemStableKeys = "always-hidden-item-stable-keys"
     }
 
@@ -31,6 +33,29 @@ final class MenuBarHiddenStore {
         set { storage.set(newValue, forKey: Key.showsHiddenIconsInPanel) }
     }
 
+    var hasVisibleHiddenLayout: Bool {
+        storage.object(forKey: Key.visibleItemStableKeys) != nil
+            || storage.object(forKey: Key.hiddenItemStableKeys) != nil
+    }
+
+    var visibleItemStableKeys: [String] {
+        get {
+            normalizedStableKeys(storage.stringArray(forKey: Key.visibleItemStableKeys) ?? [])
+        }
+        set {
+            storage.set(normalizedStableKeys(newValue), forKey: Key.visibleItemStableKeys)
+        }
+    }
+
+    var hiddenItemStableKeys: [String] {
+        get {
+            normalizedStableKeys(storage.stringArray(forKey: Key.hiddenItemStableKeys) ?? [])
+        }
+        set {
+            storage.set(normalizedStableKeys(newValue), forKey: Key.hiddenItemStableKeys)
+        }
+    }
+
     var alwaysHiddenItemStableKeys: Set<String> {
         get {
             Set(storage.stringArray(forKey: Key.alwaysHiddenItemStableKeys) ?? [])
@@ -45,6 +70,13 @@ final class MenuBarHiddenStore {
         }
     }
 
+    func recordVisibleHiddenLayout(visibleKeys: [String], hiddenKeys: [String]) {
+        let visible = normalizedStableKeys(visibleKeys)
+        let hidden = normalizedStableKeys(hiddenKeys.filter { !visible.contains($0) })
+        storage.set(visible, forKey: Key.visibleItemStableKeys)
+        storage.set(hidden, forKey: Key.hiddenItemStableKeys)
+    }
+
     func recordAlwaysHiddenItem(_ tag: MenuBarItemTag) {
         var keys = alwaysHiddenItemStableKeys
         guard keys.insert(tag.stableKey).inserted else { return }
@@ -55,5 +87,15 @@ final class MenuBarHiddenStore {
         var keys = alwaysHiddenItemStableKeys
         guard keys.remove(tag.stableKey) != nil else { return }
         alwaysHiddenItemStableKeys = keys
+    }
+
+    private func normalizedStableKeys(_ keys: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for key in keys where !key.isEmpty {
+            guard seen.insert(key).inserted else { continue }
+            result.append(key)
+        }
+        return result
     }
 }

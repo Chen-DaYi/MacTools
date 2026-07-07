@@ -1,67 +1,13 @@
-import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
 private enum ShortcutSettingsLayout {
-    static let controlColumnWidth: CGFloat = 128
-    static let controlHeight: CGFloat = 48
-}
-
-@MainActor
-final class ShortcutCaptureController: ObservableObject {
-    @Published private(set) var recordingShortcutID: String?
-
-    private var localMonitor: Any?
-    private var onCapture: ((ShortcutBinding) -> Void)?
-
-    func toggleRecording(for shortcutID: String, onCapture: @escaping (ShortcutBinding) -> Void) {
-        if recordingShortcutID == shortcutID {
-            stopRecording()
-            return
-        }
-
-        startRecording(for: shortcutID, onCapture: onCapture)
-    }
-
-    func stopRecording() {
-        if let localMonitor {
-            NSEvent.removeMonitor(localMonitor)
-        }
-
-        localMonitor = nil
-        onCapture = nil
-        recordingShortcutID = nil
-    }
-
-    private func startRecording(for shortcutID: String, onCapture: @escaping (ShortcutBinding) -> Void) {
-        stopRecording()
-        recordingShortcutID = shortcutID
-        self.onCapture = onCapture
-
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handle(event) ?? event
-        }
-    }
-
-    private func handle(_ event: NSEvent) -> NSEvent? {
-        guard recordingShortcutID != nil else {
-            return event
-        }
-
-        let modifiers = ShortcutModifiers.from(event.modifierFlags)
-
-        if event.keyCode == ShortcutKeyCode.escape, modifiers.isEmpty {
-            stopRecording()
-            return nil
-        }
-
-        if let binding = event.shortcutBindingCandidate {
-            onCapture?(binding)
-        }
-
-        stopRecording()
-        return nil
-    }
+    static let standardRecorderWidth: CGFloat = 126
+    static let groupedRecorderWidth: CGFloat = 126
+    static let groupedControlWidth: CGFloat = 192
+    static let groupedIconWidth: CGFloat = 22
+    static let actionButtonSize: CGFloat = 22
+    static let actionButtonsWidth: CGFloat = 50
 }
 
 struct ShortcutSettingsView: View {
@@ -71,10 +17,13 @@ struct ShortcutSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("键盘快捷键", systemImage: "command")
+                    Label(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"), systemImage: "command")
                         .font(PluginSettingsTheme.Typography.pageTitle)
 
-                    Text("为常用动作配置全局快捷键。编辑后立即生效，必要项不可删除。")
+                    Text(AppL10n.settings(
+                        "shortcuts.description",
+                        defaultValue: "为常用动作配置全局快捷键。编辑后立即生效，必要项不可删除。"
+                    ))
                         .font(PluginSettingsTheme.Typography.pageDescription)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -95,29 +44,23 @@ struct ShortcutSettingsView: View {
 struct ShortcutSettingsRowsView: View {
     @ObservedObject var pluginHost: PluginHost
     let items: [ShortcutSettingsItem]
-    @StateObject private var captureController = ShortcutCaptureController()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                ShortcutSettingsRow(
+                ShortcutSettingsStandardRow(
                     item: item,
-                    isRecording: captureController.recordingShortcutID == item.id,
+                    recordShortcut: { binding in
+                        configure(item, binding: binding)
+                    },
                     onConfigure: {
                         pluginHost.clearShortcutError(for: item.id)
-                        captureController.toggleRecording(for: item.id) { binding in
-                            pluginHost.setShortcutBinding(binding, for: item.id)
-                        }
                     },
                     onClear: {
-                        captureController.stopRecording()
-                        pluginHost.clearShortcutError(for: item.id)
-                        pluginHost.clearShortcut(for: item.id)
+                        clear(item)
                     },
                     onReset: {
-                        captureController.stopRecording()
-                        pluginHost.clearShortcutError(for: item.id)
-                        pluginHost.resetShortcut(for: item.id)
+                        reset(item)
                     }
                 )
 
@@ -126,15 +69,74 @@ struct ShortcutSettingsRowsView: View {
                 }
             }
         }
-        .onDisappear {
-            captureController.stopRecording()
-        }
+    }
+
+    private func configure(_ item: ShortcutSettingsItem, binding: ShortcutBinding) -> String? {
+        pluginHost.clearShortcutError(for: item.id)
+        return pluginHost.setShortcutBindingAndReturnError(binding, for: item.id)
+    }
+
+    private func clear(_ item: ShortcutSettingsItem) {
+        pluginHost.clearShortcutError(for: item.id)
+        pluginHost.clearShortcut(for: item.id)
+    }
+
+    private func reset(_ item: ShortcutSettingsItem) {
+        pluginHost.clearShortcutError(for: item.id)
+        pluginHost.resetShortcut(for: item.id)
     }
 }
 
-private struct ShortcutSettingsRow: View {
+struct GroupedShortcutSettingsRowsView: View {
+    @ObservedObject var pluginHost: PluginHost
+    let groups: [ShortcutSettingsGroup]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                GroupedShortcutSettingsRow(
+                    group: group,
+                    recordShortcut: configure,
+                    onBeginRecording: { item in
+                        pluginHost.clearShortcutError(for: item.id)
+                    },
+                    onClear: clear,
+                    onReset: reset
+                )
+
+                if index < groups.count - 1 {
+                    PluginSettingsListDivider()
+                }
+            }
+        }
+    }
+
+    private func configure(_ item: ShortcutSettingsItem, binding: ShortcutBinding) -> String? {
+        pluginHost.clearShortcutError(for: item.id)
+        return pluginHost.setShortcutBindingAndReturnError(binding, for: item.id)
+    }
+
+    private func clear(_ item: ShortcutSettingsItem) {
+        pluginHost.clearShortcutError(for: item.id)
+        pluginHost.clearShortcut(for: item.id)
+    }
+
+    private func reset(_ item: ShortcutSettingsItem) {
+        pluginHost.clearShortcutError(for: item.id)
+        pluginHost.resetShortcut(for: item.id)
+    }
+}
+
+struct ShortcutSettingsGroup: Identifiable {
+    let id: String
+    let title: String
+    let description: String?
+    let items: [ShortcutSettingsItem]
+}
+
+private struct ShortcutSettingsStandardRow: View {
     let item: ShortcutSettingsItem
-    let isRecording: Bool
+    let recordShortcut: (ShortcutBinding) -> String?
     let onConfigure: () -> Void
     let onClear: () -> Void
     let onReset: () -> Void
@@ -164,43 +166,220 @@ private struct ShortcutSettingsRow: View {
                         .help(item.title)
 
                     if item.isRequired {
-                        ShortcutStatusBadge(text: "必填")
+                        ShortcutStatusBadge(text: AppL10n.settings("shortcuts.required", defaultValue: "必填"))
                     }
                 }
 
-                Text(supportingText)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(supportingColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(supportingText)
+                if !supportingText.isEmpty {
+                    Text(supportingText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(supportingColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(supportingText)
+                }
             }
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .help(rowHelpText)
 
             HStack(alignment: .center, spacing: 10) {
-                ShortcutBindingBadge(
-                    text: isRecording ? "请按下快捷键" : item.bindingText,
-                    isRecording: isRecording
-                )
-                .frame(width: ShortcutSettingsLayout.controlColumnWidth)
-
-                ShortcutActionGroup(
-                    isRecording: isRecording,
-                    canClear: item.canClear,
-                    canReset: !item.usesDefaultValue,
+                ShortcutBindingControl(
+                    item: item,
+                    onRecord: { binding in
+                        PluginShortcutRecordingResult.from(
+                            errorMessage: recordShortcut(binding)
+                        )
+                    },
+                    onBeginRecording: onConfigure,
                     onConfigure: onConfigure,
                     onReset: onReset,
-                    onClear: onClear,
-                    clearHelp: item.canClear
-                        ? "清除快捷键"
-                        : (item.isRequired ? "该快捷键不能为空" : "当前没有可清除的快捷键")
+                    onClear: onClear
                 )
-                .frame(width: ShortcutSettingsLayout.controlColumnWidth)
             }
         }
         .pluginSettingsListRowPadding(interactive: true)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct GroupedShortcutSettingsRow: View {
+    private enum Layout {
+        static let controlWidth = ShortcutSettingsLayout.groupedControlWidth
+    }
+
+    let group: ShortcutSettingsGroup
+    let recordShortcut: (ShortcutSettingsItem, ShortcutBinding) -> String?
+    let onBeginRecording: (ShortcutSettingsItem) -> Void
+    let onClear: (ShortcutSettingsItem) -> Void
+    let onReset: (ShortcutSettingsItem) -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(group.title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(group.title)
+
+                if !supportingText.isEmpty {
+                    Text(supportingText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(supportingColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(supportingText)
+                }
+            }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
+            HStack(alignment: .center, spacing: 10) {
+                ForEach(group.items) { item in
+                    ShortcutBindingControl(
+                        item: item,
+                        onRecord: { binding in
+                            PluginShortcutRecordingResult.from(
+                                errorMessage: recordShortcut(item, binding)
+                            )
+                        },
+                        onBeginRecording: { onBeginRecording(item) },
+                        onConfigure: { onBeginRecording(item) },
+                        onReset: { onReset(item) },
+                        onClear: { onClear(item) },
+                        title: item.settingsControlTitle ?? item.title,
+                        systemImage: item.settingsControlSystemImage,
+                        layout: .stacked
+                    )
+                    .frame(width: Layout.controlWidth, alignment: .leading)
+                }
+            }
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var supportingText: String {
+        let messages = group.items.compactMap(\.errorMessage)
+        if !messages.isEmpty {
+            return messages.joined(separator: "；")
+        }
+
+        return group.description ?? ""
+    }
+
+    private var supportingColor: Color {
+        group.items.contains(where: { $0.errorMessage != nil }) ? .red : .secondary
+    }
+}
+
+private struct ShortcutBindingControl: View {
+    enum LayoutStyle: Equatable {
+        case horizontal
+        case stacked
+    }
+
+    let item: ShortcutSettingsItem
+    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
+    let onBeginRecording: () -> Void
+    let onConfigure: () -> Void
+    let onReset: () -> Void
+    let onClear: () -> Void
+    var title: String? = nil
+    var systemImage: String? = nil
+    var layout: LayoutStyle = .horizontal
+
+    var body: some View {
+        switch layout {
+        case .horizontal:
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                recorderButton
+                actionButtons
+            }
+        case .stacked:
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                controlLabel
+                recorderButton
+                actionButtons
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var controlLabel: some View {
+        if let systemImage {
+            Image(systemName: systemImage)
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(.secondary)
+                .frame(width: ShortcutSettingsLayout.groupedIconWidth, alignment: .center)
+                .accessibilityLabel(Text(title ?? item.title))
+                .help(title ?? item.title)
+        } else if let title {
+            Text(title)
+                .font(PluginSettingsTheme.Typography.secondaryLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .help(title)
+        }
+    }
+
+    private var recorderWidth: CGFloat {
+        switch layout {
+        case .horizontal:
+            return ShortcutSettingsLayout.standardRecorderWidth
+        case .stacked:
+            return ShortcutSettingsLayout.groupedRecorderWidth
+        }
+    }
+
+    private var recorderButton: some View {
+        PluginShortcutRecorder(
+            title: title ?? item.title,
+            displayText: item.bindingText,
+            minWidth: recorderWidth,
+            onRecord: onRecord,
+            onBeginRecording: onBeginRecording
+        )
+        .frame(width: recorderWidth)
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        if shouldShowReset || item.canClear {
+            HStack(spacing: 6) {
+                if shouldShowReset {
+                    ShortcutInlineActionButton(
+                        systemName: "arrow.counterclockwise",
+                        helpText: AppL10n.settings("shortcuts.resetHelp", defaultValue: "重置为默认快捷键"),
+                        action: onReset
+                    )
+                }
+
+                if item.canClear {
+                    ShortcutInlineActionButton(
+                        systemName: "xmark.circle.fill",
+                        helpText: AppL10n.settings("shortcuts.clearHelp", defaultValue: "清除快捷键"),
+                        action: onClear
+                    )
+                }
+            }
+            .frame(width: actionButtonsWidth, alignment: .leading)
+        }
+    }
+
+    private var shouldShowReset: Bool {
+        guard layout == .horizontal || item.isRequired else {
+            return false
+        }
+
+        return !item.usesDefaultValue
+    }
+
+    private var actionButtonsWidth: CGFloat {
+        shouldShowReset && item.canClear
+            ? ShortcutSettingsLayout.actionButtonsWidth
+            : ShortcutSettingsLayout.actionButtonSize
     }
 }
 
@@ -220,251 +399,23 @@ private struct ShortcutStatusBadge: View {
     }
 }
 
-private struct ShortcutActionGroup: View {
-    let isRecording: Bool
-    let canClear: Bool
-    let canReset: Bool
-    let onConfigure: () -> Void
-    let onReset: () -> Void
-    let onClear: () -> Void
-    let clearHelp: String
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ShortcutActionButton(
-                systemName: isRecording ? "xmark" : "pencil",
-                helpText: isRecording ? "取消录制快捷键" : "编辑快捷键",
-                tint: isRecording ? .accentColor : .primary,
-                isActive: isRecording,
-                action: onConfigure
-            )
-
-            ShortcutActionDivider()
-
-            ShortcutActionButton(
-                systemName: "arrow.counterclockwise",
-                helpText: canReset ? "重置为默认快捷键" : "已是默认快捷键",
-                tint: .secondary,
-                isDisabled: !canReset,
-                action: onReset
-            )
-
-            ShortcutActionDivider()
-
-            ShortcutActionButton(
-                systemName: "trash",
-                helpText: clearHelp,
-                tint: .red,
-                isDisabled: !canClear,
-                action: onClear
-            )
-        }
-        .padding(4)
-        .frame(maxWidth: .infinity, minHeight: ShortcutSettingsLayout.controlHeight)
-        .pluginSettingsCardBackground(.recessed)
-    }
-}
-
-private struct ShortcutActionDivider: View {
-    var body: some View {
-        PluginSettingsListDivider(.vertical)
-            .frame(height: 18)
-            .padding(.vertical, 5)
-    }
-}
-
-private struct ShortcutActionButton: View {
+private struct ShortcutInlineActionButton: View {
     let systemName: String
     let helpText: String
-    let tint: Color
-    var isDisabled: Bool = false
-    var isActive: Bool = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .frame(width: 32, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(isActive ? SettingsStyle.activeControlBackground : Color.clear)
+                .font(PluginSettingsTheme.Typography.rowIcon)
+                .symbolRenderingMode(.monochrome)
+                .frame(
+                    width: ShortcutSettingsLayout.actionButtonSize,
+                    height: ShortcutSettingsLayout.actionButtonSize
                 )
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isDisabled ? Color.secondary.opacity(0.35) : tint)
-        .disabled(isDisabled)
+        .foregroundStyle(Color.secondary)
         .help(helpText)
-    }
-}
-
-private struct ShortcutBindingBadge: View {
-    let text: String
-    let isRecording: Bool
-
-    private var displayText: String {
-        text == "None" ? "未设置" : text
-    }
-
-    private var tokens: [String] {
-        guard !isRecording, displayText != "未设置" else {
-            return []
-        }
-
-        return Self.keycapTokens(from: displayText)
-    }
-
-    var body: some View {
-        badgeContent
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: ShortcutSettingsLayout.controlHeight, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.hostCard, style: .continuous)
-                .fill(
-                    isRecording
-                        ? PluginSettingsTheme.Palette.recordingBackground
-                        : PluginSettingsTheme.Palette.fieldBackground
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.hostCard, style: .continuous)
-                .strokeBorder(
-                    isRecording ? Color.accentColor : PluginSettingsTheme.Palette.cardBorder,
-                    lineWidth: isRecording ? 1.5 : PluginSettingsTheme.Stroke.standard
-                )
-        )
-    }
-
-    @ViewBuilder
-    private var badgeContent: some View {
-        if isRecording {
-            Label("请按下快捷键", systemImage: "record.circle.fill")
-                .font(PluginSettingsTheme.Typography.controlLabel.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-        } else if displayText == "未设置" {
-            Text(displayText)
-                .font(PluginSettingsTheme.Typography.controlLabel.weight(.medium))
-                .foregroundStyle(.secondary)
-        } else {
-            ViewThatFits(in: .horizontal) {
-                ShortcutKeycapRow(tokens: tokens, metrics: .regular)
-                ShortcutKeycapRow(tokens: tokens, metrics: .compact)
-                ShortcutKeycapRow(tokens: tokens, metrics: .compressed)
-            }
-        }
-    }
-
-    private static func keycapTokens(from text: String) -> [String] {
-        let separator = " + "
-        if text.contains(separator) {
-            let components = text
-                .components(separatedBy: separator)
-                .filter { !$0.isEmpty }
-            if !components.isEmpty {
-                return components
-            }
-        }
-
-        let modifierSymbols: Set<Character> = ["⌘", "⌥", "⌃", "⇧"]
-        var tokens: [String] = []
-        var keyToken = ""
-
-        for character in text {
-            if modifierSymbols.contains(character), keyToken.isEmpty {
-                tokens.append(String(character))
-            } else {
-                keyToken.append(character)
-            }
-        }
-
-        if !keyToken.isEmpty {
-            tokens.append(keyToken)
-        }
-
-        return tokens.isEmpty ? [text] : tokens
-    }
-}
-
-private struct ShortcutKeycapRow: View {
-    let tokens: [String]
-    let metrics: ShortcutKeycapMetrics
-
-    var body: some View {
-        HStack(spacing: metrics.spacing) {
-            ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
-                ShortcutKeycap(text: token, metrics: metrics)
-            }
-        }
-    }
-}
-
-private struct ShortcutKeycapMetrics {
-    let singleCharacterFontSize: CGFloat
-    let multiCharacterFontSize: CGFloat
-    let horizontalPadding: CGFloat
-    let multiCharacterHorizontalPadding: CGFloat
-    let verticalPadding: CGFloat
-    let cornerRadius: CGFloat
-    let spacing: CGFloat
-
-    static let regular = ShortcutKeycapMetrics(
-        singleCharacterFontSize: 13,
-        multiCharacterFontSize: 12,
-        horizontalPadding: 8,
-        multiCharacterHorizontalPadding: 9,
-        verticalPadding: 5,
-        cornerRadius: 8,
-        spacing: 6
-    )
-
-    static let compact = ShortcutKeycapMetrics(
-        singleCharacterFontSize: 12,
-        multiCharacterFontSize: 11,
-        horizontalPadding: 7,
-        multiCharacterHorizontalPadding: 7,
-        verticalPadding: 4,
-        cornerRadius: 7,
-        spacing: 5
-    )
-
-    static let compressed = ShortcutKeycapMetrics(
-        singleCharacterFontSize: 11,
-        multiCharacterFontSize: 10,
-        horizontalPadding: 6,
-        multiCharacterHorizontalPadding: 6,
-        verticalPadding: 4,
-        cornerRadius: 7,
-        spacing: 4
-    )
-}
-
-private struct ShortcutKeycap: View {
-    let text: String
-    let metrics: ShortcutKeycapMetrics
-
-    var body: some View {
-        Text(text)
-            .font(
-                .system(
-                    size: text.count > 1 ? metrics.multiCharacterFontSize : metrics.singleCharacterFontSize,
-                    weight: .semibold
-                )
-            )
-            .foregroundStyle(Color.primary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            .padding(.horizontal, text.count > 1 ? metrics.multiCharacterHorizontalPadding : metrics.horizontalPadding)
-            .padding(.vertical, metrics.verticalPadding)
-            .background(
-                RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
-                    .fill(PluginSettingsTheme.Palette.keycapBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        PluginSettingsTheme.Palette.cardBorder,
-                        lineWidth: PluginSettingsTheme.Stroke.standard
-                    )
-            )
     }
 }

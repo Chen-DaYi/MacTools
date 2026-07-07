@@ -15,13 +15,13 @@ enum PluginCategory: String, CaseIterable, Hashable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .display: return "显示"
-        case .audio: return "音频"
-        case .system: return "系统"
-        case .storage: return "清理"
-        case .productivity: return "效率"
-        case .monitoring: return "监控"
-        case .other: return "其他"
+        case .display: return AppL10n.plugins("plugin.category.display", defaultValue: "显示")
+        case .audio: return AppL10n.plugins("plugin.category.audio", defaultValue: "音频")
+        case .system: return AppL10n.plugins("plugin.category.system", defaultValue: "系统")
+        case .storage: return AppL10n.plugins("plugin.category.storage", defaultValue: "清理")
+        case .productivity: return AppL10n.plugins("plugin.category.productivity", defaultValue: "效率")
+        case .monitoring: return AppL10n.plugins("plugin.category.monitoring", defaultValue: "监控")
+        case .other: return AppL10n.plugins("plugin.category.other", defaultValue: "其他")
         }
     }
 
@@ -91,7 +91,7 @@ enum PluginCategoryFilter: Hashable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .all: return "全部"
+        case .all: return AppL10n.plugins("plugin.category.all", defaultValue: "全部")
         case .category(let category): return category.displayName
         }
     }

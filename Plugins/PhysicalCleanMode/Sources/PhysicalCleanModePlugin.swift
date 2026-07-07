@@ -38,14 +38,11 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         static let exitPhysicalCleanMode = "exit-physical-clean-mode"
     }
 
-    let metadata = PluginMetadata(
-        id: "physical-clean-mode",
-        title: "清洁模式",
-        iconName: "sparkles",
-        iconTint: Color(nsColor: .systemCyan),
-        order: 100,
-        defaultDescription: "屏幕全黑并临时禁用键盘输入"
-    )
+    private enum ShortcutSettingsGroupID {
+        static let exitPhysicalCleanMode = "physical-clean-mode.exit"
+    }
+
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -57,8 +54,10 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let storage: PluginStorage
+    private let localization: PluginLocalization
     private let logger = PhysicalCleanModeLog.plugin
     private var isAccessibilityGranted: Bool
+    private var lastErrorKey: String?
     private var lastErrorMessage: String?
     private var session: PhysicalCleanModeSession?
 
@@ -66,9 +65,22 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "physical-clean-mode"),
         userDefaults: UserDefaults? = nil
     ) {
+        let localization = PluginLocalization(bundle: context.resourceBundle)
+        self.localization = localization
         self.storage = userDefaults.map {
             UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
         } ?? context.storage
+        self.metadata = PluginMetadata(
+            id: "physical-clean-mode",
+            title: localization.string("metadata.title", defaultValue: "清洁模式"),
+            iconName: "sparkles",
+            iconTint: Color(nsColor: .systemCyan),
+            order: 100,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "屏幕全黑并临时禁用键盘输入"
+            )
+        )
         self.isAccessibilityGranted = AccessibilityCheck.isTrusted()
 
         storage.migrateValueIfNeeded(
@@ -95,8 +107,11 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
             PluginPermissionRequirement(
                 id: PermissionID.accessibility,
                 kind: .accessibility,
-                title: "辅助功能授权",
-                description: "辅助功能权限是清洁模式运行所需的必要权限。"
+                title: localization.string("permission.accessibility.title", defaultValue: "辅助功能授权"),
+                description: localization.string(
+                    "permission.accessibility.description",
+                    defaultValue: "辅助功能权限是清洁模式运行所需的必要权限。"
+                )
             )
         ]
     }
@@ -107,15 +122,26 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         [
             PluginShortcutDefinition(
                 id: ShortcutID.exitPhysicalCleanMode,
-                title: "退出清洁模式",
-                description: "清洁模式启用时用于恢复输入和关闭黑屏覆盖的快捷键。",
+                title: localization.string("shortcut.exit.title", defaultValue: "退出清洁模式"),
+                description: localization.string(
+                    "shortcut.exit.description",
+                    defaultValue: "清洁模式启用时用于恢复输入和关闭黑屏覆盖的快捷键。"
+                ),
                 actionID: ActionID.exitPhysicalCleanMode,
                 scope: .whilePluginActive,
                 defaultBinding: ShortcutBinding(
                     keyCode: UInt16(kVK_Escape),
                     modifiers: [.control, .command]
                 ),
-                isRequired: true
+                isRequired: true,
+                settingsGroupID: ShortcutSettingsGroupID.exitPhysicalCleanMode,
+                settingsGroupTitle: localization.string("shortcut.exit.settingsGroupTitle", defaultValue: "退出快捷键"),
+                settingsGroupDescription: localization.string(
+                    "shortcut.exit.settingsGroupDescription",
+                    defaultValue: "清洁模式启用时恢复输入并关闭黑屏覆盖。"
+                ),
+                settingsControlTitle: localization.string("shortcut.exit.settingsControlTitle", defaultValue: "退出"),
+                settingsControlSystemImage: "keyboard"
             )
         ]
     }
@@ -125,11 +151,12 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         isAccessibilityGranted = AccessibilityCheck.isTrusted()
 
         if isAccessibilityGranted {
-            if lastErrorMessage == "请先完成辅助功能授权。" {
-                lastErrorMessage = nil
-            }
+            clearErrorIfKey("error.accessibilityRequired")
         } else if session != nil {
-            session?.requestEmergencyExit(message: "辅助功能授权已失效，已自动退出清洁模式。")
+            session?.requestEmergencyExit(message: localization.string(
+                "error.accessibilityRevokedEmergencyExit",
+                defaultValue: "辅助功能授权已失效，已自动退出清洁模式。"
+            ))
         }
 
         if previousAccessState != isAccessibilityGranted {
@@ -191,14 +218,18 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
 
     private var panelSubtitle: String {
         if let session {
-            return "已启用，使用 \(ShortcutFormatter.displayString(for: session.exitBinding)) 退出"
+            return localization.format(
+                "panel.subtitle.enabledExitFormat",
+                defaultValue: "已启用，使用 %@ 退出",
+                ShortcutFormatter.displayString(for: session.exitBinding)
+            )
         }
 
         if isAccessibilityGranted {
             return metadata.defaultDescription
         }
 
-        return "启用前需要辅助功能授权"
+        return localization.string("panel.subtitle.needsAccessibility", defaultValue: "启用前需要辅助功能授权")
     }
 
     private func requestAccessibilityPermission(showSettingsGuidance: Bool) {
@@ -208,10 +239,10 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         isAccessibilityGranted = AccessibilityCheck.requestTrust(prompt: true)
 
         if isAccessibilityGranted {
-            lastErrorMessage = nil
+            clearError()
         } else {
             logger.notice("accessibility permission is required before entering physical clean mode")
-            lastErrorMessage = "清洁模式需要辅助功能权限，请先前往设置完成授权。"
+            setError("error.accessibilityRequired")
 
             if showSettingsGuidance {
                 requestPermissionGuidance?(PermissionID.accessibility)
@@ -223,7 +254,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
 
     private func setPhysicalCleanModeEnabled(_ isEnabled: Bool) {
         guard isEnabled else {
-            lastErrorMessage = nil
+            clearError()
             if let session {
                 session.requestStop(reason: .userRequested)
             } else {
@@ -245,7 +276,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
 
         guard let exitBinding = shortcutBindingResolver?(ShortcutID.exitPhysicalCleanMode), exitBinding.isValid else {
             logger.error("enable aborted because exit shortcut is missing or invalid")
-            lastErrorMessage = "请先在功能中设置有效的退出快捷键。"
+            setError("error.invalidExitShortcut")
             notifyChange()
             return
         }
@@ -258,7 +289,8 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
             exitBinding: exitBinding,
             onEnd: { [weak self] reason in
                 self?.handleSessionEnd(reason)
-            }
+            },
+            localization: localization
         )
 
         do {
@@ -273,7 +305,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
                 return
             }
 
-            lastErrorMessage = nil
+            clearError()
             notifyChange()
         } catch {
             if self.session === session {
@@ -297,12 +329,43 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
 
         switch reason {
         case .userRequested:
-            lastErrorMessage = nil
+            clearError()
         case let .emergency(message):
-            lastErrorMessage = message
+            setRawError(message)
         }
 
         notifyChange()
+    }
+
+    private func clearError() {
+        lastErrorKey = nil
+        lastErrorMessage = nil
+    }
+
+    private func clearErrorIfKey(_ key: String) {
+        guard lastErrorKey == key else { return }
+        clearError()
+    }
+
+    private func setError(_ key: String) {
+        lastErrorKey = key
+        lastErrorMessage = localizedErrorMessage(for: key)
+    }
+
+    private func setRawError(_ message: String) {
+        lastErrorKey = nil
+        lastErrorMessage = message
+    }
+
+    private func localizedErrorMessage(for key: String) -> String {
+        switch key {
+        case "error.accessibilityRequired":
+            return localization.string(key, defaultValue: "清洁模式需要辅助功能权限，请先前往设置完成授权。")
+        case "error.invalidExitShortcut":
+            return localization.string(key, defaultValue: "请先在功能中设置有效的退出快捷键。")
+        default:
+            return localization.string(key, defaultValue: "清洁模式不可用。")
+        }
     }
 
     private func notifyChange() {

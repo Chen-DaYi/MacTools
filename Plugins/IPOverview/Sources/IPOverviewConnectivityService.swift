@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 protocol IPOverviewConnectivityChecking: Sendable {
     func check(target: IPOverviewConnectivityTarget) async -> IPOverviewConnectivityResult
@@ -7,13 +8,16 @@ protocol IPOverviewConnectivityChecking: Sendable {
 struct IPOverviewConnectivityService: IPOverviewConnectivityChecking {
     private let httpClient: any IPOverviewHTTPClient
     private let timeout: TimeInterval
+    private let localization: PluginLocalization
 
     init(
         httpClient: any IPOverviewHTTPClient = URLSession.shared,
-        timeout: TimeInterval = 3
+        timeout: TimeInterval = 3,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.httpClient = httpClient
         self.timeout = timeout
+        self.localization = localization
     }
 
     func check(target: IPOverviewConnectivityTarget) async -> IPOverviewConnectivityResult {
@@ -21,7 +25,7 @@ struct IPOverviewConnectivityService: IPOverviewConnectivityChecking {
             return IPOverviewConnectivityResult(
                 id: target.id,
                 target: target,
-                status: .unreachable("URL 无效")
+                status: .unreachable(localization.string("connectivity.error.invalidURL", defaultValue: "URL 无效"))
             )
         }
 

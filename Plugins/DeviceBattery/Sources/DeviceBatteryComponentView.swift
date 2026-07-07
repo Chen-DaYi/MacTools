@@ -1,48 +1,35 @@
+import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 struct DeviceBatteryComponentView: View {
     @ObservedObject var viewModel: DeviceBatteryViewModel
     @ObservedObject var store: DeviceBatteryStore
-    let isPanelVisible: Bool
+    let localization: PluginLocalization
     let openSettings: () -> Void
 
     var body: some View {
         Group {
             if visibleItems.isEmpty {
                 emptyState
-            } else if visibleItems.count == 1 {
-                DeviceBatterySingleLineCard(item: visibleItems[0])
             } else {
                 switch store.layoutMode {
                 case .grid:
                     DeviceBatteryListCard(
-                        items: Array(visibleItems.prefix(5)),
-                        totalCount: visibleItems.count
+                        items: Array(visibleItems.prefix(DeviceBatteryLayout.maximumListItems)),
+                        totalCount: visibleItems.count,
+                        localization: localization
                     )
                 case .list:
                     DeviceBatteryGaugeGrid(
-                        items: Array(visibleItems.prefix(8)),
-                        totalCount: visibleItems.count
-                    )
-                case .showcase:
-                    DeviceBatteryShowcaseCard(
-                        items: Array(visibleItems.prefix(4)),
-                        totalCount: visibleItems.count
+                        items: Array(visibleItems.prefix(DeviceBatteryLayout.maximumGaugeItems)),
+                        totalCount: visibleItems.count,
+                        localization: localization
                     )
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onAppear {
-            if isPanelVisible {
-                viewModel.start(
-                    includeInternalBattery: store.showInternalBattery,
-                    includeBluetoothDevices: store.showBluetoothDevices,
-                    includeRapooDevices: store.showRapooDevices
-                )
-            }
-        }
-        .onDisappear { viewModel.stop() }
     }
 
     private var visibleItems: [DeviceBatteryItem] {
@@ -70,7 +57,10 @@ struct DeviceBatteryComponentView: View {
 
             if viewModel.snapshot.accessState == .permissionDenied {
                 Button(action: openSettings) {
-                    Label("打开系统设置", systemImage: "gearshape")
+                    Label(
+                        localization.string("empty.openSettings", defaultValue: "打开系统设置"),
+                        systemImage: "gearshape"
+                    )
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .buttonStyle(.bordered)
@@ -79,46 +69,99 @@ struct DeviceBatteryComponentView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
     }
 
     private var emptyTitle: String {
         switch viewModel.snapshot.accessState {
         case .permissionDenied:
-            return "需要输入监控权限"
+            return localization.string("empty.title.permissionDenied", defaultValue: "需要输入监控权限")
         case .scanning:
-            return "正在读取电量"
+            return localization.string("empty.title.scanning", defaultValue: "正在读取电量")
         case .failed:
-            return "读取失败"
+            return localization.string("empty.title.failed", defaultValue: "读取失败")
         case .idle, .ready, .noDevices:
-            return "暂无设备电量"
+            return localization.string("empty.title.noDevices", defaultValue: "暂无设备电量")
         }
     }
 
     private var emptySubtitle: String {
         switch viewModel.snapshot.accessState {
         case .permissionDenied:
-            return "授权后可读取雷柏 HID 上报"
+            return localization.string("empty.subtitle.permissionDenied", defaultValue: "授权后可读取厂商 HID 鼠标")
         case .failed(let message):
             return message
         case .scanning:
-            return "正在查询系统电源与蓝牙设备"
+            return localization.string("empty.subtitle.scanning", defaultValue: "正在查询系统电源与蓝牙设备")
         case .idle, .ready, .noDevices:
-            return "连接蓝牙设备或雷柏 VT 系列鼠标"
+            return localization.string("empty.subtitle.noDevices", defaultValue: "连接蓝牙设备或厂商 HID 鼠标")
         }
     }
 }
 
-private enum DeviceBatteryLayout {
-    static let cornerRadius: CGFloat = 16
+enum DeviceBatteryComponentLayout {
+    static let width = 4
+    static let cornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
     static let horizontalPadding: CGFloat = 12
-    static let verticalPadding: CGFloat = 6
-    static let rowIconWidth: CGFloat = 34
-    static let percentWidth: CGFloat = 48
-    static let batteryWidth: CGFloat = 34
+    static let rowHeight: CGFloat = 34
+    static let overflowHeight: CGFloat = 20
+    static let rowIconWidth: CGFloat = 26
+    static let percentWidth: CGFloat = 38
+    static let batteryWidth: CGFloat = 23
+    static let cardVerticalPadding: CGFloat = 6
+    static let gaugeHorizontalPadding: CGFloat = 12
+    static let gaugeVerticalPadding: CGFloat = 10
+    static let maximumListItems = 6
+    static let maximumGaugeItems = 8
     static let ringSpan: CGFloat = 0.78
     static let ringRotation: Double = 129.6
+    static let ringTrackLineWidthScale: CGFloat = 1.15
+    static let poweredRingLineWidthScale: CGFloat = 1.38
+
+    static func contentHeight(mode: DeviceBatteryLayoutMode, visibleItemCount: Int) -> CGFloat {
+        guard visibleItemCount > 0 else {
+            return 116
+        }
+
+        switch mode {
+        case .grid:
+            return listCardHeight(totalCount: visibleItemCount)
+        case .list:
+            return gaugeCardHeight(totalCount: visibleItemCount)
+        }
+    }
+
+    static func spanHeight(
+        mode: DeviceBatteryLayoutMode,
+        visibleItemCount: Int,
+        metrics: PluginComponentPanelLayoutMetrics = .default
+    ) -> Int {
+        metrics.heightSpan(
+            fittingContentHeight: contentHeight(
+                mode: mode,
+                visibleItemCount: visibleItemCount
+            )
+        )
+    }
+
+    static func listCardHeight(totalCount: Int) -> CGFloat {
+        let displayCount = min(max(totalCount, 1), maximumListItems)
+        return cardVerticalPadding * 2
+            + CGFloat(displayCount) * rowHeight
+            + CGFloat(max(displayCount - 1, 0))
+            + overflowHeightIfNeeded(totalCount: totalCount, displayedCount: displayCount)
+    }
+
+    static func gaugeCardHeight(totalCount: Int) -> CGFloat {
+        let displayCount = min(max(totalCount, 1), maximumGaugeItems)
+        let tileSize = gaugeTileSize(for: displayCount)
+        let rows = gaugeRowCount(totalCount: totalCount)
+        let rowSpacing = gaugeRowSpacing(for: displayCount)
+        return gaugeVerticalPadding * 2
+            + CGFloat(rows) * (tileSize + gaugePercentHeight)
+            + CGFloat(max(rows - 1, 0)) * rowSpacing
+    }
 
     static func gaugeColumnCount(for itemCount: Int) -> Int {
         switch itemCount {
@@ -133,10 +176,17 @@ private enum DeviceBatteryLayout {
         }
     }
 
+    static func gaugeRowCount(totalCount: Int) -> Int {
+        let displayCount = min(max(totalCount, 1), maximumGaugeItems)
+        let cellCount = displayCount + (totalCount > displayCount ? 1 : 0)
+        let columns = gaugeColumnCount(for: displayCount)
+        return Int(ceil(Double(cellCount) / Double(columns)))
+    }
+
     static func gaugeTileSize(for itemCount: Int) -> CGFloat {
         switch itemCount {
         case 0...2:
-            return 68
+            return 66
         case 3...4:
             return 58
         default:
@@ -145,81 +195,58 @@ private enum DeviceBatteryLayout {
     }
 
     static func gaugeLineWidth(for tileSize: CGFloat) -> CGFloat {
-        max(5, tileSize * 0.105)
+        max(4, tileSize * 0.078)
+    }
+
+    static let gaugePercentHeight: CGFloat = 20
+
+    static func gaugeRowSpacing(for itemCount: Int) -> CGFloat {
+        itemCount > 4 ? 8 : 6
+    }
+
+    static func overflowHeightIfNeeded(totalCount: Int, displayedCount: Int) -> CGFloat {
+        totalCount > displayedCount ? overflowHeight + 1 : 0
     }
 }
 
-private struct DeviceBatterySingleLineCard: View {
-    let item: DeviceBatteryItem
-
-    var body: some View {
-        VStack(spacing: 0) {
-            DeviceBatteryNativeRow(item: item, rowHeight: 78, showsDetail: false, prominent: true)
-        }
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
-    }
-}
+private typealias DeviceBatteryLayout = DeviceBatteryComponentLayout
 
 private struct DeviceBatteryListCard: View {
     let items: [DeviceBatteryItem]
     let totalCount: Int
+    let localization: PluginLocalization
 
     var body: some View {
-        GeometryReader { proxy in
-            let rowHeight = resolvedRowHeight(containerHeight: proxy.size.height)
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                DeviceBatteryNativeRow(
+                    item: item,
+                    rowHeight: DeviceBatteryLayout.rowHeight,
+                    showsDetail: false,
+                    localization: localization
+                )
 
-            VStack(spacing: 0) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    DeviceBatteryNativeRow(
-                        item: item,
-                        rowHeight: rowHeight,
-                        showsDetail: false
-                    )
-
-                    if index < items.count - 1 {
-                        DeviceBatteryDivider()
-                    }
-                }
-
-                if totalCount > items.count {
+                if index < items.count - 1 {
                     DeviceBatteryDivider()
-                    Text("还有 \(totalCount - items.count) 台设备")
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 22)
                 }
             }
-            .padding(.vertical, DeviceBatteryLayout.verticalPadding)
-            .frame(maxWidth: .infinity)
-            .frame(height: proxy.size.height, alignment: .top)
-            .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
+
+            if totalCount > items.count {
+                DeviceBatteryDivider()
+                DeviceBatteryOverflowRow(count: totalCount - items.count, localization: localization)
+            }
         }
+        .padding(.vertical, DeviceBatteryLayout.cardVerticalPadding)
+        .frame(maxWidth: .infinity)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    private func resolvedRowHeight(containerHeight: CGFloat) -> CGFloat {
-        guard !items.isEmpty else {
-            return 40
-        }
-
-        let overflowHeight: CGFloat = totalCount > items.count ? 23 : 0
-        let dividerHeight = CGFloat(max(items.count - 1, 0)) * 1
-            + (totalCount > items.count ? 1 : 0)
-        let availableHeight = containerHeight
-            - DeviceBatteryLayout.verticalPadding * 2
-            - overflowHeight
-            - dividerHeight
-
-        return max(30, floor(availableHeight / CGFloat(items.count)))
+        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
     }
 }
 
 private struct DeviceBatteryGaugeGrid: View {
     let items: [DeviceBatteryItem]
     let totalCount: Int
+    let localization: PluginLocalization
 
     var body: some View {
         Group {
@@ -228,24 +255,25 @@ private struct DeviceBatteryGaugeGrid: View {
                     DeviceBatteryGaugeTile(
                         item: item,
                         tileSize: tileSize,
-                        lineWidth: DeviceBatteryLayout.gaugeLineWidth(for: tileSize)
+                        lineWidth: DeviceBatteryLayout.gaugeLineWidth(for: tileSize),
+                        localization: localization
                     )
                     .frame(maxWidth: .infinity)
                 }
 
                 if totalCount > items.count {
                     Text("+\(totalCount - items.count)")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: tileSize, height: tileSize + 28)
+                        .frame(width: tileSize, height: tileSize + DeviceBatteryLayout.gaugePercentHeight)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, DeviceBatteryLayout.gaugeHorizontalPadding)
+            .padding(.vertical, DeviceBatteryLayout.gaugeVerticalPadding)
             .frame(maxWidth: .infinity)
-            .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
     }
 
     private var tileSize: CGFloat {
@@ -253,81 +281,14 @@ private struct DeviceBatteryGaugeGrid: View {
     }
 
     private var rowSpacing: CGFloat {
-        items.count > 4 ? 14 : 10
+        DeviceBatteryLayout.gaugeRowSpacing(for: items.count)
     }
 
     private var columns: [GridItem] {
         Array(
-            repeating: GridItem(.flexible(minimum: tileSize), spacing: items.count > 4 ? 10 : 12),
+            repeating: GridItem(.flexible(minimum: tileSize), spacing: items.count > 4 ? 6 : 8),
             count: DeviceBatteryLayout.gaugeColumnCount(for: items.count)
         )
-    }
-}
-
-private struct DeviceBatteryShowcaseCard: View {
-    let items: [DeviceBatteryItem]
-    let totalCount: Int
-
-    var body: some View {
-        Group {
-            if let primary = items.first {
-                HStack(spacing: 12) {
-                    DeviceBatteryFeaturedGauge(item: primary)
-                        .frame(width: 124)
-
-                    VStack(spacing: 0) {
-                        ForEach(Array(items.dropFirst().enumerated()), id: \.element.id) { index, item in
-                            DeviceBatteryNativeRow(item: item, rowHeight: 38, showsDetail: true, compact: true)
-
-                            if index < items.dropFirst().count - 1 {
-                                Divider()
-                            }
-                        }
-
-                        if totalCount > items.count {
-                            Divider()
-                            Text("还有 \(totalCount - items.count) 台设备")
-                                .font(.system(size: 9.5, weight: .medium))
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 22)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .top)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity)
-                .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-}
-
-private struct DeviceBatteryFeaturedGauge: View {
-    let item: DeviceBatteryItem
-
-    var body: some View {
-        VStack(spacing: 6) {
-            DeviceBatteryGaugeTile(
-                item: item,
-                tileSize: 96,
-                lineWidth: 10,
-                iconSize: 38,
-                percentSize: 16
-            )
-            .frame(width: 114, height: 120)
-
-            Text(item.name)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .minimumScaleFactor(0.72)
-                .frame(maxWidth: .infinity)
-        }
-        .help(helpText(for: item))
     }
 }
 
@@ -335,8 +296,7 @@ private struct DeviceBatteryGaugeTile: View {
     let item: DeviceBatteryItem
     let tileSize: CGFloat
     let lineWidth: CGFloat
-    var iconSize: CGFloat? = nil
-    var percentSize: CGFloat? = nil
+    let localization: PluginLocalization
 
     var body: some View {
         VStack(spacing: 2) {
@@ -344,34 +304,72 @@ private struct DeviceBatteryGaugeTile: View {
                 DeviceBatteryRing(
                     item: item,
                     size: tileSize,
-                    lineWidth: lineWidth
+                    lineWidth: lineWidth,
+                    localization: localization
                 )
 
                 Image(systemName: deviceSymbolName(for: item))
-                    .font(.system(size: iconSize ?? tileSize * 0.34, weight: .regular))
+                    .font(.system(size: tileSize * 0.32, weight: .regular))
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
-                    .frame(width: tileSize * 0.55, height: tileSize * 0.5)
-
-                if let symbolName = chargingSymbolName(for: item) {
-                    Image(systemName: symbolName)
-                        .font(.system(size: max(9, tileSize * 0.16), weight: .bold))
-                        .foregroundStyle(batteryTint(for: item))
-                        .offset(y: -tileSize * 0.48)
-                }
+                    .foregroundStyle(iconTint)
+                    .frame(width: tileSize * 0.54, height: tileSize * 0.48)
             }
             .frame(width: tileSize, height: tileSize)
+            .overlay {
+                if chargingSymbolName(for: item) != nil {
+                    let badgeSize = max(14, tileSize * 0.24)
+                    DeviceBatteryChargingBadge(
+                        systemName: "bolt.fill",
+                        color: batteryTint(for: item),
+                        size: badgeSize
+                    )
+                    .position(x: tileSize / 2, y: chargingBadgeCenterY)
+                }
+            }
 
             Text(DeviceBatteryFormatter.percent(item.clampedLevel))
-                .font(.system(size: percentSize ?? max(10, tileSize * 0.19), weight: .medium, design: .rounded))
+                .font(.system(size: max(10, tileSize * 0.18), weight: .regular, design: .rounded))
                 .foregroundStyle(.primary)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
-        .frame(width: tileSize, height: tileSize + 24)
+        .frame(width: tileSize, height: tileSize + DeviceBatteryLayout.gaugePercentHeight)
         .compositingGroup()
-        .help(helpText(for: item))
+        .help(helpText(for: item, localization: localization))
+    }
+
+    private var iconTint: Color {
+        chargingSymbolName(for: item) == nil
+            ? Color.primary.opacity(0.58)
+            : batteryTint(for: item).opacity(0.84)
+    }
+
+    private var chargingBadgeCenterY: CGFloat {
+        ringPathInset
+    }
+
+    private var ringPathInset: CGFloat {
+        lineWidth * DeviceBatteryLayout.poweredRingLineWidthScale / 2
+    }
+}
+
+private struct DeviceBatteryChargingBadge: View {
+    let systemName: String
+    let color: Color
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white)
+
+            Image(systemName: systemName)
+                .font(.system(size: max(7.2, size * 0.54), weight: .black))
+                .foregroundStyle(color)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
@@ -379,18 +377,56 @@ private struct DeviceBatteryRing: View {
     let item: DeviceBatteryItem
     let size: CGFloat
     let lineWidth: CGFloat
+    var localization: PluginLocalization = PluginLocalization(bundle: .main)
 
     var body: some View {
         ZStack {
             Circle()
+                .inset(by: ringPathInset)
                 .trim(from: 0, to: DeviceBatteryLayout.ringSpan)
                 .stroke(
-                    Color.primary.opacity(0.14),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+                    Color.primary.opacity(0.12),
+                    style: StrokeStyle(
+                        lineWidth: lineWidth * DeviceBatteryLayout.ringTrackLineWidthScale,
+                        lineCap: .round,
+                        lineJoin: .round
+                    )
                 )
 
+            if showsPoweredOverlay {
+                Circle()
+                    .inset(by: ringPathInset)
+                    .trim(from: 0, to: DeviceBatteryLayout.ringSpan)
+                    .stroke(
+                        batteryTint(for: item).opacity(0.12),
+                        style: StrokeStyle(
+                            lineWidth: lineWidth * DeviceBatteryLayout.poweredRingLineWidthScale,
+                            lineCap: .round,
+                            lineJoin: .round
+                        )
+                    )
+
+                if progressSpan > 0.002, progress < 0.995 {
+                    Circle()
+                        .inset(by: ringPathInset)
+                        .trim(from: max(progressSpan - 0.002, 0), to: max(progressSpan - 0.0004, 0))
+                        .stroke(
+                            batteryTint(for: item),
+                            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+                        )
+                        .shadow(color: batteryTint(for: item).opacity(0.32), radius: lineWidth * 0.7)
+                        .clipShape(
+                            Circle()
+                                .inset(by: ringPathInset)
+                                .trim(from: 0, to: DeviceBatteryLayout.ringSpan)
+                                .stroke(style: StrokeStyle(lineWidth: lineWidth * 1.4, lineCap: .round, lineJoin: .round))
+                        )
+                }
+            }
+
             Circle()
-                .trim(from: 0, to: DeviceBatteryLayout.ringSpan * progress)
+                .inset(by: ringPathInset)
+                .trim(from: 0, to: progressSpan)
                 .stroke(
                     batteryTint(for: item),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
@@ -398,19 +434,51 @@ private struct DeviceBatteryRing: View {
         }
         .rotationEffect(.degrees(DeviceBatteryLayout.ringRotation))
         .frame(width: size, height: size)
-        .accessibilityLabel("\(item.name)，\(DeviceBatteryFormatter.percent(item.clampedLevel))")
+        .accessibilityLabel(
+            localization.format(
+                "accessibility.ring",
+                defaultValue: "%@，%@",
+                item.name,
+                DeviceBatteryFormatter.percent(item.clampedLevel)
+            )
+        )
     }
 
     private var progress: CGFloat {
         CGFloat(item.clampedLevel ?? 0) / 100
+    }
+
+    private var progressSpan: CGFloat {
+        DeviceBatteryLayout.ringSpan * progress
+    }
+
+    private var showsPoweredOverlay: Bool {
+        chargingSymbolName(for: item) != nil
+    }
+
+    private var ringPathInset: CGFloat {
+        lineWidth * DeviceBatteryLayout.poweredRingLineWidthScale / 2
     }
 }
 
 private struct DeviceBatteryDivider: View {
     var body: some View {
         Divider()
-            .padding(.leading, DeviceBatteryLayout.horizontalPadding + DeviceBatteryLayout.rowIconWidth + 12)
+            .padding(.leading, DeviceBatteryLayout.horizontalPadding + DeviceBatteryLayout.rowIconWidth + 10)
             .padding(.trailing, DeviceBatteryLayout.horizontalPadding)
+    }
+}
+
+private struct DeviceBatteryOverflowRow: View {
+    let count: Int
+    let localization: PluginLocalization
+
+    var body: some View {
+        Text(localization.format("overflow.moreDevices", defaultValue: "还有 %d 台设备", count))
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+            .frame(height: DeviceBatteryLayout.overflowHeight)
     }
 }
 
@@ -420,26 +488,27 @@ private struct DeviceBatteryNativeRow: View {
     var showsDetail = false
     var compact = false
     var prominent = false
+    var localization: PluginLocalization = PluginLocalization(bundle: .main)
 
     var body: some View {
-        HStack(spacing: compact ? 8 : 12) {
+        HStack(spacing: compact ? 8 : 10) {
             Image(systemName: deviceSymbolName(for: item))
                 .font(.system(size: iconSize, weight: .regular))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.primary.opacity(iconOpacity))
                 .frame(width: DeviceBatteryLayout.rowIconWidth, height: rowHeight)
 
-            VStack(alignment: .leading, spacing: showsDetail ? 1 : 0) {
+            VStack(alignment: .leading, spacing: showsDetail ? 2 : 0) {
                 Text(item.name)
-                    .font(.system(size: titleSize, weight: .semibold))
+                    .font(titleFont)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .minimumScaleFactor(0.72)
 
                 if showsDetail {
-                    Text(deviceDetailText(for: item))
-                        .font(.system(size: 9, weight: .medium))
+                    Text(deviceDetailText(for: item, localization: localization))
+                        .font(.caption2.weight(.medium))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -450,7 +519,7 @@ private struct DeviceBatteryNativeRow: View {
             .layoutPriority(1)
 
             Text(DeviceBatteryFormatter.percent(item.clampedLevel))
-                .font(.system(size: titleSize, weight: .semibold, design: .rounded))
+                .font(percentFont)
                 .foregroundStyle(item.clampedLevel ?? 100 <= 10 ? Color(nsColor: .systemRed) : .primary)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -458,25 +527,38 @@ private struct DeviceBatteryNativeRow: View {
                 .frame(width: DeviceBatteryLayout.percentWidth, alignment: .trailing)
 
             DeviceBatterySystemBattery(item: item)
-                .frame(width: DeviceBatteryLayout.batteryWidth, height: 16)
+                .frame(width: DeviceBatteryLayout.batteryWidth, height: 14)
         }
         .padding(.horizontal, DeviceBatteryLayout.horizontalPadding)
         .frame(height: rowHeight)
-        .help(helpText(for: item))
+        .help(helpText(for: item, localization: localization))
     }
 
-    private var titleSize: CGFloat {
+    private var titleFont: Font {
         if prominent {
-            return 15
+            return .body.weight(.semibold)
         }
-        return rowHeight >= 44 ? 13.5 : 12.5
+        return compact ? .caption.weight(.medium) : .subheadline.weight(.medium)
+    }
+
+    private var percentFont: Font {
+        if prominent {
+            return .subheadline
+        }
+        return compact
+            ? .caption2
+            : .caption
     }
 
     private var iconSize: CGFloat {
         if prominent {
-            return 25
+            return 21
         }
-        return rowHeight >= 44 ? 22 : 19
+        return compact ? 15 : 17
+    }
+
+    private var iconOpacity: Double {
+        prominent ? 0.64 : 0.56
     }
 }
 
@@ -484,37 +566,40 @@ private struct DeviceBatterySystemBattery: View {
     let item: DeviceBatteryItem
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 1) {
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .stroke(Color.primary.opacity(0.36), lineWidth: 1.1)
+                RoundedRectangle(cornerRadius: 1.9, style: .continuous)
+                    .stroke(Color.primary.opacity(0.30), lineWidth: 0.85)
+                    .frame(width: 18, height: 8.2)
 
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                RoundedRectangle(cornerRadius: 1.2, style: .continuous)
                     .fill(batteryTint(for: item))
-                    .frame(width: fillWidth, height: 9)
-                    .padding(.leading, 2)
-                    .opacity(item.clampedLevel == nil ? 0.2 : 0.92)
+                    .frame(width: fillWidth, height: 4.8)
+                    .padding(.leading, 1.9)
+                    .opacity(item.clampedLevel == nil ? 0.18 : 0.82)
 
-                if let symbolName = chargingSymbolName(for: item) {
-                    Image(systemName: symbolName)
-                        .font(.system(size: 7, weight: .black))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if chargingSymbolName(for: item) != nil {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 5.1, weight: .black))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.white)
+                        .frame(width: 18, height: 8.2)
                 }
             }
-            .frame(width: 28, height: 14)
 
-            RoundedRectangle(cornerRadius: 1.2, style: .continuous)
-                .fill(Color.primary.opacity(0.36))
-                .frame(width: 2.4, height: 6)
+            RoundedRectangle(cornerRadius: 0.8, style: .continuous)
+                .fill(Color.primary.opacity(0.30))
+                .frame(width: 1.3, height: 3.6)
         }
+        .accessibilityLabel(DeviceBatteryFormatter.percent(item.clampedLevel))
     }
 
     private var fillWidth: CGFloat {
         guard let level = item.clampedLevel else {
             return 3
         }
-        return max(3, 24 * CGFloat(level) / 100)
+
+        return max(2.8, 14.2 * CGFloat(level) / 100)
     }
 }
 
@@ -560,14 +645,42 @@ private func chargingSymbolName(for item: DeviceBatteryItem) -> String? {
     }
 }
 
-private func deviceDetailText(for item: DeviceBatteryItem) -> String {
+private func batterySymbolName(for item: DeviceBatteryItem) -> String {
+    if item.chargeState == .charging || item.chargeState == .charged || item.chargeState == .plugged {
+        return "battery.100percent.bolt"
+    }
+
+    guard let level = item.clampedLevel else {
+        return "battery.0percent"
+    }
+
+    switch level {
+    case 76...100:
+        return "battery.100percent"
+    case 51...75:
+        return "battery.75percent"
+    case 26...50:
+        return "battery.50percent"
+    case 11...25:
+        return "battery.25percent"
+    default:
+        return "battery.0percent"
+    }
+}
+
+private func deviceDetailText(
+    for item: DeviceBatteryItem,
+    localization: PluginLocalization = PluginLocalization(bundle: .main)
+) -> String {
     if let detail = item.detail, !detail.isEmpty {
         return detail
     }
     if let model = item.model, !model.isEmpty, model != item.name {
         return model
     }
-    return item.chargeState.title == "正常" ? "已连接" : item.chargeState.title
+    return item.chargeState == .normal
+        ? localization.string("deviceDetail.connected", defaultValue: "已连接")
+        : item.chargeState.title(localization: localization)
 }
 
 func deviceSymbolName(for item: DeviceBatteryItem) -> String {
@@ -576,81 +689,212 @@ func deviceSymbolName(for item: DeviceBatteryItem) -> String {
         item.model,
         item.detail,
         item.parentName,
-        item.kind.title
+        item.kind.title()
     ]
         .compactMap { $0?.lowercased() }
         .joined(separator: " ")
 
     switch item.kind {
     case .internalBattery:
-        return "laptopcomputer"
+        if containsAny(haystack, ["macbook", "mac book", "book"]) {
+            return "macbook"
+        }
+        if containsAny(haystack, ["mac mini", "macmini", "mini"]) {
+            return "macmini"
+        }
+        if containsAny(haystack, ["imac"]) {
+            return "desktopcomputer"
+        }
+        return "desktopcomputer.and.macbook"
     case .rapooMouse:
         return "computermouse.fill"
     case .airPodsPart:
         let ownName = item.name.lowercased()
-        let isPro = haystack.contains("airpods pro")
         if ownName.contains("case") || ownName.contains("充电盒") {
-            if isPro {
-                return "airpodspro.chargingcase.wireless"
-            }
-            return "airpods.chargingcase"
+            return airPodsSymbolName(in: haystack, part: .case)
         }
         if ownName.contains("左耳") || ownName.contains("left") || ownName.contains("🄻") {
-            if isPro {
-                return "airpodpro.left"
-            }
-            return "airpod.left"
+            return airPodsSymbolName(in: haystack, part: .left)
         }
         if ownName.contains("右耳") || ownName.contains("right") || ownName.contains("🅁") {
-            if isPro {
-                return "airpodpro.right"
-            }
-            return "airpod.right"
+            return airPodsSymbolName(in: haystack, part: .right)
         }
-        return isPro ? "airpodspro" : "airpods"
+        return airPodsSymbolName(in: haystack, part: .all)
     case .bluetooth, .magicAccessory, .other:
-        if haystack.contains("iphone") || haystack.contains("手机") {
-            return "iphone"
+        if containsAny(haystack, ["iphone", "phone", "mobile phone", "手机"]) {
+            return "iphone.gen2"
         }
-        if haystack.contains("ipad") || haystack.contains("平板") {
+        if containsAny(haystack, ["ipad", "tablet", "平板"]) {
             return "ipad"
         }
-        if haystack.contains("watch") || haystack.contains("手表") {
+        if containsAny(haystack, ["watch", "手表"]) {
             return "applewatch"
         }
-        if haystack.contains("macbook") || haystack.contains("mac book") {
-            return "laptopcomputer"
+        if haystack.contains("vision") {
+            return "visionpro"
         }
-        if haystack.contains("mouse") || haystack.contains("鼠标") || haystack.contains("mx anywhere") || haystack.contains("mx master") {
+        if containsAny(haystack, ["macbook", "mac book", "notebook", "laptop"]) {
+            return "macbook"
+        }
+        if containsAny(haystack, ["mac mini", "macmini"]) {
+            return "macmini"
+        }
+        if containsAny(haystack, ["imac", "desktop computer"]) {
+            return "desktopcomputer"
+        }
+        if containsAny(haystack, ["magic mouse", "magicmouse"]) {
+            return "magicmouse.fill"
+        }
+        if containsAny(haystack, ["mouse", "pointing", "鼠标", "mx anywhere", "mx master", "razer"]) {
             return "computermouse.fill"
         }
-        if haystack.contains("keyboard") || haystack.contains("键盘") {
-            return "keyboard"
+        if containsAny(haystack, ["keyboard", "键盘", "hhkb", "niz"]) {
+            return "keyboard.fill"
         }
-        if haystack.contains("trackpad") || haystack.contains("触控板") {
+        if containsAny(haystack, ["trackpad", "touchpad", "触控板"]) {
             return "rectangle.and.hand.point.up.left.fill"
         }
-        if haystack.contains("airpods") {
-            return "airpodspro"
+        if containsAny(haystack, ["airpods"]) {
+            return airPodsSymbolName(in: haystack, part: .all)
         }
-        if haystack.contains("beats") || haystack.contains("headphone") || haystack.contains("耳机") {
+        if containsAny(haystack, ["beats", "headphone", "headphones", "headset", "earbud", "earbuds", "耳机"]) {
             return "headphones"
+        }
+        if containsAny(haystack, ["gamepad", "controller", "joystick", "手柄"]) {
+            return "gamecontroller.fill"
+        }
+        if containsAny(haystack, ["speaker", "音箱", "扬声器"]) {
+            return "hifispeaker.fill"
+        }
+        if containsAny(haystack, ["printer", "打印机"]) {
+            return "printer.fill"
+        }
+        if containsAny(haystack, ["camera", "摄像头", "相机"]) {
+            return "camera.fill"
         }
         return item.kind.iconName
     }
 }
 
-private func helpText(for item: DeviceBatteryItem) -> String {
+private func containsAny(_ text: String, _ needles: [String]) -> Bool {
+    needles.contains { text.contains($0) }
+}
+
+private enum DeviceBatteryAirPodsPart {
+    case all
+    case left
+    case right
+    case `case`
+}
+
+private func airPodsSymbolName(
+    in haystack: String,
+    part: DeviceBatteryAirPodsPart
+) -> String {
+    if haystack.contains("airpods max") {
+        return availableSystemSymbolName(["airpods.max", "airpodsmax"])
+    }
+
+    if isAirPodsPro(in: haystack) {
+        switch part {
+        case .all:
+            return "airpodspro"
+        case .left:
+            return "airpodpro.left"
+        case .right:
+            return "airpodpro.right"
+        case .case:
+            return "airpodspro.chargingcase.wireless"
+        }
+    }
+
+    if isAirPodsGeneration(4, in: haystack) {
+        switch part {
+        case .all:
+            return availableSystemSymbolName(["airpods.gen4", "airpods"])
+        case .left:
+            return availableSystemSymbolName(["airpods.gen4.left", "airpod.left"])
+        case .right:
+            return availableSystemSymbolName(["airpods.gen4.right", "airpod.right"])
+        case .case:
+            return availableSystemSymbolName(["airpods.gen4.chargingcase.wireless", "airpods.chargingcase"])
+        }
+    }
+
+    if isAirPodsGeneration(3, in: haystack) {
+        switch part {
+        case .all:
+            return availableSystemSymbolName(["airpods.gen3", "airpods"])
+        case .left:
+            return availableSystemSymbolName(["airpod.gen3.left", "airpod.left"])
+        case .right:
+            return availableSystemSymbolName(["airpod.gen3.right", "airpod.right"])
+        case .case:
+            return availableSystemSymbolName(["airpods.gen3.chargingcase.wireless", "airpods.chargingcase"])
+        }
+    }
+
+    switch part {
+    case .all:
+        return "airpods"
+    case .left:
+        return "airpod.left"
+    case .right:
+        return "airpod.right"
+    case .case:
+        return "airpods.chargingcase"
+    }
+}
+
+private func isAirPodsPro(in haystack: String) -> Bool {
+    haystack.contains("airpods pro") || haystack.contains("airpodspro")
+}
+
+private func isAirPodsGeneration(_ generation: Int, in haystack: String) -> Bool {
+    let compact = haystack.replacingOccurrences(of: " ", with: "")
+    return haystack.contains("airpods \(generation)")
+        || haystack.contains("airpods gen\(generation)")
+        || haystack.contains("airpods gen \(generation)")
+        || haystack.contains("airpods.gen\(generation)")
+        || compact.contains("airpods\(generation)")
+        || compact.contains("第\(generation)代")
+}
+
+private func availableSystemSymbolName(_ candidates: [String]) -> String {
+    for candidate in candidates {
+        if NSImage(systemSymbolName: candidate, accessibilityDescription: nil) != nil {
+            return candidate
+        }
+    }
+
+    return candidates.last ?? "airpods"
+}
+
+private func helpText(
+    for item: DeviceBatteryItem,
+    localization: PluginLocalization = PluginLocalization(bundle: .main)
+) -> String {
     var lines = [
         item.name,
-        "\(DeviceBatteryFormatter.percent(item.clampedLevel)) · \(item.chargeState.title)",
-        "来源：\(item.source)"
+        localization.format(
+            "help.levelAndState",
+            defaultValue: "%@ · %@",
+            DeviceBatteryFormatter.percent(item.clampedLevel),
+            item.chargeState.title(localization: localization)
+        ),
+        localization.format("help.source", defaultValue: "来源：%@", item.source)
     ]
     if let parentName = item.parentName {
-        lines.append("关联：\(parentName)")
+        lines.append(localization.format("help.parent", defaultValue: "关联：%@", parentName))
     }
     if let lastUpdated = item.lastUpdated {
-        lines.append("更新：\(DeviceBatteryFormatter.time(lastUpdated))")
+        lines.append(
+            localization.format(
+                "help.updated",
+                defaultValue: "更新：%@",
+                DeviceBatteryFormatter.time(lastUpdated, localization: localization)
+            )
+        )
     }
     return lines.joined(separator: "\n")
 }

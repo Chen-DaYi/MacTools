@@ -12,11 +12,12 @@ final class XcodeCleanConfirmWindow: NSPanel {
 
     init(
         candidates: [XcodeCleanCandidate],
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         onConfirm: @escaping (Set<XcodeCleanCandidate.ID>) -> Void,
         onCancel: @escaping () -> Void
     ) {
         let size = NSSize(width: 480, height: 540)
-        self.viewModel = XcodeCleanConfirmViewModel(candidates: candidates)
+        self.viewModel = XcodeCleanConfirmViewModel(candidates: candidates, localization: localization)
 
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
@@ -41,6 +42,7 @@ final class XcodeCleanConfirmWindow: NSPanel {
 
         let rootView = XcodeCleanConfirmView(
             viewModel: viewModel,
+            localization: localization,
             onConfirm: { [weak self] selectedIDs in
                 onConfirm(selectedIDs)
                 self?.orderOut(nil)
@@ -103,7 +105,10 @@ final class XcodeCleanConfirmViewModel: ObservableObject {
 
     private let allCleanableIDs: Set<XcodeCleanCandidate.ID>
 
-    init(candidates: [XcodeCleanCandidate]) {
+    init(
+        candidates: [XcodeCleanCandidate],
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         let cleanable = candidates.filter { $0.safety.isCleanable }
         self.allCleanableIDs = Set(cleanable.map(\.id))
         self.selectedIDs = self.allCleanableIDs
@@ -116,7 +121,7 @@ final class XcodeCleanConfirmViewModel: ObservableObject {
             guard let items = grouped[category], !items.isEmpty else { return nil }
             return Section(
                 id: category,
-                title: category.title,
+                title: category.title(localization: localization),
                 candidates: items.sorted { $0.sizeBytes > $1.sizeBytes }
             )
         }
@@ -184,6 +189,7 @@ enum SectionSelectionState {
 
 private struct XcodeCleanConfirmView: View {
     @ObservedObject var viewModel: XcodeCleanConfirmViewModel
+    let localization: PluginLocalization
     let onConfirm: (Set<XcodeCleanCandidate.ID>) -> Void
     let onCancel: () -> Void
 
@@ -204,7 +210,7 @@ private struct XcodeCleanConfirmView: View {
                 .foregroundStyle(Color(nsColor: .systemBlue))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("确认清理 Xcode 缓存")
+                Text(localization.string("confirm.title", defaultValue: "确认清理 Xcode 缓存"))
                     .font(.system(size: 15, weight: .semibold))
                 Text(headerSubtitle)
                     .font(.caption)
@@ -214,7 +220,10 @@ private struct XcodeCleanConfirmView: View {
             Spacer()
 
             Button(action: { viewModel.toggleAll() }) {
-                Text(viewModel.allSelected ? "全不选" : "全选")
+                Text(viewModel.allSelected
+                    ? localization.string("confirm.action.deselectAll", defaultValue: "全不选")
+                    : localization.string("confirm.action.selectAll", defaultValue: "全选")
+                )
                     .font(.system(size: 12))
                     .foregroundStyle(Color.accentColor)
             }
@@ -226,9 +235,15 @@ private struct XcodeCleanConfirmView: View {
 
     private var headerSubtitle: String {
         if viewModel.totalCount == 0 {
-            return "没有可清理项目"
+            return localization.string("confirm.noItems", defaultValue: "没有可清理项目")
         }
-        return "已选 \(viewModel.selectedCount) / \(viewModel.totalCount) 项 · \(byteText(viewModel.selectedSizeBytes))"
+        return localization.format(
+            "confirm.subtitle.selected",
+            defaultValue: "已选 %d / %d 项 · %@",
+            viewModel.selectedCount,
+            viewModel.totalCount,
+            byteText(viewModel.selectedSizeBytes)
+        )
     }
 
     private var candidateList: some View {
@@ -260,7 +275,7 @@ private struct XcodeCleanConfirmView: View {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 32))
                 .foregroundStyle(.secondary)
-            Text("没有可清理项目")
+            Text(localization.string("confirm.noItems", defaultValue: "没有可清理项目"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 60)
@@ -286,7 +301,7 @@ private struct XcodeCleanConfirmView: View {
 
             Spacer()
 
-            Text("\(section.candidates.count) 项")
+            Text(itemCountText(section.candidates.count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -366,7 +381,7 @@ private struct XcodeCleanConfirmView: View {
             .disabled(viewModel.selectedCount == 0)
 
             Button(action: onCancel) {
-                Text("取消")
+                Text(localization.string("confirm.action.cancel", defaultValue: "取消"))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -379,12 +394,21 @@ private struct XcodeCleanConfirmView: View {
 
     private var confirmTitle: String {
         if viewModel.selectedCount == 0 {
-            return "请选择要清理的项目"
+            return localization.string("confirm.action.empty", defaultValue: "请选择要清理的项目")
         }
-        return "清理 \(viewModel.selectedCount) 项 · \(byteText(viewModel.selectedSizeBytes))"
+        return localization.format(
+            "confirm.action.confirm",
+            defaultValue: "清理 %d 项 · %@",
+            viewModel.selectedCount,
+            byteText(viewModel.selectedSizeBytes)
+        )
     }
 
     private func byteText(_ bytes: Int64) -> String {
         XcodeCleanByteFormatter.string(fromByteCount: bytes)
+    }
+
+    private func itemCountText(_ count: Int) -> String {
+        localization.format("confirm.itemCount", defaultValue: "%d 项", count)
     }
 }

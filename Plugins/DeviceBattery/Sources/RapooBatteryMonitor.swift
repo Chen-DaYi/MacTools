@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import IOKit.hid
+import MacToolsPluginKit
 
 enum RapooBatteryAccessState: Equatable, Sendable {
     case idle
@@ -60,7 +61,7 @@ struct RapooMouseBatterySnapshot: Equatable, Sendable {
         lastUpdated: nil
     )
 
-    var batteryItem: DeviceBatteryItem? {
+    func batteryItem(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> DeviceBatteryItem? {
         guard let device else {
             return nil
         }
@@ -76,7 +77,8 @@ struct RapooMouseBatterySnapshot: Equatable, Sendable {
             source: "Rapoo HID",
             lastUpdated: lastUpdated,
             isConnected: true,
-            detail: itemDetail
+            detail: itemDetail(localization: localization),
+            componentIdentity: nil
         )
     }
 
@@ -93,20 +95,20 @@ struct RapooMouseBatterySnapshot: Equatable, Sendable {
         }
     }
 
-    var itemDetail: String {
+    func itemDetail(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch accessState {
         case .idle:
-            return "等待检测"
+            return localization.string("rapoo.detail.idle", defaultValue: "等待检测")
         case .scanning:
-            return "检测中"
+            return localization.string("rapoo.detail.scanning", defaultValue: "检测中")
         case .waitingForReport:
-            return "等待电量上报"
+            return localization.string("rapoo.detail.waitingForReport", defaultValue: "等待电量上报")
         case .connected:
-            return deviceChargeState.title
+            return deviceChargeState.title(localization: localization)
         case .noDevice:
-            return "未检测到"
+            return localization.string("rapoo.detail.noDevice", defaultValue: "未检测到")
         case .permissionDenied:
-            return "需要输入监控权限"
+            return localization.string("rapoo.detail.permissionDenied", defaultValue: "需要输入监控权限")
         case let .failed(message):
             return message
         }
@@ -129,6 +131,11 @@ final class RapooHIDBatteryMonitor: RapooBatteryMonitoring {
 
     private var manager: IOHIDManager?
     private var sessions: [String: RapooHIDDeviceSession] = [:]
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
 
     private(set) var snapshot = RapooMouseBatterySnapshot.idle {
         didSet {
@@ -298,7 +305,8 @@ final class RapooHIDBatteryMonitor: RapooBatteryMonitoring {
             return nil
         }
 
-        let modelName = RapooDeviceCatalog.modelName(forProductID: productID) ?? "Rapoo 鼠标"
+        let modelName = RapooDeviceCatalog.modelName(forProductID: productID)
+            ?? localization.string("rapoo.deviceName.fallback", defaultValue: "Rapoo 鼠标")
         let productName = stringProperty(kIOHIDProductKey, from: device)
         let displayName = productName?.isEmpty == false ? productName! : modelName
 
@@ -329,7 +337,9 @@ final class RapooHIDBatteryMonitor: RapooBatteryMonitoring {
             accessState = .permissionDenied
         } else {
             let code = String(UInt32(bitPattern: result), radix: 16, uppercase: false)
-            accessState = .failed("HID 打开失败：0x\(code)")
+            accessState = .failed(
+                localization.format("rapoo.error.openFailed", defaultValue: "HID 打开失败：0x%@", code)
+            )
         }
 
         return RapooMouseBatterySnapshot(
@@ -587,4 +597,3 @@ private func rapooHIDInputReportCallback(
         )
     }
 }
-

@@ -9,13 +9,17 @@ enum LaunchControlScope: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 
     var title: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .user:
-            return "当前用户"
+            return localization.string("scope.user.title", defaultValue: "当前用户")
         case .global:
-            return "全局"
+            return localization.string("scope.global.title", defaultValue: "全局")
         case .system:
-            return "系统"
+            return localization.string("scope.system.title", defaultValue: "系统")
         }
     }
 }
@@ -31,19 +35,23 @@ enum LaunchControlState: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 
     var title: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .running:
-            return "运行中"
+            return localization.string("state.running.title", defaultValue: "运行中")
         case .loaded:
-            return "已加载"
+            return localization.string("state.loaded.title", defaultValue: "已加载")
         case .disabled:
-            return "已禁用"
+            return localization.string("state.disabled.title", defaultValue: "已禁用")
         case .failed:
-            return "异常退出"
+            return localization.string("state.failed.title", defaultValue: "异常退出")
         case .unloaded:
-            return "未加载"
+            return localization.string("state.unloaded.title", defaultValue: "未加载")
         case .unknown:
-            return "未知"
+            return localization.string("state.unknown.title", defaultValue: "未知")
         }
     }
 }
@@ -56,13 +64,17 @@ enum LaunchControlOrigin: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 
     var title: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .userCreated:
-            return "用户创建"
+            return localization.string("origin.userCreated.title", defaultValue: "用户创建")
         case .thirdParty:
-            return "应用创建"
+            return localization.string("origin.thirdParty.title", defaultValue: "应用创建")
         case .system:
-            return "系统内置"
+            return localization.string("origin.system.title", defaultValue: "系统内置")
         }
     }
 }
@@ -79,21 +91,25 @@ enum LaunchControlOriginFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .all:
-            return "全部来源"
+            return localization.string("originFilter.all.title", defaultValue: "全部来源")
         case .favorite:
-            return "已关注"
+            return localization.string("originFilter.favorite.title", defaultValue: "已关注")
         case .manageable:
-            return "可操作"
+            return localization.string("originFilter.manageable.title", defaultValue: "可操作")
         case .userCreated:
-            return LaunchControlOrigin.userCreated.title
+            return LaunchControlOrigin.userCreated.title(localization: localization)
         case .appCreated:
-            return LaunchControlOrigin.thirdParty.title
+            return LaunchControlOrigin.thirdParty.title(localization: localization)
         case .system:
-            return LaunchControlOrigin.system.title
+            return LaunchControlOrigin.system.title(localization: localization)
         case .readOnly:
-            return "只读"
+            return localization.string("originFilter.readOnly.title", defaultValue: "只读")
         }
     }
 
@@ -126,15 +142,19 @@ enum LaunchControlFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .all:
-            return "全部范围"
+            return localization.string("scopeFilter.all.title", defaultValue: "全部范围")
         case .user:
-            return LaunchControlScope.user.title
+            return LaunchControlScope.user.title(localization: localization)
         case .global:
-            return LaunchControlScope.global.title
+            return LaunchControlScope.global.title(localization: localization)
         case .system:
-            return LaunchControlScope.system.title
+            return LaunchControlScope.system.title(localization: localization)
         }
     }
 
@@ -162,17 +182,21 @@ enum LaunchControlStateFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .all:
-            return "全部状态"
+            return localization.string("stateFilter.all.title", defaultValue: "全部状态")
         case .running:
-            return LaunchControlState.running.title
+            return LaunchControlState.running.title(localization: localization)
         case .loaded:
-            return LaunchControlState.loaded.title
+            return LaunchControlState.loaded.title(localization: localization)
         case .disabled:
-            return LaunchControlState.disabled.title
+            return LaunchControlState.disabled.title(localization: localization)
         case .failed:
-            return LaunchControlState.failed.title
+            return LaunchControlState.failed.title(localization: localization)
         }
     }
 
@@ -210,31 +234,51 @@ struct LaunchControlItem: Identifiable, Equatable, Sendable {
     let launchctlDomain: String
     let isDisabled: Bool
     let isLoaded: Bool
-    let isFavorite: Bool
+    var isFavorite: Bool
+    /// User-authored local note (persisted separately; never written to the plist).
+    var note: String = ""
 
     var commandText: String {
+        commandText()
+    }
+
+    func commandText(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         if !programArguments.isEmpty {
             return programArguments.joined(separator: " ")
         }
 
-        return "未声明 ProgramArguments"
+        return localization.string("item.commandText.empty", defaultValue: "未声明 ProgramArguments")
     }
 
     var triggerSummary: String {
+        triggerSummary()
+    }
+
+    func triggerSummary(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         var parts: [String] = []
         if runAtLoad {
-            parts.append("登录/加载时运行")
+            parts.append(localization.string("item.trigger.runAtLoad", defaultValue: "登录/加载时运行"))
         }
         if let keepAliveDescription {
-            parts.append("KeepAlive: \(keepAliveDescription)")
+            parts.append(localization.format(
+                "item.trigger.keepAlive",
+                defaultValue: "KeepAlive: %@",
+                keepAliveDescription
+            ))
         }
         if let startInterval {
-            parts.append("每 \(startInterval) 秒")
+            parts.append(localization.format("item.trigger.startInterval", defaultValue: "每 %d 秒", startInterval))
         }
         if let startCalendarDescription {
-            parts.append("定时: \(startCalendarDescription)")
+            parts.append(localization.format(
+                "item.trigger.startCalendar",
+                defaultValue: "定时: %@",
+                startCalendarDescription
+            ))
         }
-        return parts.isEmpty ? "未声明自动触发条件" : parts.joined(separator: " · ")
+        return parts.isEmpty
+            ? localization.string("item.trigger.empty", defaultValue: "未声明自动触发条件")
+            : parts.joined(separator: " · ")
     }
 
     var canManage: Bool {
@@ -242,13 +286,27 @@ struct LaunchControlItem: Identifiable, Equatable, Sendable {
     }
 
     var statusText: String {
+        statusText()
+    }
+
+    func statusText(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         if let pid {
-            return "\(state.title) · PID \(pid)"
+            return localization.format(
+                "item.status.pid",
+                defaultValue: "%@ · PID %d",
+                state.title(localization: localization),
+                pid
+            )
         }
         if let lastExitStatus {
-            return "\(state.title) · 退出码 \(lastExitStatus)"
+            return localization.format(
+                "item.status.exitCode",
+                defaultValue: "%@ · 退出码 %d",
+                state.title(localization: localization),
+                lastExitStatus
+            )
         }
-        return state.title
+        return state.title(localization: localization)
     }
 }
 
@@ -308,11 +366,86 @@ final class LaunchControlFavoritesStore {
     }
 }
 
+/// Persists per-item user notes locally (keyed by item ID / plist path). Notes are
+/// never written back to the launchd plist — they live only in plugin storage.
+@MainActor
+final class LaunchControlNotesStore {
+    private enum StorageKey {
+        static let storage = "launch-control.item-notes"
+    }
+
+    private let storage: PluginStorage
+
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control"),
+        userDefaults: UserDefaults? = nil
+    ) {
+        self.storage = userDefaults.map {
+            UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
+        } ?? context.storage
+    }
+
+    func allNotes() -> [String: String] {
+        guard
+            let data = storage.data(forKey: StorageKey.storage),
+            let notes = try? JSONDecoder().decode([String: String].self, from: data)
+        else {
+            return [:]
+        }
+        return notes
+    }
+
+    func note(for itemID: String) -> String {
+        allNotes()[itemID] ?? ""
+    }
+
+    func setNote(_ note: String, for itemID: String) {
+        var notes = allNotes()
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            notes.removeValue(forKey: itemID)
+        } else {
+            notes[itemID] = trimmed
+        }
+        guard let data = try? JSONEncoder().encode(notes) else { return }
+        storage.set(data, forKey: StorageKey.storage)
+    }
+}
+
 enum LaunchControlScanEvent: Sendable {
     case directory(String)
     case file(String)
     case found(LaunchControlItem)
     case message(String)
+}
+
+enum LaunchControlManagedAction: String, Sendable {
+    case bootstrap
+    case bootout
+    case enable
+    case disable
+    case start
+    case stop
+    case restart
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
+        switch self {
+        case .bootstrap:
+            return localization.string("managedAction.bootstrap.title", defaultValue: "加载")
+        case .bootout:
+            return localization.string("managedAction.bootout.title", defaultValue: "卸载")
+        case .enable:
+            return localization.string("managedAction.enable.title", defaultValue: "启用")
+        case .disable:
+            return localization.string("managedAction.disable.title", defaultValue: "禁用")
+        case .start:
+            return localization.string("managedAction.start.title", defaultValue: "启动")
+        case .stop:
+            return localization.string("managedAction.stop.title", defaultValue: "停止")
+        case .restart:
+            return localization.string("managedAction.restart.title", defaultValue: "重启")
+        }
+    }
 }
 
 struct LaunchControlPlistSummary: Sendable {

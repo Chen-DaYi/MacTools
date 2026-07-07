@@ -48,6 +48,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
 
     private let displayProvider: DisplayProviding
     private let backendBuilder: DisplayBrightnessBackendBuilding
+    private let localization: PluginLocalization
     private let logger = DisplayBrightnessLog.controller
     private let shortWriteDelay: TimeInterval
     private let minimumWriteInterval: TimeInterval
@@ -61,10 +62,12 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
     init(
         displayProvider: DisplayProviding = SystemDisplayService(),
         backendBuilder: DisplayBrightnessBackendBuilding? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         shortWriteDelay: TimeInterval = 0.08,
         minimumWriteInterval: TimeInterval = 0.08
     ) {
         self.displayProvider = displayProvider
+        self.localization = localization
         self.backendBuilder = backendBuilder ?? SystemDisplayBrightnessBackendBuilder(
             resolveArm64Services: Arm64DDCServiceMatcher.resolveServices
         )
@@ -148,10 +151,14 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         for displayID: CGDirectDisplayID,
         phase: PluginPanelAction.SliderPhase
     ) {
+        if managedDisplays[displayID] == nil {
+            refresh()
+        }
+
         guard var managedDisplay = managedDisplays[displayID] else {
             lastErrorMessage = DisplayBrightnessControllerError.displayUnavailable(
                 displayID: displayID
-            ).localizedDescription
+            ).localizedDescription(localization: localization)
             onStateChange?()
             return
         }
@@ -265,7 +272,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
             }
             lastErrorMessage = nil
         case .failure(let error):
-            let localizedDescription = error.localizedDescription
+            let localizedDescription = localizedDescription(for: error)
             logger.error(
                 "write failed for \(displayName, privacy: .public): \(localizedDescription, privacy: .public)"
             )
@@ -286,7 +293,11 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                     managedDisplay.currentBrightness = managedDisplay.lastCommittedBrightness
                 }
 
-                lastErrorMessage = "调节失败：\(localizedDescription)"
+                lastErrorMessage = localization.format(
+                    "error.adjustFailedFormat",
+                    defaultValue: "调节失败：%@",
+                    localizedDescription
+                )
             }
         }
 
@@ -296,6 +307,14 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         if managedDisplay.pendingBrightness != nil {
             scheduleWrite(for: displayID, delay: 0)
         }
+    }
+
+    private func localizedDescription(for error: Error) -> String {
+        guard let brightnessError = error as? DisplayBrightnessControllerError else {
+            return error.localizedDescription
+        }
+
+        return brightnessError.localizedDescription(localization: localization)
     }
 
     private func fallbackBackend(

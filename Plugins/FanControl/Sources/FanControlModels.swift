@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 // MARK: - Fan Preset
 
@@ -14,6 +15,17 @@ struct FanPreset: Identifiable, Codable, Equatable {
         self.name = name
         self.strategy = strategy
         self.isBuiltIn = isBuiltIn
+    }
+
+    func displayName(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
+        switch id {
+        case FanPresetBuiltInID.auto:
+            return localization.string("preset.auto.name", defaultValue: "自动")
+        case FanPresetBuiltInID.fullSpeed:
+            return localization.string("preset.fullSpeed.name", defaultValue: "全速")
+        default:
+            return name
+        }
     }
 }
 
@@ -109,15 +121,29 @@ enum FanWriteError: Error, LocalizedError {
     case writeFailed(String)
 
     var errorDescription: String? {
+        localizedDescription()
+    }
+
+    func localizedDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .helperNotFound:
-            return "未找到内置风扇控制组件。请重新安装风扇控制插件。"
+            return localization.string(
+                "writeError.helperNotFound",
+                defaultValue: "未找到内置风扇控制组件。请重新安装风扇控制插件。"
+            )
         case .helperInstallFailed(let msg):
-            return "安装风扇控制组件失败：\(msg)"
+            return localization.format(
+                "writeError.helperInstallFailed",
+                defaultValue: "安装风扇控制组件失败：%@",
+                msg
+            )
         case .helperVerificationFailed:
-            return "风扇控制组件校验失败。请重新安装风扇控制插件。"
+            return localization.string(
+                "writeError.helperVerificationFailed",
+                defaultValue: "风扇控制组件校验失败。请重新安装风扇控制插件。"
+            )
         case .writeFailed(let msg):
-            return "写入风扇速度失败：\(msg)"
+            return localization.format("writeError.writeFailed", defaultValue: "写入风扇速度失败：%@", msg)
         }
     }
 }
@@ -130,6 +156,7 @@ protocol FanControlSMCReading: AnyObject {
 
 protocol FanControlSMCWriting: AnyObject {
     @MainActor var isHelperAvailable: Bool { get }
+    @MainActor var isInstalledHelperAvailable: Bool { get }
     @MainActor @discardableResult
     func apply(strategy: FanControlStrategy, snapshot: FanSnapshot) -> FanWriteError?
 }

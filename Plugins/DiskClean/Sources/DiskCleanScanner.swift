@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 typealias DiskCleanScanProgressHandler = @Sendable (DiskCleanScanLogMessage) async -> Void
 
@@ -53,19 +54,22 @@ struct DiskCleanScanner: DiskCleanScanning {
     let safetyPolicy: DiskCleanSafetyPolicy
     let processInspector: DiskCleanProcessInspecting
     let now: @Sendable () -> Date
+    let localization: PluginLocalization
 
     init(
         ruleCatalog: DiskCleanRuleCatalog = .moleFirstVersion,
         fileSystem: DiskCleanFileSystemProviding = LocalDiskCleanFileSystem(),
         safetyPolicy: DiskCleanSafetyPolicy = DiskCleanSafetyPolicy(),
         processInspector: DiskCleanProcessInspecting = LocalDiskCleanProcessInspector(),
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.ruleCatalog = ruleCatalog
         self.fileSystem = fileSystem
         self.safetyPolicy = safetyPolicy
         self.processInspector = processInspector
         self.now = now
+        self.localization = localization
     }
 
     func scan(
@@ -82,7 +86,11 @@ struct DiskCleanScanner: DiskCleanScanning {
                 currentChoice = rule.choice
                 await progress(
                     DiskCleanScanLogMessage(
-                        text: "扫描范围：\(rule.choice.title)",
+                        text: localization.format(
+                            "scanLog.scope",
+                            defaultValue: "扫描范围：%@",
+                            rule.choice.title(localization: localization)
+                        ),
                         tone: .info
                     )
                 )
@@ -90,7 +98,7 @@ struct DiskCleanScanner: DiskCleanScanning {
 
             await progress(
                 DiskCleanScanLogMessage(
-                    text: "展开规则：\(rule.title)",
+                    text: localization.format("scanLog.expandRule", defaultValue: "展开规则：%@", rule.title),
                     tone: .info
                 )
             )
@@ -100,7 +108,12 @@ struct DiskCleanScanner: DiskCleanScanning {
                 let items = try expand(target)
                 await progress(
                     DiskCleanScanLogMessage(
-                        text: "匹配 \(items.count) 项：\(rule.title)",
+                        text: localization.format(
+                            "scanLog.matched",
+                            defaultValue: "匹配 %d 项：%@",
+                            items.count,
+                            rule.title
+                        ),
                         tone: items.isEmpty ? .info : .success
                     )
                 )
@@ -126,7 +139,12 @@ struct DiskCleanScanner: DiskCleanScanning {
 
         await progress(
             DiskCleanScanLogMessage(
-                text: "扫描完成：\(candidates.count) 项，\(candidates.filter { $0.safety.isCleanable }.count) 项可清理",
+                text: localization.format(
+                    "scanLog.completed",
+                    defaultValue: "扫描完成：%d 项，%d 项可清理",
+                    candidates.count,
+                    candidates.filter { $0.safety.isCleanable }.count
+                ),
                 tone: .success
             )
         )
@@ -225,17 +243,40 @@ struct DiskCleanScanner: DiskCleanScanning {
     private func logMessage(for candidate: DiskCleanCandidate) -> DiskCleanScanLogMessage {
         switch candidate.safety {
         case .allowed:
-            return DiskCleanScanLogMessage(text: "可清理：\(candidate.path)", tone: .success)
+            return DiskCleanScanLogMessage(
+                text: localization.format("scanLog.candidate.allowed", defaultValue: "可清理：%@", candidate.path),
+                tone: .success
+            )
         case .whitelisted:
-            return DiskCleanScanLogMessage(text: "白名单保护：\(candidate.path)", tone: .warning)
+            return DiskCleanScanLogMessage(
+                text: localization.format("scanLog.candidate.whitelisted", defaultValue: "白名单保护：%@", candidate.path),
+                tone: .warning
+            )
         case .protected:
-            return DiskCleanScanLogMessage(text: "敏感数据保护：\(candidate.path)", tone: .warning)
+            return DiskCleanScanLogMessage(
+                text: localization.format("scanLog.candidate.protected", defaultValue: "敏感数据保护：%@", candidate.path),
+                tone: .warning
+            )
         case .invalid:
-            return DiskCleanScanLogMessage(text: "路径安全保护：\(candidate.path)", tone: .warning)
+            return DiskCleanScanLogMessage(
+                text: localization.format("scanLog.candidate.invalid", defaultValue: "路径安全保护：%@", candidate.path),
+                tone: .warning
+            )
         case .requiresAdmin:
-            return DiskCleanScanLogMessage(text: "需要管理员权限：\(candidate.path)", tone: .warning)
+            return DiskCleanScanLogMessage(
+                text: localization.format("scanLog.candidate.requiresAdmin", defaultValue: "需要管理员权限：%@", candidate.path),
+                tone: .warning
+            )
         case let .inUse(processName):
-            return DiskCleanScanLogMessage(text: "正在使用(\(processName))：\(candidate.path)", tone: .warning)
+            return DiskCleanScanLogMessage(
+                text: localization.format(
+                    "scanLog.candidate.inUse",
+                    defaultValue: "正在使用(%@)：%@",
+                    processName,
+                    candidate.path
+                ),
+                tone: .warning
+            )
         }
     }
 

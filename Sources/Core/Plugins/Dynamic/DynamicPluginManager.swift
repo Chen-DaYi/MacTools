@@ -23,6 +23,7 @@ struct PluginManagementItem: Identifiable, Equatable {
     let requiresRestartToFullyUnload: Bool
     let releaseNotesURL: URL?
     let category: String?
+    let releaseChannel: String?
 
     init(
         id: String,
@@ -33,7 +34,8 @@ struct PluginManagementItem: Identifiable, Equatable {
         packageURL: URL?,
         requiresRestartToFullyUnload: Bool,
         releaseNotesURL: URL?,
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -44,55 +46,61 @@ struct PluginManagementItem: Identifiable, Equatable {
         self.requiresRestartToFullyUnload = requiresRestartToFullyUnload
         self.releaseNotesURL = releaseNotesURL
         self.category = category
+        self.releaseChannel = releaseChannel
     }
 
     var statusText: String {
         switch state {
         case .available:
-            return "可安装"
+            return AppL10n.plugins("plugin.status.available", defaultValue: "可安装")
         case .localDevelopment:
-            return "本地开发"
+            return AppL10n.plugins("plugin.status.localDevelopment", defaultValue: "本地开发")
         case .enabled, .disabled:
-            return "已安装"
+            return AppL10n.plugins("plugin.status.installed", defaultValue: "已安装")
         case .updateAvailable:
-            return "可更新"
+            return AppL10n.plugins("plugin.status.updateAvailable", defaultValue: "可更新")
         case .restartRequired:
-            return "需重启"
+            return AppL10n.plugins("plugin.status.restartRequired", defaultValue: "需重启")
         case .failed:
-            return "加载失败"
+            return AppL10n.plugins("plugin.status.failed", defaultValue: "加载失败")
         case .incompatible:
-            return "不兼容"
+            return AppL10n.plugins("plugin.status.incompatible", defaultValue: "不兼容")
         case .revoked:
-            return "已撤回"
+            return AppL10n.plugins("plugin.status.revoked", defaultValue: "已撤回")
         }
     }
 
     var detailText: String {
         switch state {
         case .available:
-            return summary ?? "可以安装此插件。"
+            return summary ?? AppL10n.plugins("plugin.detail.available", defaultValue: "可以安装此插件。")
         case .localDevelopment:
-            return summary ?? "来自本地开发插件列表。"
+            return summary ?? AppL10n.plugins("plugin.detail.localDevelopment", defaultValue: "来自本地开发插件列表。")
         case .enabled:
             if requiresRestartToFullyUnload {
-                return "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+                return AppL10n.plugins("plugin.detail.restartRequiredAfterUpdate", defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。")
             }
 
-            return packageURL?.path ?? summary ?? ""
+            return summary ?? ""
         case .disabled:
             if requiresRestartToFullyUnload {
-                return "已移出界面，重启后彻底释放已加载代码。"
+                return AppL10n.plugins("plugin.detail.restartRequiredAfterRemoval", defaultValue: "已移出界面，重启后彻底释放已加载代码。")
             }
 
-            return packageURL?.path ?? summary ?? ""
+            return summary ?? ""
         case let .updateAvailable(installedVersion, catalogVersion):
-            return "已安装 \(installedVersion)，可更新到 \(catalogVersion)。"
+            return AppL10n.pluginsFormat(
+                "plugin.detail.updateAvailableFormat",
+                defaultValue: "已安装 %@，可更新到 %@。",
+                installedVersion,
+                catalogVersion
+            )
         case .restartRequired:
-            return "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+            return AppL10n.plugins("plugin.detail.restartRequiredAfterUpdate", defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。")
         case let .failed(reason), let .incompatible(reason):
             return reason
         case let .revoked(reason):
-            return reason ?? "此版本已被撤回。"
+            return reason ?? AppL10n.plugins("plugin.detail.revoked", defaultValue: "此版本已被撤回。")
         }
     }
 
@@ -205,6 +213,20 @@ final class DynamicPluginManager: ObservableObject {
         return activePlugins(from: records)
     }
 
+    func prepareInstalledPluginsWithoutLoading() {
+        let records = packageStore.installedRecords()
+        deactivateMissingOrDisabledPlugins(records: records)
+        latestLoadErrorsByID = [:]
+        let results = records.map { record in
+            DynamicPluginLoadResult(
+                record: deferredPluginIDs.contains(record.id) ? record.markingRestartRequired() : record,
+                plugins: [],
+                errorMessage: nil
+            )
+        }
+        rebuildManagementItems(results: results, catalogSnapshot: catalogSnapshot)
+    }
+
     func reloadInstalledPlugins() {
         onPluginsChanged?(loadInstalledPlugins())
     }
@@ -229,7 +251,9 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     func updatePluginPackages(
-        _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)]
+        _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)],
+        reloadAfterUpdate: Bool = true,
+        onPackageProcessed: (() -> Void)? = nil
     ) -> [PluginPackageUpdateFailure] {
         guard !updates.isEmpty else {
             return []
@@ -239,7 +263,7 @@ final class DynamicPluginManager: ObservableObject {
         var didUpdatePackage = false
 
         defer {
-            if didUpdatePackage {
+            if reloadAfterUpdate && didUpdatePackage {
                 reloadInstalledPlugins()
             }
         }
@@ -259,6 +283,8 @@ final class DynamicPluginManager: ObservableObject {
                     )
                 )
             }
+
+            onPackageProcessed?()
         }
 
         return failures
@@ -302,10 +328,26 @@ final class DynamicPluginManager: ObservableObject {
         )
     }
 
+    func installedPackageVersionsByID() -> [String: String] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.manifest.version)
+            }
+        )
+    }
+
     func installedCategoriesByID() -> [String: String?] {
         Dictionary(
             uniqueKeysWithValues: packageStore.installedRecords().map {
                 ($0.id, $0.manifest.category)
+            }
+        )
+    }
+
+    func installedReleaseChannelsByID() -> [String: String?] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.manifest.releaseChannel)
             }
         )
     }
@@ -322,8 +364,16 @@ final class DynamicPluginManager: ObservableObject {
     /// Re-activate a previously paused plugin without reloading it.
     func resumePlugin(_ pluginID: String) {
         guard let plugins = loadedPluginsByID[pluginID] else { return }
+        // Re-activate with the SAME context the plugin was first loaded with
+        // (support/cache/temp directories, resource bundle, scoped storage). A bare
+        // `PluginRuntimeContext(pluginID:)` has nil directories and the .main bundle,
+        // so plugins that recompute paths in activate() — e.g. ActivityBar's hook
+        // script location — would silently switch on-disk locations after hide/show.
+        let context = packageStore.installedRecords().first { $0.id == pluginID }
+            .map { packageStore.runtimeContext(for: $0) }
+            ?? PluginRuntimeContext(pluginID: pluginID)
         for plugin in plugins {
-            plugin.activate(context: PluginRuntimeContext(pluginID: pluginID))
+            plugin.activate(context: context)
         }
     }
 
@@ -428,6 +478,10 @@ final class DynamicPluginManager: ObservableObject {
         guard manifest.pluginKitVersion == entry.pluginKitVersion else {
             throw PluginPackageResolverError.manifestMismatch(field: "pluginKitVersion")
         }
+
+        guard manifest.releaseChannel == entry.releaseChannel else {
+            throw PluginPackageResolverError.manifestMismatch(field: "releaseChannel")
+        }
     }
 
     private func rebuildManagementItems(
@@ -457,14 +511,15 @@ final class DynamicPluginManager: ObservableObject {
                 items.append(
                     PluginManagementItem(
                         id: entry.id,
-                        title: entry.displayName,
-                        summary: entry.summary,
+                        title: entry.localizedDisplayName,
+                        summary: entry.localizedSummary,
                         version: entry.version,
                         state: catalogSnapshot?.isLocalDevelopment == true ? .localDevelopment : .available,
                         packageURL: nil,
                         requiresRestartToFullyUnload: false,
                         releaseNotesURL: entry.releaseNotesURL,
-                        category: entry.category
+                        category: entry.category,
+                        releaseChannel: entry.releaseChannel
                     )
                 )
             }
@@ -521,19 +576,20 @@ final class DynamicPluginManager: ObservableObject {
 
         return PluginManagementItem(
             id: record.id,
-            title: catalogEntry?.displayName ?? record.manifest.displayName,
-            summary: catalogEntry?.summary,
+            title: catalogEntry?.localizedDisplayName ?? record.manifest.localizedDisplayName,
+            summary: catalogEntry?.localizedSummary ?? record.manifest.localizedSummary,
             version: catalogEntry?.version ?? record.manifest.version,
             state: state,
             packageURL: record.packageURL,
             requiresRestartToFullyUnload: record.requiresRestartToFullyUnload,
             releaseNotesURL: catalogEntry?.releaseNotesURL,
-            category: catalogEntry?.category ?? record.manifest.category
+            category: catalogEntry?.category ?? record.manifest.category,
+            releaseChannel: catalogEntry?.releaseChannel ?? record.manifest.releaseChannel
         )
     }
 
     private func catalogEntrySort(_ lhs: PluginCatalogEntry, _ rhs: PluginCatalogEntry) -> Bool {
-        lhs.displayName.localizedCompare(rhs.displayName) == .orderedAscending
+        lhs.localizedDisplayName.localizedCompare(rhs.localizedDisplayName) == .orderedAscending
     }
 
     private func managementItemSort(_ lhs: PluginManagementItem, _ rhs: PluginManagementItem) -> Bool {

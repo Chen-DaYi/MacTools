@@ -5,43 +5,52 @@ import MacToolsPluginKit
 
 public final class EjectDiskPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        EjectDiskPluginProvider()
+        EjectDiskPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct EjectDiskPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [EjectDiskPlugin()]
+        [EjectDiskPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "eject-disk",
-        title: "推出磁盘",
-        iconName: "eject",
-        iconTint: Color(nsColor: .systemGray),
-        order: 92,
-        defaultDescription: "推出所有可移动磁盘"
-    )
+    let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .keepPresented,
-        buttonTitle: "推出"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
+    private let localization: PluginLocalization
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EjectDiskPlugin")
     private var isEjecting = false
     private var ejectableDiskCount: Int = 0
     private var lastErrorMessage: String?
     private var volumeMountObservers: [NSObjectProtocol] = []
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "eject-disk",
+            title: localization.string("metadata.title", defaultValue: "推出磁盘"),
+            iconName: "eject",
+            iconTint: Color(nsColor: .systemGray),
+            order: 92,
+            defaultDescription: localization.string("metadata.description", defaultValue: "推出所有可移动磁盘")
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .keepPresented,
+            buttonTitle: localization.string("panel.button.eject", defaultValue: "推出")
+        )
+    }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
@@ -66,12 +75,10 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
             self.onStateChange?()
         }
         
-        // 设置磁盘挂载/卸载事件监听
         setupVolumeMountObserver()
     }
     
     private func setupVolumeMountObserver() {
-        // 如果已经设置了监听，就不再重复设置
         guard volumeMountObservers.isEmpty else { return }
         
         let workspace = NSWorkspace.shared
@@ -131,9 +138,17 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: - Private
 
     private var subtitle: String {
-        if isEjecting { return "推出中..." }
-        if ejectableDiskCount == 0 { return "无可推出的磁盘" }
-        return "\(ejectableDiskCount) 个可推出的磁盘"
+        if isEjecting {
+            return localization.string("panel.subtitle.ejecting", defaultValue: "推出中...")
+        }
+        if ejectableDiskCount == 0 {
+            return localization.string("panel.subtitle.none", defaultValue: "无可推出的磁盘")
+        }
+        return localization.format(
+            "panel.subtitle.countFormat",
+            defaultValue: "%d 个可推出的磁盘",
+            ejectableDiskCount
+        )
     }
 
     nonisolated private static func ejectableDiskCountSync() -> Int {
@@ -161,7 +176,6 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let contents = try fileManager.contentsOfDirectory(atPath: volumesPath)
         
         return contents.filter { name in
-            // 排除系统卷
             if name == "Macintosh HD" || name.hasPrefix(".") {
                 return false
             }
@@ -170,7 +184,6 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
             var isDir: ObjCBool = false
             let exists = fileManager.fileExists(atPath: volumePath, isDirectory: &isDir)
             
-            // 必须是目录
             return exists && isDir.boolValue
         }
     }
@@ -209,13 +222,31 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let volumesPath = "/Volumes"
         
         guard fileManager.fileExists(atPath: volumesPath) else {
-            throw NSError(domain: "EjectDiskPlugin", code: 1, userInfo: [NSLocalizedDescriptionKey: "/Volumes 目录不可用"])
+            throw NSError(
+                domain: "EjectDiskPlugin",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: localization.string(
+                        "error.volumesUnavailable",
+                        defaultValue: "/Volumes 目录不可用"
+                    )
+                ]
+            )
         }
         
         let ejectableVolumes = try Self.getEjectableVolumes(from: volumesPath)
         
         guard !ejectableVolumes.isEmpty else {
-            throw NSError(domain: "EjectDiskPlugin", code: 2, userInfo: [NSLocalizedDescriptionKey: "未找到可推出的磁盘"])
+            throw NSError(
+                domain: "EjectDiskPlugin",
+                code: 2,
+                userInfo: [
+                    NSLocalizedDescriptionKey: localization.string(
+                        "error.noEjectableDisks",
+                        defaultValue: "未找到可推出的磁盘"
+                    )
+                ]
+            )
         }
         
         var successCount = 0
@@ -234,9 +265,14 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
             }
         }
         
-        // 如果有错误，抛出异常
         if !errorMessages.isEmpty {
-            let message = "已推出 \(successCount) 个磁盘，\(errorMessages.count) 个失败:\n\(errorMessages.joined(separator: "\n"))"
+            let message = localization.format(
+                "error.partialFailureFormat",
+                defaultValue: "已推出 %d 个磁盘，%d 个失败:\n%@",
+                successCount,
+                errorMessages.count,
+                errorMessages.joined(separator: "\n")
+            )
             throw NSError(domain: "EjectDiskPlugin", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
         }
     }
@@ -256,7 +292,9 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
         if process.terminationStatus != 0 {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let errorMessage = output.isEmpty ? "推出失败" : output
+            let errorMessage = output.isEmpty
+                ? localization.string("error.ejectFailed", defaultValue: "推出失败")
+                : output
             throw NSError(domain: "EjectDiskPlugin", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: errorMessage])
         }
     }

@@ -9,6 +9,98 @@ enum FeatureSettingsPane: Hashable {
     case configuration(String)
 }
 
+struct PluginAutomaticUpdateStatus: Equatable {
+    enum Phase: Equatable {
+        case idle
+        case checking
+        case updating
+        case completed
+        case failed
+    }
+
+    let phase: Phase
+    let pluginIDs: [String]
+    let message: String?
+
+    static let idle = PluginAutomaticUpdateStatus(
+        phase: .idle,
+        pluginIDs: [],
+        message: nil
+    )
+
+    var isActive: Bool {
+        phase == .checking || phase == .updating
+    }
+
+    var isVisible: Bool {
+        phase != .idle
+    }
+
+    func isUpdatingPlugin(id: String) -> Bool {
+        phase == .updating && pluginIDs.contains(id)
+    }
+
+    var title: String {
+        switch phase {
+        case .idle:
+            return ""
+        case .checking:
+            return AppL10n.plugins("plugin.autoUpdate.title.checking", defaultValue: "正在检查插件更新")
+        case .updating:
+            return AppL10n.plugins("plugin.autoUpdate.title.updating", defaultValue: "正在更新插件")
+        case .completed:
+            return AppL10n.plugins("plugin.autoUpdate.title.completed", defaultValue: "插件已更新")
+        case .failed:
+            return AppL10n.plugins("plugin.autoUpdate.title.failed", defaultValue: "插件自动更新失败")
+        }
+    }
+
+    var detailText: String {
+        if let message {
+            return message
+        }
+
+        switch phase {
+        case .idle:
+            return ""
+        case .checking:
+            return AppL10n.plugins("plugin.autoUpdate.detail.checking", defaultValue: "新版首次启动时会先检查已安装插件。")
+        case .updating:
+            return AppL10n.pluginsFormat(
+                "plugin.autoUpdate.detail.updatingFormat",
+                defaultValue: "正在更新 %d 个已安装插件，完成后会继续加载。",
+                pluginIDs.count
+            )
+        case .completed:
+            return pluginIDs.isEmpty
+                ? AppL10n.plugins("plugin.autoUpdate.detail.noUpdates", defaultValue: "已是最新版本。")
+                : AppL10n.pluginsFormat("plugin.autoUpdate.detail.completedFormat", defaultValue: "已更新 %d 个插件。", pluginIDs.count)
+        case .failed:
+            return AppL10n.plugins("plugin.autoUpdate.detail.failed", defaultValue: "稍后可在此页面重试。")
+        }
+    }
+}
+
+struct PluginAutomaticUpdateVersionStore {
+    private enum DefaultsKey {
+        static let lastCheckedAppVersion = "plugins.dynamic.lastAutomaticUpdateAppVersion"
+    }
+
+    var userDefaults: UserDefaults = .standard
+
+    func needsAutomaticUpdateCheck(currentAppVersion: String) -> Bool {
+        guard !currentAppVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        return userDefaults.string(forKey: DefaultsKey.lastCheckedAppVersion) != currentAppVersion
+    }
+
+    func markAutomaticUpdateChecked(currentAppVersion: String) {
+        userDefaults.set(currentAppVersion, forKey: DefaultsKey.lastCheckedAppVersion)
+    }
+}
+
 @MainActor
 final class PluginHost: ObservableObject {
     private struct PluginDescriptor {
@@ -44,20 +136,24 @@ final class PluginHost: ObservableObject {
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
     private let displayTopologyRefreshDelay: Duration
-    private let derivedStateRebuildDelay: Duration
+    private let pluginStateChangeRebuildDelay: Duration
     let dynamicPluginManager: DynamicPluginManager?
     private let pluginCatalogManager: PluginCatalogManager?
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
     private var dynamicPluginCategoriesByID: [String: String?] = [:]
+    private var dynamicPluginReleaseChannelsByID: [String: String?] = [:]
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
+    private var visiblePanelSurfaces: Set<PluginPanelSurface> = []
+    private var visiblePanelSurfacePluginIDs: [PluginPanelSurface: Set<String>] = [:]
     private var isolatedPluginFailures: [String: String] = [:]
     private var isHandlingPluginAction = false
+    private var didLoadDynamicPlugins = false
     private var displayTopologyRefreshTask: Task<Void, Never>?
-    private var derivedStateRebuildTask: Task<Void, Never>?
+    private var pluginStateChangeRebuildTask: Task<Void, Never>?
     private var dirtyPluginIDs: Set<String> = []
     private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
     private var cachedComponentStatesByID: [String: PluginComponentState] = [:]
@@ -71,12 +167,13 @@ final class PluginHost: ObservableObject {
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
+    @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
     @Published private(set) var hasActivePlugin = false
     @Published private(set) var settingsPresentationRequestCount = 0
     @Published var selectedSettingsDestination: SettingsDestination = .general
     @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .installed
 
-    /// 由 `MenuBarStatusItemController` 注入，返回状态栏图标按钮的屏幕 frame。
+    /// Injected by `MenuBarStatusItemController`; returns the status-item button frame in screen coordinates.
     var statusItemButtonFrameProvider: (() -> NSRect?)? = nil {
         didSet {
             configureHostStatusItemCallbacks(for: activePlugins)
@@ -88,7 +185,7 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    convenience init() {
+    convenience init(loadDynamicPluginsOnInit: Bool = true) {
         let dynamicPluginManager = DynamicPluginManager()
         let pluginCatalogManager = PluginCatalogManager.live(dynamicPluginManager: dynamicPluginManager)
         self.init(
@@ -99,7 +196,8 @@ final class PluginHost: ObservableObject {
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: SystemDisplayConfigurationObserver(),
-            accessibilityPermissionObserver: AccessibilityPermissionObserver()
+            accessibilityPermissionObserver: AccessibilityPermissionObserver(),
+            loadDynamicPluginsOnInit: loadDynamicPluginsOnInit
         )
     }
 
@@ -113,7 +211,8 @@ final class PluginHost: ObservableObject {
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180),
-        derivedStateRebuildDelay: Duration = .milliseconds(150)
+        pluginStateChangeRebuildDelay: Duration = .milliseconds(80),
+        loadDynamicPluginsOnInit: Bool = true
     ) {
         self.builtInPlugins = plugins.sorted {
             if $0.metadata.order == $1.metadata.order {
@@ -128,16 +227,22 @@ final class PluginHost: ObservableObject {
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
         self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
-        self.derivedStateRebuildDelay = derivedStateRebuildDelay
+        self.pluginStateChangeRebuildDelay = pluginStateChangeRebuildDelay
         self.dynamicPluginManager = dynamicPluginManager
         self.pluginCatalogManager = pluginCatalogManager
 
         configureCallbacks(for: self.builtInPlugins)
 
         if let dynamicPluginManager {
-            self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+            if loadDynamicPluginsOnInit {
+                self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+                self.didLoadDynamicPlugins = true
+            } else {
+                dynamicPluginManager.prepareInstalledPluginsWithoutLoading()
+            }
             self.dynamicPluginCapabilitiesByID = dynamicPluginManager.installedCapabilitiesByID()
             self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
+            self.dynamicPluginReleaseChannelsByID = dynamicPluginManager.installedReleaseChannelsByID()
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
@@ -151,6 +256,9 @@ final class PluginHost: ObservableObject {
         self.globalShortcutManager.onShortcutTriggered = { [weak self] shortcutID in
             self?.handleShortcutTrigger(shortcutID: shortcutID)
         }
+        self.globalShortcutManager.onShortcutReleased = { [weak self] shortcutID in
+            self?.handleShortcutRelease(shortcutID: shortcutID)
+        }
 
         self.displayConfigurationObserver?.onConfigurationChange = { [weak self] in
             self?.scheduleDisplayTopologyRefresh()
@@ -160,12 +268,25 @@ final class PluginHost: ObservableObject {
             self?.refreshAccessibilityPermissionNow()
         }
 
+        pauseHiddenBuiltInVisibilityLifecyclePlugins()
         refreshAll()
     }
 
     deinit {
         displayTopologyRefreshTask?.cancel()
-        derivedStateRebuildTask?.cancel()
+        pluginStateChangeRebuildTask?.cancel()
+    }
+
+    func deactivateAllPlugins(reason: PluginDeactivationReason = .hostShutdown) {
+        pluginStateChangeRebuildTask?.cancel()
+        pluginStateChangeRebuildTask = nil
+        hideAllPanelSurfaces()
+
+        for plugin in activePlugins {
+            guardPluginCall(plugin, operation: "deactivate plugin") {
+                plugin.deactivate(reason: reason)
+            }
+        }
     }
 
     func refreshAll() {
@@ -184,18 +305,6 @@ final class PluginHost: ObservableObject {
     func refreshDisplayTopology() {
         displayTopologyRefreshTask?.cancel()
         refreshDisplayTopologyNow()
-    }
-
-    func setFeaturePanelVisible(_ isVisible: Bool) {
-        for plugin in activePlugins {
-            guard let observer = plugin as? FeaturePanelVisibilityObserving else {
-                continue
-            }
-
-            guardPluginCall(plugin, operation: "set feature panel visibility") {
-                observer.setFeaturePanelVisible(isVisible)
-            }
-        }
     }
 
     func isSwitchOn(for pluginID: String) -> Bool {
@@ -315,10 +424,15 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        handlePluginAction {
+        let isolatedPluginCountAtStart = isolatedPluginFailures.count
+        handlePluginAction(rebuildAfterAction: phase == .ended) {
             guardPluginCall(plugin, operation: "set slider") {
                 primaryPanel.handleAction(.setSlider(controlID: controlID, value: value, phase: phase))
             }
+        }
+
+        if phase == .changed, isolatedPluginFailures.count > isolatedPluginCountAtStart {
+            rebuildDerivedState()
         }
     }
 
@@ -366,6 +480,14 @@ final class PluginHost: ObservableObject {
         }
 
         applyShortcutCustomization(.custom(binding), for: descriptor)
+    }
+
+    func setShortcutBindingAndReturnError(_ binding: ShortcutBinding, for shortcutID: String) -> String? {
+        guard let descriptor = shortcutDescriptor(for: shortcutID) else {
+            return AppL10n.plugins("plugin.shortcut.unavailable", defaultValue: "快捷键不可用。")
+        }
+
+        return applyShortcutCustomization(.custom(binding), for: descriptor)
     }
 
     func clearShortcut(for shortcutID: String) {
@@ -430,20 +552,29 @@ final class PluginHost: ObservableObject {
     }
 
     func setFeatureVisibility(_ isVisible: Bool, for pluginID: String) {
+        if !isVisible {
+            removePluginFromVisiblePanelSurfaces(pluginID, notify: true)
+        }
+
         pluginDisplayPreferencesStore.setVisibility(
             isVisible,
             for: pluginID,
             defaultPluginIDs: defaultPluginIDs
         )
+
         // For dynamic plugins, pause/resume side effects with visibility.
-        // The plugin stays loaded so it remains visible in the 已安装 list.
-        if dynamicPlugins.contains(where: { $0.metadata.id == pluginID }) {
+        // The plugin stays loaded so it remains visible in the installed list.
+        let isDynamicPlugin = dynamicPlugins.contains(where: { $0.metadata.id == pluginID })
+        if isDynamicPlugin {
             if isVisible {
                 dynamicPluginManager?.resumePlugin(pluginID)
             } else {
                 dynamicPluginManager?.pausePlugin(pluginID)
             }
+        } else if let plugin = activePlugins.first(where: { $0.metadata.id == pluginID }) {
+            notifyFeatureVisibilityLifecycle(isVisible, for: plugin)
         }
+
         rebuildDerivedState()
     }
 
@@ -518,14 +649,6 @@ final class PluginHost: ObservableObject {
     }
 
     func componentViewItem(for itemID: String, dismiss: @escaping () -> Void) -> PluginComponentViewItem {
-        componentViewItem(for: itemID, dismiss: dismiss, isPanelVisible: true)
-    }
-
-    func componentViewItem(
-        for itemID: String,
-        dismiss: @escaping () -> Void,
-        isPanelVisible: Bool
-    ) -> PluginComponentViewItem {
         if let cachedItem = componentViewCache[itemID] {
             return cachedItem
         }
@@ -541,7 +664,7 @@ final class PluginHost: ObservableObject {
         let context = PluginComponentContext(
             pluginID: itemID,
             dismiss: dismiss,
-            isPanelVisible: isPanelVisible
+            isPanelVisible: true
         )
         let content = guardedValue(
             for: plugin,
@@ -558,6 +681,27 @@ final class PluginHost: ObservableObject {
             rebuildDerivedState()
         }
         return item
+    }
+
+    func setPanelSurface(_ surface: PluginPanelSurface, visible isVisible: Bool) {
+        if isVisible {
+            visiblePanelSurfaces.insert(surface)
+        } else {
+            visiblePanelSurfaces.remove(surface)
+        }
+
+        let visiblePluginIDs = isVisible ? pluginIDs(for: surface) : []
+        updateVisiblePanelSurface(surface, visiblePluginIDs: visiblePluginIDs)
+    }
+
+    func isComponentViewCached(for itemID: String) -> Bool {
+        componentViewCache[itemID] != nil
+    }
+
+    func prewarmComponentViews(dismiss: @escaping () -> Void) {
+        for item in componentItems {
+            _ = componentViewItem(for: item.id, dismiss: dismiss)
+        }
     }
 
     func pluginConfigurationViewItem(for pluginID: String) -> PluginConfigurationViewItem {
@@ -632,6 +776,111 @@ final class PluginHost: ObservableObject {
         syncPluginManagementState()
     }
 
+    func loadDynamicPluginsIfNeeded() {
+        guard !didLoadDynamicPlugins, let dynamicPluginManager else {
+            return
+        }
+
+        dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+        didLoadDynamicPlugins = true
+        configureCallbacks(for: dynamicPlugins)
+        pauseHiddenDynamicPlugins()
+        refreshAll()
+        syncPluginManagementState()
+    }
+
+    var hasInstalledDynamicPlugins: Bool {
+        guard let dynamicPluginManager else {
+            return false
+        }
+
+        return !dynamicPluginManager.installedPackageVersionsByID().isEmpty
+    }
+
+    func automaticUpdateInstalledPluginsBeforeLoading() async {
+        guard let pluginCatalogManager else {
+            loadDynamicPluginsIfNeeded()
+            return
+        }
+
+        automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+            phase: .checking,
+            pluginIDs: [],
+            message: nil
+        )
+
+        await pluginCatalogManager.refreshCatalog()
+        syncPluginManagementState()
+
+        if let errorMessage = pluginCatalogManager.status.errorMessage {
+            automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                phase: .failed,
+                pluginIDs: [],
+                message: errorMessage
+            )
+            loadDynamicPluginsIfNeeded()
+            return
+        }
+
+        let updatePlan = pluginCatalogManager.automaticUpdatePlanForInstalledPlugins()
+        guard !updatePlan.isEmpty else {
+            automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                phase: .completed,
+                pluginIDs: [],
+                message: AppL10n.plugins("plugin.autoUpdate.message.noInstalledUpdates", defaultValue: "已安装插件都是最新版本。")
+            )
+            loadDynamicPluginsIfNeeded()
+            return
+        }
+
+        presentPluginMarketplace()
+        automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+            phase: .updating,
+            pluginIDs: updatePlan.updateableInstalledPluginIDs,
+            message: AppL10n.pluginsFormat(
+                "plugin.autoUpdate.message.progressFormat",
+                defaultValue: "已完成 %d/%d",
+                0,
+                updatePlan.updateableInstalledPluginIDs.count
+            )
+        )
+        syncPluginManagementState()
+
+        do {
+            try await pluginCatalogManager.updateInstalledPluginsToLatestBeforeLoading { [weak self] progress in
+                self?.automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                    phase: .updating,
+                    pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                    message: AppL10n.pluginsFormat(
+                        "plugin.autoUpdate.message.progressFormat",
+                        defaultValue: "已完成 %d/%d",
+                        progress.completedCount,
+                        progress.totalCount
+                    )
+                )
+            }
+            syncPluginManagementState()
+            automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                phase: .completed,
+                pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                message: AppL10n.pluginsFormat(
+                    "plugin.autoUpdate.message.updatedInstalledFormat",
+                    defaultValue: "已更新 %d 个插件。",
+                    updatePlan.updateableInstalledPluginIDs.count
+                )
+            )
+        } catch {
+            syncPluginManagementState()
+            automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                phase: .failed,
+                pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                message: error.localizedDescription
+            )
+        }
+
+        loadDynamicPluginsIfNeeded()
+    }
+
     func installPluginFromCatalog(pluginID: String) async throws {
         guard let pluginCatalogManager else {
             return
@@ -650,7 +899,9 @@ final class PluginHost: ObservableObject {
         syncPluginManagementState()
     }
 
-    func updateAvailablePluginsFromCatalog() async throws {
+    func updateAvailablePluginsFromCatalog(
+        progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
+    ) async throws {
         guard let pluginCatalogManager else {
             return
         }
@@ -659,7 +910,7 @@ final class PluginHost: ObservableObject {
             syncPluginManagementState()
         }
 
-        try await pluginCatalogManager.updateAvailablePlugins()
+        try await pluginCatalogManager.updateAvailablePlugins(progress: progress)
     }
 
     func installPluginPackage(from sourceURL: URL) throws {
@@ -720,6 +971,11 @@ final class PluginHost: ObservableObject {
                     self?.statusItemButtonFrameProvider?()
                 }
             }
+            if let configurationPresenting = plugin as? any PluginConfigurationPresenting {
+                configurationPresenting.requestConfigurationPresentation = { [weak self] in
+                    self?.presentPluginConfiguration(pluginID: pluginID)
+                }
+            }
             configureHostStatusItemCallbacks(for: [plugin])
         }
     }
@@ -737,6 +993,9 @@ final class PluginHost: ObservableObject {
     }
 
     private func replaceDynamicPlugins(_ plugins: [any MacToolsPlugin]) {
+        let previouslyVisibleSurfaces = visiblePanelSurfaces
+        hideAllPanelSurfaces()
+        visiblePanelSurfaces = previouslyVisibleSurfaces
         discardComponentViews()
         configurationViewCache.removeAll()
         syncPluginManagementState()
@@ -764,16 +1023,34 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    private func pauseHiddenBuiltInVisibilityLifecyclePlugins() {
+        for plugin in builtInPlugins
+            where !pluginDisplayPreferencesStore.isVisible(
+                plugin.metadata.id, defaultPluginIDs: defaultPluginIDs
+            )
+        {
+            notifyFeatureVisibilityLifecycle(false, for: plugin)
+        }
+    }
+
+    private func notifyFeatureVisibilityLifecycle(_ isVisible: Bool, for plugin: any MacToolsPlugin) {
+        guard let visibilityLifecycle = plugin as? any PluginFeatureVisibilityLifecycleHandling else { return }
+        guardPluginCall(plugin, operation: "feature visibility lifecycle") {
+            visibilityLifecycle.featureVisibilityDidChange(isVisible)
+        }
+    }
+
     private func syncPluginManagementState() {
         dynamicPluginCapabilitiesByID = dynamicPluginManager?.installedCapabilitiesByID() ?? [:]
         dynamicPluginCategoriesByID = dynamicPluginManager?.installedCategoriesByID() ?? [:]
+        dynamicPluginReleaseChannelsByID = dynamicPluginManager?.installedReleaseChannelsByID() ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
 
     private func rebuildDerivedState(dirtyPluginIDs: Set<String>? = nil) {
         if dirtyPluginIDs == nil {
-            cancelScheduledDerivedStateRebuild()
+            cancelScheduledPluginStateRebuild()
         }
 
         let isolatedPluginCountAtStart = isolatedPluginFailures.count
@@ -917,6 +1194,7 @@ final class PluginHost: ObservableObject {
             )
         }
         trimComponentViewCache(keeping: Set(componentItems.map(\.id)))
+        syncVisiblePanelSurfaces()
 
         featureManagementItems = orderedDescriptors.map { descriptor in
             let metadata = descriptor.metadata
@@ -934,7 +1212,8 @@ final class PluginHost: ObservableObject {
                 isActive: panelStatesByID[metadata.id]?.isOn == true
                     || componentStatesByID[metadata.id]?.isActive == true,
                 presentation: presentation(for: descriptor),
-                category: dynamicPluginCategoriesByID[metadata.id] ?? nil
+                category: dynamicPluginCategoriesByID[metadata.id] ?? nil,
+                releaseChannel: dynamicPluginReleaseChannelsByID[metadata.id] ?? nil
             )
         }
 
@@ -984,7 +1263,9 @@ final class PluginHost: ObservableObject {
                     title: requirement.title,
                     description: requirement.description,
                     iconSystemImage: permissionIconName(for: requirement.kind),
-                    statusText: state.statusText ?? (state.isGranted ? "已授权" : "未授权"),
+                    statusText: state.statusText ?? (state.isGranted
+                        ? AppL10n.plugins("plugin.permission.granted", defaultValue: "已授权")
+                        : AppL10n.plugins("plugin.permission.notGranted", defaultValue: "未授权")),
                     statusSystemImage: state.statusSystemImage ?? (state.isGranted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"),
                     statusTone: state.statusTone ?? (state.isGranted ? .positive : .caution),
                     footnote: state.footnote,
@@ -1010,7 +1291,12 @@ final class PluginHost: ObservableObject {
                 isRequired: descriptor.definition.isRequired,
                 canClear: !descriptor.definition.isRequired && binding != nil,
                 usesDefaultValue: customization == .inheritDefault,
-                errorMessage: shortcutErrors[descriptor.itemID]
+                errorMessage: shortcutErrors[descriptor.itemID],
+                settingsGroupID: descriptor.definition.settingsGroupID,
+                settingsGroupTitle: descriptor.definition.settingsGroupTitle,
+                settingsGroupDescription: descriptor.definition.settingsGroupDescription,
+                settingsControlTitle: descriptor.definition.settingsControlTitle,
+                settingsControlSystemImage: descriptor.definition.settingsControlSystemImage
             )
         }
 
@@ -1019,7 +1305,6 @@ final class PluginHost: ObservableObject {
             permissionCards: permissionCards,
             shortcutItems: shortcutItems
         )
-        // 状态变化时只丢弃相关插件的配置视图，全量重建才清空全部缓存。
         if let dirtyPluginIDs {
             for pluginID in dirtyPluginIDs {
                 configurationViewCache.removeValue(forKey: pluginID)
@@ -1063,36 +1348,43 @@ final class PluginHost: ObservableObject {
         }
 
         dirtyPluginIDs.insert(pluginID)
-        guard derivedStateRebuildTask == nil else {
+        schedulePluginStateChangeRebuild()
+    }
+
+    private func schedulePluginStateChangeRebuild() {
+        guard pluginStateChangeRebuildTask == nil else {
             return
         }
 
-        let rebuildDelay = derivedStateRebuildDelay
-        derivedStateRebuildTask = Task { @MainActor [weak self, rebuildDelay] in
+        pluginStateChangeRebuildTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
             do {
-                try await Task.sleep(for: rebuildDelay)
+                try await Task.sleep(for: pluginStateChangeRebuildDelay)
             } catch {
                 return
             }
 
-            guard let self, !Task.isCancelled else {
+            guard !Task.isCancelled else {
                 return
             }
 
-            let pluginIDs = self.dirtyPluginIDs
-            self.dirtyPluginIDs.removeAll()
-            self.derivedStateRebuildTask = nil
+            let pluginIDs = dirtyPluginIDs
+            dirtyPluginIDs.removeAll()
+            pluginStateChangeRebuildTask = nil
             guard !pluginIDs.isEmpty else {
                 return
             }
 
-            self.rebuildDerivedState(dirtyPluginIDs: pluginIDs)
+            rebuildDerivedState(dirtyPluginIDs: pluginIDs)
         }
     }
 
-    private func cancelScheduledDerivedStateRebuild() {
-        derivedStateRebuildTask?.cancel()
-        derivedStateRebuildTask = nil
+    private func cancelScheduledPluginStateRebuild() {
+        pluginStateChangeRebuildTask?.cancel()
+        pluginStateChangeRebuildTask = nil
         dirtyPluginIDs.removeAll()
     }
 
@@ -1178,6 +1470,9 @@ final class PluginHost: ObservableObject {
         }
 
         isolatedPluginFailures[pluginID] = message
+        removePluginFromVisiblePanelSurfaces(pluginID, notify: false)
+        cachedPanelStatesByID.removeValue(forKey: pluginID)
+        cachedComponentStatesByID.removeValue(forKey: pluginID)
         componentViewCache.removeValue(forKey: pluginID)
         configurationViewCache.removeValue(forKey: pluginID)
         shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }
@@ -1200,6 +1495,7 @@ final class PluginHost: ObservableObject {
         plugin.onStateChange = nil
         plugin.requestPermissionGuidance = nil
         plugin.shortcutBindingResolver = nil
+        (plugin as? any PluginConfigurationPresenting)?.requestConfigurationPresentation = nil
         syncGlobalShortcuts()
     }
 
@@ -1412,6 +1708,114 @@ final class PluginHost: ObservableObject {
         componentViewCache = componentViewCache.filter { visibleComponentIDs.contains($0.key) }
     }
 
+    private func pluginIDs(for surface: PluginPanelSurface) -> Set<String> {
+        switch surface {
+        case .component:
+            return Set(componentItems.map(\.id))
+        case .primary:
+            return Set(panelItems.map(\.id))
+        }
+    }
+
+    private func syncVisiblePanelSurfaces() {
+        for surface in visiblePanelSurfaces {
+            updateVisiblePanelSurface(
+                surface,
+                visiblePluginIDs: pluginIDs(for: surface)
+            )
+        }
+    }
+
+    private func hideAllPanelSurfaces() {
+        for surface in PluginPanelSurface.allCases {
+            updateVisiblePanelSurface(surface, visiblePluginIDs: [])
+        }
+        visiblePanelSurfaces.removeAll()
+    }
+
+    private func updateVisiblePanelSurface(
+        _ surface: PluginPanelSurface,
+        visiblePluginIDs nextVisiblePluginIDs: Set<String>
+    ) {
+        let previousVisiblePluginIDs = visiblePanelSurfacePluginIDs[surface] ?? []
+        let hiddenPluginIDs = previousVisiblePluginIDs.subtracting(nextVisiblePluginIDs)
+        let shownPluginIDs = nextVisiblePluginIDs.subtracting(previousVisiblePluginIDs)
+
+        guard !hiddenPluginIDs.isEmpty || !shownPluginIDs.isEmpty else {
+            return
+        }
+
+        for pluginID in hiddenPluginIDs {
+            notifyPanelSurfaceHidden(surface, pluginID: pluginID)
+        }
+
+        for pluginID in shownPluginIDs {
+            notifyPanelSurfaceVisible(surface, pluginID: pluginID)
+        }
+
+        let visiblePluginIDs = nextVisiblePluginIDs.filter { pluginID in
+            guard let plugin = corePlugin(for: pluginID) else {
+                return false
+            }
+
+            return !isPluginIsolated(plugin)
+        }
+
+        if visiblePluginIDs.isEmpty {
+            visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
+        } else {
+            visiblePanelSurfacePluginIDs[surface] = visiblePluginIDs
+        }
+    }
+
+    private func notifyPanelSurfaceVisible(_ surface: PluginPanelSurface, pluginID: String) {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let lifecycleHandler = plugin as? any PluginPanelSurfaceLifecycleHandling
+        else {
+            return
+        }
+
+        guardPluginCall(plugin, operation: "show \(surface) panel surface") {
+            lifecycleHandler.panelSurfaceDidBecomeVisible(surface)
+        }
+    }
+
+    private func notifyPanelSurfaceHidden(_ surface: PluginPanelSurface, pluginID: String) {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let lifecycleHandler = plugin as? any PluginPanelSurfaceLifecycleHandling
+        else {
+            return
+        }
+
+        guardPluginCall(plugin, operation: "hide \(surface) panel surface") {
+            lifecycleHandler.panelSurfaceDidBecomeHidden(surface)
+        }
+    }
+
+    private func removePluginFromVisiblePanelSurfaces(_ pluginID: String, notify: Bool) {
+        for surface in PluginPanelSurface.allCases {
+            guard var pluginIDs = visiblePanelSurfacePluginIDs[surface] else {
+                continue
+            }
+
+            guard pluginIDs.remove(pluginID) != nil else {
+                continue
+            }
+
+            if notify {
+                notifyPanelSurfaceHidden(surface, pluginID: pluginID)
+            }
+
+            if pluginIDs.isEmpty {
+                visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
+            } else {
+                visiblePanelSurfacePluginIDs[surface] = pluginIDs
+            }
+        }
+    }
+
     private func trimConfigurationViewCache(keeping configurationPluginIDs: Set<String>) {
         configurationViewCache = configurationViewCache.filter {
             configurationPluginIDs.contains($0.key)
@@ -1454,22 +1858,26 @@ final class PluginHost: ObservableObject {
         return resolvedBinding(for: descriptor)
     }
 
+    @discardableResult
     private func applyShortcutCustomization(
         _ customization: ShortcutCustomization,
         for descriptor: ShortcutDescriptor
-    ) {
+    ) -> String? {
         do {
             try validateShortcutCustomization(customization, for: descriptor)
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
             shortcutErrors.removeValue(forKey: descriptor.itemID)
             rebuildDerivedState()
             syncGlobalShortcuts()
+            return nil
         } catch let error as ShortcutValidationError {
             shortcutErrors[descriptor.itemID] = error.localizedDescription
             rebuildDerivedState()
+            return error.localizedDescription
         } catch {
             shortcutErrors[descriptor.itemID] = error.localizedDescription
             rebuildDerivedState()
+            return error.localizedDescription
         }
     }
 
@@ -1496,13 +1904,23 @@ final class PluginHost: ObservableObject {
             }
 
             if let conflict = shortcutDescriptors().first(where: {
-                $0.itemID != descriptor.itemID && resolvedBinding(for: $0) == candidate
+                $0.itemID != descriptor.itemID
+                    && resolvedBinding(for: $0) == candidate
+                    && !canShareShortcutBinding(descriptor, with: $0)
             }) {
                 throw ShortcutValidationError.duplicate(
                     ownerDescription: "\(conflict.pluginTitle) · \(conflict.definition.title)"
                 )
             }
         }
+    }
+
+    private func canShareShortcutBinding(_ lhs: ShortcutDescriptor, with rhs: ShortcutDescriptor) -> Bool {
+        guard let groupID = lhs.definition.sharedBindingGroupID else {
+            return false
+        }
+
+        return groupID == rhs.definition.sharedBindingGroupID
     }
 
     private func syncGlobalShortcuts() {
@@ -1531,7 +1949,25 @@ final class PluginHost: ObservableObject {
 
         handlePluginAction {
             guardPluginCall(descriptor.plugin, operation: "shortcut action") {
-                descriptor.plugin.handleShortcutAction(id: descriptor.definition.actionID)
+                if let eventHandler = descriptor.plugin as? any PluginShortcutEventHandling {
+                    eventHandler.handleShortcutEvent(id: descriptor.definition.actionID, phase: .pressed)
+                } else {
+                    descriptor.plugin.handleShortcutAction(id: descriptor.definition.actionID)
+                }
+            }
+        }
+    }
+
+    private func handleShortcutRelease(shortcutID: String) {
+        guard let descriptor = shortcutDescriptor(for: shortcutID),
+              let eventHandler = descriptor.plugin as? any PluginShortcutEventHandling
+        else {
+            return
+        }
+
+        handlePluginAction {
+            guardPluginCall(descriptor.plugin, operation: "shortcut release") {
+                eventHandler.handleShortcutEvent(id: descriptor.definition.actionID, phase: .released)
             }
         }
     }
@@ -1557,13 +1993,23 @@ final class PluginHost: ObservableObject {
     ) -> String {
         switch kind {
         case .accessibility:
-            return isGranted ? "检查授权状态" : "前往授权"
+            return isGranted
+                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
+        case .inputMonitoring:
+            return isGranted
+                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
         case .calendarFullAccess:
-            return isGranted ? "检查授权状态" : "请求授权"
+            return isGranted
+                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                : AppL10n.plugins("plugin.permission.requestAuthorization", defaultValue: "请求授权")
         case .automation:
-            return "打开设置"
+            return AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
         case .screenRecording:
-            return isGranted ? "检查授权状态" : "前往授权"
+            return isGranted
+                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
         }
     }
 
@@ -1571,6 +2017,8 @@ final class PluginHost: ObservableObject {
         switch kind {
         case .accessibility:
             return "accessibility"
+        case .inputMonitoring:
+            return "keyboard.badge.eye"
         case .calendarFullAccess:
             return "calendar"
         case .automation:

@@ -2,7 +2,53 @@
   "id": "auto-hide-menu-bar",
   "displayName": "自动隐藏菜单栏",
   "summary": "自动隐藏菜单栏，提供更完整的屏幕显示空间",
-  "version": "1.0.2",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إخفاء شريط القوائم تلقائيًا",
+      "summary": "إخفاء شريط القائمة تلقائيًا لتوفير مساحة أكبر على الشاشة."
+    },
+    "de": {
+      "displayName": "Menüleiste automatisch ausblenden",
+      "summary": "Blenden Sie die Menüleiste automatisch aus, um mehr Platz auf dem Bildschirm zu schaffen."
+    },
+    "en": {
+      "displayName": "Auto-hide Menu Bar",
+      "summary": "Hide the menu bar automatically for more screen space."
+    },
+    "es": {
+      "displayName": "Ocultar barra de menús automáticamente",
+      "summary": "Oculte la barra de menú automáticamente para obtener más espacio en la pantalla."
+    },
+    "fr": {
+      "displayName": "Masquer la barre des menus automatiquement",
+      "summary": "Masquez automatiquement la barre de menus pour plus d'espace sur l'écran."
+    },
+    "ja": {
+      "displayName": "メニューバーを自動的に隠す",
+      "summary": "画面スペースを増やすために、メニュー バーを自動的に非表示にします。"
+    },
+    "ko": {
+      "displayName": "메뉴 막대 자동 숨기기",
+      "summary": "더 많은 화면 공간을 위해 메뉴 표시줄을 자동으로 숨깁니다."
+    },
+    "pt": {
+      "displayName": "Ocultar barra de menus automaticamente",
+      "summary": "Oculte a barra de menu automaticamente para obter mais espaço na tela."
+    },
+    "ru": {
+      "displayName": "Автоскрытие строки меню",
+      "summary": "Автоматически скрывайте строку меню, чтобы освободить больше места на экране."
+    },
+    "zh-Hans": {
+      "displayName": "自动隐藏菜单栏",
+      "summary": "自动隐藏菜单栏，提供更完整的屏幕显示空间"
+    },
+    "zh-Hant": {
+      "displayName": "自動隱藏選單列",
+      "summary": "自動隱藏選單列，提供更完整的螢幕顯示空間"
+    }
+  },
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "AutoHideMenuBar.bundle",

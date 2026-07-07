@@ -1,24 +1,30 @@
 import SwiftUI
+import MacToolsPluginKit
 
 struct IPOverviewComponentView: View {
     private enum Layout {
-        static let leakCardMinimumWidth: CGFloat = 280
-        static let leakCardMaximumWidth: CGFloat = 420
+        static let leakCardMinimumWidth: CGFloat = 240
+        static let leakCardMaximumWidth: CGFloat = 360
     }
 
     @ObservedObject var viewModel: IPOverviewViewModel
+    let localization: PluginLocalization
     let startsInDetails: Bool
     let showsBackButton: Bool
     @State private var customName = ""
     @State private var customURL = ""
     @State private var addError = ""
+    @State private var didRunInitialDiagnostics = false
+    @State private var presentedLeakDetails: IPOverviewLeakAssessmentKind?
 
     init(
         viewModel: IPOverviewViewModel,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         startsInDetails: Bool = false,
         showsBackButton: Bool = true
     ) {
         self.viewModel = viewModel
+        self.localization = localization
         self.startsInDetails = startsInDetails
         self.showsBackButton = showsBackButton
     }
@@ -52,10 +58,13 @@ struct IPOverviewComponentView: View {
                         .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("IP 检测")
+                        Text(localization.string("component.title", defaultValue: "IP 检测"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                        Text(viewModel.snapshot.preferredGeoInfo?.locationText ?? "公网、归属地与连通性")
+                        Text(viewModel.snapshot.preferredGeoInfo?.locationText ?? localization.string(
+                            "landing.subtitle",
+                            defaultValue: "公网、归属地与连通性"
+                        ))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -75,9 +84,23 @@ struct IPOverviewComponentView: View {
                 }
 
                 HStack(alignment: .top, spacing: 8) {
-                    landingMetric(title: "IPv4", value: viewModel.snapshot.publicIPv4?.ip ?? "检测中")
-                    landingMetric(title: "IPv6", value: viewModel.snapshot.publicIPv6?.ip ?? "未检测到")
-                    landingMetric(title: "本地", value: viewModel.snapshot.localAddresses.first?.address ?? "等待")
+                    landingMetric(
+                        title: localization.string("landing.domestic", defaultValue: "国内出口"),
+                        value: landingEgressValue(
+                            viewModel.snapshot.domesticIPv4 ?? viewModel.snapshot.domesticIPv6
+                        )
+                    )
+                    landingMetric(
+                        title: localization.string("landing.international", defaultValue: "国际出口"),
+                        value: landingEgressValue(
+                            viewModel.snapshot.internationalIPv4 ?? viewModel.snapshot.internationalIPv6
+                        )
+                    )
+                    landingMetric(
+                        title: localization.string("landing.local", defaultValue: "本地"),
+                        value: viewModel.snapshot.localAddresses.first.map { displayIP($0.address) }
+                            ?? localization.string("common.waiting", defaultValue: "等待")
+                    )
                 }
             }
             .padding(10)
@@ -88,13 +111,13 @@ struct IPOverviewComponentView: View {
     }
 
     private var detailPage: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             detailHeader
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 10) {
-                    ipCard(index: 1, title: "IP 来源: IPCheck.ing IPv4", result: viewModel.snapshot.publicIPv4)
-                    ipCard(index: 2, title: "IP 来源: IPCheck.ing IPv6", result: viewModel.snapshot.publicIPv6)
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+                    networkQualitySection
+                    publicIPSection
                     localAddressSection
                     connectivitySection
                     webRTCLeakSection
@@ -104,14 +127,19 @@ struct IPOverviewComponentView: View {
                 .padding(.bottom, 2)
             }
         }
-        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .onAppear {
-            viewModel.checkDiagnosticsIfNeeded()
+            guard !didRunInitialDiagnostics else {
+                return
+            }
+
+            didRunInitialDiagnostics = true
+            viewModel.refreshAllIfNeeded()
         }
     }
 
     private var detailHeader: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
             if showsBackButton {
                 Button {
                     viewModel.showSummary()
@@ -119,11 +147,11 @@ struct IPOverviewComponentView: View {
                     Image(systemName: "chevron.left")
                 }
                 .buttonStyle(.borderless)
-                .help("返回概览")
+                .help(localization.string("detail.back.help", defaultValue: "返回概览"))
             }
 
-            Text("IP 详情")
-                .font(.headline)
+            Text(localization.string("detail.title", defaultValue: "IP 详情"))
+                .font(PluginSettingsTheme.Typography.sectionTitle)
 
             Spacer(minLength: 8)
 
@@ -133,234 +161,231 @@ struct IPOverviewComponentView: View {
             }
 
             Button {
-                viewModel.refreshAll()
+                viewModel.toggleSensitiveInfoVisibility()
             } label: {
-                Image(systemName: "arrow.clockwise")
+                Image(systemName: viewModel.hidesSensitiveInfo ? "eye.slash" : "eye")
+                    .frame(width: 14, height: 14)
             }
-            .buttonStyle(.borderless)
-            .disabled(viewModel.isRefreshingAll)
-            .help("刷新全部检测")
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help(viewModel.hidesSensitiveInfo
+                ? localization.string("privacy.showIP.help", defaultValue: "显示 IP")
+                : localization.string("privacy.hideIP.help", defaultValue: "隐藏 IP")
+            )
 
             Button {
-                viewModel.copy(viewModel.snapshot.reportText)
+                viewModel.refreshAll()
             } label: {
-                Image(systemName: "doc.on.doc")
+                Label(
+                    viewModel.isRefreshingAll
+                        ? localization.string("detail.refreshing", defaultValue: "检测中")
+                        : localization.string("detail.refresh", defaultValue: "检测"),
+                    systemImage: "arrow.clockwise"
+                )
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(viewModel.isRefreshingAll)
+            .help(localization.string("detail.refresh.help", defaultValue: "刷新全部检测"))
+
+            Button {
+                viewModel.copy(viewModel.snapshot.reportText(localization: localization))
+            } label: {
+                Label(localization.string("detail.copyReport", defaultValue: "复制结果"), systemImage: "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .disabled(viewModel.snapshot.lastUpdated == nil)
-            .help("复制完整检测结果")
+            .help(localization.string("detail.copyReport.help", defaultValue: "复制完整检测结果"))
         }
     }
 
-    private func ipCard(index: Int, title: String, result: IPOverviewPublicIPResult?) -> some View {
-        let geoInfo = result.flatMap { viewModel.snapshot.geoInfoByIP[$0.ip] }
-
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("\(index)")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 22, height: 22)
-                    .background(result == nil ? Color.secondary : Color.primary, in: Circle())
-
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(result == nil ? .secondary : .primary)
-                    .lineLimit(1)
-
-                Spacer(minLength: 6)
-
+    private var publicIPSection: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                sectionHeader(
+                    title: localization.string("publicIP.title", defaultValue: "公网 IP"),
+                    icon: "network"
+                )
+                Spacer(minLength: 4)
                 Button {
                     viewModel.refresh()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Label(
+                        viewModel.snapshot.isRefreshing
+                            ? localization.string("status.checking", defaultValue: "检测中")
+                            : localization.string("common.refresh", defaultValue: "刷新"),
+                        systemImage: viewModel.snapshot.isRefreshing ? "hourglass" : "arrow.clockwise"
+                    )
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(viewModel.snapshot.isRefreshing)
+                .help(localization.string("publicIP.refresh.help", defaultValue: "刷新公网 IP 和归属地"))
             }
-            .padding(10)
 
-            Divider()
-
-            if let result {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "desktopcomputer")
-                            .foregroundStyle(.secondary)
-                        Text(result.ip)
-                            .font(.system(.title3, design: .monospaced).weight(.bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.55)
-                        Button {
-                            viewModel.copy(result.ip)
-                        } label: {
-                            Image(systemName: "doc.on.doc")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-
-                    if let geoInfo {
-                        geoGrid(geoInfo)
-                        Divider()
-                        networkGrid(geoInfo)
-                        Divider()
-                        HStack(spacing: 6) {
-                            Image(systemName: "building.2")
-                                .foregroundStyle(.secondary)
-                            Text("ASN")
-                                .foregroundStyle(.secondary)
-                            Text(geoInfo.asn ?? "未知")
-                                .font(.system(.body, design: .monospaced))
-                            Spacer(minLength: 6)
-                            Button {
-                                viewModel.copy(geoInfo.asn)
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(geoInfo.asn == nil)
-                        }
-                        .font(.caption)
-                    } else {
-                        Text("归属地信息获取中或不可用")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(12)
-            } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.circle")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.secondary)
-                    Text("获取失败或不存在 \(index == 2 ? "IPv6" : "IPv4") 地址")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 150)
-                .padding(12)
+            VStack(spacing: 0) {
+                publicIPRow(
+                    title: "IPv4",
+                    route: .domestic,
+                    result: viewModel.snapshot.domesticIPv4
+                )
+                PluginSettingsListDivider()
+                publicIPRow(
+                    title: "IPv4",
+                    route: .international,
+                    result: viewModel.snapshot.internationalIPv4
+                )
+                PluginSettingsListDivider()
+                publicIPRow(
+                    title: "IPv6",
+                    route: .domestic,
+                    result: viewModel.snapshot.domesticIPv6
+                )
+                PluginSettingsListDivider()
+                publicIPRow(
+                    title: "IPv6",
+                    route: .international,
+                    result: viewModel.snapshot.internationalIPv6
+                )
             }
+            .pluginSettingsCardBackground(.host)
         }
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.separator.opacity(0.35), lineWidth: 1)
+    }
+
+    private func publicIPRow(
+        title: String,
+        route: IPOverviewEgressRoute,
+        result: IPOverviewPublicIPResult?
+    ) -> some View {
+        let geoInfo = result.flatMap { viewModel.snapshot.geoInfoByIP[$0.ip] }
+
+        return PublicIPRowView(
+            title: title,
+            route: route,
+            result: result,
+            geoInfo: geoInfo,
+            notDetectedText: notDetectedText,
+            geoUnavailableText: localization.string("ipCard.geoUnavailable", defaultValue: "归属地不可用"),
+            unknownText: unknownText,
+            localization: localization,
+            displayIP: result.map { displayIP($0.ip) },
+            onCopyIP: { viewModel.copy(result?.ip) }
         )
-    }
-
-    private func geoGrid(_ geoInfo: IPOverviewGeoInfo) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            locationValue(geoInfo.countryDisplayText ?? "未知", icon: "mappin")
-            locationValue(geoInfo.region ?? "未知", icon: "house")
-            locationValue(geoInfo.city ?? "未知", icon: "arrow.turn.down.right")
-        }
-    }
-
-    private func locationValue(_ value: String, icon: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
-                .frame(width: 14)
-            Text(value)
-                .font(.subheadline)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func networkGrid(_ geoInfo: IPOverviewGeoInfo) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 9) {
-            GridRow {
-                infoCell(icon: "server.rack", title: "网络", value: geoInfo.organization ?? geoInfo.isp ?? "未知")
-                infoCell(icon: "chart.bar", title: "类型", value: geoInfo.networkType.rawValue)
-            }
-            GridRow {
-                infoCell(icon: "shield", title: "代理", value: geoInfo.proxyText)
-                infoCell(icon: "clock", title: "时区", value: geoInfo.timezone ?? "未知")
-            }
-        }
-    }
-
-    private func infoCell(icon: String, title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.subheadline)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .pluginSettingsListRowPadding(interactive: true)
     }
 
     private var localAddressSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(title: "本地局域网 IP", icon: "wifi.router")
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            sectionHeader(title: localization.string("local.title", defaultValue: "本地局域网 IP"), icon: "wifi.router")
 
-            if viewModel.snapshot.localAddresses.isEmpty {
-                Text("未检测到可用本地地址")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(viewModel.snapshot.localAddresses.prefix(5)) { address in
-                    HStack(spacing: 8) {
-                        Text(address.interfaceName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 42, alignment: .leading)
-                        Text(address.address)
-                            .font(.system(.caption, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 4)
-                        Text(address.family.rawValue)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                if viewModel.snapshot.localAddresses.isEmpty {
+                    Text(localization.string("local.empty", defaultValue: "未检测到可用本地地址"))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .pluginSettingsListRowPadding()
+                } else {
+                    ForEach(Array(viewModel.snapshot.localAddresses.prefix(5).enumerated()), id: \.element.id) { index, address in
+                        localAddressRow(address)
+                        if index < min(viewModel.snapshot.localAddresses.count, 5) - 1 {
+                            PluginSettingsListDivider()
+                        }
                     }
                 }
             }
+            .pluginSettingsCardBackground(.host)
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func localAddressRow(_ address: IPOverviewLocalAddress) -> some View {
+        LocalAddressRowView(
+            address: address,
+            displayAddress: displayIP(address.address),
+            localization: localization,
+            onCopyIP: { viewModel.copy(address.address) }
+        )
+        .pluginSettingsListRowPadding()
+    }
+
+    private var networkQualitySection: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                sectionHeader(
+                    title: localization.string("speed.title", defaultValue: "网络测速"),
+                    icon: "speedometer"
+                )
+                Spacer(minLength: 4)
+                Button {
+                    viewModel.measureNetworkQuality()
+                } label: {
+                    Label(
+                        viewModel.isMeasuringNetworkQuality
+                            ? localization.string("speed.running", defaultValue: "测速中")
+                            : localization.string("common.refresh", defaultValue: "刷新"),
+                        systemImage: viewModel.isMeasuringNetworkQuality ? "hourglass" : "arrow.clockwise"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(viewModel.isMeasuringNetworkQuality)
+                .help(localization.string("speed.start.help", defaultValue: "使用 macOS networkQuality 测量当前网络"))
+            }
+
+            NetworkQualityCardView(
+                state: viewModel.networkQualityState,
+                localization: localization
+            )
+        }
     }
 
     private var connectivitySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                sectionHeader(title: "网络连通性", icon: "point.3.connected.trianglepath.dotted")
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                sectionHeader(
+                    title: localization.string("connectivity.title", defaultValue: "网络连通性"),
+                    icon: "point.3.connected.trianglepath.dotted"
+                )
                 Spacer(minLength: 4)
                 Button {
                     viewModel.checkConnectivity()
                 } label: {
-                    Image(systemName: viewModel.isCheckingConnectivity ? "hourglass" : "arrow.clockwise")
+                    Label(
+                        viewModel.isCheckingConnectivity
+                            ? localization.string("status.checking", defaultValue: "检测中")
+                            : localization.string("common.refresh", defaultValue: "刷新"),
+                        systemImage: viewModel.isCheckingConnectivity ? "hourglass" : "arrow.clockwise"
+                    )
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(viewModel.isCheckingConnectivity)
-                .help("刷新连通性")
+                .help(localization.string("connectivity.refresh.help", defaultValue: "刷新连通性"))
             }
 
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 8),
-                GridItem(.flexible(), spacing: 8)
-            ], spacing: 8) {
-                ForEach(viewModel.connectivityResults) { result in
-                    connectivityTile(result)
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), spacing: 8),
+                    GridItem(.flexible(), spacing: 8)
+                ], spacing: 8) {
+                    ForEach(viewModel.connectivityResults) { result in
+                        connectivityTile(result)
+                    }
                 }
-            }
 
-            customTargetForm
+                customTargetForm
+            }
+            .padding(PluginSettingsTheme.Spacing.cardContent)
+            .pluginSettingsCardBackground(.host)
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var webRTCLeakSection: some View {
         leakSection(
-            title: "WebRTC 泄露测试",
+            kind: .webRTC,
+            title: localization.string("webrtc.title", defaultValue: "WebRTC 泄露测试"),
             icon: "network.badge.shield.half.filled",
-            note: "WebRTC 往往通过 UDP 直连进行建立，如果测试返回了真实 IP，则意味着你的代理设置没有覆盖这些连接。除了检测你连接 WebRTC 时所使用的 IP，我们还会检测你的 NAT 类型。然而，NAT 类型的检测并不是 100% 准确的，仅供参考。",
             isRunning: viewModel.isCheckingWebRTC,
             action: { viewModel.checkWebRTCLeak() },
             results: viewModel.webRTCResults,
@@ -370,9 +395,9 @@ struct IPOverviewComponentView: View {
 
     private var dnsLeakSection: some View {
         leakSection(
-            title: "DNS 泄漏测试",
+            kind: .dns,
+            title: localization.string("dns.title", defaultValue: "DNS 泄露测试"),
             icon: "octagon.fill",
-            note: "DNS 泄露（DNS Leaks）的意思是，当你挂上 VPN/代理后，你解析域名时，依然通过当地的运营商进行解析，这时就有 DNS 泄露的风险。\n\n泄露测试的方法是通过访问新生成的域名，检测你是通过哪个地区的 DNS 出口进行解析，如果返回的出口区域和你当地的运营商区域相同，则有 DNS 泄露风险，你可能需要修改 VPN/代理设置。",
             isRunning: viewModel.isCheckingDNSLeak,
             action: { viewModel.checkDNSLeak() },
             results: viewModel.dnsLeakResults,
@@ -381,150 +406,308 @@ struct IPOverviewComponentView: View {
     }
 
     private func leakSection(
+        kind: IPOverviewLeakAssessmentKind,
         title: String,
         icon: String,
-        note: String,
         isRunning: Bool,
         action: @escaping () -> Void,
         results: [IPOverviewLeakTestResult],
         showsNAT: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        let assessment = IPOverviewLeakAssessment.evaluate(
+            kind: kind,
+            results: results,
+            snapshot: viewModel.snapshot,
+            isRunning: isRunning
+        )
+
+        return VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
                 Label(title, systemImage: icon)
-                    .font(.headline)
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
+                    .foregroundStyle(.secondary)
                 Spacer(minLength: 4)
                 Button(action: action) {
-                    Image(systemName: isRunning ? "hourglass" : "arrow.clockwise")
+                    Label(
+                        isRunning
+                            ? localization.string("status.checking", defaultValue: "检测中")
+                            : localization.string("common.refresh", defaultValue: "刷新"),
+                        systemImage: isRunning ? "hourglass" : "arrow.clockwise"
+                    )
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(isRunning)
             }
 
-            Text(note)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            LazyVGrid(columns: leakGridColumns, spacing: 8) {
-                ForEach(results) { result in
-                    leakTile(result, showsNAT: showsNAT)
-                }
-            }
+            leakSummaryCard(assessment, results: results, showsNAT: showsNAT)
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private var leakGridColumns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(
-                    minimum: Layout.leakCardMinimumWidth,
-                    maximum: Layout.leakCardMaximumWidth
-                ),
-                spacing: 8,
-                alignment: .top
-            )
-        ]
-    }
+    private func leakSummaryCard(
+        _ assessment: IPOverviewLeakAssessment,
+        results: [IPOverviewLeakTestResult],
+        showsNAT: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: leakAssessmentIcon(assessment.state))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(leakAssessmentColor(assessment.state))
+                .frame(width: 20, height: 20)
 
-    private func leakTile(_ result: IPOverviewLeakTestResult, showsNAT: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "heart.text.square")
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(leakAssessmentTitle(assessment))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    .foregroundStyle(leakAssessmentColor(assessment.state))
+                Text(leakAssessmentDetail(assessment))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
-                Text(result.name)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            Spacer(minLength: 8)
 
             HStack(spacing: 6) {
-                Circle()
-                    .fill(leakColor(result.status))
-                    .frame(width: 8, height: 8)
-                Text(leakPrimaryText(result.status))
-                    .font(.system(.caption, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+                Text(leakAssessmentBadge(assessment))
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(leakAssessmentColor(assessment.state))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        leakAssessmentColor(assessment.state).opacity(0.12),
+                        in: Capsule()
+                    )
+                    .fixedSize()
 
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 10) {
-                    if showsNAT {
-                        leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? "未知")
-                    }
-                    leakInfoLine(title: "网络", value: leakEndpoint(result.status)?.organization ?? "未知")
-                    leakInfoLine(title: "出口地区", value: leakEndpoint(result.status)?.countryDisplayText ?? "未知")
+                Button {
+                    presentedLeakDetails = assessment.kind
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    if showsNAT {
-                        leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? "未知")
-                    }
-                    leakInfoLine(title: "网络", value: leakEndpoint(result.status)?.organization ?? "未知")
-                    leakInfoLine(title: "出口地区", value: leakEndpoint(result.status)?.countryDisplayText ?? "未知")
+                .buttonStyle(.plain)
+                .help(localization.string("leak.details.help", defaultValue: "查看检测详情"))
+                .popover(
+                    isPresented: Binding(
+                        get: { presentedLeakDetails == assessment.kind },
+                        set: { isPresented in
+                            presentedLeakDetails = isPresented ? assessment.kind : nil
+                        }
+                    ),
+                    arrowEdge: .trailing
+                ) {
+                    leakDetailsPopover(
+                        assessment: assessment,
+                        results: results,
+                        showsNAT: showsNAT
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
         }
-        .padding(8)
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+        .background(
+            PluginSettingsTheme.Palette.nativeCardBackground,
+            in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card, style: .continuous)
+        )
     }
 
-    private func leakInfoLine(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption)
-                .lineLimit(1)
-                .truncationMode(.middle)
+    private func leakDetailsPopover(
+        assessment: IPOverviewLeakAssessment,
+        results: [IPOverviewLeakTestResult],
+        showsNAT: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: leakAssessmentIcon(assessment.state))
+                    .foregroundStyle(leakAssessmentColor(assessment.state))
+                Text(localization.string("leak.details.title", defaultValue: "检测详情"))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Spacer(minLength: 8)
+                Text(leakEvidenceCountText(assessment))
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
+                    LeakEvidenceListRowView(
+                        result: result,
+                        showsNAT: showsNAT,
+                        unknownText: unknownText,
+                        localization: localization,
+                        color: leakColor(result.status),
+                        primaryText: leakPrimaryText(result.status),
+                        displayIP: result.endpoint.map { displayIP($0.ip) },
+                        onCopyIP: { viewModel.copy(result.endpoint?.ip) }
+                    )
+
+                    if index < results.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+            .background(
+                PluginSettingsTheme.Palette.recessedControlBackground,
+                in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous)
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .frame(width: 380)
+    }
+
+    private func leakAssessmentTitle(_ assessment: IPOverviewLeakAssessment) -> String {
+        switch assessment.kind {
+        case .webRTC:
+            switch assessment.state {
+            case .waiting:
+                return localization.string("webrtc.assessment.waiting", defaultValue: "等待 WebRTC 检测")
+            case .checking:
+                return localization.string("webrtc.assessment.checking", defaultValue: "正在检测 WebRTC")
+            case .clear:
+                return localization.string("webrtc.assessment.clear", defaultValue: "未发现 WebRTC 泄露")
+            case .warning:
+                return localization.string("webrtc.assessment.warning", defaultValue: "可能存在 WebRTC 泄露")
+            case .unknown:
+                return localization.string("webrtc.assessment.unknown", defaultValue: "WebRTC 结果不完整")
+            }
+        case .dns:
+            switch assessment.state {
+            case .waiting:
+                return localization.string("dns.assessment.waiting", defaultValue: "等待 DNS 检测")
+            case .checking:
+                return localization.string("dns.assessment.checking", defaultValue: "正在检测 DNS")
+            case .clear:
+                return localization.string("dns.assessment.clear", defaultValue: "未发现 DNS 泄露")
+            case .warning:
+                return localization.string("dns.assessment.warning", defaultValue: "可能存在 DNS 泄露")
+            case .unknown:
+                return localization.string("dns.assessment.unknown", defaultValue: "DNS 结果不完整")
+            }
+        }
+    }
+
+    private func leakAssessmentDetail(_ assessment: IPOverviewLeakAssessment) -> String {
+        switch assessment.reason {
+        case .waiting:
+            return localization.string("leak.reason.waiting", defaultValue: "点击刷新后会检测出口是否和当前公网信息一致。")
+        case .checking:
+            return localization.string("leak.reason.checking", defaultValue: "正在收集各节点返回的出口信息。")
+        case .noPublicIP:
+            return localization.string("leak.reason.noPublicIP", defaultValue: "当前公网 IP 未获取完成，暂时无法建立对照。")
+        case .noDNSEndpoint:
+            return localization.string("leak.reason.noDNSEndpoint", defaultValue: "没有获取到 DNS 解析器出口，可能被网络或服务拦截。")
+        case .webRTCMatchesPublicIP:
+            return localization.string("leak.reason.webRTCMatchesPublicIP", defaultValue: "STUN 返回的出口与当前公网 IP 一致。")
+        case .webRTCNoVisibleEndpoint:
+            return localization.string("leak.reason.webRTCNoVisibleEndpoint", defaultValue: "未检测到 WebRTC 可见出口，通常表示 STUN 被阻断或不可达。")
+        case .webRTCDifferentIP:
+            return localization.string("leak.reason.webRTCDifferentIP", defaultValue: "STUN 返回了不同于当前公网 IP 的出口。")
+        case .dnsMatchesEgressRegion:
+            return localization.string("leak.reason.dnsMatchesEgressRegion", defaultValue: "DNS 解析器出口地区与当前公网出口一致。")
+        case .dnsDifferentEgressRegion:
+            return localization.string("leak.reason.dnsDifferentEgressRegion", defaultValue: "DNS 解析器出口地区与当前公网出口不一致。")
+        case .dnsObservedWithoutBaselineRegion:
+            return localization.string("leak.reason.dnsObservedWithoutBaselineRegion", defaultValue: "已获取 DNS 出口，但公网归属地不足，暂时无法对照。")
+        }
+    }
+
+    private func leakAssessmentBadge(_ assessment: IPOverviewLeakAssessment) -> String {
+        leakStateBadge(assessment.state)
+    }
+
+    private func leakStateBadge(_ state: IPOverviewLeakAssessmentState) -> String {
+        switch state {
+        case .waiting:
+            return localization.string("leak.badge.waiting", defaultValue: "待检测")
+        case .checking:
+            return localization.string("leak.badge.checking", defaultValue: "检测中")
+        case .clear:
+            return localization.string("leak.badge.clear", defaultValue: "通过")
+        case .warning:
+            return localization.string("leak.badge.warning", defaultValue: "注意")
+        case .unknown:
+            return localization.string("leak.badge.unknown", defaultValue: "无法判断")
+        }
+    }
+
+    private func leakEvidenceCountText(_ assessment: IPOverviewLeakAssessment) -> String {
+        localization.format(
+            "leak.evidence.count",
+            defaultValue: "%d/%d 个节点有结果",
+            assessment.observedCount,
+            assessment.totalCount
+        )
+    }
+
+    private func leakAssessmentColor(_ state: IPOverviewLeakAssessmentState) -> Color {
+        switch state {
+        case .waiting:
+            return .secondary
+        case .checking:
+            return Color(nsColor: .systemBlue)
+        case .clear:
+            return Color(nsColor: .systemGreen)
+        case .warning:
+            return Color(nsColor: .systemRed)
+        case .unknown:
+            return Color(nsColor: .systemOrange)
+        }
+    }
+
+    private func leakAssessmentIcon(_ state: IPOverviewLeakAssessmentState) -> String {
+        switch state {
+        case .waiting:
+            return "clock"
+        case .checking:
+            return "hourglass"
+        case .clear:
+            return "checkmark.shield"
+        case .warning:
+            return "exclamationmark.triangle"
+        case .unknown:
+            return "questionmark.circle"
+        }
     }
 
     private func connectivityTile(_ result: IPOverviewConnectivityResult) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(connectivityColor(result.status))
-                    .frame(width: 8, height: 8)
-                Text(result.target.name)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 2)
-                if result.target.isCustom {
-                    Button {
-                        viewModel.removeConnectivityTarget(id: result.id)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption2)
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
+        HStack(spacing: 7) {
+            Circle()
+                .fill(connectivityColor(result.status))
+                .frame(width: 7, height: 7)
+            Text(result.target.name)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+
+            Spacer(minLength: 4)
 
             Text(connectivityText(result.status))
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+
+            if result.target.isCustom {
+                Button {
+                    viewModel.removeConnectivityTarget(id: result.id)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption2)
+                }
+                .buttonStyle(.borderless)
+            }
         }
-        .padding(8)
+        .padding(.horizontal, 2)
+        .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
     }
 
     private var customTargetForm: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                TextField("名称", text: $customName)
+                TextField(localization.string("customTarget.name.placeholder", defaultValue: "名称"), text: $customName)
                     .textFieldStyle(.roundedBorder)
                 TextField("https://example.com", text: $customURL)
                     .textFieldStyle(.roundedBorder)
@@ -548,7 +731,10 @@ struct IPOverviewComponentView: View {
     private var privacyFooter: some View {
         HStack(spacing: 6) {
             Image(systemName: "lock.shield")
-            Text("公网、归属地和连通性检测会请求外部服务；本地地址仅在本机读取。")
+            Text(localization.string(
+                "privacy.footer",
+                defaultValue: "公网、归属地和连通性检测会请求外部服务；本地地址仅在本机读取。"
+            ))
                 .lineLimit(2)
             Spacer(minLength: 0)
         }
@@ -572,7 +758,7 @@ struct IPOverviewComponentView: View {
 
     private func sectionHeader(title: String, icon: String) -> some View {
         Label(title, systemImage: icon)
-            .font(.caption.weight(.semibold))
+            .font(PluginSettingsTheme.Typography.sectionTitle)
             .foregroundStyle(.secondary)
     }
 
@@ -603,22 +789,14 @@ struct IPOverviewComponentView: View {
     private func connectivityText(_ status: IPOverviewConnectivityResult.Status) -> String {
         switch status {
         case .waiting:
-            return "等待检测"
+            return localization.string("status.waiting", defaultValue: "等待检测")
         case .checking:
-            return "检测中"
+            return localization.string("status.checking", defaultValue: "检测中")
         case .reachable(let milliseconds):
             return "\(milliseconds) ms"
         case .unreachable:
-            return "不可达"
+            return localization.string("connectivity.unreachable", defaultValue: "不可达")
         }
-    }
-
-    private func leakEndpoint(_ status: IPOverviewLeakTestResult.Status) -> IPOverviewLeakEndpoint? {
-        guard case .success(let endpoint) = status else {
-            return nil
-        }
-
-        return endpoint
     }
 
     private func leakColor(_ status: IPOverviewLeakTestResult.Status) -> Color {
@@ -628,22 +806,966 @@ struct IPOverviewComponentView: View {
         case .checking:
             return Color(nsColor: .systemBlue)
         case .success:
-            return Color(nsColor: .systemGreen)
+            return Color(nsColor: .systemBlue)
         case .failure:
-            return Color(nsColor: .systemRed)
+            return .secondary.opacity(0.65)
         }
     }
 
     private func leakPrimaryText(_ status: IPOverviewLeakTestResult.Status) -> String {
         switch status {
         case .waiting:
-            return "等待检测"
+            return localization.string("status.waiting", defaultValue: "等待检测")
         case .checking:
-            return "检测中"
+            return localization.string("status.checking", defaultValue: "检测中")
         case .success(let endpoint):
             return endpoint.ip
         case .failure:
-            return "获取失败"
+            return localization.string("leak.failed", defaultValue: "获取失败")
         }
+    }
+
+    private var unknownText: String {
+        localization.string("common.unknown", defaultValue: "未知")
+    }
+
+    private var notDetectedText: String {
+        localization.string("common.notDetected", defaultValue: "未检测到")
+    }
+
+    private func landingEgressValue(_ result: IPOverviewPublicIPResult?) -> String {
+        if let result {
+            return displayIP(result.ip)
+        }
+
+        if viewModel.snapshot.isRefreshing || viewModel.snapshot.lastUpdated == nil {
+            return localization.string("common.checking", defaultValue: "检测中")
+        }
+
+        return notDetectedText
+    }
+
+    private func displayIP(_ value: String) -> String {
+        viewModel.hidesSensitiveInfo ? IPOverviewSensitiveValueMask.maskedIP(value) : value
+    }
+}
+
+private struct PublicIPRowView: View {
+    let title: String
+    let route: IPOverviewEgressRoute
+    let result: IPOverviewPublicIPResult?
+    let geoInfo: IPOverviewGeoInfo?
+    let notDetectedText: String
+    let geoUnavailableText: String
+    let unknownText: String
+    let localization: PluginLocalization
+    let displayIP: String?
+    let onCopyIP: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            HStack(alignment: .center, spacing: 4) {
+                if let result {
+                    Text(displayIP ?? result.ip)
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .layoutPriority(1)
+                } else {
+                    Text(notDetectedText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                }
+
+                IPOverviewTagBadge(title: title, style: .addressFamily(title))
+                IPOverviewTagBadge(title: route.title(localization: localization), style: .egressRoute(route))
+
+                IPOverviewInlineCopyButton(
+                    help: localization.format(
+                        "copy.ip.help",
+                        defaultValue: "复制 %@ IP",
+                        title
+                    ),
+                    action: onCopyIP
+                )
+                .opacity(isHovered && result != nil ? 1 : 0)
+                .allowsHitTesting(isHovered && result != nil)
+
+                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+            }
+
+            if result != nil {
+                if geoInfo != nil {
+                    publicIPDetails
+                        .padding(.top, 2)
+                } else {
+                    unavailableGeoInfo
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
+
+    private var publicIPDetails: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                publicIPDetailValues
+            }
+
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 8),
+                GridItem(.flexible(), spacing: 8)
+            ], spacing: 8) {
+                publicIPDetailValues
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var publicIPDetailValues: some View {
+        detailValue(
+            title: localization.string("info.location", defaultValue: "位置"),
+            value: geoInfo?.locationText ?? geoInfo?.countryDisplayText ?? geoUnavailableText,
+            icon: "mappin.and.ellipse"
+        )
+        detailValue(
+            title: localization.string("info.isp", defaultValue: "运营商"),
+            value: geoInfo?.organization ?? geoInfo?.isp ?? unknownText,
+            icon: "server.rack"
+        )
+        detailValue(
+            title: "ASN",
+            value: geoInfo?.asn ?? unknownText,
+            icon: "building.2"
+        )
+    }
+
+    private func detailValue(title: String, value: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(title, systemImage: icon)
+                .font(PluginSettingsTheme.Typography.statusBadge)
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var unavailableGeoInfo: some View {
+        Text(geoUnavailableText)
+            .font(PluginSettingsTheme.Typography.rowDescription)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 2)
+    }
+}
+
+private struct LocalAddressRowView: View {
+    let address: IPOverviewLocalAddress
+    let displayAddress: String
+    let localization: PluginLocalization
+    let onCopyIP: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(address.interfaceName)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                HStack(alignment: .center, spacing: 4) {
+                    Text(displayAddress)
+                        .font(PluginSettingsTheme.Typography.monospacedValue)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .layoutPriority(1)
+
+                    IPOverviewTagBadge(title: address.family.rawValue, style: .addressFamily(address.family.rawValue))
+
+                    IPOverviewInlineCopyButton(
+                        help: localization.format(
+                            "copy.ip.help",
+                            defaultValue: "复制 %@ IP",
+                            address.family.rawValue
+                        ),
+                        action: onCopyIP
+                    )
+                    .opacity(isHovered ? 1 : 0)
+                    .allowsHitTesting(isHovered)
+                }
+            }
+
+            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct NetworkQualityCardView: View {
+    let state: IPOverviewNetworkQualityRunState
+    let localization: PluginLocalization
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            switch state {
+            case .waiting:
+                chartContent(
+                    progress: .started(),
+                    measurement: nil
+                )
+            case .running(let progress):
+                chartContent(
+                    progress: progress,
+                    measurement: nil
+                )
+            case .completed(let measurement, let progress):
+                chartContent(
+                    progress: progress,
+                    measurement: measurement
+                )
+            case .failed(let message):
+                failureContent(message)
+            }
+        }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .pluginSettingsCardBackground(.host)
+    }
+
+    private func chartContent(
+        progress: IPOverviewNetworkQualityProgress,
+        measurement: IPOverviewNetworkQualityMeasurement?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            NetworkQualityGraphPanel(
+                progress: progress,
+                measurement: measurement,
+                localization: localization
+            )
+
+            if let measurement {
+                NetworkQualityResultStrip(measurement: measurement, localization: localization)
+                metadataRow(measurement)
+            } else {
+                Text(localization.string(
+                    "speed.waiting.description",
+                    defaultValue: "点击刷新后，会顺序测量下载、上传、延迟和响应性。"
+                ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private func failureContent(_ message: String) -> some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: "exclamationmark.triangle")
+                .pluginSettingsRowIconStyle(Color(nsColor: .systemOrange))
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(localization.string("speed.failed.title", defaultValue: "测速失败"))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Text(message)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func metadataRow(_ measurement: IPOverviewNetworkQualityMeasurement) -> some View {
+        HStack(spacing: 8) {
+            if let interfaceName = measurement.interfaceName, !interfaceName.isEmpty {
+                Label(interfaceName, systemImage: "antenna.radiowaves.left.and.right")
+            }
+            if let endpoint = measurement.testEndpoint, !endpoint.isEmpty {
+                Label(endpoint, systemImage: "server.rack")
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            if let totalDuration = measurement.totalPhaseDuration {
+                Label(durationText(totalDuration), systemImage: "clock")
+            }
+            Spacer(minLength: 0)
+        }
+        .font(PluginSettingsTheme.Typography.statusBadge)
+        .foregroundStyle(.secondary)
+    }
+
+    private func durationText(_ value: TimeInterval) -> String {
+        localization.format("speed.duration.seconds", defaultValue: "%.1f 秒", value)
+    }
+}
+
+private struct NetworkQualityGraphPanel: View {
+    let progress: IPOverviewNetworkQualityProgress
+    let measurement: IPOverviewNetworkQualityMeasurement?
+    let localization: PluginLocalization
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 18) {
+            NetworkQualityGaugeView(
+                value: gaugeValue,
+                maximumValue: gaugeMaximum,
+                subtitle: gaugeSubtitle,
+                tint: gaugeTint
+            )
+            .frame(width: 148, height: 148)
+
+            VStack(alignment: .leading, spacing: 12) {
+                NetworkQualitySparklineView(
+                    title: localization.string("speed.download", defaultValue: "下载"),
+                    valueText: valueText(measurement?.downloadMbps ?? progress.latestDownloadMbps, unit: "Mbps"),
+                    samples: sparklineSamples(progress.downloadSamples, fallback: measurement?.downloadMbps),
+                    tint: Color(nsColor: .systemTeal)
+                )
+                NetworkQualitySparklineView(
+                    title: localization.string("speed.upload", defaultValue: "上传"),
+                    valueText: valueText(measurement?.uploadMbps ?? progress.latestUploadMbps, unit: "Mbps"),
+                    samples: sparklineSamples(progress.uploadSamples, fallback: measurement?.uploadMbps),
+                    tint: Color(nsColor: .systemCyan)
+                )
+            }
+            .frame(minHeight: 150, alignment: .center)
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 174, alignment: .center)
+        .background(
+            PluginSettingsTheme.Palette.recessedControlBackground.opacity(0.55),
+            in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous)
+        )
+    }
+
+    private var gaugeValue: Double? {
+        if let measurement {
+            return measurement.downloadMbps
+        }
+
+        switch progress.phase {
+        case .measuringUpload:
+            return progress.latestUploadMbps
+        case .measuringDownload:
+            return progress.latestDownloadMbps
+        case .initializing, .measuringLatency:
+            return nil
+        }
+    }
+
+    private var gaugeSubtitle: String {
+        if let value = gaugeValue {
+            return valueText(value, unit: "Mbps")
+        }
+
+        return "-- Mbps"
+    }
+
+    private var gaugeMaximum: Double {
+        let value = gaugeValue ?? 0
+        switch value {
+        case ..<100:
+            return 100
+        case ..<300:
+            return 300
+        case ..<1_000:
+            return 1_000
+        default:
+            return (ceil(value / 1_000) * 1_000)
+        }
+    }
+
+    private var gaugeTint: Color {
+        if measurement != nil {
+            return Color(nsColor: .systemTeal)
+        }
+
+        return progress.phase.tint
+    }
+
+    private func sparklineSamples(_ samples: [Double], fallback: Double?) -> [Double] {
+        if !samples.isEmpty {
+            return samples
+        }
+
+        return fallback.map { [$0] } ?? []
+    }
+
+    private func valueText(_ value: Double?, unit: String) -> String {
+        guard let value else {
+            return "-- \(unit)"
+        }
+
+        let format = value >= 100 ? "%.0f %@" : value >= 10 ? "%.1f %@" : "%.2f %@"
+        return String(format: format, value, unit)
+    }
+}
+
+private struct NetworkQualityGaugeView: View {
+    let value: Double?
+    let maximumValue: Double
+    let subtitle: String
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(PluginSettingsTheme.Palette.cardBackground.opacity(0.66))
+                .frame(width: 116, height: 116)
+            GaugeArc(progress: 1)
+                .stroke(.secondary.opacity(0.15), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+            GaugeArc(progress: progress)
+                .stroke(tint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+            VStack(spacing: 0) {
+                Text(subtitle)
+                    .font(.system(size: 19.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+            }
+        }
+    }
+
+    private var progress: Double {
+        guard let value else {
+            return 0.08
+        }
+
+        return min(max(value / maximumValue, 0.08), 1)
+    }
+
+}
+
+private struct GaugeArc: Shape {
+    let progress: Double
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let size = min(rect.width, rect.height)
+        let radius = size / 2 - 10
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let start = Angle.degrees(135)
+        let end = Angle.degrees(135 + 270 * min(max(progress, 0), 1))
+        path.addArc(center: center, radius: radius, startAngle: start, endAngle: end, clockwise: false)
+        return path
+    }
+}
+
+private struct NetworkQualitySparklineView: View {
+    let title: String
+    let valueText: String
+    let samples: [Double]
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Text(valueText)
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(tint)
+                    .monospacedDigit()
+                Spacer(minLength: 0)
+                if let maximumText {
+                    Text(maximumText)
+                        .font(PluginSettingsTheme.Typography.statusBadge)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            GeometryReader { proxy in
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(PluginSettingsTheme.Palette.cardBackground.opacity(0.42))
+                    NetworkQualityGrid()
+                        .stroke(.secondary.opacity(0.11), lineWidth: 0.7)
+                    if normalizedSamples.isEmpty {
+                        NetworkQualityBaseline()
+                            .stroke(
+                                .secondary.opacity(0.18),
+                                style: StrokeStyle(lineWidth: 1, dash: [4, 4])
+                            )
+                    } else {
+                        NetworkQualityArea(samples: normalizedSamples)
+                            .fill(tint.opacity(0.14))
+                        NetworkQualityLine(samples: normalizedSamples)
+                            .stroke(tint, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                            .shadow(color: tint.opacity(0.20), radius: 2, x: 0, y: 1)
+                    }
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .frame(height: 54)
+        }
+    }
+
+    private var maximumText: String? {
+        guard let maximum = samples.max(), maximum > 0 else {
+            return nil
+        }
+
+        let format = maximum >= 100 ? "%.0f max" : maximum >= 10 ? "%.1f max" : "%.2f max"
+        return String(format: format, maximum)
+    }
+
+    private var normalizedSamples: [Double] {
+        guard !samples.isEmpty else {
+            return []
+        }
+
+        let maximum = max(samples.max() ?? 1, 1)
+        return samples.map { min(max($0 / maximum, 0.02), 1) }
+    }
+}
+
+private extension CGRect {
+    var networkQualityPlotRect: CGRect {
+        insetBy(dx: 6, dy: 5)
+    }
+}
+
+private struct NetworkQualityGrid: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let plotRect = rect.networkQualityPlotRect
+        let columns = 12
+        let rows = 4
+        for column in 0...columns {
+            let x = plotRect.minX + plotRect.width * CGFloat(column) / CGFloat(columns)
+            path.move(to: CGPoint(x: x, y: plotRect.minY))
+            path.addLine(to: CGPoint(x: x, y: plotRect.maxY))
+        }
+        for row in 0...rows {
+            let y = plotRect.minY + plotRect.height * CGFloat(row) / CGFloat(rows)
+            path.move(to: CGPoint(x: plotRect.minX, y: y))
+            path.addLine(to: CGPoint(x: plotRect.maxX, y: y))
+        }
+        return path
+    }
+}
+
+private struct NetworkQualityLine: Shape {
+    let samples: [Double]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard !samples.isEmpty else {
+            return path
+        }
+
+        let plotRect = rect.networkQualityPlotRect
+        let points = samples.enumerated().map { index, value in
+            let x = samples.count == 1
+                ? plotRect.midX
+                : plotRect.minX + plotRect.width * CGFloat(index) / CGFloat(samples.count - 1)
+            let y = plotRect.maxY - plotRect.height * CGFloat(value)
+            return CGPoint(x: x, y: y)
+        }
+
+        path.move(to: points[0])
+        for point in points.dropFirst() {
+            path.addLine(to: point)
+        }
+        return path
+    }
+}
+
+private struct NetworkQualityArea: Shape {
+    let samples: [Double]
+
+    func path(in rect: CGRect) -> Path {
+        guard !samples.isEmpty else {
+            return Path()
+        }
+
+        let plotRect = rect.networkQualityPlotRect
+        var path = NetworkQualityLine(samples: samples).path(in: rect)
+        let trailingX = samples.count == 1 ? plotRect.midX : plotRect.maxX
+        let leadingX = samples.count == 1 ? plotRect.midX : plotRect.minX
+        path.addLine(to: CGPoint(x: trailingX, y: plotRect.maxY))
+        path.addLine(to: CGPoint(x: leadingX, y: plotRect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct NetworkQualityBaseline: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let plotRect = rect.networkQualityPlotRect
+        let y = plotRect.minY + plotRect.height * 0.68
+        path.move(to: CGPoint(x: plotRect.minX, y: y))
+        path.addLine(to: CGPoint(x: plotRect.maxX, y: y))
+        return path
+    }
+}
+
+private struct NetworkQualityResultStrip: View {
+    let measurement: IPOverviewNetworkQualityMeasurement
+    let localization: PluginLocalization
+
+    var body: some View {
+        HStack(spacing: 0) {
+            resultItem(
+                title: localization.string("speed.download", defaultValue: "下载"),
+                value: speedText(measurement.downloadMbps),
+                unit: "Mbps",
+                icon: "arrow.down.circle",
+                tint: Color(nsColor: .systemTeal)
+            )
+            Divider().padding(.vertical, 5)
+            resultItem(
+                title: localization.string("speed.upload", defaultValue: "上传"),
+                value: speedText(measurement.uploadMbps),
+                unit: "Mbps",
+                icon: "arrow.up.circle",
+                tint: Color(nsColor: .systemCyan)
+            )
+            Divider().padding(.vertical, 5)
+            resultItem(
+                title: localization.string("speed.latency", defaultValue: "延迟"),
+                value: integerText(measurement.baseRTTMilliseconds),
+                unit: "ms",
+                icon: "timer",
+                tint: Color(nsColor: .systemOrange)
+            )
+            Divider().padding(.vertical, 5)
+            resultItem(
+                title: localization.string("speed.responsiveness", defaultValue: "响应性"),
+                value: integerText(measurement.uploadResponsivenessRPM ?? measurement.downloadResponsivenessRPM),
+                unit: "RPM",
+                icon: "waveform.path.ecg",
+                tint: Color(nsColor: .systemPurple)
+            )
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func resultItem(
+        title: String,
+        value: String,
+        unit: String,
+        icon: String,
+        tint: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: icon)
+                .font(PluginSettingsTheme.Typography.statusBadge)
+                .foregroundStyle(tint)
+                .lineLimit(1)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text(unit)
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func speedText(_ value: Double?) -> String {
+        guard let value else {
+            return "--"
+        }
+
+        let format = value >= 100 ? "%.0f" : value >= 10 ? "%.1f" : "%.2f"
+        return String(format: format, value)
+    }
+
+    private func integerText(_ value: Double?) -> String {
+        guard let value else {
+            return "--"
+        }
+
+        return String(format: "%.0f", value)
+    }
+}
+
+private extension IPOverviewNetworkQualityPhase {
+    var systemImage: String {
+        switch self {
+        case .initializing:
+            return "hourglass"
+        case .measuringDownload:
+            return "arrow.down.circle"
+        case .measuringUpload:
+            return "arrow.up.circle"
+        case .measuringLatency:
+            return "waveform.path.ecg"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .initializing, .measuringDownload:
+            return Color(nsColor: .systemTeal)
+        case .measuringUpload:
+            return Color(nsColor: .systemCyan)
+        case .measuringLatency:
+            return Color(nsColor: .systemPurple)
+        }
+    }
+}
+
+private extension IPOverviewNetworkQualityGrade {
+    var systemImage: String {
+        switch self {
+        case .excellent:
+            return "checkmark.seal.fill"
+        case .good:
+            return "checkmark.circle.fill"
+        case .fair:
+            return "exclamationmark.circle.fill"
+        case .poor:
+            return "exclamationmark.triangle.fill"
+        case .unknown:
+            return "questionmark.circle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .excellent:
+            return Color(nsColor: .systemGreen)
+        case .good:
+            return Color(nsColor: .systemTeal)
+        case .fair:
+            return Color(nsColor: .systemOrange)
+        case .poor:
+            return Color(nsColor: .systemRed)
+        case .unknown:
+            return Color(nsColor: .secondaryLabelColor)
+        }
+    }
+}
+
+private struct LeakEvidenceListRowView: View {
+    let result: IPOverviewLeakTestResult
+    let showsNAT: Bool
+    let unknownText: String
+    let localization: PluginLocalization
+    let color: Color
+    let primaryText: String
+    let displayIP: String?
+    let onCopyIP: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+                .padding(.top, 5)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(result.name)
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                        .lineLimit(1)
+                    Text(statusText)
+                        .font(PluginSettingsTheme.Typography.statusBadge)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let endpoint = result.endpoint {
+                    HStack(spacing: 6) {
+                        IPOverviewCopyableMonospacedValue(
+                            value: displayIP ?? endpoint.ip,
+                            help: localization.string("copy.leakEndpoint.help", defaultValue: "复制出口 IP"),
+                            onCopy: onCopyIP
+                        )
+                        Text(endpoint.countryDisplayText ?? unknownText)
+                            .font(PluginSettingsTheme.Typography.statusBadge)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Text(detailText(endpoint))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Text(primaryText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func detailText(_ endpoint: IPOverviewLeakEndpoint) -> String {
+        var parts: [String] = []
+        if let organization = endpoint.organization, !organization.isEmpty {
+            parts.append(organization)
+        }
+        if showsNAT, let natType = endpoint.natType, !natType.isEmpty {
+            parts.append(natType)
+        }
+        return parts.isEmpty ? unknownText : parts.joined(separator: " · ")
+    }
+
+    private var statusText: String {
+        switch result.status {
+        case .waiting:
+            return localization.string("status.waiting", defaultValue: "等待检测")
+        case .checking:
+            return localization.string("status.checking", defaultValue: "检测中")
+        case .success:
+            return localization.string("leak.observed", defaultValue: "已获取")
+        case .failure:
+            return localization.string("leak.failed", defaultValue: "获取失败")
+        }
+    }
+}
+
+private struct IPOverviewTagBadge: View {
+    let title: String
+    let style: IPOverviewTagBadgeStyle
+
+    var body: some View {
+        Text(title)
+            .font(PluginSettingsTheme.Typography.statusBadge)
+            .foregroundStyle(style.foregroundColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule().fill(style.backgroundColor)
+            )
+            .overlay(
+                Capsule().stroke(style.strokeColor, lineWidth: 0.5)
+            )
+            .fixedSize()
+    }
+}
+
+private enum IPOverviewTagBadgeStyle {
+    case ipv4
+    case ipv6
+    case domestic
+    case international
+
+    static func addressFamily(_ title: String) -> IPOverviewTagBadgeStyle {
+        title.uppercased() == "IPV6" ? .ipv6 : .ipv4
+    }
+
+    static func egressRoute(_ route: IPOverviewEgressRoute) -> IPOverviewTagBadgeStyle {
+        switch route {
+        case .domestic:
+            return .domestic
+        case .international:
+            return .international
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .ipv4:
+            return Self.adaptiveColor(
+                light: NSColor(calibratedRed: 0.05, green: 0.32, blue: 0.72, alpha: 1),
+                dark: .systemBlue
+            )
+        case .ipv6:
+            return Self.adaptiveColor(
+                light: NSColor(calibratedRed: 0.42, green: 0.20, blue: 0.68, alpha: 1),
+                dark: .systemPurple
+            )
+        case .domestic:
+            return Self.adaptiveColor(
+                light: NSColor(calibratedRed: 0.08, green: 0.48, blue: 0.24, alpha: 1),
+                dark: .systemGreen
+            )
+        case .international:
+            return Self.adaptiveColor(
+                light: NSColor(calibratedRed: 0.64, green: 0.34, blue: 0.00, alpha: 1),
+                dark: .systemOrange
+            )
+        }
+    }
+
+    var foregroundColor: Color {
+        tint
+    }
+
+    var backgroundColor: Color {
+        tint.opacity(0.12)
+    }
+
+    var strokeColor: Color {
+        tint.opacity(0.2)
+    }
+
+    private static func adaptiveColor(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        })
+    }
+}
+
+private struct IPOverviewCopyableMonospacedValue: View {
+    let value: String
+    let help: String
+    let onCopy: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 4) {
+            Text(value)
+                .font(PluginSettingsTheme.Typography.monospacedValue)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .layoutPriority(1)
+
+            IPOverviewInlineCopyButton(help: help, action: onCopy)
+                .opacity(isHovered ? 1 : 0)
+                .allowsHitTesting(isHovered)
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct IPOverviewInlineCopyButton: View {
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "doc.on.doc")
+                .font(.system(size: 8.5, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 12, height: 12)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }

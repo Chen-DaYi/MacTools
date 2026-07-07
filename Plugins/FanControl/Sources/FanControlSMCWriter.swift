@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 // MARK: - FanControlSMCWriter
 
@@ -17,12 +18,18 @@ final class FanControlSMCWriter: FanControlSMCWriting {
 
     private let fileManager: FileManager
     private let resourceBundle: Bundle
+    private let localization: PluginLocalization
 
     private var resolvedHelperPath: String?
 
-    init(resourceBundle: Bundle = .main, fileManager: FileManager = .default) {
+    init(
+        resourceBundle: Bundle = .main,
+        fileManager: FileManager = .default,
+        localization: PluginLocalization? = nil
+    ) {
         self.resourceBundle = resourceBundle
         self.fileManager = fileManager
+        self.localization = localization ?? PluginLocalization(bundle: resourceBundle)
     }
 
     // MARK: - Public API
@@ -31,6 +38,14 @@ final class FanControlSMCWriter: FanControlSMCWriting {
 
     var isHelperAvailable: Bool {
         bundledHelperURL != nil
+    }
+
+    var isInstalledHelperAvailable: Bool {
+        guard let bundledHelperURL else {
+            return false
+        }
+
+        return installedHelperPath(matching: bundledHelperURL) != nil
     }
 
     /// Apply `strategy` to all fans described by `snapshot`.
@@ -55,7 +70,10 @@ final class FanControlSMCWriter: FanControlSMCWriting {
                 if !runHelper(path: resolvedPath, args: ["auto", "\(i)"]) { allOK = false }
             }
             if !allOK {
-                return .writeFailed("部分风扇恢复自动控制失败")
+                return .writeFailed(localization.string(
+                    "writer.error.restoreAutoPartial",
+                    defaultValue: "部分风扇恢复自动控制失败"
+                ))
             }
 
         case .fullSpeed:
@@ -68,7 +86,10 @@ final class FanControlSMCWriter: FanControlSMCWriting {
                 if !runHelper(path: resolvedPath, args: ["set", "\(i)", "\(safe)"]) { allOK = false }
             }
             if !allOK {
-                return .writeFailed("部分风扇设置全速失败")
+                return .writeFailed(localization.string(
+                    "writer.error.fullSpeedPartial",
+                    defaultValue: "部分风扇设置全速失败"
+                ))
             }
 
         case .fixed(let rpm):
@@ -85,7 +106,10 @@ final class FanControlSMCWriter: FanControlSMCWriting {
                 if !runHelper(path: resolvedPath, args: ["set", "\(i)", "\(clamped)"]) { allOK = false }
             }
             if !allOK {
-                return .writeFailed("部分风扇设置目标转速失败")
+                return .writeFailed(localization.string(
+                    "writer.error.fixedRPMPartial",
+                    defaultValue: "部分风扇设置目标转速失败"
+                ))
             }
         }
 
@@ -137,7 +161,10 @@ final class FanControlSMCWriter: FanControlSMCWriting {
         }
 
         guard let installedHelperPath = installedHelperPath(matching: bundledHelperURL) else {
-            return .failure(.helperInstallFailed("安装后仍无法找到组件"))
+            return .failure(.helperInstallFailed(localization.string(
+                "writer.error.helperMissingAfterInstall",
+                defaultValue: "安装后仍无法找到组件"
+            )))
         }
 
         return .success(installedHelperPath)
@@ -213,7 +240,10 @@ final class FanControlSMCWriter: FanControlSMCWriting {
         let script = "do shell script \"\(appleScriptEscaped(command))\" with administrator privileges"
         var appleScriptError: NSDictionary?
         guard let scriptObject = NSAppleScript(source: script) else {
-            return .helperInstallFailed("无法创建授权脚本")
+            return .helperInstallFailed(localization.string(
+                "writer.error.authorizationScriptFailed",
+                defaultValue: "无法创建授权脚本"
+            ))
         }
 
         _ = scriptObject.executeAndReturnError(&appleScriptError)

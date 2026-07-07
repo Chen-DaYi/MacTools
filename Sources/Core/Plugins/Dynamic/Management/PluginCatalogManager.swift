@@ -22,11 +22,11 @@ struct PluginCatalogStatus: Equatable {
     var title: String {
         switch source {
         case .production:
-            return "插件列表"
+            return AppL10n.plugins("plugin.catalog.title.production", defaultValue: "插件列表")
         case .localDevelopment:
-            return "本地开发列表"
+            return AppL10n.plugins("plugin.catalog.title.localDevelopment", defaultValue: "本地开发列表")
         case .unavailable:
-            return "插件列表未配置"
+            return AppL10n.plugins("plugin.catalog.title.unavailable", defaultValue: "插件列表未配置")
         }
     }
 
@@ -36,14 +36,14 @@ struct PluginCatalogStatus: Equatable {
         }
 
         if isRefreshing {
-            return "正在刷新插件列表..."
+            return AppL10n.plugins("plugin.catalog.detail.refreshing", defaultValue: "正在刷新插件列表...")
         }
 
         switch source {
         case let .production(url), let .localDevelopment(url):
             return url.absoluteString
         case .unavailable:
-            return "已安装插件仍可继续管理。"
+            return AppL10n.plugins("plugin.catalog.detail.unavailable", defaultValue: "已安装插件仍可继续管理。")
         }
     }
 }
@@ -53,7 +53,25 @@ struct PluginCatalogBulkUpdateError: LocalizedError {
 
     var errorDescription: String? {
         let ids = failures.map(\.pluginID).joined(separator: "、")
-        return "部分插件更新失败：\(ids)"
+        return AppL10n.pluginsFormat("plugin.error.catalog.bulkUpdateFailedFormat", defaultValue: "部分插件更新失败：%@", ids)
+    }
+}
+
+struct PluginCatalogUpdatePlan: Equatable {
+    let updateableInstalledPluginIDs: [String]
+
+    var isEmpty: Bool {
+        updateableInstalledPluginIDs.isEmpty
+    }
+}
+
+struct PluginCatalogUpdateProgress: Equatable {
+    let completedCount: Int
+    let totalCount: Int
+
+    init(completedCount: Int, totalCount: Int) {
+        self.totalCount = max(0, totalCount)
+        self.completedCount = min(max(0, completedCount), self.totalCount)
     }
 }
 
@@ -153,14 +171,53 @@ final class PluginCatalogManager {
         try dynamicPluginManager.updatePluginPackage(from: packageURL, catalogEntry: entry)
     }
 
-    func updateAvailablePlugins() async throws {
+    func updateAvailablePlugins(
+        progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
+    ) async throws {
         let entries = try availableUpdateEntries()
         guard !entries.isEmpty else {
             return
         }
 
+        try await updatePlugins(entries: entries, reloadAfterUpdate: true, progress: progress)
+    }
+
+    func automaticUpdatePlanForInstalledPlugins() -> PluginCatalogUpdatePlan {
+        let entries = updateEntriesForInstalledPlugins()
+        return PluginCatalogUpdatePlan(updateableInstalledPluginIDs: entries.map(\.id))
+    }
+
+    func updateInstalledPluginsToLatestBeforeLoading(
+        progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
+    ) async throws {
+        let entries = updateEntriesForInstalledPlugins()
+        guard !entries.isEmpty else {
+            return
+        }
+
+        try await updatePlugins(entries: entries, reloadAfterUpdate: false, progress: progress)
+    }
+
+    private func updatePlugins(
+        entries: [PluginCatalogEntry],
+        reloadAfterUpdate: Bool,
+        progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
+    ) async throws {
         var resolvedUpdates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)] = []
         var failures: [PluginPackageUpdateFailure] = []
+        let totalCount = entries.count
+        var completedCount = 0
+
+        func reportProgress() {
+            progress?(
+                PluginCatalogUpdateProgress(
+                    completedCount: completedCount,
+                    totalCount: totalCount
+                )
+            )
+        }
+
+        reportProgress()
 
         for entry in entries {
             do {
@@ -168,10 +225,21 @@ final class PluginCatalogManager {
                 resolvedUpdates.append((sourceURL: packageURL, catalogEntry: entry))
             } catch {
                 failures.append(PluginPackageUpdateFailure(pluginID: entry.id, error: error))
+                completedCount += 1
+                reportProgress()
             }
         }
 
-        failures.append(contentsOf: dynamicPluginManager.updatePluginPackages(resolvedUpdates))
+        failures.append(
+            contentsOf: dynamicPluginManager.updatePluginPackages(
+                resolvedUpdates,
+                reloadAfterUpdate: reloadAfterUpdate,
+                onPackageProcessed: {
+                    completedCount += 1
+                    reportProgress()
+                }
+            )
+        )
 
         guard failures.isEmpty else {
             throw PluginCatalogBulkUpdateError(failures: failures)
@@ -211,6 +279,24 @@ final class PluginCatalogManager {
         }
     }
 
+    private func updateEntriesForInstalledPlugins() -> [PluginCatalogEntry] {
+        let installedVersionsByID = dynamicPluginManager.installedPackageVersionsByID()
+
+        return (snapshot?.catalog.plugins ?? []).filter { entry in
+            guard let installedVersion = installedVersionsByID[entry.id] else {
+                return false
+            }
+
+            if snapshot?.catalog.revoked.contains(where: {
+                $0.matches(pluginID: entry.id, version: entry.version)
+            }) == true {
+                return false
+            }
+
+            return PluginVersionComparator.isVersion(entry.version, newerThan: installedVersion)
+        }
+    }
+
     private func statusSource(for snapshot: PluginCatalogSnapshot) -> PluginCatalogStatus.Source {
         switch snapshot.sourceKind {
         case .production:
@@ -227,7 +313,7 @@ enum PluginCatalogManagerError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .catalogEntryNotFound(id):
-            return "插件列表中未找到插件：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.entryNotFoundFormat", defaultValue: "插件列表中未找到插件：%@", id)
         }
     }
 }

@@ -2,7 +2,53 @@
   "id": "battery-charge-limit",
   "displayName": "电池充电上限",
   "summary": "设置电池充电上限，达到上限后停止充电；不自动恢复，由用户决定何时继续充电",
-  "version": "1.0.0",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "حد شحن البطارية",
+      "summary": "تعيين حد شحن البطارية وإيقاف الشحن عند الوصول إليه؛ يتم استئناف الشحن فقط عندما تختار ذلك."
+    },
+    "de": {
+      "displayName": "Batterieladelimit",
+      "summary": "Legen Sie ein Batterieladelimit fest und stoppen Sie den Ladevorgang, wenn es erreicht ist. Der Ladevorgang wird erst fortgesetzt, wenn Sie dies wünschen."
+    },
+    "en": {
+      "displayName": "Battery Charge Limit",
+      "summary": "Set a battery charge limit and stop charging when it is reached; charging resumes only when you choose."
+    },
+    "es": {
+      "displayName": "Límite de carga de batería",
+      "summary": "Establezca un límite de carga de la batería y detenga la carga cuando lo alcance; la carga se reanuda solo cuando usted elige."
+    },
+    "fr": {
+      "displayName": "Limite de charge de la batterie",
+      "summary": "Fixez une limite de charge de la batterie et arrêtez la charge lorsqu'elle est atteinte ; la charge ne reprend que lorsque vous le souhaitez."
+    },
+    "ja": {
+      "displayName": "バッテリー充電上限",
+      "summary": "バッテリー充電制限を設定し、その制限に達したら充電を停止します。選択した場合にのみ充電が再開されます。"
+    },
+    "ko": {
+      "displayName": "배터리 충전 한도",
+      "summary": "배터리 충전 한도를 설정하고 한도에 도달하면 충전을 중지합니다. 선택한 경우에만 충전이 재개됩니다."
+    },
+    "pt": {
+      "displayName": "Limite de carga da bateria",
+      "summary": "Defina um limite de carga da bateria e pare de carregar quando ele for atingido; o carregamento é retomado somente quando você escolher."
+    },
+    "ru": {
+      "displayName": "Лимит заряда батареи",
+      "summary": "Установите лимит заряда аккумулятора и прекращайте зарядку при его достижении; зарядка возобновляется только тогда, когда вы выберете."
+    },
+    "zh-Hans": {
+      "displayName": "电池充电上限",
+      "summary": "设置电池充电上限，达到上限后停止充电；不自动恢复，由用户决定何时继续充电"
+    },
+    "zh-Hant": {
+      "displayName": "電池充電上限",
+      "summary": "設定電池充電上限，達到上限後停止充電；不自動恢復，由用戶決定何時繼續充電"
+    }
+  },
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "BatteryChargeLimit.bundle",

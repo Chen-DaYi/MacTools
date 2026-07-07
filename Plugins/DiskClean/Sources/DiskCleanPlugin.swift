@@ -4,15 +4,22 @@ import MacToolsPluginKit
 
 public final class DiskCleanPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        DiskCleanPluginProvider()
+        DiskCleanPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct DiskCleanPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        let controller = DiskCleanController()
-        return [DiskCleanPlugin(controller: controller)]
+        let localization = PluginLocalization(bundle: context.resourceBundle)
+        let controller = DiskCleanController(
+            scanner: DiskCleanScanner(localization: localization),
+            executor: DiskCleanExecutor(),
+            localization: localization
+        )
+        return [DiskCleanPlugin(controller: controller, localization: localization)]
     }
 }
 
@@ -24,14 +31,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel {
         static let openDetails = "disk-clean-open-details"
     }
 
-    let metadata = PluginMetadata(
-        id: "disk-clean",
-        title: "磁盘清理",
-        iconName: "internaldrive",
-        iconTint: Color(nsColor: .systemGreen),
-        order: 90,
-        defaultDescription: "缓存、开发者缓存和浏览器缓存清理"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -43,10 +43,26 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let controller: DiskCleanControlling
+    private let localization: PluginLocalization
     private var isExpanded = false
 
-    init(controller: DiskCleanControlling = DiskCleanController()) {
+    init(
+        controller: DiskCleanControlling = DiskCleanController(),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.controller = controller
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "disk-clean",
+            title: localization.string("metadata.title", defaultValue: "磁盘清理"),
+            iconName: "internaldrive",
+            iconTint: Color(nsColor: .systemGreen),
+            order: 90,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "缓存、开发者缓存和浏览器缓存清理"
+            )
+        )
         self.controller.onStateChange = { [weak self] in
             self?.onStateChange?()
         }
@@ -74,9 +90,11 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel {
             return nil
         }
 
+        let localization = localization
         return PluginConfiguration(description: metadata.defaultDescription) { _ in
             DiskCleanDetailView(
                 controller: controller,
+                localization: localization,
                 showsHeader: false,
                 contentPadding: 0,
                 minimumContentHeight: 0
@@ -139,7 +157,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel {
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "扫描",
+            actionTitle: localization.string("panel.action.scan", defaultValue: "扫描"),
             actionIconSystemName: "magnifyingglass",
             isEnabled: snapshot.canScan
         )
@@ -154,7 +172,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel {
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "清理",
+            actionTitle: localization.string("panel.action.clean", defaultValue: "清理"),
             actionIconSystemName: "trash",
             showsLeadingDivider: true,
             isEnabled: snapshot.canClean
@@ -170,7 +188,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel {
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "打开详情",
+            actionTitle: localization.string("panel.action.openDetails", defaultValue: "打开详情"),
             actionIconSystemName: "arrow.up.right.square",
             actionBehavior: .dismissBeforeHandling,
             isEnabled: true
@@ -186,15 +204,24 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel {
         if snapshot.phase == .scanned,
            !snapshot.isResultStale,
            let result = snapshot.scanResult {
-            return "\(result.cleanableCandidates.count) 项，\(byteText(result.cleanableSizeBytes))"
+            return localization.format(
+                "panel.subtitle.scanned",
+                defaultValue: "%d 项，%@",
+                result.cleanableCandidates.count,
+                byteText(result.cleanableSizeBytes)
+            )
         }
 
         if snapshot.phase == .completed,
            let result = snapshot.executionResult {
-            return "已清理 \(byteText(result.reclaimedBytes))"
+            return localization.format(
+                "panel.subtitle.completed",
+                defaultValue: "已清理 %@",
+                byteText(result.reclaimedBytes)
+            )
         }
 
-        return snapshot.subtitle
+        return snapshot.subtitle(localization: localization)
     }
 
     private var cleanableCandidateIDs: Set<DiskCleanCandidate.ID> {

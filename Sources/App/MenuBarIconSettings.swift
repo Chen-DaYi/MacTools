@@ -14,9 +14,9 @@ enum MenuBarIconAppearance: String, CaseIterable, Identifiable, Codable {
     var title: String {
         switch self {
         case .light:
-            return "浅色模式"
+            return AppL10n.settings("menuBarIcon.appearance.light", defaultValue: "浅色模式")
         case .dark:
-            return "深色模式"
+            return AppL10n.settings("menuBarIcon.appearance.dark", defaultValue: "深色模式")
         }
     }
 }
@@ -30,9 +30,9 @@ enum MenuBarIconRenderMode: String, CaseIterable, Identifiable, Codable {
     var title: String {
         switch self {
         case .original:
-            return "保留原图"
+            return AppL10n.settings("menuBarIcon.renderMode.original", defaultValue: "保留原图")
         case .template:
-            return "模板图标"
+            return AppL10n.settings("menuBarIcon.renderMode.template", defaultValue: "模板图标")
         }
     }
 }
@@ -54,9 +54,9 @@ enum MenuBarIconAnimationSpeedMode: String, CaseIterable, Identifiable, Codable 
     var title: String {
         switch self {
         case .manual:
-            return "手动速度"
+            return AppL10n.settings("menuBarIcon.animationSpeed.manual", defaultValue: "手动速度")
         case .adaptiveSystemLoad:
-            return "随系统负载"
+            return AppL10n.settings("menuBarIcon.animationSpeed.adaptiveSystemLoad", defaultValue: "随系统负载")
         }
     }
 }
@@ -180,11 +180,11 @@ struct MenuBarIconContrastReport: Equatable {
 
         switch (lightIsLow, darkIsLow) {
         case (true, true):
-            return "当前图标在深浅色菜单栏里都可能不够清晰。"
+            return AppL10n.settings("menuBarIcon.contrast.warningBoth", defaultValue: "当前图标在深浅色菜单栏里都可能不够清晰。")
         case (true, false):
-            return "当前图标在浅色菜单栏里对比度可能偏低。"
+            return AppL10n.settings("menuBarIcon.contrast.warningLight", defaultValue: "当前图标在浅色菜单栏里对比度可能偏低。")
         case (false, true):
-            return "当前图标在深色菜单栏里对比度可能偏低。"
+            return AppL10n.settings("menuBarIcon.contrast.warningDark", defaultValue: "当前图标在深色菜单栏里对比度可能偏低。")
         case (false, false):
             return nil
         }
@@ -503,15 +503,15 @@ enum MenuBarIconImportError: Error {
     var userMessage: String {
         switch self {
         case .animationTooLarge:
-            return "动画文件过大或分辨率过高，请选择 5 MB 以内、画面更简单的文件。"
+            return AppL10n.settings("menuBarIcon.importError.animationTooLarge", defaultValue: "动画文件过大或分辨率过高，请选择 5 MB 以内、画面更简单的文件。")
         case .animationTooComplex:
-            return "动画帧数过多，请选择更简单的短动画。"
+            return AppL10n.settings("menuBarIcon.importError.animationTooComplex", defaultValue: "动画帧数过多，请选择更简单的短动画。")
         case .cannotDecodeAnimation:
-            return "无法解析这个动画文件。"
+            return AppL10n.settings("menuBarIcon.importError.cannotDecodeAnimation", defaultValue: "无法解析这个动画文件。")
         case .notAnimated:
-            return "所选文件不是可循环播放的动画。"
+            return AppL10n.settings("menuBarIcon.importError.notAnimated", defaultValue: "所选文件不是可循环播放的动画。")
         case .unsupportedAnimation:
-            return "暂不支持这个动画格式，请选择 GIF 或 MP4。"
+            return AppL10n.settings("menuBarIcon.importError.unsupportedAnimation", defaultValue: "暂不支持这个动画格式，请选择 GIF 或 MP4。")
         }
     }
 }
@@ -670,7 +670,7 @@ final class MenuBarIconSettings: ObservableObject {
         clearError()
 
         guard let sourceImage = NSImage(contentsOf: sourceURL) else {
-            lastErrorMessage = "无法读取所选图片。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.error.readSelectedImage", defaultValue: "无法读取所选图片。")
             return
         }
         let processedImage = MenuBarIconBackgroundRemover.removingBackground(
@@ -683,7 +683,7 @@ final class MenuBarIconSettings: ObservableObject {
         let recentURL = recentsDirectory.appendingPathComponent(recentFileName)
 
         guard saveOriginalImage(processedImage, to: recentURL) else {
-            lastErrorMessage = "无法保存所选图片。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.error.saveSelectedImage", defaultValue: "无法保存所选图片。")
             return
         }
 
@@ -691,7 +691,9 @@ final class MenuBarIconSettings: ObservableObject {
             id: UUID(),
             fileName: recentFileName,
             frameFileNames: [recentFileName],
-            displayName: displayName.isEmpty ? "自定义图标" : displayName,
+            displayName: displayName.isEmpty
+                ? AppL10n.settings("menuBarIcon.recent.customIcon", defaultValue: "自定义图标")
+                : displayName,
             addedAt: Date(),
             mediaKind: .image,
             frameDuration: 1.0 / MenuBarIconProcessing.animationFramesPerSecond
@@ -720,7 +722,7 @@ final class MenuBarIconSettings: ObservableObject {
             lastErrorMessage = error.userMessage
             return
         } catch {
-            lastErrorMessage = "无法解析这个动画文件。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.importError.cannotDecodeAnimation", defaultValue: "无法解析这个动画文件。")
             return
         }
 
@@ -737,7 +739,7 @@ final class MenuBarIconSettings: ObservableObject {
         }
 
         guard saveAnimationFrames(processedFrames, fileNames: fileNames) else {
-            lastErrorMessage = "无法保存动画图标。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.error.saveAnimationIcon", defaultValue: "无法保存动画图标。")
             return
         }
 
@@ -746,7 +748,9 @@ final class MenuBarIconSettings: ObservableObject {
             id: UUID(),
             fileName: fileNames[0],
             frameFileNames: fileNames,
-            displayName: displayName.isEmpty ? "动画图标" : displayName,
+            displayName: displayName.isEmpty
+                ? AppL10n.settings("menuBarIcon.recent.animationIcon", defaultValue: "动画图标")
+                : displayName,
             addedAt: Date(),
             mediaKind: .animation,
             frameDuration: 1.0 / MenuBarIconProcessing.animationFramesPerSecond
@@ -765,7 +769,7 @@ final class MenuBarIconSettings: ObservableObject {
         clearError()
 
         guard remoteAssetStore.hasFrames(for: selection) else {
-            lastErrorMessage = "在线图标文件尚未下载完成。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.error.remoteAssetNotReady", defaultValue: "在线图标文件尚未下载完成。")
             return
         }
 
@@ -789,7 +793,7 @@ final class MenuBarIconSettings: ObservableObject {
 
         if let remoteSelection = remoteAssetSelection(for: item) {
             guard remoteAssetStore.hasFrames(for: remoteSelection) else {
-                lastErrorMessage = "最近使用的在线图标文件已不存在。"
+                lastErrorMessage = AppL10n.settings("menuBarIcon.error.recentRemoteMissing", defaultValue: "最近使用的在线图标文件已不存在。")
                 pruneMissingRecentItems()
                 return
             }
@@ -808,7 +812,7 @@ final class MenuBarIconSettings: ObservableObject {
 
         let requiredFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
         guard requiredFileNames.allSatisfy({ fileManager.fileExists(atPath: recentsDirectory.appendingPathComponent($0).path) }) else {
-            lastErrorMessage = "最近使用的图标文件已不存在。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.error.recentIconMissing", defaultValue: "最近使用的图标文件已不存在。")
             pruneMissingRecentItems()
             return
         }
@@ -1161,7 +1165,7 @@ final class MenuBarIconSettings: ObservableObject {
             try data.write(to: destinationURL, options: .atomic)
             return true
         } catch {
-            lastErrorMessage = "无法保存图标设置。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.error.saveSettings", defaultValue: "无法保存图标设置。")
             return false
         }
     }
@@ -1184,7 +1188,7 @@ final class MenuBarIconSettings: ObservableObject {
 
             return true
         } catch {
-            lastErrorMessage = "无法保存动画图标。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.error.saveAnimationIcon", defaultValue: "无法保存动画图标。")
             return false
         }
     }

@@ -5,33 +5,24 @@ import MacToolsPluginKit
 
 public final class DisplaySleepPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        DisplaySleepPluginProvider()
+        DisplaySleepPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct DisplaySleepPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [DisplaySleepPlugin()]
+        [DisplaySleepPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "display-sleep",
-        title: "显示器休眠",
-        iconName: "display",
-        iconTint: Color(nsColor: .systemIndigo),
-        order: 97,
-        defaultDescription: "立即让显示器休眠"
-    )
+    let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "休眠"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -41,6 +32,22 @@ final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel {
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "DisplaySleepPlugin"
     )
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.metadata = PluginMetadata(
+            id: "display-sleep",
+            title: localization.string("metadata.title", defaultValue: "显示器休眠"),
+            iconName: "display",
+            iconTint: Color(nsColor: .systemIndigo),
+            order: 97,
+            defaultDescription: localization.string("metadata.description", defaultValue: "立即让显示器休眠")
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.button.sleep", defaultValue: "休眠")
+        )
+    }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(

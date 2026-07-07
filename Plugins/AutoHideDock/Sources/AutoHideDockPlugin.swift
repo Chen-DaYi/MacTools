@@ -9,6 +9,12 @@ protocol DockCommandRunning {
 }
 
 struct ProcessDockCommandRunner: DockCommandRunning {
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
+
     func setDockAutohide(_ isEnabled: Bool) throws {
         let script = """
         tell application "System Events"
@@ -27,7 +33,14 @@ struct ProcessDockCommandRunner: DockCommandRunning {
             throw NSError(
                 domain: "AutoHideDockPlugin",
                 code: (error[NSAppleScript.errorNumber] as? Int) ?? 1,
-                userInfo: [NSLocalizedDescriptionKey: message?.isEmpty == false ? message! : "切换 Dock 自动隐藏失败"]
+                userInfo: [
+                    NSLocalizedDescriptionKey: message?.isEmpty == false
+                        ? message!
+                        : localization.string(
+                            "error.toggleFailed",
+                            defaultValue: "切换 Dock 自动隐藏失败"
+                        )
+                ]
             )
         }
     }
@@ -35,27 +48,22 @@ struct ProcessDockCommandRunner: DockCommandRunning {
 
 public final class AutoHideDockPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        AutoHideDockPluginProvider()
+        AutoHideDockPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct AutoHideDockPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [AutoHideDockPlugin()]
+        [AutoHideDockPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "auto-hide-dock",
-        title: "自动隐藏程序坞",
-        iconName: "rectangle.bottomthird.inset.filled",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 45,
-        defaultDescription: "自动隐藏程序坞，提供更干净的桌面环境"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -69,22 +77,38 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "AutoHideDockPlugin")
     private let commandRunner: any DockCommandRunning
     private let stateReader: () -> Bool
+    private let localization: PluginLocalization
 
     private var isDockHidden: Bool
     private var lastErrorMessage: String?
 
     init(
-        commandRunner: any DockCommandRunning = ProcessDockCommandRunner(),
-        stateReader: @escaping () -> Bool = { AutoHideDockPlugin.readDockAutohideState() }
+        commandRunner: (any DockCommandRunning)? = nil,
+        stateReader: @escaping () -> Bool = { AutoHideDockPlugin.readDockAutohideState() },
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        self.commandRunner = commandRunner
+        self.localization = localization
+        self.commandRunner = commandRunner ?? ProcessDockCommandRunner(localization: localization)
         self.stateReader = stateReader
+        self.metadata = PluginMetadata(
+            id: "auto-hide-dock",
+            title: localization.string("metadata.title", defaultValue: "自动隐藏程序坞"),
+            iconName: "rectangle.bottomthird.inset.filled",
+            iconTint: Color(nsColor: .systemBlue),
+            order: 45,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "自动隐藏程序坞，提供更干净的桌面环境"
+            )
+        )
         self.isDockHidden = stateReader()
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: isDockHidden ? "已开启" : "已关闭",
+            subtitle: isDockHidden
+                ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
             isOn: isDockHidden,
             isExpanded: false,
             isEnabled: true,

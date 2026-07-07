@@ -29,17 +29,36 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
         case idleLockPreventionFailed
 
         var errorDescription: String? {
+            localizedDescription(localization: PluginLocalization(bundle: .main))
+        }
+
+        func localizedDescription(localization: PluginLocalization) -> String {
             switch self {
             case .eventTapUnavailable:
-                return "无法创建输入拦截器，请确认已授予辅助功能权限。"
+                return localization.string(
+                    "session.error.eventTapUnavailable",
+                    defaultValue: "无法创建输入拦截器，请确认已授予辅助功能权限。"
+                )
             case .runLoopSourceUnavailable:
-                return "无法初始化输入拦截运行循环。"
+                return localization.string(
+                    "session.error.runLoopSourceUnavailable",
+                    defaultValue: "无法初始化输入拦截运行循环。"
+                )
             case .missingScreens:
-                return "未检测到可用屏幕，无法进入清洁模式。"
+                return localization.string(
+                    "session.error.missingScreens",
+                    defaultValue: "未检测到可用屏幕，无法进入清洁模式。"
+                )
             case .overlayWindowCreationFailed:
-                return "无法创建屏幕覆盖窗口，已取消进入清洁模式。"
+                return localization.string(
+                    "session.error.overlayWindowCreationFailed",
+                    defaultValue: "无法创建屏幕覆盖窗口，已取消进入清洁模式。"
+                )
             case .idleLockPreventionFailed:
-                return "无法启用防空闲锁屏保护，已取消进入清洁模式。"
+                return localization.string(
+                    "session.error.idleLockPreventionFailed",
+                    defaultValue: "无法启用防空闲锁屏保护，已取消进入清洁模式。"
+                )
             }
         }
     }
@@ -224,6 +243,7 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
     let exitBinding: ShortcutBinding
 
     private let onEnd: (EndReason) -> Void
+    private let localization: PluginLocalization
     private let logger = PhysicalCleanModeLog.session
     private let sessionIdentifier = String(UUID().uuidString.prefix(8))
     private let overlayHintModel = OverlayHintModel()
@@ -242,20 +262,30 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
     private var tapDisableTimestamps: [Date] = []
 
     private var keyboardExitHintText: String {
-        "按 \(Self.displayTokens(for: exitBinding).joined(separator: " + ")) 退出"
+        localization.format(
+            "overlay.exit.keyboardFormat",
+            defaultValue: "按 %@ 退出",
+            Self.displayTokens(for: exitBinding).joined(separator: " + ")
+        )
     }
 
     private var rightMouseExitHintText: String {
         let remainingSeconds = rightMouseHoldRemainingSeconds ?? Self.rightMouseHoldDurationSeconds
-        return "或长按鼠标右键 \(remainingSeconds)s 退出"
+        return localization.format(
+            "overlay.exit.rightMouseFormat",
+            defaultValue: "或长按鼠标右键 %ds 退出",
+            remainingSeconds
+        )
     }
 
     init(
         exitBinding: ShortcutBinding,
-        onEnd: @escaping (EndReason) -> Void
+        onEnd: @escaping (EndReason) -> Void,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.exitBinding = exitBinding
         self.onEnd = onEnd
+        self.localization = localization
         super.init()
         overlayHintModel.keyboardExitHintText = keyboardExitHintText
         overlayHintModel.rightMouseExitHintText = rightMouseExitHintText
@@ -342,7 +372,7 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
         } catch {
             logger.error("[\(self.sessionIdentifier, privacy: .public)] startup failed: \(error.localizedDescription, privacy: .public)")
             tearDown(shouldNotify: false, endReason: .userRequested)
-            throw error
+            throw localizedStartupError(from: error)
         }
     }
 
@@ -361,7 +391,10 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
         }
 
         logger.error("[\(self.sessionIdentifier, privacy: .public)] overlay window will close unexpectedly")
-        requestEmergencyExit(message: "清洁模式覆盖窗口意外关闭，已恢复系统输入。")
+        requestEmergencyExit(message: localization.string(
+            "session.error.overlayWindowUnexpectedlyClosed",
+            defaultValue: "清洁模式覆盖窗口意外关闭，已恢复系统输入。"
+        ))
     }
 
     private func installObservers() {
@@ -372,14 +405,14 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
             NotificationObservation(
                 center: appCenter,
                 token: appCenter.addObserver(
-                forName: NSApplication.didChangeScreenParametersNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.handleScreenParametersChanged()
+                    forName: NSApplication.didChangeScreenParametersNotification,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor in
+                        self?.handleScreenParametersChanged()
+                    }
                 }
-            }
             )
         )
 
@@ -387,13 +420,13 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
             NotificationObservation(
                 center: appCenter,
                 token: appCenter.addObserver(
-                forName: NSApplication.willTerminateNotification,
-                object: NSApp,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.requestStop(reason: .userRequested)
-                }
+                    forName: NSApplication.willTerminateNotification,
+                    object: NSApp,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor in
+                        self?.requestStop(reason: .userRequested)
+                    }
                 }
             )
         )
@@ -407,8 +440,12 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
                     queue: .main
                 ) { [weak self] _ in
                     Task { @MainActor in
-                        self?.handleWorkspaceInterruption(
-                            message: "当前会话已锁定或切出，已自动退出清洁模式。"
+                        guard let self else { return }
+                        self.handleWorkspaceInterruption(
+                            message: self.localization.string(
+                                "session.error.workspaceInactiveEmergencyExit",
+                                defaultValue: "当前会话已锁定或切出，已自动退出清洁模式。"
+                            )
                         )
                     }
                 }
@@ -424,8 +461,12 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
                     queue: .main
                 ) { [weak self] _ in
                     Task { @MainActor in
-                        self?.handleWorkspaceInterruption(
-                            message: "屏幕已进入睡眠，已自动退出清洁模式。"
+                        guard let self else { return }
+                        self.handleWorkspaceInterruption(
+                            message: self.localization.string(
+                                "session.error.screensDidSleepEmergencyExit",
+                                defaultValue: "屏幕已进入睡眠，已自动退出清洁模式。"
+                            )
                         )
                     }
                 }
@@ -441,8 +482,12 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
                     queue: .main
                 ) { [weak self] _ in
                     Task { @MainActor in
-                        self?.handleWorkspaceInterruption(
-                            message: "系统即将进入睡眠，已自动退出清洁模式。"
+                        guard let self else { return }
+                        self.handleWorkspaceInterruption(
+                            message: self.localization.string(
+                                "session.error.systemWillSleepEmergencyExit",
+                                defaultValue: "系统即将进入睡眠，已自动退出清洁模式。"
+                            )
                         )
                     }
                 }
@@ -470,7 +515,7 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
         do {
             try rebuildOverlayWindows()
         } catch {
-            requestEmergencyExit(message: error.localizedDescription)
+            requestEmergencyExit(message: localizedDescription(from: error))
         }
     }
 
@@ -739,10 +784,16 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
             requestStop(reason: .userRequested)
         case .disabledByTimeout:
             logger.error("[\(self.sessionIdentifier, privacy: .public)] event tap could not recover from timeout interruption")
-            requestEmergencyExit(message: "输入拦截重启失败，已自动退出清洁模式。")
+            requestEmergencyExit(message: localization.string(
+                "session.error.eventTapTimeoutEmergencyExit",
+                defaultValue: "输入拦截重启失败，已自动退出清洁模式。"
+            ))
         case .disabledByUserInput:
             logger.error("[\(self.sessionIdentifier, privacy: .public)] event tap could not recover from user-input interruption")
-            requestEmergencyExit(message: "输入拦截被系统停用且无法恢复，已自动退出清洁模式。")
+            requestEmergencyExit(message: localization.string(
+                "session.error.eventTapUserInputEmergencyExit",
+                defaultValue: "输入拦截被系统停用且无法恢复，已自动退出清洁模式。"
+            ))
         }
     }
 
@@ -763,8 +814,33 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
         tapDisableTimestamps.removeAll { now.timeIntervalSince($0) > 2 }
 
         if tapDisableTimestamps.count >= 3 {
-            requestEmergencyExit(message: "输入拦截被系统连续停用，已自动退出清洁模式。")
+            requestEmergencyExit(message: localization.string(
+                "session.error.eventTapRepeatedlyDisabledEmergencyExit",
+                defaultValue: "输入拦截被系统连续停用，已自动退出清洁模式。"
+            ))
         }
+    }
+
+    private func localizedStartupError(from error: Error) -> Error {
+        guard let sessionError = error as? SessionError else {
+            return error
+        }
+
+        return NSError(
+            domain: "PhysicalCleanModeSession",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey: sessionError.localizedDescription(localization: localization)
+            ]
+        )
+    }
+
+    private func localizedDescription(from error: Error) -> String {
+        guard let sessionError = error as? SessionError else {
+            return error.localizedDescription
+        }
+
+        return sessionError.localizedDescription(localization: localization)
     }
 
     private nonisolated static let interceptedEventMask: CGEventMask = {

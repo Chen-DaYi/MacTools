@@ -92,7 +92,7 @@ final class IntelDDCTransport: DDCBrightnessTransport, @unchecked Sendable {
             }
 
             guard didWrite else {
-                throw DisplayBrightnessControllerError.failed(message: "\(display.name) DDC 写入失败")
+                throw DisplayBrightnessControllerError.ddcWriteFailed(displayName: display.name)
             }
         }
     }
@@ -364,7 +364,7 @@ final class Arm64DDCTransport: DDCBrightnessTransport, @unchecked Sendable {
         }
 
         guard didWrite else {
-            throw DisplayBrightnessControllerError.failed(message: "\(display.name) DDC 写入失败")
+            throw DisplayBrightnessControllerError.ddcWriteFailed(displayName: display.name)
         }
 
         guard !reply.isEmpty else {

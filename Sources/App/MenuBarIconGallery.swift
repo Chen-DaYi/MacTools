@@ -103,7 +103,7 @@ enum MenuBarIconGallerySource: Equatable {
 }
 
 struct MenuBarIconGalleryProviderConfiguration {
-    static let productionCatalogURL = URL(string: "https://ggbond268.github.io/MacTools/icon-gallery/catalog.json")!
+    static let productionCatalogURL = URL(string: "https://mactools.ggbond.app/icon-gallery/catalog.json")!
 
     static func defaultSource(environment: [String: String] = ProcessInfo.processInfo.environment) -> MenuBarIconGallerySource {
         #if DEBUG
@@ -787,7 +787,10 @@ final class MenuBarIconGalleryLibrary: ObservableObject {
         guard let asset = assets.first(where: { asset in
             asset.id == selection.id && asset.version == selection.version
         }) else {
-            iconSettings.reportError(lastErrorMessage ?? "最近使用的在线图标已不在图库中。")
+            iconSettings.reportError(lastErrorMessage ?? AppL10n.settings(
+                "menuBarIcon.gallery.error.recentAssetMissing",
+                defaultValue: "最近使用的在线图标已不在图库中。"
+            ))
             return false
         }
 
@@ -800,7 +803,7 @@ final class MenuBarIconGalleryLibrary: ObservableObject {
 
     func selectAsset(_ asset: MenuBarIconGalleryAsset, iconSettings: MenuBarIconSettings) async -> Bool {
         guard let snapshot else {
-            lastErrorMessage = "图标图库尚未加载。"
+            lastErrorMessage = AppL10n.settings("menuBarIcon.gallery.error.notLoaded", defaultValue: "图标图库尚未加载。")
             return false
         }
 
@@ -844,23 +847,23 @@ enum MenuBarIconGalleryError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .unsupportedSchemaVersion(version):
-            return "图标图库版本不支持：\(version)"
+            return AppL10n.settingsFormat("menuBarIcon.gallery.error.unsupportedSchemaFormat", defaultValue: "图标图库版本不支持：%d", version)
         case .invalidCatalog:
-            return "图标图库格式无效。"
+            return AppL10n.settings("menuBarIcon.gallery.error.invalidCatalog", defaultValue: "图标图库格式无效。")
         case let .invalidAsset(id):
-            return "图标素材无效：\(id)"
+            return AppL10n.settingsFormat("menuBarIcon.gallery.error.invalidAssetFormat", defaultValue: "图标素材无效：%@", id)
         case let .invalidResourceURL(path):
-            return "图标资源地址无效：\(path)"
+            return AppL10n.settingsFormat("menuBarIcon.gallery.error.invalidResourceURLFormat", defaultValue: "图标资源地址无效：%@", path)
         case let .httpStatus(statusCode):
-            return "图标资源下载失败：HTTP \(statusCode)"
+            return AppL10n.settingsFormat("menuBarIcon.gallery.error.httpStatusFormat", defaultValue: "图标资源下载失败：HTTP %d", statusCode)
         case let .resourceTooLarge(size):
-            return "图标资源过大：\(size)"
+            return AppL10n.settingsFormat("menuBarIcon.gallery.error.resourceTooLargeFormat", defaultValue: "图标资源过大：%d", size)
         case let .invalidFrame(name):
-            return "图标帧无法读取：\(name)"
+            return AppL10n.settingsFormat("menuBarIcon.gallery.error.invalidFrameFormat", defaultValue: "图标帧无法读取：%@", name)
         case .archiveEscapedDestination:
-            return "图标压缩包包含不安全路径。"
+            return AppL10n.settings("menuBarIcon.gallery.error.unsafeArchivePath", defaultValue: "图标压缩包包含不安全路径。")
         case let .unzipFailed(reason):
-            return "图标压缩包解压失败：\(reason)"
+            return AppL10n.settingsFormat("menuBarIcon.gallery.error.unzipFailedFormat", defaultValue: "图标压缩包解压失败：%@", reason)
         }
     }
 }

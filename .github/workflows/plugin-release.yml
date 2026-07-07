@@ -316,56 +316,9 @@ jobs:
         if: env.PLUGIN_RELEASE_REQUIRED == 'true'
         run: |
           RELEASE_NOTES="$RUNNER_TEMP/plugin-release-notes.md"
-          export PLUGIN_RELEASE_PLAN_PATH PLUGIN_CATALOG_DELTA_PATH SIGNED_PLUGIN_CATALOG_PATH RELEASE_NOTES
-          python3 <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          def load(path):
-              path = Path(path)
-              if not path.exists():
-                  return None
-              return json.loads(path.read_text(encoding="utf-8"))
-
-          plan = load(os.environ["PLUGIN_RELEASE_PLAN_PATH"]) or {}
-          delta = load(os.environ["PLUGIN_CATALOG_DELTA_PATH"]) or {}
-          catalog = load(os.environ["SIGNED_PLUGIN_CATALOG_PATH"]) or {}
-          selected = plan.get("selectedPluginIDs", [])
-          removed = plan.get("removedPluginIDs", [])
-          delta_entries = {entry["id"]: entry for entry in delta.get("plugins", [])}
-          total_count = len(catalog.get("plugins", []))
-          unchanged_count = max(total_count - len(selected), 0)
-
-          lines = [
-              "## Plugin catalog update",
-              "",
-              "This release updates the signed production plugin catalog.",
-              "",
-          ]
-
-          if selected:
-              lines.extend(["### Updated packages", ""])
-              for plugin in plan.get("plugins", []):
-                  plugin_id = plugin["id"]
-                  entry = delta_entries.get(plugin_id, plugin)
-                  reasons = plan.get("reasons", {}).get(plugin_id, [])
-                  suffix = f" - {'; '.join(reasons)}" if reasons else ""
-                  lines.append(f"- {entry.get('displayName', plugin_id)} (`{plugin_id}`) {entry['version']}{suffix}")
-              lines.append("")
-
-          if removed:
-              lines.extend(["### Removed from catalog", ""])
-              lines.extend(f"- `{plugin_id}`" for plugin_id in removed)
-              lines.append("")
-
-          if unchanged_count:
-              noun = "entry" if unchanged_count == 1 else "entries"
-              lines.append(f"{unchanged_count} unchanged plugin {noun} keep their existing package URLs and checksums.")
-              lines.append("")
-
-          Path(os.environ["RELEASE_NOTES"]).write_text("\n".join(lines), encoding="utf-8")
-          PY
+          python3 scripts/changelog.py extract \
+            --tag "$TAG" \
+            --output "$RELEASE_NOTES"
           echo "PLUGIN_RELEASE_NOTES_PATH=$RELEASE_NOTES" >> "$GITHUB_ENV"
 
       - name: Create or update plugin GitHub Release

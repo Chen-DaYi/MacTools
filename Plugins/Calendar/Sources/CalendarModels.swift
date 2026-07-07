@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct CalendarEventColor: Equatable, Sendable {
     let red: Double
@@ -32,12 +33,12 @@ enum CalendarHolidayKind: Int, Equatable, Sendable {
     case workday = 1
     case holiday = 2
 
-    var badgeText: String {
+    func badgeText(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .workday:
-            return "班"
+            return localization.string("holiday.badge.workday", defaultValue: "班")
         case .holiday:
-            return "休"
+            return localization.string("holiday.badge.holiday", defaultValue: "休")
         }
     }
 }
@@ -97,17 +98,22 @@ struct CalendarMonthModelBuilder {
     private let calendar: Calendar
     private let lunarCalendar: Calendar
     private let holidayProvider: CalendarHolidayProvider
+    private let localization: PluginLocalization
+    private let showsHolidayBadges: Bool
 
     init(
         calendar: Calendar = CalendarComponentCalendars.gregorianFollowingSystem(),
-        holidayProvider: CalendarHolidayProvider = .empty
+        holidayProvider: CalendarHolidayProvider = .empty,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.calendar = calendar
         self.holidayProvider = holidayProvider
+        self.localization = localization
         var lunarCalendar = Calendar(identifier: .chinese)
         lunarCalendar.locale = Locale(identifier: "zh_Hans_CN")
         lunarCalendar.timeZone = calendar.timeZone
         self.lunarCalendar = lunarCalendar
+        self.showsHolidayBadges = Self.shouldShowHolidayBadges(calendar: calendar)
     }
 
     func makeMonth(
@@ -116,7 +122,7 @@ struct CalendarMonthModelBuilder {
         eventsByDay: [Date: [CalendarEventSummary]] = [:]
     ) -> CalendarMonthModel {
         let monthStart = CalendarComponentCalendars.monthStart(containing: monthDate, calendar: calendar)
-        let title = Self.monthTitle(for: monthStart, calendar: calendar)
+        let title = monthTitle(for: monthStart, calendar: calendar)
         let days = makeDays(displayedMonthStart: monthStart, today: today, eventsByDay: eventsByDay)
 
         return CalendarMonthModel(
@@ -144,7 +150,7 @@ struct CalendarMonthModelBuilder {
             let dayStart = calendar.startOfDay(for: date)
             let components = calendar.dateComponents([.year, .month, .day], from: dayStart)
             let isInDisplayedMonth = calendar.isDate(dayStart, equalTo: displayedMonthStart, toGranularity: .month)
-            let holidayKind = holidayProvider.kind(for: dayStart, calendar: calendar)
+            let holidayKind = showsHolidayBadges ? holidayProvider.kind(for: dayStart, calendar: calendar) : nil
 
             return CalendarDayModel(
                 id: CalendarComponentCalendars.dayID(for: dayStart, calendar: calendar),
@@ -167,7 +173,15 @@ struct CalendarMonthModelBuilder {
     }
 
     private func weekdaySymbols() -> [String] {
-        let symbols = ["日", "一", "二", "三", "四", "五", "六"]
+        let symbols = [
+            localization.string("weekday.sunday.short", defaultValue: "日"),
+            localization.string("weekday.monday.short", defaultValue: "一"),
+            localization.string("weekday.tuesday.short", defaultValue: "二"),
+            localization.string("weekday.wednesday.short", defaultValue: "三"),
+            localization.string("weekday.thursday.short", defaultValue: "四"),
+            localization.string("weekday.friday.short", defaultValue: "五"),
+            localization.string("weekday.saturday.short", defaultValue: "六")
+        ]
         let startIndex = max(calendar.firstWeekday - 1, 0) % symbols.count
         return Array(symbols[startIndex..<symbols.count] + symbols[0..<startIndex])
     }
@@ -178,7 +192,7 @@ struct CalendarMonthModelBuilder {
         let day = components.day ?? 1
 
         if isLastDayOfLunarYear(date) {
-            return "除夕"
+            return localization.string("lunar.festival.newYearsEve", defaultValue: "除夕")
         }
 
         if let festival = lunarFestival(month: month, day: day) {
@@ -186,11 +200,13 @@ struct CalendarMonthModelBuilder {
         }
 
         if day == 1 {
-            let prefix = components.isLeapMonth == true ? "闰" : ""
-            return prefix + Self.lunarMonthName(month)
+            let prefix = components.isLeapMonth == true
+                ? localization.string("lunar.leapPrefix", defaultValue: "闰")
+                : ""
+            return prefix + lunarMonthName(month)
         }
 
-        return Self.lunarDayName(day)
+        return lunarDayName(day)
     }
 
     private func isLastDayOfLunarYear(_ date: Date) -> Bool {
@@ -206,50 +222,100 @@ struct CalendarMonthModelBuilder {
     private func lunarFestival(month: Int, day: Int) -> String? {
         switch (month, day) {
         case (1, 1):
-            return "春节"
+            return localization.string("lunar.festival.springFestival", defaultValue: "春节")
         case (1, 15):
-            return "元宵"
+            return localization.string("lunar.festival.lanternFestival", defaultValue: "元宵")
         case (5, 5):
-            return "端午"
+            return localization.string("lunar.festival.dragonBoat", defaultValue: "端午")
         case (7, 7):
-            return "七夕"
+            return localization.string("lunar.festival.qixi", defaultValue: "七夕")
         case (8, 15):
-            return "中秋"
+            return localization.string("lunar.festival.midAutumn", defaultValue: "中秋")
         case (9, 9):
-            return "重阳"
+            return localization.string("lunar.festival.doubleNinth", defaultValue: "重阳")
         case (12, 8):
-            return "腊八"
+            return localization.string("lunar.festival.laba", defaultValue: "腊八")
         case (12, 23):
-            return "小年"
+            return localization.string("lunar.festival.littleNewYear", defaultValue: "小年")
         default:
             return nil
         }
     }
 
-    private static func monthTitle(for date: Date, calendar: Calendar) -> String {
+    private func monthTitle(for date: Date, calendar: Calendar) -> String {
         let components = calendar.dateComponents([.year, .month], from: date)
-        return String(format: "%04d年%02d月", components.year ?? 0, components.month ?? 0)
+        return String(
+            format: localization.string("month.title", defaultValue: "%04d年%02d月"),
+            locale: Locale(identifier: "en_US_POSIX"),
+            components.year ?? 0,
+            components.month ?? 0
+        )
     }
 
-    private static func lunarMonthName(_ month: Int) -> String {
-        let names = ["正月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "冬月", "腊月"]
+    private func lunarMonthName(_ month: Int) -> String {
+        let names = [
+            localization.string("lunar.month.1", defaultValue: "正月"),
+            localization.string("lunar.month.2", defaultValue: "二月"),
+            localization.string("lunar.month.3", defaultValue: "三月"),
+            localization.string("lunar.month.4", defaultValue: "四月"),
+            localization.string("lunar.month.5", defaultValue: "五月"),
+            localization.string("lunar.month.6", defaultValue: "六月"),
+            localization.string("lunar.month.7", defaultValue: "七月"),
+            localization.string("lunar.month.8", defaultValue: "八月"),
+            localization.string("lunar.month.9", defaultValue: "九月"),
+            localization.string("lunar.month.10", defaultValue: "十月"),
+            localization.string("lunar.month.11", defaultValue: "冬月"),
+            localization.string("lunar.month.12", defaultValue: "腊月")
+        ]
         guard (1...names.count).contains(month) else {
-            return "月"
+            return localization.string("lunar.month.fallback", defaultValue: "月")
         }
 
         return names[month - 1]
     }
 
-    private static func lunarDayName(_ day: Int) -> String {
+    private func lunarDayName(_ day: Int) -> String {
         let names = [
-            "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
-            "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-            "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+            localization.string("lunar.day.1", defaultValue: "初一"),
+            localization.string("lunar.day.2", defaultValue: "初二"),
+            localization.string("lunar.day.3", defaultValue: "初三"),
+            localization.string("lunar.day.4", defaultValue: "初四"),
+            localization.string("lunar.day.5", defaultValue: "初五"),
+            localization.string("lunar.day.6", defaultValue: "初六"),
+            localization.string("lunar.day.7", defaultValue: "初七"),
+            localization.string("lunar.day.8", defaultValue: "初八"),
+            localization.string("lunar.day.9", defaultValue: "初九"),
+            localization.string("lunar.day.10", defaultValue: "初十"),
+            localization.string("lunar.day.11", defaultValue: "十一"),
+            localization.string("lunar.day.12", defaultValue: "十二"),
+            localization.string("lunar.day.13", defaultValue: "十三"),
+            localization.string("lunar.day.14", defaultValue: "十四"),
+            localization.string("lunar.day.15", defaultValue: "十五"),
+            localization.string("lunar.day.16", defaultValue: "十六"),
+            localization.string("lunar.day.17", defaultValue: "十七"),
+            localization.string("lunar.day.18", defaultValue: "十八"),
+            localization.string("lunar.day.19", defaultValue: "十九"),
+            localization.string("lunar.day.20", defaultValue: "二十"),
+            localization.string("lunar.day.21", defaultValue: "廿一"),
+            localization.string("lunar.day.22", defaultValue: "廿二"),
+            localization.string("lunar.day.23", defaultValue: "廿三"),
+            localization.string("lunar.day.24", defaultValue: "廿四"),
+            localization.string("lunar.day.25", defaultValue: "廿五"),
+            localization.string("lunar.day.26", defaultValue: "廿六"),
+            localization.string("lunar.day.27", defaultValue: "廿七"),
+            localization.string("lunar.day.28", defaultValue: "廿八"),
+            localization.string("lunar.day.29", defaultValue: "廿九"),
+            localization.string("lunar.day.30", defaultValue: "三十")
         ]
         guard (1...names.count).contains(day) else {
             return ""
         }
 
         return names[day - 1]
+    }
+
+    private static func shouldShowHolidayBadges(calendar: Calendar) -> Bool {
+        let identifier = calendar.locale?.identifier ?? Locale.autoupdatingCurrent.identifier
+        return identifier.lowercased().hasPrefix("zh")
     }
 }

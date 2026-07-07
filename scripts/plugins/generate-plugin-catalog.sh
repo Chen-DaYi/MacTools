@@ -169,6 +169,7 @@ for raw in packages:
         "id": manifest["id"],
         "displayName": manifest.get("displayName", manifest["id"]),
         "summary": manifest.get("summary", manifest.get("displayName", manifest["id"])),
+        "localizedMetadata": manifest.get("localizedMetadata"),
         "version": manifest["version"],
         "minimumHostVersion": manifest.get("minHostVersion", minimum_host_version),
         "pluginKitVersion": manifest_plugin_kit_version,
@@ -185,6 +186,7 @@ for raw in packages:
         },
         "releaseNotesURL": manifest.get("releaseNotesURL") or release_notes_url or None,
         "category": manifest.get("category"),
+        "releaseChannel": manifest.get("releaseChannel"),
     })
 
 if requested_plugin_kit_version is None:

@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import MacToolsPluginKit
 
 protocol ActivityBarSocketServing: AnyObject {
     var isRunning: Bool { get }
@@ -15,15 +16,19 @@ enum ActivityBarSocketError: LocalizedError, Equatable {
     case listenFailed(Int32)
 
     var errorDescription: String? {
+        localizedDescription(localization: PluginLocalization(bundle: .main))
+    }
+
+    func localizedDescription(localization: PluginLocalization) -> String {
         switch self {
         case let .pathTooLong(path):
-            return "Socket 路径过长：\(path)"
+            return localization.format("error.socket.pathTooLong", defaultValue: "Socket 路径过长：%@", path)
         case let .socketFailed(code):
-            return "创建 Socket 失败：\(code)"
+            return localization.format("error.socket.createFailed", defaultValue: "创建 Socket 失败：%d", code)
         case let .bindFailed(code):
-            return "绑定 Socket 失败：\(code)"
+            return localization.format("error.socket.bindFailed", defaultValue: "绑定 Socket 失败：%d", code)
         case let .listenFailed(code):
-            return "监听 Socket 失败：\(code)"
+            return localization.format("error.socket.listenFailed", defaultValue: "监听 Socket 失败：%d", code)
         }
     }
 }

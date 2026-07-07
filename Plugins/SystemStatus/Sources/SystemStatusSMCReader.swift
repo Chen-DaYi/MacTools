@@ -108,7 +108,7 @@ final class SystemStatusSMCReader {
                 UInt32(value.bytes[3])
             )
         case "sp78":
-            let rawValue = Double(Int(value.bytes[0]) * 256 + Int(value.bytes[1]))
+            let rawValue = Double(Int(Int8(bitPattern: value.bytes[0])) * 256 + Int(value.bytes[1]))
             return rawValue / 256
         case "flt ":
             var floatValue: Float = 0

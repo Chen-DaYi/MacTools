@@ -1,10 +1,10 @@
 import Foundation
 import MacToolsPluginKit
 
-/// 一条「应用 → 快捷键」绑定记录
+/// Stores one app-to-shortcut binding.
 struct AppShortcutEntry: Codable, Identifiable, Equatable {
     let id: UUID
-    /// .app bundle 的 file:// URL 字符串
+    /// The `.app` bundle's `file://` URL string.
     var bundleURLString: String
     var displayName: String
     var shortcut: ShortcutBinding?

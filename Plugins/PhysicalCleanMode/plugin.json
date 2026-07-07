@@ -2,7 +2,53 @@
   "id": "physical-clean-mode",
   "displayName": "清洁模式",
   "summary": "屏幕全黑并临时禁用键盘输入",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "وضع التنظيف",
+      "summary": "تحويل الشاشة إلى اللون الأسود وتعطيل إدخال لوحة المفاتيح مؤقتًا."
+    },
+    "de": {
+      "displayName": "Reinigungsmodus",
+      "summary": "Schalten Sie den Bildschirm schwarz und deaktivieren Sie vorübergehend die Tastatureingabe."
+    },
+    "en": {
+      "displayName": "Clean Mode",
+      "summary": "Turn the screen black and temporarily disable keyboard input."
+    },
+    "es": {
+      "displayName": "Modo limpieza",
+      "summary": "Ponga la pantalla en negro y desactive temporalmente la entrada del teclado."
+    },
+    "fr": {
+      "displayName": "Mode nettoyage",
+      "summary": "Rendez l'écran noir et désactivez temporairement la saisie au clavier."
+    },
+    "ja": {
+      "displayName": "クリーニングモード",
+      "summary": "画面を黒くし、キーボード入力を一時的に無効にします。"
+    },
+    "ko": {
+      "displayName": "청소 모드",
+      "summary": "화면을 검게 만들고 키보드 입력을 일시적으로 비활성화합니다."
+    },
+    "pt": {
+      "displayName": "Modo de limpeza",
+      "summary": "Deixe a tela preta e desative temporariamente a entrada do teclado."
+    },
+    "ru": {
+      "displayName": "Режим очистки",
+      "summary": "Сделайте экран черным и временно отключите ввод с клавиатуры."
+    },
+    "zh-Hans": {
+      "displayName": "清洁模式",
+      "summary": "屏幕全黑并临时禁用键盘输入"
+    },
+    "zh-Hant": {
+      "displayName": "清潔模式",
+      "summary": "螢幕全黑並臨時禁用鍵盤輸入"
+    }
+  },
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "PhysicalCleanMode.bundle",

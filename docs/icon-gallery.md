@@ -8,7 +8,7 @@
 {
   "schemaVersion": 1,
   "generatedAt": "2026-05-20T00:00:00Z",
-  "baseURL": "https://ggbond268.github.io/MacTools/icon-gallery/",
+  "baseURL": "https://mactools.ggbond.app/icon-gallery/",
   "categories": [
     { "id": "featured", "title": "精选" }
   ],
@@ -47,7 +47,7 @@
 
 ## Runtime Behavior
 
-- 正式环境默认读取 `https://ggbond268.github.io/MacTools/icon-gallery/catalog.json`。
+- 正式环境默认读取 `https://mactools.ggbond.app/icon-gallery/catalog.json`。
 - Debug 环境可用 `MACTOOLS_ICON_CATALOG_URL` 指定 `file://` 或 `https://` catalog。
 - `make run` 会自动生成 `build/LocalIconGallery/catalog.dev.json` 并注入 `MACTOOLS_ICON_CATALOG_URL`。
 - 远程素材下载到 `~/Library/Application Support/MacTools/MenuBarIcons/RemoteAssets/`，Debug 为 `MacTools Dev`。

@@ -39,7 +39,7 @@ final class AppHotkeyStore: ObservableObject {
         persist()
     }
 
-    /// 检查给定快捷键是否与现有绑定冲突（排除自身）
+    /// Returns the existing entry that conflicts with the shortcut, excluding the current entry.
     func conflictEntry(for shortcut: ShortcutBinding, excludingID: UUID? = nil) -> AppShortcutEntry? {
         entries.first { $0.id != excludingID && $0.shortcut == shortcut }
     }

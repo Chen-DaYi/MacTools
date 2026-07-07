@@ -2,7 +2,53 @@
   "id": "system-mute",
   "displayName": "系统静音",
   "summary": "快速静音或恢复系统音频输出",
-  "version": "1.0.2",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "كتم صوت النظام",
+      "summary": "كتم صوت إخراج صوت النظام أو استعادته بسرعة."
+    },
+    "de": {
+      "displayName": "System stummschalten",
+      "summary": "System-Audioausgabe schnell stummschalten oder wiederherstellen."
+    },
+    "en": {
+      "displayName": "System Mute",
+      "summary": "Quickly mute or restore system audio output."
+    },
+    "es": {
+      "displayName": "Silenciar sistema",
+      "summary": "Silencia o restaura rápidamente la salida de audio del sistema."
+    },
+    "fr": {
+      "displayName": "Couper le son du système",
+      "summary": "Mettre ou restaurer rapidement la sortie audio du système."
+    },
+    "ja": {
+      "displayName": "システムをミュート",
+      "summary": "システムオーディオ出力を素早くミュートまたは復元します。"
+    },
+    "ko": {
+      "displayName": "시스템 음소거",
+      "summary": "시스템 오디오 출력을 빠르게 음소거하거나 복원합니다."
+    },
+    "pt": {
+      "displayName": "Silenciar sistema",
+      "summary": "Silencie ou restaure rapidamente a saída de áudio do sistema."
+    },
+    "ru": {
+      "displayName": "Отключить звук системы",
+      "summary": "Быстро отключить или восстановить звук системы."
+    },
+    "zh-Hans": {
+      "displayName": "系统静音",
+      "summary": "快速静音或恢复系统音频输出"
+    },
+    "zh-Hant": {
+      "displayName": "系統靜音",
+      "summary": "快速靜音或恢復系統音頻輸出"
+    }
+  },
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "SystemMute.bundle",

@@ -7,6 +7,7 @@ struct FanControlPresetManagerView: View {
     @ObservedObject var presetStore: FanControlPresetStore
     /// Live snapshot for showing actual hardware max RPM in sliders.
     var fanSnapshot: FanSnapshot
+    var localization: PluginLocalization = PluginLocalization(bundle: .main)
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
@@ -19,11 +20,18 @@ struct FanControlPresetManagerView: View {
 
     private var builtInSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(title: "内置预设", icon: "lock")
+            sectionHeader(
+                title: localization.string("settings.builtIn.title", defaultValue: "内置预设"),
+                icon: "lock"
+            )
 
             VStack(spacing: 0) {
                 ForEach(FanControlPresetStore.builtInPresets) { preset in
-                    BuiltInPresetRow(preset: preset, fanSnapshot: fanSnapshot)
+                    BuiltInPresetRow(
+                        preset: preset,
+                        fanSnapshot: fanSnapshot,
+                        localization: localization
+                    )
                     if preset.id != FanControlPresetStore.builtInPresets.last?.id {
                         PluginSettingsListDivider()
                     }
@@ -38,10 +46,13 @@ struct FanControlPresetManagerView: View {
     private var customSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
-                sectionHeader(title: "自定义预设", icon: "slider.horizontal.3")
+                sectionHeader(
+                    title: localization.string("settings.custom.title", defaultValue: "自定义预设"),
+                    icon: "slider.horizontal.3"
+                )
                 Spacer()
                 Button(action: addPreset) {
-                    Label("添加", systemImage: "plus")
+                    Label(localization.string("settings.custom.add", defaultValue: "添加"), systemImage: "plus")
                         .font(PluginSettingsTheme.Typography.controlLabel)
                 }
                 .buttonStyle(.bordered)
@@ -56,6 +67,7 @@ struct FanControlPresetManagerView: View {
                         CustomPresetRow(
                             preset: preset,
                             fanSnapshot: fanSnapshot,
+                            localization: localization,
                             onRename: { presetStore.renameCustomPreset(id: preset.id, newName: $0) },
                             onRPMChange: { presetStore.updateCustomPresetRPM(id: preset.id, rpm: $0) },
                             onDelete: { presetStore.deleteCustomPreset(id: preset.id) }
@@ -77,7 +89,7 @@ struct FanControlPresetManagerView: View {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon))
                     .foregroundStyle(.secondary)
-                Text("点击「添加」创建自定义转速预设")
+                Text(localization.string("settings.custom.empty", defaultValue: "点击「添加」创建自定义转速预设"))
                     .font(PluginSettingsTheme.Typography.pageDescription)
                     .foregroundStyle(.secondary)
             }
@@ -105,18 +117,19 @@ struct FanControlPresetManagerView: View {
 private struct BuiltInPresetRow: View {
     let preset: FanPreset
     let fanSnapshot: FanSnapshot
+    let localization: PluginLocalization
 
     var body: some View {
         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                Text(preset.name)
+                Text(preset.displayName(localization: localization))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                 Text(subtitle)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("内置")
+            Text(localization.string("settings.builtIn.badge", defaultValue: "内置"))
                 .font(PluginSettingsTheme.Typography.statusBadge)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)
@@ -131,10 +144,12 @@ private struct BuiltInPresetRow: View {
     private var subtitle: String {
         switch preset.strategy {
         case .auto:
-            return "由 macOS 自动管理"
+            return localization.string("settings.builtIn.auto.subtitle", defaultValue: "由 macOS 自动管理")
         case .fullSpeed:
             let max = fanSnapshot.globalMaxSpeed
-            return max > 0 ? "最高 \(max) RPM" : "最高转速"
+            return max > 0
+                ? localization.format("preset.fullSpeed.subtitleWithRPM", defaultValue: "最高 %d RPM", max)
+                : localization.string("preset.fullSpeed.subtitle", defaultValue: "最高转速")
         case .fixed(let rpm):
             return "\(rpm) RPM"
         }
@@ -146,6 +161,7 @@ private struct BuiltInPresetRow: View {
 private struct CustomPresetRow: View {
     let preset: FanPreset
     let fanSnapshot: FanSnapshot
+    let localization: PluginLocalization
     let onRename: (String) -> Void
     let onRPMChange: (Int) -> Void
     let onDelete: () -> Void
@@ -158,12 +174,14 @@ private struct CustomPresetRow: View {
     init(
         preset: FanPreset,
         fanSnapshot: FanSnapshot,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         onRename: @escaping (String) -> Void,
         onRPMChange: @escaping (Int) -> Void,
         onDelete: @escaping () -> Void
     ) {
         self.preset = preset
         self.fanSnapshot = fanSnapshot
+        self.localization = localization
         self.onRename = onRename
         self.onRPMChange = onRPMChange
         self.onDelete = onDelete
@@ -190,7 +208,7 @@ private struct CustomPresetRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                TextField("预设名称", text: $nameText)
+                TextField(localization.string("settings.custom.namePlaceholder", defaultValue: "预设名称"), text: $nameText)
                     .textFieldStyle(.plain)
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     .padding(.horizontal, 6)
@@ -227,7 +245,7 @@ private struct CustomPresetRow: View {
                         .foregroundStyle(.red)
                 }
                 .buttonStyle(.plain)
-                .help("删除此预设")
+                .help(localization.string("settings.custom.deleteHelp", defaultValue: "删除此预设"))
             }
 
             HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {

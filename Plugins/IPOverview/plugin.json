@@ -1,8 +1,54 @@
 {
   "id": "ip-overview",
   "displayName": "IP 检测",
-  "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要",
-  "version": "1.0.8",
+  "summary": "查看出口 IP、本地 IP、归属地与网络测速摘要",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "فحص IP",
+      "summary": "عرض IP الخروج وIP المحلي والموقع وجودة الشبكة."
+    },
+    "de": {
+      "displayName": "IP-Prüfung",
+      "summary": "Zeigt Ausgangs-IP, lokale IP, Standort und Netzwerkqualität an."
+    },
+    "en": {
+      "displayName": "IP Check",
+      "summary": "View egress IP, local IP, location, and network quality."
+    },
+    "es": {
+      "displayName": "Comprobación de IP",
+      "summary": "Consulta la IP de salida, la IP local, la ubicación y la calidad de red."
+    },
+    "fr": {
+      "displayName": "Vérification IP",
+      "summary": "Afficher l’IP de sortie, l’IP locale, la localisation et la qualité du réseau."
+    },
+    "ja": {
+      "displayName": "IPチェック",
+      "summary": "出口 IP、ローカル IP、所在地、ネットワーク品質を表示します。"
+    },
+    "ko": {
+      "displayName": "IP 확인",
+      "summary": "외부 IP, 로컬 IP, 위치 및 네트워크 품질을 확인합니다."
+    },
+    "pt": {
+      "displayName": "Verificação de IP",
+      "summary": "Veja IP de saída, IP local, localização e qualidade da rede."
+    },
+    "ru": {
+      "displayName": "Проверка IP",
+      "summary": "Просмотр исходящего IP, локального IP, местоположения и качества сети."
+    },
+    "zh-Hans": {
+      "displayName": "IP 检测",
+      "summary": "查看出口 IP、本地 IP、归属地与网络测速摘要"
+    },
+    "zh-Hant": {
+      "displayName": "IP 檢測",
+      "summary": "查看出口 IP、本地 IP、歸屬地與網路測速摘要"
+    }
+  },
+  "version": "1.0.11",
   "minHostVersion": "1.0.10",
   "pluginKitVersion": 2,
   "bundleRelativePath": "IPOverview.bundle",

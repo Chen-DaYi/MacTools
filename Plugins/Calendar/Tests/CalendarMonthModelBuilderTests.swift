@@ -20,7 +20,8 @@ final class CalendarMonthModelBuilderTests: XCTestCase {
     }
 
     func testWeekendAndHolidayOverrideCanCoexist() throws {
-        let calendar = Self.makeCalendar(firstWeekday: 1)
+        var calendar = Self.makeCalendar(firstWeekday: 1)
+        calendar.locale = Locale(identifier: "zh_Hans_CN")
         let data = #"{"2026":{"0101":2,"0104":1}}"#.data(using: .utf8)!
         let provider = try CalendarHolidayProvider(data: data)
         let builder = CalendarMonthModelBuilder(calendar: calendar, holidayProvider: provider)
@@ -35,6 +36,21 @@ final class CalendarMonthModelBuilderTests: XCTestCase {
         let adjustedWorkday = try XCTUnwrap(model.days.first { $0.id == "20260104" })
         XCTAssertTrue(adjustedWorkday.isWeekend)
         XCTAssertEqual(adjustedWorkday.holidayKind, .workday)
+    }
+
+    func testHolidayBadgesAreHiddenForNonChineseLocales() throws {
+        var calendar = Self.makeCalendar(firstWeekday: 1)
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        let data = #"{"2026":{"0101":2,"0104":1}}"#.data(using: .utf8)!
+        let provider = try CalendarHolidayProvider(data: data)
+        let builder = CalendarMonthModelBuilder(calendar: calendar, holidayProvider: provider)
+        let model = builder.makeMonth(
+            containing: try Self.date(year: 2026, month: 1, day: 15, calendar: calendar),
+            today: try Self.date(year: 2026, month: 1, day: 2, calendar: calendar)
+        )
+
+        XCTAssertNil(model.days.first { $0.id == "20260101" }?.holidayKind)
+        XCTAssertNil(model.days.first { $0.id == "20260104" }?.holidayKind)
     }
 
     func testVisibleEventsLimitKeepsFirstThreeEvents() throws {

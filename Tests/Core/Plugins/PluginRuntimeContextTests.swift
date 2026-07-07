@@ -42,16 +42,16 @@ final class PluginRuntimeContextTests: XCTestCase {
 
     func testStorageMigratesLegacyValueAndRemovesLegacyKeyWhenScopedValueIsMissing() {
         let defaults = isolatedDefaults()
-        defaults.set(4, forKey: "middle-click.required-finger-count")
-        let storage = UserDefaultsPluginStorage(pluginID: "middle-click", userDefaults: defaults)
+        defaults.set(4, forKey: "sample-plugin.sample-count")
+        let storage = UserDefaultsPluginStorage(pluginID: "sample-plugin", userDefaults: defaults)
 
         storage.migrateValueIfNeeded(
-            fromLegacyKey: "middle-click.required-finger-count",
-            to: "middle-click.required-finger-count"
+            fromLegacyKey: "sample-plugin.sample-count",
+            to: "sample-plugin.sample-count"
         )
 
-        XCTAssertEqual(storage.integer(forKey: "middle-click.required-finger-count"), 4)
-        XCTAssertNil(defaults.object(forKey: "middle-click.required-finger-count"))
+        XCTAssertEqual(storage.integer(forKey: "sample-plugin.sample-count"), 4)
+        XCTAssertNil(defaults.object(forKey: "sample-plugin.sample-count"))
     }
 
     private func isolatedDefaults() -> UserDefaults {

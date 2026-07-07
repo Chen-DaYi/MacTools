@@ -47,7 +47,9 @@ final class AboutUpdateViewModel: ObservableObject {
     }
 
     var primaryButtonTitle: String {
-        shouldOfferInstallAction ? "立即更新" : "检查更新"
+        shouldOfferInstallAction
+            ? AppL10n.settings("about.update.installNow", defaultValue: "立即更新")
+            : AppL10n.settings("about.update.check", defaultValue: "检查更新")
     }
 
     var isPrimaryButtonDisabled: Bool {
@@ -57,21 +59,21 @@ final class AboutUpdateViewModel: ObservableObject {
     var statusHeadline: String {
         switch state {
         case .idle:
-            return "检查最新版本"
+            return AppL10n.settings("about.update.headline.idle", defaultValue: "检查最新版本")
         case .checking:
-            return "正在检查更新…"
+            return AppL10n.settings("about.update.headline.checking", defaultValue: "正在检查更新…")
         case .upToDate:
-            return "当前已是最新版本"
+            return AppL10n.settings("about.update.headline.upToDate", defaultValue: "当前已是最新版本")
         case let .updateAvailable(version):
-            return "检测到新版本 \(version)"
+            return AppL10n.settingsFormat("about.update.headline.availableFormat", defaultValue: "检测到新版本 %@", version)
         case .blocked:
             if let version = lastAvailableVersion {
-                return "检测到新版本 \(version)"
+                return AppL10n.settingsFormat("about.update.headline.availableFormat", defaultValue: "检测到新版本 %@", version)
             }
 
-            return "暂时无法启动更新"
+            return AppL10n.settings("about.update.headline.blocked", defaultValue: "暂时无法启动更新")
         case .error:
-            return "检查更新失败"
+            return AppL10n.settings("about.update.headline.failed", defaultValue: "检查更新失败")
         }
     }
 
@@ -80,11 +82,14 @@ final class AboutUpdateViewModel: ObservableObject {
         case .idle:
             return nil
         case .checking:
-            return "正在获取最新 Release 信息，请稍候。"
+            return AppL10n.settings("about.update.detail.checking", defaultValue: "正在获取最新 Release 信息，请稍候。")
         case .upToDate:
-            return "当前已是最新版本。"
+            return AppL10n.settings("about.update.detail.upToDate", defaultValue: "当前已是最新版本。")
         case .updateAvailable:
-            return "已发现更高版本，点击“立即更新”后会进入系统标准安装流程。"
+            return AppL10n.settings(
+                "about.update.detail.available",
+                defaultValue: "已发现更高版本，点击“立即更新”后会进入系统标准安装流程。"
+            )
         case let .blocked(reason):
             return reason
         case let .error(message):
@@ -147,7 +152,7 @@ final class AboutUpdateViewModel: ObservableObject {
         }
 
         guard updater.canCheckForUpdates else {
-            state = .error(message: "更新服务正在准备中，请稍后再试。")
+            state = .error(message: AppL10n.settings("about.update.error.servicePreparing", defaultValue: "更新服务正在准备中，请稍后再试。"))
             return
         }
 
@@ -170,13 +175,13 @@ final class AboutUpdateViewModel: ObservableObject {
         guard eligibility.isAllowed else {
             state = .blocked(
                 reason: eligibility.reason
-                    ?? "请先将应用移到 Applications 再更新。"
+                    ?? AppL10n.settings("about.update.error.moveToApplications", defaultValue: "请先将应用移到 Applications 再更新。")
             )
             return
         }
 
         guard updater.canCheckForUpdates else {
-            state = .error(message: "更新服务正在准备中，请稍后再试。")
+            state = .error(message: AppL10n.settings("about.update.error.servicePreparing", defaultValue: "更新服务正在准备中，请稍后再试。"))
             return
         }
 

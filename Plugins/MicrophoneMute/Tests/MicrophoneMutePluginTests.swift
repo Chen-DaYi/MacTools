@@ -90,7 +90,7 @@ final class MicrophoneMutePluginTests: XCTestCase {
         XCTAssertFalse(plugin.primaryPanelState.isOn)
 
         controller.muteState = true
-        // 用新状态的 controller 重新初始化，模拟外部变化后 refresh 读到新值
+        // Reinitialize with the updated controller state to simulate refresh reading an external change.
         let plugin2 = MicrophoneMutePlugin(controller: controller)
         XCTAssertTrue(plugin2.primaryPanelState.isOn)
     }
@@ -101,11 +101,10 @@ final class MicrophoneMutePluginTests: XCTestCase {
         var callCount = 0
         plugin.onStateChange = { callCount += 1 }
 
-        // refresh 时状态没变，不应触发回调
         plugin.refresh()
         XCTAssertEqual(callCount, 0)
 
-        // 用新 controller 模拟：直接更新 isMuted 不可达，改为通过 handleAction 验证回调
+        // `isMuted` is not directly mutable here; validate the callback path through `handleAction`.
         plugin.handleAction(.setSwitch(true))
         XCTAssertEqual(callCount, 1)
     }

@@ -1,6 +1,6 @@
-# 第三方说明
+# Third-Party Notices
 
-本目录用于记录 MacTools 使用到的第三方素材、依赖和实现参考。以下链接用于来源追踪与致谢，不表示全部项目都作为第三方组件被打包。
+This directory records third-party assets, dependencies, and implementation references used by MacTools. The links below are provided for source tracking and acknowledgements; they do not imply that every listed project is packaged as a third-party component.
 
 - [Kyome22/menubar_runcat](https://github.com/Kyome22/menubar_runcat)
 - [sparkle-project/Sparkle](https://github.com/sparkle-project/Sparkle)

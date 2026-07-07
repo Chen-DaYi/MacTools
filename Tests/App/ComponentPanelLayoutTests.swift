@@ -5,15 +5,26 @@ import MacToolsPluginKit
 @testable import MacTools
 
 final class ComponentPanelLayoutTests: XCTestCase {
+    func testComponentCardCornerRadiusMatchesLeftClickPanelCornerRadius() {
+        XCTAssertEqual(
+            PluginComponentPanelLayoutMetrics.cardCornerRadius,
+            MenuBarPanelLayout.cornerRadius
+        )
+    }
+
     func testPanelWidthUsesFourFixedColumnsWithinExistingPanelWidth() {
         XCTAssertEqual(ComponentPanelLayout.columns, 4)
         XCTAssertEqual(ComponentPanelLayout.cellWidth, 70)
         XCTAssertEqual(ComponentPanelLayout.originalCellHeight, 94)
         XCTAssertEqual(ComponentPanelLayout.cellHeight, 8)
         XCTAssertEqual(ComponentPanelLayout.horizontalSpacing, 8)
-        XCTAssertEqual(ComponentPanelLayout.verticalSpacing, 8)
+        XCTAssertEqual(ComponentPanelLayout.verticalSpacing, 6)
+        XCTAssertEqual(ComponentPanelLayout.verticalSpacing, ComponentPanelLayout.horizontalPadding)
         XCTAssertEqual(ComponentPanelLayout.horizontalPadding, MenuBarPanelLayout.outerPadding)
+        XCTAssertEqual(ComponentPanelLayout.topPadding, MenuBarPanelLayout.contentTopPadding)
+        XCTAssertEqual(ComponentPanelLayout.bottomPadding, MenuBarPanelLayout.contentBottomPadding)
         XCTAssertEqual(ComponentPanelLayout.verticalPadding, MenuBarPanelLayout.outerPadding)
+        XCTAssertEqual(ComponentPanelLayout.contentVerticalPadding, 10)
         XCTAssertEqual(
             ComponentPanelLayout.panelWidth,
             ComponentPanelLayout.horizontalPadding * 2
@@ -21,6 +32,13 @@ final class ComponentPanelLayoutTests: XCTestCase {
                 + ComponentPanelLayout.horizontalSpacing * 3
         )
         XCTAssertEqual(ComponentPanelLayout.panelWidth, 316)
+    }
+
+    func testScrollClipCornerRadiusMatchesPanelCornerRadius() {
+        XCTAssertEqual(
+            ComponentPanelLayout.scrollClipCornerRadius,
+            MenuBarPanelLayout.cornerRadius
+        )
     }
 
     func testGridUsesCompactRowsForDenseComponents() {
@@ -71,12 +89,18 @@ final class ComponentPanelLayoutTests: XCTestCase {
         )
     }
 
-    func testPreferredHeightForItemsIncludesVerticalPaddingWithoutHeader() {
+    func testPreferredHeightForItemsIncludesSharedToolbarAndVerticalPadding() {
         let item = makeItem(id: "system", span: .fourByTwo)
 
         XCTAssertEqual(
-            ComponentPanelLayout.preferredPanelHeight(for: [item], screen: nil),
+            ComponentPanelLayout.preferredContentHeight(for: [item], screen: nil),
             ComponentPanelLayout.itemHeight(for: .fourByTwo) + ComponentPanelLayout.contentVerticalPadding
+        )
+        XCTAssertEqual(
+            ComponentPanelLayout.preferredPanelHeight(for: [item], screen: nil),
+            MenuBarPanelLayout.topChromeHeight
+                + ComponentPanelLayout.itemHeight(for: .fourByTwo)
+                + ComponentPanelLayout.contentVerticalPadding
         )
     }
 
@@ -112,8 +136,8 @@ final class ComponentPanelLayoutTests: XCTestCase {
             placements,
             [
                 ComponentGridPlacement(id: "wide", row: 0, column: 0, span: .fourByTwo, yOffset: 0),
-                ComponentGridPlacement(id: "left", row: 2, column: 0, span: .oneByOne, yOffset: 24),
-                ComponentGridPlacement(id: "right", row: 2, column: 1, span: .twoByOne, yOffset: 24)
+                ComponentGridPlacement(id: "left", row: 2, column: 0, span: .oneByOne, yOffset: 22),
+                ComponentGridPlacement(id: "right", row: 2, column: 1, span: .twoByOne, yOffset: 22)
             ]
         )
     }
@@ -128,8 +152,8 @@ final class ComponentPanelLayoutTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(placements.map(\.yOffset), [0, 104])
-        XCTAssertEqual(ComponentPanelLayout.gridContentHeight(for: placements), 304)
+        XCTAssertEqual(placements.map(\.yOffset), [0, 102])
+        XCTAssertEqual(ComponentPanelLayout.gridContentHeight(for: placements), 302)
     }
 
     func testColumnStackingUsesOnlyInterCardSpacingForMixedWidths() {

@@ -31,10 +31,13 @@ struct MenuBarIconSettingsView: View {
             .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                Text("菜单栏图标")
+                Text(AppL10n.settings("menuBarIcon.title", defaultValue: "菜单栏图标"))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
-                Text("统一设置浅色和深色菜单栏图标，导入时会自动扣除纯色背景。")
+                Text(AppL10n.settings(
+                    "menuBarIcon.description",
+                    defaultValue: "统一设置浅色和深色菜单栏图标，导入时会自动扣除纯色背景。"
+                ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -44,14 +47,14 @@ struct MenuBarIconSettingsView: View {
             Button {
                 iconSettings.resetToDefault()
             } label: {
-                Label("恢复默认", systemImage: "arrow.counterclockwise")
+                Label(AppL10n.settings("menuBarIcon.restoreDefault", defaultValue: "恢复默认"), systemImage: "arrow.counterclockwise")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(!iconSettings.hasCustomIcon)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
-        .help("设置菜单栏图标")
+        .help(AppL10n.settings("menuBarIcon.help", defaultValue: "设置菜单栏图标"))
     }
 }
 
@@ -70,11 +73,14 @@ private struct MenuBarIconEditorControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            controlRow("图标来源") {
+            controlRow(AppL10n.settings("menuBarIcon.source", defaultValue: "图标来源")) {
                 actionButtons
             }
 
-            Text("支持图片、轻量 GIF/MP4 和在线动态图标；导入时会自动扣除纯色背景。")
+            Text(AppL10n.settings(
+                "menuBarIcon.sourceDescription",
+                defaultValue: "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会自动扣除纯色背景。"
+            ))
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
                 .frame(width: contentWidth, alignment: .leading)
@@ -82,7 +88,7 @@ private struct MenuBarIconEditorControls: View {
 
             animationSpeedControls
 
-            controlRow("最近使用", alignment: .top) {
+            controlRow(AppL10n.settings("menuBarIcon.recent", defaultValue: "最近使用"), alignment: .top) {
                 MenuBarIconRecentGrid(iconSettings: iconSettings, gallery: gallery)
                     .frame(width: contentWidth, alignment: .leading)
             }
@@ -142,7 +148,7 @@ private struct MenuBarIconEditorControls: View {
             Button {
                 selectMedia()
             } label: {
-                Label("上传图片或动画", systemImage: "square.and.arrow.up")
+                Label(AppL10n.settings("menuBarIcon.upload", defaultValue: "上传图片或动画"), systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -156,8 +162,8 @@ private struct MenuBarIconEditorControls: View {
 
     private var animationSpeedControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            controlRow("播放速度") {
-                Picker("播放速度", selection: Binding(
+            controlRow(AppL10n.settings("menuBarIcon.playbackSpeed", defaultValue: "播放速度")) {
+                Picker(AppL10n.settings("menuBarIcon.playbackSpeed", defaultValue: "播放速度"), selection: Binding(
                     get: { iconSettings.animationSpeedMode },
                     set: { iconSettings.animationSpeedMode = $0 }
                 )) {
@@ -171,7 +177,7 @@ private struct MenuBarIconEditorControls: View {
                 .frame(width: contentWidth, alignment: .leading)
             }
 
-            controlRow("倍率") {
+            controlRow(AppL10n.settings("menuBarIcon.multiplier", defaultValue: "倍率")) {
                 animationMultiplierControls
             }
         }
@@ -180,9 +186,9 @@ private struct MenuBarIconEditorControls: View {
     private var speedDescription: String {
         switch iconSettings.animationSpeedMode {
         case .manual:
-            return "固定倍率循环播放。"
+            return AppL10n.settings("menuBarIcon.speedDescription.manual", defaultValue: "固定倍率循环播放。")
         case .adaptiveSystemLoad:
-            return "CPU、GPU、内存越高越快。"
+            return AppL10n.settings("menuBarIcon.speedDescription.adaptiveSystemLoad", defaultValue: "CPU、GPU、内存越高越快。")
         }
     }
 
@@ -237,7 +243,10 @@ private struct MenuBarIconEditorControls: View {
         panel.canChooseFiles = true
         panel.allowedContentTypes = MenuBarIconProcessing.supportedImageContentTypes
             + MenuBarIconProcessing.supportedAnimationContentTypes
-        panel.message = "选择图片、GIF 或 MP4 作为 MacTools 状态栏图标"
+        panel.message = AppL10n.settings(
+            "menuBarIcon.openPanel.message",
+            defaultValue: "选择图片、GIF 或 MP4 作为 MacTools 状态栏图标"
+        )
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return
@@ -262,7 +271,7 @@ private struct MenuBarIconPreviewPair: View {
     var body: some View {
         HStack(spacing: 8) {
             MenuBarIconPreviewStrip(
-                title: "浅色",
+                title: AppL10n.settings("menuBarIcon.preview.light", defaultValue: "浅色"),
                 payload: lightPayload,
                 backgroundColor: Color(nsColor: .windowBackgroundColor),
                 foregroundColor: .black
@@ -270,7 +279,7 @@ private struct MenuBarIconPreviewPair: View {
             .frame(maxWidth: .infinity)
 
             MenuBarIconPreviewStrip(
-                title: "深色",
+                title: AppL10n.settings("menuBarIcon.preview.dark", defaultValue: "深色"),
                 payload: darkPayload,
                 backgroundColor: Color(red: 0.12, green: 0.12, blue: 0.13),
                 foregroundColor: .white
@@ -353,7 +362,7 @@ private struct MenuBarIconRecentGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if iconSettings.recentItems.isEmpty {
-                Text("上传或选择图标后会显示在这里。")
+                Text(AppL10n.settings("menuBarIcon.recent.empty", defaultValue: "上传或选择图标后会显示在这里。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
@@ -445,7 +454,7 @@ private struct MenuBarIconGalleryPicker: View {
         Button {
             isPickerPresented.toggle()
         } label: {
-            Label("在线图库", systemImage: "sparkles")
+            Label(AppL10n.settings("menuBarIcon.gallery.title", defaultValue: "在线图库"), systemImage: "sparkles")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
@@ -463,7 +472,7 @@ private struct MenuBarIconGalleryPicker: View {
     private var pickerContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Text("在线图库")
+                Text(AppL10n.settings("menuBarIcon.gallery.title", defaultValue: "在线图库"))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
                 Spacer()
@@ -483,10 +492,10 @@ private struct MenuBarIconGalleryPicker: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
-                .help("刷新图库")
+                .help(AppL10n.settings("menuBarIcon.gallery.refresh", defaultValue: "刷新图库"))
                 .disabled(gallery.status.isLoading)
 
-                Picker("分组", selection: Binding(
+                Picker(AppL10n.settings("menuBarIcon.gallery.category", defaultValue: "分组"), selection: Binding(
                     get: { selectedCategoryID ?? gallery.categories.first?.id ?? "" },
                     set: { selectedCategoryID = $0 }
                 )) {
@@ -513,9 +522,9 @@ private struct MenuBarIconGalleryPicker: View {
                 .frame(width: 460, height: 300)
         } else if gallery.assets.isEmpty {
             ContentUnavailableView(
-                "图库不可用",
+                AppL10n.settings("menuBarIcon.gallery.unavailable", defaultValue: "图库不可用"),
                 systemImage: "wifi.exclamationmark",
-                description: Text(gallery.lastErrorMessage ?? "稍后再试。")
+                description: Text(gallery.lastErrorMessage ?? AppL10n.settings("menuBarIcon.gallery.tryLater", defaultValue: "稍后再试。"))
             )
             .frame(width: 460, height: 300)
         } else {
@@ -547,7 +556,7 @@ private struct MenuBarIconGalleryPicker: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(activeAssetID != nil)
-                        .help("使用 \(asset.title)")
+                        .help(AppL10n.settingsFormat("menuBarIcon.gallery.useAssetFormat", defaultValue: "使用 %@", asset.title))
                         .task {
                             await gallery.loadPreviewIfNeeded(for: asset)
                         }

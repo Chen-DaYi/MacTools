@@ -2,7 +2,53 @@
   "id": "display-resolution",
   "displayName": "显示器分辨率",
   "summary": "查看并切换每个显示器的分辨率",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "دقة الشاشة",
+      "summary": "عرض وتبديل القرارات لكل شاشة."
+    },
+    "de": {
+      "displayName": "Displayauflösung",
+      "summary": "Sehen Sie sich die Auflösungen für jede Anzeige an und wechseln Sie sie."
+    },
+    "en": {
+      "displayName": "Display Resolution",
+      "summary": "View and switch resolutions for each display."
+    },
+    "es": {
+      "displayName": "Resolución de pantalla",
+      "summary": "Vea y cambie resoluciones para cada pantalla."
+    },
+    "fr": {
+      "displayName": "Résolution de l’écran",
+      "summary": "Affichez et changez de résolution pour chaque écran."
+    },
+    "ja": {
+      "displayName": "ディスプレイ解像度",
+      "summary": "各ディスプレイの解像度を表示および切り替えます。"
+    },
+    "ko": {
+      "displayName": "디스플레이 해상도",
+      "summary": "각 디스플레이의 해상도를 보고 전환합니다."
+    },
+    "pt": {
+      "displayName": "Resolução da tela",
+      "summary": "Visualize e alterne as resoluções para cada monitor."
+    },
+    "ru": {
+      "displayName": "Разрешение дисплея",
+      "summary": "Просмотр и переключение разрешения для каждого дисплея."
+    },
+    "zh-Hans": {
+      "displayName": "显示器分辨率",
+      "summary": "查看并切换每个显示器的分辨率"
+    },
+    "zh-Hant": {
+      "displayName": "顯示器解析度",
+      "summary": "查看並切換每個顯示器的分辨率"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayResolution.bundle",

@@ -127,10 +127,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
 if [[ -z "$MINIMUM_HOST_VERSION" ]]; then
-    MINIMUM_HOST_VERSION="$(awk '$1 == "MARKETING_VERSION:" { print $2; exit }' project.yml)"
+    MINIMUM_HOST_VERSION="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configs/AppVersion.xcconfig)"
 fi
 if [[ -z "$MINIMUM_HOST_VERSION" ]]; then
-    echo "Unable to determine minimum host version from project.yml." >&2
+    echo "Unable to determine minimum host version from Configs/AppVersion.xcconfig." >&2
     exit 1
 fi
 

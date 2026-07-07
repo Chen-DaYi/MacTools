@@ -6,14 +6,16 @@ import MacToolsPluginKit
 
 public final class MicrophoneMutePluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        MicrophoneMutePluginProvider()
+        MicrophoneMutePluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct MicrophoneMutePluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [MicrophoneMutePlugin()]
+        [MicrophoneMutePlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -83,14 +85,7 @@ struct CoreAudioMicrophoneController: MicrophoneControlling {
 
 @MainActor
 final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "microphone-mute",
-        title: "麦克风静音",
-        iconName: "mic.slash",
-        iconTint: Color(nsColor: .systemRed),
-        order: 47,
-        defaultDescription: "快速静音或恢复默认麦克风输入"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -105,18 +100,36 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "MicrophoneMutePlugin"
     )
+    private let localization: PluginLocalization
     private let controller: any MicrophoneControlling
     private var isMuted: Bool = false
     private var lastErrorMessage: String?
 
-    init(controller: any MicrophoneControlling = CoreAudioMicrophoneController()) {
+    init(
+        controller: any MicrophoneControlling = CoreAudioMicrophoneController(),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.localization = localization
         self.controller = controller
+        self.metadata = PluginMetadata(
+            id: "microphone-mute",
+            title: localization.string("metadata.title", defaultValue: "麦克风静音"),
+            iconName: "mic.slash",
+            iconTint: Color(nsColor: .systemRed),
+            order: 47,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "快速静音或恢复默认麦克风输入"
+            )
+        )
         self.isMuted = controller.readMuteState()
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: isMuted ? "已静音" : "未静音",
+            subtitle: isMuted
+                ? localization.string("panel.subtitle.muted", defaultValue: "已静音")
+                : localization.string("panel.subtitle.unmuted", defaultValue: "未静音"),
             isOn: isMuted,
             isExpanded: false,
             isEnabled: true,
@@ -160,7 +173,9 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
             lastErrorMessage = nil
         } else {
             logger.error("Failed to set mute to \(muted, privacy: .public)")
-            lastErrorMessage = muted ? "静音操作失败" : "取消静音失败"
+            lastErrorMessage = muted
+                ? localization.string("error.muteFailed", defaultValue: "静音操作失败")
+                : localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
         }
         onStateChange?()
     }

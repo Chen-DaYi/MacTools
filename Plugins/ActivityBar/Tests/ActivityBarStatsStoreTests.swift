@@ -48,6 +48,35 @@ final class ActivityBarStatsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.today.perApp["Xcode"]?.keystrokes, 1)
     }
 
+    func testInputStatsBatchPersistenceUntilFlush() {
+        let storage = ActivityBarMemoryStorage()
+        let store = ActivityBarStatsStore(
+            storage: storage,
+            calendar: activityBarTestCalendar(),
+            dateProvider: { activityBarTestDate() },
+            persistenceDelay: .seconds(60)
+        )
+
+        store.incrementKeystroke(app: "Terminal")
+        store.incrementPointerClick(app: "Terminal")
+        store.incrementScroll(app: "Safari")
+
+        XCTAssertEqual(store.today.totalInputs, 3)
+        XCTAssertEqual(storage.setCallCount(forKey: "activity-bar.input.days.v1"), 0)
+
+        store.flushPendingChanges()
+
+        XCTAssertEqual(storage.setCallCount(forKey: "activity-bar.input.days.v1"), 1)
+
+        let reloaded = ActivityBarStatsStore(
+            storage: storage,
+            calendar: activityBarTestCalendar(),
+            dateProvider: { activityBarTestDate() }
+        )
+
+        XCTAssertEqual(reloaded.today.totalInputs, 3)
+    }
+
     func testResetTodayKeepsCurrentDateButClearsCounters() {
         let storage = ActivityBarMemoryStorage()
         let store = ActivityBarStatsStore(
@@ -62,6 +91,30 @@ final class ActivityBarStatsStoreTests: XCTestCase {
         XCTAssertEqual(store.today.date, "2026-05-18")
         XCTAssertEqual(store.today.totalInputs, 0)
         XCTAssertTrue(store.today.perApp.isEmpty)
+    }
+
+    func testResetTodayPersistsClearedCountersAfterPreviousFlush() {
+        let storage = ActivityBarMemoryStorage()
+        let store = ActivityBarStatsStore(
+            storage: storage,
+            calendar: activityBarTestCalendar(),
+            dateProvider: { activityBarTestDate() },
+            persistenceDelay: .seconds(60)
+        )
+
+        store.incrementKeystroke(app: "Terminal")
+        store.flushPendingChanges()
+        store.resetToday()
+
+        let reloaded = ActivityBarStatsStore(
+            storage: storage,
+            calendar: activityBarTestCalendar(),
+            dateProvider: { activityBarTestDate() }
+        )
+
+        XCTAssertEqual(reloaded.today.date, "2026-05-18")
+        XCTAssertEqual(reloaded.today.totalInputs, 0)
+        XCTAssertTrue(reloaded.today.perApp.isEmpty)
     }
 
     func testFlushPendingChangesOnlyWritesWhenStatsAreDirty() {

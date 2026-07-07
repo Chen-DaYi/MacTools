@@ -36,20 +36,32 @@ final class AppUpdater: NSObject, ObservableObject, AppUpdating {
         let path = bundleURL.path
 
         if path.contains("/AppTranslocation/") {
-            return .blocked("请先将应用移到 Applications 再更新。当前应用仍在系统隔离位置中运行。")
+            return .blocked(AppL10n.settings(
+                "about.update.error.quarantineLocation",
+                defaultValue: "请先将应用移到 Applications 再更新。当前应用仍在系统隔离位置中运行。"
+            ))
         }
 
         if path.hasPrefix("/Volumes/") || path.contains("/Volumes/") {
-            return .blocked("请先将应用移到 Applications 再更新。当前应用仍在磁盘镜像中运行。")
+            return .blocked(AppL10n.settings(
+                "about.update.error.diskImageLocation",
+                defaultValue: "请先将应用移到 Applications 再更新。当前应用仍在磁盘镜像中运行。"
+            ))
         }
 
         do {
             let resourceValues = try bundleURL.resourceValues(forKeys: [.volumeIsReadOnlyKey])
             if resourceValues.volumeIsReadOnly == true {
-                return .blocked("请先将应用移到 Applications 再更新。当前应用所在磁盘是只读的。")
+                return .blocked(AppL10n.settings(
+                    "about.update.error.readOnlyVolume",
+                    defaultValue: "请先将应用移到 Applications 再更新。当前应用所在磁盘是只读的。"
+                ))
             }
         } catch {
-            return .blocked("无法确认当前安装位置是否可写，请将应用移到 Applications 后再更新。")
+            return .blocked(AppL10n.settings(
+                "about.update.error.unwritableLocationUnknown",
+                defaultValue: "无法确认当前安装位置是否可写，请将应用移到 Applications 后再更新。"
+            ))
         }
 
         return .allowed
@@ -57,11 +69,11 @@ final class AppUpdater: NSObject, ObservableObject, AppUpdating {
 
     func checkForUpdateInformation() async -> AppUpdateProbeResult {
         guard canCheckForUpdates else {
-            return .error(message: "更新服务正在准备中，请稍后再试。")
+            return .error(message: AppL10n.settings("about.update.error.servicePreparing", defaultValue: "更新服务正在准备中，请稍后再试。"))
         }
 
         guard probeContinuation == nil else {
-            return .error(message: "正在检查更新，请稍后再试。")
+            return .error(message: AppL10n.settings("about.update.error.alreadyChecking", defaultValue: "正在检查更新，请稍后再试。"))
         }
 
         return await withCheckedContinuation { continuation in
@@ -85,8 +97,8 @@ final class AppUpdater: NSObject, ObservableObject, AppUpdating {
         probeContinuation.resume(returning: result)
     }
 
-    /// Sparkle 在"未找到更新"时会以 SUNoUpdateError（code 1001）通知委托，
-    /// 这不是真实失败，应当作"已是最新版本"处理。
+    /// Sparkle reports "no update found" to its delegate as `SUNoUpdateError` (code 1001).
+    /// Treat it as "already up to date" rather than a real failure.
     private func isNoUpdateError(_ error: Error) -> Bool {
         (error as NSError).code == 1001
     }

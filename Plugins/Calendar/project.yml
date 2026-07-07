@@ -3,6 +3,14 @@ settings:
     OTHER_LDFLAGS: -framework EventKit
 
 bundle:
-  sources:
-    - path: CalendarPluginResources
-      type: folder
+  postBuildScripts:
+    - name: Copy CalendarPluginResources
+      script: |
+        set -euo pipefail
+        resource_dir="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/CalendarPluginResources"
+        rm -rf "$resource_dir"
+        ditto "$SRCROOT/Plugins/Calendar/CalendarPluginResources" "$resource_dir"
+      inputFiles:
+        - "$(SRCROOT)/Plugins/Calendar/CalendarPluginResources/ChinaHolidayOverrides.json"
+      outputFiles:
+        - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/CalendarPluginResources/ChinaHolidayOverrides.json"

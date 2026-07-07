@@ -9,6 +9,12 @@ protocol MenuBarCommandRunning {
 }
 
 struct ProcessMenuBarCommandRunner: MenuBarCommandRunning {
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
+
     func setMenuBarAutohide(_ isEnabled: Bool) throws {
         let script = """
         tell application "System Events"
@@ -27,7 +33,14 @@ struct ProcessMenuBarCommandRunner: MenuBarCommandRunning {
             throw NSError(
                 domain: "AutoHideMenuBarPlugin",
                 code: (error[NSAppleScript.errorNumber] as? Int) ?? 1,
-                userInfo: [NSLocalizedDescriptionKey: message?.isEmpty == false ? message! : "切换菜单栏自动隐藏失败"]
+                userInfo: [
+                    NSLocalizedDescriptionKey: message?.isEmpty == false
+                        ? message!
+                        : localization.string(
+                            "error.toggleFailed",
+                            defaultValue: "切换菜单栏自动隐藏失败"
+                        )
+                ]
             )
         }
     }
@@ -35,27 +48,22 @@ struct ProcessMenuBarCommandRunner: MenuBarCommandRunning {
 
 public final class AutoHideMenuBarPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        AutoHideMenuBarPluginProvider()
+        AutoHideMenuBarPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct AutoHideMenuBarPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [AutoHideMenuBarPlugin()]
+        [AutoHideMenuBarPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "auto-hide-menu-bar",
-        title: "自动隐藏菜单栏",
-        iconName: "menubar.rectangle",
-        iconTint: Color(nsColor: .systemIndigo),
-        order: 42,
-        defaultDescription: "自动隐藏菜单栏，提供更完整的屏幕显示空间"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -69,22 +77,38 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "AutoHideMenuBarPlugin")
     private let commandRunner: any MenuBarCommandRunning
     private let stateReader: () -> Bool
+    private let localization: PluginLocalization
 
     private var isMenuBarHidden: Bool
     private var lastErrorMessage: String?
 
     init(
-        commandRunner: any MenuBarCommandRunning = ProcessMenuBarCommandRunner(),
-        stateReader: @escaping () -> Bool = { AutoHideMenuBarPlugin.readMenuBarAutohideState() }
+        commandRunner: (any MenuBarCommandRunning)? = nil,
+        stateReader: @escaping () -> Bool = { AutoHideMenuBarPlugin.readMenuBarAutohideState() },
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        self.commandRunner = commandRunner
+        self.localization = localization
+        self.commandRunner = commandRunner ?? ProcessMenuBarCommandRunner(localization: localization)
         self.stateReader = stateReader
+        self.metadata = PluginMetadata(
+            id: "auto-hide-menu-bar",
+            title: localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+            iconName: "menubar.rectangle",
+            iconTint: Color(nsColor: .systemIndigo),
+            order: 42,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "自动隐藏菜单栏，提供更完整的屏幕显示空间"
+            )
+        )
         self.isMenuBarHidden = stateReader()
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: isMenuBarHidden ? "已开启" : "已关闭",
+            subtitle: isMenuBarHidden
+                ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
             isOn: isMenuBarHidden,
             isExpanded: false,
             isEnabled: true,
@@ -136,8 +160,36 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
     }
 
-    private nonisolated static func readMenuBarAutohideState() -> Bool {
-        let defaults = UserDefaults(suiteName: "com.apple.dock")
-        return defaults?.object(forKey: "autohide-menubar") as? Bool ?? false
+    nonisolated static func readMenuBarAutohideState(
+        globalDefaults: UserDefaults = .standard,
+        dockDefaults: UserDefaults? = UserDefaults(suiteName: "com.apple.dock")
+    ) -> Bool {
+        resolvedMenuBarAutohideState(
+            globalValue: globalDefaults.object(forKey: "_HIHideMenuBar"),
+            dockValue: dockDefaults?.object(forKey: "autohide-menubar")
+        )
+    }
+
+    nonisolated static func resolvedMenuBarAutohideState(globalValue: Any?, dockValue: Any?) -> Bool {
+        if let value = boolValue(from: globalValue) {
+            return value
+        }
+
+        if let value = boolValue(from: dockValue) {
+            return value
+        }
+
+        return false
+    }
+
+    private nonisolated static func boolValue(from value: Any?) -> Bool? {
+        switch value {
+        case let value as Bool:
+            value
+        case let value as NSNumber:
+            value.boolValue
+        default:
+            nil
+        }
     }
 }

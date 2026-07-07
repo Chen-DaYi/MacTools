@@ -6,28 +6,23 @@ import MacToolsPluginKit
 
 public final class DisplayTrueColorPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        DisplayTrueColorPluginProvider()
+        DisplayTrueColorPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct DisplayTrueColorPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [DisplayTrueColorPlugin()]
+        [DisplayTrueColorPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
-/// 通过 CoreBrightness 私有框架的 CBAdaptationClient 控制原彩显示（True Tone）。
+/// Controls True Tone through CoreBrightness's private `CBAdaptationClient`.
 @MainActor
 final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "display-true-color",
-        title: "原彩显示",
-        iconName: "circle.righthalf.filled",
-        iconTint: Color(nsColor: .systemCyan),
-        order: 25,
-        defaultDescription: "自动调节显示器颜色以适应环境光"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -39,12 +34,28 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayTrueColorPlugin")
+    private let localization: PluginLocalization
     private let client: TrueToneClient
     private var isTrueColorEnabled: Bool = false
     private var isSupported: Bool = false
 
-    init(client: TrueToneClient = CoreBrightnessTrueToneClient()) {
+    init(
+        client: TrueToneClient = CoreBrightnessTrueToneClient(),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.localization = localization
         self.client = client
+        self.metadata = PluginMetadata(
+            id: "display-true-color",
+            title: localization.string("metadata.title", defaultValue: "原彩显示"),
+            iconName: "circle.righthalf.filled",
+            iconTint: Color(nsColor: .systemCyan),
+            order: 25,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "自动调节显示器颜色以适应环境光"
+            )
+        )
         isSupported = client.isSupported
         isTrueColorEnabled = isSupported ? (client.isEnabled ?? false) : false
     }
@@ -94,8 +105,12 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: - Private
 
     private var subtitle: String {
-        if !isSupported { return "不支持" }
-        return isTrueColorEnabled ? "已开启" : "已关闭"
+        if !isSupported {
+            return localization.string("panel.subtitle.unsupported", defaultValue: "不支持")
+        }
+        return isTrueColorEnabled
+            ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+            : localization.string("panel.subtitle.disabled", defaultValue: "已关闭")
     }
 }
 

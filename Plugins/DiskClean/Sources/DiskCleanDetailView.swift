@@ -3,17 +3,20 @@ import MacToolsPluginKit
 
 struct DiskCleanDetailView: View {
     @ObservedObject var controller: DiskCleanController
+    private let localization: PluginLocalization
     private let showsHeader: Bool
     private let contentPadding: CGFloat
     private let minimumContentHeight: CGFloat
 
     init(
         controller: DiskCleanController,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         showsHeader: Bool = true,
         contentPadding: CGFloat = 20,
         minimumContentHeight: CGFloat = 420
     ) {
         self.controller = controller
+        self.localization = localization
         self.showsHeader = showsHeader
         self.contentPadding = contentPadding
         self.minimumContentHeight = minimumContentHeight
@@ -40,10 +43,10 @@ struct DiskCleanDetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("磁盘清理")
+            Text(localization.string("detail.title", defaultValue: "磁盘清理"))
                 .font(PluginSettingsTheme.Typography.pageTitle)
 
-            Text(snapshot.errorMessage ?? snapshot.subtitle)
+            Text(snapshot.errorMessage ?? snapshot.subtitle(localization: localization))
                 .font(PluginSettingsTheme.Typography.pageDescription.weight(.medium))
                 .foregroundStyle(snapshot.errorMessage == nil ? Color.secondary : Color.red)
         }
@@ -53,7 +56,7 @@ struct DiskCleanDetailView: View {
         HStack(spacing: 16) {
             ForEach(DiskCleanChoice.allCases) { choice in
                 Toggle(
-                    choice.title,
+                    choice.title(localization: localization),
                     isOn: Binding(
                         get: { snapshot.selectedChoices.contains(choice) },
                         set: { controller.setChoice(choice, isSelected: $0) }
@@ -72,14 +75,14 @@ struct DiskCleanDetailView: View {
             Button {
                 controller.scan()
             } label: {
-                Label("扫描", systemImage: "magnifyingglass")
+                Label(localization.string("detail.action.scan", defaultValue: "扫描"), systemImage: "magnifyingglass")
             }
             .disabled(!snapshot.canScan)
 
             Button {
                 controller.cleanSelected(candidateIDs: cleanableCandidateIDs)
             } label: {
-                Label("清理", systemImage: "trash")
+                Label(localization.string("detail.action.clean", defaultValue: "清理"), systemImage: "trash")
             }
             .disabled(!snapshot.canClean)
 
@@ -87,7 +90,7 @@ struct DiskCleanDetailView: View {
                 Button {
                     controller.cancelCurrentOperation()
                 } label: {
-                    Label("停止", systemImage: "xmark.circle")
+                    Label(localization.string("detail.action.stop", defaultValue: "停止"), systemImage: "xmark.circle")
                 }
             }
         }
@@ -96,7 +99,7 @@ struct DiskCleanDetailView: View {
     private var scanLog: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("扫描日志")
+                Text(localization.string("detail.scanLog.title", defaultValue: "扫描日志"))
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                 Spacer()
                 if snapshot.phase == .scanning {
@@ -110,7 +113,7 @@ struct DiskCleanDetailView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         if snapshot.scanLogEntries.isEmpty {
-                            Text("点击扫描后显示实时进度")
+                            Text(localization.string("detail.scanLog.empty", defaultValue: "点击扫描后显示实时进度"))
                                 .font(PluginSettingsTheme.Typography.secondaryLabel)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -156,26 +159,38 @@ struct DiskCleanDetailView: View {
         if let scanResult = snapshot.scanResult {
             HStack(spacing: 16) {
                 summaryTile(
-                    title: "可清理",
-                    value: "\(scanResult.cleanableCandidates.count) 项"
+                    title: localization.string("detail.summary.cleanable", defaultValue: "可清理"),
+                    value: itemCountText(scanResult.cleanableCandidates.count)
                 )
                 summaryTile(
-                    title: "预计释放",
+                    title: localization.string("detail.summary.estimatedRelease", defaultValue: "预计释放"),
                     value: byteText(scanResult.cleanableSizeBytes)
                 )
                 summaryTile(
-                    title: "已保护",
-                    value: "\(scanResult.protectedCount) 项"
+                    title: localization.string("detail.summary.protected", defaultValue: "已保护"),
+                    value: itemCountText(scanResult.protectedCount)
                 )
             }
         }
 
         if let executionResult = snapshot.executionResult {
             HStack(spacing: 16) {
-                summaryTile(title: "已删除", value: "\(executionResult.removedCount) 项")
-                summaryTile(title: "已跳过", value: "\(executionResult.skippedCount) 项")
-                summaryTile(title: "失败", value: "\(executionResult.failedCount) 项")
-                summaryTile(title: "已释放", value: byteText(executionResult.reclaimedBytes))
+                summaryTile(
+                    title: localization.string("detail.summary.removed", defaultValue: "已删除"),
+                    value: itemCountText(executionResult.removedCount)
+                )
+                summaryTile(
+                    title: localization.string("detail.summary.skipped", defaultValue: "已跳过"),
+                    value: itemCountText(executionResult.skippedCount)
+                )
+                summaryTile(
+                    title: localization.string("detail.summary.failed", defaultValue: "失败"),
+                    value: itemCountText(executionResult.failedCount)
+                )
+                summaryTile(
+                    title: localization.string("detail.summary.released", defaultValue: "已释放"),
+                    value: byteText(executionResult.reclaimedBytes)
+                )
             }
         }
     }
@@ -204,7 +219,7 @@ struct DiskCleanDetailView: View {
             }
             .overlay {
                 if scanResult.candidates.isEmpty {
-                    Text("没有发现可清理项目")
+                    Text(localization.string("detail.candidates.empty", defaultValue: "没有发现可清理项目"))
                         .font(PluginSettingsTheme.Typography.rowTitle)
                         .foregroundStyle(.secondary)
                 }
@@ -250,18 +265,22 @@ struct DiskCleanDetailView: View {
     private func safetyText(_ safety: DiskCleanSafetyStatus) -> String {
         switch safety {
         case .allowed:
-            return "允许清理"
+            return localization.string("safety.allowed", defaultValue: "允许清理")
         case let .whitelisted(rule):
-            return "白名单保护：\(rule)"
+            return localization.format("safety.whitelisted", defaultValue: "白名单保护：%@", rule)
         case let .protected(reason):
-            return "敏感数据保护：\(reason)"
+            return localization.format("safety.protected", defaultValue: "敏感数据保护：%@", reason)
         case let .invalid(reason):
-            return "路径安全保护：\(reason)"
+            return localization.format("safety.invalid", defaultValue: "路径安全保护：%@", reason)
         case let .requiresAdmin(reason):
-            return "需要管理员权限：\(reason)"
+            return localization.format("safety.requiresAdmin", defaultValue: "需要管理员权限：%@", reason)
         case let .inUse(processName):
-            return "正在使用：\(processName)"
+            return localization.format("safety.inUse", defaultValue: "正在使用：%@", processName)
         }
+    }
+
+    private func itemCountText(_ count: Int) -> String {
+        localization.format("item.count", defaultValue: "%d 项", count)
     }
 
     private func byteText(_ bytes: Int64) -> String {

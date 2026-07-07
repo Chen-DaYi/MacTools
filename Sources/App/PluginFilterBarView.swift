@@ -5,7 +5,7 @@ struct PluginFilterBarView: View {
     @Binding var searchText: String
     @Binding var selectedFilter: PluginCategoryFilter
     let countsByFilter: [PluginCategoryFilter: Int]
-    var searchPrompt: String = "搜索插件名称或简介"
+    var searchPrompt: String = AppL10n.plugins("plugin.filter.searchPrompt", defaultValue: "搜索插件名称或简介")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -36,7 +36,7 @@ struct PluginFilterBarView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("清除搜索")
+                .help(AppL10n.plugins("plugin.filter.clearSearch", defaultValue: "清除搜索"))
             }
         }
         .padding(.horizontal, 10)
@@ -115,10 +115,6 @@ private struct PluginFilterChip: View {
                 Capsule(style: .continuous)
                     .fill(chipBackground)
             )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(strokeColor, lineWidth: 1)
-            )
             .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
@@ -156,13 +152,5 @@ private struct PluginFilterChip: View {
         }
 
         return Color(nsColor: .controlBackgroundColor).opacity(0.5)
-    }
-
-    private var strokeColor: Color {
-        if isSelected {
-            return Color.accentColor
-        }
-
-        return Color(nsColor: .separatorColor).opacity(0.5)
     }
 }

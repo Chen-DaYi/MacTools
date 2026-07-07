@@ -1,0 +1,38 @@
+{
+  "id": "mouse-enhancer",
+  "displayName": "鼠标增强",
+  "summary": "增强鼠标与触控板控制",
+  "localizedMetadata": {
+    "en": {
+      "displayName": "Mouse Enhancer",
+      "summary": "Enhance mouse and trackpad controls."
+    },
+    "zh-Hans": {
+      "displayName": "鼠标增强",
+      "summary": "增强鼠标与触控板控制"
+    },
+    "zh-Hant": {
+      "displayName": "滑鼠增強",
+      "summary": "增強滑鼠與觸控板控制"
+    }
+  },
+  "version": "1.0.1",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "MouseEnhancer.bundle",
+  "factoryClass": "MouseEnhancerPlugin.MouseEnhancerPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "MouseEnhancerPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [
+    "accessibility",
+    "inputMonitoring"
+  ],
+  "category": "productivity"
+}

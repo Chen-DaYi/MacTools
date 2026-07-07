@@ -1,19 +1,23 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import MacToolsPluginKit
 
 // MARK: - Errors
 
-enum MenuBarHiddenEventError: Error, LocalizedError {
+enum MenuBarHiddenEventError: Error {
     case notTrusted
     case eventCreationFailed
     case pidDead(pid_t)
 
-    var errorDescription: String? {
+    func localizedDescription(localization: PluginLocalization) -> String {
         switch self {
-        case .notTrusted: "辅助功能权限未授予"
-        case .eventCreationFailed: "无法创建鼠标事件"
-        case .pidDead(let pid): "目标进程 \(pid) 已退出"
+        case .notTrusted:
+            localization.string("eventError.notTrusted", defaultValue: "辅助功能权限未授予")
+        case .eventCreationFailed:
+            localization.string("eventError.eventCreationFailed", defaultValue: "无法创建鼠标事件")
+        case .pidDead(let pid):
+            localization.format("eventError.pidDead", defaultValue: "目标进程 %d 已退出", pid)
         }
     }
 }

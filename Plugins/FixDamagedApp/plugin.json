@@ -2,7 +2,53 @@
   "id": "fix-damaged-app",
   "displayName": "修复损坏应用",
   "summary": "移除隔离属性，解决「已损坏」或「不受信任」提示",
-  "version": "1.0.5",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إصلاح التطبيقات التالفة",
+      "summary": "قم بإزالة سمات العزل لحل تحذيرات التطبيقات التالفة أو غير الموثوقة."
+    },
+    "de": {
+      "displayName": "Beschädigte Apps reparieren",
+      "summary": "Entfernen Sie Quarantäneattribute, um Warnungen zu beschädigten oder nicht vertrauenswürdigen Apps zu beheben."
+    },
+    "en": {
+      "displayName": "Fix Damaged Apps",
+      "summary": "Remove quarantine attributes to resolve damaged or untrusted app warnings."
+    },
+    "es": {
+      "displayName": "Reparar apps dañadas",
+      "summary": "Elimine los atributos de cuarentena para resolver advertencias de aplicaciones dañadas o que no son de confianza."
+    },
+    "fr": {
+      "displayName": "Réparer les apps endommagées",
+      "summary": "Supprimez les attributs de quarantaine pour résoudre les avertissements d'applications endommagées ou non fiables."
+    },
+    "ja": {
+      "displayName": "破損したアプリを修復",
+      "summary": "破損したアプリまたは信頼できないアプリの警告を解決するには、隔離属性を削除します。"
+    },
+    "ko": {
+      "displayName": "손상된 앱 복구",
+      "summary": "손상되었거나 신뢰할 수 없는 앱 경고를 해결하려면 격리 속성을 제거하세요."
+    },
+    "pt": {
+      "displayName": "Corrigir apps danificados",
+      "summary": "Remova atributos de quarentena para resolver avisos de aplicativos danificados ou não confiáveis."
+    },
+    "ru": {
+      "displayName": "Исправить повреждённые приложения",
+      "summary": "Удалите атрибуты карантина, чтобы устранить предупреждения поврежденных или ненадежных приложений."
+    },
+    "zh-Hans": {
+      "displayName": "修复损坏应用",
+      "summary": "移除隔离属性，解决「已损坏」或「不受信任」提示"
+    },
+    "zh-Hant": {
+      "displayName": "修復損壞的 App",
+      "summary": "移除隔離屬性，解決「已損壞」或「不受信任」提示"
+    }
+  },
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "FixDamagedApp.bundle",

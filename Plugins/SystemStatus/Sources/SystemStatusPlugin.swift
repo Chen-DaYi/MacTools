@@ -4,39 +4,59 @@ import MacToolsPluginKit
 
 public final class SystemStatusPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        SystemStatusPluginProvider()
+        SystemStatusPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct SystemStatusPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [SystemStatusPlugin()]
+        [SystemStatusPlugin(
+            supportDirectory: context.supportDirectory,
+            localization: PluginLocalization(bundle: context.resourceBundle)
+        )]
     }
 }
 
 @MainActor
-final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
-    let metadata = PluginMetadata(
-        id: "system-status",
-        title: "系统状态",
-        iconName: "gauge.with.dots.needle.67percent",
-        iconTint: Color(nsColor: .systemTeal),
-        order: 10,
-        defaultDescription: "实时查看系统状态"
-    )
+final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
+    let metadata: PluginMetadata
 
     let descriptor = PluginComponentDescriptor(
         span: PluginComponentSpan(
             width: 4,
-            height: PluginComponentPanelLayoutMetrics.default.heightSpan(closestToOriginalSpanHeight: 2)
+            height: PluginComponentPanelLayoutMetrics.default.heightSpan(
+                fittingContentHeight: SystemStatusComponentLayout.dashboardContentHeight
+            )
         )!
     )
 
     private let viewModel: SystemStatusViewModel
+    private let localization: PluginLocalization
 
-    init(viewModel: SystemStatusViewModel = SystemStatusViewModel()) {
+    init(
+        viewModel: SystemStatusViewModel? = nil,
+        supportDirectory: URL? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.viewModel = viewModel
+            ?? SystemStatusViewModel(
+                sampler: SystemStatusSampler(localization: localization),
+                historyStore: SystemStatusHistoryStore(
+                    fileURL: SystemStatusHistoryStore.defaultFileURL(supportDirectory: supportDirectory)
+                )
+            )
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "system-status",
+            title: localization.string("metadata.title", defaultValue: "系统状态"),
+            iconName: "gauge.with.dots.needle.67percent",
+            iconTint: Color(nsColor: .systemTeal),
+            order: 10,
+            defaultDescription: localization.string("metadata.description", defaultValue: "实时查看系统状态")
+        )
     }
 
     var onStateChange: (() -> Void)?
@@ -61,12 +81,34 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
         AnyView(
             SystemStatusComponentView(
                 viewModel: viewModel,
-                isPanelVisible: context.isPanelVisible
+                localization: localization
             )
         )
     }
 
-    func refresh() {}
+    func refresh() {
+        viewModel.startBackground()
+    }
+
+    func deactivate(reason: PluginDeactivationReason) {
+        viewModel.stop()
+    }
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        viewModel.startForeground()
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        viewModel.returnToBackground()
+    }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)
@@ -78,105 +120,394 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
 }
 
 @MainActor
+struct SystemStatusSamplingSchedule: Sendable {
+    let backgroundFastInterval: Duration
+    let foregroundFastInterval: Duration
+    let backgroundSlowInterval: TimeInterval
+    let foregroundSlowInterval: TimeInterval
+    let backgroundProcessInterval: TimeInterval
+    let foregroundProcessInterval: TimeInterval
+    let backgroundHistoryInterval: TimeInterval
+    let foregroundHistoryInterval: TimeInterval
+
+    static let production = SystemStatusSamplingSchedule(
+        backgroundFastInterval: .seconds(30),
+        foregroundFastInterval: .seconds(3),
+        backgroundSlowInterval: 300,
+        foregroundSlowInterval: 15,
+        backgroundProcessInterval: 300,
+        foregroundProcessInterval: 15,
+        backgroundHistoryInterval: 300,
+        foregroundHistoryInterval: 60
+    )
+}
+
+@MainActor
 final class SystemStatusViewModel: ObservableObject {
     @Published private(set) var snapshot = SystemStatusSnapshot.empty
 
-    private let sampler: any SystemStatusSampling
-    private var fastTask: Task<Void, Never>?
-    private var slowTask: Task<Void, Never>?
-    private var processTask: Task<Void, Never>?
-    private var publicIPTask: Task<Void, Never>?
-    private var publicIPAddress: String?
+    private enum SamplingMode: Equatable {
+        case background
+        case foreground
 
-    init(sampler: any SystemStatusSampling = SystemStatusSampler()) {
+        func fastInterval(schedule: SystemStatusSamplingSchedule) -> Duration {
+            switch self {
+            case .background:
+                return schedule.backgroundFastInterval
+            case .foreground:
+                return schedule.foregroundFastInterval
+            }
+        }
+
+        func slowInterval(schedule: SystemStatusSamplingSchedule) -> TimeInterval {
+            switch self {
+            case .background:
+                return schedule.backgroundSlowInterval
+            case .foreground:
+                return schedule.foregroundSlowInterval
+            }
+        }
+
+        func processInterval(schedule: SystemStatusSamplingSchedule) -> TimeInterval {
+            switch self {
+            case .background:
+                return schedule.backgroundProcessInterval
+            case .foreground:
+                return schedule.foregroundProcessInterval
+            }
+        }
+
+        func historyInterval(schedule: SystemStatusSamplingSchedule) -> TimeInterval {
+            switch self {
+            case .background:
+                return schedule.backgroundHistoryInterval
+            case .foreground:
+                return schedule.foregroundHistoryInterval
+            }
+        }
+    }
+
+    private let sampler: any SystemStatusSampling
+    private let historyStore: any SystemStatusHistoryStoring
+    private let schedule: SystemStatusSamplingSchedule
+    private var samplingTask: Task<Void, Never>?
+    private var mode: SamplingMode = .background
+    private var lastSlowDate: Date?
+    private var lastProcessDate: Date?
+    private var lastHistoryDate: Date?
+    private var displayHistory: [SystemStatusHistoryPoint] = []
+    private var didLoadHistory = false
+    private var lastDisplayHistoryPublishDate: Date?
+
+    private static let displayHistoryRetention: TimeInterval = 30 * 60
+    private static let maximumDisplayHistoryCount = 1_800
+    private static let foregroundDisplayHistoryInterval: TimeInterval = 2
+    private static let backgroundDisplayHistoryInterval: TimeInterval = 30
+
+    init(
+        sampler: any SystemStatusSampling = SystemStatusSampler(),
+        historyStore: (any SystemStatusHistoryStoring)? = nil,
+        schedule: SystemStatusSamplingSchedule = .production
+    ) {
         self.sampler = sampler
+        self.historyStore = historyStore ?? SystemStatusHistoryStore(
+            fileURL: SystemStatusHistoryStore.defaultFileURL(supportDirectory: nil)
+        )
+        self.schedule = schedule
     }
 
     func start() {
-        guard fastTask == nil, slowTask == nil, processTask == nil, publicIPTask == nil else {
+        startForeground()
+    }
+
+    func startForeground() {
+        let previousMode = mode
+        mode = .foreground
+
+        if previousMode != .foreground, samplingTask != nil {
+            restartSamplingLoop()
             return
         }
 
-        fastTask = Task { @MainActor [weak self] in
-            await self?.runFastSamplingLoop()
+        startSamplingIfNeeded()
+    }
+
+    func startBackground() {
+        guard mode != .foreground else {
+            return
         }
-        slowTask = Task { @MainActor [weak self] in
-            await self?.runSlowSamplingLoop()
-        }
-        processTask = Task { @MainActor [weak self] in
-            await self?.runProcessSamplingLoop()
-        }
-        publicIPTask = Task { @MainActor [weak self] in
-            await self?.runPublicIPSamplingLoop()
-        }
+
+        mode = .background
+        startSamplingIfNeeded()
+    }
+
+    func returnToBackground() {
+        mode = .background
+    }
+
+    func refreshSnapshotNow(referenceDate: Date = Date()) async {
+        await collectFast(referenceDate: referenceDate, mode: .foreground, forcePublishHistory: true)
+
+        let slowSample = await sampler.collectSlow()
+        guard !Task.isCancelled else { return }
+        var slowSnapshot = snapshot
+        slowSnapshot.disk = slowSnapshot.disk.replacingCapacity(from: slowSample.disk)
+        slowSnapshot.battery = slowSample.battery
+        slowSnapshot.gpu = slowSample.gpu
+        slowSnapshot.hardware = slowSample.hardware
+        publishSnapshotIfChanged(slowSnapshot)
+
+        let processes = await sampler.collectTopProcesses(limit: 3)
+        guard !Task.isCancelled else { return }
+        var processSnapshot = snapshot
+        processSnapshot.topProcesses = await Self.resolveApplicationNames(for: processes)
+        publishSnapshotIfChanged(processSnapshot)
+
+        let point = SystemStatusHistoryPoint(timestamp: referenceDate.timeIntervalSince1970, snapshot: snapshot)
+        appendDisplayHistoryPoint(point, referenceDate: referenceDate)
+        publishDisplayHistory(referenceDate: referenceDate, force: true)
+        _ = await historyStore.append(point, referenceDate: referenceDate)
+        guard !Task.isCancelled else { return }
     }
 
     func stop() {
-        fastTask?.cancel()
-        slowTask?.cancel()
-        processTask?.cancel()
-        publicIPTask?.cancel()
-        fastTask = nil
-        slowTask = nil
-        processTask = nil
-        publicIPTask = nil
+        samplingTask?.cancel()
+        samplingTask = nil
+        mode = .background
     }
 
-    private func runFastSamplingLoop() async {
+    private func startSamplingIfNeeded() {
+        guard samplingTask == nil else {
+            return
+        }
+
+        samplingTask = Task { @MainActor [weak self] in
+            await self?.loadHistory()
+            await self?.runSamplingLoop()
+        }
+    }
+
+    private func restartSamplingLoop() {
+        samplingTask?.cancel()
+        samplingTask = nil
+        startSamplingIfNeeded()
+    }
+
+    private func loadHistory() async {
+        guard !didLoadHistory else {
+            return
+        }
+
+        let referenceDate = Date()
+        displayHistory = Self.prunedDisplayHistory(
+            await historyStore.load(referenceDate: referenceDate),
+            referenceDate: referenceDate
+        )
+        publishDisplayHistory(referenceDate: referenceDate, force: true)
+        didLoadHistory = true
+    }
+
+    private func runSamplingLoop() async {
         while !Task.isCancelled {
-            let sample = await sampler.collectFast(referenceDate: Date())
-            snapshot.cpu = sample.cpu
-            snapshot.memory = sample.memory
-            snapshot.network = sample.network.replacingPublicIPAddress(publicIPAddress)
+            let currentMode = mode
+            let now = Date()
+            await collectFast(referenceDate: now, mode: currentMode)
+            guard !Task.isCancelled else { return }
+            await collectSlowIfNeeded(referenceDate: now, mode: currentMode)
+            guard !Task.isCancelled else { return }
+            await collectProcessesIfNeeded(referenceDate: now, mode: currentMode)
+            guard !Task.isCancelled else { return }
+            await persistHistoryIfNeeded(referenceDate: now, mode: currentMode)
+            guard !Task.isCancelled else { return }
 
             do {
-                try await Task.sleep(for: .seconds(1))
+                try await Task.sleep(for: currentMode.fastInterval(schedule: schedule))
             } catch {
                 return
             }
         }
     }
 
-    private func runSlowSamplingLoop() async {
-        while !Task.isCancelled {
-            let sample = await sampler.collectSlow()
-            snapshot.disk = sample.disk
-            snapshot.battery = sample.battery
+    private func collectFast(
+        referenceDate: Date,
+        mode: SamplingMode,
+        forcePublishHistory: Bool = false
+    ) async {
+        let sample = await sampler.collectFast(referenceDate: referenceDate)
+        guard !Task.isCancelled else { return }
 
-            do {
-                try await Task.sleep(for: .seconds(5))
-            } catch {
-                return
-            }
+        var updatedSnapshot = snapshot
+        updatedSnapshot.cpu = sample.cpu
+        updatedSnapshot.memory = sample.memory
+        updatedSnapshot.network = sample.network
+        updatedSnapshot.disk = updatedSnapshot.disk.replacingActivity(from: sample.disk)
+        appendDisplayHistoryPoint(
+            SystemStatusHistoryPoint(timestamp: referenceDate.timeIntervalSince1970, snapshot: updatedSnapshot),
+            referenceDate: referenceDate
+        )
+
+        if shouldPublishDisplayHistory(referenceDate: referenceDate, mode: mode) || forcePublishHistory {
+            updatedSnapshot.history = displayHistory
+            lastDisplayHistoryPublishDate = referenceDate
+        } else {
+            updatedSnapshot.history = snapshot.history
         }
+        publishSnapshotIfChanged(updatedSnapshot)
     }
 
-    private func runProcessSamplingLoop() async {
-        while !Task.isCancelled {
-            let processes = await sampler.collectTopProcesses(limit: 3)
-            snapshot.topProcesses = await Self.resolveApplicationNames(for: processes)
-
-            do {
-                try await Task.sleep(for: .seconds(3))
-            } catch {
-                return
-            }
+    private func collectSlowIfNeeded(referenceDate: Date, mode: SamplingMode) async {
+        guard shouldRun(lastDate: lastSlowDate, referenceDate: referenceDate, interval: mode.slowInterval(schedule: schedule)) else {
+            return
         }
+
+        lastSlowDate = referenceDate
+        let sample = await sampler.collectSlow()
+        guard !Task.isCancelled else { return }
+        var updatedSnapshot = snapshot
+        updatedSnapshot.disk = updatedSnapshot.disk.replacingCapacity(from: sample.disk)
+        updatedSnapshot.battery = sample.battery
+        updatedSnapshot.gpu = sample.gpu
+        updatedSnapshot.hardware = sample.hardware
+        publishSnapshotIfChanged(updatedSnapshot)
     }
 
-    private func runPublicIPSamplingLoop() async {
-        while !Task.isCancelled {
-            if let publicIPAddress = await sampler.collectPublicIPAddress() {
-                self.publicIPAddress = publicIPAddress
-                snapshot.network = snapshot.network.replacingPublicIPAddress(publicIPAddress)
+    private func collectProcessesIfNeeded(referenceDate: Date, mode: SamplingMode) async {
+        guard shouldRun(lastDate: lastProcessDate, referenceDate: referenceDate, interval: mode.processInterval(schedule: schedule)) else {
+            return
+        }
+
+        lastProcessDate = referenceDate
+        let processes = await sampler.collectTopProcesses(limit: 3)
+        guard !Task.isCancelled else { return }
+        var updatedSnapshot = snapshot
+        updatedSnapshot.topProcesses = await Self.resolveApplicationNames(for: processes)
+        publishSnapshotIfChanged(updatedSnapshot)
+    }
+
+    private func persistHistoryIfNeeded(referenceDate: Date, mode: SamplingMode) async {
+        guard shouldRun(lastDate: lastHistoryDate, referenceDate: referenceDate, interval: mode.historyInterval(schedule: schedule)) else {
+            return
+        }
+
+        lastHistoryDate = referenceDate
+        let point = SystemStatusHistoryPoint(timestamp: referenceDate.timeIntervalSince1970, snapshot: snapshot)
+        appendDisplayHistoryPoint(point, referenceDate: referenceDate)
+        publishDisplayHistory(referenceDate: referenceDate, force: true)
+        _ = await historyStore.append(point, referenceDate: referenceDate)
+        guard !Task.isCancelled else { return }
+    }
+
+    private func shouldRun(lastDate: Date?, referenceDate: Date, interval: TimeInterval) -> Bool {
+        guard let lastDate else {
+            return true
+        }
+
+        return referenceDate.timeIntervalSince(lastDate) >= interval
+    }
+
+    private func appendDisplayHistoryPoint(_ point: SystemStatusHistoryPoint, referenceDate: Date) {
+        if let lastIndex = displayHistory.indices.last,
+           displayHistory[lastIndex].timestamp == point.timestamp {
+            displayHistory[lastIndex] = point
+            displayHistory = Self.prunedSortedDisplayHistory(displayHistory, referenceDate: referenceDate)
+            return
+        }
+
+        if let lastTimestamp = displayHistory.last?.timestamp,
+           point.timestamp < lastTimestamp {
+            displayHistory.append(point)
+            displayHistory = Self.prunedDisplayHistory(displayHistory, referenceDate: referenceDate)
+            return
+        }
+
+        displayHistory.append(point)
+        displayHistory = Self.prunedSortedDisplayHistory(displayHistory, referenceDate: referenceDate)
+    }
+
+    private func shouldPublishDisplayHistory(referenceDate: Date, mode: SamplingMode) -> Bool {
+        let interval: TimeInterval
+        switch mode {
+        case .foreground:
+            interval = Self.foregroundDisplayHistoryInterval
+        case .background:
+            interval = Self.backgroundDisplayHistoryInterval
+        }
+
+        return shouldRun(lastDate: lastDisplayHistoryPublishDate, referenceDate: referenceDate, interval: interval)
+    }
+
+    private func publishDisplayHistory(referenceDate: Date, force: Bool = false) {
+        guard force || shouldPublishDisplayHistory(referenceDate: referenceDate, mode: mode) else {
+            return
+        }
+
+        var updatedSnapshot = snapshot
+        updatedSnapshot.history = displayHistory
+        lastDisplayHistoryPublishDate = referenceDate
+        publishSnapshotIfChanged(updatedSnapshot)
+    }
+
+    private func publishSnapshotIfChanged(_ updatedSnapshot: SystemStatusSnapshot) {
+        guard updatedSnapshot != snapshot else {
+            return
+        }
+
+        snapshot = updatedSnapshot
+    }
+
+    static func prunedSortedDisplayHistory(
+        _ points: [SystemStatusHistoryPoint],
+        referenceDate: Date
+    ) -> [SystemStatusHistoryPoint] {
+        guard !points.isEmpty else {
+            return []
+        }
+
+        let cutoff = referenceDate.timeIntervalSince1970 - displayHistoryRetention
+        let upperBound = referenceDate.timeIntervalSince1970 + 60
+        var startIndex = points.startIndex
+
+        while startIndex < points.endIndex, points[startIndex].timestamp < cutoff {
+            startIndex = points.index(after: startIndex)
+        }
+
+        var endIndex = points.endIndex
+        var currentIndex = startIndex
+        while currentIndex < points.endIndex {
+            if points[currentIndex].timestamp > upperBound {
+                endIndex = currentIndex
+                break
             }
 
-            do {
-                try await Task.sleep(for: .seconds(60))
-            } catch {
-                return
-            }
+            currentIndex = points.index(after: currentIndex)
         }
+
+        let retainedCount = points.distance(from: startIndex, to: endIndex)
+        if retainedCount > maximumDisplayHistoryCount {
+            startIndex = points.index(endIndex, offsetBy: -maximumDisplayHistoryCount)
+        }
+
+        guard startIndex < endIndex else {
+            return []
+        }
+
+        return Array(points[startIndex..<endIndex])
+    }
+
+    static func prunedDisplayHistory(
+        _ points: [SystemStatusHistoryPoint],
+        referenceDate: Date
+    ) -> [SystemStatusHistoryPoint] {
+        let cutoff = referenceDate.timeIntervalSince1970 - displayHistoryRetention
+        let recentPoints = points
+            .filter { $0.timestamp >= cutoff && $0.timestamp <= referenceDate.timeIntervalSince1970 + 60 }
+            .sorted { $0.timestamp < $1.timestamp }
+
+        guard recentPoints.count > maximumDisplayHistoryCount else {
+            return recentPoints
+        }
+
+        return Array(recentPoints.suffix(maximumDisplayHistoryCount))
     }
 
     private static func resolveApplicationNames(for processes: [SystemStatusTopProcess]) async -> [SystemStatusTopProcess] {
@@ -196,87 +527,94 @@ final class SystemStatusViewModel: ObservableObject {
 
 struct SystemStatusComponentView: View {
     private enum Layout {
-        static let spacing: CGFloat = 8
+        static let spacing = SystemStatusComponentLayout.cardSpacing
     }
 
     @ObservedObject var viewModel: SystemStatusViewModel
-    let isPanelVisible: Bool
+    let localization: PluginLocalization
 
     var body: some View {
-        VStack(spacing: Layout.spacing) {
-            HStack(spacing: Layout.spacing) {
-                compactCPUCard
-                compactMemoryCard
-                compactDiskCard
-                compactBatteryCard
-            }
-
-            HStack(spacing: Layout.spacing) {
-                networkCard
-                topProcessesCard
-            }
-        }
-        .onAppear {
-            if isPanelVisible {
-                viewModel.start()
-            }
-        }
-        .onDisappear { viewModel.stop() }
+        SystemStatusDashboardView(snapshot: viewModel.snapshot, localization: localization)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var compactCPUCard: some View {
         let cpu = viewModel.snapshot.cpu
         return SystemStatusCompactMetricCard(
-            title: SystemStatusMetricKind.cpu.title,
+            title: SystemStatusMetricKind.cpu.title(localization: localization),
             percentText: cpu.isCollecting ? "--" : SystemStatusFormatter.percent(cpu.usage),
             detailLines: [
-                "温度 \(SystemStatusFormatter.temperature(cpu.temperatureCelsius))",
-                "功率 \(SystemStatusFormatter.power(cpu.systemPowerWatts))"
+                localization.format(
+                    "metric.temperatureFormat",
+                    defaultValue: "温度 %@",
+                    SystemStatusFormatter.temperature(cpu.temperatureCelsius)
+                ),
+                localization.format(
+                    "metric.powerFormat",
+                    defaultValue: "功率 %@",
+                    SystemStatusFormatter.power(cpu.systemPowerWatts)
+                )
             ],
-            progress: cpu.usage,
-            tone: .purple
+            progress: cpu.usage
         )
     }
 
     private var compactMemoryCard: some View {
         let memory = viewModel.snapshot.memory
         return SystemStatusCompactMetricCard(
-            title: SystemStatusMetricKind.memory.title,
+            title: SystemStatusMetricKind.memory.title(localization: localization),
             percentText: SystemStatusFormatter.percent(memory.usage),
             detailLines: [
-                "已用 \(SystemStatusFormatter.bytes(memory.usedBytes))",
-                "总量 \(SystemStatusFormatter.bytes(memory.totalBytes))"
+                localization.format(
+                    "metric.usedFormat",
+                    defaultValue: "已用 %@",
+                    SystemStatusFormatter.bytes(memory.usedBytes)
+                ),
+                localization.format(
+                    "metric.totalFormat",
+                    defaultValue: "总量 %@",
+                    SystemStatusFormatter.bytes(memory.totalBytes)
+                )
             ],
-            progress: memory.usage,
-            tone: tone(forUsage: memory.usage, normal: .blue)
+            progress: memory.usage
         )
     }
 
     private var compactDiskCard: some View {
         let disk = viewModel.snapshot.disk
         return SystemStatusCompactMetricCard(
-            title: SystemStatusMetricKind.disk.title,
+            title: SystemStatusMetricKind.disk.title(localization: localization),
             percentText: SystemStatusFormatter.percent(disk.usage),
             detailLines: [
-                "已用 \(SystemStatusFormatter.bytes(disk.usedBytes))",
-                "总量 \(SystemStatusFormatter.bytes(disk.totalBytes))"
+                localization.format(
+                    "metric.usedFormat",
+                    defaultValue: "已用 %@",
+                    SystemStatusFormatter.bytes(disk.usedBytes)
+                ),
+                localization.format(
+                    "metric.totalFormat",
+                    defaultValue: "总量 %@",
+                    SystemStatusFormatter.bytes(disk.totalBytes)
+                )
             ],
-            progress: disk.usage,
-            tone: tone(forUsage: disk.usage, normal: .teal)
+            progress: disk.usage
         )
     }
 
     private var compactBatteryCard: some View {
         let battery = viewModel.snapshot.battery
         return SystemStatusCompactMetricCard(
-            title: SystemStatusMetricKind.battery.title,
+            title: SystemStatusMetricKind.battery.title(localization: localization),
             percentText: battery.isAvailable ? SystemStatusFormatter.percent(battery.level) : "--",
             detailLines: [
-                "温度 \(SystemStatusFormatter.temperature(battery.temperatureCelsius))",
+                localization.format(
+                    "metric.temperatureFormat",
+                    defaultValue: "温度 %@",
+                    SystemStatusFormatter.temperature(battery.temperatureCelsius)
+                ),
                 batteryHealthText(for: battery)
             ],
             progress: battery.level,
-            tone: tone(for: battery),
             centerSubtext: batteryCircleStatusText(for: battery),
             centerHelpText: batteryShortText(for: battery)
         )
@@ -285,7 +623,7 @@ struct SystemStatusComponentView: View {
     private var networkCard: some View {
         let network = viewModel.snapshot.network
         return SystemStatusWideInfoCard(
-            title: SystemStatusMetricKind.network.title,
+            title: SystemStatusMetricKind.network.title(localization: localization),
             iconName: "wifi",
             tint: Color(nsColor: .systemCyan),
             headerLeadingPadding: 4
@@ -306,14 +644,17 @@ struct SystemStatusComponentView: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     SystemStatusKeyValueLine(
-                        label: "公网",
-                        value: network.publicIPAddress ?? "获取中",
-                        copyValue: network.publicIPAddress
+                        label: localization.string("network.publicIP", defaultValue: "公网"),
+                        value: network.publicIPAddress
+                            ?? localization.string("network.publicIP.collecting", defaultValue: "获取中"),
+                        copyValue: network.publicIPAddress,
+                        localization: localization
                     )
                     SystemStatusKeyValueLine(
-                        label: "内网",
+                        label: localization.string("network.localIP", defaultValue: "内网"),
                         value: network.ipAddress ?? "—",
-                        copyValue: network.ipAddress
+                        copyValue: network.ipAddress,
+                        localization: localization
                     )
                 }
             }
@@ -322,64 +663,33 @@ struct SystemStatusComponentView: View {
 
     private var topProcessesCard: some View {
         SystemStatusTopProcessesCard(
-            processes: Array(viewModel.snapshot.topProcesses.prefix(3))
+            processes: Array(viewModel.snapshot.topProcesses.prefix(3)),
+            localization: localization
         )
-    }
-
-    private func tone(forUsage usage: Double?, normal: SystemStatusMetricTone) -> SystemStatusMetricTone {
-        guard let usage else {
-            return normal
-        }
-
-        if usage >= 0.9 {
-            return .red
-        }
-        if usage >= 0.75 {
-            return .orange
-        }
-
-        return normal
-    }
-
-    private func tone(for battery: SystemStatusBatterySnapshot) -> SystemStatusMetricTone {
-        guard let level = battery.level else {
-            return .orange
-        }
-
-        if battery.state == .charging || battery.state == .charged {
-            return .green
-        }
-        if level <= 0.2 {
-            return .red
-        }
-        if level <= 0.35 {
-            return .orange
-        }
-        return .green
     }
 
     private func batteryShortText(for battery: SystemStatusBatterySnapshot) -> String {
         guard battery.isAvailable else {
-            return battery.state.title
+            return battery.state.title(localization: localization)
         }
 
         if battery.state == .charged {
-            return "已充满"
+            return localization.string("battery.state.charged", defaultValue: "已充满")
         }
 
-        if let adapterWatts = battery.adapterWatts, battery.state == .charging || battery.state == .acPower {
-            return "\(battery.state.title) \(adapterWatts)W"
+        if battery.state == .charging || battery.state == .acPower {
+            return battery.state.title(localization: localization)
         }
 
-        return SystemStatusFormatter.timeRemaining(minutes: battery.timeRemainingMinutes)
+        return SystemStatusFormatter.timeRemaining(minutes: battery.timeRemainingMinutes, localization: localization)
     }
 
     private func batteryHealthText(for battery: SystemStatusBatterySnapshot) -> String {
         guard let healthPercent = battery.healthPercent else {
-            return "健康度 —"
+            return localization.string("battery.healthUnavailable", defaultValue: "健康度 —")
         }
 
-        return "健康度 \(healthPercent)%"
+        return localization.format("battery.healthFormat", defaultValue: "健康度 %d%%", healthPercent)
     }
 
     private func batteryCircleStatusText(for battery: SystemStatusBatterySnapshot) -> String? {
@@ -389,40 +699,15 @@ struct SystemStatusComponentView: View {
 
         switch battery.state {
         case .charging, .charged, .acPower, .unplugged:
-            return battery.state.title
+            return battery.state.title(localization: localization)
         case .unavailable, .unknown:
             return nil
         }
     }
 }
 
-private enum SystemStatusMetricTone {
-    case blue
-    case cyan
-    case green
-    case orange
-    case purple
-    case red
-    case teal
-
-    var color: Color {
-        switch self {
-        case .blue:
-            return Color(nsColor: .systemBlue)
-        case .cyan:
-            return Color(nsColor: .systemCyan)
-        case .green:
-            return Color(nsColor: .systemGreen)
-        case .orange:
-            return Color(nsColor: .systemOrange)
-        case .purple:
-            return Color(nsColor: .systemPurple)
-        case .red:
-            return Color(nsColor: .systemRed)
-        case .teal:
-            return Color(nsColor: .systemTeal)
-        }
-    }
+private enum SystemStatusCircleStyle {
+    static let tint = Color(nsColor: .systemBlue)
 }
 
 private struct SystemStatusCompactMetricCard: View {
@@ -430,14 +715,13 @@ private struct SystemStatusCompactMetricCard: View {
     let percentText: String
     let detailLines: [String]
     let progress: Double?
-    let tone: SystemStatusMetricTone
     var centerSubtext: String? = nil
     var centerHelpText: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                SystemStatusCircularProgress(value: progress, tint: tone.color)
+                SystemStatusCircularProgress(value: progress, tint: SystemStatusCircleStyle.tint)
                     .frame(width: 58, height: 58)
 
                 VStack(spacing: centerSubtext == nil ? 1 : 0) {
@@ -457,7 +741,7 @@ private struct SystemStatusCompactMetricCard: View {
                     if let centerSubtext {
                         Text(centerSubtext)
                             .font(.system(size: 6.8, weight: .semibold, design: .rounded))
-                            .foregroundStyle(tone.color)
+                            .foregroundStyle(SystemStatusCircleStyle.tint)
                             .lineLimit(1)
                             .minimumScaleFactor(0.55)
                     }
@@ -481,10 +765,9 @@ private struct SystemStatusCompactMetricCard: View {
             }
             .help(detailLines.joined(separator: "\n"))
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 7)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 }
 private struct SystemStatusWideInfoCard<Content: View>: View {
@@ -514,10 +797,9 @@ private struct SystemStatusWideInfoCard<Content: View>: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 }
 
@@ -555,6 +837,7 @@ private struct SystemStatusKeyValueLine: View {
     let label: String
     let value: String
     let copyValue: String?
+    let localization: PluginLocalization
 
     @State private var isHovering = false
 
@@ -584,7 +867,7 @@ private struct SystemStatusKeyValueLine: View {
                 .buttonStyle(.plain)
                 .opacity(isHovering ? 1 : 0)
                 .disabled(!isHovering)
-                .help("复制\(label) IP")
+                .help(localization.format("network.copyIPHelpFormat", defaultValue: "复制%@ IP", label))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -611,13 +894,14 @@ private struct SystemStatusKeyValueLine: View {
 
 private struct SystemStatusTopProcessesCard: View {
     let processes: [SystemStatusTopProcess]
+    let localization: PluginLocalization
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
 
             if processes.isEmpty {
-                Text("采集中…")
+                Text(localization.string("topProcesses.collecting", defaultValue: "采集中…"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -630,9 +914,9 @@ private struct SystemStatusTopProcessesCard: View {
                 .frame(maxHeight: .infinity, alignment: .center)
             }
         }
-        .padding(10)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 
     private var header: some View {
@@ -642,7 +926,7 @@ private struct SystemStatusTopProcessesCard: View {
                 .foregroundStyle(Color(nsColor: .systemPink))
                 .frame(width: 14, height: 14)
 
-            Text(SystemStatusMetricKind.topProcesses.title)
+            Text(SystemStatusMetricKind.topProcesses.title(localization: localization))
                 .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

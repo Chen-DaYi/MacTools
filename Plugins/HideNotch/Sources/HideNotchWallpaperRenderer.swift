@@ -1,14 +1,15 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import MacToolsPluginKit
 
 enum HideNotchDesktopMaskWindowError: LocalizedError {
-    case creationFailed
+    case creationFailed(PluginLocalization)
 
     var errorDescription: String? {
         switch self {
-        case .creationFailed:
-            return "无法创建隐藏刘海遮挡层。"
+        case let .creationFailed(localization):
+            return localization.string("error.maskWindowCreationFailed", defaultValue: "无法创建隐藏刘海遮挡层。")
         }
     }
 }
@@ -79,9 +80,15 @@ private final class SystemHideNotchDesktopMaskWindow: HideNotchDesktopMaskWindow
 
 @MainActor
 final class HideNotchDesktopMaskWindowBuilder: HideNotchDesktopMaskWindowBuilding {
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
+
     func makeWindow(frame: CGRect) throws -> HideNotchDesktopMaskWindowing {
         guard !frame.isEmpty else {
-            throw HideNotchDesktopMaskWindowError.creationFailed
+            throw HideNotchDesktopMaskWindowError.creationFailed(localization)
         }
 
         return SystemHideNotchDesktopMaskWindow(frame: frame)

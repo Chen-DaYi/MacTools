@@ -6,33 +6,24 @@ import MacToolsPluginKit
 
 public final class LockScreenPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        LockScreenPluginProvider()
+        LockScreenPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct LockScreenPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [LockScreenPlugin()]
+        [LockScreenPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "lock-screen",
-        title: "锁定屏幕",
-        iconName: "lock",
-        iconTint: Color(nsColor: .systemGray),
-        order: 96,
-        defaultDescription: "立即锁定屏幕"
-    )
+    let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "锁定"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -42,6 +33,22 @@ final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel {
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "LockScreenPlugin"
     )
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.metadata = PluginMetadata(
+            id: "lock-screen",
+            title: localization.string("metadata.title", defaultValue: "锁定屏幕"),
+            iconName: "lock",
+            iconTint: Color(nsColor: .systemGray),
+            order: 96,
+            defaultDescription: localization.string("metadata.description", defaultValue: "立即锁定屏幕")
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.button.lock", defaultValue: "锁定")
+        )
+    }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(

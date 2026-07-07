@@ -3,12 +3,21 @@ import MacToolsPluginKit
 
 struct LaunchControlManagerView: View {
     @ObservedObject var controller: LaunchControlController
+    private let localization: PluginLocalization
 
     @State private var scopeFilter: LaunchControlFilter = .user
     @State private var originFilter: LaunchControlOriginFilter = .all
     @State private var stateFilter: LaunchControlStateFilter = .all
     @State private var searchText = ""
     @State private var pendingAction: LaunchControlPendingAction?
+
+    init(
+        controller: LaunchControlController,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.controller = controller
+        self.localization = localization
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
@@ -41,7 +50,8 @@ struct LaunchControlManagerView: View {
             }
         }
         .confirmationDialog(
-            pendingAction?.confirmationTitle ?? "确认操作",
+            pendingAction?.confirmationTitle(localization: localization)
+                ?? localization.string("manager.confirm.defaultTitle", defaultValue: "确认操作"),
             isPresented: Binding(
                 get: { pendingAction != nil },
                 set: { if !$0 { pendingAction = nil } }
@@ -49,29 +59,29 @@ struct LaunchControlManagerView: View {
             titleVisibility: .visible
         ) {
             if let pendingAction {
-                Button(pendingAction.buttonTitle, role: pendingAction.role) {
+                Button(pendingAction.buttonTitle(localization: localization), role: pendingAction.role) {
                     perform(pendingAction)
                     self.pendingAction = nil
                 }
             }
-            Button("取消", role: .cancel) {
+            Button(localization.string("manager.confirm.cancel", defaultValue: "取消"), role: .cancel) {
                 pendingAction = nil
             }
         } message: {
             if let pendingAction {
-                Text(pendingAction.message)
+                Text(pendingAction.message(localization: localization))
             }
         }
     }
 
     private var summaryHeader: some View {
         HStack(alignment: .center, spacing: 12) {
-            metric("总数", value: controller.snapshot.items.count, color: .primary)
-            metric("关注", value: controller.snapshot.items.filter(\.isFavorite).count, color: .yellow)
-            metric("运行中", value: controller.snapshot.items.filter { $0.state == .running }.count, color: .green)
-            metric("用户创建", value: controller.snapshot.items.filter { $0.origin == .userCreated }.count, color: .orange)
-            metric("应用创建", value: controller.snapshot.items.filter { $0.origin == .thirdParty }.count, color: .blue)
-            metric("异常", value: controller.snapshot.items.filter { $0.state == .failed }.count, color: .red)
+            metric(localization.string("manager.metric.total", defaultValue: "总数"), value: controller.snapshot.items.count, color: .primary)
+            metric(localization.string("manager.metric.favorite", defaultValue: "关注"), value: controller.snapshot.items.filter(\.isFavorite).count, color: .yellow)
+            metric(localization.string("manager.metric.running", defaultValue: "运行中"), value: controller.snapshot.items.filter { $0.state == .running }.count, color: .green)
+            metric(localization.string("manager.metric.userCreated", defaultValue: "用户创建"), value: controller.snapshot.items.filter { $0.origin == .userCreated }.count, color: .orange)
+            metric(localization.string("manager.metric.appCreated", defaultValue: "应用创建"), value: controller.snapshot.items.filter { $0.origin == .thirdParty }.count, color: .blue)
+            metric(localization.string("manager.metric.failed", defaultValue: "异常"), value: controller.snapshot.items.filter { $0.state == .failed }.count, color: .red)
 
             Spacer()
 
@@ -92,31 +102,31 @@ struct LaunchControlManagerView: View {
 
     private var toolbar: some View {
         HStack(spacing: 10) {
-            Picker("范围", selection: $scopeFilter) {
+            Picker(localization.string("manager.filter.scope", defaultValue: "范围"), selection: $scopeFilter) {
                 ForEach(LaunchControlFilter.allCases) { filter in
-                    Text(filter.title).tag(filter)
+                    Text(filter.title(localization: localization)).tag(filter)
                 }
             }
             .labelsHidden()
             .frame(width: 112)
 
-            Picker("来源", selection: $originFilter) {
+            Picker(localization.string("manager.filter.origin", defaultValue: "来源"), selection: $originFilter) {
                 ForEach(LaunchControlOriginFilter.allCases) { filter in
-                    Text(filter.title).tag(filter)
+                    Text(filter.title(localization: localization)).tag(filter)
                 }
             }
             .labelsHidden()
             .frame(width: 112)
 
-            Picker("状态", selection: $stateFilter) {
+            Picker(localization.string("manager.filter.state", defaultValue: "状态"), selection: $stateFilter) {
                 ForEach(LaunchControlStateFilter.allCases) { filter in
-                    Text(filter.title).tag(filter)
+                    Text(filter.title(localization: localization)).tag(filter)
                 }
             }
             .labelsHidden()
             .frame(width: 112)
 
-            TextField("搜索 label、命令或路径", text: $searchText)
+            TextField(localization.string("manager.search.placeholder", defaultValue: "搜索 label、命令或路径"), text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 180, idealWidth: 260, maxWidth: 320)
 
@@ -125,14 +135,19 @@ struct LaunchControlManagerView: View {
             Button {
                 originFilter = originFilter == .favorite ? .all : .favorite
             } label: {
-                Label("关注", systemImage: originFilter == .favorite ? "star.fill" : "star")
+                Label(localization.string("manager.action.favoriteFilter", defaultValue: "关注"), systemImage: originFilter == .favorite ? "star.fill" : "star")
             }
             .buttonStyle(.bordered)
 
             Button {
                 controller.refresh()
             } label: {
-                Label(controller.snapshot.isRefreshing ? "刷新中" : "刷新", systemImage: "arrow.clockwise")
+                Label(
+                    controller.snapshot.isRefreshing
+                        ? localization.string("manager.action.refreshing", defaultValue: "刷新中")
+                        : localization.string("manager.action.refresh", defaultValue: "刷新"),
+                    systemImage: "arrow.clockwise"
+                )
             }
             .disabled(controller.snapshot.isRefreshing)
         }
@@ -141,7 +156,7 @@ struct LaunchControlManagerView: View {
     private var itemList: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("启动项")
+                Text(localization.string("manager.list.title", defaultValue: "启动项"))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                 Spacer()
                 Text("\(filteredItems.count) / \(controller.snapshot.items.count)")
@@ -155,6 +170,7 @@ struct LaunchControlManagerView: View {
                 ForEach(filteredItems) { item in
                     LaunchControlItemRow(
                         item: item,
+                        localization: localization,
                         onFavoriteToggle: {
                             controller.setFavorite(!item.isFavorite, for: item)
                         }
@@ -165,10 +181,13 @@ struct LaunchControlManagerView: View {
             .listStyle(.inset)
             .overlay {
                 if controller.snapshot.isRefreshing && controller.snapshot.items.isEmpty {
-                    ProgressView("正在扫描")
+                    ProgressView(localization.string("manager.list.scanning", defaultValue: "正在扫描"))
                         .controlSize(.small)
                 } else if filteredItems.isEmpty {
-                    ContentUnavailableView("没有匹配项目", systemImage: "magnifyingglass")
+                    ContentUnavailableView(
+                        localization.string("manager.list.empty", defaultValue: "没有匹配项目"),
+                        systemImage: "magnifyingglass"
+                    )
                 }
             }
         }
@@ -182,6 +201,8 @@ struct LaunchControlManagerView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         detailHeader(item)
                         actionBar(item)
+                        LaunchControlNoteEditor(item: item, controller: controller, localization: localization)
+                            .id(item.id)
                         keyFields(item)
                         rawPlist(item)
                     }
@@ -200,9 +221,15 @@ struct LaunchControlManagerView: View {
             Image(systemName: "list.bullet.rectangle")
                 .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon, weight: .regular))
                 .foregroundStyle(.secondary)
-            Text(controller.snapshot.isRefreshing ? "正在读取启动项" : "选择一个启动项")
+            Text(controller.snapshot.isRefreshing
+                ? localization.string("manager.placeholder.loadingTitle", defaultValue: "正在读取启动项")
+                : localization.string("manager.placeholder.title", defaultValue: "选择一个启动项")
+            )
                 .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
-            Text(controller.snapshot.isRefreshing ? "左侧列表会随扫描进度逐步更新" : "查看 plist 字段、运行状态和可用操作")
+            Text(controller.snapshot.isRefreshing
+                ? localization.string("manager.placeholder.loadingDescription", defaultValue: "左侧列表会随扫描进度逐步更新")
+                : localization.string("manager.placeholder.description", defaultValue: "查看 plist 字段、运行状态和可用操作")
+            )
                 .font(PluginSettingsTheme.Typography.secondaryLabel)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -216,7 +243,7 @@ struct LaunchControlManagerView: View {
         if controller.snapshot.isRefreshing || !controller.snapshot.scanLogEntries.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("扫描进度")
+                    Text(localization.string("manager.scanActivity.title", defaultValue: "扫描进度"))
                         .font(PluginSettingsTheme.Typography.sectionTitle)
                     Spacer()
                     if controller.snapshot.isRefreshing {
@@ -264,10 +291,11 @@ struct LaunchControlManagerView: View {
             } else {
                 let haystack = [
                     item.label,
-                    item.commandText,
+                    item.commandText(localization: localization),
                     item.plistURL.path,
-                    item.origin.title,
-                    item.triggerSummary
+                    item.origin.title(localization: localization),
+                    item.triggerSummary(localization: localization),
+                    item.note
                 ].joined(separator: "\n")
                 searchMatches = haystack.localizedCaseInsensitiveContains(query)
             }
@@ -322,15 +350,18 @@ struct LaunchControlManagerView: View {
                         .foregroundStyle(item.isFavorite ? Color.yellow : Color.secondary)
                 }
                 .buttonStyle(.plain)
-                .help(item.isFavorite ? "取消关注" : "关注启动项")
+                .help(item.isFavorite
+                    ? localization.string("manager.favorite.removeHelp", defaultValue: "取消关注")
+                    : localization.string("manager.favorite.addHelp", defaultValue: "关注启动项")
+                )
             }
 
             FlowLayout(spacing: 8, rowSpacing: 6) {
-                badge(item.scope.title, color: .blue)
-                badge(item.origin.title, color: item.origin == .system ? .gray : .orange)
-                badge(item.statusText, color: item.state == .failed ? .red : .green)
+                badge(item.scope.title(localization: localization), color: .blue)
+                badge(item.origin.title(localization: localization), color: item.origin == .system ? .gray : .orange)
+                badge(item.statusText(localization: localization), color: item.state == .failed ? .red : .green)
                 if !item.canManage {
-                    badge("只读", color: .gray)
+                    badge(localization.string("manager.badge.readOnly", defaultValue: "只读"), color: .gray)
                 }
             }
         }
@@ -341,47 +372,62 @@ struct LaunchControlManagerView: View {
             Button {
                 controller.setFavorite(!item.isFavorite, for: item)
             } label: {
-                Label(item.isFavorite ? "取消关注" : "关注", systemImage: item.isFavorite ? "star.slash" : "star")
+                Label(
+                    item.isFavorite
+                        ? localization.string("manager.action.unfavorite", defaultValue: "取消关注")
+                        : localization.string("manager.action.favorite", defaultValue: "关注"),
+                    systemImage: item.isFavorite ? "star.slash" : "star"
+                )
             }
 
             Button {
                 controller.openInFinder(item)
             } label: {
-                Label("在 Finder 中显示", systemImage: "finder")
+                Label(localization.string("manager.action.revealInFinder", defaultValue: "在 Finder 中显示"), systemImage: "finder")
             }
 
             if item.canManage {
                 Button {
                     pendingAction = .bootstrap(item)
                 } label: {
-                    Label("加载", systemImage: "tray.and.arrow.down")
+                    Label(LaunchControlManagedAction.bootstrap.title(localization: localization), systemImage: "tray.and.arrow.down")
                 }
                 .disabled(item.isLoaded)
 
                 Button {
                     pendingAction = .bootout(item)
                 } label: {
-                    Label("卸载", systemImage: "tray.and.arrow.up")
+                    Label(LaunchControlManagedAction.bootout.title(localization: localization), systemImage: "tray.and.arrow.up")
                 }
                 .disabled(!item.isLoaded)
 
                 Button {
                     pendingAction = item.isDisabled ? .enable(item) : .disable(item)
                 } label: {
-                    Label(item.isDisabled ? "启用" : "禁用", systemImage: item.isDisabled ? "checkmark.circle" : "nosign")
+                    Label(
+                        item.isDisabled
+                            ? LaunchControlManagedAction.enable.title(localization: localization)
+                            : LaunchControlManagedAction.disable.title(localization: localization),
+                        systemImage: item.isDisabled ? "checkmark.circle" : "nosign"
+                    )
                 }
 
                 Button {
                     pendingAction = item.state == .running ? .stop(item) : .start(item)
                 } label: {
-                    Label(item.state == .running ? "停止" : "启动", systemImage: item.state == .running ? "stop.circle" : "play.circle")
+                    Label(
+                        item.state == .running
+                            ? LaunchControlManagedAction.stop.title(localization: localization)
+                            : LaunchControlManagedAction.start.title(localization: localization),
+                        systemImage: item.state == .running ? "stop.circle" : "play.circle"
+                    )
                 }
                 .disabled(item.isDisabled)
 
                 Button {
                     pendingAction = .restart(item)
                 } label: {
-                    Label("重启", systemImage: "arrow.clockwise.circle")
+                    Label(LaunchControlManagedAction.restart.title(localization: localization), systemImage: "arrow.clockwise.circle")
                 }
                 .disabled(item.isDisabled)
             }
@@ -391,25 +437,52 @@ struct LaunchControlManagerView: View {
 
     private func keyFields(_ item: LaunchControlItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("关键字段")
+            Text(localization.string("manager.keyFields.title", defaultValue: "关键字段"))
                 .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
-            fieldRow("ProgramArguments", value: item.commandText, help: "启动时执行的命令与参数。")
-            fieldRow("RunAtLoad", value: item.runAtLoad ? "true" : "false", help: "加载 LaunchAgent 后是否立即运行一次。")
-            fieldRow("KeepAlive", value: item.keepAliveDescription ?? "未设置", help: "进程退出后是否按条件自动拉起。")
-            fieldRow("StartInterval", value: item.startInterval.map { "\($0) 秒" } ?? "未设置", help: "按固定秒数间隔触发。")
-            fieldRow("StartCalendarInterval", value: item.startCalendarDescription ?? "未设置", help: "按日历时间触发。")
-            fieldRow("触发摘要", value: item.triggerSummary, help: "根据常见字段生成的可读说明。")
+            fieldRow(
+                "ProgramArguments",
+                value: item.commandText(localization: localization),
+                help: localization.string("manager.field.programArguments.help", defaultValue: "启动时执行的命令与参数。")
+            )
+            fieldRow(
+                "RunAtLoad",
+                value: item.runAtLoad ? "true" : "false",
+                help: localization.string("manager.field.runAtLoad.help", defaultValue: "加载 LaunchAgent 后是否立即运行一次。")
+            )
+            fieldRow(
+                "KeepAlive",
+                value: item.keepAliveDescription ?? notSetText,
+                help: localization.string("manager.field.keepAlive.help", defaultValue: "进程退出后是否按条件自动拉起。")
+            )
+            fieldRow(
+                "StartInterval",
+                value: item.startInterval.map { secondsText($0) } ?? notSetText,
+                help: localization.string("manager.field.startInterval.help", defaultValue: "按固定秒数间隔触发。")
+            )
+            fieldRow(
+                "StartCalendarInterval",
+                value: item.startCalendarDescription ?? notSetText,
+                help: localization.string("manager.field.startCalendar.help", defaultValue: "按日历时间触发。")
+            )
+            fieldRow(
+                localization.string("manager.field.triggerSummary.title", defaultValue: "触发摘要"),
+                value: item.triggerSummary(localization: localization),
+                help: localization.string("manager.field.triggerSummary.help", defaultValue: "根据常见字段生成的可读说明。")
+            )
         }
     }
 
     private func rawPlist(_ item: LaunchControlItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("原始 plist")
+            Text(localization.string("manager.rawPlist.title", defaultValue: "原始 plist"))
                 .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
             ScrollView(.horizontal) {
-                Text(item.rawPlist.isEmpty ? "无法以 UTF-8 显示原始内容" : item.rawPlist)
+                Text(item.rawPlist.isEmpty
+                    ? localization.string("manager.rawPlist.unreadable", defaultValue: "无法以 UTF-8 显示原始内容")
+                    : item.rawPlist
+                )
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -500,6 +573,14 @@ struct LaunchControlManagerView: View {
             controller.restart(item)
         }
     }
+
+    private var notSetText: String {
+        localization.string("manager.field.notSet", defaultValue: "未设置")
+    }
+
+    private func secondsText(_ seconds: Int) -> String {
+        localization.format("manager.seconds", defaultValue: "%d 秒", seconds)
+    }
 }
 
 private struct FlowLayout: Layout {
@@ -582,6 +663,7 @@ private struct FlowItem {
 
 private struct LaunchControlItemRow: View {
     let item: LaunchControlItem
+    let localization: PluginLocalization
     let onFavoriteToggle: () -> Void
 
     var body: some View {
@@ -597,18 +679,23 @@ private struct LaunchControlItemRow: View {
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                         .lineLimit(1)
                     if item.origin == .userCreated {
-                        Text("用户")
+                        Text(localization.string("manager.itemRow.userBadge", defaultValue: "用户"))
                             .font(PluginSettingsTheme.Typography.statusBadge)
                             .foregroundStyle(.orange)
                     }
                 }
 
-                Text(item.commandText)
+                Text(item.commandText(localization: localization))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
-                Text("\(item.scope.title) · \(item.statusText)")
+                Text(localization.format(
+                    "manager.itemRow.scopeStatus",
+                    defaultValue: "%@ · %@",
+                    item.scope.title(localization: localization),
+                    item.statusText(localization: localization)
+                ))
                     .font(PluginSettingsTheme.Typography.secondaryLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -623,7 +710,10 @@ private struct LaunchControlItemRow: View {
                     .frame(width: 18, height: 18)
             }
             .buttonStyle(.plain)
-            .help(item.isFavorite ? "取消关注" : "关注启动项")
+            .help(item.isFavorite
+                ? localization.string("manager.favorite.removeHelp", defaultValue: "取消关注")
+                : localization.string("manager.favorite.addHelp", defaultValue: "关注启动项")
+            )
         }
         .padding(.vertical, 4)
     }
@@ -672,21 +762,29 @@ private enum LaunchControlPendingAction: Identifiable {
     }
 
     var actionName: String {
+        action.title()
+    }
+
+    func actionName(localization: PluginLocalization) -> String {
+        action.title(localization: localization)
+    }
+
+    var action: LaunchControlManagedAction {
         switch self {
         case .bootstrap:
-            return "加载"
+            return .bootstrap
         case .bootout:
-            return "卸载"
+            return .bootout
         case .enable:
-            return "启用"
+            return .enable
         case .disable:
-            return "禁用"
+            return .disable
         case .start:
-            return "启动"
+            return .start
         case .stop:
-            return "停止"
+            return .stop
         case .restart:
-            return "重启"
+            return .restart
         }
     }
 
@@ -694,12 +792,39 @@ private enum LaunchControlPendingAction: Identifiable {
         "\(actionName) \(item.label)"
     }
 
+    func buttonTitle(localization: PluginLocalization) -> String {
+        localization.format(
+            "manager.confirm.buttonTitle",
+            defaultValue: "%@ %@",
+            actionName(localization: localization),
+            item.label
+        )
+    }
+
     var confirmationTitle: String {
-        "确认\(actionName)启动项？"
+        confirmationTitle(localization: PluginLocalization(bundle: .main))
+    }
+
+    func confirmationTitle(localization: PluginLocalization) -> String {
+        localization.format(
+            "manager.confirm.title",
+            defaultValue: "确认%@启动项？",
+            actionName(localization: localization)
+        )
     }
 
     var message: String {
-        "\(item.label)\n\(item.plistURL.path)\n\n此操作会调用 launchctl \(actionName)。用户级 LaunchAgent 通常可以恢复，但禁用、卸载或停止可能影响后台任务。"
+        message(localization: PluginLocalization(bundle: .main))
+    }
+
+    func message(localization: PluginLocalization) -> String {
+        localization.format(
+            "manager.confirm.message",
+            defaultValue: "%@\n%@\n\n此操作会调用 launchctl %@。用户级 LaunchAgent 通常可以恢复，但禁用、卸载或停止可能影响后台任务。",
+            item.label,
+            item.plistURL.path,
+            actionName(localization: localization)
+        )
     }
 
     var role: ButtonRole? {
@@ -713,6 +838,66 @@ private enum LaunchControlPendingAction: Identifiable {
              .start,
              .restart:
             return nil
+        }
+    }
+}
+
+private struct LaunchControlNoteEditor: View {
+    let item: LaunchControlItem
+    let controller: LaunchControlController
+    let localization: PluginLocalization
+    @State private var draft: String
+
+    init(
+        item: LaunchControlItem,
+        controller: LaunchControlController,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.item = item
+        self.controller = controller
+        self.localization = localization
+        _draft = State(initialValue: item.note)
+    }
+
+    private var isDirty: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            != item.note.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(localization.string("manager.note.title", defaultValue: "备注"))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Spacer()
+                if isDirty {
+                    Button(localization.string("manager.note.save", defaultValue: "保存")) {
+                        controller.setNote(draft, for: item)
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
+            TextEditor(text: $draft)
+                .font(.system(size: 12))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 60, maxHeight: 120)
+                .padding(6)
+                .pluginSettingsCardBackground(.recessed)
+                .overlay(alignment: .topLeading) {
+                    if draft.isEmpty {
+                        Text(localization.string(
+                            "manager.note.placeholder",
+                            defaultValue: "为这个启动项添加本地备注（仅保存在本机，不写入 plist）。"
+                        ))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 11)
+                            .padding(.top, 13)
+                            .allowsHitTesting(false)
+                    }
+                }
         }
     }
 }

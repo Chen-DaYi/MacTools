@@ -5,6 +5,7 @@ import MacToolsPluginKit
 
 struct ZshConfigEditorView: View {
     @ObservedObject var store: ZshConfigStore
+    private let localization: PluginLocalization
     @State private var contentTab: ContentTab = .editor
     @State private var activeSnippet: ZshSnippet? = nil
     @State private var snippetInput: String = ""
@@ -14,14 +15,31 @@ struct ZshConfigEditorView: View {
     @State private var sourceResult: Bool? = nil
     @State private var sourceResultToken = 0
 
-    private enum ContentTab: String, CaseIterable {
-        case editor     = "编辑"
-        case quickInsert = "快速插入"
+    init(
+        store: ZshConfigStore,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.store = store
+        self.localization = localization
+    }
+
+    private enum ContentTab: CaseIterable {
+        case editor
+        case quickInsert
 
         var icon: String {
             switch self {
             case .editor:      return "square.and.pencil"
             case .quickInsert: return "bolt.fill"
+            }
+        }
+
+        func title(localization: PluginLocalization) -> String {
+            switch self {
+            case .editor:
+                return localization.string("editor.tab.editor", defaultValue: "编辑")
+            case .quickInsert:
+                return localization.string("editor.tab.quickInsert", defaultValue: "快速插入")
             }
         }
     }
@@ -38,7 +56,10 @@ struct ZshConfigEditorView: View {
 
     private var fileSelectorSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(title: "配置文件", icon: "doc.text")
+            sectionHeader(
+                title: localization.string("editor.fileSelector.title", defaultValue: "配置文件"),
+                icon: "doc.text"
+            )
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(ZshConfigFileType.allCases) { type in
@@ -103,7 +124,7 @@ struct ZshConfigEditorView: View {
                 contentTab = tab
             }
         } label: {
-            Label(tab.rawValue, systemImage: tab.icon)
+            Label(tab.title(localization: localization), systemImage: tab.icon)
                 .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .padding(.horizontal, 14)
@@ -156,7 +177,7 @@ struct ZshConfigEditorView: View {
     private func fileInfoRow(status: ZshFileStatus) -> some View {
         HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                Text(store.selectedType.role)
+                Text(store.selectedType.role(localization: localization))
                     .font(PluginSettingsTheme.Typography.rowTitle)
                 HStack(spacing: 4) {
                     if status.exists {
@@ -168,12 +189,12 @@ struct ZshConfigEditorView: View {
                             Text(date, style: .relative)
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .foregroundStyle(.secondary)
-                            Text("前修改")
+                            Text(localization.string("editor.fileInfo.modifiedAgo", defaultValue: "前修改"))
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
-                        Text("文件不存在")
+                        Text(localization.string("editor.fileInfo.missing", defaultValue: "文件不存在"))
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary)
                     }
@@ -187,7 +208,7 @@ struct ZshConfigEditorView: View {
                     .pluginSettingsRowIconStyle(showFileInfo ? Color.accentColor : .secondary)
             }
             .buttonStyle(.plain)
-            .help("查看加载时机与推荐用途")
+            .help(localization.string("editor.fileInfo.help", defaultValue: "查看加载时机与推荐用途"))
         }
         .pluginSettingsListRowPadding()
         .pluginSettingsCardBackground(.host)
@@ -199,9 +220,15 @@ struct ZshConfigEditorView: View {
 
     private var fileInfoPanel: some View {
         VStack(alignment: .leading, spacing: 6) {
-            infoRow(label: "加载时机", value: store.selectedType.whenLoaded)
+            infoRow(
+                label: localization.string("editor.fileInfo.whenLoaded", defaultValue: "加载时机"),
+                value: store.selectedType.whenLoaded(localization: localization)
+            )
             PluginSettingsListDivider(leadingInset: 0, trailingInset: 0)
-            infoRow(label: "推荐用途", value: store.selectedType.recommendedUse)
+            infoRow(
+                label: localization.string("editor.fileInfo.recommendedUse", defaultValue: "推荐用途"),
+                value: store.selectedType.recommendedUse(localization: localization)
+            )
         }
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
         .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
@@ -224,7 +251,10 @@ struct ZshConfigEditorView: View {
     private func editorField(isWritable: Bool) -> some View {
         ZStack(alignment: .topLeading) {
             if store.editingContent.isEmpty {
-                Text("文件为空。可直接在此输入，或切换到「快速插入」标签添加常用配置。")
+                Text(localization.string(
+                    "editor.emptyFile.placeholder",
+                    defaultValue: "文件为空。可直接在此输入，或切换到「快速插入」标签添加常用配置。"
+                ))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .padding(.top, 8)
@@ -264,14 +294,18 @@ struct ZshConfigEditorView: View {
                             Image(systemName: "checkmark")
                                 .font(PluginSettingsTheme.Typography.statusBadge)
                         }
-                        Text(store.hasUnsavedChanges ? "保存*" : (store.lastSaveSucceeded ? "已保存" : "保存"))
+                        Text(saveButtonTitle)
                     }
                     .font(PluginSettingsTheme.Typography.controlLabel)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(!store.hasUnsavedChanges || store.isBusy)
-                .help("保存前会自动备份为 \(store.selectedType.filename).bak")
+                .help(localization.format(
+                    "editor.action.save.help",
+                    defaultValue: "保存前会自动备份为 %@.bak",
+                    store.selectedType.filename
+                ))
             } else {
                 readOnlyBadge
             }
@@ -279,12 +313,15 @@ struct ZshConfigEditorView: View {
             Button {
                 store.openInExternalEditor(store.selectedType)
             } label: {
-                Label("在系统编辑器中打开", systemImage: "square.and.pencil")
+                Label(
+                    localization.string("editor.action.openExternal", defaultValue: "在系统编辑器中打开"),
+                    systemImage: "square.and.pencil"
+                )
                     .font(PluginSettingsTheme.Typography.controlLabel)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .help("在系统默认文本编辑器中打开此文件")
+            .help(localization.string("editor.action.openExternal.help", defaultValue: "在系统默认文本编辑器中打开此文件"))
         }
 
         if let error = store.saveError {
@@ -301,17 +338,26 @@ struct ZshConfigEditorView: View {
                 .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon + 4))
                 .foregroundStyle(.tertiary)
             VStack(spacing: 5) {
-                Text("文件尚不存在")
+                Text(localization.string("editor.missingFile.title", defaultValue: "文件尚不存在"))
                     .font(PluginSettingsTheme.Typography.rowTitle)
                 Text(status.isWritable
-                     ? "点击「创建文件」将在家目录生成 \(store.selectedType.filename) 并填入说明注释。"
-                     : "家目录不可写，无法创建此文件。请检查磁盘权限。")
+                     ? localization.format(
+                        "editor.missingFile.createDescription",
+                        defaultValue: "点击「创建文件」将在家目录生成 %@ 并填入说明注释。",
+                        store.selectedType.filename
+                     )
+                     : localization.string(
+                        "editor.missingFile.readOnlyDescription",
+                        defaultValue: "家目录不可写，无法创建此文件。请检查磁盘权限。"
+                     ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
             if status.isWritable {
-                Button("创建文件") { store.createCurrentFile() }
+                Button(localization.string("editor.action.createFile", defaultValue: "创建文件")) {
+                    store.createCurrentFile()
+                }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(store.isBusy)
@@ -330,19 +376,22 @@ struct ZshConfigEditorView: View {
 
     private var snippetSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            // 插入目标提示
             HStack(spacing: 6) {
                 Image(systemName: "arrow.right.circle")
                     .font(PluginSettingsTheme.Typography.statusBadge)
                     .foregroundStyle(.secondary)
-                Text("插入到 \(store.selectedType.filename)")
+                Text(localization.format(
+                    "editor.quickInsert.target",
+                    defaultValue: "插入到 %@",
+                    store.selectedType.filename
+                ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { contentTab = .editor }
                 } label: {
-                    Text("切换到编辑器")
+                    Text(localization.string("editor.quickInsert.switchToEditor", defaultValue: "切换到编辑器"))
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(Color.accentColor)
                 }
@@ -352,9 +401,8 @@ struct ZshConfigEditorView: View {
             .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
             .pluginSettingsCardBackground(.recessed)
 
-            // 片段列表（手风琴：点击行后在该行下方内联展开）
             VStack(spacing: 0) {
-                ForEach(Array(ZshSnippet.all.enumerated()), id: \.element.id) { index, snippet in
+                ForEach(Array(snippets.enumerated()), id: \.element.id) { index, snippet in
                     VStack(spacing: 0) {
                         snippetRow(snippet: snippet)
                         if activeSnippet?.id == snippet.id {
@@ -362,7 +410,7 @@ struct ZshConfigEditorView: View {
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
-                    if index < ZshSnippet.all.count - 1 {
+                    if index < snippets.count - 1 {
                         PluginSettingsListDivider()
                     }
                 }
@@ -429,7 +477,9 @@ struct ZshConfigEditorView: View {
 
             HStack {
                 Spacer()
-                Button("插入到末尾") { insertCurrentSnippet(snippet) }
+                Button(localization.string("editor.quickInsert.insertAtEnd", defaultValue: "插入到末尾")) {
+                    insertCurrentSnippet(snippet)
+                }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(snippetInput.isEmpty)
@@ -449,7 +499,8 @@ struct ZshConfigEditorView: View {
         HStack(spacing: 4) {
             Image(systemName: "lock")
                 .font(PluginSettingsTheme.Typography.statusBadge)
-            Text("只读").font(PluginSettingsTheme.Typography.statusBadge)
+            Text(localization.string("editor.readOnly", defaultValue: "只读"))
+                .font(PluginSettingsTheme.Typography.statusBadge)
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
@@ -482,10 +533,13 @@ struct ZshConfigEditorView: View {
                 .foregroundStyle(.green)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 6) {
-                Text("已保存（已备份为 \(store.selectedType.filename).bak）")
+                Text(localization.format(
+                    "editor.savedHint.title",
+                    defaultValue: "已保存（已备份为 %@.bak）",
+                    store.selectedType.filename
+                ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                 if store.selectedType == .zshrc || store.selectedType == .zshenv {
-                    // 命令代码块：左侧 terminal 图标 + 命令文本（可选中），右侧内联图标执行按钮
                     HStack(spacing: 8) {
                         Image(systemName: "terminal")
                             .font(.system(size: 10))
@@ -534,7 +588,7 @@ struct ZshConfigEditorView: View {
                             .stroke(PluginSettingsTheme.Palette.separator, lineWidth: PluginSettingsTheme.Stroke.hairline)
                     )
 
-                    Text("执行后无需重启终端即可生效。")
+                    Text(localization.string("editor.savedHint.reloadDescription", defaultValue: "执行后无需重启终端即可生效。"))
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                 }
@@ -545,7 +599,6 @@ struct ZshConfigEditorView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .pluginSettingsCardBackground(.recessed)
         .onAppear {
-            // 每次 banner 重新出现（新一次保存后）立刻重置执行状态
             sourceResult = nil
         }
     }
@@ -559,6 +612,20 @@ struct ZshConfigEditorView: View {
     }
 
     // MARK: - Helper Functions
+
+    private var snippets: [ZshSnippet] {
+        ZshSnippet.localizedSnippets(localization: localization)
+    }
+
+    private var saveButtonTitle: String {
+        if store.hasUnsavedChanges {
+            return localization.string("editor.action.saveUnsaved", defaultValue: "保存*")
+        }
+        if store.lastSaveSucceeded {
+            return localization.string("editor.action.saved", defaultValue: "已保存")
+        }
+        return localization.string("editor.action.save", defaultValue: "保存")
+    }
 
     private func runSourceDirectly(for type: ZshConfigFileType) {
         guard !isRunningSource else { return }
@@ -586,7 +653,6 @@ struct ZshConfigEditorView: View {
                 isRunningSource = false
                 sourceResult = succeeded
             }
-            // 3 秒后自动恢复为「执行」图标；若期间已触发新一次执行则跳过
             try? await Task.sleep(for: .seconds(3))
             guard sourceResultToken == token else { return }
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -622,7 +688,6 @@ struct ZshConfigEditorView: View {
         withAnimation(.easeInOut(duration: 0.15)) {
             activeSnippet = nil
             snippetInput = ""
-            // 插入后自动跳到编辑器 tab，让用户看到刚插入的内容
             contentTab = .editor
         }
     }

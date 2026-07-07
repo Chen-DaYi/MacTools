@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum XcodeCleanCategory: String, CaseIterable, Identifiable, Equatable, Sendable {
     case derivedData
@@ -11,36 +12,44 @@ enum XcodeCleanCategory: String, CaseIterable, Identifiable, Equatable, Sendable
     var id: String { rawValue }
 
     var title: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .derivedData:
-            return "DerivedData"
+            return localization.string("category.derivedData.title", defaultValue: "DerivedData")
         case .deviceSupport:
-            return "设备支持文件"
+            return localization.string("category.deviceSupport.title", defaultValue: "设备支持文件")
         case .archives:
-            return "Archives"
+            return localization.string("category.archives.title", defaultValue: "Archives")
         case .simulatorCaches:
-            return "模拟器缓存"
+            return localization.string("category.simulatorCaches.title", defaultValue: "模拟器缓存")
         case .previews:
-            return "预览缓存"
+            return localization.string("category.previews.title", defaultValue: "预览缓存")
         case .xcodeAppCaches:
-            return "Xcode 应用缓存"
+            return localization.string("category.xcodeAppCaches.title", defaultValue: "Xcode 应用缓存")
         }
     }
 
     var summary: String {
+        summary()
+    }
+
+    func summary(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .derivedData:
-            return "构建中间产物、索引与日志"
+            return localization.string("category.derivedData.summary", defaultValue: "构建中间产物、索引与日志")
         case .deviceSupport:
-            return "调试旧设备时下载的符号文件"
+            return localization.string("category.deviceSupport.summary", defaultValue: "调试旧设备时下载的符号文件")
         case .archives:
-            return "包含已发布版本的归档与 dSYM，谨慎清理"
+            return localization.string("category.archives.summary", defaultValue: "包含已发布版本的归档与 dSYM，谨慎清理")
         case .simulatorCaches:
-            return "模拟器运行时缓存，不影响已创建的模拟器设备"
+            return localization.string("category.simulatorCaches.summary", defaultValue: "模拟器运行时缓存，不影响已创建的模拟器设备")
         case .previews:
-            return "SwiftUI 预览的中间渲染缓存"
+            return localization.string("category.previews.summary", defaultValue: "SwiftUI 预览的中间渲染缓存")
         case .xcodeAppCaches:
-            return "Xcode 自身的会话与界面状态缓存"
+            return localization.string("category.xcodeAppCaches.summary", defaultValue: "Xcode 自身的会话与界面状态缓存")
         }
     }
 

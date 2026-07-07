@@ -2,8 +2,8 @@ import Carbon
 import Foundation
 import MacToolsPluginKit
 
-/// 管理 Carbon Event 热键注册。与 GlobalShortcutManager 平行运行，
-/// 使用独立的 OSType 签名（"AHKY"），避免 Carbon ID 碰撞。
+/// Manages Carbon Event hotkey registration alongside `GlobalShortcutManager`.
+/// Uses a dedicated OSType signature ("AHKY") to avoid Carbon ID collisions.
 @MainActor
 final class AppHotkeyManager {
     private struct RegisteredHotKey {
@@ -27,7 +27,7 @@ final class AppHotkeyManager {
         installHandler()
     }
 
-    /// 根据当前 entries 重新同步热键注册（增量 diff）。
+    /// Resynchronizes registered hotkeys from the current entries using an incremental diff.
     func sync(entries: [AppShortcutEntry]) {
         let desired = Dictionary(
             uniqueKeysWithValues: entries.compactMap { e -> (UUID, ShortcutBinding)? in
@@ -36,12 +36,10 @@ final class AppHotkeyManager {
             }
         )
 
-        // 移除已失效的热键
         for id in registeredHotKeys.keys where desired[id] == nil {
             unregister(id: id)
         }
 
-        // 新增或更新
         for (id, binding) in desired {
             if let existing = registeredHotKeys[id], existing.binding == binding { continue }
             unregister(id: id)
@@ -53,7 +51,7 @@ final class AppHotkeyManager {
         for id in Array(registeredHotKeys.keys) { unregister(id: id) }
     }
 
-    /// 录制期间临时注销指定条目的热键，录制结束后由调用方调用 `sync` 恢复。
+    /// Temporarily unregisters an entry while recording; callers restore it by invoking `sync`.
     func temporarilyDisable(id: UUID) {
         unregister(id: id)
     }
@@ -65,8 +63,11 @@ final class AppHotkeyManager {
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
+        // Match the host global-shortcut path by using the event dispatcher target, avoiding
+        // routing differences between Carbon targets. The handler still filters AppHotkey events
+        // through the dedicated signature.
         InstallEventHandler(
-            GetApplicationEventTarget(),
+            GetEventDispatcherTarget(),
             Self.hotKeyHandler,
             1,
             &eventType,
@@ -85,7 +86,7 @@ final class AppHotkeyManager {
             UInt32(binding.keyCode),
             binding.modifiers.carbonFlags,
             hotKeyID,
-            GetApplicationEventTarget(),
+            GetEventDispatcherTarget(),
             0,
             &ref
         )
@@ -122,6 +123,10 @@ final class AppHotkeyManager {
             &hotKeyID
         )
         guard status == noErr else { return status }
+
+        guard hotKeyID.signature == 0x4148_4B59 else {
+            return OSStatus(eventNotHandledErr)
+        }
 
         let manager = Unmanaged<AppHotkeyManager>
             .fromOpaque(userData)

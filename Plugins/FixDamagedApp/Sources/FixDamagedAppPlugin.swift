@@ -29,14 +29,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
 
     // MARK: Metadata
 
-    let metadata = PluginMetadata(
-        id: "fix-damaged-app",
-        title: "修复损坏应用",
-        iconName: "wrench.and.screwdriver.fill",
-        iconTint: Color(nsColor: .systemOrange),
-        order: 94,
-        defaultDescription: "移除隔离属性，解决「已损坏」或「不受信任」提示"
-    )
+    let metadata: PluginMetadata
 
     // MARK: State
 
@@ -59,8 +52,9 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     private var dropZonePanel: FixDamagedAppDropZonePanel?
     private var isDragPanelShowing = false
     private var isMouseButtonDown = false
-    /// 记录 mouseDown 时的拖拽剪贴板版本号，用于识别新拖拽会话
+    /// Drag pasteboard change count captured at mouseDown to identify a new drag session.
     private var dragSessionPasteboardChangeCount: Int = Int.min
+    private let localization: PluginLocalization
 
     // MARK: DropZoneAnchorProviding
 
@@ -94,7 +88,25 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     // MARK: Init
 
     init(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "fix-damaged-app")) {
+        let localization = PluginLocalization(bundle: context.resourceBundle)
+        self.localization = localization
         self.storage = context.storage
+        self.metadata = PluginMetadata(
+            id: "fix-damaged-app",
+            title: localization.string("metadata.title", defaultValue: "修复损坏应用"),
+            iconName: "wrench.and.screwdriver.fill",
+            iconTint: Color(nsColor: .systemOrange),
+            order: 94,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "移除隔离属性，解决「已损坏」或「不受信任」提示"
+            )
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.button.choose", defaultValue: "选择")
+        )
     }
 
     // MARK: Lifecycle
@@ -118,6 +130,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
             return AnyView(
                 FixDamagedAppSettingsView(
                     isDragDetectionEnabled: self.isDragDetectionEnabled,
+                    localization: self.localization,
                     onToggle: { [weak self] isOn in
                         self?.setDragDetectionEnabled(isOn)
                     }
@@ -134,11 +147,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
 
     // MARK: PluginPrimaryPanel
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "选择"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
@@ -179,13 +188,15 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     private var primarySubtitle: String {
         switch fixState {
         case .idle:
-            return selectedApp.map { $0.deletingPathExtension().lastPathComponent } ?? "选择 .app 文件以修复"
+            return selectedApp.map { $0.deletingPathExtension().lastPathComponent }
+                ?? localization.string("panel.subtitle.chooseApp", defaultValue: "选择 .app 文件以修复")
         case .running:
-            return "修复中…"
+            return localization.string("panel.subtitle.running", defaultValue: "修复中…")
         case .success(let name):
-            return "已修复：\(name)"
+            return localization.format("panel.subtitle.successFormat", defaultValue: "已修复：%@", name)
         case .failure:
-            return selectedApp.map { $0.deletingPathExtension().lastPathComponent } ?? "选择 .app 文件以修复"
+            return selectedApp.map { $0.deletingPathExtension().lastPathComponent }
+                ?? localization.string("panel.subtitle.chooseApp", defaultValue: "选择 .app 文件以修复")
         }
     }
 
@@ -196,8 +207,8 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
 
     private func chooseApp() {
         let panel = NSOpenPanel()
-        panel.title = "选择要修复的应用"
-        panel.message = "选择显示「已损坏」或「不受信任」的应用"
+        panel.title = localization.string("openPanel.title", defaultValue: "选择要修复的应用")
+        panel.message = localization.string("openPanel.message", defaultValue: "选择显示「已损坏」或「不受信任」的应用")
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -221,7 +232,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
         onStateChange?()
         Task {
             do {
-                try await Self.removeQuarantine(appPath: appPath)
+                try await self.removeQuarantine(appPath: appPath)
                 await MainActor.run {
                     self.fixState = .success(appName: appName)
                     self.onStateChange?()
@@ -237,9 +248,10 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
         }
     }
 
-    private static func removeQuarantine(appPath: String) async throws {
+    private func removeQuarantine(appPath: String) async throws {
+        let localization = localization
         try await Task.detached(priority: .userInitiated) {
-            try runQuarantineRemoval(appPath: appPath)
+            try runQuarantineRemoval(appPath: appPath, localization: localization)
         }.value
     }
 
@@ -252,12 +264,14 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     }
 
     private func startDragMonitoring() {
-        // NSEvent 全局监听器在主线程触发，用 MainActor.assumeIsolated 同步执行，
-        // 避免 Task 异步入队导致多个事件同时通过 isDragPanelShowing 检查
+        // Global NSEvent monitors fire on the main thread. Run synchronously with
+        // `MainActor.assumeIsolated` so multiple events cannot pass the `isDragPanelShowing`
+        // check while queued through async Tasks.
         mouseDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.isMouseButtonDown = true
-                // 记录当前剪贴板版本，后续仅在 changeCount 变化时（真正开始拖拽）才响应
+                // Capture the current drag pasteboard version; only a later changeCount indicates
+                // that a real drag started.
                 self?.dragSessionPasteboardChangeCount = NSPasteboard(name: .drag).changeCount
             }
         }
@@ -293,8 +307,8 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     private func handleGlobalDrag() {
         guard !isDragPanelShowing, isMouseButtonDown else { return }
         let pb = NSPasteboard(name: .drag)
-        // 仅当拖拽剪贴板在本次 mouseDown 之后发生了变化时才响应，
-        // 防止残留的旧剪贴板数据在普通点击（如打开访达）时误触发
+        // React only after the drag pasteboard changes during this mouse-down cycle. This prevents
+        // stale drag pasteboard data from showing the panel on normal clicks, such as opening Finder.
         guard pb.changeCount != dragSessionPasteboardChangeCount else { return }
         guard
             let urls = pb.readObjects(
@@ -308,8 +322,9 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
 
     private func handleGlobalMouseUp() {
         guard isDragPanelShowing else { return }
-        // 若松手位置在面板范围内，说明文件投入了窗口，不关闭——交由 drop 流程处理
-        // 全局 mouseUp 比 SwiftUI onDrop 更早触发，不能依赖 isDropPending 此时已被设置
+        // If the pointer is inside the panel, the file was dropped into the window and the drop
+        // pipeline owns dismissal. The global mouseUp arrives before SwiftUI `onDrop`, so it cannot
+        // rely on `isDropPending` having been set yet.
         if let panel = dropZonePanel, panel.frame.contains(NSEvent.mouseLocation) { return }
         dropZonePanel?.dismissIfIdle()
     }
@@ -317,12 +332,16 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     private func showDropZonePanel() {
         isDragPanelShowing = true
         let vm = DropZoneViewModel(
+            localization: localization,
             onComplete: { [weak self] appName, succeeded, errorMessage in
                 guard let self else { return }
                 if succeeded {
                     self.fixState = .success(appName: appName)
                 } else {
-                    self.fixState = .failure(message: errorMessage ?? "修复失败")
+                    self.fixState = .failure(
+                        message: errorMessage
+                            ?? self.localization.string("error.fixFailed", defaultValue: "修复失败")
+                    )
                 }
                 self.onStateChange?()
             },
@@ -330,7 +349,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
                 self?.hideDropZonePanel()
             }
         )
-        let panel = FixDamagedAppDropZonePanel(viewModel: vm)
+        let panel = FixDamagedAppDropZonePanel(viewModel: vm, localization: localization)
         positionDropZonePanel(panel)
         panel.makeKeyAndOrderFront(nil)
         dropZonePanel = panel
@@ -345,7 +364,6 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     private func positionDropZonePanel(_ panel: NSPanel) {
         let panelSize = panel.frame.size
 
-        // 优先锚定在 App 状态栏图标正下方
         if let anchorRect = anchorRectProvider?() {
             let screenMaxX = NSScreen.main?.frame.maxX ?? 1440
             let rawX = anchorRect.midX - panelSize.width / 2
@@ -355,7 +373,6 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
             return
         }
 
-        // 回退：屏幕顶部居中
         guard let screen = NSScreen.main else { return }
         let menuBarThickness = NSStatusBar.system.thickness
         let x = screen.frame.midX - panelSize.width / 2
@@ -367,12 +384,21 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
 // MARK: - Quarantine Removal (nonisolated helper)
 
 func runQuarantineRemoval(appPath: String) throws {
+    try runQuarantineRemoval(appPath: appPath, localization: PluginLocalization(bundle: .main))
+}
+
+func runQuarantineRemoval(appPath: String, localization: PluginLocalization) throws {
     // Reject paths containing double-quote to prevent AppleScript string literal injection
     guard !appPath.contains("\"") else {
         throw NSError(
             domain: "FixDamagedAppPlugin",
             code: 1,
-            userInfo: [NSLocalizedDescriptionKey: "应用路径包含不支持的字符（双引号）"]
+            userInfo: [
+                NSLocalizedDescriptionKey: localization.string(
+                    "error.unsupportedPathCharacters",
+                    defaultValue: "应用路径包含不支持的字符（双引号）"
+                )
+            ]
         )
     }
     // Use AppleScript's `quoted form of` to safely quote the path in the shell command
@@ -397,15 +423,22 @@ func runQuarantineRemoval(appPath: String) throws {
             throw NSError(
                 domain: "FixDamagedAppPlugin",
                 code: -128,
-                userInfo: [NSLocalizedDescriptionKey: "用户取消了授权"]
+                userInfo: [
+                    NSLocalizedDescriptionKey: localization.string(
+                        "error.userCancelledAuthorization",
+                        defaultValue: "用户取消了授权"
+                    )
+                ]
             )
         }
         throw NSError(
             domain: "FixDamagedAppPlugin",
             code: Int(process.terminationStatus),
-            userInfo: [NSLocalizedDescriptionKey: errMsg.isEmpty ? "修复失败（未知错误）" : errMsg]
+            userInfo: [
+                NSLocalizedDescriptionKey: errMsg.isEmpty
+                    ? localization.string("error.fixFailedUnknown", defaultValue: "修复失败（未知错误）")
+                    : errMsg
+            ]
         )
     }
 }
-
-

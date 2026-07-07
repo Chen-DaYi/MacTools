@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import MacToolsPluginKit
 
 enum XcodeCleanPhase: Equatable, Sendable {
     case idle
@@ -90,6 +91,7 @@ final class XcodeCleanController: ObservableObject, XcodeCleanControlling {
 
     private let scanner: XcodeCleanScanning
     private let executor: XcodeCleanExecuting
+    private let localization: PluginLocalization
 
     private var currentTask: Task<Void, Never>?
     private var currentOperationID: UUID?
@@ -99,10 +101,12 @@ final class XcodeCleanController: ObservableObject, XcodeCleanControlling {
     init(
         scanner: XcodeCleanScanning = XcodeCleanScanner(),
         executor: XcodeCleanExecuting = XcodeCleanExecutor(),
-        initialSnapshot: XcodeCleanSnapshot = .initial
+        initialSnapshot: XcodeCleanSnapshot = .initial,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.scanner = scanner
         self.executor = executor
+        self.localization = localization
         snapshot = initialSnapshot
     }
 
@@ -145,7 +149,15 @@ final class XcodeCleanController: ObservableObject, XcodeCleanControlling {
                 isXcodeRunning: true,
                 errorMessage: nil,
                 scanLogEntries: appendLogs(
-                    [XcodeCleanScanLogMessage(text: "Xcode 已启动，操作已中断", tone: .warning)],
+                    [
+                        XcodeCleanScanLogMessage(
+                            text: localization.string(
+                                "scanLog.xcodeStarted",
+                                defaultValue: "Xcode 已启动，操作已中断"
+                            ),
+                            tone: .warning
+                        )
+                    ],
                     to: snapshot.scanLogEntries
                 )
             )
@@ -176,7 +188,11 @@ final class XcodeCleanController: ObservableObject, XcodeCleanControlling {
 
         let initialLogs = appendLogs(
             [XcodeCleanScanLogMessage(
-                text: "开始扫描：\(selectedCategoryTitles(categories))",
+                text: localization.format(
+                    "scanLog.started",
+                    defaultValue: "开始扫描：%@",
+                    selectedCategoryTitles(categories)
+                ),
                 tone: .info
             )],
             to: []
@@ -240,7 +256,16 @@ final class XcodeCleanController: ObservableObject, XcodeCleanControlling {
                     isXcodeRunning: snapshot.isXcodeRunning,
                     errorMessage: message,
                     scanLogEntries: appendLogs(
-                        [XcodeCleanScanLogMessage(text: "扫描失败：\(message)", tone: .error)],
+                        [
+                            XcodeCleanScanLogMessage(
+                                text: localization.format(
+                                    "scanLog.failed",
+                                    defaultValue: "扫描失败：%@",
+                                    message
+                                ),
+                                tone: .error
+                            )
+                        ],
                         to: snapshot.scanLogEntries
                     )
                 )
@@ -338,7 +363,12 @@ final class XcodeCleanController: ObservableObject, XcodeCleanControlling {
                 isXcodeRunning: snapshot.isXcodeRunning,
                 errorMessage: nil,
                 scanLogEntries: appendLogs(
-                    [XcodeCleanScanLogMessage(text: "扫描已停止", tone: .warning)],
+                    [
+                        XcodeCleanScanLogMessage(
+                            text: localization.string("scanLog.stopped", defaultValue: "扫描已停止"),
+                            tone: .warning
+                        )
+                    ],
                     to: logs
                 )
             )
@@ -443,7 +473,7 @@ final class XcodeCleanController: ObservableObject, XcodeCleanControlling {
     private func selectedCategoryTitles(_ categories: Set<XcodeCleanCategory>) -> String {
         XcodeCleanCategory.allCases
             .filter { categories.contains($0) }
-            .map(\.title)
+            .map { $0.title(localization: localization) }
             .joined(separator: "、")
     }
 

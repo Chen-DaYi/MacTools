@@ -30,6 +30,16 @@ public protocol PluginPrimaryPanel: AnyObject {
     func handleAction(_ action: PluginPanelAction)
 }
 
+public enum PluginShortcutEventPhase: Sendable {
+    case pressed
+    case released
+}
+
+@MainActor
+public protocol PluginShortcutEventHandling: AnyObject {
+    func handleShortcutEvent(id: String, phase: PluginShortcutEventPhase)
+}
+
 public extension MacToolsPlugin {
     var primaryPanel: (any PluginPrimaryPanel)? {
         nil
@@ -90,6 +100,22 @@ public extension MacToolsPlugin where Self: PluginComponentPanel {
     }
 }
 
+public enum PluginPanelSurface: CaseIterable, Hashable, Sendable {
+    case component
+    case primary
+}
+
+@MainActor
+public protocol PluginPanelSurfaceLifecycleHandling: AnyObject {
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface)
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface)
+}
+
+public extension PluginPanelSurfaceLifecycleHandling {
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {}
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {}
+}
+
 @MainActor
 public protocol PluginProvider {
     func makePlugins() -> [any MacToolsPlugin]
@@ -109,22 +135,33 @@ public protocol DisplayTopologyRefreshing {
     func refreshDisplayTopology()
 }
 
-@MainActor
-public protocol FeaturePanelVisibilityObserving: AnyObject {
-    func setFeaturePanelVisible(_ isVisible: Bool)
-}
-
-/// 可选协议——仅需要浮动窗口锚点的插件才声明遵从。
-/// 不修改 `MacToolsPlugin` witness table，对已安装旧插件无影响。
+/// Optional protocol for plugins that need a floating-window anchor.
+/// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
 @MainActor
 public protocol DropZoneAnchorProviding: AnyObject {
-    /// 宿主注入：返回状态栏图标按钮在屏幕坐标系中的 frame。
+    /// Host-injected provider returning the status-item button frame in screen coordinates.
     var anchorRectProvider: (() -> NSRect?)? { get set }
 }
 
-/// 可选协议——需要保护宿主菜单栏状态项位置的插件才声明遵从。
+/// Optional protocol for plugins that need to protect the host menu-bar status-item position.
 @MainActor
 public protocol MenuBarHostStatusItemRecovering: AnyObject {
     var hostStatusItemFrameProvider: (() -> NSRect?)? { get set }
     var resetHostStatusItemPosition: (() -> Void)? { get set }
+}
+
+/// Optional protocol for plugins that need to open their settings page from custom UI, such as a floating panel.
+/// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
+@MainActor
+public protocol PluginConfigurationPresenting: AnyObject {
+    /// Host-injected callback requesting presentation of this plugin's settings page.
+    var requestConfigurationPresentation: (() -> Void)? { get set }
+}
+
+/// Optional protocol for built-in plugins whose feature visibility should
+/// pause/resume heavyweight observers or external side effects.
+/// Dynamic plugins are paused by `DynamicPluginManager` instead.
+@MainActor
+public protocol PluginFeatureVisibilityLifecycleHandling: AnyObject {
+    func featureVisibilityDidChange(_ isVisible: Bool)
 }

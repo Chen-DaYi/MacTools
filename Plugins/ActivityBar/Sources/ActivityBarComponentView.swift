@@ -1,16 +1,24 @@
 import AppKit
 import Charts
 import SwiftUI
+import MacToolsPluginKit
 
-private struct ActivityBarPanelShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path(roundedRect: rect, cornerRadius: 10, style: .continuous)
-    }
+private enum ActivityBarComponentLayout {
+    static let cardCornerRadius = PluginComponentPanelLayoutMetrics.cardCornerRadius
 }
 
 private enum ActivityBarTrendMode: String, CaseIterable {
     case codingTools = "Coding Tools"
     case input = "Input"
+
+    func label(localization: PluginLocalization) -> String {
+        switch self {
+        case .codingTools:
+            localization.string("component.trendMode.codingTools", defaultValue: "Coding Tools")
+        case .input:
+            localization.string("component.trendMode.input", defaultValue: "Input")
+        }
+    }
 }
 
 private enum ActivityBarChartRange: String, CaseIterable {
@@ -39,7 +47,7 @@ private enum ActivityBarFunFact {
     static let secondsPerClick = 0.50
     static let keysPerPage = 550
 
-    static func forDay(_ stats: ActivityBarDailyStats) -> String? {
+    static func forDay(_ stats: ActivityBarDailyStats, localization: PluginLocalization) -> String? {
         var facts: [String] = []
 
         if stats.keystrokes > 0 {
@@ -47,7 +55,14 @@ private enum ActivityBarFunFact {
             if pages >= 1 {
                 let formatted = ActivityBarFormatting.decimal(stats.keystrokes)
                 let fullPages = Int(pages.rounded())
-                facts.append("✍️ You typed \(formatted) keys today. That's about writing \(fullPages) full page\(fullPages == 1 ? "" : "s").")
+                facts.append(
+                    localization.format(
+                        "component.funFact.typedPages",
+                        defaultValue: "You typed %@ keys today. That's about writing %d full pages.",
+                        formatted,
+                        fullPages
+                    )
+                )
             }
         }
 
@@ -56,7 +71,14 @@ private enum ActivityBarFunFact {
             if clickMins >= 1 {
                 let formatted = ActivityBarFormatting.decimal(stats.pointerClicks)
                 let minutes = Int(clickMins.rounded())
-                facts.append("🥁 You clicked \(formatted) times. That's like tapping your desk for about \(minutes) minute\(minutes == 1 ? "" : "s").")
+                facts.append(
+                    localization.format(
+                        "component.funFact.clickMinutes",
+                        defaultValue: "You clicked %@ times. That's like tapping your desk for about %d minutes.",
+                        formatted,
+                        minutes
+                    )
+                )
             }
         }
 
@@ -76,6 +98,7 @@ struct ActivityBarComponentView: View {
     private static let visibleCodingTools: [ActivityBarCodingTool] = [.claudeCode, .codex]
 
     @ObservedObject var controller: ActivityBarController
+    let localization: PluginLocalization
     let dismiss: () -> Void
 
     @State private var hoveredDate: String?
@@ -86,8 +109,13 @@ struct ActivityBarComponentView: View {
     @AppStorage("activity-bar.stats-expanded") private var statsExpanded = true
     @AppStorage("activity-bar.chart-range") private var chartRange = ActivityBarChartRange.sevenDays
 
-    init(controller: ActivityBarController, dismiss: @escaping () -> Void = {}) {
+    init(
+        controller: ActivityBarController,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        dismiss: @escaping () -> Void = {}
+    ) {
         self.controller = controller
+        self.localization = localization
         self.dismiss = dismiss
     }
 
@@ -155,12 +183,13 @@ struct ActivityBarComponentView: View {
             footerBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(.regularMaterial, in: ActivityBarPanelShape())
-        .overlay {
-            ActivityBarPanelShape()
-                .stroke(Color.black.opacity(0.5), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+        .background(ActivityBarComponentBackground(cornerRadius: ActivityBarComponentLayout.cardCornerRadius))
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+                style: .continuous
+            )
+        )
         .animation(.easeInOut(duration: 0.2), value: statsExpanded)
         .animation(.easeInOut(duration: 0.2), value: chartRange)
         .animation(.easeInOut(duration: 0.2), value: trendMode)
@@ -173,7 +202,7 @@ struct ActivityBarComponentView: View {
 
     private var headerBar: some View {
         HStack {
-            Text("Activity Bar")
+                Text(localization.string("component.title", defaultValue: "Activity Bar"))
                 .font(.title3.bold())
                 .lineLimit(1)
 
@@ -229,12 +258,12 @@ struct ActivityBarComponentView: View {
                 statCell(
                     icon: "keyboard",
                     value: ActivityBarFormatting.decimal(day.keystrokes),
-                    label: "Keystrokes"
+                    label: localization.string("component.metric.keystrokes", defaultValue: "Keystrokes")
                 )
                 statCell(
                     icon: "cursorarrow.click.2",
                     value: ActivityBarFormatting.decimal(day.pointerClicks),
-                    label: "Clicks"
+                    label: localization.string("component.metric.clicks", defaultValue: "Clicks")
                 )
             }
 
@@ -242,12 +271,12 @@ struct ActivityBarComponentView: View {
                 statCell(
                     icon: "scroll",
                     value: ActivityBarFormatting.decimal(day.scrollEvents),
-                    label: "Scrolls"
+                    label: localization.string("component.metric.scrolls", defaultValue: "Scrolls")
                 )
                 statCell(
                     icon: "macwindow.on.rectangle",
                     value: ActivityBarFormatting.duration(day.screenTimeSeconds),
-                    label: "Screen Time"
+                    label: localization.string("component.metric.screenTime", defaultValue: "Screen Time")
                 )
             }
 
@@ -261,7 +290,13 @@ struct ActivityBarComponentView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(
+                        .blue.opacity(0.08),
+                        in: RoundedRectangle(
+                            cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+                            style: .continuous
+                        )
+                    )
                     .padding(.horizontal, 4)
                     .padding(.top, 4)
             }
@@ -296,16 +331,25 @@ struct ActivityBarComponentView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            .primary.opacity(0.04),
+            in: RoundedRectangle(
+                cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+                style: .continuous
+            )
+        )
     }
 
     private var inputInsightText: String? {
-        if let fact = ActivityBarFunFact.forDay(selectedInputStats) {
+        if let fact = ActivityBarFunFact.forDay(selectedInputStats, localization: localization) {
             return fact
         }
 
         if isViewingToday, !controller.isTrackingEnabled {
-            return "Grant Input Monitoring and turn this on to start collecting local stats."
+            return localization.string(
+                "component.inputInsight.enableTracking",
+                defaultValue: "Grant Input Monitoring and turn this on to start collecting local stats."
+            )
         }
 
         return nil
@@ -318,7 +362,7 @@ struct ActivityBarComponentView: View {
 
     private var aiSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Time AI Worked for You")
+            Text(localization.string("component.ai.title", defaultValue: "Time AI Worked for You"))
                 .font(.headline)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 2)
@@ -330,7 +374,11 @@ struct ActivityBarComponentView: View {
                         id: "active-ai",
                         name: "Claude / Codex",
                         duration: 0,
-                        detail: "\(controller.codingStats.activeSessionCount) active",
+                        detail: localization.format(
+                            "component.ai.activeSessions",
+                            defaultValue: "%d active",
+                            controller.codingStats.activeSessionCount
+                        ),
                         tint: Self.codexColor,
                         systemImage: "terminal",
                         iconSize: 13
@@ -381,7 +429,13 @@ struct ActivityBarComponentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            .primary.opacity(0.04),
+            in: RoundedRectangle(
+                cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+                style: .continuous
+            )
+        )
         .padding(.horizontal, 16)
     }
 
@@ -400,11 +454,30 @@ struct ActivityBarComponentView: View {
                     .foregroundStyle(aboveAvg ? .green : .primary.opacity(0.45))
 
                 if pct == 0 {
-                    Text("On par with your daily avg (\(shortDuration(avg)))")
+                    Text(
+                        localization.format(
+                            "component.ai.dailyAverage.same",
+                            defaultValue: "On par with your daily avg (%@)",
+                            shortDuration(avg)
+                        )
+                    )
                         .font(.caption)
                         .foregroundStyle(.primary.opacity(0.55))
                 } else {
-                    Text("\(abs(pct))% \(aboveAvg ? "above" : "below") your daily avg (\(shortDuration(avg)))")
+                    let comparison = aboveAvg
+                        ? localization.format(
+                            "component.ai.dailyAverage.above",
+                            defaultValue: "%d%% above your daily avg (%@)",
+                            abs(pct),
+                            shortDuration(avg)
+                        )
+                        : localization.format(
+                            "component.ai.dailyAverage.below",
+                            defaultValue: "%d%% below your daily avg (%@)",
+                            abs(pct),
+                            shortDuration(avg)
+                        )
+                    Text(comparison)
                         .font(.caption)
                         .foregroundStyle(.primary.opacity(0.55))
                 }
@@ -431,14 +504,18 @@ struct ActivityBarComponentView: View {
 
     private var topAppsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Top Apps by Screen Time")
+            Text(localization.string("component.topApps.title", defaultValue: "Top Apps by Screen Time"))
                 .font(.headline)
                 .padding(.horizontal, 6)
                 .padding(.bottom, 2)
 
             let apps = Array(selectedInputStats.topApps.prefix(5))
             if apps.isEmpty {
-                Text(controller.isTrackingEnabled ? "No activity yet" : "Turn on tracking to rank your apps")
+                Text(
+                    controller.isTrackingEnabled
+                        ? localization.string("component.topApps.empty", defaultValue: "No activity yet")
+                        : localization.string("component.topApps.enableTracking", defaultValue: "Turn on tracking to rank your apps")
+                )
                     .font(.subheadline)
                     .foregroundStyle(.primary.opacity(0.55))
                     .padding(.vertical, 4)
@@ -532,7 +609,7 @@ struct ActivityBarComponentView: View {
                 statsExpanded.toggle()
             } label: {
                 HStack(spacing: 6) {
-                    Text("Trends")
+                    Text(localization.string("component.trends.title", defaultValue: "Trends"))
                         .font(.headline)
 
                     Image(systemName: "chevron.right")
@@ -554,7 +631,7 @@ struct ActivityBarComponentView: View {
                             hoveredDate = nil
                         }
                     } label: {
-                        Text(mode.rawValue)
+                        Text(mode.label(localization: localization))
                             .font(.caption.weight(.medium))
                             .foregroundStyle(.primary.opacity(trendMode == mode ? 1 : 0.35))
                     }
@@ -594,48 +671,49 @@ struct ActivityBarComponentView: View {
 
             ZStack {
                 Chart {
-                    if hasData {
-                        ForEach(days) { day in
-                            let d = chartLabel(day.date)
-                            let isHovered = hoveredDate == d
-                            let claudeMins = toolStats(.claudeCode, in: day).durationSeconds / 60
-                            let codexMins = toolStats(.codex, in: day).durationSeconds / 60
+                    // `hasData ? days : []` keeps the content a plain ForEach (no
+                    // `_ConditionalContent`, whose ChartContent conformance is macOS 27-only);
+                    // an empty range draws nothing, exactly as the old `if hasData` did.
+                    ForEach(hasData ? days : []) { day in
+                        let d = chartLabel(day.date)
+                        let isHovered = hoveredDate == d
+                        let claudeMins = toolStats(.claudeCode, in: day).durationSeconds / 60
+                        let codexMins = toolStats(.codex, in: day).durationSeconds / 60
 
-                            LineMark(x: .value("Date", d), y: .value("Minutes", claudeMins), series: .value("Tool", "Claude"))
-                                .foregroundStyle(by: .value("Tool", "Claude"))
-                                .interpolationMethod(.catmullRom)
-                            LineMark(x: .value("Date", d), y: .value("Minutes", codexMins), series: .value("Tool", "Codex"))
-                                .foregroundStyle(by: .value("Tool", "Codex"))
-                                .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Date", d), y: .value("Minutes", claudeMins), series: .value("Tool", "Claude"))
+                            .foregroundStyle(by: .value("Tool", "Claude"))
+                            .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Date", d), y: .value("Minutes", codexMins), series: .value("Tool", "Codex"))
+                            .foregroundStyle(by: .value("Tool", "Codex"))
+                            .interpolationMethod(.catmullRom)
 
-                            if isHovered {
-                                RuleMark(x: .value("Date", d))
-                                    .foregroundStyle(.gray.opacity(0.3))
-                                    .lineStyle(StrokeStyle(dash: [4, 4]))
-                                    .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                        VStack(spacing: 2) {
-                                            Text(shortDate(day.date))
-                                                .font(.system(size: 9))
-                                                .foregroundStyle(.primary.opacity(0.55))
-                                            HStack(spacing: 6) {
-                                                Text(shortDuration(claudeMins * 60)).foregroundStyle(Self.claudeColor)
-                                                Text(shortDuration(codexMins * 60)).foregroundStyle(Self.codexColor)
-                                            }
-                                            .font(.system(size: 10).bold().monospacedDigit())
+                        // Unconditional marks; opacity/symbol size carry the hover state (the old
+                        // if/else-if produced _ConditionalContent). The annotation body is a plain
+                        // View, so its `if isHovered` is fine.
+                        RuleMark(x: .value("Date", d))
+                            .foregroundStyle(.gray.opacity(isHovered ? 0.3 : 0))
+                            .lineStyle(StrokeStyle(dash: [4, 4]))
+                            .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                if isHovered {
+                                    VStack(spacing: 2) {
+                                        Text(shortDate(day.date))
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.primary.opacity(0.55))
+                                        HStack(spacing: 6) {
+                                            Text(shortDuration(claudeMins * 60)).foregroundStyle(Self.claudeColor)
+                                            Text(shortDuration(codexMins * 60)).foregroundStyle(Self.codexColor)
                                         }
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
-                                        .offset(y: 30)
+                                        .font(.system(size: 10).bold().monospacedDigit())
                                     }
-
-                                chartPoint(x: d, y: claudeMins, color: Self.claudeColor, size: 30)
-                                chartPoint(x: d, y: codexMins, color: Self.codexColor, size: 30)
-                            } else if !compactMode {
-                                chartPoint(x: d, y: claudeMins, color: Self.claudeColor, size: 12)
-                                chartPoint(x: d, y: codexMins, color: Self.codexColor, size: 12)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                                    .offset(y: 30)
+                                }
                             }
-                        }
+
+                        chartPoint(x: d, y: claudeMins, color: Self.claudeColor, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
+                        chartPoint(x: d, y: codexMins, color: Self.codexColor, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
                     }
                 }
                 .chartForegroundStyleScale([
@@ -674,7 +752,7 @@ struct ActivityBarComponentView: View {
                 }
 
                 if !hasData {
-                    emptyChartMessage("No coding activity")
+                    emptyChartMessage(localization.string("component.chart.emptyCoding", defaultValue: "No coding activity"))
                 }
             }
             .frame(height: 120)
@@ -699,60 +777,55 @@ struct ActivityBarComponentView: View {
             HStack {
                 rangePickerBar
                 Spacer(minLength: 8)
-                legendDot(color: .blue, label: "Keys")
-                legendDot(color: .orange, label: "Clicks")
-                legendDot(color: .green, label: "Scrolls")
+                legendDot(color: .blue, label: localization.string("component.legend.keys", defaultValue: "Keys"))
+                legendDot(color: .orange, label: localization.string("component.legend.clicks", defaultValue: "Clicks"))
+                legendDot(color: .green, label: localization.string("component.legend.scrolls", defaultValue: "Scrolls"))
             }
             .padding(.horizontal, 6)
 
             ZStack {
                 Chart {
-                    if hasData {
-                        ForEach(days) { day in
-                            let d = chartLabel(day.date)
-                            let isHovered = hoveredDate == d
+                    // See codingToolsChart: `hasData ? days : []` avoids _ConditionalContent.
+                    ForEach(hasData ? days : []) { day in
+                        let d = chartLabel(day.date)
+                        let isHovered = hoveredDate == d
 
-                            LineMark(x: .value("Date", d), y: .value("Count", day.keystrokes), series: .value("Metric", "Keystrokes"))
-                                .foregroundStyle(by: .value("Metric", "Keystrokes"))
-                                .interpolationMethod(.catmullRom)
-                            LineMark(x: .value("Date", d), y: .value("Count", day.pointerClicks), series: .value("Metric", "Clicks"))
-                                .foregroundStyle(by: .value("Metric", "Clicks"))
-                                .interpolationMethod(.catmullRom)
-                            LineMark(x: .value("Date", d), y: .value("Count", day.scrollEvents), series: .value("Metric", "Scrolls"))
-                                .foregroundStyle(by: .value("Metric", "Scrolls"))
-                                .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Date", d), y: .value("Count", day.keystrokes), series: .value("Metric", "Keystrokes"))
+                            .foregroundStyle(by: .value("Metric", "Keystrokes"))
+                            .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Date", d), y: .value("Count", day.pointerClicks), series: .value("Metric", "Clicks"))
+                            .foregroundStyle(by: .value("Metric", "Clicks"))
+                            .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Date", d), y: .value("Count", day.scrollEvents), series: .value("Metric", "Scrolls"))
+                            .foregroundStyle(by: .value("Metric", "Scrolls"))
+                            .interpolationMethod(.catmullRom)
 
-                            if isHovered {
-                                RuleMark(x: .value("Date", d))
-                                    .foregroundStyle(.gray.opacity(0.3))
-                                    .lineStyle(StrokeStyle(dash: [4, 4]))
-                                    .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                        VStack(spacing: 2) {
-                                            Text(shortDate(day.date))
-                                                .font(.system(size: 9))
-                                                .foregroundStyle(.primary.opacity(0.55))
-                                            HStack(spacing: 6) {
-                                                Text("\(day.keystrokes)").foregroundStyle(.blue)
-                                                Text("\(day.pointerClicks)").foregroundStyle(.orange)
-                                                Text("\(day.scrollEvents)").foregroundStyle(.green)
-                                            }
-                                            .font(.system(size: 10).bold().monospacedDigit())
+                        RuleMark(x: .value("Date", d))
+                            .foregroundStyle(.gray.opacity(isHovered ? 0.3 : 0))
+                            .lineStyle(StrokeStyle(dash: [4, 4]))
+                            .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                if isHovered {
+                                    VStack(spacing: 2) {
+                                        Text(shortDate(day.date))
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.primary.opacity(0.55))
+                                        HStack(spacing: 6) {
+                                            Text("\(day.keystrokes)").foregroundStyle(.blue)
+                                            Text("\(day.pointerClicks)").foregroundStyle(.orange)
+                                            Text("\(day.scrollEvents)").foregroundStyle(.green)
                                         }
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
-                                        .offset(y: 30)
+                                        .font(.system(size: 10).bold().monospacedDigit())
                                     }
-
-                                chartPoint(x: d, y: Double(day.keystrokes), color: .blue, size: 30)
-                                chartPoint(x: d, y: Double(day.pointerClicks), color: .orange, size: 30)
-                                chartPoint(x: d, y: Double(day.scrollEvents), color: .green, size: 30)
-                            } else if !compactMode {
-                                chartPoint(x: d, y: Double(day.keystrokes), color: .blue, size: 12)
-                                chartPoint(x: d, y: Double(day.pointerClicks), color: .orange, size: 12)
-                                chartPoint(x: d, y: Double(day.scrollEvents), color: .green, size: 12)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                                    .offset(y: 30)
+                                }
                             }
-                        }
+
+                        chartPoint(x: d, y: Double(day.keystrokes), color: .blue, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
+                        chartPoint(x: d, y: Double(day.pointerClicks), color: .orange, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
+                        chartPoint(x: d, y: Double(day.scrollEvents), color: .green, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
                     }
                 }
                 .chartForegroundStyleScale([
@@ -792,7 +865,7 @@ struct ActivityBarComponentView: View {
                 }
 
                 if !hasData {
-                    emptyChartMessage("No input activity")
+                    emptyChartMessage(localization.string("component.chart.emptyInput", defaultValue: "No input activity"))
                 }
             }
             .frame(height: 120)
@@ -807,7 +880,7 @@ struct ActivityBarComponentView: View {
         let labels = days.map { chartLabel($0.date) }
 
         return VStack(alignment: .leading, spacing: 6) {
-            Text("Screen Time")
+            Text(localization.string("component.screenTime.title", defaultValue: "Screen Time"))
                 .font(.headline)
 
             Chart {
@@ -914,6 +987,15 @@ struct ActivityBarComponentView: View {
             .symbolSize(size)
     }
 
+    /// Hover-driven point size, kept unconditional (0 hides the mark on compact
+    /// non-hovered days) so the Chart body has no `_ConditionalContent` — whose
+    /// `ChartContent` conformance is macOS 27-only and fails the 27-SDK build at
+    /// a 14.0 deployment target.
+    private func hoverPointSize(isHovered: Bool, compactMode: Bool) -> CGFloat {
+        if isHovered { return 30 }
+        return compactMode ? 0 : 12
+    }
+
     private func chartHoverOverlay(proxy: ChartProxy, labels: [String], hoveredLabel: Binding<String?>) -> some View {
         GeometryReader { geo in
             Rectangle()
@@ -954,7 +1036,7 @@ struct ActivityBarComponentView: View {
             Button {
                 controller.installHooks()
             } label: {
-                Text("Hooks")
+                Text(localization.string("component.footer.hooks", defaultValue: "Hooks"))
                     .font(.subheadline)
                     .foregroundStyle(.primary.opacity(0.55))
             }
@@ -963,7 +1045,7 @@ struct ActivityBarComponentView: View {
             Button {
                 controller.openInputMonitoringSettings()
             } label: {
-                Text("Permissions")
+                Text(localization.string("component.footer.permissions", defaultValue: "Permissions"))
                     .font(.subheadline)
                     .foregroundStyle(.primary.opacity(0.55))
             }
@@ -972,7 +1054,7 @@ struct ActivityBarComponentView: View {
             Spacer()
 
             Button(action: dismiss) {
-                Text("Close")
+                Text(localization.string("component.footer.close", defaultValue: "Close"))
                     .font(.subheadline)
                     .foregroundStyle(.primary.opacity(0.55))
             }
@@ -1102,16 +1184,21 @@ struct ActivityBarComponentView: View {
     }
 
     private func codingDetailText(for stats: ActivityBarProjectStats) -> String {
-        "\(ActivityBarFormatting.decimal(stats.wordCount)) words · \(ActivityBarFormatting.decimal(stats.toolCallCount)) tools"
+        localization.format(
+            "component.ai.detail",
+            defaultValue: "%@ words · %@ tools",
+            ActivityBarFormatting.decimal(stats.wordCount),
+            ActivityBarFormatting.decimal(stats.toolCallCount)
+        )
     }
 
     private var displayDateString: String {
         if isViewingToday {
-            return "Today"
+            return localization.string("component.date.today", defaultValue: "Today")
         }
 
         if selectedDateOffset == -1 {
-            return "Yesterday"
+            return localization.string("component.date.yesterday", defaultValue: "Yesterday")
         }
 
         let formatter = DateFormatter()
@@ -1121,17 +1208,18 @@ struct ActivityBarComponentView: View {
 
     private func shortDate(_ dateString: String) -> String {
         let parts = dateString.split(separator: "-")
-        guard parts.count == 3 else {
+        guard parts.count == 3,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2]),
+              let date = Calendar.current.date(from: DateComponents(year: year, month: month, day: day))
+        else {
             return dateString
         }
 
-        let months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        let monthIndex = Int(parts[1]) ?? 0
-        guard monthIndex >= 1, monthIndex <= 12 else {
-            return dateString
-        }
-
-        return "\(months[monthIndex]) \(parts[2])"
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter.string(from: date)
     }
 
     private func chartLabel(_ dateString: String) -> String {
@@ -1145,10 +1233,8 @@ struct ActivityBarComponentView: View {
         }
 
         let day = Int(parts[2]) ?? 0
-        let monthIndex = Int(parts[1]) ?? 0
-        let months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        if day == 1, monthIndex >= 1, monthIndex <= 12 {
-            return "\(months[monthIndex]) 1"
+        if day == 1 {
+            return shortDate(dateString)
         }
 
         return "\(day)"
@@ -1205,5 +1291,14 @@ struct ActivityBarComponentView: View {
         let tint: Color
         let systemImage: String
         let iconSize: CGFloat
+    }
+}
+
+private struct ActivityBarComponentBackground: View {
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.primary.opacity(0.045))
     }
 }

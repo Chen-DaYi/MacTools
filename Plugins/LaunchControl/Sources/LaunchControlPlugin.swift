@@ -13,8 +13,9 @@ private struct LaunchControlPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        let controller = LaunchControlController(context: context)
-        return [LaunchControlPlugin(context: context, controller: controller)]
+        let localization = PluginLocalization(bundle: context.resourceBundle)
+        let controller = LaunchControlController(context: context, localization: localization)
+        return [LaunchControlPlugin(context: context, controller: controller, localization: localization)]
     }
 }
 
@@ -25,14 +26,7 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         static let openManager = "launch-control-open-manager"
     }
 
-    let metadata = PluginMetadata(
-        id: "launch-control",
-        title: "启动项",
-        iconName: "powerplug",
-        iconTint: Color(nsColor: .systemOrange),
-        order: 95,
-        defaultDescription: "查看和管理 launchctl 启动项"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -44,13 +38,28 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let controller: LaunchControlController
+    private let localization: PluginLocalization
     private var isExpanded = false
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control"),
-        controller: LaunchControlController? = nil
+        controller: LaunchControlController? = nil,
+        localization: PluginLocalization? = nil
     ) {
-        self.controller = controller ?? LaunchControlController(context: context)
+        let localization = localization ?? PluginLocalization(bundle: context.resourceBundle)
+        self.localization = localization
+        self.controller = controller ?? LaunchControlController(context: context, localization: localization)
+        self.metadata = PluginMetadata(
+            id: "launch-control",
+            title: localization.string("metadata.title", defaultValue: "启动项"),
+            iconName: "powerplug",
+            iconTint: Color(nsColor: .systemOrange),
+            order: 95,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "查看和管理 launchctl 启动项"
+            )
+        )
         self.controller.onStateChange = { [weak self] in
             self?.onStateChange?()
         }
@@ -73,8 +82,9 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { _ in
-            LaunchControlManagerView(controller: self.controller)
+        let localization = localization
+        return PluginConfiguration(description: metadata.defaultDescription) { _ in
+            LaunchControlManagerView(controller: self.controller, localization: localization)
         }
     }
 
@@ -126,7 +136,9 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: snapshot.isRefreshing ? "正在刷新" : "刷新列表",
+            actionTitle: snapshot.isRefreshing
+                ? localization.string("panel.action.refreshing", defaultValue: "正在刷新")
+                : localization.string("panel.action.refresh", defaultValue: "刷新列表"),
             actionIconSystemName: "arrow.clockwise",
             isEnabled: !snapshot.isRefreshing
         )
@@ -141,7 +153,7 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "打开管理器",
+            actionTitle: localization.string("panel.action.openManager", defaultValue: "打开管理器"),
             actionIconSystemName: "arrow.up.right.square",
             actionBehavior: .dismissBeforeHandling,
             showsLeadingDivider: true,
@@ -153,15 +165,27 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func subtitle(for snapshot: LaunchControlSnapshot) -> String {
         if snapshot.isRefreshing {
-            return "正在扫描 LaunchAgent 与 LaunchDaemon"
+            return localization.string(
+                "panel.subtitle.refreshing",
+                defaultValue: "正在扫描 LaunchAgent 与 LaunchDaemon"
+            )
         }
 
         if snapshot.items.isEmpty {
-            return "打开管理器或刷新后查看启动项"
+            return localization.string(
+                "panel.subtitle.empty",
+                defaultValue: "打开管理器或刷新后查看启动项"
+            )
         }
 
         let userCreatedCount = snapshot.items.filter { $0.origin == .userCreated }.count
         let runningCount = snapshot.items.filter { $0.state == .running }.count
-        return "\(snapshot.items.count) 项 · \(runningCount) 运行中 · \(userCreatedCount) 用户创建"
+        return localization.format(
+            "panel.subtitle.summary",
+            defaultValue: "%d 项 · %d 运行中 · %d 用户创建",
+            snapshot.items.count,
+            runningCount,
+            userCreatedCount
+        )
     }
 }

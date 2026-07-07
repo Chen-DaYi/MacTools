@@ -2,7 +2,53 @@
   "id": "device-battery",
   "displayName": "设备电量",
   "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量",
-  "version": "1.0.0",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "بطارية الأجهزة",
+      "summary": "عرض مستويات البطارية لجهاز Mac، وملحقات Bluetooth، وأجهزة الماوس Rapoo."
+    },
+    "de": {
+      "displayName": "Gerätebatterie",
+      "summary": "Zeigen Sie den Akkustand Ihres Mac, Ihres Bluetooth-Zubehörs und Ihrer Rapoo Mäuse an."
+    },
+    "en": {
+      "displayName": "Device Battery",
+      "summary": "View battery levels for your Mac, Bluetooth accessories, and Rapoo mice."
+    },
+    "es": {
+      "displayName": "Batería de dispositivos",
+      "summary": "Ver los niveles de batería de tu Mac, accesorios Bluetooth y Rapoo ratones."
+    },
+    "fr": {
+      "displayName": "Batterie des appareils",
+      "summary": "Affichez les niveaux de batterie de votre Mac, de vos accessoires Bluetooth et de vos souris Rapoo."
+    },
+    "ja": {
+      "displayName": "デバイスのバッテリー",
+      "summary": "Mac、Bluetooth アクセサリ、Rapoo マウスのバッテリー レベルを表示します。"
+    },
+    "ko": {
+      "displayName": "기기 배터리",
+      "summary": "Mac, Bluetooth 액세서리 및 Rapoo 마우스의 배터리 잔량을 확인하세요."
+    },
+    "pt": {
+      "displayName": "Bateria dos dispositivos",
+      "summary": "Veja os níveis de bateria do seu Mac, acessórios Bluetooth e mouses Rapoo."
+    },
+    "ru": {
+      "displayName": "Батарея устройств",
+      "summary": "Просматривайте уровень заряда батареи вашего Mac, аксессуаров Bluetooth и мышей Rapoo."
+    },
+    "zh-Hans": {
+      "displayName": "设备电量",
+      "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量"
+    },
+    "zh-Hant": {
+      "displayName": "裝置電量",
+      "summary": "查看 Mac、藍牙外設和雷柏滑鼠電量"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DeviceBattery.bundle",

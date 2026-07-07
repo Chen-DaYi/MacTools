@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import MacToolsPluginKit
 
 @MainActor
 final class CalendarComponentViewModel: ObservableObject {
@@ -11,6 +12,7 @@ final class CalendarComponentViewModel: ObservableObject {
     private let eventService: CalendarEventServicing
     private let holidayProvider: CalendarHolidayProvider
     private let calendar: Calendar
+    private let localization: PluginLocalization
     private var displayedMonthStart: Date
     private var selectedDate: Date
     private var eventsByDay: [Date: [CalendarEventSummary]] = [:]
@@ -20,17 +22,20 @@ final class CalendarComponentViewModel: ObservableObject {
         eventService: CalendarEventServicing = CalendarEventService(),
         holidayProvider: CalendarHolidayProvider,
         calendar: Calendar = CalendarComponentCalendars.gregorianFollowingSystem(),
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         today: Date = Date()
     ) {
         self.eventService = eventService
         self.holidayProvider = holidayProvider
         self.calendar = calendar
+        self.localization = localization
         self.displayedMonthStart = CalendarComponentCalendars.monthStart(containing: today, calendar: calendar)
         self.selectedDate = calendar.startOfDay(for: today)
         self.authorization = eventService.authorization
         self.month = CalendarMonthModelBuilder(
             calendar: calendar,
-            holidayProvider: holidayProvider
+            holidayProvider: holidayProvider,
+            localization: localization
         ).makeMonth(containing: today, today: today)
         self.selectedDay = month.days.first { calendar.isDate($0.date, inSameDayAs: selectedDate) }
     }
@@ -112,7 +117,8 @@ final class CalendarComponentViewModel: ObservableObject {
                 eventsByDay = CalendarEventGrouper.group(
                     events: events,
                     visibleDates: month.days.map(\.date),
-                    calendar: calendar
+                    calendar: calendar,
+                    localization: localization
                 )
                 isLoadingEvents = false
                 rebuildMonth()
@@ -131,7 +137,8 @@ final class CalendarComponentViewModel: ObservableObject {
     private func rebuildMonth(today: Date = Date()) {
         month = CalendarMonthModelBuilder(
             calendar: calendar,
-            holidayProvider: holidayProvider
+            holidayProvider: holidayProvider,
+            localization: localization
         ).makeMonth(
             containing: displayedMonthStart,
             today: today,

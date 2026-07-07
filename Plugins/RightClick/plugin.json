@@ -1,0 +1,67 @@
+{
+  "id": "right-click",
+  "displayName": "右键工具",
+  "summary": "为 Finder 右键菜单添加新建文件夹和路径复制",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "النقر بزر الماوس الأيمن",
+      "summary": "أضف إجراءات قائمة السياق Finder السريعة للمجلدات والمسارات."
+    },
+    "de": {
+      "displayName": "Rechtsklick",
+      "summary": "Fügen Sie schnelle Finder-Kontextmenüaktionen für Ordner und Pfade hinzu."
+    },
+    "en": {
+      "displayName": "Right Click",
+      "summary": "Add quick Finder context menu actions for folders and paths."
+    },
+    "es": {
+      "displayName": "Clic derecho",
+      "summary": "Agregue acciones rápidas del menú contextual Finder para carpetas y rutas."
+    },
+    "fr": {
+      "displayName": "Clic droit",
+      "summary": "Ajoutez des actions rapides de menu contextuel Finder pour les dossiers et les chemins."
+    },
+    "ja": {
+      "displayName": "右クリック",
+      "summary": "フォルダーとパスに対するクイック Finder コンテキスト メニュー アクションを追加します。"
+    },
+    "ko": {
+      "displayName": "오른쪽 클릭",
+      "summary": "폴더 및 경로에 대한 빠른 Finder 컨텍스트 메뉴 작업을 추가합니다."
+    },
+    "pt": {
+      "displayName": "Clique direito",
+      "summary": "Adicione ações rápidas do menu de contexto Finder para pastas e caminhos."
+    },
+    "ru": {
+      "displayName": "Правый клик",
+      "summary": "Добавьте быстрые действия контекстного меню Finder для папок и путей."
+    },
+    "zh-Hans": {
+      "displayName": "右键工具",
+      "summary": "为 Finder 右键菜单添加新建文件夹和路径复制"
+    },
+    "zh-Hant": {
+      "displayName": "右鍵工具",
+      "summary": "為 Finder 右鍵菜單添加新建資料夾和路徑複製"
+    }
+  },
+  "version": "1.0.4",
+  "minHostVersion": "1.0.21",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "RightClick.bundle",
+  "factoryClass": "RightClickPlugin.RightClickPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "RightClickPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": false,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [],
+  "category": "productivity"
+}

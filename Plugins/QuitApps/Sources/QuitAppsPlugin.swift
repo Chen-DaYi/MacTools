@@ -8,14 +8,16 @@ import MacToolsPluginKit
 
 public final class QuitAppsPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        QuitAppsPluginProvider()
+        QuitAppsPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct QuitAppsPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [QuitAppsPlugin()]
+        [QuitAppsPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -26,20 +28,9 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
 
     // MARK: Metadata
 
-    let metadata = PluginMetadata(
-        id: "quit-apps",
-        title: "退出应用",
-        iconName: "power",
-        iconTint: Color(nsColor: .systemRed),
-        order: 96,
-        defaultDescription: "选择并退出正在运行的应用"
-    )
+    let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "选择"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     // MARK: DropZoneAnchorProviding
 
@@ -57,15 +48,42 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "QuitAppsPlugin"
     )
+    private let localization: PluginLocalization
     private var selectionWindow: QuitAppsSelectionWindow?
     private var runningAppCount: Int = 0
     private var appObservers: [NSObjectProtocol] = []
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "quit-apps",
+            title: localization.string("metadata.title", defaultValue: "退出应用"),
+            iconName: "power",
+            iconTint: Color(nsColor: .systemRed),
+            order: 96,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "选择并退出正在运行的应用"
+            )
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.button.choose", defaultValue: "选择")
+        )
+    }
 
     // MARK: PluginPrimaryPanel
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: runningAppCount > 0 ? "正在运行 \(runningAppCount) 个应用" : "无正在运行的应用",
+            subtitle: runningAppCount > 0
+                ? localization.format(
+                    "panel.subtitle.runningCountFormat",
+                    defaultValue: "正在运行 %d 个应用",
+                    runningAppCount
+                )
+                : localization.string("panel.subtitle.none", defaultValue: "无正在运行的应用"),
             isOn: false,
             isExpanded: false,
             isEnabled: runningAppCount > 0,
@@ -165,6 +183,7 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
         }
 
         let window = QuitAppsSelectionWindow(
+            localization: localization,
             onDismiss: { [weak self] in
                 self?.closeSelectionWindow()
             }

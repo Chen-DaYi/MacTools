@@ -1,0 +1,71 @@
+{
+  "id": "translator",
+  "displayName": "翻译",
+  "summary": "划词与截图快捷键翻译",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "المترجم",
+      "summary": "ترجم النص المحدد أو مناطق لقطة الشاشة باستخدام اختصارات."
+    },
+    "de": {
+      "displayName": "Übersetzer",
+      "summary": "Ausgewählten Text oder Screenshot-Bereiche per Kurzbefehl übersetzen."
+    },
+    "en": {
+      "displayName": "Translator",
+      "summary": "Translate selected text or screenshot regions with shortcuts."
+    },
+    "es": {
+      "displayName": "Traductor",
+      "summary": "Traduce texto seleccionado o regiones de captura con atajos."
+    },
+    "fr": {
+      "displayName": "Traducteur",
+      "summary": "Traduit le texte sélectionné ou des zones de capture d’écran avec des raccourcis."
+    },
+    "ja": {
+      "displayName": "翻訳",
+      "summary": "選択したテキストやスクリーンショット範囲をショートカットで翻訳します。"
+    },
+    "ko": {
+      "displayName": "번역",
+      "summary": "선택한 텍스트나 스크린샷 영역을 단축키로 번역합니다."
+    },
+    "pt": {
+      "displayName": "Tradutor",
+      "summary": "Traduz texto selecionado ou regiões de captura de tela com atalhos."
+    },
+    "ru": {
+      "displayName": "Переводчик",
+      "summary": "Перевод выбранного текста или области снимка экрана по горячим клавишам."
+    },
+    "zh-Hans": {
+      "displayName": "翻译",
+      "summary": "划词与截图快捷键翻译"
+    },
+    "zh-Hant": {
+      "displayName": "翻譯",
+      "summary": "透過快速鍵翻譯選取文字或截圖區域。"
+    }
+  },
+  "version": "0.1.6",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "Translator.bundle",
+  "factoryClass": "TranslatorPlugin.TranslatorPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "TranslatorPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [
+    "accessibility",
+    "automation",
+    "screen-recording"
+  ],
+  "category": "productivity"
+}

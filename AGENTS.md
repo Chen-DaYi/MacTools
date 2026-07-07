@@ -1,101 +1,103 @@
 # Agent Instructions for MacTools
 
-## 指令范围
-- 本文件是本仓库的 canonical agent 指南，适用于整个仓库。
-- 若子目录未来出现更近的 `AGENTS.md`，以更近文件为准。
-- `CLAUDE.md`、`GEMINI.md` 只做兼容入口；共享规则应优先维护在本文件。
+## Instruction Scope
+- This file is the canonical agent guide for this repository and applies to the entire repo.
+- If a closer `AGENTS.md` appears in a subdirectory in the future, the closer file takes precedence.
+- `CLAUDE.md` and `GEMINI.md` are compatibility entry points only; shared rules should be maintained here first.
 
-## 项目概览
-- MacTools 是原生 macOS 菜单栏工具集合，面向高频、轻量、不打扰的系统能力。
-- 技术栈为 Swift 6、SwiftUI + AppKit，最低支持 macOS 14.0。
-- 功能以插件组织。当前插件源码统一放在 `Plugins/<PluginName>/`，通过 `MacToolsPluginKit`、动态插件包和 catalog 接入宿主。
-- 用户可见文案当前以中文为主；新增文案需保持简洁、清楚、接近 macOS 原生表达。
+## Project Overview
+- MacTools is a native macOS menu-bar utility collection for frequent, lightweight, non-disruptive system tasks.
+- The stack is Swift 6 with SwiftUI + AppKit, targeting macOS 14.0 or later.
+- Features are organized as plugins. Current plugin source lives under `Plugins/<PluginName>/` and is integrated into the host through `MacToolsPluginKit`, dynamic plugin packages, and catalogs.
+- User-facing copy is currently primarily Chinese. New copy should stay concise, clear, and close to native macOS phrasing.
 
-## 关键目录
-- `Sources/App/`：应用入口、菜单栏状态项、面板、设置页和窗口路由。
-- `Sources/Core/Plugins/`：插件宿主、动态插件加载、包安装、catalog 校验和展示偏好。
-- `Sources/Core/Shortcuts/`：全局快捷键模型、存储和管理。
-- `Sources/Core/Permissions/`：系统权限检查。
-- `Sources/Core/Diagnostics/`：统一日志入口。
-- `Sources/Core/Updates/`：Sparkle 更新检查与关于页更新状态。
-- `Sources/MacToolsPluginKit/`：插件协议、描述式 UI 模型、快捷键模型和运行时上下文。
-- `Plugins/<PluginName>/`：插件 manifest、源码、bundle 入口、资源和相邻测试。
-- `Tests/`：App/Core 共享逻辑的 XCTest；插件测试优先放在对应插件目录下。
-- `Configs/`：Xcode build settings 与 `Info.plist`。
-- `docs/plugins/`：插件包、catalog、本地调试和发布流程文档。
-- `docs/superpowers/`：较大的产品/交互设计规格与实施计划。
-- `scripts/`：发布、签名、公证和 GitHub Release 辅助脚本。
+## Key Directories
+- `Sources/App/`: app entry point, menu-bar status item, panels, settings pages, and window routing.
+- `Sources/Core/Plugins/`: plugin host, dynamic plugin loading, package installation, catalog validation, and display preferences.
+- `Sources/Core/Shortcuts/`: global shortcut models, storage, and management.
+- `Sources/Core/Permissions/`: system permission checks.
+- `Sources/Core/Diagnostics/`: shared logging entry points.
+- `Sources/Core/Updates/`: Sparkle update checks and About-page update state.
+- `Sources/MacToolsPluginKit/`: plugin protocols, declarative UI models, shortcut models, and runtime context.
+- `Plugins/<PluginName>/`: plugin manifest, source, bundle entry point, resources, and adjacent tests.
+- `Tests/`: XCTest coverage for shared App/Core logic; plugin tests should prefer the corresponding plugin directory.
+- `Configs/`: Xcode build settings and `Info.plist`.
+- `docs/plugins/`: plugin package, catalog, local debugging, and release-process documentation.
+- `docs/superpowers/`: larger product/interaction specs and implementation plans.
+- `scripts/`: release, signing, notarization, and GitHub Release helper scripts.
 
-## 构建与运行
-- 先运行 `make setup` 初始化 `LocalConfig.xcconfig`，再填写 `DEVELOPMENT_TEAM` 与 `BUNDLE_IDENTIFIER_PREFIX`。
-- `project.yml` 是 XcodeGen 的根项目源文件；插件 target/scheme 由 `scripts/plugins/generate-plugin-project-config.rb` 扫描 `Plugins/*/plugin.json` 后生成到本地 `Configs/GeneratedPlugins.yml`，该生成文件不提交。
-- 生成项目：`make generate`。不要直接运行裸 `xcodegen generate`，否则可能缺少最新插件生成配置。
-- 编译校验：`make build`。
-- 本地运行：`make run`，会同步最新 Debug 插件包并生成本地开发 catalog。
-- 只同步已编译的 Debug 插件包和本地开发 catalog：`make sync-debug-plugins`。
-- 单独构建本地插件包并生成 Debug catalog：`make build-plugin`。
-- 构建指定插件：`make build-plugin PLUGIN=<插件目录名或插件 ID>`。
-- 运行完整测试：`xcodebuild -project MacTools.xcodeproj -scheme MacTools -configuration Debug -derivedDataPath build/DerivedData test -quiet`。
-- 运行单个测试类：在完整测试命令后加 `-only-testing:MacToolsTests/<TestClassName>`。
-- 只在需要发布时使用 `./scripts/release-local.sh`；签名、公证、发布和打 tag 前必须确认用户意图。
+## Build And Run
+- Run `make setup` first to initialize `LocalConfig.xcconfig`, then fill in `DEVELOPMENT_TEAM` and `BUNDLE_IDENTIFIER_PREFIX`.
+- `project.yml` is the root XcodeGen source. Plugin targets and schemes are generated locally into `Configs/GeneratedPlugins.yml` by `scripts/plugins/generate-plugin-project-config.rb`, which scans `Plugins/*/plugin.json`; that generated file is not committed.
+- Generate the project with `make generate`. Do not run bare `xcodegen generate`, because it can miss the latest generated plugin configuration.
+- Validate compilation with `make build`.
+- Run locally with `make run`; it syncs the latest Debug plugin packages and generates the local development catalog.
+- Sync only already-built Debug plugin packages and the local development catalog with `make sync-debug-plugins`.
+- Build the local plugin packages and generate the Debug catalog with `make build-plugin`.
+- Build one plugin with `make build-plugin PLUGIN=<plugin directory name or plugin ID>`.
+- Run the full test suite with `xcodebuild -project MacTools.xcodeproj -scheme MacTools -configuration Debug -derivedDataPath build/DerivedData test -quiet`.
+- Run one test class by appending `-only-testing:MacToolsTests/<TestClassName>` to the full test command.
+- Use `./scripts/release-local.sh` only when a release is needed; confirm user intent before signing, notarizing, publishing, or tagging.
 
-## 架构约定
-- 新增插件放在 `Plugins/<PluginName>/`，至少包含 `plugin.json`、`Sources/` 和 `Bundle/`。
-- 插件实现 `MacToolsPlugin`；菜单栏主面板实现 `PluginPrimaryPanel`，组件面板实现 `PluginComponentPanel`。
-- `plugin.json.id` 必须稳定、可读，并与运行时 `PluginMetadata.id` 完全一致；每个 `.mactoolsplugin` 包只返回一个插件实例。
-- `PluginHost` 负责插件排序、可见性、快捷键、权限卡片和派生展示状态；不要让具体插件直接操纵宿主 UI。
-- 插件 UI 应通过 `PluginPanelState`、`PluginPanelDetail`、`PluginPanelControl` 等描述式模型表达；除 `PluginComponentPanel.makeView` 外，避免绕过现有面板框架自建菜单栏 UI。
-- 插件状态与 UI 相关代码默认在 `@MainActor`；耗时扫描、文件系统或系统调用应避免长时间阻塞主线程。`primaryPanelState`、`componentPanelState` 应尽量只读取已有快照，不要在 getter 中同步扫描硬件、文件系统或网络。
-- `PluginHost` 只负责派生面板项、组件项、设置项等通用展示状态，并会缓存组件视图和合并短时间内的状态重建；业务数据快照、缓存失效和刷新时机仍应由具体插件或组件负责。
-- 插件状态变化后调用 `onStateChange?()`，使宿主重建派生状态。若状态会被外部系统事件改变（如显示器热插拔、权限变化、文件系统变化、日历授权变化），需要接入明确的事件监听或刷新入口，并配合 debounce/节流更新快照，避免依赖用户展开面板、切换设置页或全量 `refreshAll()` 才拿到新数据。例外：输入统计、采样计数等高频事件源可以只更新插件自身快照，不对每个事件调用 `onStateChange?()`；这类插件必须按面板/组件可见性或固定时间窗口节流上报 UI 变化，并确保用户主动打开面板或 `refresh()` 时能读到最新快照。
-- 有跨插件通用意义的外部状态变化应优先抽象成 Core 层协议或观察器；例如显示器拓扑变化使用 `DisplayConfigurationObserving` 通知宿主，再由实现 `DisplayTopologyRefreshing` 的显示器相关插件刷新自身快照。
-- 控件 ID、插件 ID、快捷键 ID 要稳定、可读，并尽量集中在功能内的私有常量中。
-- 普通新增插件不需要更新根 `project.yml`；保持 `plugin.json.build.scheme` 指向对应 bundle scheme，生成器会自动创建 core target、bundle target、测试依赖和插件 scheme。若插件需要额外 framework、include path、bundle 资源或 target 覆盖，在 `Plugins/<PluginName>/project.yml` 中声明最小差异。
+## Architecture Conventions
+- Add new plugins under `Plugins/<PluginName>/` with at least `plugin.json`, `Sources/`, and `Bundle/`.
+- Plugins implement `MacToolsPlugin`; menu-bar primary panels implement `PluginPrimaryPanel`, and component panels implement `PluginComponentPanel`.
+- `plugin.json.id` must be stable, readable, and exactly match the runtime `PluginMetadata.id`; each `.mactoolsplugin` package must return exactly one plugin instance.
+- `PluginHost` owns plugin ordering, visibility, shortcuts, permission cards, and derived display state. Individual plugins should not manipulate host UI directly.
+- Plugin UI should be expressed through declarative models such as `PluginPanelState`, `PluginPanelDetail`, and `PluginPanelControl`. Except for `PluginComponentPanel.makeView`, avoid bypassing the existing panel framework with custom menu-bar UI.
+- Plugin state and UI-related code should normally run on `@MainActor`. Long-running scans, filesystem work, or system calls should not block the main thread for extended periods. `primaryPanelState` and `componentPanelState` should read existing snapshots whenever possible, not synchronously scan hardware, filesystems, or networks from getters.
+- `PluginHost` is responsible only for deriving common display state such as panel items, component items, and settings items. It caches component views and coalesces short-window state rebuilds; business-data snapshots, cache invalidation, and refresh timing remain the plugin or component's responsibility.
+- After plugin state changes, call `onStateChange?()` so the host can rebuild derived state. If state can change due to external system events such as display hot-plugging, permission changes, filesystem changes, or calendar authorization changes, wire an explicit observer or refresh entry point with debounce/throttling. Do not depend on users expanding a panel, switching settings pages, or a full `refreshAll()` to get fresh data. Exception: high-frequency event sources such as input statistics or sampling counters may update only their own snapshots instead of calling `onStateChange?()` for every event; they must throttle UI notifications by visibility or a fixed time window and ensure `refresh()` or user panel opening can read the latest snapshot.
+- External state changes with cross-plugin value should be abstracted into Core-layer protocols or observers first. For example, display-topology changes should use `DisplayConfigurationObserving` to notify the host, then refresh display-related plugins that implement `DisplayTopologyRefreshing`.
+- Control IDs, plugin IDs, and shortcut IDs must be stable, readable, and preferably centralized in private constants within the feature.
+- Ordinary new plugins do not need root `project.yml` changes. Keep `plugin.json.build.scheme` pointing to the bundle scheme; the generator creates the core target, bundle target, test dependencies, and plugin scheme. If a plugin needs extra frameworks, include paths, bundle resources, or target overrides, declare only the minimal delta in `Plugins/<PluginName>/project.yml`.
 
-## 插件设置界面规范
-- 插件设置页默认使用宿主设置页框架：`PluginConfiguration` 只提供当前插件的配置内容，页面主标题、图标、描述、权限卡、快捷键卡等通用区域交给 `PluginHost`/`SettingsView` 派生和渲染；不要在插件自定义配置里重复实现整页标题。
-- 新增设置项优先使用 `settingsSections`、`permissionRequirements`、`shortcutDefinitions` 等描述式模型，由宿主统一排版；只有需要复杂交互、列表、拖放、图表或专用管理器时才提供 `PluginConfiguration.makeView` 自定义视图。
-- 设置页主题常量统一使用 `MacToolsPluginKit.PluginSettingsTheme`。插件 target 不得依赖 `Sources/App/SettingsStyle.swift`，也不要复制一套插件私有 settings style；需要扩展主题时优先加到 `PluginSettingsTheme`，保持依赖方向为宿主 App -> PluginKit、插件 -> PluginKit。
-- 自定义插件设置视图的字体层级以 `FanControlPresetManagerView` 为视觉基准，并通过 `PluginSettingsTheme.Typography` 表达：页面标题用 `pageTitle`，页面说明用 `pageDescription`；分组标题使用 `Label` + SF Symbol + `sectionTitle` + `.foregroundStyle(.secondary)`；普通行标题使用 `rowTitle`，强调行标题或表头使用 `emphasizedRowTitle`；说明、帮助、副标题使用 `rowDescription`；状态徽标使用 `statusBadge`；固定宽度数值读数使用 `monospacedValue`。这些 token 应优先映射 Apple 平台语义字体（如 `.title2`、`.body`、`.subheadline`），避免在插件里散落裸字号。
-- 宿主设置页页面头使用 `PluginSettingsTheme.Typography.pageTitle` + `pageDescription`；插件自定义配置内容从分组开始，不再使用页面级标题，避免同一页出现多个视觉主标题。
-- 自定义配置的排版以风扇控制为基准，并优先使用 `PluginSettingsTheme.Spacing`：外层分组间距用 `section`，分组标题与内容间距用 `sectionHeaderContent`；卡片/列表行横向 padding 用 `rowHorizontal`，普通行纵向 padding 用 `rowVertical`，包含编辑控件或滑杆的行用 `interactiveRowVertical`；行内主副标题间距用 `rowTitleDescription`，控件与文本间距用 `rowContentControl`。
-- 卡片和列表容器优先使用 `PluginSettingsTheme.Palette` 与 `Radius`：通过背景色、留白和圆角区分区域，不给普通设置卡片加描边；宿主设置卡片用 `cardBackground`，插件自定义列表可用 macOS 原生 `nativeCardBackground`，圆角优先 `Radius.card`，宿主大卡片可用 `Radius.hostCard`。
-- 控件布局要稳定：按钮使用系统 `.bordered`/`.borderedProminent` 与 `.controlSize(.small)`，开关使用 `.toggleStyle(.switch)`；滑杆、Picker、文本框等设置明确的最小/理想/最大宽度，数值文本给固定宽度，长标题和路径使用 `lineLimit`、`fixedSize` 或 text selection，避免窗口缩放时挤压或跳动。
-- 文案保持中文、短句、接近 macOS 原生表达。标题描述“对象/设置项”，副标题描述“作用/当前状态”，不要把操作说明写成大段说明文字。
+## Plugin Settings UI Guidelines
+- Plugin settings pages should use the host settings-page framework by default. `PluginConfiguration` should provide only the current plugin's configuration content; page title, icon, description, permission cards, shortcut cards, and other common regions are derived and rendered by `PluginHost`/`SettingsView`. Do not duplicate a full-page title inside custom plugin configuration.
+- Prefer declarative models such as `settingsSections`, `permissionRequirements`, and `shortcutDefinitions` for new settings. Use `PluginConfiguration.makeView` only for complex interactions, lists, drag and drop, charts, or dedicated managers.
+- Settings theme constants must use `MacToolsPluginKit.PluginSettingsTheme`. Plugin targets must not depend on `Sources/App/SettingsStyle.swift` or copy private settings-style definitions. When the theme needs extension, add it to `PluginSettingsTheme` first so dependencies remain host App -> PluginKit and plugin -> PluginKit.
+- Use `FanControlPresetManagerView` as the visual baseline for custom plugin settings typography, expressed through `PluginSettingsTheme.Typography`: `pageTitle` for page titles and `pageDescription` for page descriptions; section headers should use `Label` + SF Symbol + `sectionTitle` + `.foregroundStyle(.secondary)`; normal row titles should use `rowTitle`; emphasized row titles or table headers should use `emphasizedRowTitle`; descriptions, help text, and subtitles should use `rowDescription`; status badges should use `statusBadge`; fixed-width numeric readings should use `monospacedValue`. These tokens should map to Apple platform semantic fonts such as `.title2`, `.body`, and `.subheadline` whenever possible, instead of scattering raw font sizes across plugins.
+- Host settings-page headers use `PluginSettingsTheme.Typography.pageTitle` + `pageDescription`. Custom plugin configuration content starts at sections and should not introduce another page-level title.
+- Base custom-configuration layout on Fan Control and prefer `PluginSettingsTheme.Spacing`: `section` for outer section spacing, `sectionHeaderContent` between a section header and content, `rowHorizontal` for card/list row horizontal padding, `rowVertical` for normal row vertical padding, `interactiveRowVertical` for rows containing editors or sliders, `rowTitleDescription` between row title and description, and `rowContentControl` between text and controls.
+- Prefer `PluginSettingsTheme.Palette` and `Radius` for card/list containers. Use background color, spacing, and corner radius to separate regions; do not add strokes to ordinary settings cards. Host settings cards use `cardBackground`, custom plugin lists may use macOS native `nativeCardBackground`, `Radius.card` is preferred, and large host cards may use `Radius.hostCard`.
+- Keep control layout stable: buttons should use system `.bordered`/`.borderedProminent` styles with `.controlSize(.small)`, switches should use `.toggleStyle(.switch)`, and sliders, pickers, text fields, and similar controls should have explicit minimum/ideal/maximum widths. Numeric text should have fixed width. Long titles and paths should use `lineLimit`, `fixedSize`, or text selection to avoid compression and layout jumps during window resizing.
+- Copy should remain Chinese, short, and close to native macOS phrasing. Titles should name the object or setting, subtitles should explain effect or current state, and operation instructions should not become long prose blocks.
 
-## Swift 代码风格
-- 保持现有 Swift 风格：小类型、明确命名、早返回、少全局状态。
-- 优先使用 Apple 原生框架；引入第三方依赖前先说明理由。插件私有的系统 framework/include path 优先写入对应 `Plugins/<PluginName>/project.yml`。
-- 使用 `AppLog` 添加 OSLog category，避免在应用代码中使用裸 `print`。
-- 与 AppKit、CoreGraphics、IOKit、EventKit 等系统 API 交互时，保留失败分支和降级路径。
-- 文件、路径、权限、显示器 ID、快捷键绑定等外部输入必须校验后再使用。
-- 不要把签名证书、notary 凭证、bundle 前缀、开发团队 ID 等本地敏感配置写入仓库。
+## Swift Code Style
+- Follow the existing Swift style: small types, clear names, early returns, and minimal global state.
+- Prefer Apple native frameworks. Explain the reason before adding a third-party dependency. Plugin-private system frameworks or include paths should be declared in the plugin's own `Plugins/<PluginName>/project.yml`.
+- Add OSLog categories through `AppLog`; avoid bare `print` in app code.
+- When interacting with AppKit, CoreGraphics, IOKit, EventKit, or other system APIs, preserve failure branches and fallback paths.
+- Validate external inputs such as files, paths, permissions, display IDs, and shortcut bindings before use.
+- Do not write local sensitive configuration such as signing certificates, notarization credentials, bundle prefixes, or development team IDs into the repository.
 
-## 功能安全边界
-- 磁盘清理：不得绕过 `DiskCleanSafetyPolicy`、白名单、敏感路径保护和执行前二次校验；扩大清理范围必须补测试。
-- 物理清洁模式：必须保留可退出路径、辅助功能权限引导、多屏覆盖和睡眠/锁屏后的安全退出逻辑。
-- 隐藏刘海：不要破坏用户原始壁纸；注意多显示器、Space 切换和壁纸变化场景。
-- 显示器亮度：优先保留 Apple 原生、DDC/CI、Gamma/Shade 回退链路，外接屏失败时不要崩溃。
-- 显示器分辨率：切换前确认显示器仍连接且目标模式仍存在；错误应转为用户可理解状态。
-- 日历：不要假设权限已授予；权限不足时应提供清楚引导而非静默失败。
-- 更新发布：Sparkle appcast、版本号、签名和公证相关改动要小心，避免提交本地发布产物。
+## Feature Safety Boundaries
+- Disk cleanup: do not bypass `DiskCleanSafetyPolicy`, allowlists, sensitive-path protection, or pre-execution secondary validation. Expanding cleanup scope requires tests.
+- Physical clean mode: preserve an exit path, Accessibility permission guidance, multi-display overlays, and safe exit after sleep or lock.
+- Hide notch: do not destroy the user's original wallpaper; account for multi-display, Space switching, and wallpaper-change scenarios.
+- Display brightness: keep the Apple-native, DDC/CI, and Gamma/Shade fallback chain; external-display failures must not crash.
+- Display resolution: confirm the display is still connected and the target mode still exists before switching; errors should be converted into user-understandable state.
+- Calendar: do not assume permission is granted; insufficient permission should show clear guidance instead of failing silently.
+- Update release: keep Sparkle appcast, version, signing, and notarization changes small and careful; avoid committing local release artifacts.
 
-## 测试要求
-- 行为改动优先补或更新相邻 XCTest；测试文件命名使用 `<TypeName>Tests.swift`。
-- 插件测试优先放在 `Plugins/<PluginName>/Tests/`；Core/App 共享逻辑测试放在 `Tests/Core/` 或 `Tests/App/` 对应目录。
-- 文件系统测试使用临时目录或 fake store，禁止删除真实用户目录。
-- 插件交互测试应覆盖 `PluginPanelAction`、派生 `PluginPanelState`、权限状态和错误状态。
-- 无法运行测试时，在最终回复中明确说明原因和建议的本地验证命令。
+## Testing Requirements
+- Behavior changes should prefer adjacent XCTest additions or updates. Test files should use `<TypeName>Tests.swift`.
+- Local and agent validation should default to the smallest relevant test method or class, such as `-only-testing:MacToolsTests/<TestClassName>` or `-only-testing:MacToolsTests/<TestClassName>/<testMethod>`. Do not run the full suite for narrow changes unless the scope justifies it.
+- Plugin tests should prefer `Plugins/<PluginName>/Tests/`; shared Core/App tests should live under the corresponding `Tests/Core/` or `Tests/App/` path.
+- Filesystem tests must use temporary directories or fake stores, and must never delete real user directories.
+- Plugin interaction tests should cover `PluginPanelAction`, derived `PluginPanelState`, permission state, and error state.
+- If tests cannot be run, explicitly state the reason and suggest the local verification command in the final response.
 
-## 文档与资源
-- 用户可见功能变化需同步更新 `README.md`。
-- 插件目录、manifest、catalog 或发布流程变化需同步更新 `docs/plugins/` 和 `CONTRIBUTING.md`。
-- 大型产品/交互变更可在 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 添加日期前缀文档。
-- 图标、asset catalog、`LocalConfig.xcconfig`、发布 env 文件通常由用户或生成流程维护；不要无关改动。
+## Documentation And Resources
+- User-visible feature changes should update `README.md`.
+- User-visible app or plugin changes should add or update one concise English changelog fragment under `changes/unreleased/*.md`. Use `release: app` for app releases and `release: plugin` for plugin batch releases, plus `type: added`, `changed`, `fixed`, `security`, `removed`, `deprecated`, `maintenance`, or `summary`. If one change needs both release channels, write one app fragment for the host/app impact and one plugin fragment for the plugin-package impact; do not duplicate the same sentence. Keep entries user-facing, avoid duplicate wording, and do not describe implementation details. Pure refactors, tests, and local-only release mechanics do not need a fragment unless users or maintainers need to know about them.
+- Plugin directories, manifests, catalogs, or release-flow changes should update `docs/plugins/` and `CONTRIBUTING.md`.
+- Large product/interaction changes may add date-prefixed documents under `docs/superpowers/specs/` or `docs/superpowers/plans/`.
+- Icons, asset catalogs, `LocalConfig.xcconfig`, and release env files are usually maintained by the user or generation flow; avoid unrelated changes.
 
-## Agent 工作流
-- 开始修改前用 `rg`/`rg --files` 快速定位现有模式，优先复用相邻实现。
-- 保持改动聚焦，不顺手重构无关模块，不覆盖用户已有改动。
-- 修改 `project.yml` 后运行或建议运行 `make generate`。
-- 验证从最小相关测试开始，再视情况运行完整测试或 `make build`。
-- 不要自动 commit、创建分支、打 tag、发布 release 或清理用户文件，除非用户明确要求。
+## Agent Workflow
+- Before modifying code, use `rg`/`rg --files` to quickly locate existing patterns and prefer adjacent implementations.
+- Keep changes focused. Do not opportunistically refactor unrelated modules or overwrite existing user edits.
+- After changing `project.yml`, run or recommend running `make generate`.
+- Start verification from the smallest related test method or class. Consider full tests or `make build` only for cross-module changes, shared infrastructure changes, pre-release checks, or explicit user requests.
+- Do not automatically commit, create branches, tag, publish releases, or clean user files unless the user explicitly asks.

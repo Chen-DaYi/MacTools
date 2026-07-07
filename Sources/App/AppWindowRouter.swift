@@ -43,7 +43,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "设置"
+        window.title = AppL10n.settings("settings.window.title", defaultValue: "设置")
         window.minSize = NSSize(width: 860, height: 560)
         window.contentView = NSHostingView(
             rootView: SettingsView(

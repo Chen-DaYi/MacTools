@@ -6,14 +6,16 @@ import MacToolsPluginKit
 
 public final class NightShiftPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        NightShiftPluginProvider()
+        NightShiftPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct NightShiftPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [NightShiftPlugin()]
+        [NightShiftPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -38,14 +40,7 @@ struct CBNightShiftController: NightShiftControlling {
 
 @MainActor
 final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "night-shift",
-        title: "夜览",
-        iconName: "lamp.floor",
-        iconTint: Color(nsColor: .systemOrange),
-        order: 35,
-        defaultDescription: "降低蓝光，使屏幕颜色更暖"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -57,18 +52,33 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "NightShiftPlugin")
+    private let localization: PluginLocalization
     private let controller: any NightShiftControlling
     private var isEnabled: Bool
     private var lastErrorMessage: String?
 
-    init(controller: any NightShiftControlling = CBNightShiftController()) {
+    init(
+        controller: any NightShiftControlling = CBNightShiftController(),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.localization = localization
         self.controller = controller
+        self.metadata = PluginMetadata(
+            id: "night-shift",
+            title: localization.string("metadata.title", defaultValue: "夜览"),
+            iconName: "lamp.floor",
+            iconTint: Color(nsColor: .systemOrange),
+            order: 35,
+            defaultDescription: localization.string("metadata.description", defaultValue: "降低蓝光，使屏幕颜色更暖")
+        )
         self.isEnabled = controller.getStatus()
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: isEnabled ? "已开启" : "已关闭",
+            subtitle: isEnabled
+                ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
             isOn: isEnabled,
             isExpanded: false,
             isEnabled: true,
@@ -113,7 +123,7 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel {
             onStateChange?()
         } else {
             logger.error("Failed to \(enable ? "enable" : "disable", privacy: .public) Night Shift")
-            lastErrorMessage = "切换夜览失败"
+            lastErrorMessage = localization.string("error.toggleFailed", defaultValue: "切换夜览失败")
             onStateChange?()
         }
     }

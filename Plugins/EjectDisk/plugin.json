@@ -2,7 +2,53 @@
   "id": "eject-disk",
   "displayName": "推出磁盘",
   "summary": "推出所有可移动磁盘",
-  "version": "1.0.5",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إخراج الأقراص",
+      "summary": "أخرج كافة الأقراص القابلة للإزالة."
+    },
+    "de": {
+      "displayName": "Datenträger auswerfen",
+      "summary": "Alle Wechseldatenträger auswerfen."
+    },
+    "en": {
+      "displayName": "Eject Disks",
+      "summary": "Eject all removable disks."
+    },
+    "es": {
+      "displayName": "Expulsar discos",
+      "summary": "Expulse todos los discos extraíbles."
+    },
+    "fr": {
+      "displayName": "Éjecter les disques",
+      "summary": "Éjectez tous les disques amovibles."
+    },
+    "ja": {
+      "displayName": "ディスクを取り出す",
+      "summary": "すべてのリムーバブル ディスクを取り出します。"
+    },
+    "ko": {
+      "displayName": "디스크 추출",
+      "summary": "모든 이동식 디스크를 꺼냅니다."
+    },
+    "pt": {
+      "displayName": "Ejetar discos",
+      "summary": "Ejete todos os discos removíveis."
+    },
+    "ru": {
+      "displayName": "Извлечь диски",
+      "summary": "Извлечь все съемные диски."
+    },
+    "zh-Hans": {
+      "displayName": "推出磁盘",
+      "summary": "推出所有可移动磁盘"
+    },
+    "zh-Hant": {
+      "displayName": "退出磁碟",
+      "summary": "推出所有可移動磁盤"
+    }
+  },
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "EjectDisk.bundle",

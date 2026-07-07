@@ -1,0 +1,160 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import SiteNav from "@/components/SiteNav.astro";
+import SiteFooter from "@/components/SiteFooter.astro";
+
+const storyParagraphs = [
+  {
+    zh: "话说乾隆二十三年夏，皇帝微服私访，行至西洋一奇境。忽见一高阁，上悬“MacTools”金匾，门楣隐现异光。乾隆正欲探问，只见一西洋长者出迎，身形清瘦，目藏星辰，自报家门：“臣蒂姆·库克，奉此间主人‘ggbond268’之命，守此宝库。”",
+    en: "In the summer of the twenty-third year of Qianlong's reign, the emperor traveled incognito and found himself in a curious Western realm. Before him stood a high pavilion with a golden plaque reading “MacTools,” its lintel glowing with a faint and unusual light. As Qianlong prepared to inquire, an elder from the West stepped forward: slender, composed, and bright-eyed. “Your servant is Tim Cook,” he said. “By order of this place's master, ggbond268, I keep watch over this treasury.”",
+  },
+  {
+    zh: "乾隆大笑：“朕闻西洋有巧器，不想连守门人也非凡俗。你这库中，有何宝物？”",
+    en: "Qianlong laughed. “I have heard that the West is rich in ingenious devices. I did not expect even the gatekeeper to be so uncommon. Tell me, what treasures does this storehouse contain?”",
+  },
+  {
+    zh: "库克引乾隆入内，但见满墙玉钮星罗棋布，轻触即生万象。乾隆指着一枚“显示器亮度”玉钮，库克按下一旋，四壁明灯竟随指而暗，复又转亮，如日月轮替。乾隆抚掌：“此物可替朕的秉烛夜读！”",
+    en: "Cook led Qianlong inside. Jade buttons covered the walls like constellations, each one ready to call forth a different function. The emperor pointed to one marked “Display Brightness.” Cook pressed and turned it, and the lamps along the walls dimmed, then brightened again, moving like the sun and moon through their cycle. Qianlong clapped his hands. “This could replace my candles for late-night reading.”",
+  },
+  {
+    zh: "再行数步，见一钮名“深色”。库克一点，满室金碧瞬间化作墨玉之夜，独留文档皎如霜雪。乾隆奇道：“朕批奏章至深夜，目常昏眩，此墨色正好养眼！”库克笑答：“此乃‘夜览’配伍之功，蓝光尽滤，犹加护目玄甲。”",
+    en: "A few steps farther on, Qianlong saw a button named “Dark Mode.” With one tap from Cook, the gilded chamber became a polished night of black jade, while the documents remained clear and pale as frost. “When I review memorials deep into the night, my eyes often blur,” Qianlong said. “This dark surface is well suited to them.” Cook smiled. “Paired with Night Shift, it filters blue light and gives the eyes another layer of protection.”",
+  },
+  {
+    zh: "行至“阻止休眠”钮前，库克奏曰：“圣上日理万机，若需离案片刻，此钮可使御案长醒，待君归来。”乾隆喜而试之，果然屏上朱批未消，笔锋如新。",
+    en: "They came next to a button marked “Prevent Sleep.” Cook explained, “Your Majesty carries many responsibilities. If you must step away for a moment, this keeps the imperial desk awake until you return.” Qianlong tested it with delight. The red annotations on the screen remained untouched, the brushwork as fresh as before.",
+  },
+  {
+    zh: "忽见一琉璃屏，上书“活动统计”，竟录乾隆方才击键次数、鼠标游踪，连“朕知道了”三字输入节奏也分毫不差。乾隆骇然：“此非‘起居注’耶？竟比朕的史官还精细！”库克忙解释：“此乃自省之镜，不录内容，只记形影，助人察己之功。”",
+    en: "Then Qianlong noticed a glass screen titled “Activity Statistics.” It recorded the number of keys he had pressed, the paths of his mouse, and even the rhythm with which he typed the words “朕知道了.” Alarmed, the emperor asked, “Is this not a daily court chronicle? It is more precise than my historians.” Cook quickly replied, “It is a mirror for self-observation. It records no content, only traces of activity, so one may understand one's own habits.”",
+  },
+  {
+    zh: "最令乾隆流连者，乃“电池充电上限”玉匣。库克捧匣道：“此物养‘御电之驹’，限充八分，则骏马长健，十年不衰。”乾隆叹道：“朕的御马监若得此术，何必年年换马！”",
+    en: "The treasure that most held Qianlong's attention was a jade case labeled “Battery Charge Limit.” Holding it carefully, Cook said, “This nourishes the imperial electric steed. Limit its charge to eight tenths, and it remains healthy for years.” Qianlong sighed. “If the imperial stables possessed such a method, why would we replace horses every year?”",
+  },
+  {
+    zh: "正赏玩间，库克忽取一丸“清洁模式”，向御案一掷——满桌尘埃文书竟似被无形障壁隔开，按键触板皎然如新。乾隆大笑：“此乃‘仙帚术’！朕那帮太监该当羞愧。”",
+    en: "While the emperor was still admiring the treasury, Cook took out a small pellet marked “Clean Mode” and cast it toward the desk. Dust and papers seemed to part behind an invisible barrier, while the keys and trackpad became clear and untouched. Qianlong laughed. “This is an immortal broom technique. My attendants should be ashamed.”",
+  },
+  {
+    zh: "临别，乾隆亲题“MacTools”四字，命库克刻于门额。又索一瓶“隐藏刘海”仙露，欲带回宫中遮御案雕龙之隙。库克婉言：“此乃开源法宝，专配‘macOS 14.0’以上天机，凡间龙案恐不兼容。”乾隆怅然，遂解下腰间和田玉牌，掷入“插件市场”井中，权作润笔。",
+    en: "Before leaving, Qianlong personally inscribed the four characters “MacTools” and ordered Cook to carve them above the gate. He also asked for a bottle of “Hide Notch” elixir, hoping to bring it back to the palace and cover a carved gap in the dragon desk. Cook replied politely, “This is an open-source treasure designed for the celestial mechanics of macOS 14.0 and later. A mortal dragon desk may not be compatible.” Disappointed, Qianlong removed the Hetian jade plaque from his waist and dropped it into the plugin marketplace well as payment for the inscription.",
+  },
+  {
+    zh: "回銮后，乾隆每对群臣叹曰：“西洋有库克，善守民间奇库；朕有和珅，只会修圆明园。”自此，密令造办处依样仿制“系统状态”玉屏一座，虽形似而神不似。内监窃议：“若当时求那‘zsh配置’秘笈，何至于此？”",
+    en: "After returning to the palace, Qianlong often sighed before his ministers: “The West has Cook, who keeps a marvelous public treasury. I have Heshen, who only knows how to renovate the Old Summer Palace.” From then on, he secretly ordered the imperial workshops to imitate the “System Status” jade screen. The result resembled the original in form, but not in spirit. The palace attendants whispered, “Had he asked for the zsh configuration manual back then, would things have come to this?”",
+  },
+];
+
+const poemLines = [
+  {
+    zh: "乾隆微服访西洋，库克捧出百宝箱。",
+    en: "Qianlong journeyed west in plain disguise; Cook opened a treasury before his eyes.",
+  },
+  {
+    zh: "深色夜览护龙目，清洁模式扫御床。",
+    en: "Dark Mode and Night Shift guarded the royal gaze; Clean Mode swept the imperial desk.",
+  },
+  {
+    zh: "莫笑民间工巧技，胜过内府万金装。",
+    en: "Do not dismiss the craft of common hands; it can outshine palace gold.",
+  },
+  {
+    zh: "若问如何得此宝？一行brew install就开张！",
+    en: "Ask how to claim the treasure today: one brew install opens the way.",
+  },
+];
+
+const pageTitle = "关于 MacTools | 免费开源 macOS 菜单栏工具";
+const pageDescription = "了解 MacTools 项目故事：一个免费、开源、原生、安静的 macOS 菜单栏工具箱，适合显示器控制、菜单栏整理、清理维护和插件扩展。";
+const aboutKeywords = [
+  "MacTools about",
+  "open source macOS app",
+  "free macOS menu bar app",
+  "native macOS utility",
+  "SwiftUI AppKit macOS app",
+  "macOS menu bar toolbox",
+  "One Switch alternative",
+  "AnySwitch alternative",
+  "Bartender alternative",
+  "Ice alternative",
+  "Thaw alternative",
+];
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  name: pageTitle,
+  description: pageDescription,
+  url: new URL(Astro.url.pathname, Astro.site).href,
+  about: {
+    "@type": "SoftwareApplication",
+    name: "MacTools",
+    applicationCategory: "UtilitiesApplication",
+    operatingSystem: "macOS 14.0 or later",
+    codeRepository: "https://github.com/ggbond268/MacTools",
+  },
+};
+---
+
+<BaseLayout
+  title={pageTitle}
+  description={pageDescription}
+  keywords={aboutKeywords}
+  structuredData={structuredData}
+  page="about"
+>
+  <SiteNav active="about" />
+  <main>
+    <section class="page-hero about-hero">
+      <p class="eyebrow">
+        <span data-i18n-zh>关于 MacTools</span>
+        <span data-i18n-en>About MacTools</span>
+      </p>
+      <h1>
+        <span data-i18n-zh>连皇帝都想要的菜单栏工具箱。</span>
+        <span data-i18n-en>A menu bar toolbox even an emperor would want.</span>
+      </h1>
+    </section>
+
+    <article class="source-story" aria-label="MacTools 故事">
+      <div>
+        <p class="eyebrow">
+          <span data-i18n-zh>故事</span>
+          <span data-i18n-en>Story</span>
+        </p>
+        <h2>
+          <span data-i18n-zh>MacTools 百宝箱</span>
+          <span data-i18n-en>MacTools Treasury</span>
+        </h2>
+      </div>
+      <div class="source-prose">
+        {storyParagraphs.map((paragraph) => (
+          <p>
+            <span data-i18n-zh>{paragraph.zh}</span>
+            <span data-i18n-en>{paragraph.en}</span>
+          </p>
+        ))}
+        <p>
+          <span data-i18n-zh>后人诗云：</span>
+          <span data-i18n-en>Later generations wrote:</span>
+        </p>
+        <blockquote>
+          {poemLines.map((line) => (
+            <span class="poem-line">
+              <span data-i18n-zh>{line.zh}</span>
+              <span data-i18n-en>{line.en}</span>
+            </span>
+          ))}
+        </blockquote>
+        <p>
+          <strong>
+            <span data-i18n-zh>MacTools——开源，免费，原生，安静，连皇帝都想要。</span>
+            <span data-i18n-en>MacTools: open source, free, native, quiet, and desirable even to an emperor.</span>
+          </strong>
+        </p>
+      </div>
+    </article>
+  </main>
+  <SiteFooter />
+  <script src="../scripts/site-controls.ts"></script>
+</BaseLayout>

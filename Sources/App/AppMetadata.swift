@@ -27,7 +27,10 @@ enum AppMetadata {
     }
 
     static var aboutDescription: String {
-        "一款免费、开源的 macOS 菜单栏工具集合。\n使用 SwiftUI 构建。"
+        AppL10n.settings(
+            "about.description",
+            defaultValue: "一款免费、开源的 macOS 菜单栏工具集合。\n使用 SwiftUI 构建。"
+        )
     }
 
     static var appIcon: NSImage? {
@@ -52,7 +55,7 @@ enum AppMetadata {
         case let (_, buildNumber?) where !buildNumber.isEmpty:
             return buildNumber
         default:
-            return "未知版本"
+            return AppL10n.settings("about.version.unknown", defaultValue: "未知版本")
         }
     }
 }

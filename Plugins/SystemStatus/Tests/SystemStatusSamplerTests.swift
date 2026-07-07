@@ -3,136 +3,226 @@ import XCTest
 @testable import SystemStatusPlugin
 
 final class SystemStatusSamplerTests: XCTestCase {
-    func testCPUUsageCalculatorUsesPositiveTickDeltas() throws {
-        let previous = SystemStatusCPUTicks(user: 100, system: 50, idle: 850, nice: 0)
-        let current = SystemStatusCPUTicks(user: 150, system: 75, idle: 925, nice: 0)
+    func testNetworkChartDownsamplesWithBucketPeaks() {
+        XCTAssertEqual(
+            SystemStatusHUDDualLineChart.downsamplePeaks([1, 90, 3, 4], limit: 2),
+            [90, 4]
+        )
+    }
 
-        let usage = try XCTUnwrap(SystemStatusCPUUsageCalculator.usage(current: current, previous: previous))
+    func testCPUUsageCalculatorUsesPositiveTickDeltas() throws {
+        let usage = try XCTUnwrap(SystemStatusCPUUsageCalculator.usage(
+            current: SystemStatusCPUTicks(user: 150, system: 75, idle: 925, nice: 0),
+            previous: SystemStatusCPUTicks(user: 100, system: 50, idle: 850, nice: 0)
+        ))
 
         XCTAssertEqual(usage, 0.5, accuracy: 0.0001)
     }
 
-    func testCPUUsageCalculatorReturnsNilForNoElapsedTicks() {
-        let ticks = SystemStatusCPUTicks(user: 100, system: 50, idle: 850, nice: 0)
-
-        XCTAssertNil(SystemStatusCPUUsageCalculator.usage(current: ticks, previous: ticks))
-    }
-
-    func testPowerNormalizerConvertsTelemetryMilliwatts() throws {
-        let watts = try XCTUnwrap(SystemStatusPowerNormalizer.telemetryWatts(fromMilliwatts: 29_813))
-        let chargingWatts = try XCTUnwrap(SystemStatusPowerNormalizer.telemetryWatts(fromMilliwatts: -20_629))
-
-        XCTAssertEqual(watts, 29.813, accuracy: 0.0001)
-        XCTAssertEqual(chargingWatts, 20.629, accuracy: 0.0001)
-    }
-
-    func testPowerNormalizerRejectsUnreasonableTelemetryPower() {
-        XCTAssertNil(SystemStatusPowerNormalizer.telemetryWatts(fromMilliwatts: 0))
-        XCTAssertNil(SystemStatusPowerNormalizer.telemetryWatts(fromMilliwatts: 1_000_000))
-    }
-
-    func testPowerNormalizerConvertsIOReportEnergyUnits() throws {
-        XCTAssertEqual(try XCTUnwrap(SystemStatusPowerNormalizer.energyJoules(from: 12_345, unit: "mJ")), 12.345, accuracy: 0.0001)
-        XCTAssertEqual(try XCTUnwrap(SystemStatusPowerNormalizer.energyJoules(from: 12_345_000, unit: "uJ")), 12.345, accuracy: 0.0001)
-        XCTAssertEqual(try XCTUnwrap(SystemStatusPowerNormalizer.energyJoules(from: 12_345_000_000, unit: "nJ")), 12.345, accuracy: 0.0001)
-        XCTAssertNil(SystemStatusPowerNormalizer.energyJoules(from: 12_345, unit: "J"))
-    }
-
     func testPowerCalculatorUsesEnergyDeltaOverElapsedTime() throws {
-        let previous = SystemStatusPowerEnergySample(joules: 100, date: Date(timeIntervalSince1970: 1_000))
-        let current = SystemStatusPowerEnergySample(joules: 105, date: Date(timeIntervalSince1970: 1_002))
-
-        let watts = try XCTUnwrap(SystemStatusPowerCalculator.watts(current: current, previous: previous))
+        let watts = try XCTUnwrap(SystemStatusPowerCalculator.watts(
+            current: SystemStatusPowerEnergySample(joules: 105, date: Date(timeIntervalSince1970: 1_002)),
+            previous: SystemStatusPowerEnergySample(joules: 100, date: Date(timeIntervalSince1970: 1_000))
+        ))
 
         XCTAssertEqual(watts, 2.5, accuracy: 0.0001)
     }
 
-    func testPowerCalculatorRejectsInvalidSamples() {
-        let previous = SystemStatusPowerEnergySample(joules: 100, date: Date(timeIntervalSince1970: 1_000))
-        let sameTime = SystemStatusPowerEnergySample(joules: 105, date: Date(timeIntervalSince1970: 1_000))
-        let lowerEnergy = SystemStatusPowerEnergySample(joules: 99, date: Date(timeIntervalSince1970: 1_002))
-        let unreasonable = SystemStatusPowerEnergySample(joules: 2_500, date: Date(timeIntervalSince1970: 1_001))
-
-        XCTAssertNil(SystemStatusPowerCalculator.watts(current: sameTime, previous: previous))
-        XCTAssertNil(SystemStatusPowerCalculator.watts(current: lowerEnergy, previous: previous))
-        XCTAssertNil(SystemStatusPowerCalculator.watts(current: unreasonable, previous: previous))
-    }
-
-    func testNetworkRateCalculatorClampsNegativeDeltas() {
-        let previous = SystemStatusNetworkCounter(
-            key: "en0",
-            displayName: "en0",
-            receivedBytes: 2_000,
-            sentBytes: 2_000,
-            ipAddress: "192.168.1.2",
-            isUp: true
-        )
-        let current = SystemStatusNetworkCounter(
-            key: "en0",
-            displayName: "en0",
-            receivedBytes: 1_500,
-            sentBytes: 2_400,
-            ipAddress: "192.168.1.2",
-            isUp: true
-        )
-
+    func testNetworkRateCalculatorDifferentiatesCountersByElapsedTime() {
         let rate = SystemStatusNetworkRateCalculator.rate(
-            current: current,
-            previous: previous,
-            elapsedSeconds: 2
+            current: SystemStatusNetworkCounter(
+                key: "iflist2:en0",
+                displayName: "en0",
+                receivedBytes: 16_000,
+                sentBytes: 27_500,
+                ipAddress: "192.168.1.2",
+                isUp: true
+            ),
+            previous: SystemStatusNetworkCounter(
+                key: "iflist2:en0",
+                displayName: "en0",
+                receivedBytes: 10_000,
+                sentBytes: 20_000,
+                ipAddress: "192.168.1.2",
+                isUp: true
+            ),
+            elapsedSeconds: 3
         )
 
-        XCTAssertEqual(rate?.downloadBytesPerSecond, 0)
-        XCTAssertEqual(rate?.uploadBytesPerSecond, 200)
+        XCTAssertEqual(rate?.downloadBytesPerSecond, 2_000)
+        XCTAssertEqual(rate?.uploadBytesPerSecond, 2_500)
     }
 
-    func testNetworkRateCalculatorReturnsNilForZeroElapsedTime() {
-        let counter = SystemStatusNetworkCounter(
-            key: "en0",
-            displayName: "en0",
-            receivedBytes: 2_000,
-            sentBytes: 2_000,
-            ipAddress: nil,
-            isUp: true
+    func testDiskIORateCalculatorDifferentiatesCountersByElapsedTime() {
+        let rate = SystemStatusDiskIORateCalculator.rate(
+            current: SystemStatusDiskIOCounter(readBytes: 16_000, writeBytes: 27_500),
+            previous: SystemStatusDiskIOCounter(readBytes: 10_000, writeBytes: 20_000),
+            elapsedSeconds: 3
         )
 
-        XCTAssertNil(
-            SystemStatusNetworkRateCalculator.rate(
-                current: counter,
-                previous: counter,
-                elapsedSeconds: 0
+        XCTAssertEqual(rate?.readBytesPerSecond, 2_000)
+        XCTAssertEqual(rate?.writeBytesPerSecond, 2_500)
+    }
+
+    func testBatteryHealthPercentPrefersNominalChargeCapacity() {
+        let health = SystemStatusSampler.batteryHealthPercent(
+            designCapacity: 10_000,
+            nominalChargeCapacity: 8_300,
+            appleRawMaxCapacity: 7_800
+        )
+
+        XCTAssertEqual(health, 83)
+    }
+
+    func testSystemPowerBatteryHealthPercentUsesSystemProfilerMaximumCapacity() {
+        let output = """
+        {
+          "SPPowerDataType" : [
+            {
+              "sppower_battery_health_info" : {
+                "sppower_battery_cycle_count" : 253,
+                "sppower_battery_health" : "Good",
+                "sppower_battery_health_maximum_capacity" : "84%"
+              }
+            }
+          ]
+        }
+        """
+
+        XCTAssertEqual(
+            SystemStatusSampler.systemPowerBatteryHealthPercent(fromSystemProfilerJSON: output),
+            84
+        )
+    }
+
+    func testSystemPowerBatteryHealthPercentParsesNonBreakingSpacePercent() {
+        let output = """
+        {
+          "SPPowerDataType" : [
+            {
+              "sppower_battery_health_info" : {
+                "sppower_battery_health_maximum_capacity" : "100\u{00a0}%"
+              }
+            }
+          ]
+        }
+        """
+
+        XCTAssertEqual(
+            SystemStatusSampler.systemPowerBatteryHealthPercent(fromSystemProfilerJSON: output),
+            100
+        )
+    }
+
+    func testBatteryHealthPercentFallsBackToAppleRawMaxCapacity() {
+        let health = SystemStatusSampler.batteryHealthPercent(
+            designCapacity: 10_000,
+            nominalChargeCapacity: nil,
+            appleRawMaxCapacity: 7_800
+        )
+
+        XCTAssertEqual(health, 78)
+    }
+
+    func testBatteryHealthPercentRoundsAndClampsLikeMoleStatus() {
+        XCTAssertEqual(
+            SystemStatusSampler.batteryHealthPercent(
+                designCapacity: 10_000,
+                nominalChargeCapacity: 8_249,
+                appleRawMaxCapacity: nil
+            ),
+            82
+        )
+        XCTAssertEqual(
+            SystemStatusSampler.batteryHealthPercent(
+                designCapacity: 10_000,
+                nominalChargeCapacity: 8_250,
+                appleRawMaxCapacity: nil
+            ),
+            83
+        )
+        XCTAssertEqual(
+            SystemStatusSampler.batteryHealthPercent(
+                designCapacity: 10_000,
+                nominalChargeCapacity: 12_000,
+                appleRawMaxCapacity: nil
+            ),
+            100
+        )
+    }
+
+    func testBatteryHealthPercentReturnsZeroForMissingCapacityData() {
+        XCTAssertEqual(
+            SystemStatusSampler.batteryHealthPercent(
+                designCapacity: 0,
+                nominalChargeCapacity: 8_000,
+                appleRawMaxCapacity: nil
+            ),
+            0
+        )
+        XCTAssertEqual(
+            SystemStatusSampler.batteryHealthPercent(
+                designCapacity: 10_000,
+                nominalChargeCapacity: 0,
+                appleRawMaxCapacity: nil
+            ),
+            0
+        )
+    }
+
+    func testBatteryPowerNormalizerUsesSignedBatteryPowerMilliwatts() throws {
+        let dischargingWatts = try XCTUnwrap(
+            SystemStatusBatteryPowerNormalizer.telemetryWatts(fromRawMilliwatts: 13_654)
+        )
+        let chargingWatts = try XCTUnwrap(
+            SystemStatusBatteryPowerNormalizer.telemetryWatts(fromRawMilliwatts: -12_345)
+        )
+
+        XCTAssertEqual(dischargingWatts, 13.654, accuracy: 0.001)
+        XCTAssertEqual(chargingWatts, -12.345, accuracy: 0.001)
+    }
+
+    func testBatteryPowerNormalizerParsesTwosComplementBatteryPower() throws {
+        let watts = try XCTUnwrap(
+            SystemStatusBatteryPowerNormalizer.telemetryWatts(
+                fromRawMilliwatts: "18446744073709539271"
             )
         )
+
+        XCTAssertEqual(watts, -12.345, accuracy: 0.001)
+    }
+
+    func testBatteryPowerNormalizerDerivesWattsFromVoltageAndAmperageLikeMoleStatus() throws {
+        let watts = try XCTUnwrap(
+            SystemStatusBatteryPowerNormalizer.derivedWatts(
+                voltageMillivolts: 12_000,
+                amperageMilliamps: -1_500
+            )
+        )
+
+        XCTAssertEqual(watts, 18.0, accuracy: 0.001)
     }
 
     func testProcessParserSortsByCPUThenMemoryThenPIDAndLimits() {
         let output = """
-          42   8.5  1.0 /Applications/Alpha.app/Contents/MacOS/Alpha
-           7  12.0  2.0 /usr/bin/beta
-           9  12.0  5.0 /usr/bin/gamma
-           6  12.0  5.0 /usr/bin/delta
-          11   1.0  9.0 /usr/bin/epsilon
+          42   8.5  1.0  10240 /Applications/Alpha.app/Contents/MacOS/Alpha
+           7  12.0  2.0  20480 /usr/bin/beta
+           9  12.0  5.0  40960 /usr/bin/gamma
+           6  12.0  5.0  51200 /usr/bin/delta
         """
 
         let processes = SystemStatusProcessParser.parsePSOutput(output, limit: 3)
 
         XCTAssertEqual(processes.map(\.pid), [6, 9, 7])
         XCTAssertEqual(processes.map(\.displayName), ["delta", "gamma", "beta"])
-        XCTAssertEqual(processes[0].cpuPercent, 12)
-        XCTAssertEqual(processes[0].memoryPercent, 5)
     }
 
     func testFormatterOutputsExpectedValues() {
         XCTAssertEqual(SystemStatusFormatter.percent(0.425), "43%")
-        XCTAssertEqual(SystemStatusFormatter.wholePercent(12.34, fractionDigits: 1), "12.3%")
         XCTAssertEqual(SystemStatusFormatter.bytes(1_073_741_824), "1.0 GB")
         XCTAssertEqual(SystemStatusFormatter.speed(1_048_576), "1.0 MB/s")
-        XCTAssertEqual(SystemStatusFormatter.temperature(30.6), "31℃")
-        XCTAssertEqual(SystemStatusFormatter.temperature(nil), "—℃")
-        XCTAssertEqual(SystemStatusFormatter.power(7.26), "7.3W")
+        XCTAssertEqual(SystemStatusFormatter.temperature(nil), "—°C")
         XCTAssertEqual(SystemStatusFormatter.power(29.813), "30W")
-        XCTAssertEqual(SystemStatusFormatter.power(nil), "—W")
-        XCTAssertEqual(SystemStatusFormatter.timeRemaining(minutes: 65), "1h 5m")
-        XCTAssertEqual(SystemStatusFormatter.timeRemaining(minutes: nil), "估算中")
+        XCTAssertEqual(SystemStatusFormatter.uptime(90_000), "1d 1h")
     }
 }

@@ -141,6 +141,12 @@ public struct PluginShortcutDefinition: Identifiable {
     public let scope: ShortcutScope
     public let defaultBinding: ShortcutBinding?
     public let isRequired: Bool
+    public let sharedBindingGroupID: String?
+    public let settingsGroupID: String?
+    public let settingsGroupTitle: String?
+    public let settingsGroupDescription: String?
+    public let settingsControlTitle: String?
+    public let settingsControlSystemImage: String?
 
     public init(
         id: String,
@@ -149,7 +155,13 @@ public struct PluginShortcutDefinition: Identifiable {
         actionID: String,
         scope: ShortcutScope,
         defaultBinding: ShortcutBinding?,
-        isRequired: Bool
+        isRequired: Bool,
+        sharedBindingGroupID: String? = nil,
+        settingsGroupID: String? = nil,
+        settingsGroupTitle: String? = nil,
+        settingsGroupDescription: String? = nil,
+        settingsControlTitle: String? = nil,
+        settingsControlSystemImage: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -158,6 +170,12 @@ public struct PluginShortcutDefinition: Identifiable {
         self.scope = scope
         self.defaultBinding = defaultBinding
         self.isRequired = isRequired
+        self.sharedBindingGroupID = sharedBindingGroupID
+        self.settingsGroupID = settingsGroupID
+        self.settingsGroupTitle = settingsGroupTitle
+        self.settingsGroupDescription = settingsGroupDescription
+        self.settingsControlTitle = settingsControlTitle
+        self.settingsControlSystemImage = settingsControlSystemImage
     }
 }
 
@@ -172,6 +190,11 @@ public struct ShortcutSettingsItem: Identifiable {
     public let canClear: Bool
     public let usesDefaultValue: Bool
     public let errorMessage: String?
+    public let settingsGroupID: String?
+    public let settingsGroupTitle: String?
+    public let settingsGroupDescription: String?
+    public let settingsControlTitle: String?
+    public let settingsControlSystemImage: String?
 
     public init(
         id: String,
@@ -183,7 +206,12 @@ public struct ShortcutSettingsItem: Identifiable {
         isRequired: Bool,
         canClear: Bool,
         usesDefaultValue: Bool,
-        errorMessage: String?
+        errorMessage: String?,
+        settingsGroupID: String? = nil,
+        settingsGroupTitle: String? = nil,
+        settingsGroupDescription: String? = nil,
+        settingsControlTitle: String? = nil,
+        settingsControlSystemImage: String? = nil
     ) {
         self.id = id
         self.pluginID = pluginID
@@ -195,6 +223,11 @@ public struct ShortcutSettingsItem: Identifiable {
         self.canClear = canClear
         self.usesDefaultValue = usesDefaultValue
         self.errorMessage = errorMessage
+        self.settingsGroupID = settingsGroupID
+        self.settingsGroupTitle = settingsGroupTitle
+        self.settingsGroupDescription = settingsGroupDescription
+        self.settingsControlTitle = settingsControlTitle
+        self.settingsControlSystemImage = settingsControlSystemImage
     }
 }
 
@@ -207,13 +240,13 @@ public enum ShortcutValidationError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .missingModifier:
-            return "快捷键至少需要一个修饰键。"
+            return PluginKitLocalization.shortcutValidationMissingModifier
         case .modifierOnly:
-            return "快捷键必须包含一个非修饰键。"
+            return PluginKitLocalization.shortcutValidationModifierOnly
         case .requiredShortcut:
-            return "该快捷键不能为空。"
+            return PluginKitLocalization.shortcutValidationRequiredShortcut
         case let .duplicate(ownerDescription):
-            return "该快捷键已被“\(ownerDescription)”占用。"
+            return PluginKitLocalization.shortcutValidationDuplicate(ownerDescription: ownerDescription)
         }
     }
 }

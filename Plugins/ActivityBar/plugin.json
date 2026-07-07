@@ -2,7 +2,53 @@
   "id": "activity-bar",
   "displayName": "活动统计",
   "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إحصاءات النشاط",
+      "summary": "تتبع الإدخال ووقت استخدام التطبيق الأمامي ونشاط ترميز الذكاء الاصطناعي."
+    },
+    "de": {
+      "displayName": "Aktivitätsstatistik",
+      "summary": "Verfolgen Sie Eingaben, Nutzungsdauer der Vordergrund-App und KI-Codierungsaktivitäten."
+    },
+    "en": {
+      "displayName": "Activity Stats",
+      "summary": "Track input, foreground app usage time, and AI coding activity."
+    },
+    "es": {
+      "displayName": "Estadísticas de actividad",
+      "summary": "Seguimiento de la entrada, el tiempo de uso de la aplicación en primer plano y la actividad de codificación de IA."
+    },
+    "fr": {
+      "displayName": "Statistiques d’activité",
+      "summary": "Suivez les entrées, la durée d'utilisation de l'application au premier plan et l'activité de codage de l'IA."
+    },
+    "ja": {
+      "displayName": "アクティビティ統計",
+      "summary": "入力、フォアグラウンド アプリの使用時間、AI コーディング アクティビティを追跡します。"
+    },
+    "ko": {
+      "displayName": "활동 통계",
+      "summary": "입력, 포그라운드 앱 사용 시간 및 AI 코딩 활동을 추적합니다."
+    },
+    "pt": {
+      "displayName": "Estatísticas de atividade",
+      "summary": "Rastreie a entrada, o tempo de uso do aplicativo em primeiro plano e a atividade de codificação de IA."
+    },
+    "ru": {
+      "displayName": "Статистика активности",
+      "summary": "Отслеживайте ввод данных, время использования приложений на переднем плане и активность ИИ-кодирования."
+    },
+    "zh-Hans": {
+      "displayName": "活动统计",
+      "summary": "统计输入、前台应用使用时长和 AI 编程活动"
+    },
+    "zh-Hant": {
+      "displayName": "活動統計",
+      "summary": "統計輸入、前臺應用使用時長和 AI 編程活動"
+    }
+  },
+  "version": "1.0.12",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "ActivityBar.bundle",

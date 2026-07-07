@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum DiskCleanChoice: String, CaseIterable, Identifiable, Equatable, Sendable {
     case cache
@@ -8,13 +9,17 @@ enum DiskCleanChoice: String, CaseIterable, Identifiable, Equatable, Sendable {
     var id: String { rawValue }
 
     var title: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .cache:
-            return "缓存清理"
+            return localization.string("choice.cache.title", defaultValue: "缓存清理")
         case .developer:
-            return "开发者缓存清理"
+            return localization.string("choice.developer.title", defaultValue: "开发者缓存清理")
         case .browser:
-            return "浏览器缓存清理"
+            return localization.string("choice.browser.title", defaultValue: "浏览器缓存清理")
         }
     }
 }

@@ -2,7 +2,53 @@
   "id": "calendar",
   "displayName": "日历",
   "summary": "查看日期、节假日和系统日程",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "التقويم",
+      "summary": "عرض التواريخ والعطلات وأحداث التقويم."
+    },
+    "de": {
+      "displayName": "Kalender",
+      "summary": "Termine, Feiertage und Kalenderereignisse anzeigen."
+    },
+    "en": {
+      "displayName": "Calendar",
+      "summary": "View dates, holidays, and calendar events."
+    },
+    "es": {
+      "displayName": "Calendario",
+      "summary": "Ver fechas, días festivos y eventos del calendario."
+    },
+    "fr": {
+      "displayName": "Calendrier",
+      "summary": "Afficher les dates, les jours fériés et les événements du calendrier."
+    },
+    "ja": {
+      "displayName": "カレンダー",
+      "summary": "日付、休日、カレンダーイベントを表示します。"
+    },
+    "ko": {
+      "displayName": "캘린더",
+      "summary": "날짜, 공휴일 및 달력 이벤트를 확인하세요."
+    },
+    "pt": {
+      "displayName": "Calendário",
+      "summary": "Veja datas, feriados e eventos da agenda."
+    },
+    "ru": {
+      "displayName": "Календарь",
+      "summary": "Просмотр дат, праздников и событий календаря."
+    },
+    "zh-Hans": {
+      "displayName": "日历",
+      "summary": "查看日期、节假日和系统日程"
+    },
+    "zh-Hant": {
+      "displayName": "行事曆",
+      "summary": "查看日期、節假日和系統行程"
+    }
+  },
+  "version": "1.0.10",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "Calendar.bundle",

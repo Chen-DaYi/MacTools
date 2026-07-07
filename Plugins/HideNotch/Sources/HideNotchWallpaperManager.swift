@@ -1,14 +1,20 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import MacToolsPluginKit
 
 enum HideNotchDesktopMaskManagerError: LocalizedError {
-    case maskWindowCreationFailed(displayName: String, underlyingMessage: String)
+    case maskWindowCreationFailed(displayName: String, underlyingMessage: String, PluginLocalization)
 
     var errorDescription: String? {
         switch self {
-        case let .maskWindowCreationFailed(displayName, underlyingMessage):
-            return "无法为 \(displayName) 创建刘海遮挡层：\(underlyingMessage)"
+        case let .maskWindowCreationFailed(displayName, underlyingMessage, localization):
+            return localization.format(
+                "error.maskWindowCreationFailedFormat",
+                defaultValue: "无法为 %@ 创建刘海遮挡层：%@",
+                displayName,
+                underlyingMessage
+            )
         }
     }
 }
@@ -21,12 +27,17 @@ final class HideNotchDesktopMaskManager: HideNotchDesktopMaskManaging {
     }
 
     private let windowBuilder: HideNotchDesktopMaskWindowBuilding
+    private let localization: PluginLocalization
     private let logger = HideNotchLog.overlayManager
 
     private var windowsByDisplayIdentifier: [String: ManagedWindow] = [:]
 
-    init(windowBuilder: HideNotchDesktopMaskWindowBuilding = HideNotchDesktopMaskWindowBuilder()) {
-        self.windowBuilder = windowBuilder
+    init(
+        windowBuilder: HideNotchDesktopMaskWindowBuilding? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.localization = localization
+        self.windowBuilder = windowBuilder ?? HideNotchDesktopMaskWindowBuilder(localization: localization)
     }
 
     var managedDisplayIdentifiers: Set<String> {
@@ -79,7 +90,8 @@ final class HideNotchDesktopMaskManager: HideNotchDesktopMaskManaging {
             } catch {
                 throw HideNotchDesktopMaskManagerError.maskWindowCreationFailed(
                     displayName: display.name,
-                    underlyingMessage: error.localizedDescription
+                    underlyingMessage: error.localizedDescription,
+                    localization
                 )
             }
         }

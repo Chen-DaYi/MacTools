@@ -11,7 +11,10 @@ final class AboutUpdateViewModelTests: XCTestCase {
         await viewModel.performPrimaryAction()
 
         XCTAssertEqual(viewModel.state, .upToDate)
-        XCTAssertEqual(viewModel.primaryButtonTitle, "检查更新")
+        XCTAssertEqual(
+            viewModel.primaryButtonTitle,
+            AppL10n.settings("about.update.check", defaultValue: "检查更新")
+        )
     }
 
     func testProbeTransitionsToUpdateAvailableState() async {
@@ -22,7 +25,10 @@ final class AboutUpdateViewModelTests: XCTestCase {
         await viewModel.performPrimaryAction()
 
         XCTAssertEqual(viewModel.state, .updateAvailable(version: "0.3.0"))
-        XCTAssertEqual(viewModel.primaryButtonTitle, "立即更新")
+        XCTAssertEqual(
+            viewModel.primaryButtonTitle,
+            AppL10n.settings("about.update.installNow", defaultValue: "立即更新")
+        )
     }
 
     func testBlockedInstallPreservesImmediateUpdateAction() async {
@@ -38,7 +44,10 @@ final class AboutUpdateViewModelTests: XCTestCase {
             viewModel.state,
             .blocked(reason: "请先将应用移到 Applications 再更新。")
         )
-        XCTAssertEqual(viewModel.primaryButtonTitle, "立即更新")
+        XCTAssertEqual(
+            viewModel.primaryButtonTitle,
+            AppL10n.settings("about.update.installNow", defaultValue: "立即更新")
+        )
         XCTAssertEqual(updater.checkForUpdatesCallCount, 0)
     }
 

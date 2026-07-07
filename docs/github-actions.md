@@ -7,7 +7,7 @@
 - `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release，并提交最新 `docs/appcast.xml`。
 - `Homebrew Cask Update`：在 `Release` 成功完成后，或手动输入版本时运行。读取稳定版 Release 里的 `MacTools.dmg` 与 `MacTools.sha256`，通过 `brew bump-cask-pr` 向官方 `Homebrew/homebrew-cask` 提交 cask bump PR。
 - `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。默认只构建和上传增量变化插件包，使用 Developer ID 签名插件 bundle，合并并提交签名后的 `docs/plugins/catalog.json`。
-- `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它把 `main` 分支上的 `docs/` 发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
+- `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它先构建 `site/` 下的 Astro 官网，再合并 `docs/` 中的 appcast、插件 catalog、图标库等静态发布资源并发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
 
 ## 需要配置的 Secrets
 
@@ -112,17 +112,17 @@ make release
 make release ARGS="--type app --version 1.0.7 --yes"
 ```
 
-`project.yml` 是发布版本源。若需要手动处理，发布前先更新：
+`Configs/AppVersion.xcconfig` 是 App 与内嵌 extension 的共享发布版本源。若需要手动处理，发布前先更新：
 
-```yaml
-CURRENT_PROJECT_VERSION: 15
-MARKETING_VERSION: 0.9.3
+```xcconfig
+MARKETING_VERSION = 0.9.3
+CURRENT_PROJECT_VERSION = 15
 ```
 
 提交并推送版本号变更：
 
 ```bash
-git add project.yml
+git add Configs/AppVersion.xcconfig
 git commit -m "Bump version to 0.9.3"
 git push origin main
 ```
@@ -134,9 +134,9 @@ git tag v0.9.3
 git push origin v0.9.3
 ```
 
-Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.9.3` 一致，并使用 `CURRENT_PROJECT_VERSION` 作为 Sparkle appcast 和 App 包里的 build 号。版本不一致时会直接失败，避免产物、tag 和 appcast 不一致。
+Release 工作流会校验 `v0.9.3` 与 `Configs/AppVersion.xcconfig` 的 `MARKETING_VERSION = 0.9.3` 一致，并使用 `CURRENT_PROJECT_VERSION` 作为 Sparkle appcast 和 App 包里的 build 号。版本不一致时会直接失败，避免产物、tag 和 appcast 不一致。
 
-也可以在 GitHub Actions 页面手动运行 `Release`，输入已存在的 tag，例如 `v0.9.3`；该 tag 指向的提交里仍必须已经更新 `project.yml`。
+也可以在 GitHub Actions 页面手动运行 `Release`，输入已存在的 tag，例如 `v0.9.3`；该 tag 指向的提交里仍必须已经更新 `Configs/AppVersion.xcconfig`。
 
 ## 插件发布方式
 
@@ -215,39 +215,38 @@ appearance.mactoolsplugin/
 
 ## Release Notes 规范
 
-Release 工作流会在创建或更新 GitHub Release 前自动生成更新日志。生成逻辑使用 GitHub 的 release notes API，并读取 `.github/release.yml` 中的分类配置。同一份 Markdown 更新日志也会写入 Sparkle appcast 的 `<description sparkle:format="markdown">`，因此应用内“检查更新”的 Sparkle 弹窗会直接显示内嵌更新日志，而不是加载 GitHub Release 页面。
+App 和 Plugin Release 共用 `CHANGELOG.md` 作为唯一更新日志来源，但各自生成不同的 release notes。开发完成用户可见变更时，先添加一个简洁英文 fragment 到 `changes/unreleased/*.md`；`scripts/release.py --type app` 只消费 `release: app` fragments 并写入 `## [vX.Y.Z]`，`scripts/release.py --type plugin` 只消费 `release: plugin` fragments 并写入 `## [plugins-X.Y.Z]`。已消费 fragments 会在发布提交中删除。随后对应 workflow 从 tag 对应的 `CHANGELOG.md` 段落提取 Markdown：App notes 写入 GitHub Release 和 Sparkle appcast，Plugin notes 写入插件批次 GitHub Release。
 
-每个会进入 release notes 的 PR 应至少带一个发布分类 label：
+fragment 使用简化的 front matter：
 
-| Label | Release 分组 | 用途 |
+```markdown
+---
+release: app
+type: fixed
+area: Finder Integration
+---
+
+Finder right-click menu items now stay hidden when the plugin is disabled.
+```
+
+`release` 必须是 `app` 或 `plugin`，决定哪类发布会消费该 fragment。`type` 会映射到 Keep a Changelog 风格分组：
+
+| Type | Release 分组 | 用途 |
 | --- | --- | --- |
-| `release:feature` | `New Features` | 新功能、用户可感知的新能力。 |
-| `release:changed` | `Changed` | 行为、交互、文案或默认值变化。 |
-| `release:fix` | `Fixed` | Bug 修复、稳定性修复。 |
-| `release:maintenance` | `Maintenance` | 构建、CI、依赖、内部维护。 |
-| `release:ignore` | 不进入更新日志 | 版本 bump、appcast 自动提交、纯发布流水线噪音。 |
+| `summary` | `Summary` | 版本顶部的一句话产品摘要，通常发布前再补。 |
+| `added` | `Added` | 新功能、用户可感知的新能力。 |
+| `changed` | `Changed` | 行为、交互、文案或默认值变化。 |
+| `fixed` | `Fixed` | Bug 修复、稳定性修复。 |
+| `security` | `Security` | 安全相关修复。 |
+| `removed` | `Removed` | 已移除能力或兼容性。 |
+| `deprecated` | `Deprecated` | 即将移除或不推荐继续使用。 |
+| `maintenance` | `Maintenance` | 维护者需要知道的构建、发布或依赖变化。 |
 
-首次启用时可以用 GitHub CLI 创建这些 label：
+更新日志应面向用户或维护者可读，保持英文、短句、少量信息密度。不要把 git log、实现细节、测试重构、重复描述或长篇背景写进 fragment。多个 fragment 内容完全相同时，发布脚本会按文本去重；语义重复仍应由 agent 在提交前合并成一条更好的描述。
 
-```bash
-gh label create release:feature --color 0E8A16 --description "User-facing feature for release notes"
-gh label create release:changed --color FBCA04 --description "Changed behavior for release notes"
-gh label create release:fix --color D73A4A --description "Bug fix for release notes"
-gh label create release:maintenance --color 5319E7 --description "Maintenance change for release notes"
-gh label create release:ignore --color C0C0C0 --description "Exclude from release notes"
-```
+如果同一个修改同时影响 App 发布和插件批次发布，应写两份 fragment：`release: app` 描述宿主或 App 层面的影响，`release: plugin` 描述插件包层面的影响。不要把同一句复制到两个 release channel；如果用户只需要在其中一个发布说明里看到该变化，就只写对应的 fragment。
 
-兼容 GitHub 默认 label：`enhancement` 会归入 `New Features`，`bug` 会归入 `Fixed`，`dependencies` 和 `documentation` 会归入 `Maintenance`。如果一个 PR 没有匹配到以上 label，会落到 `Other Changes`，发布前应尽量清空这个分组。
-
-PR 标题会直接出现在 GitHub Release 中，因此标题应面向用户或维护者可读，例如：
-
-```text
-feat: add clear clipboard action
-fix: keep display resolution side panel clicks working
-changed: refine menu item icon names
-```
-
-发布版本本身的提交或 PR，例如 `Bump version to 0.14.0`，应打 `release:ignore`，避免出现在正式更新日志里。
+发布版本本身的提交，例如 `chore: release v1.0.28`，不需要 fragment。
 
 如果某个版本需要像产品公告一样在自动列表上方放一段手写摘要，可以在推 tag 前添加：
 
@@ -255,9 +254,9 @@ changed: refine menu item icon names
 .github/release-highlights/v0.14.0.md
 ```
 
-文件内容会被原样置顶到自动生成的 release notes 前。没有对应文件时，Release 工作流只使用自动生成内容。该文件也会同步进入 Sparkle 更新弹窗。
+文件内容会被原样置顶到 `CHANGELOG.md` 中提取的 release notes 前。没有对应文件时，Release 工作流只使用 `CHANGELOG.md` 当前版本段落。该文件也会同步进入 Sparkle 更新弹窗。
 
-稳定版发布成功创建 GitHub Release 后，`Homebrew Cask Update` 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时读取刚发布的 DMG URL 和 SHA-256，并通过 `brew bump-cask-pr mactools` 向官方 `Homebrew/homebrew-cask` 打开版本更新 PR。预发布版本不会成为默认稳定版；未配置该 secret 时可以手动运行 workflow 或手动提交 Homebrew PR。Homebrew PR 合并后，用户本地运行 `brew update` 后即可通过 `brew upgrade --cask --greedy mactools` 检测到新版本。
+稳定版发布成功创建 GitHub Release 后，`Homebrew Cask Update` 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时确认 `MacTools.dmg` 存在、读取 `MacTools.sha256`，并通过 `brew bump-cask-pr mactools --version ... --sha256 ...` 向官方 `Homebrew/homebrew-cask` 打开版本更新 PR。不要传入 GitHub release asset 的展开下载 URL；官方 cask 应保留 `v#{version}` URL 模板，否则 Homebrew audit 会把它当成未版本化 URL。预发布版本不会成为默认稳定版；未配置该 secret 时可以手动运行 workflow 或手动提交 Homebrew PR。Homebrew PR 合并后，用户本地运行 `brew update` 后即可通过 `brew upgrade --cask --greedy mactools` 检测到新版本。
 
 仓库设置中需要允许 workflow 写入：`Settings` → `Actions` → `General` → `Workflow permissions` 选择 `Read and write permissions`。
 

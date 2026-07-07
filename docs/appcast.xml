@@ -5,23 +5,17 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.13</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.13</link>
-            <sparkle:version>43</sparkle:version>
-            <sparkle:shortVersionString>1.0.13</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.13 -->
+            <title>Version 1.0.29</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.29</link>
+            <sparkle:version>59</sparkle:version>
+            <sparkle:shortVersionString>1.0.29</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[### Fixed
 
-## What's Changed
-### Other Changes
-* feat: update app icons for improved visual consistency by @ayangweb in https://github.com/ggbond268/MacTools/pull/90
-* feat: adjust app icon preview size and padding for better layout by @ayangweb in https://github.com/ggbond268/MacTools/pull/91
-
-
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.12...v1.0.13
+- Kept panel position stable and feature panel height accurate as controls expand.
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Tue, 26 May 2026 07:23:47 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.13/MacTools.dmg" length="5796901" type="application/octet-stream" sparkle:edSignature="lMZz5VDjJBxUCp2OzG+kUSC2VvRzkLWUKjYabKF2JMeaoQDwDMfRqU+w3cN9P/iy/5CDd3CN1xhZ3ZekQCGgAw==" />
+            <pubDate>Sun, 05 Jul 2026 16:05:07 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.29/MacTools.dmg" length="6554059" type="application/octet-stream" sparkle:edSignature="Z80Rjn6ABvgqak2Z7sAJQbJl58N1atds8OJtl0/8Cq2PQc92ES+aqO/n/ddeovIXKQZ+HJ6jVgZD7xgBsAteCQ==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>

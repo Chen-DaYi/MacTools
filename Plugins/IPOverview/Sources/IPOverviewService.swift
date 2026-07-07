@@ -1,8 +1,10 @@
 import Darwin
 import Foundation
+import MacToolsPluginKit
 
 protocol IPOverviewProviding: Sendable {
     func collectSnapshot() async -> IPOverviewSnapshot
+    func collectPublicIPSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot
 }
 
 protocol IPOverviewHTTPClient: Sendable {
@@ -27,15 +29,19 @@ enum IPOverviewServiceError: LocalizedError {
     case invalidIP(String)
 
     var errorDescription: String? {
+        localizedDescription()
+    }
+
+    func localizedDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .invalidResponse:
-            return "响应无效"
+            return localization.string("service.error.invalidResponse", defaultValue: "响应无效")
         case .badStatus(let statusCode):
             return "HTTP \(statusCode)"
         case .invalidPayload:
-            return "数据格式不正确"
+            return localization.string("service.error.invalidPayload", defaultValue: "数据格式不正确")
         case .invalidIP(let value):
-            return "IP 无效：\(value)"
+            return localization.format("service.error.invalidIP", defaultValue: "IP 无效：%@", value)
         }
     }
 }
@@ -43,44 +49,69 @@ enum IPOverviewServiceError: LocalizedError {
 struct IPOverviewService: IPOverviewProviding {
     private let httpClient: any IPOverviewHTTPClient
     private let timeout: TimeInterval
+    private let localization: PluginLocalization
 
     init(
         httpClient: any IPOverviewHTTPClient = URLSession.shared,
-        timeout: TimeInterval = 4
+        timeout: TimeInterval = 4,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.httpClient = httpClient
         self.timeout = timeout
+        self.localization = localization
     }
 
     func collectSnapshot() async -> IPOverviewSnapshot {
         async let localAddresses = Self.localAddresses()
-        async let ipv4Results = fetchPublicIP(family: .ipv4)
-        async let ipv6Results = fetchPublicIP(family: .ipv6)
+        async let domesticIPv4Results = fetchPublicIP(route: .domestic, family: .ipv4)
+        async let domesticIPv6Results = fetchPublicIP(route: .domestic, family: .ipv6)
+        async let internationalIPv4Results = fetchPublicIP(route: .international, family: .ipv4)
+        async let internationalIPv6Results = fetchPublicIP(route: .international, family: .ipv6)
 
         let local = await localAddresses
-        let ipv4 = await ipv4Results
-        let ipv6 = await ipv6Results
-        let sourceResults = ipv4.results + ipv6.results
-        let publicIPv4 = ipv4.best
-        let publicIPv6 = ipv6.best
+        let domesticIPv4 = await domesticIPv4Results
+        let domesticIPv6 = await domesticIPv6Results
+        let internationalIPv4 = await internationalIPv4Results
+        let internationalIPv6 = await internationalIPv6Results
+        let sourceResults = domesticIPv4.results
+            + domesticIPv6.results
+            + internationalIPv4.results
+            + internationalIPv6.results
+        let domesticIPv4Result = domesticIPv4.best
+        let domesticIPv6Result = domesticIPv6.best
+        let internationalIPv4Result = internationalIPv4.best
+        let internationalIPv6Result = internationalIPv6.best
 
         var geoInfoByIP: [String: IPOverviewGeoInfo] = [:]
-        for result in [publicIPv4, publicIPv6].compactMap({ $0 }) {
+        for result in [
+            domesticIPv4Result,
+            domesticIPv6Result,
+            internationalIPv4Result,
+            internationalIPv6Result
+        ].compactMap({ $0 }) {
             if let geoInfo = await fetchGeoInfo(ip: result.ip) {
                 geoInfoByIP[result.ip] = geoInfo
             }
         }
 
         let errorMessage: String?
-        if publicIPv4 == nil && publicIPv6 == nil {
-            errorMessage = "未能从外部检测源获取公网 IP"
+        if domesticIPv4Result == nil
+            && domesticIPv6Result == nil
+            && internationalIPv4Result == nil
+            && internationalIPv6Result == nil {
+            errorMessage = localization.string(
+                "service.error.noPublicIP",
+                defaultValue: "未能从外部检测源获取公网 IP"
+            )
         } else {
             errorMessage = nil
         }
 
         return IPOverviewSnapshot(
-            publicIPv4: publicIPv4,
-            publicIPv6: publicIPv6,
+            domesticIPv4: domesticIPv4Result,
+            domesticIPv6: domesticIPv6Result,
+            internationalIPv4: internationalIPv4Result,
+            internationalIPv6: internationalIPv6Result,
             localAddresses: local,
             geoInfoByIP: geoInfoByIP,
             sourceResults: sourceResults,
@@ -90,38 +121,114 @@ struct IPOverviewService: IPOverviewProviding {
         )
     }
 
+    func collectPublicIPSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot {
+        async let domesticIPv4Results = fetchPublicIP(route: .domestic, family: .ipv4)
+        async let domesticIPv6Results = fetchPublicIP(route: .domestic, family: .ipv6)
+        async let internationalIPv4Results = fetchPublicIP(route: .international, family: .ipv4)
+        async let internationalIPv6Results = fetchPublicIP(route: .international, family: .ipv6)
+
+        let domesticIPv4 = await domesticIPv4Results
+        let domesticIPv6 = await domesticIPv6Results
+        let internationalIPv4 = await internationalIPv4Results
+        let internationalIPv6 = await internationalIPv6Results
+        let sourceResults = domesticIPv4.results
+            + domesticIPv6.results
+            + internationalIPv4.results
+            + internationalIPv6.results
+        let domesticIPv4Result = domesticIPv4.best
+        let domesticIPv6Result = domesticIPv6.best
+        let internationalIPv4Result = internationalIPv4.best
+        let internationalIPv6Result = internationalIPv6.best
+        let publicIPs = Set([
+            domesticIPv4Result?.ip,
+            domesticIPv6Result?.ip,
+            internationalIPv4Result?.ip,
+            internationalIPv6Result?.ip
+        ].compactMap(\.self))
+
+        let errorMessage: String?
+        if domesticIPv4Result == nil
+            && domesticIPv6Result == nil
+            && internationalIPv4Result == nil
+            && internationalIPv6Result == nil {
+            errorMessage = localization.string(
+                "service.error.noPublicIP",
+                defaultValue: "未能从外部检测源获取公网 IP"
+            )
+        } else {
+            errorMessage = nil
+        }
+
+        return IPOverviewSnapshot(
+            domesticIPv4: domesticIPv4Result,
+            domesticIPv6: domesticIPv6Result,
+            internationalIPv4: internationalIPv4Result,
+            internationalIPv6: internationalIPv6Result,
+            localAddresses: snapshot.localAddresses,
+            geoInfoByIP: snapshot.geoInfoByIP.filter { publicIPs.contains($0.key) },
+            sourceResults: sourceResults,
+            lastUpdated: Date(),
+            errorMessage: errorMessage,
+            isRefreshing: false
+        )
+    }
+
     private func fetchPublicIP(
+        route: IPOverviewEgressRoute,
         family: IPOverviewAddressFamily
     ) async -> (best: IPOverviewPublicIPResult?, results: [IPOverviewSourceResult]) {
-        var best: IPOverviewPublicIPResult?
-        var results: [IPOverviewSourceResult] = []
+        let sources = IPOverviewPublicIPSource.sources(route: route, family: family)
+        let orderByID = Dictionary(uniqueKeysWithValues: sources.enumerated().map { ($0.element.id, $0.offset) })
 
-        for source in IPOverviewPublicIPSource.sources(for: family) {
-            do {
-                let ip = try await fetchIP(from: source)
-                let result = IPOverviewPublicIPResult(
-                    family: family,
-                    ip: ip,
-                    source: source.name
-                )
-                if best == nil {
-                    best = result
+        let unorderedResults = await withTaskGroup(of: IPOverviewSourceResult.self) { group in
+            for source in sources {
+                group.addTask {
+                    do {
+                        let ip = try await fetchIP(from: source)
+                        return IPOverviewSourceResult(
+                            id: source.id,
+                            family: family,
+                            route: route,
+                            source: source.name,
+                            status: .success(ip)
+                        )
+                    } catch {
+                        let message = (error as? IPOverviewServiceError)?
+                            .localizedDescription(localization: localization)
+                            ?? error.localizedDescription
+                        return IPOverviewSourceResult(
+                            id: source.id,
+                            family: family,
+                            route: route,
+                            source: source.name,
+                            status: .failure(message)
+                        )
+                    }
                 }
-                results.append(IPOverviewSourceResult(
-                    id: source.id,
-                    family: family,
-                    source: source.name,
-                    status: .success(ip)
-                ))
-            } catch {
-                results.append(IPOverviewSourceResult(
-                    id: source.id,
-                    family: family,
-                    source: source.name,
-                    status: .failure(error.localizedDescription)
-                ))
             }
+
+            var results: [IPOverviewSourceResult] = []
+            for await result in group {
+                results.append(result)
+            }
+            return results
         }
+
+        let results = unorderedResults.sorted {
+            (orderByID[$0.id] ?? Int.max) < (orderByID[$1.id] ?? Int.max)
+        }
+        let best = results.lazy.compactMap { sourceResult -> IPOverviewPublicIPResult? in
+            guard case .success(let ip) = sourceResult.status else {
+                return nil
+            }
+
+            return IPOverviewPublicIPResult(
+                family: family,
+                route: route,
+                ip: ip,
+                source: sourceResult.source
+            )
+        }.first
 
         return (best, results)
     }
@@ -141,6 +248,12 @@ struct IPOverviewService: IPOverviewProviding {
         case .plainText:
             ip = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+        case .bilibiliIPService:
+            ip = IPOverviewParser.ipFromBilibiliIPService(data)
+        case .cipText:
+            ip = IPOverviewParser.ipFromCIPText(data)
+        case .ipipText:
+            ip = IPOverviewParser.ipFromIPIPText(data)
         }
 
         guard let ip else {
@@ -157,7 +270,7 @@ struct IPOverviewService: IPOverviewProviding {
     private func fetchGeoInfo(ip: String) async -> IPOverviewGeoInfo? {
         for source in IPOverviewGeoSource.allCases {
             do {
-                let (data, response) = try await fetch(source.url(ip: ip))
+                let (data, response) = try await fetch(source.url(ip: ip, localization: localization))
                 guard (200..<300).contains(response.statusCode) else {
                     continue
                 }
@@ -303,21 +416,83 @@ struct IPOverviewPublicIPSource: Sendable {
         case jsonIP
         case cloudflareTrace
         case plainText
+        case bilibiliIPService
+        case cipText
+        case ipipText
     }
 
     let id: String
     let name: String
+    let route: IPOverviewEgressRoute
     let family: IPOverviewAddressFamily
     let url: URL
     let parser: Parser
 
-    static func sources(for family: IPOverviewAddressFamily) -> [IPOverviewPublicIPSource] {
-        switch family {
-        case .ipv4:
+    static func sources(
+        route: IPOverviewEgressRoute,
+        family: IPOverviewAddressFamily
+    ) -> [IPOverviewPublicIPSource] {
+        switch (route, family) {
+        case (.domestic, .ipv4):
+            return [
+                IPOverviewPublicIPSource(
+                    id: "bilibili-v4",
+                    name: "Bilibili IPv4",
+                    route: .domestic,
+                    family: .ipv4,
+                    url: URL(string: "https://api.live.bilibili.com/ip_service/v1/ip_service/get_ip_addr")!,
+                    parser: .bilibiliIPService
+                ),
+                IPOverviewPublicIPSource(
+                    id: "cip-v4",
+                    name: "cip.cc IPv4",
+                    route: .domestic,
+                    family: .ipv4,
+                    url: URL(string: "https://cip.cc")!,
+                    parser: .cipText
+                ),
+                IPOverviewPublicIPSource(
+                    id: "ipip-v4",
+                    name: "IPIP IPv4",
+                    route: .domestic,
+                    family: .ipv4,
+                    url: URL(string: "https://myip.ipip.net")!,
+                    parser: .ipipText
+                ),
+                IPOverviewPublicIPSource(
+                    id: "netart-v4",
+                    name: "NetArt IPv4",
+                    route: .domestic,
+                    family: .ipv4,
+                    url: URL(string: "https://ipv4.netart.cn")!,
+                    parser: .jsonIP
+                )
+            ]
+        case (.domestic, .ipv6):
+            return [
+                IPOverviewPublicIPSource(
+                    id: "ddnspod-v6",
+                    name: "DNSPod IPv6",
+                    route: .domestic,
+                    family: .ipv6,
+                    url: URL(string: "https://ipv6.ddnspod.com")!,
+                    parser: .plainText
+                ),
+                IPOverviewPublicIPSource(
+                    id: "netart-v6",
+                    name: "NetArt IPv6",
+                    route: .domestic,
+                    family: .ipv6,
+                    url: URL(string: "https://ipv6.netart.cn")!,
+                    parser: .jsonIP
+                )
+            ]
+        case (.international, .ipv4):
             return [
                 IPOverviewPublicIPSource(
                     id: "ipcheck-v4-json",
                     name: "IPCheck.ing IPv4",
+                    route: .international,
                     family: .ipv4,
                     url: URL(string: "https://4.ipcheck.ing")!,
                     parser: .jsonIP
@@ -325,6 +500,7 @@ struct IPOverviewPublicIPSource: Sendable {
                 IPOverviewPublicIPSource(
                     id: "ipcheck-v4-trace",
                     name: "IPCheck.ing Trace IPv4",
+                    route: .international,
                     family: .ipv4,
                     url: URL(string: "https://4.ipcheck.ing/cdn-cgi/trace")!,
                     parser: .cloudflareTrace
@@ -332,6 +508,7 @@ struct IPOverviewPublicIPSource: Sendable {
                 IPOverviewPublicIPSource(
                     id: "ipify-v4",
                     name: "IPify IPv4",
+                    route: .international,
                     family: .ipv4,
                     url: URL(string: "https://api4.ipify.org?format=json")!,
                     parser: .jsonIP
@@ -339,16 +516,18 @@ struct IPOverviewPublicIPSource: Sendable {
                 IPOverviewPublicIPSource(
                     id: "ifconfig-v4",
                     name: "ifconfig.me IPv4",
+                    route: .international,
                     family: .ipv4,
                     url: URL(string: "https://ifconfig.me/ip")!,
                     parser: .plainText
                 )
             ]
-        case .ipv6:
+        case (.international, .ipv6):
             return [
                 IPOverviewPublicIPSource(
                     id: "ipcheck-v6-json",
                     name: "IPCheck.ing IPv6",
+                    route: .international,
                     family: .ipv6,
                     url: URL(string: "https://6.ipcheck.ing")!,
                     parser: .jsonIP
@@ -356,6 +535,7 @@ struct IPOverviewPublicIPSource: Sendable {
                 IPOverviewPublicIPSource(
                     id: "ipcheck-v6-trace",
                     name: "IPCheck.ing Trace IPv6",
+                    route: .international,
                     family: .ipv6,
                     url: URL(string: "https://6.ipcheck.ing/cdn-cgi/trace")!,
                     parser: .cloudflareTrace
@@ -363,6 +543,7 @@ struct IPOverviewPublicIPSource: Sendable {
                 IPOverviewPublicIPSource(
                     id: "ipify-v6",
                     name: "IPify IPv6",
+                    route: .international,
                     family: .ipv6,
                     url: URL(string: "https://api6.ipify.org?format=json")!,
                     parser: .jsonIP
@@ -376,13 +557,51 @@ enum IPOverviewGeoSource: CaseIterable {
     case ipwhois
     case ipapi
 
-    func url(ip: String) -> URL {
+    func url(ip: String, localization: PluginLocalization = PluginLocalization(bundle: .main)) -> URL {
         switch self {
         case .ipwhois:
-            return URL(string: "https://ipwho.is/\(ip)")!
+            return url(ip: ip, languageCode: IPOverviewLocale.geoLanguageCode(localization: localization))
         case .ipapi:
             return URL(string: "https://ipapi.co/\(ip)/json/")!
         }
+    }
+
+    func url(ip: String, languageCode: String?) -> URL {
+        switch self {
+        case .ipwhois:
+            var components = URLComponents(string: "https://ipwho.is/\(ip)")!
+            if let languageCode {
+                components.queryItems = [URLQueryItem(name: "lang", value: languageCode)]
+            }
+            return components.url!
+        case .ipapi:
+            return URL(string: "https://ipapi.co/\(ip)/json/")!
+        }
+    }
+}
+
+enum IPOverviewLocale {
+    static func geoLanguageCode(localization: PluginLocalization) -> String? {
+        let preferredLocalization = localization.bundle.preferredLocalizations.first
+            ?? Bundle.main.preferredLocalizations.first
+            ?? Locale.current.identifier
+        return geoLanguageCode(preferredLocalization: preferredLocalization)
+    }
+
+    static func geoLanguageCode(preferredLocalization: String) -> String? {
+        let normalizedLocalization = preferredLocalization
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
+
+        if normalizedLocalization.hasPrefix("zh") {
+            return "zh-CN"
+        }
+
+        if normalizedLocalization.hasPrefix("en") {
+            return "en"
+        }
+
+        return nil
     }
 }
 
@@ -408,6 +627,57 @@ enum IPOverviewParser {
             .first { $0.hasPrefix("ip=") }
             .map { String($0.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines) }?
             .nilIfEmpty
+    }
+
+    static func ipFromBilibiliIPService(_ data: Data) -> String? {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let data = object["data"] as? [String: Any],
+            let ip = data["addr"] as? String
+        else {
+            return nil
+        }
+
+        return ip.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+
+    static func ipFromCIPText(_ data: Data) -> String? {
+        guard let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        return text
+            .split(separator: "\n")
+            .lazy
+            .compactMap { line -> String? in
+                let parts = line.split(separator: ":", maxSplits: 1)
+                guard parts.count == 2,
+                      parts[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "ip"
+                else {
+                    return nil
+                }
+                return String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            }
+            .first
+    }
+
+    static func ipFromIPIPText(_ data: Data) -> String? {
+        guard let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let pattern = #"(?:(?:当前\s*)?IP|Ip)\s*[：:]\s*([0-9A-Fa-f:.]+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                  in: text,
+                  range: NSRange(text.startIndex..<text.endIndex, in: text)
+              ),
+              let range = Range(match.range(at: 1), in: text)
+        else {
+            return nil
+        }
+
+        return String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
     static func geoInfoFromIPWhois(_ data: Data, ip: String) -> IPOverviewGeoInfo? {

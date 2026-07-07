@@ -110,11 +110,15 @@ final class MenuBarHiddenPopupPanel: NSPanel {
 
 private struct MenuBarHiddenPopupView: View {
     @ObservedObject var controller: MenuBarHiddenController
+    private var localization: PluginLocalization { controller.localization }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("隐藏图标", systemImage: "menubar.arrow.up.rectangle")
+                Label(
+                    localization.string("popup.title", defaultValue: "隐藏图标"),
+                    systemImage: "menubar.arrow.up.rectangle"
+                )
                     .font(.headline)
                 Spacer()
             }
@@ -148,7 +152,7 @@ private struct MenuBarHiddenPopupView: View {
     private var emptyView: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
-            Text("没有隐藏的菜单栏图标")
+            Text(localization.string("popup.empty", defaultValue: "没有隐藏的菜单栏图标"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

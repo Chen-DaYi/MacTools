@@ -3,17 +3,20 @@ import MacToolsPluginKit
 
 struct XcodeCleanDetailView: View {
     @ObservedObject var controller: XcodeCleanController
+    private let localization: PluginLocalization
     private let showsHeader: Bool
     private let contentPadding: CGFloat
     private let minimumContentHeight: CGFloat
 
     init(
         controller: XcodeCleanController,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         showsHeader: Bool = true,
         contentPadding: CGFloat = 20,
         minimumContentHeight: CGFloat = 420
     ) {
         self.controller = controller
+        self.localization = localization
         self.showsHeader = showsHeader
         self.contentPadding = contentPadding
         self.minimumContentHeight = minimumContentHeight
@@ -43,7 +46,7 @@ struct XcodeCleanDetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Xcode 清理")
+            Text(localization.string("detail.title", defaultValue: "Xcode 清理"))
                 .font(PluginSettingsTheme.Typography.pageTitle)
 
             Text(snapshot.errorMessage ?? subtitleText)
@@ -54,20 +57,34 @@ struct XcodeCleanDetailView: View {
 
     private var subtitleText: String {
         if snapshot.isXcodeRunning {
-            return "请先退出 Xcode，再进行扫描或清理"
+            return localization.string("detail.subtitle.xcodeRunning", defaultValue: "请先退出 Xcode，再进行扫描或清理")
         }
         switch snapshot.phase {
         case .idle:
-            return "选择需要清理的分类，然后点击扫描"
+            return localization.string("detail.subtitle.idle", defaultValue: "选择需要清理的分类，然后点击扫描")
         case .scanning:
-            return "正在扫描…"
+            return localization.string("detail.subtitle.scanning", defaultValue: "正在扫描…")
         case .scanned:
-            if snapshot.isResultStale { return "勾选已更新，请重新扫描" }
-            return snapshot.scanResult.map { "已找到 \($0.cleanableCandidates.count) 项可清理" } ?? "扫描完成"
+            if snapshot.isResultStale {
+                return localization.string("detail.subtitle.stale", defaultValue: "勾选已更新，请重新扫描")
+            }
+            return snapshot.scanResult.map {
+                localization.format(
+                    "detail.subtitle.scanned",
+                    defaultValue: "已找到 %d 项可清理",
+                    $0.cleanableCandidates.count
+                )
+            } ?? localization.string("detail.subtitle.scanComplete", defaultValue: "扫描完成")
         case .cleaning:
-            return "正在清理…"
+            return localization.string("detail.subtitle.cleaning", defaultValue: "正在清理…")
         case .completed:
-            return snapshot.executionResult.map { "已释放 \(byteText($0.reclaimedBytes))" } ?? "清理完成"
+            return snapshot.executionResult.map {
+                localization.format(
+                    "detail.subtitle.completed",
+                    defaultValue: "已释放 %@",
+                    byteText($0.reclaimedBytes)
+                )
+            } ?? localization.string("detail.subtitle.cleanComplete", defaultValue: "清理完成")
         }
     }
 
@@ -78,9 +95,12 @@ struct XcodeCleanDetailView: View {
                 .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Xcode 当前正在运行")
+                Text(localization.string("detail.xcodeRunning.title", defaultValue: "Xcode 当前正在运行"))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                Text("为避免破坏正在进行的构建或索引，请先退出 Xcode 再使用此功能。")
+                Text(localization.string(
+                    "detail.xcodeRunning.description",
+                    defaultValue: "为避免破坏正在进行的构建或索引，请先退出 Xcode 再使用此功能。"
+                ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
             }
@@ -94,7 +114,7 @@ struct XcodeCleanDetailView: View {
 
     private var categoryControls: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label("清理分类", systemImage: "square.grid.2x2")
+            Label(localization.string("detail.categories.title", defaultValue: "清理分类"), systemImage: "square.grid.2x2")
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
 
@@ -121,10 +141,10 @@ struct XcodeCleanDetailView: View {
             )) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(category.title)
+                        Text(category.title(localization: localization))
                             .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                         if category.risk == .medium {
-                            Text("谨慎")
+                            Text(localization.string("detail.risk.medium", defaultValue: "谨慎"))
                                 .font(PluginSettingsTheme.Typography.statusBadge)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
@@ -132,7 +152,7 @@ struct XcodeCleanDetailView: View {
                                 .foregroundStyle(.orange)
                         }
                     }
-                    Text(category.summary)
+                    Text(category.summary(localization: localization))
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                 }
@@ -155,14 +175,14 @@ struct XcodeCleanDetailView: View {
             Button {
                 controller.scan()
             } label: {
-                Label("扫描", systemImage: "magnifyingglass")
+                Label(localization.string("detail.action.scan", defaultValue: "扫描"), systemImage: "magnifyingglass")
             }
             .disabled(!snapshot.canScan)
 
             Button {
                 controller.cleanSelected(candidateIDs: cleanableCandidateIDs)
             } label: {
-                Label("清理", systemImage: "trash")
+                Label(localization.string("detail.action.clean", defaultValue: "清理"), systemImage: "trash")
             }
             .disabled(!snapshot.canClean)
 
@@ -170,7 +190,7 @@ struct XcodeCleanDetailView: View {
                 Button {
                     controller.cancelCurrentOperation()
                 } label: {
-                    Label("停止", systemImage: "xmark.circle")
+                    Label(localization.string("detail.action.stop", defaultValue: "停止"), systemImage: "xmark.circle")
                 }
             }
 
@@ -181,7 +201,7 @@ struct XcodeCleanDetailView: View {
     private var scanLog: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("扫描日志")
+                Text(localization.string("detail.scanLog.title", defaultValue: "扫描日志"))
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -196,7 +216,7 @@ struct XcodeCleanDetailView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         if snapshot.scanLogEntries.isEmpty {
-                            Text("扫描后这里会显示实时进度")
+                            Text(localization.string("detail.scanLog.empty", defaultValue: "扫描后这里会显示实时进度"))
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -240,18 +260,39 @@ struct XcodeCleanDetailView: View {
     private var statusSummary: some View {
         if let scanResult = snapshot.scanResult {
             HStack(spacing: 16) {
-                summaryTile(title: "可清理", value: "\(scanResult.cleanableCandidates.count) 项")
-                summaryTile(title: "预计释放", value: byteText(scanResult.cleanableSizeBytes))
-                summaryTile(title: "已保护", value: "\(scanResult.protectedCount) 项")
+                summaryTile(
+                    title: localization.string("detail.summary.cleanable", defaultValue: "可清理"),
+                    value: itemCountText(scanResult.cleanableCandidates.count)
+                )
+                summaryTile(
+                    title: localization.string("detail.summary.estimatedRelease", defaultValue: "预计释放"),
+                    value: byteText(scanResult.cleanableSizeBytes)
+                )
+                summaryTile(
+                    title: localization.string("detail.summary.protected", defaultValue: "已保护"),
+                    value: itemCountText(scanResult.protectedCount)
+                )
             }
         }
 
         if let executionResult = snapshot.executionResult {
             HStack(spacing: 16) {
-                summaryTile(title: "已删除", value: "\(executionResult.removedCount) 项")
-                summaryTile(title: "已跳过", value: "\(executionResult.skippedCount) 项")
-                summaryTile(title: "失败", value: "\(executionResult.failedCount) 项")
-                summaryTile(title: "已释放", value: byteText(executionResult.reclaimedBytes))
+                summaryTile(
+                    title: localization.string("detail.summary.removed", defaultValue: "已删除"),
+                    value: itemCountText(executionResult.removedCount)
+                )
+                summaryTile(
+                    title: localization.string("detail.summary.skipped", defaultValue: "已跳过"),
+                    value: itemCountText(executionResult.skippedCount)
+                )
+                summaryTile(
+                    title: localization.string("detail.summary.failed", defaultValue: "失败"),
+                    value: itemCountText(executionResult.failedCount)
+                )
+                summaryTile(
+                    title: localization.string("detail.summary.released", defaultValue: "已释放"),
+                    value: byteText(executionResult.reclaimedBytes)
+                )
             }
         }
     }
@@ -289,7 +330,7 @@ struct XcodeCleanDetailView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(candidate.category.title)
+                    Text(candidate.category.title(localization: localization))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     Spacer(minLength: 12)
                     Text(byteText(candidate.sizeBytes))
@@ -319,14 +360,18 @@ struct XcodeCleanDetailView: View {
     private func safetyText(_ safety: XcodeCleanSafetyStatus) -> String {
         switch safety {
         case .allowed:
-            return "允许清理"
+            return localization.string("detail.safety.allowed", defaultValue: "允许清理")
         case .outsideAllowedRoot:
-            return "路径越界保护"
+            return localization.string("detail.safety.outsideAllowedRoot", defaultValue: "路径越界保护")
         case .xcodeRunning:
-            return "Xcode 运行中"
+            return localization.string("detail.safety.xcodeRunning", defaultValue: "Xcode 运行中")
         case .missing:
-            return "路径已不存在"
+            return localization.string("detail.safety.missing", defaultValue: "路径已不存在")
         }
+    }
+
+    private func itemCountText(_ count: Int) -> String {
+        localization.format("detail.itemCount", defaultValue: "%d 项", count)
     }
 
     private func byteText(_ bytes: Int64) -> String {

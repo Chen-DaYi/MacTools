@@ -26,19 +26,19 @@ struct SettingsView: View {
             )
                 .tag(SettingsDestination.general)
                 .tabItem {
-                    Label("通用", systemImage: "gearshape")
+                    Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
                 }
 
             FeatureSettingsView(pluginHost: pluginHost)
                 .tag(SettingsDestination.pluginConfiguration)
                 .tabItem {
-                    Label("插件", systemImage: "slider.horizontal.3")
+                    Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
                 }
 
             AboutSettingsView(appUpdater: appUpdater)
                 .tag(SettingsDestination.about)
                 .tabItem {
-                    Label("关于", systemImage: "info.circle")
+                    Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
                 }
         }
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
@@ -96,19 +96,24 @@ struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
+    @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
+    @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
+    @State private var showsLanguageRestartAlert = false
+    private let appRelauncher: any AppRelaunching = AppRelauncher()
 
     var body: some View {
         Form {
             Section {
                 LaunchAtLoginSettingsRow(controller: launchAtLoginController)
             } header: {
-                Text("启动")
+                Text(AppL10n.settings("general.section.startup", defaultValue: "启动"))
             }
-            
+
             Section {
                 AppearanceSettingsRow(selection: appearancePreferenceBinding)
+                LanguageSettingsRow(selection: languagePreferenceBinding)
             } header: {
-                Text("外观")
+                Text(AppL10n.settings("general.section.appearance", defaultValue: "外观"))
             }
 
             Section {
@@ -116,11 +121,24 @@ struct GeneralSettingsView: View {
                     iconSettings: menuBarIconSettings,
                     gallery: menuBarIconGallery
                 )
+                MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
             } header: {
-                Text("状态栏图标")
+                Text(AppL10n.settings("general.section.menuBarIcon", defaultValue: "状态栏图标"))
             }
         }
         .formStyle(.grouped)
+        .alert(
+            AppL10n.settings("language.restartAlert.title", defaultValue: "需要重启应用"),
+            isPresented: $showsLanguageRestartAlert
+        ) {
+            Button(AppL10n.settings("language.restartAlert.restart", defaultValue: "重启"), role: .none) {
+                appRelauncher.relaunch()
+            }
+
+            Button(AppL10n.settings("language.restartAlert.later", defaultValue: "稍后"), role: .cancel) {}
+        } message: {
+            Text(AppL10n.settings("language.restartAlert.message", defaultValue: "语言设置将在重启 MacTools 后生效。"))
+        }
     }
 
     private var appearancePreferenceBinding: Binding<AppAppearancePreference> {
@@ -129,6 +147,90 @@ struct GeneralSettingsView: View {
         } set: { preference in
             appearancePreferenceRawValue = preference.rawValue
             preference.apply()
+        }
+    }
+
+    private var languagePreferenceBinding: Binding<AppLanguagePreference> {
+        Binding {
+            AppLanguagePreference(rawValue: languagePreferenceRawValue) ?? .system
+        } set: { preference in
+            let oldPreference = AppLanguagePreference(rawValue: languagePreferenceRawValue) ?? .system
+            guard oldPreference != preference else {
+                return
+            }
+
+            languagePreferenceRawValue = preference.rawValue
+            preference.store()
+            showsLanguageRestartAlert = true
+        }
+    }
+
+    private var clickBehaviorBinding: Binding<MenuBarClickBehaviorPreference> {
+        Binding {
+            MenuBarClickBehaviorPreference(rawValue: clickBehaviorRawValue) ?? .standard
+        } set: { preference in
+            clickBehaviorRawValue = preference.rawValue
+        }
+    }
+}
+
+private struct MenuBarClickBehaviorSettingsRow: View {
+    @Binding var selection: MenuBarClickBehaviorPreference
+    @State private var toggleID = UUID()
+
+    private var isSwapped: Binding<Bool> {
+        Binding {
+            selection.isSwapped
+        } set: { enabled in
+            selection = enabled ? .swapped : .standard
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: "cursorarrow.click.2")
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(AppL10n.settings("menuBarClick.title", defaultValue: "交换左键与右键功能"))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text(AppL10n.settings("menuBarClick.description", defaultValue: "关闭时左键打开仪表盘、右键功能打开功能面板；开启后互换。"))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(AppL10n.settings(
+                    "menuBarClick.rightClickShortcutNotice",
+                    defaultValue: "可以使用 Option + 左键触发右键功能。"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle(AppL10n.settings("menuBarClick.toggle", defaultValue: "交换左键与右键功能"), isOn: isSwapped)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .id(toggleID)
+        }
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+        .help(AppL10n.settings("menuBarClick.help", defaultValue: "开启后左键打开功能面板，右键功能打开仪表盘"))
+        .onAppear {
+            DispatchQueue.main.async {
+                toggleID = UUID()
+            }
         }
     }
 }
@@ -149,17 +251,17 @@ private struct AppearanceSettingsRow: View {
             .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("应用外观")
+                Text(AppL10n.settings("appearance.title", defaultValue: "应用外观"))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
-                Text("自动跟随系统，也可以固定为深色或浅色。")
+                Text(AppL10n.settings("appearance.description", defaultValue: "自动跟随系统，也可以固定为深色或浅色。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Picker("外观", selection: $selection) {
+            Picker(AppL10n.settings("appearance.picker", defaultValue: "外观"), selection: $selection) {
                 ForEach(AppAppearancePreference.allCases) { preference in
                     Text(preference.title)
                         .tag(preference)
@@ -171,7 +273,50 @@ private struct AppearanceSettingsRow: View {
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
-        .help("设置应用外观")
+        .help(AppL10n.settings("appearance.help", defaultValue: "设置应用外观"))
+    }
+}
+
+private struct LanguageSettingsRow: View {
+    @Binding var selection: AppLanguagePreference
+
+    var body: some View {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: "globe")
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(AppL10n.settings("language.title", defaultValue: "语言"))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text(AppL10n.settings("language.description", defaultValue: "默认跟随系统语言，也可以固定为指定语言。"))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Picker(AppL10n.settings("language.picker", defaultValue: "语言"), selection: $selection) {
+                ForEach(AppLanguagePreference.allCases) { preference in
+                    Text(preference.title)
+                        .tag(preference)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(width: 150, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+        .help(AppL10n.settings("language.help", defaultValue: "设置应用语言"))
     }
 }
 
@@ -192,7 +337,7 @@ private struct LaunchAtLoginSettingsRow: View {
             .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("开机时启动")
+                Text(AppL10n.settings("launchAtLogin.title", defaultValue: "开机时启动"))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
                 Text(subtitle)
@@ -203,7 +348,7 @@ private struct LaunchAtLoginSettingsRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Toggle("开机时启动 MacTools", isOn: enabledBinding)
+            Toggle(AppL10n.settings("launchAtLogin.toggle", defaultValue: "开机时启动 MacTools"), isOn: enabledBinding)
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .id(toggleID)
@@ -211,7 +356,7 @@ private struct LaunchAtLoginSettingsRow: View {
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
-        .help("登录系统时自动启动 MacTools 并显示在菜单栏。")
+        .help(AppL10n.settings("launchAtLogin.help", defaultValue: "登录系统时自动启动 MacTools 并显示在菜单栏。"))
         .onAppear {
             DispatchQueue.main.async {
                 toggleID = UUID()
@@ -228,7 +373,7 @@ private struct LaunchAtLoginSettingsRow: View {
     }
 
     private var subtitle: String {
-        controller.lastErrorMessage ?? "登录系统时自动启动 MacTools 并显示在菜单栏。"
+        controller.lastErrorMessage ?? AppL10n.settings("launchAtLogin.description", defaultValue: "登录系统时自动启动 MacTools 并显示在菜单栏。")
     }
 }
 
@@ -265,11 +410,11 @@ private struct FeatureSettingsSidebar: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
-                FeatureSettingsSidebarSectionTitle("插件市场")
+                FeatureSettingsSidebarSectionTitle(AppL10n.settings("plugins.sidebar.marketplaceSection", defaultValue: "插件市场"))
                     .padding(.top, 14)
 
                 FeatureSettingsSidebarRow(
-                    title: "已安装",
+                    title: AppL10n.settings("plugins.sidebar.installed", defaultValue: "已安装"),
                     systemImage: "checkmark.circle",
                     iconTint: .green,
                     isSelected: selection == .installed
@@ -278,7 +423,7 @@ private struct FeatureSettingsSidebar: View {
                 }
 
                 FeatureSettingsSidebarRow(
-                    title: "市场",
+                    title: AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场"),
                     systemImage: "shippingbox",
                     iconTint: .blue,
                     isSelected: selection == .marketplace
@@ -286,11 +431,11 @@ private struct FeatureSettingsSidebar: View {
                     selection = .marketplace
                 }
 
-                FeatureSettingsSidebarSectionTitle("插件设置")
+                FeatureSettingsSidebarSectionTitle(AppL10n.settings("plugins.sidebar.configurationSection", defaultValue: "插件设置"))
                     .padding(.top, 16)
 
                 if configurationItems.isEmpty {
-                    Text("暂无可设置插件")
+                    Text(AppL10n.settings("plugins.sidebar.emptyConfigurations", defaultValue: "暂无可设置插件"))
                         .font(PluginSettingsTheme.Typography.secondaryLabel)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 10)
@@ -411,8 +556,11 @@ private struct InstalledFeaturesSettingsView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 SettingsPageHeader(
-                    title: "已安装",
-                    description: "启用、隐藏并拖拽调整插件在菜单栏里的显示顺序。",
+                    title: AppL10n.settings("plugins.installed.title", defaultValue: "已安装"),
+                    description: AppL10n.settings(
+                        "plugins.installed.description",
+                        defaultValue: "启用、隐藏并拖拽调整插件在菜单栏里的显示顺序。"
+                    ),
                     systemImage: "checkmark.circle",
                     iconTint: .green
                 )
@@ -422,23 +570,23 @@ private struct InstalledFeaturesSettingsView: View {
                         searchText: $searchText,
                         selectedFilter: $selectedFilter,
                         countsByFilter: countsByFilter,
-                        searchPrompt: "搜索已安装插件"
+                        searchPrompt: AppL10n.settings("plugins.installed.searchPrompt", defaultValue: "搜索已安装插件")
                     )
                 }
 
                 SettingsCardContainer {
                     if pluginHost.featureManagementItems.isEmpty {
                         ContentUnavailableView(
-                            "暂无已安装插件",
+                            AppL10n.settings("plugins.installed.empty.title", defaultValue: "暂无已安装插件"),
                             systemImage: "checkmark.circle",
-                            description: Text("安装插件后，会显示在这里。")
+                            description: Text(AppL10n.settings("plugins.installed.empty.description", defaultValue: "安装插件后，会显示在这里。"))
                         )
                         .frame(maxWidth: .infinity, minHeight: 180)
                     } else if filteredItems.isEmpty {
                         ContentUnavailableView(
-                            "未找到匹配的插件",
+                            AppL10n.settings("plugins.filter.empty.title", defaultValue: "未找到匹配的插件"),
                             systemImage: "magnifyingglass",
-                            description: Text("尝试调整关键字或切换分类。")
+                            description: Text(AppL10n.settings("plugins.filter.empty.description", defaultValue: "尝试调整关键字或切换分类。"))
                         )
                         .frame(maxWidth: .infinity, minHeight: 180)
                     } else {
@@ -457,7 +605,10 @@ private struct InstalledFeaturesSettingsView: View {
                 }
 
                 if isFiltering && !filteredItems.isEmpty {
-                    Text("筛选中暂时不能拖拽排序，清除关键字或选择「全部」即可重新排序。")
+                    Text(AppL10n.settings(
+                        "plugins.installed.filteringReorderHint",
+                        defaultValue: "筛选中暂时不能拖拽排序，清除关键字或选择「全部」即可重新排序。"
+                    ))
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
@@ -513,7 +664,6 @@ private struct PluginConfigurationDetailPane: View {
         Group {
             if let item {
                 if item.prefersFullHeight {
-                    // 全高度布局：header 固定在顶部，自定义视图填满剩余空间
                     VStack(alignment: .leading, spacing: 0) {
                         PluginConfigurationHeader(item: item)
                             .padding(PluginSettingsTheme.Spacing.pagePadding)
@@ -560,9 +710,12 @@ private struct PluginConfigurationDetailPane: View {
                 }
             } else {
                 ContentUnavailableView(
-                    "暂无可配置插件",
+                    AppL10n.settings("plugins.configuration.empty.title", defaultValue: "暂无可配置插件"),
                     systemImage: "slider.horizontal.3",
-                    description: Text("当插件提供权限、快捷键或自定义设置后，会显示在这里。")
+                    description: Text(AppL10n.settings(
+                        "plugins.configuration.empty.description",
+                        defaultValue: "当插件提供权限、快捷键或自定义设置后，会显示在这里。"
+                    ))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -623,7 +776,7 @@ private struct PluginSettingsCardSection: View {
     let cards: [PluginSettingsCard]
 
     var body: some View {
-        PluginConfigurationSection(title: "设置", systemImage: "switch.2") {
+        PluginConfigurationSection(title: AppL10n.settings("plugins.configuration.section.settings", defaultValue: "设置"), systemImage: "switch.2") {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                     PluginSettingsCardRow(
@@ -699,7 +852,7 @@ private struct PluginPermissionCardSection: View {
     let cards: [PluginPermissionCard]
 
     var body: some View {
-        PluginConfigurationSection(title: "权限", systemImage: "lock.shield") {
+        PluginConfigurationSection(title: AppL10n.settings("plugins.configuration.section.permissions", defaultValue: "权限"), systemImage: "lock.shield") {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                     PermissionSettingsRow(
@@ -729,10 +882,45 @@ private struct PluginShortcutSection: View {
     let items: [ShortcutSettingsItem]
 
     var body: some View {
-        PluginConfigurationSection(title: "快捷键", systemImage: "command") {
+        PluginConfigurationSection(title: AppL10n.settings("plugins.configuration.section.shortcuts", defaultValue: "快捷键"), systemImage: "command") {
             VStack(alignment: .leading, spacing: 0) {
-                ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
+                if groupedItems.isEmpty {
+                    ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
+                } else {
+                    GroupedShortcutSettingsRowsView(pluginHost: pluginHost, groups: groupedItems)
+                }
             }
+        }
+    }
+
+    private var groupedItems: [ShortcutSettingsGroup] {
+        guard items.allSatisfy({ $0.settingsGroupID != nil }) else {
+            return []
+        }
+
+        var groupOrder: [String] = []
+        var groups: [String: [ShortcutSettingsItem]] = [:]
+
+        for item in items {
+            guard let groupID = item.settingsGroupID else {
+                continue
+            }
+
+            if groups[groupID] == nil {
+                groupOrder.append(groupID)
+            }
+            groups[groupID, default: []].append(item)
+        }
+
+        return groupOrder.compactMap { groupID in
+            guard let groupItems = groups[groupID], let firstItem = groupItems.first else { return nil }
+
+            return ShortcutSettingsGroup(
+                id: groupID,
+                title: firstItem.settingsGroupTitle ?? firstItem.title,
+                description: firstItem.settingsGroupDescription ?? firstItem.description,
+                items: groupItems
+            )
         }
     }
 }
@@ -795,7 +983,7 @@ struct AboutSettingsView: View {
                 .font(.system(size: 22, weight: .bold))
                 .padding(.top, 8)
 
-            Text("版本 \(AppMetadata.versionDescription)")
+            Text(AppL10n.settingsFormat("about.versionFormat", defaultValue: "版本 %@", AppMetadata.versionDescription))
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .padding(.top, 8)

@@ -20,6 +20,16 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
       "id": "com.ggbond.mactools.demo",
       "displayName": "Demo",
       "summary": "示例插件",
+      "localizedMetadata": {
+        "zh-Hans": {
+          "displayName": "示例",
+          "summary": "示例插件"
+        },
+        "en": {
+          "displayName": "Demo",
+          "summary": "Demo plugin"
+        }
+      },
       "version": "1.0.0",
       "minimumHostVersion": "0.15.2",
       "pluginKitVersion": 2,
@@ -35,7 +45,8 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
         "size": 1234567
       },
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.1",
-      "category": "productivity"
+      "category": "productivity",
+      "releaseChannel": "beta"
     }
   ],
   "revoked": [],
@@ -45,6 +56,8 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
   }
 }
 ```
+
+`localizedMetadata` is copied from each plugin manifest and is used by the marketplace before the plugin bundle is loaded. `displayName` and `summary` remain required fallbacks for older hosts and incomplete translations.
 
 Release catalogs must include an Ed25519 signature. Debug local catalogs may omit `signature`, but they still go through package checksum, manifest, staging, and same-team code signature validation.
 
@@ -73,7 +86,7 @@ MacToolsPlugins/
     Tests/
 ```
 
-`plugin.json` declares the plugin ID, version, capabilities, bundle path, and build scheme. In this repository `make generate`, `make build`, `make run`, and `make build-plugin` first scan `Plugins/*/plugin.json` and generate the local XcodeGen plugin targets. External repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The built package contains only `plugin.json` and the signed `.bundle`; extra executables must already be copied into the bundle resources and listed in `plugin.json.package.signPaths` when they require an individual code signature.
+`plugin.json` declares the plugin ID, version, capabilities, bundle path, optional `releaseChannel`, and build scheme. In this repository `make generate`, `make build`, `make run`, and `make build-plugin` first scan `Plugins/*/plugin.json` and generate the local XcodeGen plugin targets. External repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The built package contains only `plugin.json` and the signed `.bundle`; extra executables must already be copied into the bundle resources and listed in `plugin.json.package.signPaths` when they require an individual code signature.
 
 From the MacTools repository, build all local plugins and generate the Debug catalog:
 
@@ -114,7 +127,7 @@ make run MACTOOLS_PLUGIN_CATALOG_URL=file:///path/to/catalog.dev.json
 For Debug runs, the catalog URL scheme selects the verification mode. A `file://` URL uses the local development catalog policy, where signatures are optional. An `https://` URL uses the production catalog policy, where the catalog signature is required:
 
 ```bash
-make run MACTOOLS_PLUGIN_CATALOG_URL=https://ggbond268.github.io/MacTools/plugins/catalog.json
+make run MACTOOLS_PLUGIN_CATALOG_URL=https://mactools.ggbond.app/plugins/catalog.json
 ```
 
 The app copies the package into its own staging and installed directories. Uninstall deletes only the installed copy under MacTools application support; it never deletes the plugin source directory or the local build directory.
@@ -126,7 +139,7 @@ Recommended production flow is an incremental batch plugin release:
 1. Run `make release`.
 2. Choose `plugin`, release mode, and `patch`/`minor`/`major`.
 3. The helper analyzes the production catalog and shows the planned manifest bumps.
-4. After confirmation, the helper syncs `main`, bumps changed plugin manifests when needed, runs a release plan check, commits the bump, and pushes a batch tag such as `plugins-1.0.1`.
+4. After confirmation, the helper syncs `main`, bumps changed plugin manifests when needed, compiles `release: plugin` changelog fragments into `CHANGELOG.md`, runs a release plan check, commits the bump, and pushes a batch tag such as `plugins-1.0.1`.
 5. The `Plugin Release` GitHub Action reads the current production catalog from `origin/main`.
 6. In default `auto` mode, the workflow selects only new plugins and plugins whose manifest version is higher than the previous catalog entry.
 7. If package-relevant files changed inside a plugin or its `pluginKitVersion` changed but that plugin version did not increase, the workflow fails before signing or uploading. PluginKit ABI changes require a full `mode=all` rebuild; other shared host changes can use `mode=all` or explicit `--shared-path` values when they really require repackaging existing plugins.
@@ -136,6 +149,8 @@ Recommended production flow is an incremental batch plugin release:
 11. `Deploy Pages` publishes the signed catalog to GitHub Pages.
 
 The batch tag is stored per plugin entry through `package.url` and `releaseNotesURL`, so one catalog can point different plugins to different release tags without changing host code.
+
+The GitHub Release body for each plugin batch is extracted from the matching `CHANGELOG.md` entry, such as `## [plugins-1.0.1]`.
 
 An incremental release record contains only packages changed in that batch:
 

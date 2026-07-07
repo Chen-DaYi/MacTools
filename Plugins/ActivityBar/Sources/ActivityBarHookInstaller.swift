@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct ActivityBarHookInstallSummary: Equatable, Sendable {
     let scriptDirectory: URL
@@ -36,9 +37,13 @@ enum ActivityBarHookInstallerError: LocalizedError, Equatable {
     case invalidJSON(URL)
 
     var errorDescription: String? {
+        localizedDescription(localization: PluginLocalization(bundle: .main))
+    }
+
+    func localizedDescription(localization: PluginLocalization) -> String {
         switch self {
         case let .invalidJSON(url):
-            return "无法解析配置文件：\(url.path)"
+            return localization.format("error.hook.invalidJSON", defaultValue: "无法解析配置文件：%@", url.path)
         }
     }
 }

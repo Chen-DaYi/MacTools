@@ -8,17 +8,22 @@ import MacToolsPluginKit
 @MainActor
 private final class MockBatteryReader: BatteryChargeLimitReading {
     var snapshot: BatterySnapshot
+    private(set) var readCount = 0
 
     init(snapshot: BatterySnapshot = .empty) {
         self.snapshot = snapshot
     }
 
-    func readSnapshot() -> BatterySnapshot { snapshot }
+    func readSnapshot() -> BatterySnapshot {
+        readCount += 1
+        return snapshot
+    }
 }
 
 @MainActor
 private final class MockBatteryWriter: BatteryChargeLimitWriting {
     var isHelperAvailable: Bool
+    var isInstalledHelperAvailable: Bool
     var capabilities: BatterySMCCapabilities
     var inhibitCalls: [Int] = []
     var resumeCalls: Int = 0
@@ -27,11 +32,13 @@ private final class MockBatteryWriter: BatteryChargeLimitWriting {
 
     init(
         isHelperAvailable: Bool = true,
+        isInstalledHelperAvailable: Bool = true,
         capabilities: BatterySMCCapabilities = BatterySMCCapabilities(
             hasCHIE: false, hasCH0BC: true, hasBCLM: false, hasCH0I: true
         )
     ) {
         self.isHelperAvailable = isHelperAvailable
+        self.isInstalledHelperAvailable = isInstalledHelperAvailable
         self.capabilities = capabilities
     }
 
@@ -125,6 +132,96 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
 
         XCTAssertFalse(plugin.store.isEnabled)
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testActivateWhenDisabledReadsOnceWithoutStartingMonitoring() async {
+        let reader = MockBatteryReader(snapshot: makeSnapshot(level: 60))
+        let plugin = makePlugin(reader: reader)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "battery-charge-limit"))
+        await Task.yield()
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(reader.readCount, 1)
+    }
+
+    func testActivateWhenEnabledStartsMonitoring() async {
+        let reader = MockBatteryReader(snapshot: makeSnapshot(level: 60))
+        let plugin = makePlugin(reader: reader)
+        plugin.store.setEnabled(true)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "battery-charge-limit"))
+        await Task.yield()
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertGreaterThanOrEqual(reader.readCount, 2)
+        plugin.deactivate(reason: .updating)
+    }
+
+    func testDeactivateWithoutEnablingDoesNotWriteSMC() {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)), writer: writer)
+
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.resumeCalls, 0)
+        XCTAssertTrue(writer.dischargeCalls.isEmpty)
+    }
+
+    func testDeactivateWhenEnabledRestoresUnrestrictedCharging() {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)), writer: writer)
+        plugin.refresh()
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        writer.resumeCalls = 0
+        writer.dischargeCalls = []
+
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.resumeCalls, 1)
+        XCTAssertEqual(writer.dischargeCalls, [false])
+    }
+
+    func testDeactivateWhenEnabledButHelperNotInstalledSkipsCleanup() {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)), writer: writer)
+        plugin.refresh()
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        writer.resumeCalls = 0
+        writer.dischargeCalls = []
+        writer.isInstalledHelperAvailable = false
+
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.resumeCalls, 0)
+        XCTAssertTrue(writer.dischargeCalls.isEmpty)
+    }
+
+    func testDeactivateWhileChargingDoesNotRepeatCleanup() {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)), writer: writer)
+        plugin.refresh()
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        plugin.handleAction(.invokeAction(controlID: "battery-charge-action"))
+        writer.resumeCalls = 0
+        writer.dischargeCalls = []
+
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.resumeCalls, 0)
+        XCTAssertTrue(writer.dischargeCalls.isEmpty)
+    }
+
+    func testDeactivateAfterFailedEnableDoesNotRetryCleanup() {
+        let writer = MockBatteryWriter(capabilities: .none)
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)), writer: writer)
+        plugin.refresh()
+
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        plugin.deactivate(reason: .hostShutdown)
+
+        XCTAssertEqual(writer.resumeCalls, 0)
+        XCTAssertTrue(writer.dischargeCalls.isEmpty)
     }
 
     // MARK: Limit Changes

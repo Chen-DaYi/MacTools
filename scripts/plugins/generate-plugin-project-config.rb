@@ -198,6 +198,7 @@ plugin_roots.each do |plugin_root|
   common_settings = {
     "GENERATE_INFOPLIST_FILE" => "YES",
     "SWIFT_VERSION" => "6.0",
+    "DEVELOPMENT_LANGUAGE" => "zh-Hans",
     "MACOSX_DEPLOYMENT_TARGET" => "14.0",
     "CODE_SIGN_STYLE" => "Automatic",
     "DEVELOPMENT_TEAM" => "$(DEVELOPMENT_TEAM)"
@@ -240,6 +241,10 @@ plugin_roots.each do |plugin_root|
   end
 
   bundle_sources = [{ "path" => relative_to_output_dir(File.join(plugin_root, "Bundle"), output_dir) }]
+  plugin_resources_dir = File.join(plugin_root, "Resources")
+  if Dir.exist?(plugin_resources_dir)
+    bundle_sources << { "path" => relative_to_output_dir(plugin_resources_dir, output_dir) }
+  end
   Array(fragment.dig("bundle", "sources")).each do |item|
     bundle_sources << normalize_fragment_path(plugin_relative_dir, item, repo_root, output_dir)
   end

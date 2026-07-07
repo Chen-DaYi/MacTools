@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import MacToolsPluginKit
 
 typealias XcodeCleanScanProgressHandler = @Sendable (XcodeCleanScanLogMessage) async -> Void
 
@@ -122,9 +123,18 @@ enum XcodeCleanFileSystemError: LocalizedError {
     case globFailed(pattern: String, status: Int32)
 
     var errorDescription: String? {
+        errorDescription()
+    }
+
+    func errorDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case let .globFailed(pattern, status):
-            return "无法展开路径 \(pattern)（glob 状态 \(status)）"
+            return localization.format(
+                "fileSystemError.globFailed",
+                defaultValue: "无法展开路径 %@（glob 状态 %d）",
+                pattern,
+                status
+            )
         }
     }
 }
@@ -134,17 +144,20 @@ struct XcodeCleanScanner: XcodeCleanScanning {
     let fileSystem: XcodeCleanFileSystemProviding
     let allowedRoots: [String]
     let now: @Sendable () -> Date
+    let localization: PluginLocalization
 
     init(
         ruleCatalog: XcodeCleanRuleCatalog = .defaultCatalog,
         fileSystem: XcodeCleanFileSystemProviding = LocalXcodeCleanFileSystem(),
         allowedRoots: [String]? = nil,
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.ruleCatalog = ruleCatalog
         self.fileSystem = fileSystem
         self.allowedRoots = (allowedRoots ?? Self.defaultAllowedRoots()).map { Self.ensureTrailingSlash($0) }
         self.now = now
+        self.localization = localization
     }
 
     func scan(
@@ -158,7 +171,11 @@ struct XcodeCleanScanner: XcodeCleanScanning {
 
             await progress(
                 XcodeCleanScanLogMessage(
-                    text: "扫描分类：\(category.title)",
+                    text: localization.format(
+                        "scanLog.category",
+                        defaultValue: "扫描分类：%@",
+                        category.title(localization: localization)
+                    ),
                     tone: .info
                 )
             )
@@ -171,7 +188,12 @@ struct XcodeCleanScanner: XcodeCleanScanning {
                     let matches = (try? fileSystem.expandPathPattern(pattern)) ?? []
                     await progress(
                         XcodeCleanScanLogMessage(
-                            text: "展开 \(pattern) → \(matches.count) 项",
+                            text: localization.format(
+                                "scanLog.expanded",
+                                defaultValue: "展开 %@ → %d 项",
+                                pattern,
+                                matches.count
+                            ),
                             tone: matches.isEmpty ? .info : .success
                         )
                     )
@@ -197,7 +219,12 @@ struct XcodeCleanScanner: XcodeCleanScanning {
         let cleanable = candidates.filter { $0.safety.isCleanable }
         await progress(
             XcodeCleanScanLogMessage(
-                text: "扫描完成：\(candidates.count) 项，\(cleanable.count) 项可清理",
+                text: localization.format(
+                    "scanLog.completed",
+                    defaultValue: "扫描完成：%d 项，%d 项可清理",
+                    candidates.count,
+                    cleanable.count
+                ),
                 tone: .success
             )
         )
@@ -227,13 +254,29 @@ struct XcodeCleanScanner: XcodeCleanScanning {
     private func logMessage(for candidate: XcodeCleanCandidate) -> XcodeCleanScanLogMessage {
         switch candidate.safety {
         case .allowed:
-            return XcodeCleanScanLogMessage(text: "可清理：\(candidate.path)", tone: .success)
+            return XcodeCleanScanLogMessage(
+                text: localization.format("scanLog.candidate.allowed", defaultValue: "可清理：%@", candidate.path),
+                tone: .success
+            )
         case .outsideAllowedRoot:
-            return XcodeCleanScanLogMessage(text: "越界拒绝：\(candidate.path)", tone: .warning)
+            return XcodeCleanScanLogMessage(
+                text: localization.format(
+                    "scanLog.candidate.outsideAllowedRoot",
+                    defaultValue: "越界拒绝：%@",
+                    candidate.path
+                ),
+                tone: .warning
+            )
         case .xcodeRunning:
-            return XcodeCleanScanLogMessage(text: "Xcode 运行中：\(candidate.path)", tone: .warning)
+            return XcodeCleanScanLogMessage(
+                text: localization.format("scanLog.candidate.xcodeRunning", defaultValue: "Xcode 运行中：%@", candidate.path),
+                tone: .warning
+            )
         case .missing:
-            return XcodeCleanScanLogMessage(text: "已不存在：\(candidate.path)", tone: .info)
+            return XcodeCleanScanLogMessage(
+                text: localization.format("scanLog.candidate.missing", defaultValue: "已不存在：%@", candidate.path),
+                tone: .info
+            )
         }
     }
 

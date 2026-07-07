@@ -21,11 +21,18 @@ final class PluginDisplayPreferencesStore {
     }
 
     func orderedPluginIDs(defaultPluginIDs: [String]) -> [String] {
-        normalizedPreferences(defaultPluginIDs: defaultPluginIDs).orderedPluginIDs
+        normalizeOrder(
+            loadPreferences().orderedPluginIDs,
+            defaultPluginIDs: defaultPluginIDs
+        )
     }
 
     func isVisible(_ pluginID: String, defaultPluginIDs: [String]) -> Bool {
-        !normalizedPreferences(defaultPluginIDs: defaultPluginIDs).hiddenPluginIDs.contains(pluginID)
+        guard defaultPluginIDs.contains(pluginID) else {
+            return true
+        }
+
+        return !loadPreferences().hiddenPluginIDs.contains(pluginID)
     }
 
     func setVisibility(
@@ -33,7 +40,11 @@ final class PluginDisplayPreferencesStore {
         for pluginID: String,
         defaultPluginIDs: [String]
     ) {
-        var preferences = normalizedPreferences(defaultPluginIDs: defaultPluginIDs)
+        guard defaultPluginIDs.contains(pluginID) else {
+            return
+        }
+
+        var preferences = loadPreferences()
 
         if isVisible {
             preferences.hiddenPluginIDs.remove(pluginID)
@@ -48,31 +59,12 @@ final class PluginDisplayPreferencesStore {
         _ orderedPluginIDs: [String],
         defaultPluginIDs: [String]
     ) {
-        var preferences = normalizedPreferences(defaultPluginIDs: defaultPluginIDs)
+        var preferences = loadPreferences()
         preferences.orderedPluginIDs = normalizeOrder(
             orderedPluginIDs,
             defaultPluginIDs: defaultPluginIDs
         )
         persist(preferences)
-    }
-
-    private func normalizedPreferences(defaultPluginIDs: [String]) -> StoredPreferences {
-        let stored = loadPreferences()
-        let normalized = StoredPreferences(
-            orderedPluginIDs: normalizeOrder(
-                stored.orderedPluginIDs,
-                defaultPluginIDs: defaultPluginIDs
-            ),
-            hiddenPluginIDs: Set(
-                stored.hiddenPluginIDs.filter { defaultPluginIDs.contains($0) }
-            )
-        )
-
-        if normalized != stored {
-            persist(normalized)
-        }
-
-        return normalized
     }
 
     private func loadPreferences() -> StoredPreferences {

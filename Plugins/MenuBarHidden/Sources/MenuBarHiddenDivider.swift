@@ -45,7 +45,8 @@ final class MenuBarHiddenDivider {
             switch self {
             case .hidden:
                 MenuBarControlItemDefaults.prepareHiddenDividerControlItem(
-                    preferredPosition: preferredPosition ?? MenuBarControlItemDefaults.hiddenDefaultPreferredPosition
+                    preferredPosition: preferredPosition
+                        ?? MenuBarControlItemDefaults.preferredPositionForHiddenDividerLeftOfVisibleControlItem()
                 )
             case .alwaysHidden:
                 MenuBarControlItemDefaults.prepareAlwaysHiddenDividerControlItem()
@@ -55,7 +56,7 @@ final class MenuBarHiddenDivider {
         func preferredPositionForRecovery() -> Double? {
             switch self {
             case .hidden:
-                MenuBarControlItemDefaults.hiddenDefaultPreferredPosition
+                MenuBarControlItemDefaults.preferredPositionForHiddenDividerLeftOfVisibleControlItem()
             case .alwaysHidden:
                 nil
             }

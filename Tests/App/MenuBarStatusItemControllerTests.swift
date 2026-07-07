@@ -71,11 +71,24 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
 
-    func testControlClickOpensFeaturePanel() {
-        let event = NSEvent.mouseEvent(
-            with: .leftMouseUp,
+    func testModifierLeftClicksRouteOnlyOptionToRightClickAction() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseUp, modifiers: [.control])),
+            .componentPanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseUp, modifiers: [.option])),
+            .featurePanel
+        )
+    }
+
+    // MARK: - Swapped click behavior
+
+    private func mouseEvent(_ type: NSEvent.EventType, modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
+        NSEvent.mouseEvent(
+            with: type,
             location: .zero,
-            modifierFlags: [.control],
+            modifierFlags: modifiers,
             timestamp: 0,
             windowNumber: 0,
             context: nil,
@@ -83,7 +96,88 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             clickCount: 1,
             pressure: 0
         )
-
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
+
+    func testSwappedLeftClickOpensFeaturePanel() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseDown), swapped: true),
+            .featurePanel
+        )
+    }
+
+    func testSwappedRightClickOpensComponentPanel() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.rightMouseDown), swapped: true),
+            .componentPanel
+        )
+    }
+
+    func testSwappedNilEventOpensFeaturePanel() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: nil, swapped: true),
+            .featurePanel
+        )
+    }
+
+    func testSwappedModifierLeftClicksRouteOnlyOptionToRightClickAction() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(
+                for: mouseEvent(.leftMouseUp, modifiers: [.control]),
+                swapped: true
+            ),
+            .featurePanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(
+                for: mouseEvent(.leftMouseUp, modifiers: [.option]),
+                swapped: true
+            ),
+            .componentPanel
+        )
+    }
+
+    func testClickBehaviorPreferenceDefaultsToStandard() {
+        let suite = "MenuBarClickBehaviorPreferenceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(MenuBarClickBehaviorPreference.current(defaults), .standard)
+        XCTAssertFalse(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
+
+        defaults.set(MenuBarClickBehaviorPreference.swapped.rawValue, forKey: MenuBarClickBehaviorPreference.userDefaultsKey)
+        XCTAssertEqual(MenuBarClickBehaviorPreference.current(defaults), .swapped)
+        XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
+    }
+
+    func testExpandedSessionUsesOptionAsRightClickAction() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocationForExpandedSession(
+                swapped: false,
+                liveModifierFlags: []
+            ),
+            .componentPanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocationForExpandedSession(
+                swapped: false,
+                liveModifierFlags: [.control]
+            ),
+            .componentPanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocationForExpandedSession(
+                swapped: false,
+                liveModifierFlags: [.option]
+            ),
+            .featurePanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocationForExpandedSession(
+                swapped: true,
+                liveModifierFlags: [.option]
+            ),
+            .componentPanel
+        )
+    }
+
 }

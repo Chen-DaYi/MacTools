@@ -86,11 +86,22 @@ struct FeatureManagementTableView: NSViewRepresentable {
             return
         }
 
-        tableView.reloadData()
-        tableView.noteNumberOfRowsChanged()
-
         let contentHeight = Self.preferredHeight(for: items.count)
         let contentWidth = max(scrollView.contentSize.width, 1)
+        let signature = FeatureManagementTableSignature(
+            items: items,
+            isReorderEnabled: isReorderEnabled,
+            contentWidth: contentWidth
+        )
+
+        guard coordinator.lastSignature != signature else {
+            return
+        }
+
+        coordinator.lastSignature = signature
+
+        tableView.reloadData()
+        tableView.noteNumberOfRowsChanged()
 
         tableView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: contentHeight)
         scrollView.contentView.scroll(to: .zero)
@@ -101,6 +112,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         var parent: FeatureManagementTableView
         weak var tableView: NSTableView?
+        fileprivate var lastSignature: FeatureManagementTableSignature?
 
         init(parent: FeatureManagementTableView) {
             self.parent = parent
@@ -165,6 +177,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
             operation: NSDragOperation
         ) {
             isDragging = false
+            lastSignature = nil
             tableView.reloadData()
         }
 
@@ -237,6 +250,69 @@ struct FeatureManagementTableView: NSViewRepresentable {
         }
     }
 }
+
+fileprivate struct FeatureManagementTableSignature: Equatable {
+    struct Row: Equatable {
+        let id: String
+        let title: String
+        let description: String
+        let iconName: String
+        let isVisible: Bool
+        let isActive: Bool
+        let presentation: PluginFeaturePresentation
+        let category: String?
+        let releaseChannel: String?
+    }
+
+    let rows: [Row]
+    let isReorderEnabled: Bool
+    let contentWidth: CGFloat
+
+    init(
+        items: [PluginFeatureManagementItem],
+        isReorderEnabled: Bool,
+        contentWidth: CGFloat
+    ) {
+        self.rows = items.map {
+            Row(
+                id: $0.id,
+                title: $0.title,
+                description: $0.description,
+                iconName: $0.iconName,
+                isVisible: $0.isVisible,
+                isActive: $0.isActive,
+                presentation: $0.presentation,
+                category: $0.category,
+                releaseChannel: $0.releaseChannel
+            )
+        }
+        self.isReorderEnabled = isReorderEnabled
+        self.contentWidth = contentWidth.rounded(.toNearestOrAwayFromZero)
+    }
+}
+
+#if DEBUG
+enum FeatureManagementTableUpdatePolicy {
+    static func needsUpdate(
+        previousItems: [PluginFeatureManagementItem],
+        currentItems: [PluginFeatureManagementItem],
+        previousIsReorderEnabled: Bool,
+        currentIsReorderEnabled: Bool,
+        previousContentWidth: CGFloat,
+        currentContentWidth: CGFloat
+    ) -> Bool {
+        FeatureManagementTableSignature(
+            items: previousItems,
+            isReorderEnabled: previousIsReorderEnabled,
+            contentWidth: previousContentWidth
+        ) != FeatureManagementTableSignature(
+            items: currentItems,
+            isReorderEnabled: currentIsReorderEnabled,
+            contentWidth: currentContentWidth
+        )
+    }
+}
+#endif
 
 private final class NonScrollingTableScrollView: NSScrollView {
     override func scrollWheel(with event: NSEvent) {
@@ -415,7 +491,9 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private let containerView = NSView()
     private let iconBackgroundView = NSView()
     private let iconImageView = NSImageView()
+    private let titleRowStackView = NSStackView()
     private let titleLabel = NSTextField(labelWithString: "")
+    private let releaseChannelBadgeView = NSHostingView(rootView: PluginReleaseChannelBadge(releaseChannel: nil))
     private let descriptionLabel = NSTextField(labelWithString: "")
     private let activeDotView = NSView()
     private let visibilityButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
@@ -442,6 +520,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         visibilityHandler = onVisibilityChange
 
         titleLabel.stringValue = item.title
+        configureReleaseChannelBadge(item.releaseChannel)
         descriptionLabel.stringValue = "\(item.description) · \(featureManagementPresentationText(for: item.presentation))"
         iconImageView.image = NSImage(
             systemSymbolName: item.iconName,
@@ -465,7 +544,9 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         addSubview(containerView)
         containerView.addSubview(iconBackgroundView)
         iconBackgroundView.addSubview(iconImageView)
-        containerView.addSubview(titleLabel)
+        containerView.addSubview(titleRowStackView)
+        titleRowStackView.addArrangedSubview(titleLabel)
+        titleRowStackView.addArrangedSubview(releaseChannelBadgeView)
         containerView.addSubview(descriptionLabel)
         containerView.addSubview(activeDotView)
         containerView.addSubview(visibilityButton)
@@ -478,9 +559,18 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
         iconBackgroundView.layer?.cornerRadius = 10
 
+        titleRowStackView.orientation = .horizontal
+        titleRowStackView.alignment = .centerY
+        titleRowStackView.spacing = 6
+        titleRowStackView.distribution = .fill
+
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        releaseChannelBadgeView.setContentHuggingPriority(.required, for: .horizontal)
+        releaseChannelBadgeView.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         descriptionLabel.font = .systemFont(ofSize: 11, weight: .medium)
         descriptionLabel.textColor = .secondaryLabelColor
@@ -498,7 +588,10 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
         handleImageView.image = NSImage(
             systemSymbolName: "line.3.horizontal",
-            accessibilityDescription: "拖拽调整顺序"
+            accessibilityDescription: AppL10n.plugins(
+                "plugin.management.reorderAccessibility",
+                defaultValue: "拖拽调整顺序"
+            )
         )
         handleImageView.contentTintColor = .secondaryLabelColor
         handleImageView.symbolConfiguration = .init(pointSize: 13, weight: .semibold)
@@ -509,7 +602,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             containerView,
             iconBackgroundView,
             iconImageView,
-            titleLabel,
+            titleRowStackView,
             descriptionLabel,
             activeDotView,
             visibilityButton,
@@ -532,13 +625,13 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             iconImageView.centerXAnchor.constraint(equalTo: iconBackgroundView.centerXAnchor),
             iconImageView.centerYAnchor.constraint(equalTo: iconBackgroundView.centerYAnchor),
 
-            titleLabel.leadingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor, constant: 12),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: activeDotView.leadingAnchor, constant: -10),
-            titleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
+            titleRowStackView.leadingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor, constant: 12),
+            titleRowStackView.trailingAnchor.constraint(lessThanOrEqualTo: activeDotView.leadingAnchor, constant: -10),
+            titleRowStackView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
 
-            descriptionLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            descriptionLabel.leadingAnchor.constraint(equalTo: titleRowStackView.leadingAnchor),
             descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: visibilityButton.leadingAnchor, constant: -12),
-            descriptionLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            descriptionLabel.topAnchor.constraint(equalTo: titleRowStackView.bottomAnchor, constant: 4),
 
             activeDotView.widthAnchor.constraint(equalToConstant: 8),
             activeDotView.heightAnchor.constraint(equalToConstant: 8),
@@ -559,16 +652,21 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private func handleVisibilityToggle(_ sender: NSButton) {
         visibilityHandler?(sender.state == .on)
     }
+
+    private func configureReleaseChannelBadge(_ rawValue: String?) {
+        releaseChannelBadgeView.rootView = PluginReleaseChannelBadge(releaseChannel: rawValue)
+        releaseChannelBadgeView.isHidden = PluginReleaseChannel(rawString: rawValue) == nil
+    }
 }
 
 private func featureManagementPresentationText(for presentation: PluginFeaturePresentation) -> String {
     switch presentation {
     case .featurePanel:
-        return "操作面板"
+        return AppL10n.plugins("plugin.presentation.featurePanel", defaultValue: "操作面板")
     case .componentPanel:
-        return "组件"
+        return AppL10n.plugins("plugin.presentation.componentPanel", defaultValue: "组件")
     case .featureAndComponentPanel:
-        return "操作面板与组件"
+        return AppL10n.plugins("plugin.presentation.featureAndComponentPanel", defaultValue: "操作面板与组件")
     }
 }
 

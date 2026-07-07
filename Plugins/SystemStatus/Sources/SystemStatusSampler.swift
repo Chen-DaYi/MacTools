@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import IOKit
 import IOKit.ps
+import MacToolsPluginKit
 import SystemConfiguration
 
 protocol SystemStatusSampling: Sendable {
@@ -12,28 +13,60 @@ protocol SystemStatusSampling: Sendable {
 }
 
 actor SystemStatusSampler: SystemStatusSampling {
+    private let localization: PluginLocalization
     private var previousCPUTicks: SystemStatusCPUTicks?
     private var previousCPUPowerEnergy: SystemStatusPowerEnergySample?
     private var cachedCPUTemperature: Double?
+    private var cachedGPUTemperature: Double?
     private var lastCPUTemperatureDate: Date?
+    private var lastGPUTemperatureDate: Date?
+    private var cachedHardware: SystemStatusHardwareSnapshot?
     private lazy var smcReader = SystemStatusSMCReader()
     private lazy var cpuPowerReader = SystemStatusCPUPowerReader()
     private var previousNetworkCounter: SystemStatusNetworkCounter?
     private var previousNetworkDate: Date?
+    private var previousDiskIOCounter: SystemStatusDiskIOCounter?
+    private var previousDiskIODate: Date?
+    private var cachedSystemPowerHealthPercent: Int?
+    private var lastSystemPowerHealthDate: Date?
+    private var didCacheSystemPowerHealth = false
+    private var cachedNetworkMetadata: [String: NetworkInterfaceMetadata]?
+    private var lastNetworkMetadataDate: Date?
+    private var cachedPrimaryInterfaceName: String?
+    private var lastPrimaryInterfaceDate: Date?
+    private var didCachePrimaryInterfaceName = false
+
+    private static let systemPowerHealthCacheInterval: TimeInterval = 30
+    private static let networkMetadataCacheInterval: TimeInterval = 10
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
+
+    private var networkInterfaceDisplayNames: NetworkInterfaceDisplayNames {
+        NetworkInterfaceDisplayNames(
+            wired: localization.string("network.interface.wired", defaultValue: "有线"),
+            generic: localization.string("network.interface.generic", defaultValue: "网络"),
+            multiple: localization.string("network.interface.multiple", defaultValue: "多接口")
+        )
+    }
 
     func collectFast(referenceDate: Date) async -> SystemStatusFastSample {
         let cpu = await collectCPU(referenceDate: referenceDate)
         return SystemStatusFastSample(
             cpu: cpu,
             memory: Self.collectMemory(),
-            network: collectNetwork(referenceDate: Date())
+            network: collectNetwork(referenceDate: referenceDate),
+            disk: collectDiskIO(referenceDate: referenceDate)
         )
     }
 
     func collectSlow() async -> SystemStatusSlowSample {
         SystemStatusSlowSample(
             disk: Self.collectDiskCapacity(),
-            battery: Self.collectBattery()
+            battery: collectBattery(),
+            gpu: collectGPU(),
+            hardware: collectHardware()
         )
     }
 
@@ -64,6 +97,7 @@ actor SystemStatusSampler: SystemStatusSampling {
         guard let currentTicks else {
             return SystemStatusCPUSnapshot(
                 usage: nil,
+                loadAverage1Minute: Self.collectCPULoadAverage(),
                 temperatureCelsius: temperature,
                 systemPowerWatts: collectPowerWatts(currentPowerEnergy: currentPowerEnergy),
                 isCollecting: false
@@ -77,6 +111,7 @@ actor SystemStatusSampler: SystemStatusSampling {
 
         return SystemStatusCPUSnapshot(
             usage: usage,
+            loadAverage1Minute: Self.collectCPULoadAverage(),
             temperatureCelsius: temperature,
             systemPowerWatts: collectPowerWatts(currentPowerEnergy: currentPowerEnergy),
             isCollecting: usage == nil
@@ -91,7 +126,7 @@ actor SystemStatusSampler: SystemStatusSampling {
             }
         }
 
-        return cpuPowerWatts ?? Self.collectBatteryTelemetryPowerWatts()
+        return cpuPowerWatts
     }
 
     private func collectCPUTemperature(referenceDate: Date) -> Double? {
@@ -105,8 +140,35 @@ actor SystemStatusSampler: SystemStatusSampling {
         return temperature
     }
 
+    private func collectGPUTemperature(referenceDate: Date) -> Double? {
+        if let lastGPUTemperatureDate, referenceDate.timeIntervalSince(lastGPUTemperatureDate) < 5 {
+            return cachedGPUTemperature
+        }
+
+        let temperature = Self.collectGPUTemperature(smcReader: smcReader)
+        cachedGPUTemperature = temperature
+        lastGPUTemperatureDate = referenceDate
+        return temperature
+    }
+
+    private func collectHardware() -> SystemStatusHardwareSnapshot {
+        if let cachedHardware {
+            return cachedHardware.replacingUptime(Self.collectUptimeSeconds())
+        }
+
+        let hardware = SystemStatusHardwareSnapshot(
+            modelName: Self.collectHardwareString("hw.model"),
+            chipName: Self.collectHardwareString("machdep.cpu.brand_string"),
+            macOSVersion: Self.collectMacOSVersionString(),
+            uptimeSeconds: Self.collectUptimeSeconds(),
+            totalMemoryBytes: ProcessInfo.processInfo.physicalMemory
+        )
+        cachedHardware = hardware
+        return hardware
+    }
+
     private func collectNetwork(referenceDate: Date) -> SystemStatusNetworkSnapshot {
-        guard let currentCounter = Self.currentNetworkCounter() else {
+        guard let currentCounter = currentNetworkCounter(referenceDate: referenceDate) else {
             previousNetworkCounter = nil
             previousNetworkDate = referenceDate
             return SystemStatusNetworkSnapshot(
@@ -176,34 +238,18 @@ actor SystemStatusSampler: SystemStatusSampling {
         UInt64(value)
     }
 
-    private static func collectBatteryTelemetryPowerWatts() -> Double? {
-        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
-        guard service != 0 else {
+    private static func collectCPULoadAverage() -> Double? {
+        var averages = [Double](repeating: 0, count: 3)
+        guard getloadavg(&averages, Int32(averages.count)) > 0 else {
             return nil
         }
-        defer { IOObjectRelease(service) }
 
-        if let telemetry = registryDictionaryValue(service: service, key: "PowerTelemetryData") {
-            for key in ["SystemPowerIn", "SystemLoad", "BatteryPower"] {
-                if
-                    let milliwatts = dictionaryNumberValue(telemetry, key: key),
-                    let watts = SystemStatusPowerNormalizer.telemetryWatts(fromMilliwatts: milliwatts)
-                {
-                    return watts
-                }
-            }
+        let load = averages[0]
+        guard load >= 0, load.isFinite else {
+            return nil
         }
 
-        for key in ["SystemPowerIn", "SystemLoad", "BatteryPower"] {
-            if
-                let milliwatts = registryNumberValue(service: service, key: key),
-                let watts = SystemStatusPowerNormalizer.telemetryWatts(fromMilliwatts: milliwatts)
-            {
-                return watts
-            }
-        }
-
-        return nil
+        return load
     }
 
     private static func collectCPUTemperature(smcReader: SystemStatusSMCReader?) -> Double? {
@@ -211,20 +257,15 @@ actor SystemStatusSampler: SystemStatusSampling {
             return smcTemperature
         }
 
-        guard let output = runCommand(path: "/usr/sbin/ioreg", arguments: ["-r", "-c", "IOHIDEventService", "-w0"]) else {
-            return nil
-        }
-        let pattern = #"temperature[^=]*=\s*([0-9]+(?:\.[0-9]+)?)"#
-        let values = regexCaptures(pattern, in: output).compactMap(Double.init)
-        let celsiusValues = values
-            .map(normalizedTemperatureCelsius)
-            .filter { $0 >= 10 && $0 <= 130 }
+        let values = collectHIDSensorTemperatures(
+            keyPrefixes: ["pACC MTR Temp", "eACC MTR Temp"]
+        )
 
-        guard !celsiusValues.isEmpty else {
+        guard !values.isEmpty else {
             return nil
         }
 
-        return celsiusValues.max()
+        return values.reduce(0, +) / Double(values.count)
     }
 
     private static func collectSMCCPUTemperature(smcReader: SystemStatusSMCReader?) -> Double? {
@@ -258,6 +299,121 @@ actor SystemStatusSampler: SystemStatusSampling {
         return values.reduce(0, +) / Double(values.count)
     }
 
+    private static func collectGPUTemperature(smcReader: SystemStatusSMCReader?) -> Double? {
+        if let smcTemperature = collectSMCGPUTemperature(smcReader: smcReader) {
+            return smcTemperature
+        }
+
+        let values = collectHIDSensorTemperatures(
+            keyPrefixes: ["GPU MTR Temp", "SOC MTR Temp"]
+        )
+
+        guard !values.isEmpty else {
+            return nil
+        }
+
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private static func collectSMCGPUTemperature(smcReader: SystemStatusSMCReader?) -> Double? {
+        guard let smcReader else {
+            return nil
+        }
+
+        let keys = [
+            "TCGC", "TG0D", "TGDD", "TG0H", "TG0P", "TG0T", "TG1D", "TG1P", "TG1H", "TG1T",
+            "Tg05", "Tg0D", "Tg0L", "Tg0T",
+            "Tg0f", "Tg0j",
+            "Tf14", "Tf18", "Tf19", "Tf1A", "Tf24", "Tf28", "Tf29", "Tf2A",
+            "Tg0G", "Tg0H", "Tg1U", "Tg1k", "Tg0K", "Tg0d", "Tg0e", "Tg0U", "Tg0X", "Tg0g", "Tg1Y", "Tg1c", "Tg1g"
+        ]
+        let values = keys.compactMap { smcReader.value(for: $0) }.filter(isValidTemperature)
+        guard !values.isEmpty else {
+            return nil
+        }
+
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    nonisolated static func hidSensorTemperatures(output: String, keyPrefixes: [String]) -> [Double] {
+        let lines = output.components(separatedBy: .newlines)
+        var isMatchingSensor = false
+        var values: [Double] = []
+
+        for line in lines {
+            if line.contains("+-o ") || line.contains("| +-o ") {
+                isMatchingSensor = keyPrefixes.contains { line.localizedCaseInsensitiveContains($0) }
+            } else if keyPrefixes.contains(where: { line.localizedCaseInsensitiveContains($0) }) {
+                isMatchingSensor = true
+            }
+
+            guard isMatchingSensor else {
+                continue
+            }
+
+            let celsiusValues = regexCaptures(#"temperature[^=]*=\s*([0-9]+(?:\.[0-9]+)?)"#, in: line)
+                .compactMap(Double.init)
+                .map(normalizedTemperatureCelsius)
+                .filter(isValidTemperature)
+
+            values.append(contentsOf: celsiusValues)
+        }
+
+        return values
+    }
+
+    private static func collectHIDSensorTemperatures(keyPrefixes: [String]) -> [Double] {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(
+            kIOMainPortDefault,
+            IOServiceMatching("IOHIDEventService"),
+            &iterator
+        ) == KERN_SUCCESS else {
+            return []
+        }
+        defer { IOObjectRelease(iterator) }
+
+        var values: [Double] = []
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            defer {
+                IOObjectRelease(service)
+                service = IOIteratorNext(iterator)
+            }
+
+            var rawProperties: Unmanaged<CFMutableDictionary>?
+            guard
+                IORegistryEntryCreateCFProperties(service, &rawProperties, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+                let properties = rawProperties?.takeRetainedValue() as? [String: Any],
+                hidSensorMatches(properties: properties, keyPrefixes: keyPrefixes)
+            else {
+                continue
+            }
+
+            for key in ["temperature", "Temperature"] {
+                if
+                    let rawTemperature = numberValue(properties[key]),
+                    isValidTemperature(normalizedTemperatureCelsius(rawTemperature))
+                {
+                    values.append(normalizedTemperatureCelsius(rawTemperature))
+                    break
+                }
+            }
+        }
+
+        return values
+    }
+
+    private static func hidSensorMatches(properties: [String: Any], keyPrefixes: [String]) -> Bool {
+        let candidates = ["Product", "product", "name", "Name", "IOName"].compactMap { key in
+            stringValue(properties[key] as Any)
+        }
+
+        return candidates.contains { candidate in
+            keyPrefixes.contains { candidate.localizedCaseInsensitiveContains($0) }
+        }
+    }
+
     private static func isValidTemperature(_ value: Double) -> Bool {
         value > 0 && value < 110
     }
@@ -289,11 +445,180 @@ actor SystemStatusSampler: SystemStatusSampling {
         let rawUsed = active + inactive + speculative + wired + compressed - purgeable - external
         let total = ProcessInfo.processInfo.physicalMemory
         let used = UInt64(min(max(rawUsed, 0), Double(total)))
+        let swapUsage = collectSwapUsage()
 
         return SystemStatusMemorySnapshot(
             usedBytes: used,
-            totalBytes: total
+            totalBytes: total,
+            swapUsedBytes: swapUsage.used,
+            swapTotalBytes: swapUsage.total
         )
+    }
+
+    private func collectGPU() -> SystemStatusGPUSnapshot {
+        let temperature = collectGPUTemperature(referenceDate: Date())
+        let matching = IOServiceMatching("IOAccelerator")
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else {
+            return SystemStatusGPUSnapshot(
+                usage: nil,
+                name: nil,
+                temperatureCelsius: temperature,
+                isAvailable: temperature != nil,
+                isCollecting: false
+            )
+        }
+        defer { IOObjectRelease(iterator) }
+
+        var usages: [Double] = []
+        var names: [String] = []
+        var performanceTemperatures: [Double] = []
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            defer {
+                IOObjectRelease(service)
+                service = IOIteratorNext(iterator)
+            }
+
+            var rawProperties: Unmanaged<CFMutableDictionary>?
+            guard IORegistryEntryCreateCFProperties(service, &rawProperties, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+                  let properties = rawProperties?.takeRetainedValue() as? [String: Any] else {
+                continue
+            }
+
+            if let name = Self.gpuName(from: properties) {
+                names.append(name)
+            }
+
+            if
+                let performance = properties["PerformanceStatistics"] as? [String: Any],
+                let usage = Self.gpuUtilization(from: performance)
+            {
+                usages.append(usage)
+            }
+
+            if
+                let performance = properties["PerformanceStatistics"] as? [String: Any],
+                let temperature = Self.gpuPerformanceTemperature(from: performance)
+            {
+                performanceTemperatures.append(temperature)
+            }
+        }
+
+        let usage = usages.isEmpty ? nil : min(max(usages.max() ?? 0, 0), 1)
+        let name = names.first
+        let resolvedTemperature = temperature ?? performanceTemperatures.max()
+
+        guard !usages.isEmpty else {
+            return SystemStatusGPUSnapshot(
+                usage: nil,
+                name: name,
+                temperatureCelsius: resolvedTemperature,
+                isAvailable: name != nil || resolvedTemperature != nil,
+                isCollecting: false
+            )
+        }
+
+        return SystemStatusGPUSnapshot(
+            usage: usage,
+            name: name,
+            temperatureCelsius: resolvedTemperature,
+            isAvailable: true,
+            isCollecting: false
+        )
+    }
+
+    private static func collectHardwareString(_ key: String) -> String? {
+        var size = 0
+        guard sysctlbyname(key, nil, &size, nil, 0) == 0, size > 1 else {
+            return nil
+        }
+
+        var buffer = [CChar](repeating: 0, count: size)
+        let result = buffer.withUnsafeMutableBufferPointer { pointer in
+            sysctlbyname(key, pointer.baseAddress, &size, nil, 0)
+        }
+        guard result == 0 else {
+            return nil
+        }
+
+        let nullIndex = buffer.firstIndex(of: 0) ?? buffer.endIndex
+        let value = String(decoding: buffer[..<nullIndex].map { UInt8(bitPattern: $0) }, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private static func collectMacOSVersionString() -> String {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        if version.patchVersion > 0 {
+            return "macOS \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        }
+        return "macOS \(version.majorVersion).\(version.minorVersion)"
+    }
+
+    private static func collectUptimeSeconds() -> TimeInterval? {
+        var bootTime = timeval()
+        var mib: [Int32] = [CTL_KERN, KERN_BOOTTIME]
+        var size = MemoryLayout<timeval>.stride
+        guard sysctl(&mib, UInt32(mib.count), &bootTime, &size, nil, 0) == 0 else {
+            return nil
+        }
+
+        let bootDate = Date(timeIntervalSince1970: TimeInterval(bootTime.tv_sec))
+        return max(0, Date().timeIntervalSince(bootDate))
+    }
+
+    nonisolated static func gpuUtilization(from performanceStatistics: [String: Any]) -> Double? {
+        let keys = ["Device Utilization %", "GPU Activity(%)", "Renderer Utilization %", "Tiler Utilization %"]
+        let values = keys.compactMap { key -> Double? in
+            guard let rawValue = numberValue(performanceStatistics[key]) else {
+                return nil
+            }
+
+            return rawValue > 1 ? rawValue / 100 : rawValue
+        }
+
+        guard let value = values.max() else {
+            return nil
+        }
+
+        return min(max(value, 0), 1)
+    }
+
+    nonisolated static func gpuPerformanceTemperature(from performanceStatistics: [String: Any]) -> Double? {
+        guard let value = numberValue(performanceStatistics["Temperature(C)"]), isValidTemperature(value) else {
+            return nil
+        }
+
+        return value
+    }
+
+    nonisolated static func gpuName(from properties: [String: Any]) -> String? {
+        for key in ["model", "IOName", "name"] {
+            guard let rawValue = properties[key] else {
+                continue
+            }
+
+            if let value = stringValue(rawValue), isUserVisibleGPUName(value) {
+                return normalizedGPUName(value)
+            }
+        }
+
+        return nil
+    }
+
+    private static func isUserVisibleGPUName(_ value: String) -> Bool {
+        let lowercased = value.lowercased()
+        return !value.isEmpty
+            && !lowercased.contains("ioaccelerator")
+            && !lowercased.contains("accelerator")
+            && !lowercased.contains("controller")
+    }
+
+    private static func normalizedGPUName(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "Apple ", with: "")
     }
 
     private static func memoryPageSize() -> vm_size_t {
@@ -304,6 +629,19 @@ actor SystemStatusSampler: SystemStatusSampling {
         }
 
         return pageSize
+    }
+
+    private static func collectSwapUsage() -> (used: UInt64?, total: UInt64?) {
+        var usage = xsw_usage()
+        var size = MemoryLayout<xsw_usage>.stride
+        var mib: [Int32] = [CTL_VM, VM_SWAPUSAGE]
+        guard sysctl(&mib, UInt32(mib.count), &usage, &size, nil, 0) == 0 else {
+            return (nil, nil)
+        }
+
+        let total = usage.xsu_total > 0 ? usage.xsu_total : nil
+        let used = usage.xsu_used > 0 ? usage.xsu_used : UInt64(0)
+        return (used, total)
     }
 
     private static func collectDiskCapacity() -> SystemStatusDiskSnapshot {
@@ -346,11 +684,96 @@ actor SystemStatusSampler: SystemStatusSampling {
         let clampedAvailable = min(availableBytes, totalBytes)
         return SystemStatusDiskSnapshot(
             usedBytes: totalBytes - clampedAvailable,
-            totalBytes: totalBytes
+            totalBytes: totalBytes,
+            readBytesPerSecond: nil,
+            writeBytesPerSecond: nil
         )
     }
 
-    private static func collectBattery() -> SystemStatusBatterySnapshot {
+    private func collectDiskIO(referenceDate: Date) -> SystemStatusDiskSnapshot {
+        guard let currentCounter = Self.readDiskIOCounter() else {
+            previousDiskIOCounter = nil
+            previousDiskIODate = referenceDate
+            return SystemStatusDiskSnapshot(
+                usedBytes: nil,
+                totalBytes: nil,
+                readBytesPerSecond: nil,
+                writeBytesPerSecond: nil
+            )
+        }
+
+        let rate: SystemStatusDiskIORate?
+        if let previousDiskIOCounter, let previousDiskIODate {
+            rate = SystemStatusDiskIORateCalculator.rate(
+                current: currentCounter,
+                previous: previousDiskIOCounter,
+                elapsedSeconds: referenceDate.timeIntervalSince(previousDiskIODate)
+            )
+        } else {
+            rate = nil
+        }
+
+        previousDiskIOCounter = currentCounter
+        previousDiskIODate = referenceDate
+
+        return SystemStatusDiskSnapshot(
+            usedBytes: nil,
+            totalBytes: nil,
+            readBytesPerSecond: rate?.readBytesPerSecond ?? 0,
+            writeBytesPerSecond: rate?.writeBytesPerSecond ?? 0
+        )
+    }
+
+    private static func readDiskIOCounter() -> SystemStatusDiskIOCounter? {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(
+            kIOMainPortDefault,
+            IOServiceMatching("IOBlockStorageDriver"),
+            &iterator
+        ) == KERN_SUCCESS else {
+            return nil
+        }
+        defer { IOObjectRelease(iterator) }
+
+        var readBytes: UInt64 = 0
+        var writeBytes: UInt64 = 0
+        var foundCounter = false
+        var service = IOIteratorNext(iterator)
+
+        while service != 0 {
+            defer {
+                IOObjectRelease(service)
+                service = IOIteratorNext(iterator)
+            }
+
+            var rawProperties: Unmanaged<CFMutableDictionary>?
+            guard
+                IORegistryEntryCreateCFProperties(service, &rawProperties, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+                let properties = rawProperties?.takeRetainedValue() as? [String: Any],
+                let statistics = properties["Statistics"] as? [String: Any]
+            else {
+                continue
+            }
+
+            if let bytes = statistics["Bytes (Read)"] as? NSNumber {
+                readBytes &+= bytes.uint64Value
+                foundCounter = true
+            }
+
+            if let bytes = statistics["Bytes (Write)"] as? NSNumber {
+                writeBytes &+= bytes.uint64Value
+                foundCounter = true
+            }
+        }
+
+        guard foundCounter else {
+            return nil
+        }
+
+        return SystemStatusDiskIOCounter(readBytes: readBytes, writeBytes: writeBytes)
+    }
+
+    private func collectBattery() -> SystemStatusBatterySnapshot {
         guard
             let powerSourcesInfo = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
             let powerSources = IOPSCopyPowerSourcesList(powerSourcesInfo)?.takeRetainedValue() as? [CFTypeRef],
@@ -358,13 +781,15 @@ actor SystemStatusSampler: SystemStatusSampling {
         else {
             return SystemStatusBatterySnapshot(
                 isAvailable: false,
-            level: nil,
-            state: .unavailable,
-            timeRemainingMinutes: nil,
-            adapterWatts: adapterWatts(),
-            temperatureCelsius: nil,
-            healthPercent: nil
-        )
+                level: nil,
+                state: .unavailable,
+                timeRemainingMinutes: nil,
+                adapterWatts: Self.adapterWatts(),
+                batteryPowerWatts: nil,
+                temperatureCelsius: nil,
+                healthPercent: nil,
+                cycleCount: nil
+            )
         }
 
         var fallbackDescription: [String: Any]?
@@ -388,9 +813,11 @@ actor SystemStatusSampler: SystemStatusSampling {
                 level: nil,
                 state: .unavailable,
                 timeRemainingMinutes: nil,
-                adapterWatts: adapterWatts(),
+                adapterWatts: Self.adapterWatts(),
+                batteryPowerWatts: nil,
                 temperatureCelsius: nil,
-                healthPercent: nil
+                healthPercent: nil,
+                cycleCount: nil
             )
         }
 
@@ -400,24 +827,50 @@ actor SystemStatusSampler: SystemStatusSampling {
         let isCharging = description[kIOPSIsChargingKey] as? Bool ?? false
         let isCharged = description[kIOPSIsChargedKey] as? Bool ?? false
         let powerSource = description[kIOPSPowerSourceStateKey] as? String ?? ""
-        let state = batteryState(
+        let state = Self.batteryState(
             level: level,
             isCharging: isCharging,
             isCharged: isCharged,
             powerSource: powerSource
         )
         let timeKey = isCharging ? kIOPSTimeToFullChargeKey : kIOPSTimeToEmptyKey
-        let registryInfo = collectBatteryRegistryInfo()
+        let registryInfo = Self.collectBatteryRegistryInfo()
 
         return SystemStatusBatterySnapshot(
             isAvailable: true,
             level: level,
             state: state,
-            timeRemainingMinutes: validBatteryMinutes(description[timeKey]),
-            adapterWatts: adapterWatts(),
+            timeRemainingMinutes: Self.validBatteryMinutes(description[timeKey]),
+            adapterWatts: Self.adapterWatts(),
+            batteryPowerWatts: registryInfo.batteryPowerWatts,
             temperatureCelsius: registryInfo.temperatureCelsius,
-            healthPercent: registryInfo.healthPercent
+            healthPercent: systemPowerHealthPercent(referenceDate: Date()) ?? registryInfo.healthPercent,
+            cycleCount: registryInfo.cycleCount
         )
+    }
+
+    private func systemPowerHealthPercent(referenceDate: Date) -> Int? {
+        if didCacheSystemPowerHealth,
+           let lastSystemPowerHealthDate,
+           referenceDate.timeIntervalSince(lastSystemPowerHealthDate) < Self.systemPowerHealthCacheInterval {
+            return cachedSystemPowerHealthPercent
+        }
+
+        let healthPercent: Int?
+        if let output = Self.runCommand(
+            path: "/usr/sbin/system_profiler",
+            arguments: ["SPPowerDataType", "-json"],
+            timeout: 3
+        ) {
+            healthPercent = Self.systemPowerBatteryHealthPercent(fromSystemProfilerJSON: output)
+        } else {
+            healthPercent = nil
+        }
+
+        cachedSystemPowerHealthPercent = healthPercent
+        lastSystemPowerHealthDate = referenceDate
+        didCacheSystemPowerHealth = true
+        return healthPercent
     }
 
     private static func batteryState(
@@ -461,46 +914,146 @@ actor SystemStatusSampler: SystemStatusSampling {
         return watts
     }
 
-    private static func collectBatteryRegistryInfo() -> (temperatureCelsius: Double?, healthPercent: Int?) {
+    private static func collectBatteryRegistryInfo() -> (
+        temperatureCelsius: Double?,
+        healthPercent: Int?,
+        cycleCount: Int?,
+        batteryPowerWatts: Double?
+    ) {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
         guard service != 0 else {
-            return (nil, nil)
+            return (nil, nil, nil, nil)
         }
         defer { IOObjectRelease(service) }
 
         let temperature = registryIntValue(service: service, key: "Temperature")
             .map { Double($0) / 100 }
 
-        let maxCapacity = registryIntValue(service: service, key: isAppleSilicon ? "AppleRawMaxCapacity" : "MaxCapacity")
-            ?? registryIntValue(service: service, key: "MaxCapacity")
-        let designCapacity = registryIntValue(service: service, key: "DesignCapacity")
-        let healthPercent: Int?
-        if let maxCapacity, let designCapacity, designCapacity > 0 {
-            healthPercent = Int((Double(maxCapacity) * 100 / Double(designCapacity)).rounded())
-        } else {
-            healthPercent = nil
-        }
+        let healthPercent = optionalBatteryHealthPercent(
+            designCapacity: registryIntValue(service: service, key: "DesignCapacity"),
+            nominalChargeCapacity: registryIntValue(service: service, key: "NominalChargeCapacity"),
+            appleRawMaxCapacity: registryIntValue(service: service, key: "AppleRawMaxCapacity")
+        )
 
-        return (temperature, healthPercent)
+        return (
+            temperature,
+            healthPercent,
+            registryIntValue(service: service, key: "CycleCount"),
+            batteryPowerWatts(service: service)
+        )
     }
 
-    private static var isAppleSilicon: Bool {
-        var size = 0
-        guard sysctlbyname("hw.optional.arm64", nil, &size, nil, 0) == 0 else {
-            return false
+    private static func batteryPowerWatts(service: io_registry_entry_t) -> Double? {
+        if
+            let telemetry = registryDictionaryValue(service: service, key: "PowerTelemetryData"),
+            let watts = SystemStatusBatteryPowerNormalizer.telemetryWatts(
+                fromRawMilliwatts: telemetry["BatteryPower"]
+            )
+        {
+            return watts
         }
 
-        var value: Int32 = 0
-        size = MemoryLayout<Int32>.stride
-        guard sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 else {
-            return false
+        if
+            let watts = SystemStatusBatteryPowerNormalizer.telemetryWatts(
+                fromRawMilliwatts: registryRawValue(service: service, key: "BatteryPower")
+            )
+        {
+            return watts
         }
 
-        return value == 1
+        let voltageMillivolts = registryNumberValue(service: service, key: "AppleRawBatteryVoltage")
+            ?? registryNumberValue(service: service, key: "Voltage")
+        let amperageMilliamps = nonzeroNumberValue(service: service, key: "InstantAmperage")
+            ?? nonzeroNumberValue(service: service, key: "Amperage")
+
+        return SystemStatusBatteryPowerNormalizer.derivedWatts(
+            voltageMillivolts: voltageMillivolts,
+            amperageMilliamps: amperageMilliamps
+        )
+    }
+
+    nonisolated static func batteryHealthPercent(
+        designCapacity: Int?,
+        nominalChargeCapacity: Int?,
+        appleRawMaxCapacity: Int?
+    ) -> Int {
+        // ioreg fallback matching Mole status: prefer NominalChargeCapacity, then AppleRawMaxCapacity.
+        optionalBatteryHealthPercent(
+            designCapacity: designCapacity,
+            nominalChargeCapacity: nominalChargeCapacity,
+            appleRawMaxCapacity: appleRawMaxCapacity
+        ) ?? 0
+    }
+
+    nonisolated static func systemPowerBatteryHealthPercent(fromSystemProfilerJSON output: String) -> Int? {
+        guard
+            let data = output.data(using: .utf8),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let sections = json["SPPowerDataType"] as? [[String: Any]]
+        else {
+            return nil
+        }
+
+        for section in sections {
+            guard
+                let info = section["sppower_battery_health_info"] as? [String: Any],
+                let rawCapacity = info["sppower_battery_health_maximum_capacity"] as? String,
+                let percent = batteryHealthPercent(fromSystemProfilerValue: rawCapacity)
+            else {
+                continue
+            }
+
+            return percent
+        }
+
+        return nil
+    }
+
+    nonisolated static func batteryHealthPercent(fromSystemProfilerValue rawValue: String) -> Int? {
+        let normalized = rawValue
+            .replacingOccurrences(of: "\u{00a0}", with: " ")
+            .replacingOccurrences(of: "%", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Int(normalized), value > 0 else {
+            return nil
+        }
+
+        return min(max(value, 0), 100)
+    }
+
+    private nonisolated static func optionalBatteryHealthPercent(
+        designCapacity: Int?,
+        nominalChargeCapacity: Int?,
+        appleRawMaxCapacity: Int?
+    ) -> Int? {
+        guard let designCapacity, designCapacity > 0 else {
+            return nil
+        }
+
+        let capacity = positiveCapacity(nominalChargeCapacity)
+            ?? positiveCapacity(appleRawMaxCapacity)
+        guard let capacity else {
+            return nil
+        }
+
+        let percent = (Double(capacity) * 100 / Double(designCapacity)).rounded()
+        guard percent > 0 else {
+            return nil
+        }
+
+        return min(max(Int(percent), 0), 100)
+    }
+
+    private nonisolated static func positiveCapacity(_ value: Int?) -> Int? {
+        guard let value, value > 0 else {
+            return nil
+        }
+
+        return value
     }
 
     private static func registryIntValue(service: io_registry_entry_t, key: String) -> Int? {
-        guard let rawValue = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() else {
+        guard let rawValue = registryRawValue(service: service, key: key) else {
             return nil
         }
 
@@ -514,15 +1067,28 @@ actor SystemStatusSampler: SystemStatusSampling {
     }
 
     private static func registryNumberValue(service: io_registry_entry_t, key: String) -> Double? {
-        guard let rawValue = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() else {
+        guard let rawValue = registryRawValue(service: service, key: key) else {
             return nil
         }
 
         return numberValue(rawValue)
     }
 
+    private static func nonzeroNumberValue(service: io_registry_entry_t, key: String) -> Double? {
+        guard let value = registryNumberValue(service: service, key: key), value != 0 else {
+            return nil
+        }
+
+        return value
+    }
+
+    private static func registryRawValue(service: io_registry_entry_t, key: String) -> Any? {
+        IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue()
+    }
+
     private static func registryDictionaryValue(service: io_registry_entry_t, key: String) -> NSDictionary? {
-        guard let rawValue = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() else {
+        guard let rawValue = registryRawValue(service: service, key: key) else {
             return nil
         }
 
@@ -549,21 +1115,40 @@ actor SystemStatusSampler: SystemStatusSampling {
         return nil
     }
 
-    private static func currentNetworkCounter() -> SystemStatusNetworkCounter? {
-        let counters = readNetworkCounters()
+    private static func stringValue(_ rawValue: Any) -> String? {
+        if let value = rawValue as? String {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if let value = rawValue as? Data {
+            let trimmed = String(decoding: value, as: UTF8.self)
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.controlCharacters))
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return nil
+    }
+
+    private func currentNetworkCounter(referenceDate: Date) -> SystemStatusNetworkCounter? {
+        let interfaceMetadata = networkInterfaceMetadata(referenceDate: referenceDate)
+        let displayNames = networkInterfaceDisplayNames
+        let counters = Self.readNetworkCounters(interfaceMetadata: interfaceMetadata, displayNames: displayNames)
+        let aggregateCounter = Self.readAggregateNetworkCounter(
+            interfaceMetadata: interfaceMetadata,
+            displayNames: displayNames
+        )
         guard !counters.isEmpty else {
-            return nil
+            return aggregateCounter
         }
 
         if
-            let primaryInterface = primaryInterfaceName(),
+            let primaryInterface = primaryInterfaceName(referenceDate: referenceDate),
             let primaryCounter = counters[primaryInterface]
         {
-            return primaryCounter
+            return primaryCounter.replacingCounters(from: aggregateCounter)
         }
 
         let candidates = counters.values
-            .filter { $0.isUp && !isNoiseInterface($0.key) }
+            .filter { $0.isUp && !Self.isNoiseInterface($0.key) }
             .sorted { lhs, rhs in
                 if lhs.receivedBytes + lhs.sentBytes == rhs.receivedBytes + rhs.sentBytes {
                     return lhs.key < rhs.key
@@ -573,10 +1158,39 @@ actor SystemStatusSampler: SystemStatusSampling {
             }
 
         guard !candidates.isEmpty else {
-            return nil
+            return aggregateCounter
         }
 
-        return aggregateNetworkCounters(candidates)
+        return aggregateNetworkCounters(candidates, displayNames: displayNames).replacingCounters(from: aggregateCounter)
+    }
+
+    private func networkInterfaceMetadata(referenceDate: Date) -> [String: NetworkInterfaceMetadata] {
+        if
+            let cachedNetworkMetadata,
+            let lastNetworkMetadataDate,
+            referenceDate.timeIntervalSince(lastNetworkMetadataDate) < Self.networkMetadataCacheInterval
+        {
+            return cachedNetworkMetadata
+        }
+
+        let metadata = Self.networkInterfaceMetadata()
+        cachedNetworkMetadata = metadata
+        lastNetworkMetadataDate = referenceDate
+        return metadata
+    }
+
+    private func primaryInterfaceName(referenceDate: Date) -> String? {
+        if didCachePrimaryInterfaceName,
+           let lastPrimaryInterfaceDate,
+           referenceDate.timeIntervalSince(lastPrimaryInterfaceDate) < Self.networkMetadataCacheInterval {
+            return cachedPrimaryInterfaceName
+        }
+
+        let name = Self.primaryInterfaceName()
+        cachedPrimaryInterfaceName = name
+        lastPrimaryInterfaceDate = referenceDate
+        didCachePrimaryInterfaceName = true
+        return name
     }
 
     private static func primaryInterfaceName() -> String? {
@@ -591,7 +1205,10 @@ actor SystemStatusSampler: SystemStatusSampling {
         return name
     }
 
-    private static func readNetworkCounters() -> [String: SystemStatusNetworkCounter] {
+    private static func readNetworkCounters(
+        interfaceMetadata: [String: NetworkInterfaceMetadata],
+        displayNames: NetworkInterfaceDisplayNames = .default
+    ) -> [String: SystemStatusNetworkCounter] {
         var interfaceAddresses: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&interfaceAddresses) == 0, let firstAddress = interfaceAddresses else {
             return [:]
@@ -636,11 +1253,89 @@ actor SystemStatusSampler: SystemStatusSampling {
         }
 
         return Dictionary(uniqueKeysWithValues: accumulators.map { key, value in
-            (key, value.counter)
+            (
+                key,
+                value.counter(
+                    displayName: friendlyNetworkInterfaceName(
+                        for: key,
+                        metadata: interfaceMetadata[key],
+                        displayNames: displayNames
+                    )
+                )
+            )
         })
     }
 
-    private static func aggregateNetworkCounters(_ counters: [SystemStatusNetworkCounter]) -> SystemStatusNetworkCounter {
+    private static func readAggregateNetworkCounter(
+        interfaceMetadata: [String: NetworkInterfaceMetadata],
+        displayNames: NetworkInterfaceDisplayNames = .default
+    ) -> SystemStatusNetworkCounter? {
+        var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, 0]
+        var length = 0
+        guard sysctl(&mib, UInt32(mib.count), nil, &length, nil, 0) == 0, length > 0 else {
+            return nil
+        }
+
+        var buffer = [UInt8](repeating: 0, count: length)
+        guard sysctl(&mib, UInt32(mib.count), &buffer, &length, nil, 0) == 0 else {
+            return nil
+        }
+
+        var receivedBytes: UInt64 = 0
+        var sentBytes: UInt64 = 0
+        var interfaceNames: [String] = []
+
+        buffer.withUnsafeBytes { rawBuffer in
+            var offset = 0
+            while offset + MemoryLayout<if_msghdr>.size <= length {
+                let messageLength = Int(rawBuffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self))
+                guard messageLength > 0 else {
+                    break
+                }
+
+                let messageType = rawBuffer.loadUnaligned(fromByteOffset: offset + 3, as: UInt8.self)
+                if Int32(messageType) == RTM_IFINFO2,
+                   offset + MemoryLayout<if_msghdr2>.size <= length {
+                    let message = rawBuffer.loadUnaligned(fromByteOffset: offset, as: if_msghdr2.self)
+                    var nameBuffer = [CChar](repeating: 0, count: Int(IFNAMSIZ) + 1)
+                    let name = if_indextoname(UInt32(message.ifm_index), &nameBuffer)
+                        .map { String(cString: $0) } ?? ""
+
+                    if !name.isEmpty && !isNoiseInterface(name) {
+                        receivedBytes &+= message.ifm_data.ifi_ibytes
+                        sentBytes &+= message.ifm_data.ifi_obytes
+                        interfaceNames.append(name)
+                    }
+                }
+
+                offset += messageLength
+            }
+        }
+
+        guard !interfaceNames.isEmpty else {
+            return nil
+        }
+
+        return SystemStatusNetworkCounter(
+            key: "iflist2:\(interfaceNames.sorted().joined(separator: ","))",
+            displayName: interfaceNames.count == 1
+                ? friendlyNetworkInterfaceName(
+                    for: interfaceNames[0],
+                    metadata: interfaceMetadata[interfaceNames[0]],
+                    displayNames: displayNames
+                )
+                : displayNames.multiple,
+            receivedBytes: receivedBytes,
+            sentBytes: sentBytes,
+            ipAddress: nil,
+            isUp: true
+        )
+    }
+
+    private func aggregateNetworkCounters(
+        _ counters: [SystemStatusNetworkCounter],
+        displayNames: NetworkInterfaceDisplayNames
+    ) -> SystemStatusNetworkCounter {
         guard counters.count > 1 else {
             return counters[0]
         }
@@ -652,7 +1347,7 @@ actor SystemStatusSampler: SystemStatusSampling {
 
         return SystemStatusNetworkCounter(
             key: "aggregate:\(sortedKeys.joined(separator: ","))",
-            displayName: "多接口",
+            displayName: displayNames.multiple,
             receivedBytes: receivedBytes,
             sentBytes: sentBytes,
             ipAddress: ipAddress,
@@ -688,8 +1383,94 @@ actor SystemStatusSampler: SystemStatusSampling {
         return noisePrefixes.contains { lowercasedName.hasPrefix($0) }
     }
 
+    private static func networkInterfaceMetadata() -> [String: NetworkInterfaceMetadata] {
+        guard let interfaces = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] else {
+            return [:]
+        }
+
+        var metadata: [String: NetworkInterfaceMetadata] = [:]
+        for interface in interfaces {
+            guard let bsdName = SCNetworkInterfaceGetBSDName(interface) as String?, !bsdName.isEmpty else {
+                continue
+            }
+
+            metadata[bsdName] = NetworkInterfaceMetadata(
+                localizedName: SCNetworkInterfaceGetLocalizedDisplayName(interface) as String?,
+                interfaceType: SCNetworkInterfaceGetInterfaceType(interface) as String?
+            )
+        }
+
+        return metadata
+    }
+
+    private static func friendlyNetworkInterfaceName(
+        for name: String,
+        metadata: NetworkInterfaceMetadata?,
+        displayNames: NetworkInterfaceDisplayNames = .default
+    ) -> String {
+        friendlyNetworkInterfaceName(
+            for: name,
+            localizedName: metadata?.localizedName,
+            interfaceType: metadata?.interfaceType,
+            wiredDisplayName: displayNames.wired,
+            genericDisplayName: displayNames.generic
+        )
+    }
+
+    nonisolated static func friendlyNetworkInterfaceName(
+        for name: String,
+        localizedName: String? = nil,
+        interfaceType: String? = nil,
+        wiredDisplayName: String = "Ethernet",
+        genericDisplayName: String = "Network"
+    ) -> String {
+        let rawName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercasedName = rawName.lowercased()
+        let localizedName = localizedName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let localizedDisplayName = localizedName?.isEmpty == false ? localizedName : nil
+        let lowercasedLocalizedName = localizedDisplayName?.lowercased() ?? ""
+        let lowercasedInterfaceType = interfaceType?.lowercased() ?? ""
+
+        if isVPNInterfaceName(lowercasedName)
+            || lowercasedInterfaceType == (kSCNetworkInterfaceTypePPP as String).lowercased()
+            || lowercasedInterfaceType == (kSCNetworkInterfaceTypeIPSec as String).lowercased()
+            || lowercasedLocalizedName.contains("vpn")
+            || lowercasedLocalizedName.contains("tunnel")
+        {
+            return "VPN"
+        }
+
+        if lowercasedInterfaceType == (kSCNetworkInterfaceTypeIEEE80211 as String).lowercased()
+            || lowercasedLocalizedName.contains("wi-fi")
+            || lowercasedLocalizedName.contains("wifi")
+            || lowercasedLocalizedName.contains("airport")
+            || lowercasedLocalizedName.contains("无线")
+        {
+            return "Wi-Fi"
+        }
+
+        if lowercasedInterfaceType == (kSCNetworkInterfaceTypeEthernet as String).lowercased()
+            || lowercasedName.hasPrefix("eth")
+            || lowercasedLocalizedName.contains("ethernet")
+            || lowercasedLocalizedName.contains("以太网")
+            || lowercasedLocalizedName.contains("有线")
+            || lowercasedLocalizedName.contains("lan")
+            || lowercasedLocalizedName.contains("thunderbolt")
+            || lowercasedLocalizedName.contains("usb")
+        {
+            return wiredDisplayName
+        }
+
+        return localizedDisplayName ?? (rawName.isEmpty ? genericDisplayName : rawName)
+    }
+
+    private static func isVPNInterfaceName(_ lowercasedName: String) -> Bool {
+        let vpnPrefixes = ["utun", "tun", "tap", "ppp", "ipsec"]
+        return vpnPrefixes.contains { lowercasedName.hasPrefix($0) }
+    }
+
     private static func collectTopProcesses(limit: Int) -> [SystemStatusTopProcess] {
-        guard let output = runCommand(path: "/bin/ps", arguments: ["-Aceo", "pid=,pcpu=,pmem=,comm=", "-r"]) else {
+        guard let output = runCommand(path: "/bin/ps", arguments: ["-ww", "-Aceo", "pid=,pcpu=,pmem=,rss=,command=", "-r"]) else {
             return []
         }
 
@@ -802,6 +1583,23 @@ actor SystemStatusSampler: SystemStatusSampling {
         return value.rangeOfCharacter(from: allowedCharacters.inverted) == nil
     }
 
+    private struct NetworkInterfaceMetadata {
+        let localizedName: String?
+        let interfaceType: String?
+    }
+
+    private struct NetworkInterfaceDisplayNames {
+        let wired: String
+        let generic: String
+        let multiple: String
+
+        static let `default` = NetworkInterfaceDisplayNames(
+            wired: "Ethernet",
+            generic: "Network",
+            multiple: "Multiple Interfaces"
+        )
+    }
+
     private struct NetworkCounterAccumulator {
         let name: String
         var receivedBytes: UInt64 = 0
@@ -810,10 +1608,10 @@ actor SystemStatusSampler: SystemStatusSampling {
         var ipv6Address: String?
         var isUp = false
 
-        var counter: SystemStatusNetworkCounter {
+        func counter(displayName: String) -> SystemStatusNetworkCounter {
             SystemStatusNetworkCounter(
                 key: name,
-                displayName: name,
+                displayName: displayName,
                 receivedBytes: receivedBytes,
                 sentBytes: sentBytes,
                 ipAddress: ipv4Address ?? ipv6Address,
@@ -847,7 +1645,7 @@ enum SystemStatusProcessParser {
 
     private static func parseLine(_ line: String) -> SystemStatusTopProcess? {
         let fields = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
-        guard fields.count >= 4 else {
+        guard fields.count >= 5 else {
             return nil
         }
 
@@ -855,12 +1653,13 @@ enum SystemStatusProcessParser {
             let pid = Int(fields[0]),
             pid > 0,
             let cpuPercent = Double(fields[1].replacingOccurrences(of: ",", with: ".")),
-            let memoryPercent = Double(fields[2].replacingOccurrences(of: ",", with: "."))
+            let memoryPercent = Double(fields[2].replacingOccurrences(of: ",", with: ".")),
+            let residentKilobytes = UInt64(fields[3])
         else {
             return nil
         }
 
-        let command = fields[3...].joined(separator: " ")
+        let command = fields[4...].joined(separator: " ")
         guard !command.isEmpty else {
             return nil
         }
@@ -870,16 +1669,47 @@ enum SystemStatusProcessParser {
             displayName: displayName(for: command),
             command: command,
             cpuPercent: cpuPercent,
-            memoryPercent: memoryPercent
+            memoryPercent: memoryPercent,
+            memoryBytes: residentKilobytes * 1_024
         )
     }
 
     private static func displayName(for command: String) -> String {
-        let lastPathComponent = URL(fileURLWithPath: command).lastPathComponent
+        let displayCommand = appBundlePath(in: command) ?? executablePath(from: command)
+        let lastPathComponent = URL(fileURLWithPath: displayCommand).lastPathComponent
         guard !lastPathComponent.isEmpty else {
             return command
         }
 
-        return lastPathComponent
+        return lastPathComponent.replacingOccurrences(of: ".app", with: "")
+    }
+
+    private static func executablePath(from command: String) -> String {
+        let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedCommand.hasPrefix("/") else {
+            return trimmedCommand
+        }
+
+        if let appRange = trimmedCommand.range(of: ".app/") {
+            return String(trimmedCommand[..<trimmedCommand.index(before: appRange.upperBound)])
+        }
+
+        if let whitespaceIndex = trimmedCommand.firstIndex(where: { $0 == " " || $0 == "\t" }) {
+            return String(trimmedCommand[..<whitespaceIndex])
+        }
+
+        return trimmedCommand
+    }
+
+    private static func appBundlePath(in command: String) -> String? {
+        let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard
+            trimmedCommand.hasPrefix("/"),
+            let appRange = trimmedCommand.range(of: ".app", options: [.caseInsensitive])
+        else {
+            return nil
+        }
+
+        return String(trimmedCommand[..<appRange.upperBound])
     }
 }

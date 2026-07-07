@@ -2,7 +2,53 @@
   "id": "system-status",
   "displayName": "系统状态",
   "summary": "实时查看系统状态",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "حالة النظام",
+      "summary": "عرض حالة النظام المباشرة."
+    },
+    "de": {
+      "displayName": "Systemstatus",
+      "summary": "Live-Systemstatus anzeigen."
+    },
+    "en": {
+      "displayName": "System Status",
+      "summary": "View live system status."
+    },
+    "es": {
+      "displayName": "Estado del sistema",
+      "summary": "Ver el estado del sistema en vivo."
+    },
+    "fr": {
+      "displayName": "État du système",
+      "summary": "Afficher l'état du système en direct."
+    },
+    "ja": {
+      "displayName": "システム状況",
+      "summary": "ライブ システム ステータスを表示します。"
+    },
+    "ko": {
+      "displayName": "시스템 상태",
+      "summary": "실시간 시스템 상태를 확인하세요."
+    },
+    "pt": {
+      "displayName": "Status do sistema",
+      "summary": "Ver o status do sistema ao vivo."
+    },
+    "ru": {
+      "displayName": "Состояние системы",
+      "summary": "Просмотр текущего состояния системы."
+    },
+    "zh-Hans": {
+      "displayName": "系统状态",
+      "summary": "实时查看系统状态"
+    },
+    "zh-Hant": {
+      "displayName": "系統狀態",
+      "summary": "實時查看系統狀態"
+    }
+  },
+  "version": "1.0.11",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "SystemStatus.bundle",

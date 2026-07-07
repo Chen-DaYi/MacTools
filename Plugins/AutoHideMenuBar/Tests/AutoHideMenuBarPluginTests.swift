@@ -70,6 +70,24 @@ final class AutoHideMenuBarPluginTests: XCTestCase {
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertEqual(stateChangeCount, 1)
     }
+
+    func testStateReaderUsesGlobalMenuBarAutohideKey() {
+        let isEnabled = AutoHideMenuBarPlugin.resolvedMenuBarAutohideState(
+            globalValue: true,
+            dockValue: false
+        )
+
+        XCTAssertTrue(isEnabled)
+    }
+
+    func testStateReaderFallsBackToLegacyDockKey() {
+        let isEnabled = AutoHideMenuBarPlugin.resolvedMenuBarAutohideState(
+            globalValue: nil,
+            dockValue: true
+        )
+
+        XCTAssertTrue(isEnabled)
+    }
 }
 
 final class MockMenuBarCommandRunner: MenuBarCommandRunning {

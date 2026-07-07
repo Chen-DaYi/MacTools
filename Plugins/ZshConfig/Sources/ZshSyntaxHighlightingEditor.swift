@@ -47,7 +47,7 @@ struct ZshSyntaxHighlightingEditor: NSViewRepresentable {
             textView.string = text
             Self.applyHighlighting(to: textView)
         }
-        // 记录初始内容，updateNSView 依靠此判断是否需要外部重置
+        // Store the initial content so `updateNSView` can detect external resets.
         context.coordinator.lastTextFedToBinding = text
         return scrollView
     }
@@ -56,9 +56,10 @@ struct ZshSyntaxHighlightingEditor: NSViewRepresentable {
         guard let textView = nsView.documentView as? NSTextView else { return }
         guard !context.coordinator.isHighlighting else { return }
 
-        // 只有当外部（加载文件、追加片段）真正改变了 text 时才重置 textView.string。
-        // 不能用 textView.string != text 判断：@Published 在 willSet（赋值前）发出
-        // objectWillChange，updateNSView 可能拿到旧值而误触发重置，从而清空 undo 栈。
+        // Reset `textView.string` only when external input, such as loading a file or appending a
+        // snippet, actually changed `text`. Do not compare `textView.string != text`: `@Published`
+        // emits `objectWillChange` in `willSet`, so `updateNSView` can observe the old value and
+        // incorrectly reset the editor, clearing the undo stack.
         if text != context.coordinator.lastTextFedToBinding {
             context.coordinator.lastTextFedToBinding = text
             let sel = textView.selectedRange()
@@ -108,7 +109,8 @@ struct ZshSyntaxHighlightingEditor: NSViewRepresentable {
         let string = textView.string
         let fullRange = NSRange(location: 0, length: (string as NSString).length)
 
-        // 语法高亮属性变化不应进入 undo 栈，否则 Cmd+Z 会撤销高亮而非文字内容
+        // Syntax highlighting attributes must not enter the undo stack, or Cmd-Z would undo
+        // highlighting instead of text edits.
         let undoManager = textView.undoManager
         undoManager?.disableUndoRegistration()
         defer { undoManager?.enableUndoRegistration() }
@@ -144,7 +146,7 @@ struct ZshSyntaxHighlightingEditor: NSViewRepresentable {
         var parent: ZshSyntaxHighlightingEditor
         var isHighlighting = false
         var lastScrollToBottomID: Int = 0
-        /// 上一次由 textDidChange 推送给 binding 的文本，用于区分用户输入与外部赋值
+        /// Last text pushed to the binding by `textDidChange`, used to distinguish user input from external assignment.
         var lastTextFedToBinding: String = ""
 
         init(_ parent: ZshSyntaxHighlightingEditor) {

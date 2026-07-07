@@ -2,7 +2,53 @@
   "id": "auto-hide-dock",
   "displayName": "自动隐藏程序坞",
   "summary": "自动隐藏程序坞，提供更干净的桌面环境",
-  "version": "1.0.6",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إخفاء Dock تلقائيًا",
+      "summary": "قم بإخفاء Dock تلقائيًا للحصول على سطح مكتب أكثر نظافة."
+    },
+    "de": {
+      "displayName": "Dock automatisch ausblenden",
+      "summary": "Blenden Sie Dock automatisch aus, um den Desktop übersichtlicher zu gestalten."
+    },
+    "en": {
+      "displayName": "Auto-hide Dock",
+      "summary": "Hide the Dock automatically for a cleaner desktop."
+    },
+    "es": {
+      "displayName": "Ocultar Dock automáticamente",
+      "summary": "Oculte Dock automáticamente para tener un escritorio más limpio."
+    },
+    "fr": {
+      "displayName": "Masquer le Dock automatiquement",
+      "summary": "Masquez automatiquement le Dock pour un bureau plus propre."
+    },
+    "ja": {
+      "displayName": "Dockを自動的に隠す",
+      "summary": "デスクトップをすっきりさせるために、Dock を自動的に非表示にします。"
+    },
+    "ko": {
+      "displayName": "Dock 자동 숨기기",
+      "summary": "더 깔끔한 데스크탑을 위해 Dock을 자동으로 숨깁니다."
+    },
+    "pt": {
+      "displayName": "Ocultar Dock automaticamente",
+      "summary": "Oculte o Dock automaticamente para uma área de trabalho mais limpa."
+    },
+    "ru": {
+      "displayName": "Автоскрытие Dock",
+      "summary": "Скройте Dock автоматически, чтобы рабочий стол стал чище."
+    },
+    "zh-Hans": {
+      "displayName": "自动隐藏程序坞",
+      "summary": "自动隐藏程序坞，提供更干净的桌面环境"
+    },
+    "zh-Hant": {
+      "displayName": "自動隱藏 Dock",
+      "summary": "自動隱藏Dock，提供更乾淨的桌面環境"
+    }
+  },
+  "version": "1.0.8",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "AutoHideDock.bundle",

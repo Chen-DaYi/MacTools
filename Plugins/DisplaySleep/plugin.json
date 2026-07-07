@@ -2,7 +2,53 @@
   "id": "display-sleep",
   "displayName": "显示器休眠",
   "summary": "一键让所有显示器立即进入休眠",
-  "version": "1.0.2",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إسبات الشاشات",
+      "summary": "ضع جميع شاشات العرض في وضع السكون على الفور."
+    },
+    "de": {
+      "displayName": "Display-Ruhezustand",
+      "summary": "Versetzen Sie alle Displays sofort in den Ruhezustand."
+    },
+    "en": {
+      "displayName": "Display Sleep",
+      "summary": "Put all displays to sleep immediately."
+    },
+    "es": {
+      "displayName": "Reposo de pantallas",
+      "summary": "Ponga todas las pantallas a dormir inmediatamente."
+    },
+    "fr": {
+      "displayName": "Mise en veille des écrans",
+      "summary": "Mettez immédiatement tous les écrans en veille."
+    },
+    "ja": {
+      "displayName": "ディスプレイをスリープ",
+      "summary": "すべてのディスプレイをすぐにスリープ状態にします。"
+    },
+    "ko": {
+      "displayName": "디스플레이 잠자기",
+      "summary": "모든 디스플레이를 즉시 절전 모드로 전환하세요."
+    },
+    "pt": {
+      "displayName": "Repouso das telas",
+      "summary": "Coloque todos os monitores em hibernação imediatamente."
+    },
+    "ru": {
+      "displayName": "Сон дисплеев",
+      "summary": "Немедленно переведите все дисплеи в спящий режим."
+    },
+    "zh-Hans": {
+      "displayName": "显示器休眠",
+      "summary": "一键让所有显示器立即进入休眠"
+    },
+    "zh-Hant": {
+      "displayName": "顯示器睡眠",
+      "summary": "一鍵讓所有顯示器立即進入休眠"
+    }
+  },
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplaySleep.bundle",

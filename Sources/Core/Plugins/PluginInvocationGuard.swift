@@ -16,7 +16,7 @@ enum PluginInvocationFailure: LocalizedError {
 
             return name
         case .missingReturnValue:
-            return "插件调用未返回结果。"
+            return AppL10n.plugins("plugin.error.invocation.missingReturnValue", defaultValue: "插件调用未返回结果。")
         }
     }
 }

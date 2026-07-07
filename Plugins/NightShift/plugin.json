@@ -2,7 +2,53 @@
   "id": "night-shift",
   "displayName": "夜览",
   "summary": "降低蓝光，使屏幕颜色更暖",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "Night Shift",
+      "summary": "قلل من الضوء الأزرق باستخدام ألوان الشاشة الأكثر دفئًا."
+    },
+    "de": {
+      "displayName": "Night Shift",
+      "summary": "Reduzieren Sie blaues Licht mit wärmeren Bildschirmfarben."
+    },
+    "en": {
+      "displayName": "Night Shift",
+      "summary": "Reduce blue light with warmer screen colors."
+    },
+    "es": {
+      "displayName": "Night Shift",
+      "summary": "Reduzca la luz azul con colores de pantalla más cálidos."
+    },
+    "fr": {
+      "displayName": "Night Shift",
+      "summary": "Réduisez la lumière bleue avec des couleurs d’écran plus chaudes."
+    },
+    "ja": {
+      "displayName": "Night Shift",
+      "summary": "暖色系の画面色でブルーライトを軽減します。"
+    },
+    "ko": {
+      "displayName": "Night Shift",
+      "summary": "따뜻한 화면 색상으로 블루라이트를 줄이세요."
+    },
+    "pt": {
+      "displayName": "Night Shift",
+      "summary": "Reduza a luz azul com cores de tela mais quentes."
+    },
+    "ru": {
+      "displayName": "Night Shift",
+      "summary": "Уменьшите синий свет с помощью более теплых цветов экрана."
+    },
+    "zh-Hans": {
+      "displayName": "夜览",
+      "summary": "降低蓝光，使屏幕颜色更暖"
+    },
+    "zh-Hant": {
+      "displayName": "Night Shift",
+      "summary": "降低藍光，使螢幕顏色更暖"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "NightShift.bundle",

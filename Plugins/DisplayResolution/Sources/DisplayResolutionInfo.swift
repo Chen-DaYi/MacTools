@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import MacToolsPluginKit
 
 struct DisplayResolutionInfo: Equatable {
     let modeId: Int32
@@ -29,17 +30,21 @@ enum DisplayResolutionError: Error, LocalizedError {
     case completeFailed(CGError)
 
     var errorDescription: String? {
+        localizedDescription(localization: PluginLocalization(bundle: .main))
+    }
+
+    func localizedDescription(localization: PluginLocalization) -> String {
         switch self {
         case .displayUnavailable:
-            return "显示器已断开连接"
+            return localization.string("error.displayUnavailable", defaultValue: "显示器已断开连接")
         case .modeNotFound:
-            return "分辨率模式已失效"
+            return localization.string("error.modeNotFound", defaultValue: "分辨率模式已失效")
         case .beginConfigFailed:
-            return "无法开始显示配置"
+            return localization.string("error.beginConfigFailed", defaultValue: "无法开始显示配置")
         case .configureFailed:
-            return "配置显示模式失败"
+            return localization.string("error.configureFailed", defaultValue: "配置显示模式失败")
         case .completeFailed:
-            return "提交显示配置失败"
+            return localization.string("error.completeFailed", defaultValue: "提交显示配置失败")
         }
     }
 }

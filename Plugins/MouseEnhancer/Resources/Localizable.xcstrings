@@ -1,0 +1,286 @@
+{
+  "sourceLanguage": "zh-Hans",
+  "strings": {
+    "error.accessibilityRequired": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Mouse Enhancer needs Accessibility permission. Grant access in System Settings first." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "鼠标增强需要辅助功能权限，请先前往设置完成授权。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "滑鼠增強需要輔助使用權限，請先前往設定完成授權。" } }
+      }
+    },
+    "error.accessibilityRevoked": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Accessibility permission is off. Mouse Enhancer has paused." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "辅助功能权限已关闭，鼠标增强已暂停。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "輔助使用權限已關閉，滑鼠增強已暫停。" } }
+      }
+    },
+    "error.tapUnavailable": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Could not start scroll event monitoring. Confirm Accessibility permission and try again." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法启动滚动事件监听，请确认辅助功能授权后重试。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法啟動滾動事件監聽，請確認輔助使用授權後重試。" } }
+      }
+    },
+    "metadata.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enhance mouse and trackpad controls." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "增强鼠标与触控板控制" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "增強滑鼠與觸控板控制" } }
+      }
+    },
+    "metadata.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Mouse Enhancer" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "鼠标增强" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "滑鼠增強" } }
+      }
+    },
+    "panel.button.settings": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Settings" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "設定" } }
+      }
+    },
+    "panel.subtitle.enabledFormat": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "On · %@ · %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已开启 · %@ · %@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已開啟 · %@ · %@" } }
+      }
+    },
+    "panel.subtitle.needsAccessibility": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Accessibility permission required before enabling" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用前需要辅助功能授权" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "啟用前需要輔助使用授權" } }
+      }
+    },
+    "panel.subtitle.off": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No enhancement enabled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未启用增强功能" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "未啟用增強功能" } }
+      }
+    },
+    "panel.subtitle.middleClickEnabledFormat": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Middle click · %d fingers" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "模拟中键 · %d指" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "模擬中鍵 · %d指" } }
+      }
+    },
+    "permission.accessibility.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Listens for scroll events and sends middle clicks." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用于监听滚动事件和发送中键点击。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "用於監聽滾動事件和傳送中鍵點按。" } }
+      }
+    },
+    "permission.accessibility.footnote": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "System Settings → Privacy & Security → Accessibility." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "系统设置 → 隐私与安全性 → 辅助功能，允许 MacTools。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "系統設定 → 隱私權與安全性 → 輔助使用，允許 MacTools。" } }
+      }
+    },
+    "permission.accessibility.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Accessibility" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "辅助功能" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "輔助使用" } }
+      }
+    },
+    "permission.inputMonitoring.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Distinguishes mouse wheel scrolling from trackpad gestures." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用于区分鼠标滚轮和触控板手势。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "用於區分滑鼠滾輪和觸控板手勢。" } }
+      }
+    },
+    "permission.inputMonitoring.footnote": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "System Settings → Privacy & Security → Input Monitoring." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "系統設定 → 隱私權與安全性 → 輸入監控，允許 MacTools。" } }
+      }
+    },
+    "permission.inputMonitoring.granted": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Allowed. Improves device detection accuracy." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已允许，可提升设备识别准确性。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已允許，可提升裝置識別準確性。" } }
+      }
+    },
+    "permission.inputMonitoring.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Input Monitoring" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "输入监控" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "輸入監控" } }
+      }
+    },
+    "settings.mouse.horizontal.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reverse left and right mouse scrolling." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "反转鼠标左右滚动方向。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "反轉滑鼠左右滾動方向。" } }
+      }
+    },
+    "settings.mouse.horizontal.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Horizontal Reversing" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "水平反转" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "水平反轉" } }
+      }
+    },
+    "settings.mouse.sectionTitle": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Mouse" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "鼠标" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "滑鼠" } }
+      }
+    },
+    "settings.mouse.vertical.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reverse up and down mouse scrolling." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "反转鼠标上下滚动方向。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "反轉滑鼠上下滾動方向。" } }
+      }
+    },
+    "settings.mouse.vertical.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Vertical Reversing" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "垂直反转" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "垂直反轉" } }
+      }
+    },
+    "settings.middleClick.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Turn trackpad taps into middle-clicks." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "触控板轻点模拟鼠标中键点击。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "觸控板輕點模擬滑鼠中鍵點按。" } }
+      }
+    },
+    "settings.middleClick.fingerCount.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Tap the trackpad with the selected number of fingers to send a middle-click." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用指定数量的手指在触控板上轻点，将模拟鼠标中键点击。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "用指定數量的手指在觸控板上輕點，將模擬滑鼠中鍵點按。" } }
+      }
+    },
+    "settings.middleClick.fingerCount.optionFormat": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%d fingers" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%d指" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%d指" } }
+      }
+    },
+    "settings.middleClick.fingerCount.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Finger Count" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "手指数量" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "手指數量" } }
+      }
+    },
+    "settings.middleClick.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Middle Click" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "模拟鼠标中键" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "模擬滑鼠中鍵" } }
+      }
+    },
+    "settings.trackpad.horizontal.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reverse left and right trackpad and Magic Mouse scrolling." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "反转触控板和 Magic Mouse 左右滚动方向。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "反轉觸控板和 Magic Mouse 左右滾動方向。" } }
+      }
+    },
+    "settings.trackpad.horizontal.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Horizontal Reversing" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "水平反转" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "水平反轉" } }
+      }
+    },
+    "settings.trackpad.sectionTitle": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Trackpad" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "触控板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "觸控板" } }
+      }
+    },
+    "settings.trackpad.vertical.description": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reverse up and down trackpad and Magic Mouse scrolling." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "反转触控板和 Magic Mouse 上下滚动方向。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "反轉觸控板和 Magic Mouse 上下滾動方向。" } }
+      }
+    },
+    "settings.trackpad.vertical.title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Vertical Reversing" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "垂直反转" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "垂直反轉" } }
+      }
+    },
+    "summary.axis.all": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "horizontal and vertical" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "水平和垂直" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "水平和垂直" } }
+      }
+    },
+    "summary.axis.horizontal": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "horizontal" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "水平" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "水平" } }
+      }
+    },
+    "summary.axis.none": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "no axis" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未选方向" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "未選方向" } }
+      }
+    },
+    "summary.axis.vertical": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "vertical" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "垂直" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "垂直" } }
+      }
+    },
+    "summary.device.all": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "mouse and trackpad" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "鼠标和触控板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "滑鼠和觸控板" } }
+      }
+    },
+    "summary.device.mouse": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "mouse" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "鼠标" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "滑鼠" } }
+      }
+    },
+    "summary.device.none": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "no device" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未选设备" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "未選裝置" } }
+      }
+    },
+    "summary.device.trackpad": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "trackpad" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "触控板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "觸控板" } }
+      }
+    }
+  },
+  "version": "1.0"
+}

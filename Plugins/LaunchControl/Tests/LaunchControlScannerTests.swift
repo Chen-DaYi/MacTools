@@ -60,7 +60,23 @@ final class LaunchControlScannerTests: XCTestCase {
         XCTAssertEqual(parsed.lastExitStatus, 1)
     }
 
-    func testParseDisabledLabelsOnlyReturnsDisabledServices() {
+    func testParseDisabledLabelsModernEnabledDisabledFormat() {
+        // The format emitted by `launchctl print-disabled` on macOS 14+.
+        let labels = LaunchControlScanner.parseDisabledLabels(
+            """
+            disabled services = {
+                "local.enabled" => enabled
+                "local.disabled" => disabled
+                "com.vendor.helper" => disabled
+            }
+            """
+        )
+
+        XCTAssertEqual(labels, ["local.disabled", "com.vendor.helper"])
+    }
+
+    func testParseDisabledLabelsLegacyTrueFalseFormat() {
+        // Older macOS used true/false; keep parsing it for backward compatibility.
         let labels = LaunchControlScanner.parseDisabledLabels(
             """
             disabled services = {

@@ -2,7 +2,53 @@
   "id": "appearance",
   "displayName": "深色模式",
   "summary": "切换系统亮色与深色外观",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "الوضع الداكن",
+      "summary": "تبديل النظام بين المظهر الفاتح والداكن."
+    },
+    "de": {
+      "displayName": "Dunkelmodus",
+      "summary": "Schalten Sie das System zwischen heller und dunkler Darstellung um."
+    },
+    "en": {
+      "displayName": "Dark Mode",
+      "summary": "Switch the system between light and dark appearance."
+    },
+    "es": {
+      "displayName": "Modo oscuro",
+      "summary": "Cambie el sistema entre apariencia clara y oscura."
+    },
+    "fr": {
+      "displayName": "Mode sombre",
+      "summary": "Basculez le système entre l’apparence claire et sombre."
+    },
+    "ja": {
+      "displayName": "ダークモード",
+      "summary": "システムの外観を明暗で切り替えます。"
+    },
+    "ko": {
+      "displayName": "다크 모드",
+      "summary": "밝은 화면과 어두운 화면 간에 시스템을 전환합니다."
+    },
+    "pt": {
+      "displayName": "Modo escuro",
+      "summary": "Alterne o sistema entre aparência clara e escura."
+    },
+    "ru": {
+      "displayName": "Тёмный режим",
+      "summary": "Переключение системы между светлым и темным внешним видом."
+    },
+    "zh-Hans": {
+      "displayName": "深色模式",
+      "summary": "切换系统亮色与深色外观"
+    },
+    "zh-Hant": {
+      "displayName": "深色模式",
+      "summary": "切換系統亮色與深色外觀"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "Appearance.bundle",

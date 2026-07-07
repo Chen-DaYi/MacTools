@@ -19,14 +19,7 @@ private struct HideNotchPluginProvider: PluginProvider {
 
 @MainActor
 final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "hide-notch",
-        title: "隐藏刘海",
-        iconName: "rectangle.topthird.inset.filled",
-        iconTint: Color(nsColor: .labelColor),
-        order: 40,
-        defaultDescription: "自动遮挡刘海屏顶部区域"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -38,12 +31,27 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let controller: HideNotchWallpaperControlling
+    private let localization: PluginLocalization
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "hide-notch"),
-        controller: HideNotchWallpaperControlling? = nil
+        controller: HideNotchWallpaperControlling? = nil,
+        localization: PluginLocalization? = nil
     ) {
-        self.controller = controller ?? HideNotchController(context: context)
+        let localization = localization ?? PluginLocalization(bundle: context.resourceBundle)
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "hide-notch",
+            title: localization.string("metadata.title", defaultValue: "隐藏刘海"),
+            iconName: "rectangle.topthird.inset.filled",
+            iconTint: Color(nsColor: .labelColor),
+            order: 40,
+            defaultDescription: localization.string("metadata.description", defaultValue: "自动遮挡刘海屏顶部区域")
+        )
+        self.controller = controller ?? HideNotchController(
+            maskManager: HideNotchDesktopMaskManager(localization: localization),
+            context: context
+        )
         self.controller.onStateChange = { [weak self] in
             self?.onStateChange?()
         }
@@ -53,7 +61,9 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let snapshot = controller.snapshot()
 
         if !snapshot.hasSupportedDisplay {
-            let subtitle = snapshot.isEnabled ? "已开启" : "未检测到刘海屏"
+            let subtitle = snapshot.isEnabled
+                ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                : localization.string("panel.subtitle.noSupportedDisplay", defaultValue: "未检测到刘海屏")
 
             return PluginPanelState(
                 subtitle: subtitle,
@@ -68,9 +78,9 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         let subtitle: String
         if snapshot.isEnabled {
-            subtitle = "已开启"
+            subtitle = localization.string("panel.subtitle.enabled", defaultValue: "已开启")
         } else if snapshot.isProcessing {
-            subtitle = "正在关闭"
+            subtitle = localization.string("panel.subtitle.closing", defaultValue: "正在关闭")
         } else {
             subtitle = metadata.defaultDescription
         }

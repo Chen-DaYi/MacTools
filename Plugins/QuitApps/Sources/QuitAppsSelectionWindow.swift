@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 // MARK: - App Entry Model
 
@@ -18,12 +19,20 @@ struct QuitAppEntry: Identifiable, Equatable {
 @MainActor
 final class QuitAppsViewModel: ObservableObject {
     @Published var entries: [QuitAppEntry] = []
+    private let localization: PluginLocalization
 
     var selectedEntries: [QuitAppEntry] { entries.filter(\.isSelected) }
 
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
+
     var confirmTitle: String {
         let count = selectedEntries.count
-        return count > 0 ? "退出 \(count) 个应用" : "退出全部应用"
+        guard count > 0 else {
+            return localization.string("selection.confirm.quitAll", defaultValue: "退出全部应用")
+        }
+        return localization.format("selection.confirm.quitCountFormat", defaultValue: "退出 %d 个应用", count)
     }
 
     func load() {
@@ -64,7 +73,8 @@ final class QuitAppsViewModel: ObservableObject {
 @MainActor
 final class QuitAppsSelectionWindow: NSPanel {
 
-    private let viewModel = QuitAppsViewModel()
+    private let viewModel: QuitAppsViewModel
+    private let localization: PluginLocalization
     private var launchObserver: (any NSObjectProtocol)?
     private var terminateObserver: (any NSObjectProtocol)?
     private var onDismiss: (() -> Void)?
@@ -74,7 +84,12 @@ final class QuitAppsSelectionWindow: NSPanel {
         onDismiss?()
     }
 
-    init(onDismiss: @escaping () -> Void) {
+    init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        onDismiss: @escaping () -> Void
+    ) {
+        self.localization = localization
+        self.viewModel = QuitAppsViewModel(localization: localization)
         let size = NSSize(width: 360, height: 460)
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
@@ -100,6 +115,7 @@ final class QuitAppsSelectionWindow: NSPanel {
 
         let rootView = QuitAppsSelectionView(
             viewModel: viewModel,
+            localization: localization,
             onDismiss: { [weak self] in
                 self?.orderOut(nil)
                 onDismiss()
@@ -160,6 +176,7 @@ final class QuitAppsSelectionWindow: NSPanel {
 
 private struct QuitAppsSelectionView: View {
     @ObservedObject var viewModel: QuitAppsViewModel
+    let localization: PluginLocalization
     let onDismiss: () -> Void
 
     private let columns = [GridItem(.adaptive(minimum: 72), spacing: 8)]
@@ -181,16 +198,20 @@ private struct QuitAppsSelectionView: View {
             Image(systemName: "power")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.red)
-            Text("退出应用")
+            Text(localization.string("selection.title", defaultValue: "退出应用"))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
             Spacer()
-            Text("\(viewModel.entries.count) 个应用")
+            Text(localization.format(
+                "selection.appCountFormat",
+                defaultValue: "%d 个应用",
+                viewModel.entries.count
+            ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if !viewModel.selectedEntries.isEmpty {
                 Button(action: { viewModel.invertSelection() }) {
-                    Text("反选")
+                    Text(localization.string("selection.invert", defaultValue: "反选"))
                         .font(.system(size: 12))
                         .foregroundStyle(Color.accentColor)
                 }
@@ -211,7 +232,7 @@ private struct QuitAppsSelectionView: View {
                     Image(systemName: "checkmark.circle")
                         .font(.system(size: 32))
                         .foregroundStyle(.secondary)
-                    Text("没有正在运行的应用")
+                    Text(localization.string("selection.empty", defaultValue: "没有正在运行的应用"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 60)
@@ -263,7 +284,7 @@ private struct QuitAppsSelectionView: View {
             .disabled(viewModel.entries.isEmpty)
 
             Button(action: onDismiss) {
-                Text("取消")
+                Text(localization.string("selection.cancel", defaultValue: "取消"))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }

@@ -1,17 +1,26 @@
 import Foundation
+import MacToolsPluginKit
 
 enum CalendarEventGrouper {
     static func group(
         events: [CalendarEventInput],
         visibleDates: [Date],
-        calendar: Calendar
+        calendar: Calendar,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) -> [Date: [CalendarEventSummary]] {
         let dayStarts = visibleDates.map { calendar.startOfDay(for: $0) }
         var grouped = Dictionary(uniqueKeysWithValues: dayStarts.map { ($0, [CalendarEventSummary]()) })
 
         for event in events {
             for dayStart in dayStarts where overlaps(event: event, dayStart: dayStart, calendar: calendar) {
-                grouped[dayStart, default: []].append(summary(for: event, dayStart: dayStart, calendar: calendar))
+                grouped[dayStart, default: []].append(
+                    summary(
+                        for: event,
+                        dayStart: dayStart,
+                        calendar: calendar,
+                        localization: localization
+                    )
+                )
             }
         }
 
@@ -42,12 +51,15 @@ enum CalendarEventGrouper {
     private static func summary(
         for event: CalendarEventInput,
         dayStart: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        localization: PluginLocalization
     ) -> CalendarEventSummary {
         CalendarEventSummary(
             id: "\(event.id)-\(CalendarComponentCalendars.dayID(for: dayStart, calendar: calendar))",
-            title: event.title.isEmpty ? "未命名日程" : event.title,
-            timeText: timeText(for: event, dayStart: dayStart, calendar: calendar),
+            title: event.title.isEmpty
+                ? localization.string("event.untitled", defaultValue: "未命名日程")
+                : event.title,
+            timeText: timeText(for: event, dayStart: dayStart, calendar: calendar, localization: localization),
             startDate: event.startDate,
             endDate: normalizedEndDate(for: event, calendar: calendar),
             isAllDay: event.isAllDay,
@@ -63,9 +75,14 @@ enum CalendarEventGrouper {
         return calendar.date(byAdding: .minute, value: 1, to: event.startDate) ?? event.startDate
     }
 
-    private static func timeText(for event: CalendarEventInput, dayStart: Date, calendar: Calendar) -> String {
+    private static func timeText(
+        for event: CalendarEventInput,
+        dayStart: Date,
+        calendar: Calendar,
+        localization: PluginLocalization
+    ) -> String {
         guard !event.isAllDay else {
-            return "全天"
+            return localization.string("event.allDay", defaultValue: "全天")
         }
 
         let endDate = normalizedEndDate(for: event, calendar: calendar)

@@ -2,7 +2,53 @@
   "id": "app-hotkey",
   "displayName": "应用快捷键",
   "summary": "为常用应用绑定全局快捷键，快速打开或切换到前台",
-  "version": "1.0.3",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "اختصارات التطبيقات",
+      "summary": "قم بربط الاختصارات العالمية بالتطبيقات الشائعة للتشغيل أو التبديل السريع."
+    },
+    "de": {
+      "displayName": "App-Kurzbefehle",
+      "summary": "Binden Sie globale Verknüpfungen an gängige Apps, um sie schnell zu starten oder zu wechseln."
+    },
+    "en": {
+      "displayName": "App Hotkeys",
+      "summary": "Bind global shortcuts to common apps for quick launch or switching."
+    },
+    "es": {
+      "displayName": "Atajos de apps",
+      "summary": "Vincule accesos directos globales a aplicaciones comunes para iniciar o cambiar rápidamente."
+    },
+    "fr": {
+      "displayName": "Raccourcis d’apps",
+      "summary": "Liez des raccourcis globaux aux applications courantes pour un lancement ou une commutation rapide."
+    },
+    "ja": {
+      "displayName": "アプリショートカット",
+      "summary": "グローバル ショートカットを一般的なアプリにバインドして、すばやく起動したり切り替えたりできます。"
+    },
+    "ko": {
+      "displayName": "앱 단축키",
+      "summary": "빠른 실행 또는 전환을 위해 일반 앱에 전역 바로가기를 바인딩합니다."
+    },
+    "pt": {
+      "displayName": "Atalhos de apps",
+      "summary": "Vincule atalhos globais a aplicativos comuns para inicialização ou troca rápida."
+    },
+    "ru": {
+      "displayName": "Горячие клавиши приложений",
+      "summary": "Привяжите глобальные ярлыки к общим приложениям для быстрого запуска или переключения."
+    },
+    "zh-Hans": {
+      "displayName": "应用快捷键",
+      "summary": "为常用应用绑定全局快捷键，快速打开或切换到前台"
+    },
+    "zh-Hant": {
+      "displayName": "應用程式快速鍵",
+      "summary": "為常用應用綁定全局快速鍵，快速打開或切換到前臺"
+    }
+  },
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "AppHotkey.bundle",

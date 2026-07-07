@@ -123,15 +123,25 @@ enum DynamicPluginLoaderError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .unreadableBundle(url):
-            return "无法读取插件 bundle：\(url.path)"
+            return AppL10n.pluginsFormat("plugin.error.loader.unreadableBundleFormat", defaultValue: "无法读取插件 bundle：%@", url.path)
         case let .loadFailed(url):
-            return "插件代码加载失败：\(url.path)"
+            return AppL10n.pluginsFormat("plugin.error.loader.loadFailedFormat", defaultValue: "插件代码加载失败：%@", url.path)
         case let .missingFactory(name):
-            return "插件缺少入口工厂：\(name)"
+            return AppL10n.pluginsFormat("plugin.error.loader.missingFactoryFormat", defaultValue: "插件缺少入口工厂：%@", name)
         case let .invalidPluginCount(expected, actual):
-            return "插件包 \(expected) 必须返回 1 个插件，实际返回 \(actual) 个。"
+            return AppL10n.pluginsFormat(
+                "plugin.error.loader.invalidPluginCountFormat",
+                defaultValue: "插件包 %@ 必须返回 1 个插件，实际返回 %d 个。",
+                expected,
+                actual
+            )
         case let .pluginIdentifierMismatch(expected, actual):
-            return "插件 ID 不匹配，manifest 为 \(expected)，运行时代码为 \(actual)。"
+            return AppL10n.pluginsFormat(
+                "plugin.error.loader.identifierMismatchFormat",
+                defaultValue: "插件 ID 不匹配，manifest 为 %@，运行时代码为 %@。",
+                expected,
+                actual
+            )
         }
     }
 }

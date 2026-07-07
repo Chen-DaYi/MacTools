@@ -16,6 +16,40 @@ final class MenuBarHiddenStoreTests: XCTestCase {
         XCTAssertTrue(store.alwaysHiddenItemStableKeys.isEmpty)
     }
 
+    func testVisibleHiddenLayoutDefaultsToMissingUntilRecorded() {
+        let store = MenuBarHiddenStore(storage: MenuBarHiddenMemoryStorage())
+
+        XCTAssertFalse(store.hasVisibleHiddenLayout)
+        XCTAssertTrue(store.visibleItemStableKeys.isEmpty)
+        XCTAssertTrue(store.hiddenItemStableKeys.isEmpty)
+    }
+
+    func testVisibleHiddenLayoutPersistsStableKeysInOrderWithoutDuplicates() {
+        let storage = MenuBarHiddenMemoryStorage()
+        let store = MenuBarHiddenStore(storage: storage)
+
+        store.recordVisibleHiddenLayout(
+            visibleKeys: ["com.example.a:Item", "com.example.a:Item", ""],
+            hiddenKeys: ["com.example.b:Item", "com.example.a:Item", "com.example.c:Item"]
+        )
+
+        XCTAssertTrue(store.hasVisibleHiddenLayout)
+        XCTAssertEqual(storage.stringArray(forKey: "visible-item-stable-keys"), [
+            "com.example.a:Item",
+        ])
+        XCTAssertEqual(storage.stringArray(forKey: "hidden-item-stable-keys"), [
+            "com.example.b:Item",
+            "com.example.c:Item",
+        ])
+        XCTAssertEqual(MenuBarHiddenStore(storage: storage).visibleItemStableKeys, [
+            "com.example.a:Item",
+        ])
+        XCTAssertEqual(MenuBarHiddenStore(storage: storage).hiddenItemStableKeys, [
+            "com.example.b:Item",
+            "com.example.c:Item",
+        ])
+    }
+
     func testAlwaysHiddenItemStableKeysPersistSortedWithoutDuplicates() {
         let storage = MenuBarHiddenMemoryStorage()
         let store = MenuBarHiddenStore(storage: storage)

@@ -46,20 +46,20 @@ jobs:
             exit 1
           fi
 
-          VERSION="$(awk '$1 == "MARKETING_VERSION:" { print $2; exit }' project.yml)"
-          BUILD_NUMBER="$(awk '$1 == "CURRENT_PROJECT_VERSION:" { print $2; exit }' project.yml)"
+          VERSION="$(awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' Configs/AppVersion.xcconfig)"
+          BUILD_NUMBER="$(awk '$1 == "CURRENT_PROJECT_VERSION" && $2 == "=" { print $3; exit }' Configs/AppVersion.xcconfig)"
           TAG_VERSION="${TAG#v}"
 
           if [[ -z "$VERSION" || -z "$BUILD_NUMBER" ]]; then
-            echo "MARKETING_VERSION and CURRENT_PROJECT_VERSION must be set in project.yml" >&2
+            echo "MARKETING_VERSION and CURRENT_PROJECT_VERSION must be set in Configs/AppVersion.xcconfig" >&2
             exit 1
           fi
           if [[ "$TAG_VERSION" != "$VERSION" ]]; then
-            echo "Release tag $TAG does not match project.yml MARKETING_VERSION $VERSION" >&2
+            echo "Release tag $TAG does not match Configs/AppVersion.xcconfig MARKETING_VERSION $VERSION" >&2
             exit 1
           fi
           if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "project.yml CURRENT_PROJECT_VERSION must be numeric" >&2
+            echo "Configs/AppVersion.xcconfig CURRENT_PROJECT_VERSION must be numeric" >&2
             exit 1
           fi
 
@@ -184,6 +184,7 @@ jobs:
         run: |
           APP_PATH="${DERIVED_DATA}/Build/Products/Release/${PROJECT_NAME}.app"
           ENTITLEMENTS="Configs/MacTools.entitlements"
+          FINDER_SYNC_ENTITLEMENTS="Sources/Extensions/RightClickFinderSync/RightClickFinderSync.entitlements"
           SPARKLE_FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
           SPARKLE_CURRENT="$SPARKLE_FRAMEWORK/Versions/Current"
 
@@ -194,6 +195,17 @@ jobs:
               --keychain "$KEYCHAIN_PATH" \
               --options runtime \
               --timestamp \
+              "$1"
+          }
+
+          sign_path_with_entitlements() {
+            /usr/bin/codesign \
+              --force \
+              --sign "$SIGNING_IDENTITY" \
+              --keychain "$KEYCHAIN_PATH" \
+              --options runtime \
+              --timestamp \
+              --entitlements "$2" \
               "$1"
           }
 
@@ -233,7 +245,11 @@ jobs:
             if [[ "$bundle" == *"/Sparkle.framework" || "$bundle" == *"/Sparkle.framework/"* ]]; then
               continue
             fi
-            sign_path "$bundle"
+            if [[ "$(basename "$bundle")" == "RightClickFinderSync.appex" ]]; then
+              sign_path_with_entitlements "$bundle" "$FINDER_SYNC_ENTITLEMENTS"
+            else
+              sign_path "$bundle"
+            fi
           done < <(find "$APP_PATH/Contents" -depth -type d \( -name "*.framework" -o -name "*.app" -o -name "*.xpc" -o -name "*.appex" \) -print)
 
           if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
@@ -248,6 +264,22 @@ jobs:
             --timestamp \
             --entitlements "$ENTITLEMENTS" \
             "$APP_PATH"
+
+          FINDER_SYNC_APPEX="$APP_PATH/Contents/PlugIns/RightClickFinderSync.appex"
+          FINDER_SYNC_EXTENSION_POINT="$(/usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$FINDER_SYNC_APPEX/Contents/Info.plist")"
+          if [[ "$FINDER_SYNC_EXTENSION_POINT" != "com.apple.FinderSync" ]]; then
+            echo "Finder Sync extension point is invalid: $FINDER_SYNC_EXTENSION_POINT" >&2
+            exit 1
+          fi
+          FINDER_SYNC_SIGNED_ENTITLEMENTS="$(/usr/bin/codesign -d --entitlements :- "$FINDER_SYNC_APPEX" 2>/dev/null || true)"
+          if [[ "$FINDER_SYNC_SIGNED_ENTITLEMENTS" != *"com.apple.security.app-sandbox"* ]]; then
+            echo "Finder Sync extension is missing app sandbox entitlement" >&2
+            exit 1
+          fi
+          if [[ "$FINDER_SYNC_SIGNED_ENTITLEMENTS" != *"com.apple.security.temporary-exception.files.home-relative-path.read-only"* ]]; then
+            echo "Finder Sync extension is missing right-click config read entitlement" >&2
+            exit 1
+          fi
 
           /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
@@ -305,22 +337,15 @@ jobs:
         run: |
           shasum -a 256 "$DMG_PATH" | tee "$SHA256_PATH"
 
-      - name: Generate GitHub Release notes
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Extract release notes from CHANGELOG
         run: |
-          GENERATED_NOTES="$RUNNER_TEMP/release-notes.generated.md"
           RELEASE_NOTES="$RUNNER_TEMP/release-notes.md"
           HIGHLIGHTS_PATH=".github/release-highlights/${TAG}.md"
-          TARGET_COMMIT="$(git rev-parse HEAD)"
+          GENERATED_NOTES="$RUNNER_TEMP/release-notes.generated.md"
 
-          gh api \
-            --method POST \
-            "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
-            -f tag_name="$TAG" \
-            -f target_commitish="$TARGET_COMMIT" \
-            -f configuration_file_path=".github/release.yml" \
-            --jq .body > "$GENERATED_NOTES"
+          python3 scripts/changelog.py extract \
+            --tag "$TAG" \
+            --output "$GENERATED_NOTES"
 
           if [[ -f "$HIGHLIGHTS_PATH" ]]; then
             cat "$HIGHLIGHTS_PATH" > "$RELEASE_NOTES"

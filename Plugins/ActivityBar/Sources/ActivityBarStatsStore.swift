@@ -14,9 +14,10 @@ final class ActivityBarStatsStore: ObservableObject {
     private let storage: PluginStorage
     private let calendar: Calendar
     private let dateProvider: () -> Date
+    private let persistenceDelay: Duration
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-    private var pendingPersistTask: Task<Void, Never>?
+    private var persistenceTask: Task<Void, Never>?
     private var hasPendingChanges = false
 
     private enum Persistence {
@@ -27,12 +28,18 @@ final class ActivityBarStatsStore: ObservableObject {
     init(
         storage: PluginStorage,
         calendar: Calendar = .current,
-        dateProvider: @escaping () -> Date = Date.init
+        dateProvider: @escaping () -> Date = Date.init,
+        persistenceDelay: Duration = Persistence.debounceDelay
     ) {
         self.storage = storage
         self.calendar = calendar
         self.dateProvider = dateProvider
+        self.persistenceDelay = persistenceDelay
         self.days = Self.prunedDays(Self.loadDays(storage: storage, decoder: decoder))
+    }
+
+    deinit {
+        persistenceTask?.cancel()
     }
 
     var today: ActivityBarDailyStats {
@@ -106,11 +113,11 @@ final class ActivityBarStatsStore: ObservableObject {
     func resetToday() {
         days[dateKey(for: dateProvider())] = ActivityBarDailyStats(date: dateKey(for: dateProvider()))
         hasPendingChanges = true
-        persistNow()
+        persistPendingChanges(force: true)
     }
 
     func flushPendingChanges() {
-        persistNow()
+        persistPendingChanges()
     }
 
     private func mutateToday(
@@ -127,7 +134,7 @@ final class ActivityBarStatsStore: ObservableObject {
         day.perApp[app] = appStats
         days[key] = day
         hasPendingChanges = true
-        schedulePersist()
+        schedulePersistence()
     }
 
     private func sanitizedAppName(_ value: String) -> String {
@@ -143,29 +150,38 @@ final class ActivityBarStatsStore: ObservableObject {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
-    private func schedulePersist() {
-        guard pendingPersistTask == nil else {
+    private func schedulePersistence() {
+        guard persistenceTask == nil else {
             return
         }
 
-        pendingPersistTask = Task { @MainActor [weak self] in
+        persistenceTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
             do {
-                try await Task.sleep(for: Persistence.debounceDelay)
+                try await Task.sleep(for: self.persistenceDelay)
             } catch {
                 return
             }
 
-            self?.persistNow()
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self.persistPendingChanges()
         }
     }
 
-    private func persistNow() {
-        guard hasPendingChanges else {
+    private func persistPendingChanges(force: Bool = false) {
+        persistenceTask?.cancel()
+        persistenceTask = nil
+
+        guard force || hasPendingChanges else {
             return
         }
 
-        pendingPersistTask?.cancel()
-        pendingPersistTask = nil
         days = Self.prunedDays(days)
 
         do {

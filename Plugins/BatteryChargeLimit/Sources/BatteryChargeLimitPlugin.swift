@@ -15,7 +15,12 @@ public final class BatteryChargeLimitPluginFactory: NSObject, MacToolsPluginBund
 private struct BatteryChargeLimitPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
     func makePlugins() -> [any MacToolsPlugin] {
-        [BatteryChargeLimitPlugin(context: context)]
+        [
+            BatteryChargeLimitPlugin(
+                context: context,
+                localization: PluginLocalization(bundle: context.resourceBundle)
+            ),
+        ]
     }
 }
 
@@ -37,14 +42,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: Metadata
 
-    let metadata = PluginMetadata(
-        id: "battery-charge-limit",
-        title: "电池充电上限",
-        iconName: "battery.100.bolt",
-        iconTint: Color(nsColor: .systemGreen),
-        order: 48,
-        defaultDescription: "限制电池充电至指定上限"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -60,6 +58,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: State
 
     let store: BatteryChargeLimitStore
+    private let localization: PluginLocalization
     private let reader: any BatteryChargeLimitReading
     private let writer: any BatteryChargeLimitWriting
 
@@ -67,6 +66,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var batterySnapshot: BatterySnapshot = .empty
     private var capabilities: BatterySMCCapabilities = .none
     private var lastErrorMessage: String?
+    private var requiresSMCCleanup = false
     private var monitoringTask: Task<Void, Never>?
     private var sleepObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
@@ -76,8 +76,21 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "battery-charge-limit"),
         reader: any BatteryChargeLimitReading = BatteryChargeLimitReader(),
-        writer: (any BatteryChargeLimitWriting)? = nil
+        writer: (any BatteryChargeLimitWriting)? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "battery-charge-limit",
+            title: localization.string("metadata.title", defaultValue: "电池充电上限"),
+            iconName: "battery.100.bolt",
+            iconTint: Color(nsColor: .systemGreen),
+            order: 48,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "限制电池充电至指定上限"
+            )
+        )
         self.store = BatteryChargeLimitStore(storage: context.storage)
         self.reader = reader
         self.writer = writer ?? BatteryChargeLimitWriter(resourceBundle: context.resourceBundle)
@@ -87,26 +100,20 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func activate(context: PluginRuntimeContext) {
         batterySnapshot = reader.readSnapshot()
-        startMonitoring()
-        registerSleepWakeObservers()
 
         // Re-assert the persisted mode after app restart. SMC keys can be
         // reset by firmware across sleep/hibernation, so on launch we
         // re-apply whatever the user last had configured.
         if store.isEnabled {
+            startActiveMonitoring()
             applyCurrentMode(reason: "activate")
         }
     }
 
     func deactivate(reason: PluginDeactivationReason) {
-        unregisterSleepWakeObservers()
-        stopMonitoring()
+        stopActiveMonitoring()
         if reason.requiresStateCleanup {
-            // Restore unrestricted charging so the user isn't left with the
-            // SMC stuck in inhibit after disabling/uninstalling the plugin.
-            _ = writer.resumeCharging()
-            _ = writer.setForceDischarge(false)
-            BatteryChargeLimitLog.plugin.info("Deactivated (\(String(describing: reason), privacy: .public)) — cleared SMC charge inhibit")
+            restoreUnrestrictedChargingIfNeeded(reason: String(describing: reason), requireInstalledHelper: true)
         }
     }
 
@@ -139,7 +146,8 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             BatteryChargeLimitSettingsView(
                 store: self.store,
                 capabilities: self.capabilities,
-                snapshot: self.batterySnapshot
+                snapshot: self.batterySnapshot,
+                localization: self.localization
             )
         }
     }
@@ -181,7 +189,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             // inhibited.
             capabilities = writer.probeCapabilities()
             if !capabilities.canInhibit && writer.isHelperAvailable {
-                lastErrorMessage = BatteryChargeWriteError.noSupportedSMCKey.errorDescription
+                lastErrorMessage = localizedDescription(for: .noSupportedSMCKey)
                 store.setEnabled(false)
                 onStateChange?()
                 return
@@ -189,11 +197,12 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             // Enabling always starts in holdAtLimit — the core behavior is
             // "don't auto-charge; user must explicitly resume."
             store.setMode(.holdAtLimit)
+            startActiveMonitoring()
             applyCurrentMode(reason: "user-enable")
         } else {
             store.setMode(.holdAtLimit)
-            _ = writer.setForceDischarge(false)
-            _ = writer.resumeCharging()
+            _ = restoreUnrestrictedCharging(reason: "user-disable", requireInstalledHelper: false)
+            stopActiveMonitoring()
             lastErrorMessage = nil
         }
         onStateChange?()
@@ -270,26 +279,24 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func applyCurrentMode(reason: String) {
         guard store.isEnabled else {
-            _ = writer.setForceDischarge(false)
-            _ = writer.resumeCharging()
+            _ = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: false)
             return
         }
 
         switch store.mode {
         case .holdAtLimit:
-            _ = writer.setForceDischarge(false)
-            if let err = writer.inhibitCharging(limitPercent: store.limitPercent) {
-                lastErrorMessage = err.errorDescription
-                BatteryChargeLimitLog.plugin.error("inhibit failed (\(reason, privacy: .public)): \(err.localizedDescription, privacy: .public)")
+            _ = setForceDischarge(false)
+            if let err = inhibitCharging(limitPercent: store.limitPercent) {
+                lastErrorMessage = localizedDescription(for: err)
+                BatteryChargeLimitLog.plugin.error("inhibit failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
             } else {
                 lastErrorMessage = nil
             }
 
         case .charging:
-            _ = writer.setForceDischarge(false)
-            if let err = writer.resumeCharging() {
-                lastErrorMessage = err.errorDescription
-                BatteryChargeLimitLog.plugin.error("resume failed (\(reason, privacy: .public)): \(err.localizedDescription, privacy: .public)")
+            if let err = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: false) {
+                lastErrorMessage = localizedDescription(for: err)
+                BatteryChargeLimitLog.plugin.error("resume failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
             } else {
                 lastErrorMessage = nil
             }
@@ -297,12 +304,12 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case .discharging:
             // Force-discharge implies the inhibit keys must also be set so
             // the adapter doesn't fight us by charging back up.
-            if let err = writer.inhibitCharging(limitPercent: store.limitPercent) {
-                BatteryChargeLimitLog.plugin.error("inhibit-for-discharge failed: \(err.localizedDescription, privacy: .public)")
+            if let err = inhibitCharging(limitPercent: store.limitPercent) {
+                BatteryChargeLimitLog.plugin.error("inhibit-for-discharge failed: \(self.localizedDescription(for: err), privacy: .public)")
             }
-            if let err = writer.setForceDischarge(true) {
-                lastErrorMessage = err.errorDescription
-                BatteryChargeLimitLog.plugin.error("force-discharge failed (\(reason, privacy: .public)): \(err.localizedDescription, privacy: .public)")
+            if let err = setForceDischarge(true) {
+                lastErrorMessage = localizedDescription(for: err)
+                BatteryChargeLimitLog.plugin.error("force-discharge failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
             } else {
                 lastErrorMessage = nil
             }
@@ -340,6 +347,16 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: - Monitoring
 
+    private func startActiveMonitoring() {
+        startMonitoring()
+        registerSleepWakeObservers()
+    }
+
+    private func stopActiveMonitoring() {
+        unregisterSleepWakeObservers()
+        stopMonitoring()
+    }
+
     private func startMonitoring() {
         guard monitoringTask == nil else { return }
         monitoringTask = Task { @MainActor [weak self] in
@@ -358,6 +375,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private func registerSleepWakeObservers() {
+        guard sleepObserver == nil, wakeObserver == nil else { return }
         let center = NSWorkspace.shared.notificationCenter
         sleepObserver = center.addObserver(
             forName: NSWorkspace.willSleepNotification,
@@ -400,24 +418,36 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: - Panel Builder
 
     private var panelSubtitle: String {
-        guard batterySnapshot.hasBattery else { return "未检测到电池" }
+        guard batterySnapshot.hasBattery else {
+            return localization.string("panel.subtitle.noBattery", defaultValue: "未检测到电池")
+        }
         let level = batterySnapshot.levelPercent ?? 0
 
         if !store.isEnabled {
-            return "未启用 · \(level)%"
+            return localization.format("panel.subtitle.disabled", defaultValue: "未启用 · %d%%", level)
         }
 
         let limit = store.limitPercent
         switch store.mode {
         case .holdAtLimit:
             if level >= limit {
-                return "已达上限 · \(level)% / \(limit)%"
+                return localization.format(
+                    "panel.subtitle.limitReached",
+                    defaultValue: "已达上限 · %d%% / %d%%",
+                    level,
+                    limit
+                )
             }
-            return "已停止充电 · \(level)% / \(limit)%"
+            return localization.format(
+                "panel.subtitle.chargingStopped",
+                defaultValue: "已停止充电 · %d%% / %d%%",
+                level,
+                limit
+            )
         case .charging:
-            return "充电中 · \(level)% → \(limit)%"
+            return localization.format("panel.subtitle.charging", defaultValue: "充电中 · %d%% → %d%%", level, limit)
         case .discharging:
-            return "放电中 · \(level)% → \(limit)%"
+            return localization.format("panel.subtitle.discharging", defaultValue: "放电中 · %d%% → %d%%", level, limit)
         }
     }
 
@@ -425,7 +455,9 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
         var controls: [PluginPanelControl] = []
 
         // 1. Enable/disable toggle as the first row.
-        let enableTitle = store.isEnabled ? "停用充电上限" : "启用充电上限"
+        let enableTitle = store.isEnabled
+            ? localization.string("panel.action.disable", defaultValue: "停用充电上限")
+            : localization.string("panel.action.enable", defaultValue: "启用充电上限")
         let enableIcon = store.isEnabled ? "checkmark.circle.fill" : "circle"
         controls.append(PluginPanelControl(
             id: ControlID.enableAction,
@@ -453,7 +485,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 minimumDate: nil,
                 displayedComponents: nil,
                 datePickerStyle: nil,
-                sectionTitle: "充电上限",
+                sectionTitle: localization.string("panel.section.limit", defaultValue: "充电上限"),
                 sliderValue: Double(store.limitPercent),
                 sliderBounds: Double(BatteryChargeLimits.minimumPercent)...Double(BatteryChargeLimits.maximumPercent),
                 sliderStep: Double(BatteryChargeLimits.percentStep),
@@ -466,13 +498,13 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             let chargeIcon: String
             switch store.mode {
             case .holdAtLimit:
-                chargeTitle = "开始充电"
+                chargeTitle = localization.string("panel.action.startCharging", defaultValue: "开始充电")
                 chargeIcon = "bolt.fill"
             case .charging:
-                chargeTitle = "停止充电"
+                chargeTitle = localization.string("panel.action.stopCharging", defaultValue: "停止充电")
                 chargeIcon = "bolt.slash.fill"
             case .discharging:
-                chargeTitle = "停止放电"
+                chargeTitle = localization.string("panel.action.stopDischarging", defaultValue: "停止放电")
                 chargeIcon = "stop.fill"
             }
             controls.append(PluginPanelControl(
@@ -497,7 +529,13 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
                let level = batterySnapshot.levelPercent,
                level > store.limitPercent
             {
-                let title = store.mode == .discharging ? "停止放电" : "强制放电至 \(store.limitPercent)%"
+                let title = store.mode == .discharging
+                    ? localization.string("panel.action.stopDischarging", defaultValue: "停止放电")
+                    : localization.format(
+                        "panel.action.dischargeToLimit",
+                        defaultValue: "强制放电至 %d%%",
+                        store.limitPercent
+                    )
                 controls.append(PluginPanelControl(
                     id: ControlID.dischargeAction,
                     kind: .actionRow,
@@ -526,7 +564,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "设置…",
+            actionTitle: localization.string("panel.action.settings", defaultValue: "设置…"),
             actionIconSystemName: "slider.horizontal.3",
             actionBehavior: .dismissBeforeHandling,
             showsLeadingDivider: true,
@@ -545,7 +583,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: "电池控制组件缺失",
+                actionTitle: localization.string("panel.action.missingHelper", defaultValue: "电池控制组件缺失"),
                 actionIconSystemName: "exclamationmark.triangle",
                 actionBehavior: .dismissBeforeHandling,
                 showsLeadingDivider: true,
@@ -554,5 +592,73 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
 
         return PluginPanelDetail(primaryControls: controls, secondaryPanel: nil)
+    }
+
+    private func localizedDescription(for error: BatteryChargeWriteError) -> String {
+        error.localizedDescription(localization: localization)
+    }
+
+    @discardableResult
+    private func inhibitCharging(limitPercent: Int) -> BatteryChargeWriteError? {
+        let error = writer.inhibitCharging(limitPercent: limitPercent)
+        markCleanupRequiredIfNeeded(after: error)
+        return error
+    }
+
+    @discardableResult
+    private func setForceDischarge(_ on: Bool) -> BatteryChargeWriteError? {
+        let error = writer.setForceDischarge(on)
+        if on {
+            markCleanupRequiredIfNeeded(after: error)
+        }
+        return error
+    }
+
+    private func markCleanupRequiredIfNeeded(after error: BatteryChargeWriteError?) {
+        if error == nil || error?.mayHaveChangedSMCState == true {
+            requiresSMCCleanup = true
+        }
+    }
+
+    private func restoreUnrestrictedChargingIfNeeded(reason: String, requireInstalledHelper: Bool) {
+        guard requiresSMCCleanup else {
+            BatteryChargeLimitLog.plugin.info("Skipped SMC charge cleanup for \(reason, privacy: .public); no active charge-control state")
+            return
+        }
+
+        _ = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: requireInstalledHelper)
+    }
+
+    @discardableResult
+    private func restoreUnrestrictedCharging(
+        reason: String,
+        requireInstalledHelper: Bool
+    ) -> BatteryChargeWriteError? {
+        guard !requireInstalledHelper || writer.isInstalledHelperAvailable else {
+            BatteryChargeLimitLog.plugin.info("Skipped SMC charge cleanup for \(reason, privacy: .public); helper is not installed")
+            return nil
+        }
+
+        let dischargeError = writer.setForceDischarge(false)
+        let resumeError = writer.resumeCharging()
+
+        if resumeError == nil && dischargeError == nil {
+            requiresSMCCleanup = false
+            BatteryChargeLimitLog.plugin.info("Cleared SMC charge-control state for \(reason, privacy: .public)")
+            return nil
+        } else {
+            BatteryChargeLimitLog.plugin.error("Failed to fully clear SMC charge-control state for \(reason, privacy: .public)")
+            return dischargeError ?? resumeError
+        }
+    }
+}
+
+private extension BatteryChargeWriteError {
+    var mayHaveChangedSMCState: Bool {
+        if case .writeFailed = self {
+            return true
+        }
+
+        return false
     }
 }

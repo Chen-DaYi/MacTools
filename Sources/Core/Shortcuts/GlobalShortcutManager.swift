@@ -12,15 +12,17 @@ final class GlobalShortcutManager {
         let binding: ShortcutBinding
         let reference: EventHotKeyRef
         let carbonID: UInt32
+        var shortcutIDs: [String]
     }
 
     private static let signature: OSType = 0x4D43544C
 
     var onShortcutTriggered: ((String) -> Void)?
+    var onShortcutReleased: ((String) -> Void)?
 
     private var handlerRef: EventHandlerRef?
-    private var registeredHotKeys: [String: RegisteredHotKey] = [:]
-    private var shortcutIDsByCarbonID: [UInt32: String] = [:]
+    private var registeredHotKeys: [ShortcutBinding: RegisteredHotKey] = [:]
+    private var shortcutIDsByCarbonID: [UInt32: [String]] = [:]
     private var nextCarbonID: UInt32 = 1
 
     init() {
@@ -30,19 +32,27 @@ final class GlobalShortcutManager {
     func updateBindings(_ registrations: [Registration]) {
         installHandlerIfNeeded()
 
-        let targetBindings = Dictionary(uniqueKeysWithValues: registrations.map { ($0.shortcutID, $0.binding) })
+        let targetGroups = registrations.reduce(into: [ShortcutBinding: [String]]()) { result, registration in
+            if result[registration.binding]?.contains(registration.shortcutID) == true {
+                return
+            }
 
-        for shortcutID in registeredHotKeys.keys where targetBindings[shortcutID] == nil {
-            unregister(shortcutID: shortcutID)
+            result[registration.binding, default: []].append(registration.shortcutID)
         }
 
-        for registration in registrations {
-            if let existing = registeredHotKeys[registration.shortcutID], existing.binding == registration.binding {
+        for binding in Array(registeredHotKeys.keys) where targetGroups[binding] == nil {
+            unregister(binding: binding)
+        }
+
+        for (binding, shortcutIDs) in targetGroups {
+            if var existing = registeredHotKeys[binding] {
+                existing.shortcutIDs = shortcutIDs
+                registeredHotKeys[binding] = existing
+                shortcutIDsByCarbonID[existing.carbonID] = shortcutIDs
                 continue
             }
 
-            unregister(shortcutID: registration.shortcutID)
-            register(registration)
+            register(binding: binding, shortcutIDs: shortcutIDs)
         }
     }
 
@@ -51,22 +61,33 @@ final class GlobalShortcutManager {
             return
         }
 
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
+        let eventTypes = [
+            EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: UInt32(kEventHotKeyPressed)
+            ),
+            EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: UInt32(kEventHotKeyReleased)
+            )
+        ]
 
-        InstallEventHandler(
-            GetApplicationEventTarget(),
-            Self.hotKeyHandler,
-            1,
-            &eventType,
-            UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()),
-            &handlerRef
-        )
+        // Register/listen on the event dispatcher target, matching Magnet and MASShortcut. In this
+        // app's run loop, global hotkey events are not routed to `GetApplicationEventTarget()`, so
+        // hotkeys can register successfully but never trigger callbacks.
+        _ = eventTypes.withUnsafeBufferPointer { buffer in
+            InstallEventHandler(
+                GetEventDispatcherTarget(),
+                Self.hotKeyHandler,
+                buffer.count,
+                buffer.baseAddress,
+                UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()),
+                &handlerRef
+            )
+        }
     }
 
-    private func register(_ registration: Registration) {
+    private func register(binding: ShortcutBinding, shortcutIDs: [String]) {
         var hotKeyReference: EventHotKeyRef?
         let carbonID = nextCarbonID
         nextCarbonID += 1
@@ -77,10 +98,10 @@ final class GlobalShortcutManager {
         )
 
         let status = RegisterEventHotKey(
-            UInt32(registration.binding.keyCode),
-            registration.binding.modifiers.carbonFlags,
+            UInt32(binding.keyCode),
+            binding.modifiers.carbonFlags,
             hotKeyID,
-            GetApplicationEventTarget(),
+            GetEventDispatcherTarget(),
             0,
             &hotKeyReference
         )
@@ -89,16 +110,17 @@ final class GlobalShortcutManager {
             return
         }
 
-        registeredHotKeys[registration.shortcutID] = RegisteredHotKey(
-            binding: registration.binding,
+        registeredHotKeys[binding] = RegisteredHotKey(
+            binding: binding,
             reference: hotKeyReference,
-            carbonID: carbonID
+            carbonID: carbonID,
+            shortcutIDs: shortcutIDs
         )
-        shortcutIDsByCarbonID[carbonID] = registration.shortcutID
+        shortcutIDsByCarbonID[carbonID] = shortcutIDs
     }
 
-    private func unregister(shortcutID: String) {
-        guard let registered = registeredHotKeys.removeValue(forKey: shortcutID) else {
+    private func unregister(binding: ShortcutBinding) {
+        guard let registered = registeredHotKeys.removeValue(forKey: binding) else {
             return
         }
 
@@ -107,17 +129,23 @@ final class GlobalShortcutManager {
     }
 
     private func unregisterAll() {
-        for shortcutID in Array(registeredHotKeys.keys) {
-            unregister(shortcutID: shortcutID)
+        for binding in Array(registeredHotKeys.keys) {
+            unregister(binding: binding)
         }
     }
 
-    private func dispatchShortcut(carbonID: UInt32) {
-        guard let shortcutID = shortcutIDsByCarbonID[carbonID] else {
+    private func dispatchShortcut(carbonID: UInt32, isReleased: Bool) {
+        guard let shortcutIDs = shortcutIDsByCarbonID[carbonID] else {
             return
         }
 
-        onShortcutTriggered?(shortcutID)
+        for shortcutID in shortcutIDs {
+            if isReleased {
+                onShortcutReleased?(shortcutID)
+            } else {
+                onShortcutTriggered?(shortcutID)
+            }
+        }
     }
 
     private nonisolated static let hotKeyHandler: EventHandlerUPP = { _, event, userData in
@@ -143,10 +171,15 @@ final class GlobalShortcutManager {
             return status
         }
 
+        guard hotKeyID.signature == 0x4D43544C else {
+            return OSStatus(eventNotHandledErr)
+        }
+
         let manager = Unmanaged<GlobalShortcutManager>.fromOpaque(userData).takeUnretainedValue()
+        let isReleased = GetEventKind(event) == UInt32(kEventHotKeyReleased)
 
         Task { @MainActor in
-            manager.dispatchShortcut(carbonID: hotKeyID.id)
+            manager.dispatchShortcut(carbonID: hotKeyID.id, isReleased: isReleased)
         }
 
         return noErr

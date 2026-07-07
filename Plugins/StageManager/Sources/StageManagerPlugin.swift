@@ -14,12 +14,23 @@ protocol StageManagerCommandRunning {
 }
 
 struct DefaultsStageManagerCommandRunner: StageManagerCommandRunning {
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
+
     func setStageManagerEnabled(_ isEnabled: Bool) throws {
         guard let defaults = UserDefaults(suiteName: StageManagerDefaults.windowManagerDomain) else {
             throw NSError(
                 domain: "StageManagerPlugin",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "无法访问台前调度偏好设置"]
+                userInfo: [
+                    NSLocalizedDescriptionKey: localization.string(
+                        "error.preferencesUnavailable",
+                        defaultValue: "无法访问台前调度偏好设置"
+                    )
+                ]
             )
         }
 
@@ -36,27 +47,22 @@ struct DefaultsStageManagerCommandRunner: StageManagerCommandRunning {
 
 public final class StageManagerPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        StageManagerPluginProvider()
+        StageManagerPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct StageManagerPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [StageManagerPlugin()]
+        [StageManagerPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class StageManagerPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "stage-manager",
-        title: "台前调度",
-        iconName: "sidebar.squares.leading",
-        iconTint: Color(nsColor: .systemTeal),
-        order: 48,
-        defaultDescription: "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -70,22 +76,38 @@ final class StageManagerPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "StageManagerPlugin")
     private let commandRunner: any StageManagerCommandRunning
     private let stateReader: () -> Bool
+    private let localization: PluginLocalization
 
     private var isStageManagerEnabled: Bool
     private var lastErrorMessage: String?
 
     init(
-        commandRunner: any StageManagerCommandRunning = DefaultsStageManagerCommandRunner(),
-        stateReader: @escaping () -> Bool = { StageManagerPlugin.readStageManagerState() }
+        commandRunner: (any StageManagerCommandRunning)? = nil,
+        stateReader: @escaping () -> Bool = { StageManagerPlugin.readStageManagerState() },
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        self.commandRunner = commandRunner
+        self.localization = localization
+        self.commandRunner = commandRunner ?? DefaultsStageManagerCommandRunner(localization: localization)
         self.stateReader = stateReader
+        self.metadata = PluginMetadata(
+            id: "stage-manager",
+            title: localization.string("metadata.title", defaultValue: "台前调度"),
+            iconName: "sidebar.squares.leading",
+            iconTint: Color(nsColor: .systemTeal),
+            order: 48,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边"
+            )
+        )
         self.isStageManagerEnabled = stateReader()
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: isStageManagerEnabled ? "已开启" : "已关闭",
+            subtitle: isStageManagerEnabled
+                ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
             isOn: isStageManagerEnabled,
             isExpanded: false,
             isEnabled: true,

@@ -33,6 +33,7 @@ final class MenuBarHiddenManager: ObservableObject {
     private let alwaysHiddenDivider: MenuBarHiddenDivider
     private let enumerator: MenuBarHiddenItemEnumerator
     private let events: MenuBarHiddenEventSynthesis
+    private let localization: PluginLocalization
     private let permissionProvider: () -> MenuBarHiddenPermissionsStatus
 
     private struct PendingClickRequest {
@@ -44,7 +45,7 @@ final class MenuBarHiddenManager: ObservableObject {
     private var settingsVisible = false
     private var hiddenIconsPanelVisible = false
     private var isDraggingMenuBarItem = false
-    private var currentDragTarget: DragTarget = .unknown
+    private var currentDragTarget: MenuBarHiddenMenuBarDragTarget = .unknown
     private var isRecoveringControlItemOrder = false
     private var shouldRestoreHiddenAfterDrag = false
     private var dragSessionID = 0
@@ -53,10 +54,12 @@ final class MenuBarHiddenManager: ObservableObject {
     private var clickTask: Task<Void, Never>?
     private var pendingClickRequests: [PendingClickRequest] = []
     private var controlItemRecoveryTask: Task<Void, Never>?
-    private var controlItemOrderSettleTask: Task<Void, Never>?
     private var controlItemRecoveryPollTask: Task<Void, Never>?
     private var hiddenRestoreTask: Task<Void, Never>?
     private var alwaysHiddenRestoreTask: Task<Void, Never>?
+    private var layoutRestoreTask: Task<Void, Never>?
+    private var menuBarDragCommitTask: Task<Void, Never>?
+    private var menuBarDragCommitSessionID: Int?
     private var settingsSettleRefreshTask: Task<Void, Never>?
     private var temporaryRehideTask: Task<Void, Never>?
     private var temporaryRehideCancellable: AnyCancellable?
@@ -66,6 +69,7 @@ final class MenuBarHiddenManager: ObservableObject {
 
     init(
         store: MenuBarHiddenStore,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         permissionProvider: @escaping () -> MenuBarHiddenPermissionsStatus = {
             MenuBarHiddenPermissionsStatus(
                 hasAccessibility: AXIsProcessTrusted(),
@@ -79,6 +83,7 @@ final class MenuBarHiddenManager: ObservableObject {
         self.enumerator = MenuBarHiddenItemEnumerator()
         self.events = MenuBarHiddenEventSynthesis()
         self.iconCache = MenuBarHiddenIconCache()
+        self.localization = localization
         self.permissionProvider = permissionProvider
 
         divider.onFrameChange = { [weak self] in
@@ -122,6 +127,7 @@ final class MenuBarHiddenManager: ObservableObject {
         updateAlwaysHiddenDividerVisibility()
         rebuildSnapshot()
         recoverControlItemOrderIfNeeded(sessionID: nil)
+        scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(700))
         scheduleAlwaysHiddenItemsRestoreIfNeeded(delay: .milliseconds(600))
     }
 
@@ -132,10 +138,11 @@ final class MenuBarHiddenManager: ObservableObject {
         clickTask?.cancel(); clickTask = nil
         pendingClickRequests.removeAll()
         controlItemRecoveryTask?.cancel(); controlItemRecoveryTask = nil
-        controlItemOrderSettleTask?.cancel(); controlItemOrderSettleTask = nil
         controlItemRecoveryPollTask?.cancel(); controlItemRecoveryPollTask = nil
         hiddenRestoreTask?.cancel(); hiddenRestoreTask = nil
         alwaysHiddenRestoreTask?.cancel(); alwaysHiddenRestoreTask = nil
+        layoutRestoreTask?.cancel(); layoutRestoreTask = nil
+        cancelMenuBarDragCommit()
         settingsSettleRefreshTask?.cancel(); settingsSettleRefreshTask = nil
         temporaryRehideTask?.cancel(); temporaryRehideTask = nil
         temporaryRehideCancellable?.cancel(); temporaryRehideCancellable = nil
@@ -157,6 +164,8 @@ final class MenuBarHiddenManager: ObservableObject {
             guard store.isEnabled != newValue else { return }
             hiddenRestoreTask?.cancel()
             hiddenRestoreTask = nil
+            layoutRestoreTask?.cancel()
+            layoutRestoreTask = nil
             shouldRestoreHiddenAfterDrag = false
             store.isEnabled = newValue
             if newValue {
@@ -166,6 +175,7 @@ final class MenuBarHiddenManager: ObservableObject {
                 divider.showSection(isDragging: false)
             }
             rebuildSnapshot()
+            scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(500))
         }
     }
 
@@ -188,6 +198,7 @@ final class MenuBarHiddenManager: ObservableObject {
             if newValue {
                 scheduleAlwaysHiddenItemsRestoreIfNeeded(delay: .milliseconds(500))
             }
+            scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(500))
             refreshIconsIfUIVisible()
         }
     }
@@ -215,7 +226,10 @@ final class MenuBarHiddenManager: ObservableObject {
         MenuBarHiddenLog.plugin.debug("refresh: \(reason.description)")
         refreshPermissions()
         rebuildSnapshot()
-        scheduleAlwaysHiddenItemsRestoreIfNeeded()
+        if !isMenuBarDragCommitPending {
+            scheduleAlwaysHiddenItemsRestoreIfNeeded()
+            scheduleStoredLayoutRestoreIfNeeded()
+        }
         refreshIconsIfUIVisible()
     }
 
@@ -253,10 +267,11 @@ final class MenuBarHiddenManager: ObservableObject {
             invalidateDragSession()
             let sessionID = dragSessionID
             currentDragTarget = dragTarget(at: startLocation)
-            controlItemOrderSettleTask?.cancel()
-            controlItemOrderSettleTask = nil
+            cancelMenuBarDragCommit()
             hiddenRestoreTask?.cancel()
             hiddenRestoreTask = nil
+            layoutRestoreTask?.cancel()
+            layoutRestoreTask = nil
             controlItemRecoveryTask?.cancel()
             controlItemRecoveryTask = nil
             isRecoveringControlItemOrder = false
@@ -273,7 +288,7 @@ final class MenuBarHiddenManager: ObservableObject {
         } else {
             let sessionID = dragSessionID
             stopControlItemOrderRecoveryPolling()
-            scheduleControlItemOrderRecoveryAfterSettling(target: currentDragTarget, sessionID: sessionID)
+            scheduleMenuBarDragCommit(target: currentDragTarget, sessionID: sessionID)
             currentDragTarget = .unknown
         }
     }
@@ -298,12 +313,14 @@ final class MenuBarHiddenManager: ObservableObject {
 
         alwaysHiddenRestoreTask?.cancel()
         alwaysHiddenRestoreTask = nil
+        layoutRestoreTask?.cancel()
+        layoutRestoreTask = nil
         moveTask?.cancel()
         moveTask = Task { [weak self] in
             guard let self else { return }
             let moved = await self.performMove(item: item, toSection: section, placement: placement)
             guard moved else { return }
-            self.updateAlwaysHiddenRecord(
+            self.updateStoredLayoutAfterMove(
                 for: item,
                 movedItem: self.snapshotItem(matching: item, in: section),
                 destination: section
@@ -367,6 +384,11 @@ final class MenuBarHiddenManager: ObservableObject {
 
     private func installAndExpand() {
         if !divider.isInstalled { divider.install() }
+        if visibleControlItemStoredPositionNeedsRecovery() {
+            divider.showSection(isDragging: false)
+            scheduleHostIconRecovery(sessionID: nil)
+            return
+        }
         if isDraggingMenuBarItem {
             divider.showSection(isDragging: true)
         } else {
@@ -465,6 +487,13 @@ final class MenuBarHiddenManager: ObservableObject {
         return ids
     }
 
+    private func localizedDescription(for error: Error) -> String {
+        if let eventError = error as? MenuBarHiddenEventError {
+            return eventError.localizedDescription(localization: localization)
+        }
+        return error.localizedDescription
+    }
+
     // MARK: - Move
 
     private func performMove(
@@ -498,7 +527,7 @@ final class MenuBarHiddenManager: ObservableObject {
         do {
             try await events.move(item: liveItem, to: target)
         } catch {
-            MenuBarHiddenLog.plugin.error("performMove failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("performMove failed: \(self.localizedDescription(for: error))")
             return false
         }
 
@@ -528,7 +557,7 @@ final class MenuBarHiddenManager: ObservableObject {
         }
     }
 
-    private func updateAlwaysHiddenRecord(
+    private func updateStoredLayoutAfterMove(
         for originalItem: MenuBarItem,
         movedItem: MenuBarItem?,
         destination: MenuBarHiddenSection
@@ -537,12 +566,215 @@ final class MenuBarHiddenManager: ObservableObject {
         case .alwaysHidden:
             store.recordAlwaysHiddenItem((movedItem ?? originalItem).tag)
         case .visible, .hidden:
-            guard store.isAlwaysHiddenEnabled else { return }
-            store.removeAlwaysHiddenItem(originalItem.tag)
-            if let movedItem {
-                store.removeAlwaysHiddenItem(movedItem.tag)
+            if store.isAlwaysHiddenEnabled {
+                store.removeAlwaysHiddenItem(originalItem.tag)
+                if let movedItem {
+                    store.removeAlwaysHiddenItem(movedItem.tag)
+                }
             }
         }
+        recordCurrentVisibleHiddenLayout()
+        scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(500))
+    }
+
+    private func prepareStoredVisibleHiddenLayoutIfNeeded() {
+        guard permissions.canManageItems else { return }
+        guard !snapshot.allItems.isEmpty else { return }
+        guard !isDraggingMenuBarItem, !isRecoveringControlItemOrder else { return }
+        guard temporarilyShownItemContexts.isEmpty else { return }
+
+        if store.hasVisibleHiddenLayout {
+            appendNewItemsToStoredVisibleHiddenLayout()
+        } else {
+            recordCurrentVisibleHiddenLayout()
+        }
+    }
+
+    private func appendNewItemsToStoredVisibleHiddenLayout() {
+        let layout = storedLayout()
+        let next = MenuBarHiddenStoredLayoutPolicy.appendNewItemsToHiddenByDefault(
+            items: snapshot.allItems,
+            storedLayout: layout
+        )
+        guard next.visibleItemStableKeys != store.visibleItemStableKeys
+            || next.hiddenItemStableKeys != store.hiddenItemStableKeys
+        else {
+            return
+        }
+        store.recordVisibleHiddenLayout(
+            visibleKeys: next.visibleItemStableKeys,
+            hiddenKeys: next.hiddenItemStableKeys
+        )
+    }
+
+    private func recordCurrentVisibleHiddenLayout() {
+        let next = MenuBarHiddenStoredLayoutPolicy.visibleHiddenLayout(
+            visibleItems: snapshot.visibleItems,
+            hiddenItems: snapshot.hiddenItems,
+            alwaysHiddenItems: snapshot.alwaysHiddenItems,
+            previousVisibleItemStableKeys: store.visibleItemStableKeys,
+            previousHiddenItemStableKeys: store.hiddenItemStableKeys
+        )
+        store.recordVisibleHiddenLayout(
+            visibleKeys: next.visibleItemStableKeys,
+            hiddenKeys: next.hiddenItemStableKeys
+        )
+    }
+
+    private func storedLayout() -> MenuBarHiddenStoredLayout {
+        MenuBarHiddenStoredLayout(
+            visibleItemStableKeys: store.visibleItemStableKeys,
+            hiddenItemStableKeys: store.hiddenItemStableKeys,
+            alwaysHiddenItemStableKeys: store.alwaysHiddenItemStableKeys,
+            isAlwaysHiddenEnabled: store.isAlwaysHiddenEnabled
+        )
+    }
+
+    private func scheduleStoredLayoutRestoreIfNeeded(delay: Duration = .milliseconds(300)) {
+        prepareStoredVisibleHiddenLayoutIfNeeded()
+        guard canRestoreStoredVisibleHiddenLayout else {
+            layoutRestoreTask?.cancel()
+            layoutRestoreTask = nil
+            return
+        }
+        guard !storedVisibleHiddenRestoreCandidates().isEmpty else {
+            layoutRestoreTask?.cancel()
+            layoutRestoreTask = nil
+            return
+        }
+
+        layoutRestoreTask?.cancel()
+        layoutRestoreTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            await self.restoreStoredVisibleHiddenLayout()
+        }
+    }
+
+    private func restoreStoredVisibleHiddenLayout() async {
+        guard canRestoreStoredVisibleHiddenLayout else {
+            layoutRestoreTask = nil
+            return
+        }
+
+        let candidates = storedVisibleHiddenRestoreCandidates()
+        guard !candidates.isEmpty else {
+            layoutRestoreTask = nil
+            return
+        }
+
+        var restoredCount = 0
+        for candidate in candidates {
+            guard !Task.isCancelled else {
+                layoutRestoreTask = nil
+                return
+            }
+            guard canRestoreStoredVisibleHiddenLayout else {
+                scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(600))
+                return
+            }
+
+            let placement = storedVisibleHiddenPlacement(
+                for: candidate.item,
+                in: candidate.section
+            )
+            if await performMove(item: candidate.item, toSection: candidate.section, placement: placement) {
+                restoredCount += 1
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+
+        layoutRestoreTask = nil
+        if restoredCount > 0, !storedVisibleHiddenRestoreCandidates().isEmpty {
+            scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(900))
+        }
+    }
+
+    private var canRestoreStoredVisibleHiddenLayout: Bool {
+        isActive
+            && store.hasVisibleHiddenLayout
+            && permissions.canManageItems
+            && divider.isInstalled
+            && !isDraggingMenuBarItem
+            && !isRecoveringControlItemOrder
+            && temporarilyShownItemContexts.isEmpty
+    }
+
+    private struct StoredVisibleHiddenRestoreCandidate {
+        let item: MenuBarItem
+        let section: MenuBarHiddenSection
+    }
+
+    private func storedVisibleHiddenRestoreCandidates() -> [StoredVisibleHiddenRestoreCandidate] {
+        let layout = storedLayout()
+        let currentSections = currentVisibleHiddenSectionsByStableKey()
+        let keyedItems = Dictionary(grouping: snapshot.allItems, by: { $0.tag.stableKey })
+            .compactMapValues(\.first)
+
+        return (layout.hiddenItemStableKeys + layout.visibleItemStableKeys).compactMap { key in
+            guard let item = keyedItems[key] else { return nil }
+            let desiredSection = MenuBarHiddenStoredLayoutPolicy.desiredSection(
+                for: item,
+                storedLayout: layout
+            )
+            guard desiredSection != .alwaysHidden else { return nil }
+            guard currentSections[key] != desiredSection else { return nil }
+            guard !MenuBarHiddenLayoutPolicy.shouldRejectMoveToSection(item: item, section: desiredSection) else {
+                return nil
+            }
+            return StoredVisibleHiddenRestoreCandidate(item: item, section: desiredSection)
+        }
+    }
+
+    private func currentVisibleHiddenSectionsByStableKey() -> [String: MenuBarHiddenSection] {
+        var sections: [String: MenuBarHiddenSection] = [:]
+        for item in snapshot.visibleItems {
+            sections[item.tag.stableKey] = .visible
+        }
+        for item in snapshot.hiddenItems {
+            sections[item.tag.stableKey] = .hidden
+        }
+        for item in snapshot.alwaysHiddenItems {
+            sections[item.tag.stableKey] = .alwaysHidden
+        }
+        return sections
+    }
+
+    private func storedVisibleHiddenPlacement(
+        for item: MenuBarItem,
+        in section: MenuBarHiddenSection
+    ) -> MenuBarHiddenMovePlacement {
+        let sectionKeys: [String]
+        let sectionItems: [MenuBarItem]
+        switch section {
+        case .visible:
+            sectionKeys = store.visibleItemStableKeys
+            sectionItems = snapshot.visibleItems
+        case .hidden:
+            sectionKeys = store.hiddenItemStableKeys
+            sectionItems = snapshot.hiddenItems
+        case .alwaysHidden:
+            return .end
+        }
+
+        guard let index = sectionKeys.firstIndex(of: item.tag.stableKey) else {
+            return .end
+        }
+        let itemsByKey = Dictionary(grouping: sectionItems, by: { $0.tag.stableKey })
+            .compactMapValues(\.first)
+
+        for nextKey in sectionKeys.dropFirst(index + 1) {
+            if let nextItem = itemsByKey[nextKey] {
+                return .before(nextItem.tag)
+            }
+        }
+        for previousKey in sectionKeys[..<index].reversed() {
+            if let previousItem = itemsByKey[previousKey] {
+                return .after(previousItem.tag)
+            }
+        }
+        return .end
     }
 
     private func scheduleAlwaysHiddenItemsRestoreIfNeeded(delay: Duration = .milliseconds(250)) {
@@ -823,7 +1055,7 @@ final class MenuBarHiddenManager: ObservableObject {
         do {
             try await events.move(item: resolution.item, to: showTarget)
         } catch {
-            MenuBarHiddenLog.plugin.error("temporary show failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("temporary show failed: \(self.localizedDescription(for: error))")
             return
         }
 
@@ -850,7 +1082,7 @@ final class MenuBarHiddenManager: ObservableObject {
                 baselineWindowIDs: baselineWindowIDs
             )
         } catch {
-            MenuBarHiddenLog.plugin.error("click failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("click failed: \(self.localizedDescription(for: error))")
         }
 
         rebuildSnapshot()
@@ -892,7 +1124,7 @@ final class MenuBarHiddenManager: ObservableObject {
             )
             return true
         } catch {
-            MenuBarHiddenLog.plugin.error("click failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("click failed: \(self.localizedDescription(for: error))")
             return false
         }
     }
@@ -1225,6 +1457,7 @@ final class MenuBarHiddenManager: ObservableObject {
             try? await Task.sleep(for: .milliseconds(200))
             rebuildSnapshot()
             scheduleAlwaysHiddenItemsRestoreIfNeeded()
+            scheduleStoredLayoutRestoreIfNeeded()
             refreshIconsIfUIVisible()
         } else {
             startTemporaryRehideLoop()
@@ -1316,7 +1549,7 @@ final class MenuBarHiddenManager: ObservableObject {
             return .retryLater
         } catch {
             context.rehideAttempts += 1
-            MenuBarHiddenLog.plugin.error("temporary rehide failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("temporary rehide failed: \(self.localizedDescription(for: error))")
             return .retryLater
         }
     }
@@ -1449,7 +1682,14 @@ final class MenuBarHiddenManager: ObservableObject {
     // MARK: - Host icon recovery
 
     private func recoverControlItemOrderIfNeeded(sessionID: Int?) {
-        switch currentDragTarget {
+        recoverControlItemOrderIfNeeded(target: currentDragTarget, sessionID: sessionID)
+    }
+
+    private func recoverControlItemOrderIfNeeded(
+        target: MenuBarHiddenMenuBarDragTarget,
+        sessionID: Int?
+    ) {
+        switch target {
         case .hostIcon:
             recoverHostIconIfNeeded(sessionID: sessionID)
         case .divider:
@@ -1462,16 +1702,9 @@ final class MenuBarHiddenManager: ObservableObject {
         }
     }
 
-    private func recoverControlItemOrderIfNeeded(target: DragTarget, sessionID: Int?) {
-        let previousTarget = currentDragTarget
-        currentDragTarget = target
-        recoverControlItemOrderIfNeeded(sessionID: sessionID)
-        currentDragTarget = previousTarget
-    }
-
     private func recoverHostIconIfNeeded(sessionID: Int? = nil) {
         guard divider.isInstalled else { return }
-        if hostStatusItemNeedsRecovery() {
+        if visibleControlItemStoredPositionNeedsRecovery() || hostStatusItemNeedsRecovery() {
             scheduleHostIconRecovery(sessionID: sessionID)
             return
         }
@@ -1510,6 +1743,10 @@ final class MenuBarHiddenManager: ObservableObject {
 
         let verticalOverlap = hostFrame.maxY > dividerFrame.minY && hostFrame.minY < dividerFrame.maxY
         return verticalOverlap && hostFrame.maxX <= dividerFrame.minX
+    }
+
+    private func visibleControlItemStoredPositionNeedsRecovery() -> Bool {
+        MenuBarControlItemDefaults.visibleControlItemNeedsRecovery()
     }
 
     private func recoverDividerIfNeeded(sessionID: Int?) {
@@ -1557,7 +1794,7 @@ final class MenuBarHiddenManager: ObservableObject {
         return verticalOverlap && dividerFrame.minX >= hostFrame.maxX
     }
 
-    private func dragTarget(at point: NSPoint?) -> DragTarget {
+    private func dragTarget(at point: NSPoint?) -> MenuBarHiddenMenuBarDragTarget {
         guard let point else { return .unknown }
         if hostStatusItemFrameProvider?().map({ $0.insetBy(dx: -6, dy: -6).contains(point) }) == true {
             return .hostIcon
@@ -1589,7 +1826,7 @@ final class MenuBarHiddenManager: ObservableObject {
 
                     self.isDraggingMenuBarItem = false
                     self.stopControlItemOrderRecoveryPolling()
-                    self.scheduleControlItemOrderRecoveryAfterSettling(
+                    self.scheduleMenuBarDragCommit(
                         target: self.currentDragTarget,
                         sessionID: sessionID
                     )
@@ -1608,29 +1845,105 @@ final class MenuBarHiddenManager: ObservableObject {
         (NSEvent.pressedMouseButtons & 1) != 0
     }
 
-    private func scheduleControlItemOrderRecoveryAfterSettling(target: DragTarget, sessionID: Int) {
-        controlItemOrderSettleTask?.cancel()
-        controlItemOrderSettleTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(500))
+    private func waitForMenuBarFramesToSettle() async {
+        var previousSignature = menuBarFrameSignature()
+        var stableReads = 0
+        let deadline = Date().addingTimeInterval(0.45)
+
+        while Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(45))
+            guard !Task.isCancelled else { return }
+            let currentSignature = menuBarFrameSignature()
+            if currentSignature == previousSignature {
+                stableReads += 1
+                if stableReads >= 2 {
+                    return
+                }
+            } else {
+                stableReads = 0
+                previousSignature = currentSignature
+            }
+        }
+    }
+
+    private func menuBarFrameSignature() -> [String] {
+        let result = enumerator.enumerate(
+            hiddenDividerWindowID: divider.windowID,
+            hiddenDividerFrame: divider.screenFrame,
+            alwaysHiddenDividerWindowID: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.windowID : nil,
+            alwaysHiddenDividerFrame: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.screenFrame : nil,
+            excludedWindowIDs: excludedControlWindowIDs()
+        )
+        return result.items.map { item in
+            let bounds = item.bounds.integral
+            return "\(item.tag.stableKey):\(Int(bounds.minX)):\(Int(bounds.maxX))"
+        }
+    }
+
+    private var isMenuBarDragCommitPending: Bool {
+        menuBarDragCommitSessionID != nil
+    }
+
+    private func scheduleMenuBarDragCommit(target: MenuBarHiddenMenuBarDragTarget, sessionID: Int) {
+        cancelMenuBarDragCommit()
+        menuBarDragCommitSessionID = sessionID
+        menuBarDragCommitTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            await self.waitForMenuBarFramesToSettle()
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard !Task.isCancelled else { return }
                 guard
-                    let self,
                     self.dragSessionID == sessionID,
                     !self.isDraggingMenuBarItem
                 else {
+                    self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
                     return
                 }
-                self.syncAlwaysHiddenRecordsAfterMenuBarDrag()
-                self.refresh(reason: .dragEnded)
-                self.recoverControlItemOrderIfNeeded(target: target, sessionID: sessionID)
-                if !self.isRecoveringControlItemOrder {
-                    self.scheduleHiddenRestoreAfterDrag(delay: .milliseconds(250), sessionID: sessionID)
-                }
-                self.scheduleAlwaysHiddenItemsRestoreIfNeeded(delay: .milliseconds(600))
+                self.commitMenuBarDragLayout(target: target, sessionID: sessionID)
             }
         }
+    }
+
+    private func commitMenuBarDragLayout(
+        target: MenuBarHiddenMenuBarDragTarget,
+        sessionID: Int
+    ) {
+        let decision = MenuBarHiddenMenuBarDragCommitPolicy.decision(
+            target: target,
+            dividerNeedsRecovery: dividerNeedsRecovery()
+        )
+
+        switch decision {
+        case .commit:
+            recordStoredLayoutAfterMenuBarDrag()
+            finishMenuBarDragCommit(sessionID: sessionID)
+        case .recoverThenCommit:
+            recoverDividerThenCommitMenuBarDrag(sessionID: sessionID)
+        case .recoverOnly:
+            recoverControlItemOrderIfNeeded(target: target, sessionID: sessionID)
+            if !isRecoveringControlItemOrder {
+                finishMenuBarDragCommit(sessionID: sessionID)
+            }
+        }
+    }
+
+    private func cancelMenuBarDragCommit() {
+        menuBarDragCommitTask?.cancel()
+        menuBarDragCommitTask = nil
+        menuBarDragCommitSessionID = nil
+    }
+
+    private func isMenuBarDragCommitCurrent(sessionID: Int) -> Bool {
+        menuBarDragCommitSessionID == sessionID
+    }
+
+    private func clearMenuBarDragCommitIfCurrent(sessionID: Int) {
+        guard menuBarDragCommitSessionID == sessionID else { return }
+        menuBarDragCommitTask = nil
+        menuBarDragCommitSessionID = nil
     }
 
     private func scheduleHostIconRecovery(sessionID: Int?) {
@@ -1644,7 +1957,11 @@ final class MenuBarHiddenManager: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 if let sessionID {
-                    guard self.dragSessionID == sessionID else { return }
+                    guard self.dragSessionID == sessionID else {
+                        self.isRecoveringControlItemOrder = false
+                        self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                        return
+                    }
                 }
                 self.divider.showSection(isDragging: false)
                 self.resetHostStatusItemPosition?()
@@ -1656,14 +1973,22 @@ final class MenuBarHiddenManager: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 if let sessionID {
-                    guard self.dragSessionID == sessionID else { return }
+                    guard self.dragSessionID == sessionID else {
+                        self.isRecoveringControlItemOrder = false
+                        self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                        return
+                    }
                 }
                 self.isRecoveringControlItemOrder = false
+                if let sessionID, self.isMenuBarDragCommitCurrent(sessionID: sessionID) {
+                    self.finishMenuBarDragCommit(sessionID: sessionID)
+                    return
+                }
                 self.refresh(reason: .hostIconRecovered)
                 if self.shouldRestoreHiddenAfterDrag {
                     self.scheduleHiddenRestoreAfterDrag(delay: .milliseconds(250), sessionID: sessionID)
                 } else if self.store.isEnabled, self.divider.isInstalled, !self.isDraggingMenuBarItem {
-                    self.divider.hideSection()
+                    self.installAndExpand()
                 }
                 self.updateAlwaysHiddenDividerVisibility()
             }
@@ -1681,7 +2006,11 @@ final class MenuBarHiddenManager: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 if let sessionID {
-                    guard self.dragSessionID == sessionID else { return }
+                    guard self.dragSessionID == sessionID else {
+                        self.isRecoveringControlItemOrder = false
+                        self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                        return
+                    }
                 }
                 self.divider.showSection(isDragging: false)
                 self.divider.reinstall()
@@ -1693,7 +2022,11 @@ final class MenuBarHiddenManager: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 if let sessionID {
-                    guard self.dragSessionID == sessionID else { return }
+                    guard self.dragSessionID == sessionID else {
+                        self.isRecoveringControlItemOrder = false
+                        self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                        return
+                    }
                 }
                 self.isRecoveringControlItemOrder = false
                 self.refresh(reason: .hostIconRecovered)
@@ -1703,6 +2036,44 @@ final class MenuBarHiddenManager: ObservableObject {
                     self.divider.hideSection()
                 }
                 self.updateAlwaysHiddenDividerVisibility()
+            }
+        }
+    }
+
+    private func recoverDividerThenCommitMenuBarDrag(sessionID: Int) {
+        guard !isRecoveringControlItemOrder else { return }
+
+        isRecoveringControlItemOrder = true
+        controlItemRecoveryTask?.cancel()
+        controlItemRecoveryTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard self.dragSessionID == sessionID else {
+                    self.isRecoveringControlItemOrder = false
+                    self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                    return
+                }
+                self.divider.showSection(isDragging: false)
+                self.divider.reinstall()
+            }
+
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            await self.waitForMenuBarFramesToSettle()
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                guard self.dragSessionID == sessionID else {
+                    self.isRecoveringControlItemOrder = false
+                    self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                    return
+                }
+                self.isRecoveringControlItemOrder = false
+                self.recordStoredLayoutAfterMenuBarDrag()
+                self.finishMenuBarDragCommit(sessionID: sessionID)
             }
         }
     }
@@ -1718,7 +2089,11 @@ final class MenuBarHiddenManager: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 if let sessionID {
-                    guard self.dragSessionID == sessionID else { return }
+                    guard self.dragSessionID == sessionID else {
+                        self.isRecoveringControlItemOrder = false
+                        self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                        return
+                    }
                 }
                 self.alwaysHiddenDivider.showSection(isDragging: false)
                 self.divider.showSection(isDragging: false)
@@ -1730,7 +2105,11 @@ final class MenuBarHiddenManager: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 if let sessionID {
-                    guard self.dragSessionID == sessionID else { return }
+                    guard self.dragSessionID == sessionID else {
+                        self.isRecoveringControlItemOrder = false
+                        self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                        return
+                    }
                 }
 
                 let result = self.enumerator.enumerate(
@@ -1777,7 +2156,7 @@ final class MenuBarHiddenManager: ObservableObject {
                         try await self.events.move(item: controlItem, to: target)
                     } catch {
                         MenuBarHiddenLog.plugin.error(
-                            "always-hidden divider recovery failed: \(error.localizedDescription)"
+                            "always-hidden divider recovery failed: \(self.localizedDescription(for: error))"
                         )
                     }
 
@@ -1786,7 +2165,11 @@ final class MenuBarHiddenManager: ObservableObject {
                     await MainActor.run {
                         guard !Task.isCancelled else { return }
                         if let sessionID {
-                            guard self.dragSessionID == sessionID else { return }
+                            guard self.dragSessionID == sessionID else {
+                                self.isRecoveringControlItemOrder = false
+                                self.clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+                                return
+                            }
                         }
                         self.isRecoveringControlItemOrder = false
                         self.restoreControlItemsAfterAlwaysHiddenRecovery()
@@ -1798,8 +2181,8 @@ final class MenuBarHiddenManager: ObservableObject {
         }
     }
 
-    private func syncAlwaysHiddenRecordsAfterMenuBarDrag() {
-        guard store.isAlwaysHiddenEnabled, permissions.canManageItems else { return }
+    private func recordStoredLayoutAfterMenuBarDrag() {
+        guard permissions.canManageItems else { return }
 
         let result = enumerator.enumerate(
             hiddenDividerWindowID: divider.windowID,
@@ -1808,26 +2191,48 @@ final class MenuBarHiddenManager: ObservableObject {
             alwaysHiddenDividerFrame: alwaysHiddenDivider.isInstalled ? alwaysHiddenDivider.screenFrame : nil,
             excludedWindowIDs: excludedControlWindowIDs()
         )
-        guard
-            let hiddenDividerBounds = result.hiddenDividerBounds,
-            let alwaysHiddenDividerBounds = result.alwaysHiddenDividerBounds
-        else {
+        guard let hiddenDividerBounds = result.hiddenDividerBounds else {
             return
         }
 
         let layoutItems = MenuBarHiddenLayoutPolicy.layoutEditorItems(from: result.items)
-        let currentAlwaysHiddenKeys = Set(
-            layoutItems
-                .filter { item in
-                    item.canBeHidden
-                        && MenuBarHiddenLayoutPolicy.section(
-                            for: item,
-                            hiddenDividerBounds: hiddenDividerBounds,
-                            alwaysHiddenDividerBounds: alwaysHiddenDividerBounds
-                        ) == .alwaysHidden
-                }
-                .map(\.tag.stableKey)
+        let alwaysHiddenDividerBounds: CGRect?
+        if store.isAlwaysHiddenEnabled {
+            guard let bounds = result.alwaysHiddenDividerBounds else { return }
+            alwaysHiddenDividerBounds = bounds
+        } else {
+            alwaysHiddenDividerBounds = nil
+        }
+        let visibleItems = MenuBarHiddenLayoutPolicy.visibleItems(
+            from: layoutItems,
+            hiddenDividerBounds: hiddenDividerBounds,
+            alwaysHiddenDividerBounds: alwaysHiddenDividerBounds
         )
+        let hiddenItems = MenuBarHiddenLayoutPolicy.hiddenItems(
+            from: layoutItems,
+            hiddenDividerBounds: hiddenDividerBounds,
+            alwaysHiddenDividerBounds: alwaysHiddenDividerBounds
+        )
+        let alwaysHiddenItems = MenuBarHiddenLayoutPolicy.alwaysHiddenItems(
+            from: layoutItems,
+            hiddenDividerBounds: hiddenDividerBounds,
+            alwaysHiddenDividerBounds: alwaysHiddenDividerBounds
+        )
+        let nextVisibleHidden = MenuBarHiddenStoredLayoutPolicy.visibleHiddenLayout(
+            visibleItems: visibleItems,
+            hiddenItems: hiddenItems,
+            alwaysHiddenItems: alwaysHiddenItems,
+            previousVisibleItemStableKeys: store.visibleItemStableKeys,
+            previousHiddenItemStableKeys: store.hiddenItemStableKeys
+        )
+        store.recordVisibleHiddenLayout(
+            visibleKeys: nextVisibleHidden.visibleItemStableKeys,
+            hiddenKeys: nextVisibleHidden.hiddenItemStableKeys
+        )
+
+        guard store.isAlwaysHiddenEnabled else { return }
+
+        let currentAlwaysHiddenKeys = Set(alwaysHiddenItems.filter(\.canBeHidden).map(\.tag.stableKey))
         let currentItemKeys = Set(layoutItems.map(\.tag.stableKey))
         let previousKeys = store.alwaysHiddenItemStableKeys
         let keysStillMissing = previousKeys.subtracting(currentItemKeys)
@@ -1835,6 +2240,20 @@ final class MenuBarHiddenManager: ObservableObject {
 
         guard nextKeys != previousKeys else { return }
         store.alwaysHiddenItemStableKeys = nextKeys
+    }
+
+    private func finishMenuBarDragCommit(sessionID: Int) {
+        guard dragSessionID == sessionID else {
+            clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+            return
+        }
+        clearMenuBarDragCommitIfCurrent(sessionID: sessionID)
+        rebuildSnapshot()
+        refreshIconsIfUIVisible()
+        if shouldRestoreHiddenAfterDrag {
+            scheduleHiddenRestoreAfterDrag(delay: .milliseconds(80), sessionID: sessionID)
+        }
+        scheduleAlwaysHiddenItemsRestoreIfNeeded(delay: .milliseconds(400))
     }
 
     private func restoreControlItemsAfterAlwaysHiddenRecovery() {
@@ -1880,9 +2299,4 @@ final class MenuBarHiddenManager: ObservableObject {
         }
     }
 
-    private enum DragTarget {
-        case hostIcon
-        case divider
-        case unknown
-    }
 }

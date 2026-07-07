@@ -77,6 +77,26 @@ final class PluginPackageResolverTests: XCTestCase {
         }
     }
 
+    func testRejectsReleaseChannelMismatch() async throws {
+        let packageURL = try makePackage(id: "com.example.demo", version: "1.0.0")
+        let entry = try makeEntry(
+            for: packageURL,
+            id: "com.example.demo",
+            version: "1.0.0",
+            releaseChannel: "beta"
+        )
+        let resolver = PluginPackageResolver(
+            temporaryDirectory: temporaryRoot.appendingPathComponent("Temporary", isDirectory: true)
+        )
+
+        do {
+            _ = try await resolver.resolvePackage(for: entry)
+            XCTFail("Expected release channel mismatch")
+        } catch {
+            XCTAssertEqual(error as? PluginPackageResolverError, .manifestMismatch(field: "releaseChannel"))
+        }
+    }
+
     func testZipPackageExpandsToMactoolsPluginDirectory() async throws {
         let packageURL = try makePackage(id: "com.example.demo", version: "1.0.0")
         let zipURL = temporaryRoot.appendingPathComponent("Demo.mactoolsplugin.zip")
@@ -164,7 +184,8 @@ final class PluginPackageResolverTests: XCTestCase {
     private func makeEntry(
         for packageURL: URL,
         id: String,
-        version: String
+        version: String,
+        releaseChannel: String? = nil
     ) throws -> PluginCatalogEntry {
         let metrics = try PluginPackageResolver.packageMetrics(for: packageURL)
 
@@ -178,7 +199,8 @@ final class PluginPackageResolverTests: XCTestCase {
                 url: packageURL,
                 sha256: metrics.sha256,
                 size: metrics.size
-            )
+            ),
+            releaseChannel: releaseChannel
         )
     }
 

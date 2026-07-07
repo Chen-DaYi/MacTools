@@ -1,6 +1,7 @@
 import AppKit
 import EventKit
 import Foundation
+import MacToolsPluginKit
 
 @MainActor
 enum CalendarEventAuthorization: Equatable {
@@ -29,9 +30,14 @@ protocol CalendarEventServicing: AnyObject {
 @MainActor
 final class CalendarEventService: CalendarEventServicing {
     private var eventStore = EKEventStore()
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
 
     var authorization: CalendarEventAuthorization {
-        Self.authorization(from: EKEventStore.authorizationStatus(for: .event))
+        Self.authorization(from: EKEventStore.authorizationStatus(for: .event), localization: localization)
     }
 
     func requestAccess() async -> CalendarEventAuthorization {
@@ -80,7 +86,7 @@ final class CalendarEventService: CalendarEventServicing {
             calendars: calendars
         )
 
-        return eventStore.events(matching: predicate).map(Self.input(from:))
+        return eventStore.events(matching: predicate).map { Self.input(from: $0, localization: localization) }
     }
 
     func openSystemCalendar(at date: Date) {
@@ -104,27 +110,30 @@ final class CalendarEventService: CalendarEventServicing {
         }
     }
 
-    private static func authorization(from status: EKAuthorizationStatus) -> CalendarEventAuthorization {
+    private static func authorization(
+        from status: EKAuthorizationStatus,
+        localization: PluginLocalization
+    ) -> CalendarEventAuthorization {
         switch status {
         case .notDetermined:
             return .notDetermined
         case .fullAccess:
             return .fullAccess
         case .denied:
-            return .denied("未获得日历访问权限")
+            return .denied(localization.string("authorization.denied", defaultValue: "未获得日历访问权限"))
         case .restricted:
-            return .denied("系统限制了日历访问")
+            return .denied(localization.string("authorization.restricted", defaultValue: "系统限制了日历访问"))
         case .writeOnly:
-            return .denied("仅允许写入日历，无法读取日程")
+            return .denied(localization.string("authorization.writeOnly", defaultValue: "仅允许写入日历，无法读取日程"))
         @unknown default:
-            return .denied("当前系统不允许读取日历")
+            return .denied(localization.string("authorization.unknown", defaultValue: "当前系统不允许读取日历"))
         }
     }
 
-    private static func input(from event: EKEvent) -> CalendarEventInput {
+    private static func input(from event: EKEvent, localization: PluginLocalization) -> CalendarEventInput {
         CalendarEventInput(
             id: event.eventIdentifier ?? event.calendarItemIdentifier,
-            title: event.title ?? "未命名日程",
+            title: event.title ?? localization.string("event.untitled", defaultValue: "未命名日程"),
             startDate: event.startDate,
             endDate: event.endDate,
             isAllDay: event.isAllDay,

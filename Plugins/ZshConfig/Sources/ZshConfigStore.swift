@@ -1,10 +1,11 @@
 import AppKit
 import Foundation
 import OSLog
+import MacToolsPluginKit
 
 // MARK: - ZshConfigStore
 
-/// 管理 zsh 配置文件的读取、编辑和写入，负责所有文件 I/O 操作。
+/// Manages zsh configuration file reads, edits, writes, and related file I/O.
 @MainActor
 final class ZshConfigStore: ObservableObject {
 
@@ -20,8 +21,9 @@ final class ZshConfigStore: ObservableObject {
 
     // MARK: Private
 
-    /// 当前文件在磁盘上的内容（加载或保存成功后更新），用于判断是否真有未保存改动
+    /// Last known on-disk content, updated after successful load or save to detect real edits.
     private var savedContent: String = ""
+    private let localization: PluginLocalization
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -30,14 +32,15 @@ final class ZshConfigStore: ObservableObject {
 
     // MARK: Init
 
-    init() {
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
         refreshStatusMap()
         loadFile(type: .zshrc)
     }
 
     // MARK: - Public API
 
-    /// 切换到指定文件（会加载其内容，丢弃未保存的编辑）
+    /// Switches to the file, loading its contents and discarding unsaved edits.
     func select(_ type: ZshConfigFileType) {
         guard type != selectedType else { return }
         selectedType = type
@@ -46,24 +49,24 @@ final class ZshConfigStore: ObservableObject {
         loadFile(type: type)
     }
 
-    /// 从磁盘重新加载当前选中的文件
+    /// Reloads the selected file from disk.
     func reloadCurrentFile() {
         loadFile(type: selectedType)
     }
 
-    /// 保存 editingContent 到当前选中的文件（先备份）
+    /// Saves `editingContent` to the selected file after creating a backup.
     func saveCurrentFile() {
         guard !isBusy else { return }
         save(type: selectedType, content: editingContent)
     }
 
-    /// 用默认模板创建当前选中的文件（文件不存在时使用）
+    /// Creates the selected file from the default template when it does not exist.
     func createCurrentFile() {
         guard !isBusy else { return }
         createFile(type: selectedType)
     }
 
-    /// 在系统默认编辑器中打开指定文件（如不存在则先创建）
+    /// Opens the file in the system default editor, creating it first if needed.
     func openInExternalEditor(_ type: ZshConfigFileType) {
         let url = type.fileURL
         if !(statusMap[type]?.exists ?? false) {
@@ -74,7 +77,7 @@ final class ZshConfigStore: ObservableObject {
         logger.info("Opened \(url.path) in external editor")
     }
 
-    /// 在 Finder 中显示指定文件（如不存在则显示家目录）
+    /// Reveals the file in Finder, or opens the home directory when the file does not exist.
     func revealInFinder(_ type: ZshConfigFileType) {
         let url = type.fileURL
         if FileManager.default.fileExists(atPath: url.path) {
@@ -84,7 +87,7 @@ final class ZshConfigStore: ObservableObject {
         }
     }
 
-    /// 将片段追加到 editingContent 末尾
+    /// Appends a snippet to the end of `editingContent`.
     func appendSnippet(_ text: String) {
         if editingContent.isEmpty {
             editingContent = text
@@ -98,14 +101,14 @@ final class ZshConfigStore: ObservableObject {
         hasUnsavedChanges = true
     }
 
-    /// 刷新所有配置文件的状态（存在性、可写性等）
+    /// Refreshes status for every configuration file.
     func refreshStatusMap() {
         for type in ZshConfigFileType.allCases {
             statusMap[type] = ZshFileStatus.probe(type)
         }
     }
 
-    /// 标记编辑内容已被用户修改（若内容已恢复到保存状态则自动取消标记）
+    /// Marks whether the current edit differs from the last saved content.
     func markEdited() {
         hasUnsavedChanges = editingContent != savedContent
         lastSaveSucceeded = false
@@ -130,7 +133,11 @@ final class ZshConfigStore: ObservableObject {
         } catch {
             editingContent = ""
             savedContent = ""
-            saveError = "读取失败：\(error.localizedDescription)"
+            saveError = localization.format(
+                "store.error.readFailed",
+                defaultValue: "读取失败：%@",
+                error.localizedDescription
+            )
             logger.error("Failed to read \(url.path): \(error)")
         }
     }
@@ -149,7 +156,11 @@ final class ZshConfigStore: ObservableObject {
             refreshStatusMap()
             logger.info("Saved \(url.path)")
         } catch {
-            saveError = "保存失败：\(error.localizedDescription)"
+            saveError = localization.format(
+                "store.error.saveFailed",
+                defaultValue: "保存失败：%@",
+                error.localizedDescription
+            )
             logger.error("Failed to save \(url.path): \(error)")
         }
         isBusy = false
@@ -167,13 +178,17 @@ final class ZshConfigStore: ObservableObject {
             loadFile(type: type)
             refreshStatusMap()
         } catch {
-            saveError = "创建失败：\(error.localizedDescription)"
+            saveError = localization.format(
+                "store.error.createFailed",
+                defaultValue: "创建失败：%@",
+                error.localizedDescription
+            )
             logger.error("Failed to create \(url.path): \(error)")
         }
         isBusy = false
     }
 
-    /// 每次保存前自动备份（覆盖上一份备份，只保留最新一份 .bak）
+    /// Creates a backup before each save, replacing the previous `.bak` backup.
     private func makeBackupIfNeeded(url: URL) throws {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let backupURL = url.deletingLastPathComponent()
@@ -187,14 +202,16 @@ final class ZshConfigStore: ObservableObject {
     }
 
     private func buildFileHeader(for type: ZshConfigFileType) -> String {
-        """
+        let createdAt = ISO8601DateFormatter().string(from: Date())
+        let sourceCommand = "source \(type.filename)"
+        return """
         # \(type.filename)
-        # 说明：\(type.role)
-        # 加载时机：\(type.whenLoaded)
-        # 推荐用途：\(type.recommendedUse)
-        # 由 MacTools 创建于 \(ISO8601DateFormatter().string(from: Date()))
+        # \(localization.format("store.header.role", defaultValue: "说明：%@", type.role(localization: localization)))
+        # \(localization.format("store.header.whenLoaded", defaultValue: "加载时机：%@", type.whenLoaded(localization: localization)))
+        # \(localization.format("store.header.recommendedUse", defaultValue: "推荐用途：%@", type.recommendedUse(localization: localization)))
+        # \(localization.format("store.header.createdAt", defaultValue: "由 MacTools 创建于 %@", createdAt))
         #
-        # 保存后，在终端执行 source \(type.filename) 即可立即生效（.zshrc 适用）。
+        # \(localization.format("store.header.reloadHint", defaultValue: "保存后，在终端执行 %@ 即可立即生效（.zshrc 适用）。", sourceCommand))
         #
 
         """

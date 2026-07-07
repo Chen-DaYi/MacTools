@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import MacToolsPluginKit
 
 protocol IPOverviewLeakTesting: Sendable {
     func checkWebRTC(target: IPOverviewWebRTCTarget) async -> IPOverviewLeakTestResult
@@ -9,13 +10,16 @@ protocol IPOverviewLeakTesting: Sendable {
 struct IPOverviewLeakTestService: IPOverviewLeakTesting {
     private let httpClient: any IPOverviewHTTPClient
     private let timeout: TimeInterval
+    private let localization: PluginLocalization
 
     init(
         httpClient: any IPOverviewHTTPClient = URLSession.shared,
-        timeout: TimeInterval = 5
+        timeout: TimeInterval = 5,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.httpClient = httpClient
         self.timeout = timeout
+        self.localization = localization
     }
 
     func checkWebRTC(target: IPOverviewWebRTCTarget) async -> IPOverviewLeakTestResult {
@@ -24,7 +28,10 @@ struct IPOverviewLeakTestService: IPOverviewLeakTesting {
                 host: target.host,
                 port: target.port
             )
-            let geo = await geoEndpoint(ip: ip, natType: "端口限制型或对称型")
+            let geo = await geoEndpoint(
+                ip: ip,
+                natType: localization.string("leak.nat.portRestrictedOrSymmetric", defaultValue: "端口限制型或对称型")
+            )
             return IPOverviewLeakTestResult(
                 id: target.id,
                 name: target.name,
@@ -34,7 +41,7 @@ struct IPOverviewLeakTestService: IPOverviewLeakTesting {
             return IPOverviewLeakTestResult(
                 id: target.id,
                 name: target.name,
-                status: .failure(error.localizedDescription)
+                status: .failure(Self.userFacingMessage(for: error, localization: localization))
             )
         }
     }
@@ -48,7 +55,11 @@ struct IPOverviewLeakTestService: IPOverviewLeakTesting {
             return IPOverviewLeakTestResult(id: id, name: name, status: .success(endpoint))
         }
 
-        return IPOverviewLeakTestResult(id: id, name: name, status: .failure("未获取到 DNS 出口"))
+        return IPOverviewLeakTestResult(
+            id: id,
+            name: name,
+            status: .failure(localization.string("leak.error.noDNSExit", defaultValue: "未获取到 DNS 出口"))
+        )
     }
 
     private func checkIPAPIDNSLeak() async -> IPOverviewLeakEndpoint? {
@@ -108,15 +119,7 @@ struct IPOverviewLeakTestService: IPOverviewLeakTesting {
     }
 
     private func geoEndpoint(ip: String, natType: String?) async -> IPOverviewLeakEndpoint {
-        guard let url = URL(string: "https://ipwho.is/\(ip)") else {
-            return IPOverviewLeakEndpoint(
-                ip: ip,
-                natType: natType,
-                country: nil,
-                countryCode: nil,
-                organization: nil
-            )
-        }
+        let url = IPOverviewGeoSource.ipwhois.url(ip: ip, localization: localization)
 
         do {
             let (data, response) = try await fetch(url)
@@ -165,6 +168,13 @@ struct IPOverviewLeakTestService: IPOverviewLeakTesting {
     private func shortToken() -> String {
         "mt\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(10))"
     }
+
+    private static func userFacingMessage(for error: Error, localization: PluginLocalization) -> String {
+        if let stunError = error as? STUNClient.Error {
+            return stunError.localizedDescription(localization: localization)
+        }
+        return error.localizedDescription
+    }
 }
 
 private struct STUNClient {
@@ -175,13 +185,17 @@ private struct STUNClient {
         case failed(String)
 
         var errorDescription: String? {
+            localizedDescription()
+        }
+
+        func localizedDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
             switch self {
             case .invalidPort:
-                return "STUN 端口无效"
+                return localization.string("stun.error.invalidPort", defaultValue: "STUN 端口无效")
             case .timedOut:
-                return "STUN 请求超时"
+                return localization.string("stun.error.timedOut", defaultValue: "STUN 请求超时")
             case .noMappedAddress:
-                return "未返回外部地址"
+                return localization.string("stun.error.noMappedAddress", defaultValue: "未返回外部地址")
             case .failed(let message):
                 return message
             }

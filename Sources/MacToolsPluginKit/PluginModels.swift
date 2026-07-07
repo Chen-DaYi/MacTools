@@ -66,6 +66,7 @@ public enum PluginStatusTone {
 
 public enum PluginPermissionKind {
     case accessibility
+    case inputMonitoring
     case calendarFullAccess
     case automation
     case screenRecording
@@ -101,14 +102,11 @@ public enum MenuBarControlItemDefaults {
     public static let visibleDefaultPreferredPosition: Double = 0
     public static let hiddenDefaultPreferredPosition: Double = 1
     public static let adjacentPreferredPositionOffset: Double = 0.5
+    private static let visiblePreferredPositionBackupKey = "MacTools.ControlItem.Visible.PreferredPositionBackup"
 
     public static func prepareVisibleControlItem(userDefaults: UserDefaults = .standard) {
-        prepareControlItem(
-            autosaveName: visibleAutosaveName,
-            preferredPosition: preferredPositionForVisibleControlItemRightOfHiddenDivider(userDefaults: userDefaults),
-            alwaysResetPreferredPosition: false,
-            userDefaults: userDefaults
-        )
+        restoreVisibleControlItemPreferredPositionIfMissing(userDefaults: userDefaults)
+        prepareControlItemVisibility(autosaveName: visibleAutosaveName, userDefaults: userDefaults)
     }
 
     public static func resetVisibleControlItemPosition(userDefaults: UserDefaults = .standard) {
@@ -131,6 +129,38 @@ public enum MenuBarControlItemDefaults {
         setPreferredPosition(position, autosaveName: visibleAutosaveName, userDefaults: userDefaults)
     }
 
+    public static func snapshotVisibleControlItemPreferredPosition(userDefaults: UserDefaults = .standard) {
+        guard let preferredPosition = visibleControlItemPreferredPosition(userDefaults: userDefaults) else {
+            return
+        }
+
+        userDefaults.set(preferredPosition, forKey: visiblePreferredPositionBackupKey)
+    }
+
+    public static func restoreVisibleControlItemPreferredPositionIfMissing(
+        userDefaults: UserDefaults = .standard
+    ) {
+        guard
+            visibleControlItemPreferredPosition(userDefaults: userDefaults) == nil,
+            let preferredPosition = userDefaults.object(forKey: visiblePreferredPositionBackupKey) as? Double
+        else {
+            return
+        }
+
+        setVisibleControlItemPreferredPosition(preferredPosition, userDefaults: userDefaults)
+    }
+
+    public static func visibleControlItemNeedsRecovery(userDefaults: UserDefaults = .standard) -> Bool {
+        guard
+            let visiblePosition = visibleControlItemPreferredPosition(userDefaults: userDefaults),
+            let hiddenDividerPosition = hiddenDividerControlItemPreferredPosition(userDefaults: userDefaults)
+        else {
+            return false
+        }
+
+        return visiblePosition >= hiddenDividerPosition
+    }
+
     public static func prepareHiddenDividerControlItem(
         preferredPosition: Double = hiddenDefaultPreferredPosition,
         userDefaults: UserDefaults = .standard
@@ -138,7 +168,7 @@ public enum MenuBarControlItemDefaults {
         prepareControlItem(
             autosaveName: hiddenAutosaveName,
             preferredPosition: preferredPosition,
-            alwaysResetPreferredPosition: true,
+            alwaysResetPreferredPosition: false,
             userDefaults: userDefaults
         )
     }
@@ -187,16 +217,6 @@ public enum MenuBarControlItemDefaults {
         let visiblePosition = visibleControlItemPreferredPosition(userDefaults: userDefaults)
             ?? visibleDefaultPreferredPosition
         return visiblePosition + adjacentPreferredPositionOffset
-    }
-
-    public static func recoverVisibleAndHiddenControlItemDefaultPositions(
-        userDefaults: UserDefaults = .standard
-    ) {
-        setHiddenDividerControlItemPreferredPosition(hiddenDefaultPreferredPosition, userDefaults: userDefaults)
-        setVisibleControlItemPreferredPosition(
-            preferredPositionForVisibleControlItemRightOfHiddenDivider(userDefaults: userDefaults),
-            userDefaults: userDefaults
-        )
     }
 
     private static func prepareControlItem(
@@ -324,6 +344,8 @@ public struct PluginComponentSpan: Equatable, Hashable, Sendable {
 }
 
 public struct PluginComponentPanelLayoutMetrics: Equatable, Sendable {
+    public static let cardCornerRadius: CGFloat = 12
+
     public let columns: Int
     public let cellWidth: CGFloat
     public let cellHeight: CGFloat
@@ -531,6 +553,7 @@ public enum PluginPanelControlKind {
     case navigationList
     case slider
     case actionRow
+    case switchRow
 }
 
 public enum PluginPanelDatePickerStyle {
@@ -551,6 +574,8 @@ public struct PluginPanelControlOption: Identifiable, Equatable {
 }
 
 public struct PluginPanelControl: Identifiable {
+    // Dynamic plugin bundles pass this value type across the PluginKit boundary.
+    // Bump PluginKitCompatibility before changing stored property layout.
     public let id: String
     public let kind: PluginPanelControlKind
     public let options: [PluginPanelControlOption]
@@ -811,6 +836,7 @@ public struct PluginFeatureManagementItem: Identifiable {
     public let isActive: Bool
     public let presentation: PluginFeaturePresentation
     public let category: String?
+    public let releaseChannel: String?
 
     public init(
         id: String,
@@ -821,7 +847,8 @@ public struct PluginFeatureManagementItem: Identifiable {
         isVisible: Bool,
         isActive: Bool,
         presentation: PluginFeaturePresentation,
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -832,6 +859,7 @@ public struct PluginFeatureManagementItem: Identifiable {
         self.isActive = isActive
         self.presentation = presentation
         self.category = category
+        self.releaseChannel = releaseChannel
     }
 }
 

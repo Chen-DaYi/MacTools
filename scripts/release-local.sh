@@ -4,11 +4,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/scripts"
-PROJECT_SPEC="$ROOT_DIR/project.yml"
+APP_VERSION_CONFIG="$ROOT_DIR/Configs/AppVersion.xcconfig"
 PROJECT_FILE="$ROOT_DIR/MacTools.xcodeproj"
 XCODEBUILD="${XCODEBUILD:-$SCRIPT_DIR/xcodebuild-filtered.sh}"
 APP_NAME="MacTools"
 APP_ENTITLEMENTS="$ROOT_DIR/Configs/MacTools.entitlements"
+FINDER_SYNC_ENTITLEMENTS="$ROOT_DIR/Sources/Extensions/RightClickFinderSync/RightClickFinderSync.entitlements"
 SCHEME="MacTools"
 CONFIG_FILE="${RELEASE_CONFIG_FILE:-$SCRIPT_DIR/release.local.env}"
 DEFAULT_GITHUB_REPOSITORY="ggbond268/MacTools"
@@ -35,8 +36,8 @@ Usage:
   ./scripts/release-local.sh [options]
 
 Options:
-  --version <version>        Release marketing version. Defaults to project.yml.
-  --build-number <number>    Release build number. Defaults to project.yml.
+  --version <version>        Release marketing version. Defaults to Configs/AppVersion.xcconfig.
+  --build-number <number>    Release build number. Defaults to Configs/AppVersion.xcconfig.
   --tag <tag>                Git tag / release tag. Defaults to v<version>.
   --notes-file <path>        Release notes file for GitHub Release upload.
   --publish                  Push the tag and sync the DMG to GitHub Releases.
@@ -156,9 +157,9 @@ $matched_identity
   fi
 }
 
-function read_project_setting() {
+function read_version_setting() {
   local key="$1"
-  awk -v key="$key" '$1 == key ":" { print $2; exit }' "$PROJECT_SPEC"
+  awk -v key="$key" '$1 == key && $2 == "=" { print $3; exit }' "$APP_VERSION_CONFIG"
 }
 
 function git_repository() {
@@ -311,6 +312,21 @@ function sign_path_preserving_entitlements() {
     "$path"
 }
 
+function sign_path_with_entitlements() {
+  local path="$1"
+  local entitlements="$2"
+
+  [[ -f "$entitlements" ]] || fail "未找到 entitlements：$entitlements"
+
+  /usr/bin/codesign \
+    --force \
+    --sign "$DEVELOPER_ID_APPLICATION" \
+    --options runtime \
+    --timestamp \
+    --entitlements "$entitlements" \
+    "$path"
+}
+
 function sign_app_path() {
   local path="$1"
 
@@ -328,6 +344,11 @@ function sign_app_path() {
 function is_inside_sparkle_framework() {
   local path="$1"
   [[ "$path" == *"/Sparkle.framework" || "$path" == *"/Sparkle.framework/"* ]]
+}
+
+function is_right_click_finder_sync_extension() {
+  local path="$1"
+  [[ "$(basename "$path")" == "RightClickFinderSync.appex" ]]
 }
 
 function sign_sparkle_framework() {
@@ -354,6 +375,25 @@ function sign_sparkle_framework() {
   fi
 
   sign_path "$sparkle_framework"
+}
+
+function validate_finder_sync_extension() {
+  local app_path="$1"
+  local extension_path="$app_path/Contents/PlugIns/RightClickFinderSync.appex"
+  local extension_point entitlements
+
+  [[ -d "$extension_path" ]] || fail "未找到 Finder Sync 扩展：$extension_path"
+
+  extension_point="$(/usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$extension_path/Contents/Info.plist" 2>/dev/null || true)"
+  [[ "$extension_point" == "com.apple.FinderSync" ]] \
+    || fail "Finder Sync 扩展 Info.plist 缺少正确的 NSExtensionPointIdentifier。"
+
+  entitlements="$(/usr/bin/codesign -d --entitlements :- "$extension_path" 2>/dev/null || true)"
+  [[ "$entitlements" == *"com.apple.security.app-sandbox"* ]] \
+    || fail "Finder Sync 扩展签名缺少 com.apple.security.app-sandbox entitlement。"
+
+  [[ "$entitlements" == *"com.apple.security.temporary-exception.files.home-relative-path.read-only"* ]] \
+    || fail "Finder Sync 扩展签名缺少读取右键配置文件所需的 temporary exception entitlement。"
 }
 
 function app_bundle_identifier() {
@@ -387,13 +427,18 @@ function sign_app_bundle() {
       if is_inside_sparkle_framework "$bundle"; then
         continue
       fi
-      sign_path "$bundle"
+      if is_right_click_finder_sync_extension "$bundle"; then
+        sign_path_with_entitlements "$bundle" "$FINDER_SYNC_ENTITLEMENTS"
+      else
+        sign_path "$bundle"
+      fi
     done < <(find "$app_path/Contents" -depth -type d \( -name "*.framework" -o -name "*.app" -o -name "*.xpc" -o -name "*.appex" \) -print)
 
     sign_sparkle_framework "$app_path"
   fi
 
   sign_app_path "$app_path"
+  validate_finder_sync_extension "$app_path"
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
 }
 
@@ -498,19 +543,18 @@ function publish_release() {
   ensure_clean_git
   ensure_tag_ready
 
+  if [[ -z "$NOTES_FILE" ]]; then
+    NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/mactools-release-notes.XXXXXX.md")"
+    python3 "$ROOT_DIR/scripts/changelog.py" extract --tag "$TAG" --output "$NOTES_FILE"
+  fi
+
   info "Syncing asset to GitHub Release $TAG ($repository)"
 
   if gh release view "$TAG" --repo "$repository" >/dev/null 2>&1; then
     gh release upload "$TAG" "$dmg_path" --repo "$repository" --clobber
-    if [[ -n "$NOTES_FILE" ]]; then
-      gh release edit "$TAG" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
-    fi
+    gh release edit "$TAG" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
   else
-    if [[ -n "$NOTES_FILE" ]]; then
-      gh release create "$TAG" "$dmg_path" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
-    else
-      gh release create "$TAG" "$dmg_path" --repo "$repository" --title "$APP_NAME $VERSION" --generate-notes
-    fi
+    gh release create "$TAG" "$dmg_path" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
   fi
 }
 
@@ -520,13 +564,13 @@ require_command shasum
 require_command codesign
 require_command git
 
-VERSION="${VERSION:-$(read_project_setting MARKETING_VERSION)}"
-BUILD_NUMBER="${BUILD_NUMBER:-$(read_project_setting CURRENT_PROJECT_VERSION)}"
+VERSION="${VERSION:-$(read_version_setting MARKETING_VERSION)}"
+BUILD_NUMBER="${BUILD_NUMBER:-$(read_version_setting CURRENT_PROJECT_VERSION)}"
 TAG="${TAG:-v$VERSION}"
 NOTES_FILE="${NOTES_FILE:-${GITHUB_RELEASE_NOTES_FILE:-}}"
 
-[[ -n "$VERSION" ]] || fail "无法从 project.yml 读取 MARKETING_VERSION。"
-[[ -n "$BUILD_NUMBER" ]] || fail "无法从 project.yml 读取 CURRENT_PROJECT_VERSION。"
+[[ -n "$VERSION" ]] || fail "无法从 Configs/AppVersion.xcconfig 读取 MARKETING_VERSION。"
+[[ -n "$BUILD_NUMBER" ]] || fail "无法从 Configs/AppVersion.xcconfig 读取 CURRENT_PROJECT_VERSION。"
 if [[ -n "$NOTES_FILE" && ! -f "$NOTES_FILE" ]]; then
   fail "Release notes 文件不存在：$NOTES_FILE"
 fi

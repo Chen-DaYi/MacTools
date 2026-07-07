@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import MacToolsPluginKit
 
 @MainActor
 final class DeviceBatteryViewModel: ObservableObject {
@@ -14,11 +15,14 @@ final class DeviceBatteryViewModel: ObservableObject {
 
     private let sampler: any DeviceBatterySampling
     private let rapooMonitor: any RapooBatteryMonitoring
+    private let localization: PluginLocalization
     private var samplingTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var systemItems: [DeviceBatteryItem] = []
     private var rapooSnapshot = RapooMouseBatterySnapshot.idle
     private var lastSystemUpdate: Date?
+    private var isCollecting = false
+    private var pendingCollectRequest = false
     private var isStarted = false
     private var includeInternalBattery = true
     private var includeBluetoothDevices = true
@@ -27,18 +31,22 @@ final class DeviceBatteryViewModel: ObservableObject {
     var onSnapshotChange: (() -> Void)?
 
     convenience init() {
+        let localization = PluginLocalization(bundle: .main)
         self.init(
-            sampler: DeviceBatterySampler(),
-            rapooMonitor: RapooHIDBatteryMonitor()
+            sampler: DeviceBatterySampler(localization: localization),
+            rapooMonitor: RapooHIDBatteryMonitor(localization: localization),
+            localization: localization
         )
     }
 
     init(
         sampler: any DeviceBatterySampling,
-        rapooMonitor: any RapooBatteryMonitoring
+        rapooMonitor: any RapooBatteryMonitoring,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.sampler = sampler
         self.rapooMonitor = rapooMonitor
+        self.localization = localization
         rapooSnapshot = rapooMonitor.snapshot
     }
 
@@ -117,6 +125,11 @@ final class DeviceBatteryViewModel: ObservableObject {
     }
 
     private func collectNow() {
+        if isCollecting {
+            pendingCollectRequest = true
+            return
+        }
+
         refreshTask?.cancel()
         refreshTask = Task { @MainActor [weak self] in
             await self?.collectOnce()
@@ -136,13 +149,31 @@ final class DeviceBatteryViewModel: ObservableObject {
     }
 
     private func collectOnce() async {
-        rebuildSnapshot(accessOverride: .scanning)
+        if isCollecting {
+            pendingCollectRequest = true
+            return
+        }
 
-        let referenceDate = Date()
-        let collectedItems = await sampler.collectSystemDevices(referenceDate: referenceDate)
-        systemItems = collectedItems
-        lastSystemUpdate = referenceDate
-        rebuildSnapshot()
+        isCollecting = true
+        defer {
+            isCollecting = false
+        }
+
+        repeat {
+            pendingCollectRequest = false
+            rebuildSnapshot(accessOverride: .scanning)
+
+            let referenceDate = Date()
+            let collectedItems = await sampler.collectSystemDevices(referenceDate: referenceDate)
+            guard !Task.isCancelled else {
+                pendingCollectRequest = false
+                return
+            }
+
+            systemItems = collectedItems
+            lastSystemUpdate = referenceDate
+            rebuildSnapshot()
+        } while pendingCollectRequest && !Task.isCancelled
     }
 
     private func rebuildSnapshot(
@@ -159,7 +190,7 @@ final class DeviceBatteryViewModel: ObservableObject {
             }
         }
 
-        if includeRapooDevices, let rapooItem = rapooSnapshot.batteryItem {
+        if includeRapooDevices, let rapooItem = rapooSnapshot.batteryItem(localization: localization) {
             items.append(rapooItem)
         }
 
@@ -185,14 +216,30 @@ final class DeviceBatteryViewModel: ObservableObject {
     }
 
     private func deduplicated(_ items: [DeviceBatteryItem]) -> [DeviceBatteryItem] {
-        var seen: Set<String> = []
-        return items.filter { item in
-            let key = "\(item.kind.title)-\(item.name.lowercased())-\(item.parentName ?? "")"
-            guard !seen.contains(key) else {
-                return false
+        var bestByKey: [String: DeviceBatteryItem] = [:]
+        var orderedKeys: [String] = []
+
+        for item in DeviceBatteryItemNormalizer.removingRedundantComponentAggregates(items) {
+            let key = "\(item.kind)-\(item.name.lowercased())-\(item.parentName ?? "")"
+            if let existing = bestByKey[key] {
+                bestByKey[key] = preferredItem(existing, item)
+            } else {
+                bestByKey[key] = item
+                orderedKeys.append(key)
             }
-            seen.insert(key)
-            return true
         }
+
+        return orderedKeys.compactMap { bestByKey[$0] }
+    }
+
+    private func preferredItem(
+        _ left: DeviceBatteryItem,
+        _ right: DeviceBatteryItem
+    ) -> DeviceBatteryItem {
+        if left.chargeState.isActiveChargingState != right.chargeState.isActiveChargingState {
+            return left.chargeState.isActiveChargingState ? left : right
+        }
+
+        return left.lastUpdated ?? .distantPast >= right.lastUpdated ?? .distantPast ? left : right
     }
 }

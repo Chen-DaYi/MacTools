@@ -6,42 +6,50 @@ import MacToolsPluginKit
 
 public final class ClipboardClearPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        ClipboardClearPluginProvider()
+        ClipboardClearPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct ClipboardClearPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [ClipboardClearPlugin()]
+        [ClipboardClearPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
-/// 剪贴板清空插件
 @MainActor
 final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
     static let pluginID = "clipboard-clear"
     static let pluginOrder: Int = 120
 
     private let pasteboard = NSPasteboard.general
+    private let localization: PluginLocalization
     private var canClearClipboard = false
 
-    let metadata = PluginMetadata(
-        id: ClipboardClearPlugin.pluginID,
-        title: "清空剪贴板",
-        iconName: "trash",
-        iconTint: .accentColor,
-        order: ClipboardClearPlugin.pluginOrder,
-        defaultDescription: "一键清空当前剪贴板内容"
-    )
+    let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "清空"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
-    init() {
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: ClipboardClearPlugin.pluginID,
+            title: localization.string("metadata.title", defaultValue: "清空剪贴板"),
+            iconName: "trash",
+            iconTint: .accentColor,
+            order: ClipboardClearPlugin.pluginOrder,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "一键清空当前剪贴板内容"
+            )
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.button.clear", defaultValue: "清空")
+        )
         canClearClipboard = Self.hasClipboardContents(in: pasteboard)
     }
 
@@ -68,7 +76,7 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
         if case .invokeAction(let controlID) = action, controlID == "execute" {
             pasteboard.clearContents()
             syncPasteboardState(forceNotify: true)
-            Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.mactools", category: "ClipboardClearPlugin").info("剪贴板已清空")
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.mactools", category: "ClipboardClearPlugin").info("Clipboard cleared")
         }
     }
 
@@ -99,5 +107,3 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
         return items.contains { !$0.types.isEmpty }
     }
 }
-
-

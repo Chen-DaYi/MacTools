@@ -2,7 +2,53 @@
   "id": "display-brightness",
   "displayName": "显示器亮度",
   "summary": "快速调节每个显示器的亮度",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "سطوع الشاشة",
+      "summary": "اضبط السطوع لكل شاشة بسرعة."
+    },
+    "de": {
+      "displayName": "Displayhelligkeit",
+      "summary": "Passen Sie die Helligkeit für jedes Display schnell an."
+    },
+    "en": {
+      "displayName": "Display Brightness",
+      "summary": "Adjust brightness for each display quickly."
+    },
+    "es": {
+      "displayName": "Brillo de pantalla",
+      "summary": "Ajuste el brillo de cada pantalla rápidamente."
+    },
+    "fr": {
+      "displayName": "Luminosité de l’écran",
+      "summary": "Ajustez rapidement la luminosité de chaque écran."
+    },
+    "ja": {
+      "displayName": "ディスプレイの明るさ",
+      "summary": "各ディスプレイの明るさを素早く調整します。"
+    },
+    "ko": {
+      "displayName": "디스플레이 밝기",
+      "summary": "각 디스플레이의 밝기를 빠르게 조정하세요."
+    },
+    "pt": {
+      "displayName": "Brilho da tela",
+      "summary": "Ajuste o brilho de cada tela rapidamente."
+    },
+    "ru": {
+      "displayName": "Яркость дисплея",
+      "summary": "Быстро отрегулируйте яркость каждого дисплея."
+    },
+    "zh-Hans": {
+      "displayName": "显示器亮度",
+      "summary": "快速调节每个显示器的亮度"
+    },
+    "zh-Hant": {
+      "displayName": "顯示器亮度",
+      "summary": "快速調節每個顯示器的亮度"
+    }
+  },
+  "version": "1.0.10",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayBrightness.bundle",
@@ -14,7 +60,7 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": false
+    "configuration": true
   },
   "permissions": [],
   "category": "display"

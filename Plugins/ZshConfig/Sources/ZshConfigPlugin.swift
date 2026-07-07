@@ -33,20 +33,9 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: Metadata
 
-    let metadata = PluginMetadata(
-        id: "zsh-config",
-        title: "zsh 配置",
-        iconName: "curlybraces",
-        iconTint: Color(nsColor: .systemGreen),
-        order: 72,
-        defaultDescription: "快速编辑 zsh 配置文件"
-    )
+    let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "编辑"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     // MARK: Callbacks
 
@@ -57,6 +46,7 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: Private
 
     private let store: ZshConfigStore
+    private let localization: PluginLocalization
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "ZshConfigPlugin"
@@ -65,7 +55,22 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: Init
 
     init(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "zsh-config")) {
-        self.store = ZshConfigStore()
+        let localization = PluginLocalization(bundle: context.resourceBundle)
+        self.localization = localization
+        self.store = ZshConfigStore(localization: localization)
+        self.metadata = PluginMetadata(
+            id: "zsh-config",
+            title: localization.string("metadata.title", defaultValue: "zsh 配置"),
+            iconName: "curlybraces",
+            iconTint: Color(nsColor: .systemGreen),
+            order: 72,
+            defaultDescription: localization.string("metadata.description", defaultValue: "快速编辑 zsh 配置文件")
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.button.edit", defaultValue: "编辑")
+        )
     }
 
     // MARK: - MacToolsPlugin
@@ -94,17 +99,20 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handleAction(_ action: PluginPanelAction) {
-        // 「编辑」按钮由宿主拦截并导航到设置页，插件无需额外处理。
+        // The host intercepts the Edit button and navigates to this plugin's settings page.
     }
 
     // MARK: - Configuration
 
     var configuration: PluginConfiguration? {
         PluginConfiguration(
-            description: "在应用内直接查看和编辑 zsh 配置文件，支持常用片段快速插入。",
+            description: localization.string(
+                "configuration.description",
+                defaultValue: "在应用内直接查看和编辑 zsh 配置文件，支持常用片段快速插入。"
+            ),
             prefersFullHeight: true
         ) { [self] _ in
-            ZshConfigEditorView(store: self.store)
+            ZshConfigEditorView(store: self.store, localization: self.localization)
         }
     }
 
@@ -115,7 +123,7 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
             store.statusMap[$0]?.exists == true
         }
         if existing.isEmpty {
-            return "未找到配置文件，点击设置创建"
+            return localization.string("panel.subtitle.noFiles", defaultValue: "未找到配置文件，点击设置创建")
         }
         return metadata.defaultDescription
     }

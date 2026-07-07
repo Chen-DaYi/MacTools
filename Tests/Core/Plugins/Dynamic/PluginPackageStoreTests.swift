@@ -88,7 +88,17 @@ final class PluginPackageStoreTests: XCTestCase {
 
         let record = try XCTUnwrap(store.installedRecords().first)
 
-        XCTAssertEqual(record.state, .incompatible("插件 SDK 版本不兼容，已安装版本为 1，当前支持版本为 2。请更新插件。"))
+        XCTAssertEqual(
+            record.state,
+            .incompatible(
+                AppL10n.pluginsFormat(
+                    "plugin.error.store.installedSDKIncompatibleFormat",
+                    defaultValue: "插件 SDK 版本不兼容，已安装版本为 %d，当前支持版本为 %d。请更新插件。",
+                    1,
+                    PluginPackageManifestLoader.supportedPluginKitVersion
+                )
+            )
+        )
     }
 
     func testUninstallDeletesPackageAndCanRemoveStorage() throws {
@@ -120,6 +130,20 @@ final class PluginPackageStoreTests: XCTestCase {
         let record = try XCTUnwrap(store.installedRecords().first)
         XCTAssertEqual(record.manifest.version, "1.0.0")
         XCTAssertEqual(record.state, .enabled)
+    }
+
+    func testUpdateKeepsDisabledPluginDisabled() throws {
+        let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
+        let updateURL = try makePackage(id: "com.example.demo", version: "2.0.0")
+        let store = makeStore()
+        _ = try store.installPackage(from: sourceURL)
+        store.setEnabled(false, for: "com.example.demo")
+
+        _ = try store.updatePackage(from: updateURL)
+
+        let record = try XCTUnwrap(store.installedRecords().first)
+        XCTAssertEqual(record.manifest.version, "2.0.0")
+        XCTAssertEqual(record.state, .disabled)
     }
 
     func testDefaultRootDirectoryUsesCurrentApplicationSupportScope() {

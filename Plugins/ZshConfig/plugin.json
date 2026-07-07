@@ -2,7 +2,53 @@
   "id": "zsh-config",
   "displayName": "zsh 配置",
   "summary": "快速编辑 ~/.zshrc 等 zsh 配置文件，支持内联编辑和常用片段快速插入",
-  "version": "1.0.2",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "zsh 配置",
+      "summary": "快速编辑 ~/.zshrc 等 zsh 配置文件，支持内联编辑和常用片段快速插入"
+    },
+    "zh-Hant": {
+      "displayName": "zsh 設定",
+      "summary": "快速編輯 ~/.zshrc 等 zsh 設定檔，支援內嵌編輯與常用片段快速插入"
+    },
+    "en": {
+      "displayName": "zsh Config",
+      "summary": "Edit ~/.zshrc and other zsh config files quickly, with inline editing and common snippets."
+    },
+    "es": {
+      "displayName": "Config. zsh",
+      "summary": "Edita ~/.zshrc y otros archivos de config. zsh con edición integrada y fragmentos comunes."
+    },
+    "fr": {
+      "displayName": "Config. zsh",
+      "summary": "Modifiez ~/.zshrc et d’autres fichiers de config. zsh avec édition intégrée et extraits courants."
+    },
+    "ru": {
+      "displayName": "Настройки zsh",
+      "summary": "Быстро редактируйте ~/.zshrc и другие файлы zsh со встроенным редактором и типовыми фрагментами."
+    },
+    "pt": {
+      "displayName": "Config. zsh",
+      "summary": "Edite ~/.zshrc e outros arquivos de config. zsh com edição integrada e trechos comuns."
+    },
+    "de": {
+      "displayName": "zsh-Konfig.",
+      "summary": "~/.zshrc und andere zsh-Konfigurationsdateien mit integriertem Editor und häufigen Snippets bearbeiten."
+    },
+    "ja": {
+      "displayName": "zsh 設定",
+      "summary": "~/.zshrc などの zsh 設定ファイルを、内蔵エディタとよく使うスニペットですばやく編集します。"
+    },
+    "ko": {
+      "displayName": "zsh 설정",
+      "summary": "내장 편집기와 자주 쓰는 스니펫으로 ~/.zshrc 등 zsh 설정 파일을 빠르게 편집합니다."
+    },
+    "ar": {
+      "displayName": "إعدادات zsh",
+      "summary": "حرّر ~/.zshrc وملفات إعداد zsh الأخرى بسرعة، مع تحرير مدمج ومقتطفات شائعة."
+    }
+  },
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "ZshConfig.bundle",

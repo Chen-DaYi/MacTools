@@ -2,7 +2,53 @@
   "id": "hide-notch",
   "displayName": "隐藏刘海",
   "summary": "自动遮挡刘海屏顶部区域",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "إخفاء النتوء",
+      "summary": "قم بتغطية المنطقة العلوية تلقائيًا على الشاشات المسننة."
+    },
+    "de": {
+      "displayName": "Notch ausblenden",
+      "summary": "Decken Sie automatisch den oberen Kerbbereich auf gekerbten Displays ab."
+    },
+    "en": {
+      "displayName": "Hide Notch",
+      "summary": "Automatically cover the top notch area on notched displays."
+    },
+    "es": {
+      "displayName": "Ocultar muesca",
+      "summary": "Cubra automáticamente el área de muesca superior en pantallas con muescas."
+    },
+    "fr": {
+      "displayName": "Masquer l’encoche",
+      "summary": "Couvrez automatiquement la zone supérieure sur les écrans à encoches."
+    },
+    "ja": {
+      "displayName": "ノッチを隠す",
+      "summary": "ノッチ付きディスプレイの最上部のノッチ領域を自動的にカバーします。"
+    },
+    "ko": {
+      "displayName": "노치 숨기기",
+      "summary": "노치 디스플레이의 상단 노치 영역을 자동으로 덮습니다."
+    },
+    "pt": {
+      "displayName": "Ocultar entalhe",
+      "summary": "Cobre automaticamente a área superior em telas entalhadas."
+    },
+    "ru": {
+      "displayName": "Скрыть вырез",
+      "summary": "Автоматически закрывать верхнюю область на дисплеях с вырезом."
+    },
+    "zh-Hans": {
+      "displayName": "隐藏刘海",
+      "summary": "自动遮挡刘海屏顶部区域"
+    },
+    "zh-Hant": {
+      "displayName": "隱藏瀏海",
+      "summary": "自動遮擋劉海螢幕頂部區域"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "HideNotch.bundle",

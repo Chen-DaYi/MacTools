@@ -24,6 +24,8 @@ struct PluginPackageManifest: Codable, Equatable {
     let capabilities: Capabilities
     let permissions: [String]
     let category: String?
+    let releaseChannel: String?
+    let localizedMetadata: [String: PluginLocalizedMetadata]?
 
     init(
         id: String,
@@ -35,7 +37,9 @@ struct PluginPackageManifest: Codable, Equatable {
         factoryClass: String? = nil,
         capabilities: Capabilities = Capabilities(),
         permissions: [String] = [],
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil,
+        localizedMetadata: [String: PluginLocalizedMetadata]? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -47,6 +51,16 @@ struct PluginPackageManifest: Codable, Equatable {
         self.capabilities = capabilities
         self.permissions = permissions
         self.category = category
+        self.releaseChannel = releaseChannel
+        self.localizedMetadata = localizedMetadata
+    }
+
+    var localizedDisplayName: String {
+        PluginLocalizationMatcher.localizedMetadata(from: localizedMetadata ?? [:])?.displayName ?? displayName
+    }
+
+    var localizedSummary: String? {
+        PluginLocalizationMatcher.localizedMetadata(from: localizedMetadata ?? [:])?.summary
     }
 }
 
@@ -62,19 +76,24 @@ enum PluginPackageManifestError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .missingManifest(url):
-            return "插件缺少 manifest：\(url.path)"
+            return AppL10n.pluginsFormat("plugin.error.manifest.missingFormat", defaultValue: "插件缺少 manifest：%@", url.path)
         case let .unreadableManifest(url):
-            return "插件 manifest 无法读取：\(url.path)"
+            return AppL10n.pluginsFormat("plugin.error.manifest.unreadableFormat", defaultValue: "插件 manifest 无法读取：%@", url.path)
         case let .invalidIdentifier(id):
-            return "插件 ID 不合法：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.manifest.invalidIdentifierFormat", defaultValue: "插件 ID 不合法：%@", id)
         case let .invalidVersion(version):
-            return "插件版本号不合法：\(version)"
+            return AppL10n.pluginsFormat("plugin.error.manifest.invalidVersionFormat", defaultValue: "插件版本号不合法：%@", version)
         case let .invalidBundleRelativePath(path):
-            return "插件入口路径不合法：\(path)"
+            return AppL10n.pluginsFormat("plugin.error.manifest.invalidBundlePathFormat", defaultValue: "插件入口路径不合法：%@", path)
         case let .unsupportedPluginKitVersion(version):
-            return "插件 SDK 版本不支持：\(version)"
+            return AppL10n.pluginsFormat("plugin.error.manifest.unsupportedSDKFormat", defaultValue: "插件 SDK 版本不支持：%d", version)
         case let .incompatibleHostVersion(required, current):
-            return "插件需要 MacTools \(required) 或更高版本，当前版本为 \(current)。"
+            return AppL10n.pluginsFormat(
+                "plugin.error.manifest.incompatibleHostFormat",
+                defaultValue: "插件需要 MacTools %@ 或更高版本，当前版本为 %@。",
+                required,
+                current
+            )
         }
     }
 }

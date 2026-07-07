@@ -1,4 +1,3 @@
-import AppKit
 import XCTest
 import MacToolsPluginKit
 @testable import ActivityBarPlugin
@@ -10,8 +9,34 @@ final class ActivityBarPluginTests: XCTestCase {
 
         XCTAssertEqual(harness.plugin.metadata.id, "activity-bar")
         XCTAssertEqual(harness.plugin.metadata.title, "活动统计")
-        XCTAssertEqual(harness.plugin.primaryPanelDescriptor.controlStyle, .switch)
+        XCTAssertEqual(harness.plugin.primaryPanelDescriptor.controlStyle, .disclosure)
         XCTAssertEqual(harness.plugin.descriptor.span, PluginComponentSpan(width: 4, height: 127)!)
+    }
+
+    func testPrimaryPanelStartsCollapsed() {
+        let harness = makeHarness()
+
+        XCTAssertFalse(harness.plugin.primaryPanelState.isExpanded)
+        XCTAssertNil(harness.plugin.primaryPanelState.detail)
+    }
+
+    func testPrimaryPanelExpandsWithTrackingSwitchAndActions() throws {
+        let harness = makeHarness()
+
+        harness.plugin.handleAction(.setDisclosureExpanded(true))
+
+        let state = harness.plugin.primaryPanelState
+        let controls = try XCTUnwrap(state.detail?.primaryControls)
+
+        XCTAssertTrue(state.isExpanded)
+        XCTAssertEqual(controls.map(\.id), [
+            "tracking-enabled",
+            "open-input-monitoring",
+            "install-hooks",
+            "reset-today"
+        ])
+        XCTAssertEqual(controls.first?.kind, .switchRow)
+        XCTAssertFalse(state.isOn)
     }
 
     func testSwitchStartsAndStopsRuntime() {
@@ -31,6 +56,18 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.socketServer.stopCallCount, 1)
     }
 
+    func testExpandedTrackingSwitchReflectsEnabledState() throws {
+        let harness = makeHarness()
+
+        harness.plugin.handleAction(.setDisclosureExpanded(true))
+        harness.plugin.handleAction(.setSwitch(true))
+
+        let controls = try XCTUnwrap(harness.plugin.primaryPanelState.detail?.primaryControls)
+
+        XCTAssertEqual(controls.first?.kind, .switchRow)
+        XCTAssertTrue(harness.plugin.primaryPanelState.isOn)
+    }
+
     func testMonitorEventsUpdateComponentSubtitle() {
         let harness = makeHarness()
 
@@ -42,19 +79,27 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.plugin.componentPanelState.subtitle, "2 次输入")
     }
 
-    func testMonitorEventsDoNotTriggerPluginStateChange() {
-        let harness = makeHarness()
-        var stateChangeCount = 0
+    func testMonitorEventsBatchPluginStateNotifications() {
+        let harness = makeHarness(inputEventNotificationDelay: .seconds(60))
+        var notificationCount = 0
         harness.plugin.onStateChange = {
-            stateChangeCount += 1
+            notificationCount += 1
         }
+
+        harness.plugin.handleAction(.setSwitch(true))
+        notificationCount = 0
 
         harness.inputMonitor.emit(.keystroke(app: "Terminal"))
         harness.inputMonitor.emit(.pointerClick(app: "Terminal"))
         harness.inputMonitor.emit(.scroll(app: "Terminal"))
 
         XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 3)
-        XCTAssertEqual(stateChangeCount, 0)
+        XCTAssertEqual(notificationCount, 0)
+
+        harness.plugin.handleAction(.setSwitch(false))
+
+        XCTAssertEqual(notificationCount, 1)
+        XCTAssertEqual(harness.storage.setCallCount(forKey: "activity-bar.input.days.v1"), 1)
     }
 
     func testAppTerminationFlushesPendingInputStats() {
@@ -68,7 +113,7 @@ final class ActivityBarPluginTests: XCTestCase {
 
         let reloaded = ActivityBarStatsStore(storage: harness.storage)
 
-        XCTAssertEqual(reloaded.todayInputCountForTests, 1)
+        XCTAssertEqual(reloaded.today.totalInputs, 1)
     }
 
     func testAppTerminationFlushesActiveCodingDuration() {
@@ -121,7 +166,8 @@ final class ActivityBarPluginTests: XCTestCase {
 
     private func makeHarness(
         storage providedStorage: ActivityBarMemoryStorage? = nil,
-        codingStats: ActivityBarCodingSessionStore? = nil
+        codingStats: ActivityBarCodingSessionStore? = nil,
+        inputEventNotificationDelay: Duration = .milliseconds(750)
     ) -> Harness {
         let storage = providedStorage ?? ActivityBarMemoryStorage()
         let inputMonitor = ActivityBarFakeInputMonitor()
@@ -136,7 +182,8 @@ final class ActivityBarPluginTests: XCTestCase {
             context: context,
             inputMonitor: inputMonitor,
             socketServer: socketServer,
-            codingStats: codingStats
+            codingStats: codingStats,
+            inputEventNotificationDelay: inputEventNotificationDelay
         )
         let plugin = ActivityBarPlugin(context: context, controller: controller)
 
@@ -155,11 +202,5 @@ final class ActivityBarPluginTests: XCTestCase {
         let storage: ActivityBarMemoryStorage
         let inputMonitor: ActivityBarFakeInputMonitor
         let socketServer: ActivityBarFakeSocketServer
-    }
-}
-
-private extension ActivityBarStatsStore {
-    var todayInputCountForTests: Int {
-        today.totalInputs
     }
 }

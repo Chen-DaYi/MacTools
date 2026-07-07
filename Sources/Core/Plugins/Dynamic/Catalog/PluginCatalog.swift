@@ -53,6 +53,8 @@ struct PluginCatalogEntry: Codable, Identifiable, Equatable {
     let package: PluginCatalogPackage
     let releaseNotesURL: URL?
     let category: String?
+    let releaseChannel: String?
+    let localizedMetadata: [String: PluginLocalizedMetadata]?
 
     init(
         id: String,
@@ -65,7 +67,9 @@ struct PluginCatalogEntry: Codable, Identifiable, Equatable {
         permissions: [String] = [],
         package: PluginCatalogPackage,
         releaseNotesURL: URL? = nil,
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil,
+        localizedMetadata: [String: PluginLocalizedMetadata]? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -78,6 +82,16 @@ struct PluginCatalogEntry: Codable, Identifiable, Equatable {
         self.package = package
         self.releaseNotesURL = releaseNotesURL
         self.category = category
+        self.releaseChannel = releaseChannel
+        self.localizedMetadata = localizedMetadata
+    }
+
+    var localizedDisplayName: String {
+        PluginLocalizationMatcher.localizedMetadata(from: localizedMetadata ?? [:])?.displayName ?? displayName
+    }
+
+    var localizedSummary: String {
+        PluginLocalizationMatcher.localizedMetadata(from: localizedMetadata ?? [:])?.summary ?? summary
     }
 }
 

@@ -26,14 +26,7 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: Metadata
 
-    let metadata = PluginMetadata(
-        id: "app-hotkey",
-        title: "应用快捷键",
-        iconName: "keyboard",
-        iconTint: Color(nsColor: .systemYellow),
-        order: 65,
-        defaultDescription: "为常用应用绑定全局快捷键"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -51,15 +44,25 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let store: AppHotkeyStore
     private let hotkeyManager: AppHotkeyManager
     private let storage: PluginStorage
+    private let localization: PluginLocalization
     private var isEnabled: Bool
 
     // MARK: Init
 
     init(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "app-hotkey")) {
+        self.localization = PluginLocalization(bundle: context.resourceBundle)
         self.storage = context.storage
         self.store = AppHotkeyStore(storage: context.storage)
         self.hotkeyManager = AppHotkeyManager()
-        // 默认启用；仅当用户明确关闭后才存储 false
+        self.metadata = PluginMetadata(
+            id: "app-hotkey",
+            title: localization.string("metadata.title", defaultValue: "应用快捷键"),
+            iconName: "keyboard",
+            iconTint: Color(nsColor: .systemYellow),
+            order: 65,
+            defaultDescription: localization.string("metadata.description", defaultValue: "为常用应用绑定全局快捷键")
+        )
+        // Enabled by default; only an explicit user pause stores `false`.
         self.isEnabled = context.storage.object(forKey: "isEnabled") == nil
             ? true
             : context.storage.bool(forKey: "isEnabled")
@@ -85,13 +88,14 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
-    // 热键由插件自己管理，不使用宿主快捷键系统
+    // Hotkeys are managed by this plugin instead of the host shortcut system.
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var configuration: PluginConfiguration? {
         PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
             AppHotkeyManagerView(
                 store: self.store,
+                localization: self.localization,
                 onUpdate: { [weak self] in
                     self?.syncHotkeys()
                     self?.onStateChange?()
@@ -136,15 +140,19 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private var panelSubtitle: String {
         let count = store.entries.filter { $0.shortcut != nil }.count
-        guard count > 0 else { return "暂无绑定，前往设置配置" }
-        return isEnabled ? "\(count) 个快捷键已启用" : "快捷键已暂停"
+        guard count > 0 else {
+            return localization.string("panel.subtitle.empty", defaultValue: "暂无绑定，前往设置配置")
+        }
+        return isEnabled
+            ? localization.format("panel.subtitle.enabledCountFormat", defaultValue: "%d 个快捷键已启用", count)
+            : localization.string("panel.subtitle.paused", defaultValue: "快捷键已暂停")
     }
 
     private func syncHotkeys() {
         hotkeyManager.sync(entries: isEnabled ? store.entries : [])
     }
 
-    /// 按下快捷键时：若目标应用在前台则隐藏，否则打开/激活。
+    /// Hides the target app when it is frontmost; otherwise opens or activates it.
     private func launch(entryID: UUID) {
         guard let entry = store.entries.first(where: { $0.id == entryID }),
               let bundleURL = entry.bundleURL

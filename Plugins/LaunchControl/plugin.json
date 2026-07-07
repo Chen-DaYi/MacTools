@@ -2,7 +2,53 @@
   "id": "launch-control",
   "displayName": "启动项",
   "summary": "查看和管理 launchctl 启动项",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "عناصر التشغيل",
+      "summary": "عرض عناصر تشغيل launchctl وإدارتها."
+    },
+    "de": {
+      "displayName": "Startelemente",
+      "summary": "launchctl-Startelemente anzeigen und verwalten."
+    },
+    "en": {
+      "displayName": "Launch Items",
+      "summary": "View and manage launchctl launch items."
+    },
+    "es": {
+      "displayName": "Elementos de inicio",
+      "summary": "Ver y administrar elementos de inicio de launchctl."
+    },
+    "fr": {
+      "displayName": "Éléments de lancement",
+      "summary": "Affichez et gérez les éléments de lancement launchctl."
+    },
+    "ja": {
+      "displayName": "起動項目",
+      "summary": "launchctl 起動項目を表示および管理します。"
+    },
+    "ko": {
+      "displayName": "시작 항목",
+      "summary": "launchctl 시작 항목을 보고 관리합니다."
+    },
+    "pt": {
+      "displayName": "Itens de inicialização",
+      "summary": "Visualize e gerencie itens de inicialização do launchctl."
+    },
+    "ru": {
+      "displayName": "Элементы запуска",
+      "summary": "Просмотр элементов запуска launchctl и управление ими."
+    },
+    "zh-Hans": {
+      "displayName": "启动项",
+      "summary": "查看和管理 launchctl 启动项"
+    },
+    "zh-Hant": {
+      "displayName": "啟動項目",
+      "summary": "查看和管理 launchctl 啟動項"
+    }
+  },
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "LaunchControl.bundle",

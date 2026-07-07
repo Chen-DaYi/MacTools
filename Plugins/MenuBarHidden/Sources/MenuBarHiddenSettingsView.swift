@@ -4,6 +4,7 @@ import MacToolsPluginKit
 
 struct MenuBarHiddenSettingsView: View {
     @ObservedObject var controller: MenuBarHiddenController
+    private var localization: PluginLocalization { controller.localization }
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
@@ -19,12 +20,18 @@ struct MenuBarHiddenSettingsView: View {
 
     private var behaviorSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(title: "行为", icon: "switch.2")
+            sectionHeader(
+                title: localization.string("settings.behavior.title", defaultValue: "行为"),
+                icon: "switch.2"
+            )
 
             VStack(spacing: 0) {
                 toggleRow(
-                    title: "隐藏菜单栏图标",
-                    description: "开启后状态栏图标右侧的扩展条会隐藏其左侧的所有图标",
+                    title: localization.string("settings.hideIcons.title", defaultValue: "隐藏菜单栏图标"),
+                    description: localization.string(
+                        "settings.hideIcons.description",
+                        defaultValue: "开启后状态栏图标右侧的扩展条会隐藏其左侧的所有图标"
+                    ),
                     isOn: Binding(
                         get: { controller.isEnabled },
                         set: { controller.isEnabled = $0 }
@@ -33,8 +40,11 @@ struct MenuBarHiddenSettingsView: View {
                 Divider()
                     .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
                 toggleRow(
-                    title: "面板中显示隐藏图标",
-                    description: "开启后左键菜单面板显示隐藏图标卡片",
+                    title: localization.string("settings.showInPanel.title", defaultValue: "面板中显示隐藏图标"),
+                    description: localization.string(
+                        "settings.showInPanel.description",
+                        defaultValue: "开启后左键菜单面板显示隐藏图标卡片"
+                    ),
                     isOn: Binding(
                         get: { controller.showsHiddenIconsInPanel },
                         set: { controller.showsHiddenIconsInPanel = $0 }
@@ -44,8 +54,11 @@ struct MenuBarHiddenSettingsView: View {
                 Divider()
                     .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
                 toggleRow(
-                    title: "永久隐藏",
-                    description: "开启后可将图标放入永久隐藏栏，隐藏开关关闭时也不会显示",
+                    title: localization.string("settings.alwaysHidden.title", defaultValue: "永久隐藏"),
+                    description: localization.string(
+                        "settings.alwaysHidden.description",
+                        defaultValue: "开启后可将图标放入永久隐藏栏，隐藏开关关闭时也不会显示"
+                    ),
                     isOn: Binding(
                         get: { controller.isAlwaysHiddenEnabled },
                         set: { controller.isAlwaysHiddenEnabled = $0 }
@@ -63,9 +76,15 @@ struct MenuBarHiddenSettingsView: View {
         let authorized = controller.permissions.canManageItems
         return VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack(spacing: 8) {
-                sectionHeader(title: "菜单栏布局", icon: "rectangle.split.2x1")
+                sectionHeader(
+                    title: localization.string("settings.layout.title", defaultValue: "菜单栏布局"),
+                    icon: "rectangle.split.2x1"
+                )
                 if !authorized {
-                    Label("需要授权", systemImage: "lock.fill")
+                    Label(
+                        localization.string("settings.layout.authorizationRequired", defaultValue: "需要授权"),
+                        systemImage: "lock.fill"
+                    )
                         .font(PluginSettingsTheme.Typography.statusBadge)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
@@ -76,18 +95,18 @@ struct MenuBarHiddenSettingsView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 stripRow(
-                    title: MenuBarHiddenSection.visible.title,
+                    title: MenuBarHiddenSection.visible.title(localization: localization),
                     section: .visible,
                     items: authorized ? controller.snapshot.visibleItems : []
                 )
                 stripRow(
-                    title: MenuBarHiddenSection.hidden.title,
+                    title: MenuBarHiddenSection.hidden.title(localization: localization),
                     section: .hidden,
                     items: authorized ? controller.snapshot.hiddenItems : []
                 )
                 if controller.isAlwaysHiddenEnabled {
                     stripRow(
-                        title: MenuBarHiddenSection.alwaysHidden.title,
+                        title: MenuBarHiddenSection.alwaysHidden.title(localization: localization),
                         section: .alwaysHidden,
                         items: authorized ? controller.snapshot.alwaysHiddenItems : []
                     )
@@ -125,7 +144,14 @@ struct MenuBarHiddenSettingsView: View {
                     )
 
                     if items.isEmpty {
-                        Text(controller.permissions.canManageItems ? "拖入菜单栏图标到此区域" : "-")
+                        Text(
+                            controller.permissions.canManageItems
+                                ? localization.string(
+                                    "settings.layout.emptyDropTarget",
+                                    defaultValue: "拖入菜单栏图标到此区域"
+                                )
+                                : "-"
+                        )
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary)
                             .allowsHitTesting(false)

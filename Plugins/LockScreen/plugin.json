@@ -2,7 +2,53 @@
   "id": "lock-screen",
   "displayName": "锁定屏幕",
   "summary": "一键立即锁定屏幕，进入密码解锁界面",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "قفل الشاشة",
+      "summary": "قفل الشاشة على الفور ويتطلب فتح كلمة المرور."
+    },
+    "de": {
+      "displayName": "Bildschirm sperren",
+      "summary": "Sperren Sie den Bildschirm sofort und verlangen Sie eine Passwort-Entsperrung."
+    },
+    "en": {
+      "displayName": "Lock Screen",
+      "summary": "Lock the screen immediately and require password unlock."
+    },
+    "es": {
+      "displayName": "Bloquear pantalla",
+      "summary": "Bloquee la pantalla inmediatamente y solicite el desbloqueo con contraseña."
+    },
+    "fr": {
+      "displayName": "Verrouiller l’écran",
+      "summary": "Verrouillez l'écran immédiatement et exigez le déverrouillage par mot de passe."
+    },
+    "ja": {
+      "displayName": "画面をロック",
+      "summary": "すぐに画面をロックし、パスワードのロック解除を要求します。"
+    },
+    "ko": {
+      "displayName": "화면 잠그기",
+      "summary": "즉시 화면을 잠그고 비밀번호 잠금 해제를 요구합니다."
+    },
+    "pt": {
+      "displayName": "Bloquear tela",
+      "summary": "Bloqueie a tela imediatamente e exija o desbloqueio por senha."
+    },
+    "ru": {
+      "displayName": "Заблокировать экран",
+      "summary": "Немедленно заблокируйте экран и запросите разблокировку пароля."
+    },
+    "zh-Hans": {
+      "displayName": "锁定屏幕",
+      "summary": "一键立即锁定屏幕，进入密码解锁界面"
+    },
+    "zh-Hant": {
+      "displayName": "鎖定螢幕",
+      "summary": "一鍵立即鎖定螢幕，進入密碼解鎖界面"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "LockScreen.bundle",

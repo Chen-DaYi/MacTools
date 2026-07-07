@@ -205,10 +205,17 @@ final class MenuBarHiddenStripPaddingNSView: NSView {
     }
 
     private func provideAlertForVisibleOnlyAppIcon() -> NSAlert {
+        let localization = container.controller?.localization ?? PluginLocalization(bundle: .main)
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "MacTools 图标不能隐藏"
-        alert.informativeText = "应用本身的菜单栏图标必须保留在显示区域。"
+        alert.messageText = localization.string(
+            "alert.hostIconCannotHide.title",
+            defaultValue: "MacTools 图标不能隐藏"
+        )
+        alert.informativeText = localization.string(
+            "alert.hostIconCannotHide.message",
+            defaultValue: "应用本身的菜单栏图标必须保留在显示区域。"
+        )
         return alert
     }
 
@@ -670,9 +677,17 @@ final class MenuBarHiddenItemNSView: NSView, NSDraggingSource {
     }
 
     private func provideAlertForDisabledItem() -> NSAlert {
+        let localization = stripView?.controller?.localization ?? PluginLocalization(bundle: .main)
         let alert = NSAlert()
-        alert.messageText = "菜单栏图标不可移动"
-        alert.informativeText = "macOS 不允许移动“\(item.displayName)”。"
+        alert.messageText = localization.string(
+            "alert.itemCannotMove.title",
+            defaultValue: "菜单栏图标不可移动"
+        )
+        alert.informativeText = localization.format(
+            "alert.itemCannotMove.message",
+            defaultValue: "macOS 不允许移动“%@”。",
+            item.displayName
+        )
         return alert
     }
 

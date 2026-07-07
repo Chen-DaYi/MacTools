@@ -10,13 +10,19 @@ struct CalendarComponentView: View {
         static let headerHeight: CGFloat = 20
         static let weekdayHeight: CGFloat = 10
         static let dayCellSize: CGFloat = 36
-        static let cornerRadius: CGFloat = 16
+        static let cornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
     }
 
-    @StateObject private var viewModel: CalendarComponentViewModel
+    @ObservedObject private var viewModel: CalendarComponentViewModel
+    private let localization: PluginLocalization
 
-    init(context: PluginComponentContext, viewModel: CalendarComponentViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    init(
+        context: PluginComponentContext,
+        viewModel: CalendarComponentViewModel,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.viewModel = viewModel
+        self.localization = localization
     }
 
     var body: some View {
@@ -25,14 +31,13 @@ struct CalendarComponentView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onAppear { viewModel.start() }
-        .onDisappear { viewModel.stop() }
     }
 
     private var calendarCard: some View {
         VStack(spacing: Layout.sectionSpacing) {
             CalendarHeaderView(
                 title: viewModel.month.title,
+                localization: localization,
                 onPrevious: { viewModel.moveMonth(by: -1) },
                 onToday: { viewModel.goToToday() },
                 onNext: { viewModel.moveMonth(by: 1) }
@@ -49,12 +54,13 @@ struct CalendarComponentView: View {
                 selectedDayID: viewModel.selectedDay?.id,
                 dayCellSize: Layout.dayCellSize,
                 gridSpacing: Layout.gridSpacing,
+                localization: localization,
                 onSelect: { viewModel.select($0) },
                 onOpen: { viewModel.open($0) }
             )
         }
         .padding(Layout.contentPadding)
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(CalendarComponentBackground(cornerRadius: Layout.cornerRadius))
     }
 
@@ -62,6 +68,7 @@ struct CalendarComponentView: View {
 
 private struct CalendarHeaderView: View {
     let title: String
+    let localization: PluginLocalization
     let onPrevious: () -> Void
     let onToday: () -> Void
     let onNext: () -> Void
@@ -73,15 +80,23 @@ private struct CalendarHeaderView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
 
-            CalendarIconButton(systemName: "chevron.left", help: "上个月", action: onPrevious)
-            Button("今天", action: onToday)
+            CalendarIconButton(
+                systemName: "chevron.left",
+                help: localization.string("header.previous.help", defaultValue: "上个月"),
+                action: onPrevious
+            )
+            Button(localization.string("header.today.button", defaultValue: "今天"), action: onToday)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .buttonStyle(.plain)
                 .frame(width: 32, height: 20)
                 .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .help("回到今天")
-            CalendarIconButton(systemName: "chevron.right", help: "下个月", action: onNext)
+                .help(localization.string("header.today.help", defaultValue: "回到今天"))
+            CalendarIconButton(
+                systemName: "chevron.right",
+                help: localization.string("header.next.help", defaultValue: "下个月"),
+                action: onNext
+            )
         }
         .frame(height: 20)
     }
@@ -128,6 +143,7 @@ private struct CalendarMonthGrid: View {
     let selectedDayID: String?
     let dayCellSize: CGFloat
     let gridSpacing: CGFloat
+    let localization: PluginLocalization
     let onSelect: (CalendarDayModel) -> Void
     let onOpen: (CalendarDayModel) -> Void
 
@@ -146,14 +162,16 @@ private struct CalendarMonthGrid: View {
                 CalendarDayCell(
                     day: day,
                     isSelected: selectedDayID == day.id,
+                    localization: localization,
                     onOpen: { onOpen(day) }
                 )
                 .frame(width: dayCellSize, height: dayCellSize)
                 .background(
                     CalendarEventPopoverPresenter(
                         title: CalendarDayPresentation.dateTitle(for: day),
-                        subtitle: CalendarDayPresentation.dateSubtitle(for: day),
+                        subtitle: CalendarDayPresentation.dateSubtitle(for: day, localization: localization),
                         events: day.events,
+                        localization: localization,
                         isPresented: hoveredDayID == day.id && !day.events.isEmpty
                     )
                 )
@@ -174,6 +192,7 @@ private struct CalendarMonthGrid: View {
 private struct CalendarDayCell: View {
     let day: CalendarDayModel
     let isSelected: Bool
+    let localization: PluginLocalization
     let onOpen: () -> Void
 
     var body: some View {
@@ -191,11 +210,13 @@ private struct CalendarDayCell: View {
                         .foregroundStyle(primaryTextStyle)
                         .lineLimit(1)
 
-                    Text(day.lunarText)
-                        .font(.system(size: 8.5, weight: .medium))
-                        .foregroundStyle(secondaryTextStyle)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
+                    if !day.lunarText.isEmpty {
+                        Text(day.lunarText)
+                            .font(.system(size: 8.5, weight: .medium))
+                            .foregroundStyle(secondaryTextStyle)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                    }
 
                     CalendarEventDots(events: day.visibleEvents)
                         .padding(.top, 1)
@@ -204,7 +225,7 @@ private struct CalendarDayCell: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if let holidayKind = day.holidayKind {
-                    CalendarHolidayBadge(kind: holidayKind)
+                    CalendarHolidayBadge(kind: holidayKind, localization: localization)
                         .offset(x: 2, y: -3)
                 }
             }
@@ -243,25 +264,37 @@ private struct CalendarDayCell: View {
     }
 
     private var accessibilityLabel: String {
-        var parts = [day.dayNumber, day.lunarText]
+        var parts = [day.dayNumber]
+        if !day.lunarText.isEmpty {
+            parts.append(day.lunarText)
+        }
         if day.isToday {
-            parts.append("今天")
+            parts.append(localization.string("accessibility.today", defaultValue: "今天"))
         }
         if let holidayKind = day.holidayKind {
-            parts.append(holidayKind == .holiday ? "休息日" : "调休工作日")
+            parts.append(CalendarDayPresentation.holidayText(for: holidayKind, localization: localization))
         }
         if !day.events.isEmpty {
-            parts.append("\(day.events.count) 个日程")
+            parts.append(
+                localization.format(
+                    "accessibility.eventCount",
+                    defaultValue: "%d 个日程",
+                    day.events.count
+                )
+            )
         }
-        return parts.joined(separator: "，")
+        return parts.joined(
+            separator: localization.string("list.separator.comma", defaultValue: "，")
+        )
     }
 }
 
 private struct CalendarHolidayBadge: View {
     let kind: CalendarHolidayKind
+    let localization: PluginLocalization
 
     var body: some View {
-        Text(kind.badgeText)
+        Text(kind.badgeText(localization: localization))
             .font(.system(size: 7, weight: .bold))
             .foregroundStyle(.white)
             .frame(width: 14, height: 14)
@@ -300,6 +333,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
     let title: String
     let subtitle: String
     let events: [CalendarEventSummary]
+    let localization: PluginLocalization
     let isPresented: Bool
 
     func makeCoordinator() -> Coordinator {
@@ -315,6 +349,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
             title: title,
             subtitle: subtitle,
             events: events,
+            localization: localization,
             isPresented: isPresented,
             sourceView: nsView
         )
@@ -332,6 +367,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
             title: String,
             subtitle: String,
             events: [CalendarEventSummary],
+            localization: PluginLocalization,
             isPresented: Bool,
             sourceView: NSView
         ) {
@@ -344,7 +380,8 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
             let content = CalendarFloatingEventPopoverContent(
                 title: title,
                 subtitle: subtitle,
-                events: events
+                events: events,
+                localization: localization
             )
             let hostingController = NSHostingController(rootView: content)
             CalendarAppearancePreference.stored().apply(to: hostingController.view)
@@ -380,6 +417,7 @@ private struct CalendarFloatingEventPopoverContent: View {
     let title: String
     let subtitle: String
     let events: [CalendarEventSummary]
+    let localization: PluginLocalization
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -402,7 +440,13 @@ private struct CalendarFloatingEventPopoverContent: View {
                 }
 
                 if events.count > 6 {
-                    Text("还有 \(events.count - 6) 个日程")
+                    Text(
+                        localization.format(
+                            "event.moreCount",
+                            defaultValue: "还有 %d 个日程",
+                            events.count - 6
+                        )
+                    )
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -422,17 +466,41 @@ private enum CalendarDayPresentation {
         return formatter.string(from: day.date)
     }
 
-    static func dateSubtitle(for day: CalendarDayModel) -> String {
-        var parts = [day.lunarText]
+    static func dateSubtitle(
+        for day: CalendarDayModel,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String {
+        var parts: [String] = []
+        if !day.lunarText.isEmpty {
+            parts.append(day.lunarText)
+        }
         if let holidayKind = day.holidayKind {
-            parts.append(holidayKind == .holiday ? "休息日" : "调休工作日")
+            parts.append(holidayText(for: holidayKind, localization: localization))
         } else if day.isWeekend {
-            parts.append("周末")
+            parts.append(localization.string("day.weekend", defaultValue: "周末"))
         }
         if day.events.count > CalendarDayModel.maximumVisibleEvents {
-            parts.append("还有 \(day.events.count - CalendarDayModel.maximumVisibleEvents) 个日程")
+            parts.append(
+                localization.format(
+                    "event.moreCount",
+                    defaultValue: "还有 %d 个日程",
+                    day.events.count - CalendarDayModel.maximumVisibleEvents
+                )
+            )
         }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: localization.string("list.separator.dot", defaultValue: " · "))
+    }
+
+    static func holidayText(
+        for holidayKind: CalendarHolidayKind,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String {
+        switch holidayKind {
+        case .holiday:
+            return localization.string("day.holiday", defaultValue: "休息日")
+        case .workday:
+            return localization.string("day.workday", defaultValue: "调休工作日")
+        }
     }
 }
 

@@ -5,21 +5,32 @@ import MacToolsPluginKit
 
 public final class KeepAwakePluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        KeepAwakePluginProvider()
+        KeepAwakePluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct KeepAwakePluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [KeepAwakePlugin()]
+        [KeepAwakePlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
+    typealias SessionFactory = (
+        PluginLocalization,
+        @escaping (KeepAwakeSession.EndReason) -> Void
+    ) -> any KeepAwakeSessionManaging
+
     private enum Timing {
         static let secondsPerMinute: TimeInterval = 60
+    }
+
+    private enum StorageKey {
+        static let persistentEnabled = "persistent-enabled"
     }
 
     private enum ControlID {
@@ -57,14 +68,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         static let fiveHours = DurationPreset.fiveHours.rawValue
     }
 
-    let metadata = PluginMetadata(
-        id: "keep-awake",
-        title: "阻止休眠",
-        iconName: "moon",
-        iconTint: Color(nsColor: .systemOrange),
-        order: 50,
-        defaultDescription: "阻止系统空闲休眠，允许显示器息屏"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -76,11 +80,37 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "KeepAwakePlugin")
+    private let localization: PluginLocalization
+    private let sessionFactory: SessionFactory
+    private var storage: PluginStorage
     private var lastErrorMessage: String?
-    private var session: KeepAwakeSession?
+    private var session: (any KeepAwakeSessionManaging)?
     private var selectedDurationPreset: DurationPreset = .forever
     private var scheduledEndDate: Date?
     private var subtitleRefreshTimer: Timer?
+
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "keep-awake"),
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        sessionFactory: @escaping SessionFactory = { localization, onEnd in
+            KeepAwakeSession(localization: localization, onEnd: onEnd)
+        }
+    ) {
+        self.localization = localization
+        self.storage = context.storage
+        self.sessionFactory = sessionFactory
+        self.metadata = PluginMetadata(
+            id: "keep-awake",
+            title: localization.string("metadata.title", defaultValue: "阻止休眠"),
+            iconName: "moon",
+            iconTint: Color(nsColor: .systemOrange),
+            order: 50,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "阻止系统空闲休眠，允许显示器息屏"
+            )
+        )
+    }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
@@ -99,6 +129,18 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var settingsSections: [PluginSettingsSection] { [] }
 
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    func activate(context: PluginRuntimeContext) {
+        storage = context.storage
+
+        guard storage.bool(forKey: StorageKey.persistentEnabled) else {
+            return
+        }
+
+        selectedDurationPreset = .forever
+        scheduledEndDate = nil
+        applyKeepAwakeConfiguration()
+    }
 
     func refresh() {
         scheduleSubtitleRefreshIfNeeded()
@@ -142,7 +184,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
 
         guard let scheduledEndDate else {
-            return "已启用"
+            return localization.string("panel.subtitle.enabled", defaultValue: "已启用")
         }
 
         return remainingTimeDescription(until: scheduledEndDate, referenceDate: Date())
@@ -159,7 +201,10 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
                     id: ControlID.duration,
                     kind: .segmented,
                     options: [
-                        PluginPanelControlOption(id: DurationOptionID.forever, title: "永不"),
+                        PluginPanelControlOption(
+                            id: DurationOptionID.forever,
+                            title: localization.string("panel.duration.forever", defaultValue: "永不")
+                        ),
                         PluginPanelControlOption(id: DurationOptionID.thirtyMinutes, title: "30min"),
                         PluginPanelControlOption(id: DurationOptionID.oneHour, title: "1h"),
                         PluginPanelControlOption(id: DurationOptionID.twoHours, title: "2h"),
@@ -181,6 +226,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     private func setKeepAwakeEnabled(_ isEnabled: Bool) {
         guard isEnabled else {
             lastErrorMessage = nil
+            clearPersistentEnabled()
             session?.requestStop(reason: .userRequested)
 
             if session == nil {
@@ -192,6 +238,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
 
         selectedDurationPreset = .forever
+        lastErrorMessage = nil
         applyKeepAwakeConfiguration()
     }
 
@@ -202,6 +249,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         selectedDurationPreset = preset
         lastErrorMessage = nil
+        persistCurrentSelectionIfRunning()
 
         guard session != nil else {
             notifyChange()
@@ -212,7 +260,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private func applyKeepAwakeConfiguration() {
-        let session = session ?? KeepAwakeSession { [weak self] reason in
+        let session = session ?? sessionFactory(localization) { [weak self] reason in
             self?.handleSessionEnd(reason)
         }
         let endDate = resolvedScheduledEndDate(referenceDate: Date())
@@ -221,6 +269,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             try session.start(until: endDate)
             self.session = session
             scheduledEndDate = endDate
+            persistCurrentSelectionIfRunning()
             scheduleSubtitleRefreshIfNeeded()
             lastErrorMessage = nil
             notifyChange()
@@ -249,14 +298,27 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         let minutes = remainingMinutes % 60
 
         if hours == 0 {
-            return "\(remainingMinutes) 分钟后自动停止"
+            return localization.format(
+                "panel.subtitle.remainingMinutesFormat",
+                defaultValue: "%d 分钟后自动停止",
+                remainingMinutes
+            )
         }
 
         if minutes == 0 {
-            return "\(hours) 小时后自动停止"
+            return localization.format(
+                "panel.subtitle.remainingHoursFormat",
+                defaultValue: "%d 小时后自动停止",
+                hours
+            )
         }
 
-        return "\(hours) 小时 \(minutes) 分钟后自动停止"
+        return localization.format(
+            "panel.subtitle.remainingHoursMinutesFormat",
+            defaultValue: "%d 小时 %d 分钟后自动停止",
+            hours,
+            minutes
+        )
     }
 
     private func scheduleSubtitleRefreshIfNeeded() {
@@ -313,6 +375,19 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
 
         notifyChange()
+    }
+
+    private func persistCurrentSelectionIfRunning() {
+        guard session != nil, selectedDurationPreset == .forever else {
+            clearPersistentEnabled()
+            return
+        }
+
+        storage.set(true, forKey: StorageKey.persistentEnabled)
+    }
+
+    private func clearPersistentEnabled() {
+        storage.removeObject(forKey: StorageKey.persistentEnabled)
     }
 
     private func resetSelectionToDefaults() {

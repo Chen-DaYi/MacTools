@@ -13,29 +13,28 @@ private struct ActivityBarPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [ActivityBarPlugin(context: context)]
+        [
+            ActivityBarPlugin(
+                context: context,
+                localization: PluginLocalization(bundle: context.resourceBundle)
+            ),
+        ]
     }
 }
 
 @MainActor
 final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel {
     private enum ControlID {
+        static let trackingEnabled = "tracking-enabled"
         static let installHooks = "install-hooks"
         static let resetToday = "reset-today"
         static let openInputMonitoring = "open-input-monitoring"
     }
 
-    let metadata = PluginMetadata(
-        id: ActivityBarController.pluginID,
-        title: "活动统计",
-        iconName: "chart.bar.xaxis",
-        iconTint: Color(nsColor: .systemGreen),
-        order: 18,
-        defaultDescription: "统计输入、前台应用使用时长和 AI 编程活动"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .switch,
+        controlStyle: .disclosure,
         menuActionBehavior: .keepPresented
     )
 
@@ -46,7 +45,9 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         )!
     )
 
+    private let localization: PluginLocalization
     private let controller: ActivityBarController
+    private var isExpanded = false
 
     var onStateChange: (() -> Void)? {
         didSet {
@@ -58,19 +59,32 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
 
     init(
         context: PluginRuntimeContext,
-        controller: ActivityBarController? = nil
+        controller: ActivityBarController? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        self.controller = controller ?? ActivityBarController(context: context)
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: ActivityBarController.pluginID,
+            title: localization.string("metadata.title", defaultValue: "活动统计"),
+            iconName: "chart.bar.xaxis",
+            iconTint: Color(nsColor: .systemGreen),
+            order: 18,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "统计输入、前台应用使用时长和 AI 编程活动"
+            )
+        )
+        self.controller = controller ?? ActivityBarController(context: context, localization: localization)
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: controller.panelSubtitle,
             isOn: controller.isTrackingEnabled,
-            isExpanded: false,
+            isExpanded: isExpanded,
             isEnabled: true,
             isVisible: true,
-            detail: panelDetail,
+            detail: isExpanded ? panelDetail : nil,
             errorMessage: controller.lastErrorMessage
         )
     }
@@ -89,20 +103,26 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         [
             PluginSettingsSection(
                 id: "input-monitoring",
-                title: "输入监控",
-                description: "用于统计键盘、鼠标点击和滚动事件。",
+                title: localization.string("settings.inputMonitoring.title", defaultValue: "输入监控"),
+                description: localization.string(
+                    "settings.inputMonitoring.description",
+                    defaultValue: "用于统计键盘、鼠标点击和滚动事件。"
+                ),
                 status: inputMonitoringSettingsStatus,
                 footnote: controller.inputMonitoringFootnote,
-                buttonTitle: "打开系统设置",
+                buttonTitle: localization.string("settings.inputMonitoring.button", defaultValue: "打开系统设置"),
                 actionID: ControlID.openInputMonitoring
             ),
             PluginSettingsSection(
                 id: "ai-hooks",
-                title: "AI 工具 Hook",
-                description: "记录 Claude Code、Cursor 和 Codex 的提示、工具调用与执行时长。",
+                title: localization.string("settings.aiHooks.title", defaultValue: "AI 工具 Hook"),
+                description: localization.string(
+                    "settings.aiHooks.description",
+                    defaultValue: "记录 Claude Code、Cursor 和 Codex 的提示、工具调用与执行时长。"
+                ),
                 status: hookSettingsStatus,
                 footnote: controller.hookInstallFootnote,
-                buttonTitle: "安装或更新 Hook",
+                buttonTitle: localization.string("settings.aiHooks.button", defaultValue: "安装或更新 Hook"),
                 actionID: ControlID.installHooks
             )
         ]
@@ -124,9 +144,12 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         switch action {
         case let .setSwitch(isEnabled):
             controller.setTrackingEnabled(isEnabled)
+        case let .setDisclosureExpanded(value):
+            isExpanded = value
+            onStateChange?()
         case let .invokeAction(controlID):
             handleAction(controlID: controlID)
-        case .setDisclosureExpanded, .setSelection, .setNavigationSelection,
+        case .setSelection, .setNavigationSelection,
              .clearNavigationSelection, .setDate, .setSlider:
             return
         }
@@ -136,6 +159,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         AnyView(
             ActivityBarComponentView(
                 controller: controller,
+                localization: localization,
                 dismiss: context.dismiss
             )
         )
@@ -154,6 +178,21 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     func handleShortcutAction(id: String) {}
 
     private var panelDetail: PluginPanelDetail {
+        let trackingControl = PluginPanelControl(
+            id: ControlID.trackingEnabled,
+            kind: .switchRow,
+            options: [],
+            selectedOptionID: nil,
+            dateValue: nil,
+            minimumDate: nil,
+            displayedComponents: nil,
+            datePickerStyle: nil,
+            sectionTitle: nil,
+            actionTitle: localization.string("panel.action.trackingEnabled", defaultValue: "活动统计"),
+            actionIconSystemName: "chart.bar.xaxis",
+            isEnabled: true
+        )
+
         let openSettingsControl = PluginPanelControl(
             id: ControlID.openInputMonitoring,
             kind: .actionRow,
@@ -164,7 +203,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "打开输入监控设置",
+            actionTitle: localization.string("panel.action.openInputMonitoring", defaultValue: "打开输入监控设置"),
             actionIconSystemName: "keyboard.badge.eye",
             isEnabled: true
         )
@@ -179,7 +218,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "安装或更新 AI Hook",
+            actionTitle: localization.string("panel.action.installHooks", defaultValue: "安装或更新 AI Hook"),
             actionIconSystemName: "terminal",
             isEnabled: true
         )
@@ -194,14 +233,14 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "清空今日统计",
+            actionTitle: localization.string("panel.action.resetToday", defaultValue: "清空今日统计"),
             actionIconSystemName: "arrow.counterclockwise",
             showsLeadingDivider: true,
             isEnabled: true
         )
 
         return PluginPanelDetail(
-            primaryControls: [openSettingsControl, installHooksControl, resetControl],
+            primaryControls: [trackingControl, openSettingsControl, installHooksControl, resetControl],
             secondaryPanel: nil
         )
     }
@@ -210,19 +249,19 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         switch controller.monitorStatus {
         case .running:
             return PluginSettingsSection.Status(
-                text: "运行中",
+                text: localization.string("status.running", defaultValue: "运行中"),
                 systemImage: "checkmark.circle.fill",
                 tone: .positive
             )
         case .inputMonitoringDenied:
             return PluginSettingsSection.Status(
-                text: "需要授权",
+                text: localization.string("status.permissionRequired", defaultValue: "需要授权"),
                 systemImage: "exclamationmark.triangle.fill",
                 tone: .caution
             )
         case .idle:
             return PluginSettingsSection.Status(
-                text: "未开启",
+                text: localization.string("status.disabled", defaultValue: "未开启"),
                 systemImage: "pause.circle",
                 tone: .neutral
             )
@@ -230,27 +269,26 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     }
 
     private var hookSettingsStatus: PluginSettingsSection.Status {
-        if controller.hookStatusMessage?.hasPrefix("已安装") == true {
+        switch controller.hookInstallState {
+        case .installed:
             return PluginSettingsSection.Status(
-                text: "已安装",
+                text: localization.string("hook.status.installed", defaultValue: "已安装"),
                 systemImage: "checkmark.circle.fill",
                 tone: .positive
             )
-        }
-
-        if controller.hookStatusMessage == "安装失败" {
+        case .failed:
             return PluginSettingsSection.Status(
-                text: "安装失败",
+                text: localization.string("hook.status.installFailed", defaultValue: "安装失败"),
                 systemImage: "exclamationmark.triangle.fill",
                 tone: .caution
             )
+        case .notInstalled:
+            return PluginSettingsSection.Status(
+                text: localization.string("hook.status.notInstalled", defaultValue: "未安装"),
+                systemImage: "terminal",
+                tone: .neutral
+            )
         }
-
-        return PluginSettingsSection.Status(
-            text: "未安装",
-            systemImage: "terminal",
-            tone: .neutral
-        )
     }
 
     private func handleAction(controlID: String) {

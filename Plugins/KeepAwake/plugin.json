@@ -2,7 +2,53 @@
   "id": "keep-awake",
   "displayName": "阻止休眠",
   "summary": "阻止系统空闲休眠，允许显示器息屏",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "منع السكون",
+      "summary": "منع وضع الخمول للنظام مع السماح لشاشات العرض بالنوم."
+    },
+    "de": {
+      "displayName": "Wach halten",
+      "summary": "Verhindern Sie den Leerlauf des Systems und ermöglichen Sie gleichzeitig den Ruhezustand der Displays."
+    },
+    "en": {
+      "displayName": "Keep Awake",
+      "summary": "Prevent system idle sleep while allowing displays to sleep."
+    },
+    "es": {
+      "displayName": "Mantener activo",
+      "summary": "Evite el modo de suspensión inactivo del sistema y al mismo tiempo permita que las pantallas entren en modo de suspensión."
+    },
+    "fr": {
+      "displayName": "Empêcher la suspension",
+      "summary": "Empêchez la mise en veille du système tout en permettant aux écrans de se mettre en veille."
+    },
+    "ja": {
+      "displayName": "スリープを防止",
+      "summary": "ディスプレイをスリープ状態にしながら、システムのアイドル スリープを防止します。"
+    },
+    "ko": {
+      "displayName": "잠자기 방지",
+      "summary": "디스플레이를 절전 모드로 허용하는 동안 시스템 유휴 절전을 방지합니다."
+    },
+    "pt": {
+      "displayName": "Manter ativo",
+      "summary": "Evite a suspensão ociosa do sistema enquanto permite que os monitores hibernem."
+    },
+    "ru": {
+      "displayName": "Не давать уснуть",
+      "summary": "Предотвратите спящий режим системы, одновременно позволяя дисплеям переходить в спящий режим."
+    },
+    "zh-Hans": {
+      "displayName": "阻止休眠",
+      "summary": "阻止系统空闲休眠，允许显示器息屏"
+    },
+    "zh-Hant": {
+      "displayName": "防止睡眠",
+      "summary": "阻止系統空閒休眠，允許顯示器息螢幕"
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "KeepAwake.bundle",

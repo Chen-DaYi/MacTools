@@ -6,27 +6,22 @@ import MacToolsPluginKit
 
 public final class AppearancePluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        AppearancePluginProvider()
+        AppearancePluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct AppearancePluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [AppearancePlugin()]
+        [AppearancePlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "appearance",
-        title: "深色模式",
-        iconName: "circle.lefthalf.filled",
-        iconTint: Color(nsColor: .systemIndigo),
-        order: 30,
-        defaultDescription: "切换系统亮色与深色外观"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -38,10 +33,23 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "AppearancePlugin")
+    private let localization: PluginLocalization
     private var isDarkMode: Bool = false
     private nonisolated(unsafe) var themeObserver: NSObjectProtocol?
 
-    init() {
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "appearance",
+            title: localization.string("metadata.title", defaultValue: "深色模式"),
+            iconName: "circle.lefthalf.filled",
+            iconTint: Color(nsColor: .systemIndigo),
+            order: 30,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "切换系统亮色与深色外观"
+            )
+        )
         isDarkMode = Self.readSystemDarkMode()
         observeSystemAppearanceChanges()
     }
@@ -54,7 +62,9 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: isDarkMode ? "已开启" : "已关闭",
+            subtitle: isDarkMode
+                ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
             isOn: isDarkMode,
             isExpanded: false,
             isEnabled: true,

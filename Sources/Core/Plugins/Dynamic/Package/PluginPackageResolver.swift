@@ -160,6 +160,10 @@ final class PluginPackageResolver: PluginPackageResolving {
         guard manifest.minHostVersion == entry.minimumHostVersion else {
             throw PluginPackageResolverError.manifestMismatch(field: "minimumHostVersion")
         }
+
+        guard manifest.releaseChannel == entry.releaseChannel else {
+            throw PluginPackageResolverError.manifestMismatch(field: "releaseChannel")
+        }
     }
 
     static func packageMetrics(for url: URL, fileManager: FileManager = .default) throws -> PluginPackageMetrics {
@@ -258,27 +262,37 @@ enum PluginPackageResolverError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .unsupportedPackageURL(url):
-            return "插件包地址不支持：\(url.absoluteString)"
+            return AppL10n.pluginsFormat("plugin.error.package.unsupportedURLFormat", defaultValue: "插件包地址不支持：%@", url.absoluteString)
         case let .missingLocalPackage(url):
-            return "本地插件包不存在：\(url.path)"
+            return AppL10n.pluginsFormat("plugin.error.package.missingLocalFormat", defaultValue: "本地插件包不存在：%@", url.path)
         case let .httpStatus(statusCode):
-            return "插件包下载失败：HTTP \(statusCode)"
+            return AppL10n.pluginsFormat("plugin.error.package.httpStatusFormat", defaultValue: "插件包下载失败：HTTP %d", statusCode)
         case let .packageSizeMismatch(expected, actual):
-            return "插件包大小不匹配，期望 \(expected)，实际 \(actual)。"
+            return AppL10n.pluginsFormat(
+                "plugin.error.package.sizeMismatchFormat",
+                defaultValue: "插件包大小不匹配，期望 %lld，实际 %lld。",
+                expected,
+                actual
+            )
         case let .packageTooLarge(size):
-            return "插件包过大：\(size)"
+            return AppL10n.pluginsFormat("plugin.error.package.tooLargeFormat", defaultValue: "插件包过大：%lld", size)
         case let .checksumMismatch(expected, actual):
-            return "插件包校验失败，期望 \(expected)，实际 \(actual)。"
+            return AppL10n.pluginsFormat(
+                "plugin.error.package.checksumMismatchFormat",
+                defaultValue: "插件包校验失败，期望 %@，实际 %@。",
+                expected,
+                actual
+            )
         case let .unsupportedPackageFormat(url):
-            return "插件包格式不支持：\(url.lastPathComponent)"
+            return AppL10n.pluginsFormat("plugin.error.package.unsupportedFormatFormat", defaultValue: "插件包格式不支持：%@", url.lastPathComponent)
         case .invalidExpandedPackage:
-            return "插件压缩包内容无效。"
+            return AppL10n.plugins("plugin.error.package.invalidExpanded", defaultValue: "插件压缩包内容无效。")
         case .archiveEscapedDestination:
-            return "插件压缩包包含不安全路径。"
+            return AppL10n.plugins("plugin.error.package.unsafeArchivePath", defaultValue: "插件压缩包包含不安全路径。")
         case let .manifestMismatch(field):
-            return "插件包 manifest 与插件列表不一致：\(field)"
+            return AppL10n.pluginsFormat("plugin.error.package.manifestMismatchFormat", defaultValue: "插件包 manifest 与插件列表不一致：%@", field)
         case let .unzipFailed(reason):
-            return "插件压缩包解压失败：\(reason)"
+            return AppL10n.pluginsFormat("plugin.error.package.unzipFailedFormat", defaultValue: "插件压缩包解压失败：%@", reason)
         }
     }
 }

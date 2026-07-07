@@ -5,18 +5,29 @@ import MacToolsPluginKit
 
 public final class XcodeCleanPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        XcodeCleanPluginProvider()
+        XcodeCleanPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct XcodeCleanPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
+        let localization = PluginLocalization(bundle: context.resourceBundle)
         let monitor = XcodeCleanRunningMonitor()
-        let scanner = XcodeCleanScanner()
+        let scanner = XcodeCleanScanner(localization: localization)
         let executor = XcodeCleanExecutor()
-        let controller = XcodeCleanController(scanner: scanner, executor: executor)
-        return [XcodeCleanPlugin(controller: controller, runningMonitor: monitor)]
+        let controller = XcodeCleanController(
+            scanner: scanner,
+            executor: executor,
+            localization: localization
+        )
+        return [XcodeCleanPlugin(
+            controller: controller,
+            runningMonitor: monitor,
+            localization: localization
+        )]
     }
 }
 
@@ -36,6 +47,11 @@ protocol XcodeCleanConfirmationPresenting: AnyObject {
 @MainActor
 final class XcodeCleanConfirmWindowPresenter: XcodeCleanConfirmationPresenting {
     private var window: XcodeCleanConfirmWindow?
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
 
     var isPresenting: Bool { window?.isVisible == true }
 
@@ -49,6 +65,7 @@ final class XcodeCleanConfirmWindowPresenter: XcodeCleanConfirmationPresenting {
 
         let window = XcodeCleanConfirmWindow(
             candidates: candidates,
+            localization: localization,
             onConfirm: onConfirm,
             onCancel: onCancel
         )
@@ -94,14 +111,7 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
         static let stop = "xcode-clean-stop"
     }
 
-    let metadata = PluginMetadata(
-        id: "xcode-clean",
-        title: "Xcode 清理",
-        iconName: "hammer",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 91,
-        defaultDescription: "分类清理 Xcode DerivedData、设备支持、归档与缓存"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -116,16 +126,30 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
     let controller: XcodeCleanControlling
     private let runningMonitor: XcodeCleanRunningMonitoring
     private let confirmationPresenter: XcodeCleanConfirmationPresenting
+    private let localization: PluginLocalization
     private var isExpanded = false
 
     init(
         controller: XcodeCleanControlling,
         runningMonitor: XcodeCleanRunningMonitoring,
-        confirmationPresenter: XcodeCleanConfirmationPresenting = XcodeCleanConfirmWindowPresenter()
+        confirmationPresenter: XcodeCleanConfirmationPresenting? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.controller = controller
         self.runningMonitor = runningMonitor
-        self.confirmationPresenter = confirmationPresenter
+        self.localization = localization
+        self.confirmationPresenter = confirmationPresenter ?? XcodeCleanConfirmWindowPresenter(localization: localization)
+        self.metadata = PluginMetadata(
+            id: "xcode-clean",
+            title: localization.string("metadata.title", defaultValue: "Xcode 清理"),
+            iconName: "hammer",
+            iconTint: Color(nsColor: .systemBlue),
+            order: 91,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "分类清理 Xcode DerivedData、设备支持、归档与缓存"
+            )
+        )
 
         self.controller.onStateChange = { [weak self] in
             self?.onStateChange?()
@@ -171,9 +195,11 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
 
     var configuration: PluginConfiguration? {
         guard let controller = controller as? XcodeCleanController else { return nil }
+        let localization = localization
         return PluginConfiguration(description: metadata.defaultDescription) { _ in
             XcodeCleanDetailView(
                 controller: controller,
+                localization: localization,
                 showsHeader: false,
                 contentPadding: 0,
                 minimumContentHeight: 0
@@ -250,7 +276,9 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: snapshot.phase == .scanning ? "扫描中…" : "扫描",
+                actionTitle: snapshot.phase == .scanning
+                    ? localization.string("panel.action.scanning", defaultValue: "扫描中…")
+                    : localization.string("panel.action.scan", defaultValue: "扫描"),
                 actionIconSystemName: "magnifyingglass",
                 isEnabled: snapshot.canScan
             )
@@ -267,7 +295,9 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: snapshot.phase == .cleaning ? "清理中…" : "清理",
+                actionTitle: snapshot.phase == .cleaning
+                    ? localization.string("panel.action.cleaning", defaultValue: "清理中…")
+                    : localization.string("panel.action.clean", defaultValue: "清理"),
                 actionIconSystemName: "trash",
                 actionBehavior: .dismissBeforeHandling,
                 showsLeadingDivider: true,
@@ -284,13 +314,13 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
                     selectedOptionID: nil,
                     dateValue: nil,
                     minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: nil,
-                    actionTitle: "停止",
-                    actionIconSystemName: "xmark.circle",
-                    showsLeadingDivider: true,
-                    isEnabled: true
+                        displayedComponents: nil,
+                        datePickerStyle: nil,
+                        sectionTitle: nil,
+                        actionTitle: localization.string("panel.action.stop", defaultValue: "停止"),
+                        actionIconSystemName: "xmark.circle",
+                        showsLeadingDivider: true,
+                        isEnabled: true
                 )
             )
         }
@@ -300,27 +330,38 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
 
     private func subtitle(for snapshot: XcodeCleanSnapshot) -> String {
         if snapshot.isXcodeRunning {
-            return "请先退出 Xcode"
+            return localization.string("panel.subtitle.xcodeRunning", defaultValue: "请先退出 Xcode")
         }
 
         switch snapshot.phase {
         case .idle:
-            return "等待扫描"
+            return localization.string("panel.subtitle.idle", defaultValue: "等待扫描")
         case .scanning:
-            return "正在扫描…"
+            return localization.string("panel.subtitle.scanning", defaultValue: "正在扫描…")
         case .scanned:
-            if snapshot.isResultStale { return "勾选已更新，请重新扫描" }
-            if let result = snapshot.scanResult {
-                return "\(result.cleanableCandidates.count) 项，\(byteText(result.cleanableSizeBytes))"
+            if snapshot.isResultStale {
+                return localization.string("panel.subtitle.stale", defaultValue: "勾选已更新，请重新扫描")
             }
-            return "扫描完成"
+            if let result = snapshot.scanResult {
+                return localization.format(
+                    "panel.subtitle.scanned",
+                    defaultValue: "%d 项，%@",
+                    result.cleanableCandidates.count,
+                    byteText(result.cleanableSizeBytes)
+                )
+            }
+            return localization.string("panel.subtitle.scanComplete", defaultValue: "扫描完成")
         case .cleaning:
-            return "正在清理…"
+            return localization.string("panel.subtitle.cleaning", defaultValue: "正在清理…")
         case .completed:
             if let result = snapshot.executionResult {
-                return "已释放 \(byteText(result.reclaimedBytes))"
+                return localization.format(
+                    "panel.subtitle.completed",
+                    defaultValue: "已释放 %@",
+                    byteText(result.reclaimedBytes)
+                )
             }
-            return "清理完成"
+            return localization.string("panel.subtitle.cleanComplete", defaultValue: "清理完成")
         }
     }
 

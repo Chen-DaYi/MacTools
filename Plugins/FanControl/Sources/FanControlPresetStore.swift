@@ -18,13 +18,13 @@ final class FanControlPresetStore: ObservableObject {
     static let builtInPresets: [FanPreset] = [
         FanPreset(
             id: FanPresetBuiltInID.auto,
-            name: "自动",
+            name: "",
             strategy: .auto,
             isBuiltIn: true
         ),
         FanPreset(
             id: FanPresetBuiltInID.fullSpeed,
-            name: "全速",
+            name: "",
             strategy: .fullSpeed,
             isBuiltIn: true
         ),
@@ -33,6 +33,7 @@ final class FanControlPresetStore: ObservableObject {
     // MARK: - State
 
     private let storage: PluginStorage
+    private let localization: PluginLocalization
     @Published private(set) var customPresets: [FanPreset] = []
     @Published private(set) var activePresetID: String = FanPresetBuiltInID.auto
 
@@ -47,8 +48,12 @@ final class FanControlPresetStore: ObservableObject {
 
     // MARK: - Init
 
-    init(storage: PluginStorage) {
+    init(
+        storage: PluginStorage,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.storage = storage
+        self.localization = localization
         load()
     }
 
@@ -90,7 +95,7 @@ final class FanControlPresetStore: ObservableObject {
         let index = customPresets.count + 1
         let preset = FanPreset(
             id: UUID().uuidString,
-            name: "自定义预设 \(index)",
+            name: localization.format("preset.custom.defaultName", defaultValue: "自定义预设 %d", index),
             strategy: .fixed(rpm: FanRPMLimits.absoluteMin),
             isBuiltIn: false
         )
