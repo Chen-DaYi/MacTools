@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-07-05T16:02:06Z",
-  "minimumHostVersion": "1.0.28",
+  "generatedAt": "2026-07-07T15:26:04Z",
+  "minimumHostVersion": "1.0.29",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -61,16 +61,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "3d03f67bd811c63036e6ba9ad625d94f5dbf6f48adfe5c24f95e562404ef5bc0",
-        "size": 781680,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/activity-bar.mactoolsplugin.zip"
+        "sha256": "3be4e17de4467a9aec2b89d494cbf0cb0389a174529de78201190f8e8e068dfc",
+        "size": 792698,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.31/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.31",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.12"
+      "version": "1.0.13"
     },
     {
       "capabilities": {
@@ -1152,16 +1152,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "2348c0856f28dd229989e5cdd64d3646797fad9edde178ebcd40410faa3b1ebe",
-        "size": 367287,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/fan-control.mactoolsplugin.zip"
+        "sha256": "3e41bdf98bca6d139c2381926b7780566eb7bb165287267f3cbb20d33829faa2",
+        "size": 368214,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.31/fan-control.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.31",
       "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-      "version": "1.0.9"
+      "version": "1.0.10"
     },
     {
       "capabilities": {
@@ -1305,6 +1305,62 @@
         "configuration": true,
         "primaryPanel": true
       },
+      "category": "system",
+      "displayName": "Homebrew 管理",
+      "id": "homebrew",
+      "localizedMetadata": {
+        "ar": {
+          "displayName": "Homebrew",
+          "summary": "إدارة حزم Homebrew والمستودعات وتشغيل تشخيصات النظام."
+        },
+        "en": {
+          "displayName": "Homebrew Manager",
+          "summary": "Manage Homebrew packages, repositories, and perform system diagnostics"
+        },
+        "es": {
+          "displayName": "Homebrew",
+          "summary": "Administrar paquetes de Homebrew, repositorios y realizar diagnósticos del sistema."
+        },
+        "fr": {
+          "displayName": "Homebrew",
+          "summary": "Gérer les paquets Homebrew, les dépôts et effectuer des diagnostics système."
+        },
+        "ja": {
+          "displayName": "Homebrew",
+          "summary": "Homebrew パッケージ、リポジトリの管理、およびシステム診断の実行。"
+        },
+        "pt": {
+          "displayName": "Homebrew",
+          "summary": "Gerenciar pacotes do Homebrew, repositórios e executar diagnósticos do sistema."
+        },
+        "zh-Hans": {
+          "displayName": "Homebrew 管理",
+          "summary": "管理 Homebrew 包、软件仓库并执行系统诊断"
+        },
+        "zh-Hant": {
+          "displayName": "Homebrew 管理",
+          "summary": "管理 Homebrew 包、軟體倉庫並執行系統診斷"
+        }
+      },
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "17c674302781e1ebe195329a25e0a39a7ff87bf8260ab83bbc0c4e0cc124dc84",
+        "size": 863001,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.31/homebrew.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 2,
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.31",
+      "summary": "管理 Homebrew 包、库仓库并执行系统诊断",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
       "category": "monitoring",
       "displayName": "IP 检测",
       "id": "ip-overview",
@@ -1424,16 +1480,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "68fb4eeb456c73c13c9b9c563fe58d57cb844d4ed79a806319b65d8036862340",
-        "size": 98573,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/keep-awake.mactoolsplugin.zip"
+        "sha256": "3e329a82fcfc18c280f190346f3257f21f47d3fb910e4246e56e41aee6e31b0d",
+        "size": 102942,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.31/keep-awake.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.31",
       "summary": "阻止系统空闲休眠，允许显示器息屏",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -1696,9 +1752,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "c77e5ced10b1f69781064ce32117defbbec1f6d7030ca82bbbd8ea19bd211c82",
-        "size": 822879,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/menu-bar-hidden.mactoolsplugin.zip"
+        "sha256": "f1019a036fbd57a603f6398f01f054706c6f8554b60781366da4c3195de1190e",
+        "size": 822586,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.31/menu-bar-hidden.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1706,9 +1762,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.31",
       "summary": "菜单栏图标隐藏功能的设置与弹窗界面",
-      "version": "1.0.5"
+      "version": "1.0.6"
     },
     {
       "capabilities": {
@@ -1803,9 +1859,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "6336d59105c43042b99ce4122a0145687dabca91895d602a4a611cfa6b43d7e3",
-        "size": 209747,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/mouse-enhancer.mactoolsplugin.zip"
+        "sha256": "59da31a1a301998fbd84d108a400a9b740e56d8ccfcba8daa1ccd8771b203d3b",
+        "size": 209749,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.31/mouse-enhancer.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1813,9 +1869,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.31",
       "summary": "增强鼠标与触控板控制",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "capabilities": {
@@ -2508,6 +2564,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "xyJG2pIWmigue6n3ls1SrAqzQFYk6pSyA+SvUlOPvKQrekPoWZTfwfzCuWDoWoplmoj0aVq92Ya6AZ6P7ppACw=="
+    "value": "97xtRlK2oGyoMziok48cNqN3PkS7zsENHpTWWC8yAMfw/S6SwwBu1n5ADqPacloR6ZWvBSokfyzqTzfPhdxQAg=="
   }
 }
