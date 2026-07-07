@@ -153,6 +153,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureV
     func handleAction(_ action: PluginPanelAction) {
         switch action {
         case let .setDisclosureExpanded(expanded):
+            guard isExpanded != expanded else { return }
             isExpanded = expanded
             if !expanded { lastErrorMessage = nil }
             restartMonitoringIfRunning()

@@ -92,12 +92,10 @@ final class ActivityBarController: ObservableObject {
         }
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            inputEventNotificationTask?.cancel()
-            if let terminateObserver {
-                NotificationCenter.default.removeObserver(terminateObserver)
-            }
+    @MainActor deinit {
+        inputEventNotificationTask?.cancel()
+        if let terminateObserver {
+            NotificationCenter.default.removeObserver(terminateObserver)
         }
     }
 

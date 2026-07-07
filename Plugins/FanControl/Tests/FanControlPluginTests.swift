@@ -53,11 +53,24 @@ final class FanControlPluginTests: XCTestCase {
         writer.writeError = .writeFailed("硬件写入失败")
         let plugin = makePlugin(writer: writer)
 
+        plugin.handleAction(.setDisclosureExpanded(true))
         plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
 
         plugin.handleAction(.setDisclosureExpanded(false))
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testDisclosureNoOpDoesNotNotifyStateChange() {
+        let plugin = makePlugin()
+        var stateChangeCount = 0
+        plugin.onStateChange = {
+            stateChangeCount += 1
+        }
+
+        plugin.handleAction(.setDisclosureExpanded(false))
+
+        XCTAssertEqual(stateChangeCount, 0)
     }
 
     func testDeletingActiveCustomPresetResetsToAuto() {
