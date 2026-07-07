@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [plugins-1.0.31] - 2026-07-07
+
+### Added
+
+- Add a Homebrew management plugin for browsing packages, installing and upgrading formulae, and running diagnostics from the menu bar and settings.
+
+### Fixed
+
+- Hide Menu Bar Icons no longer quits after Accessibility is granted before Screen Recording is approved.
+- Hide Menu Bar Icons now keeps the divider where you drag it instead of snapping it back next to the MacTools icon.
+- Keep Awake now restores permanent sessions after restarting MacTools.
+
 ## [v1.0.29] - 2026-07-05
 
 ### Fixed

@@ -48,7 +48,7 @@
       "summary": "管理風扇轉速預設，支持自動、全速和自定義策略"
     }
   },
-  "version": "1.0.9",
+  "version": "1.0.10",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "FanControl.bundle",
