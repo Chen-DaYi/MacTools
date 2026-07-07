@@ -363,11 +363,35 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["display"])
     }
 
+    func testPluginStateChangesAreDebouncedAndOnlyDirtyPanelStateIsRead() async throws {
+        let changingPlugin = CountingPrimaryPanelPlugin(id: "changing", order: 1)
+        let stablePlugin = CountingPrimaryPanelPlugin(id: "stable", order: 2)
+        let host = makeHost(
+            plugins: [changingPlugin, stablePlugin],
+            derivedStateRebuildDelay: .milliseconds(20)
+        )
+        changingPlugin.panelStateReadCount = 0
+        stablePlugin.panelStateReadCount = 0
+
+        changingPlugin.primarySubtitle = "changed"
+        changingPlugin.onStateChange?()
+        changingPlugin.primarySubtitle = "changed again"
+        changingPlugin.onStateChange?()
+        changingPlugin.onStateChange?()
+
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertEqual(changingPlugin.panelStateReadCount, 1)
+        XCTAssertEqual(stablePlugin.panelStateReadCount, 0)
+        XCTAssertEqual(host.panelItems.map(\.description), ["changed again", "Feature stable"])
+    }
+
     private func makeHost(
         plugins: [any MacToolsPlugin] = [],
         dynamicPluginManager: DynamicPluginManager? = nil,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
-        displayTopologyRefreshDelay: Duration = .milliseconds(180)
+        displayTopologyRefreshDelay: Duration = .milliseconds(180),
+        derivedStateRebuildDelay: Duration = .milliseconds(150)
     ) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -379,7 +403,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: displayConfigurationObserver,
-            displayTopologyRefreshDelay: displayTopologyRefreshDelay
+            displayTopologyRefreshDelay: displayTopologyRefreshDelay,
+            derivedStateRebuildDelay: derivedStateRebuildDelay
         )
     }
 
@@ -556,6 +581,61 @@ private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func refresh() {
         refreshCallCount += 1
     }
+    func handleAction(_ action: PluginPanelAction) {}
+
+    func permissionState(for permissionID: String) -> PluginPermissionState {
+        PluginPermissionState(isGranted: true, footnote: nil)
+    }
+
+    func handlePermissionAction(id: String) {}
+    func handleSettingsAction(id: String) {}
+    func handleShortcutAction(id: String) {}
+}
+
+@MainActor
+private final class CountingPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var primarySubtitle: String
+    var panelStateReadCount = 0
+
+    init(id: String, order: Int) {
+        self.metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "sparkles",
+            iconTint: Color(nsColor: .systemBlue),
+            order: order,
+            defaultDescription: "Feature \(id)"
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .switch,
+            menuActionBehavior: .keepPresented
+        )
+        self.primarySubtitle = ""
+    }
+
+    var primaryPanelState: PluginPanelState {
+        panelStateReadCount += 1
+        return PluginPanelState(
+            subtitle: primarySubtitle,
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    var permissionRequirements: [PluginPermissionRequirement] { [] }
+    var settingsSections: [PluginSettingsSection] { [] }
+    var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    func refresh() {}
     func handleAction(_ action: PluginPanelAction) {}
 
     func permissionState(for permissionID: String) -> PluginPermissionState {

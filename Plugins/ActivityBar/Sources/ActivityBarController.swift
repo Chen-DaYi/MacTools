@@ -25,6 +25,11 @@ final class ActivityBarController: ObservableObject {
     private let inputMonitor: any ActivityBarInputMonitoring
     private let socketServer: any ActivityBarSocketServing
     private var hookInstallerPaths: ActivityBarHookInstallerPaths
+    private var inputStatsRefreshTask: Task<Void, Never>?
+
+    private enum Timing {
+        static let inputStatsRefreshInterval: Duration = .seconds(1)
+    }
 
     init(
         context: PluginRuntimeContext,
@@ -59,7 +64,7 @@ final class ActivityBarController: ObservableObject {
                 return
             }
             self.inputStats.record(event)
-            self.notifyChange()
+            self.scheduleInputStatsRefresh()
         }
 
         if let installedAt = context.storage.string(forKey: StorageKey.hooksInstalledAt) {
@@ -131,6 +136,7 @@ final class ActivityBarController: ObservableObject {
     }
 
     func refresh() {
+        inputStats.flushPendingChanges()
         codingStats.flushActiveDurations()
         notifyChange()
     }
@@ -195,6 +201,9 @@ final class ActivityBarController: ObservableObject {
     private func stopRuntime() {
         inputMonitor.stop()
         socketServer.stop()
+        inputStatsRefreshTask?.cancel()
+        inputStatsRefreshTask = nil
+        inputStats.flushPendingChanges()
         codingStats.flushActiveDurations()
     }
 
@@ -209,6 +218,27 @@ final class ActivityBarController: ObservableObject {
     private func notifyChange() {
         objectWillChange.send()
         onStateChange?()
+    }
+
+    private func scheduleInputStatsRefresh() {
+        guard inputStatsRefreshTask == nil else {
+            return
+        }
+
+        inputStatsRefreshTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Timing.inputStatsRefreshInterval)
+            } catch {
+                return
+            }
+
+            guard let self, !Task.isCancelled else {
+                return
+            }
+
+            self.inputStatsRefreshTask = nil
+            self.objectWillChange.send()
+        }
     }
 
     private static func installTimestamp() -> String {

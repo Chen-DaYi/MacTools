@@ -44,6 +44,7 @@ final class PluginHost: ObservableObject {
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
     private let displayTopologyRefreshDelay: Duration
+    private let derivedStateRebuildDelay: Duration
     let dynamicPluginManager: DynamicPluginManager?
     private let pluginCatalogManager: PluginCatalogManager?
 
@@ -56,6 +57,10 @@ final class PluginHost: ObservableObject {
     private var isolatedPluginFailures: [String: String] = [:]
     private var isHandlingPluginAction = false
     private var displayTopologyRefreshTask: Task<Void, Never>?
+    private var derivedStateRebuildTask: Task<Void, Never>?
+    private var dirtyPluginIDs: Set<String> = []
+    private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
+    private var cachedComponentStatesByID: [String: PluginComponentState] = [:]
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var componentItems: [PluginComponentItem] = []
@@ -107,7 +112,8 @@ final class PluginHost: ObservableObject {
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
-        displayTopologyRefreshDelay: Duration = .milliseconds(180)
+        displayTopologyRefreshDelay: Duration = .milliseconds(180),
+        derivedStateRebuildDelay: Duration = .milliseconds(150)
     ) {
         self.builtInPlugins = plugins.sorted {
             if $0.metadata.order == $1.metadata.order {
@@ -122,6 +128,7 @@ final class PluginHost: ObservableObject {
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
         self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
+        self.derivedStateRebuildDelay = derivedStateRebuildDelay
         self.dynamicPluginManager = dynamicPluginManager
         self.pluginCatalogManager = pluginCatalogManager
 
@@ -158,6 +165,7 @@ final class PluginHost: ObservableObject {
 
     deinit {
         displayTopologyRefreshTask?.cancel()
+        derivedStateRebuildTask?.cancel()
     }
 
     func refreshAll() {
@@ -687,7 +695,7 @@ final class PluginHost: ObservableObject {
             let pluginID = plugin.metadata.id
 
             plugin.onStateChange = { [weak self] in
-                self?.rebuildDerivedStateAfterPluginChange()
+                self?.rebuildDerivedStateAfterPluginChange(pluginID: pluginID)
             }
             plugin.requestPermissionGuidance = { [weak self] permissionID in
                 self?.requestPermissionGuidance(forPluginID: pluginID, permissionID: permissionID)
@@ -751,61 +759,65 @@ final class PluginHost: ObservableObject {
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
 
-    private func rebuildDerivedState() {
+    private func rebuildDerivedState(dirtyPluginIDs: Set<String>? = nil) {
+        if dirtyPluginIDs == nil {
+            cancelScheduledDerivedStateRebuild()
+        }
+
         let isolatedPluginCountAtStart = isolatedPluginFailures.count
         let orderedDescriptors = orderedPluginDescriptors()
-        let panelStatesByID = Dictionary(
-            uniqueKeysWithValues: orderedDescriptors.compactMap { descriptor -> (String, PluginPanelState)? in
-                guard descriptor.hasPrimaryPanel else {
-                    return nil
-                }
+        let descriptorIDs = Set(orderedDescriptors.map(\.metadata.id))
+        var panelStatesByID = dirtyPluginIDs == nil ? [:] : cachedPanelStatesByID.filter {
+            descriptorIDs.contains($0.key)
+        }
+        var componentStatesByID = dirtyPluginIDs == nil ? [:] : cachedComponentStatesByID.filter {
+            descriptorIDs.contains($0.key)
+        }
 
-                let plugin = descriptor.plugin
-                guard !isPluginIsolated(plugin) else {
-                    return nil
-                }
+        for descriptor in orderedDescriptors {
+            let pluginID = descriptor.metadata.id
+            let shouldReadPlugin = dirtyPluginIDs?.contains(pluginID) ?? true
+            let plugin = descriptor.plugin
 
-                guard let primaryPanel = plugin.primaryPanel else {
-                    return nil
+            if descriptor.hasPrimaryPanel,
+               !isPluginIsolated(plugin),
+               let primaryPanel = plugin.primaryPanel {
+                if shouldReadPlugin || panelStatesByID[pluginID] == nil {
+                    if let state = guardedValue(
+                        for: plugin,
+                        operation: "read primary panel state",
+                        primaryPanel.primaryPanelState
+                    ) {
+                        panelStatesByID[pluginID] = state
+                    } else {
+                        panelStatesByID.removeValue(forKey: pluginID)
+                    }
                 }
-
-                guard let state = guardedValue(
-                    for: plugin,
-                    operation: "read primary panel state",
-                    primaryPanel.primaryPanelState
-                ) else {
-                    return nil
-                }
-
-                return (plugin.metadata.id, state)
+            } else {
+                panelStatesByID.removeValue(forKey: pluginID)
             }
-        )
-        let componentStatesByID = Dictionary(
-            uniqueKeysWithValues: orderedDescriptors.compactMap { descriptor -> (String, PluginComponentState)? in
-                guard descriptor.hasComponentPanel else {
-                    return nil
-                }
 
-                let plugin = descriptor.plugin
-                guard !isPluginIsolated(plugin) else {
-                    return nil
+            if descriptor.hasComponentPanel,
+               !isPluginIsolated(plugin),
+               let componentPanel = plugin.componentPanel {
+                if shouldReadPlugin || componentStatesByID[pluginID] == nil {
+                    if let state = guardedValue(
+                        for: plugin,
+                        operation: "read component panel state",
+                        componentPanel.componentPanelState
+                    ) {
+                        componentStatesByID[pluginID] = state
+                    } else {
+                        componentStatesByID.removeValue(forKey: pluginID)
+                    }
                 }
-
-                guard let componentPanel = plugin.componentPanel else {
-                    return nil
-                }
-
-                guard let state = guardedValue(
-                    for: plugin,
-                    operation: "read component panel state",
-                    componentPanel.componentPanelState
-                ) else {
-                    return nil
-                }
-
-                return (plugin.metadata.id, state)
+            } else {
+                componentStatesByID.removeValue(forKey: pluginID)
             }
-        )
+        }
+
+        cachedPanelStatesByID = panelStatesByID
+        cachedComponentStatesByID = componentStatesByID
 
         panelItems = orderedDescriptors.compactMap { descriptor in
             guard descriptor.hasPrimaryPanel else {
@@ -995,13 +1007,22 @@ final class PluginHost: ObservableObject {
             permissionCards: permissionCards,
             shortcutItems: shortcutItems
         )
-        // 清空所有配置视图缓存，确保状态改变时视图能刷新
-        configurationViewCache.removeAll()
+        // 状态变化时只丢弃相关插件的配置视图，全量重建才清空全部缓存。
+        if let dirtyPluginIDs {
+            for pluginID in dirtyPluginIDs {
+                configurationViewCache.removeValue(forKey: pluginID)
+            }
+        } else {
+            configurationViewCache.removeAll()
+        }
         trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
         syncSelectedFeatureSettingsPane()
 
-        hasActivePlugin = panelStatesByID.values.contains(where: \.isOn)
+        let newHasActivePlugin = panelStatesByID.values.contains(where: \.isOn)
             || componentStatesByID.values.contains(where: \.isActive)
+        if hasActivePlugin != newHasActivePlugin {
+            hasActivePlugin = newHasActivePlugin
+        }
 
         if isolatedPluginFailures.count > isolatedPluginCountAtStart {
             rebuildDerivedState()
@@ -1024,12 +1045,43 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func rebuildDerivedStateAfterPluginChange() {
+    private func rebuildDerivedStateAfterPluginChange(pluginID: String) {
         guard !isHandlingPluginAction else {
             return
         }
 
-        rebuildDerivedState()
+        dirtyPluginIDs.insert(pluginID)
+        guard derivedStateRebuildTask == nil else {
+            return
+        }
+
+        let rebuildDelay = derivedStateRebuildDelay
+        derivedStateRebuildTask = Task { @MainActor [weak self, rebuildDelay] in
+            do {
+                try await Task.sleep(for: rebuildDelay)
+            } catch {
+                return
+            }
+
+            guard let self, !Task.isCancelled else {
+                return
+            }
+
+            let pluginIDs = self.dirtyPluginIDs
+            self.dirtyPluginIDs.removeAll()
+            self.derivedStateRebuildTask = nil
+            guard !pluginIDs.isEmpty else {
+                return
+            }
+
+            self.rebuildDerivedState(dirtyPluginIDs: pluginIDs)
+        }
+    }
+
+    private func cancelScheduledDerivedStateRebuild() {
+        derivedStateRebuildTask?.cancel()
+        derivedStateRebuildTask = nil
+        dirtyPluginIDs.removeAll()
     }
 
     private func guardedValue<T>(

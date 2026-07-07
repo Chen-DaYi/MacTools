@@ -8,12 +8,21 @@ import MacToolsPluginKit
 @MainActor
 private final class MockSMCReader: FanControlSMCReading {
     var snapshot: FanSnapshot
+    var snapshots: [FanSnapshot]
+    private(set) var readCount = 0
 
-    init(snapshot: FanSnapshot = .empty) {
+    init(snapshot: FanSnapshot = .empty, snapshots: [FanSnapshot] = []) {
         self.snapshot = snapshot
+        self.snapshots = snapshots
     }
 
-    func readSnapshot() -> FanSnapshot { snapshot }
+    func readSnapshot() -> FanSnapshot {
+        readCount += 1
+        guard !snapshots.isEmpty else {
+            return snapshot
+        }
+        return snapshots.removeFirst()
+    }
 }
 
 // MARK: - Mock SMC Writer
@@ -281,11 +290,58 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertTrue(host.featureManagementItems.contains { $0.id == "fan-control" })
     }
 
+    // MARK: - Monitoring
+
+    func testMonitoringOnlyNotifiesWhenSnapshotMeaningfullyChanges() async throws {
+        let firstSnapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3600],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45.0
+        )
+        let equivalentSnapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3605],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45.0
+        )
+        let changedSnapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3720],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45.0
+        )
+        let reader = MockSMCReader(
+            snapshots: [firstSnapshot, equivalentSnapshot, changedSnapshot]
+        )
+        let plugin = makeFanControlPlugin(
+            reader: reader,
+            monitoringActiveInterval: .milliseconds(10),
+            monitoringIdleInterval: .milliseconds(10)
+        )
+        var stateChangeCount = 0
+        plugin.onStateChange = {
+            stateChangeCount += 1
+        }
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "fan-control"))
+        try await Task.sleep(for: .milliseconds(45))
+        plugin.deactivate(reason: .disabled)
+
+        XCTAssertGreaterThanOrEqual(reader.readCount, 3)
+        XCTAssertEqual(stateChangeCount, 2)
+    }
+
     // MARK: - Helpers
 
     private func makeFanControlPlugin(
         reader: MockSMCReader? = nil,
-        writer: MockSMCWriter? = nil
+        writer: MockSMCWriter? = nil,
+        monitoringActiveInterval: Duration = .seconds(2),
+        monitoringIdleInterval: Duration = .seconds(10)
     ) -> FanControlPlugin {
         let suiteName = "FanControlPluginTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -295,7 +351,9 @@ final class FanControlPluginTests: XCTestCase {
         return FanControlPlugin(
             context: context,
             smcReader: reader ?? MockSMCReader(),
-            smcWriter: writer ?? MockSMCWriter()
+            smcWriter: writer ?? MockSMCWriter(),
+            monitoringActiveInterval: monitoringActiveInterval,
+            monitoringIdleInterval: monitoringIdleInterval
         )
     }
 }

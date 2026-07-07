@@ -34,6 +34,7 @@ final class ActivityBarStatsStoreTests: XCTestCase {
             dateProvider: { activityBarTestDate() }
         )
         store.incrementKeystroke(app: "Xcode")
+        store.flushPendingChanges()
 
         let reloaded = ActivityBarStatsStore(
             storage: storage,

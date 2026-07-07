@@ -41,6 +41,21 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.plugin.componentPanelState.subtitle, "2 次输入")
     }
 
+    func testMonitorEventsDoNotTriggerPluginStateChange() {
+        let harness = makeHarness()
+        var stateChangeCount = 0
+        harness.plugin.onStateChange = {
+            stateChangeCount += 1
+        }
+
+        harness.inputMonitor.emit(.keystroke(app: "Terminal"))
+        harness.inputMonitor.emit(.pointerClick(app: "Terminal"))
+        harness.inputMonitor.emit(.scroll(app: "Terminal"))
+
+        XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 3)
+        XCTAssertEqual(stateChangeCount, 0)
+    }
+
     func testResetActionClearsToday() {
         let harness = makeHarness()
 

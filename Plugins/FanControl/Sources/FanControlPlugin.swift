@@ -61,6 +61,8 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     let presetStore: FanControlPresetStore
     private let smcReader: any FanControlSMCReading
     private let smcWriter: any FanControlSMCWriting
+    private let monitoringActiveInterval: Duration
+    private let monitoringIdleInterval: Duration
 
     private var isExpanded = false
     private var fanSnapshot = FanSnapshot.empty
@@ -74,11 +76,15 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "fan-control"),
         smcReader: any FanControlSMCReading = FanControlSMCReader(),
-        smcWriter: (any FanControlSMCWriting)? = nil
+        smcWriter: (any FanControlSMCWriting)? = nil,
+        monitoringActiveInterval: Duration = .seconds(2),
+        monitoringIdleInterval: Duration = .seconds(10)
     ) {
         self.presetStore = FanControlPresetStore(storage: context.storage)
         self.smcReader = smcReader
         self.smcWriter = smcWriter ?? FanControlSMCWriter(resourceBundle: context.resourceBundle)
+        self.monitoringActiveInterval = monitoringActiveInterval
+        self.monitoringIdleInterval = monitoringIdleInterval
     }
 
     // MARK: - MacToolsPlugin
@@ -219,9 +225,15 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         guard monitoringTask == nil else { return }
         monitoringTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                self?.fanSnapshot = self?.smcReader.readSnapshot() ?? .empty
-                self?.onStateChange?()
-                try? await Task.sleep(for: .seconds(2))
+                guard let self else {
+                    return
+                }
+
+                let snapshot = self.smcReader.readSnapshot()
+                if self.updateFanSnapshotIfNeeded(snapshot) {
+                    self.onStateChange?()
+                }
+                try? await Task.sleep(for: self.currentMonitoringInterval)
             }
         }
     }
@@ -229,6 +241,28 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private func stopMonitoring() {
         monitoringTask?.cancel()
         monitoringTask = nil
+    }
+
+    private var currentMonitoringInterval: Duration {
+        if isExpanded {
+            return monitoringActiveInterval
+        }
+
+        switch presetStore.activePreset.strategy {
+        case .auto:
+            return monitoringIdleInterval
+        case .fullSpeed, .fixed:
+            return monitoringActiveInterval
+        }
+    }
+
+    private func updateFanSnapshotIfNeeded(_ snapshot: FanSnapshot) -> Bool {
+        guard !fanSnapshot.isMeaningfullyEquivalent(to: snapshot) else {
+            return false
+        }
+
+        fanSnapshot = snapshot
+        return true
     }
 
     private func registerSleepWakeObservers() {

@@ -14,6 +14,12 @@ final class ActivityBarStatsStore: ObservableObject {
     private let dateProvider: () -> Date
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var pendingPersistTask: Task<Void, Never>?
+
+    private enum Persistence {
+        static let debounceDelay: Duration = .seconds(30)
+        static let retainedDayCount = 370
+    }
 
     init(
         storage: PluginStorage,
@@ -23,7 +29,7 @@ final class ActivityBarStatsStore: ObservableObject {
         self.storage = storage
         self.calendar = calendar
         self.dateProvider = dateProvider
-        self.days = Self.loadDays(storage: storage, decoder: decoder)
+        self.days = Self.prunedDays(Self.loadDays(storage: storage, decoder: decoder))
     }
 
     var today: ActivityBarDailyStats {
@@ -96,7 +102,11 @@ final class ActivityBarStatsStore: ObservableObject {
 
     func resetToday() {
         days[dateKey(for: dateProvider())] = ActivityBarDailyStats(date: dateKey(for: dateProvider()))
-        persist()
+        persistNow()
+    }
+
+    func flushPendingChanges() {
+        persistNow()
     }
 
     private func mutateToday(
@@ -112,7 +122,7 @@ final class ActivityBarStatsStore: ObservableObject {
 
         day.perApp[app] = appStats
         days[key] = day
-        persist()
+        schedulePersist()
     }
 
     private func sanitizedAppName(_ value: String) -> String {
@@ -128,7 +138,27 @@ final class ActivityBarStatsStore: ObservableObject {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
-    private func persist() {
+    private func schedulePersist() {
+        guard pendingPersistTask == nil else {
+            return
+        }
+
+        pendingPersistTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Persistence.debounceDelay)
+            } catch {
+                return
+            }
+
+            self?.persistNow()
+        }
+    }
+
+    private func persistNow() {
+        pendingPersistTask?.cancel()
+        pendingPersistTask = nil
+        days = Self.prunedDays(days)
+
         do {
             let data = try encoder.encode(days)
             storage.set(data, forKey: StorageKey.days)
@@ -148,5 +178,14 @@ final class ActivityBarStatsStore: ObservableObject {
             ActivityBarLog.input.error("Failed to load input stats: \(error.localizedDescription, privacy: .public)")
             return [:]
         }
+    }
+
+    private static func prunedDays(_ days: [String: ActivityBarDailyStats]) -> [String: ActivityBarDailyStats] {
+        guard days.count > Persistence.retainedDayCount else {
+            return days
+        }
+
+        let retainedKeys = Set(days.keys.sorted().suffix(Persistence.retainedDayCount))
+        return days.filter { retainedKeys.contains($0.key) }
     }
 }
