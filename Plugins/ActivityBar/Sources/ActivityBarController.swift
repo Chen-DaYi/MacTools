@@ -79,6 +79,7 @@ final class ActivityBarController: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.inputStats.flushPendingChanges()
+                self?.codingStats.flushActiveDurations()
             }
         }
     }

@@ -71,6 +71,43 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(reloaded.todayInputCountForTests, 1)
     }
 
+    func testAppTerminationFlushesActiveCodingDuration() {
+        let storage = ActivityBarMemoryStorage()
+        var now = activityBarTestDate(hour: 10)
+        let codingStats = ActivityBarCodingSessionStore(
+            storage: storage,
+            calendar: activityBarTestCalendar(),
+            dateProvider: { now }
+        )
+        let harness = makeHarness(storage: storage, codingStats: codingStats)
+
+        harness.controller.codingStats.handleEvent(
+            ActivityBarHookEvent(
+                sessionID: "session-1",
+                cwd: "/tmp/MacTools",
+                event: .sessionStart,
+                status: .processing,
+                userPrompt: nil,
+                tool: nil,
+                interactive: true
+            )
+        )
+
+        now = now.addingTimeInterval(10)
+        NotificationCenter.default.post(
+            name: NSApplication.willTerminateNotification,
+            object: nil
+        )
+
+        let reloaded = ActivityBarCodingSessionStore(
+            storage: harness.storage,
+            calendar: activityBarTestCalendar(),
+            dateProvider: { now }
+        )
+
+        XCTAssertEqual(reloaded.today.durationSeconds, 10, accuracy: 0.1)
+    }
+
     func testResetActionClearsToday() {
         let harness = makeHarness()
 
@@ -82,8 +119,11 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 0)
     }
 
-    private func makeHarness() -> Harness {
-        let storage = ActivityBarMemoryStorage()
+    private func makeHarness(
+        storage providedStorage: ActivityBarMemoryStorage? = nil,
+        codingStats: ActivityBarCodingSessionStore? = nil
+    ) -> Harness {
+        let storage = providedStorage ?? ActivityBarMemoryStorage()
         let inputMonitor = ActivityBarFakeInputMonitor()
         let socketServer = ActivityBarFakeSocketServer()
         let context = PluginRuntimeContext(
@@ -95,7 +135,8 @@ final class ActivityBarPluginTests: XCTestCase {
         let controller = ActivityBarController(
             context: context,
             inputMonitor: inputMonitor,
-            socketServer: socketServer
+            socketServer: socketServer,
+            codingStats: codingStats
         )
         let plugin = ActivityBarPlugin(context: context, controller: controller)
 
