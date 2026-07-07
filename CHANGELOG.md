@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.0.30] - 2026-07-07
+
+### Fixed
+
+- Reduce unnecessary menu bar refresh work when plugins report state changes, keeping panels steadier during frequent updates.
+
 ## [plugins-1.0.31] - 2026-07-07
 
 ### Added
