@@ -3,6 +3,23 @@ import SwiftUI
 import UniformTypeIdentifiers
 import MacToolsPluginKit
 
+private enum MenuBarIconSettingsMetrics {
+    static let recentIconSize = CGSize(width: 44, height: 44)
+    static let recentTileSize = CGSize(width: 58, height: 58)
+    static let recentBadgeSize: CGFloat = 18
+
+    static let galleryColumnWidth: CGFloat = 84
+    static let galleryColumnSpacing: CGFloat = 10
+    static let galleryColumnCount = 6
+    static let galleryContentWidth: CGFloat = 554
+    static let galleryContentHeight: CGFloat = 340
+    static let galleryPopoverWidth: CGFloat = 582
+    static let galleryPreviewSize = CGSize(width: 48, height: 40)
+    static let galleryTileSize = CGSize(width: 66, height: 52)
+    static let galleryCellSize = CGSize(width: 84, height: 82)
+    static let galleryTitleWidth: CGFloat = 80
+}
+
 struct MenuBarIconSettingsView: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
     @ObservedObject var gallery: MenuBarIconGalleryLibrary
@@ -380,8 +397,14 @@ private struct MenuBarIconRecentGrid: View {
                                 Image(nsImage: iconSettings.previewImage(for: item))
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 20, height: 20)
-                                    .frame(width: 42, height: 42)
+                                    .frame(
+                                        width: MenuBarIconSettingsMetrics.recentIconSize.width,
+                                        height: MenuBarIconSettingsMetrics.recentIconSize.height
+                                    )
+                                    .frame(
+                                        width: MenuBarIconSettingsMetrics.recentTileSize.width,
+                                        height: MenuBarIconSettingsMetrics.recentTileSize.height
+                                    )
                                     .background(Color(nsColor: .controlBackgroundColor))
                                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     .overlay(
@@ -397,7 +420,7 @@ private struct MenuBarIconRecentGrid: View {
                         .help(item.displayName)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: MenuBarIconSettingsMetrics.recentTileSize.height, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -408,21 +431,21 @@ private struct MenuBarIconRecentGrid: View {
         if activeRecentID == item.id {
             ProgressView()
                 .controlSize(.small)
-                .frame(width: 16, height: 16)
+                .frame(width: MenuBarIconSettingsMetrics.recentBadgeSize, height: MenuBarIconSettingsMetrics.recentBadgeSize)
                 .background(.thinMaterial, in: Circle())
         } else if iconSettings.remoteAssetSelection(forRecentItem: item) != nil,
                   !iconSettings.isRemoteAssetCached(for: item) {
             Image(systemName: "icloud.and.arrow.down")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 16, height: 16)
+                .frame(width: MenuBarIconSettingsMetrics.recentBadgeSize, height: MenuBarIconSettingsMetrics.recentBadgeSize)
                 .background(Color(nsColor: .windowBackgroundColor))
                 .clipShape(Circle())
         } else if item.mediaKind == .animation {
             Image(systemName: "play.fill")
                 .font(.system(size: 8, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 14, height: 14)
+                .frame(width: MenuBarIconSettingsMetrics.recentBadgeSize, height: MenuBarIconSettingsMetrics.recentBadgeSize)
                 .background(Color.accentColor)
                 .clipShape(Circle())
         }
@@ -512,25 +535,37 @@ private struct MenuBarIconGalleryPicker: View {
             content
         }
         .padding(14)
-        .frame(width: 488)
+        .frame(width: MenuBarIconSettingsMetrics.galleryPopoverWidth)
     }
 
     @ViewBuilder
     private var content: some View {
         if gallery.status.isLoading && gallery.assets.isEmpty {
             ProgressView()
-                .frame(width: 460, height: 300)
+                .frame(
+                    width: MenuBarIconSettingsMetrics.galleryContentWidth,
+                    height: MenuBarIconSettingsMetrics.galleryContentHeight
+                )
         } else if gallery.assets.isEmpty {
             ContentUnavailableView(
                 AppL10n.settings("menuBarIcon.gallery.unavailable", defaultValue: "图库不可用"),
                 systemImage: "wifi.exclamationmark",
                 description: Text(gallery.lastErrorMessage ?? AppL10n.settings("menuBarIcon.gallery.tryLater", defaultValue: "稍后再试。"))
             )
-            .frame(width: 460, height: 300)
+            .frame(
+                width: MenuBarIconSettingsMetrics.galleryContentWidth,
+                height: MenuBarIconSettingsMetrics.galleryContentHeight
+            )
         } else {
             ScrollView {
                 LazyVGrid(
-                    columns: Array(repeating: GridItem(.fixed(70), spacing: 8), count: 6),
+                    columns: Array(
+                        repeating: GridItem(
+                            .fixed(MenuBarIconSettingsMetrics.galleryColumnWidth),
+                            spacing: MenuBarIconSettingsMetrics.galleryColumnSpacing
+                        ),
+                        count: MenuBarIconSettingsMetrics.galleryColumnCount
+                    ),
                     alignment: .leading,
                     spacing: 10
                 ) {
@@ -564,7 +599,10 @@ private struct MenuBarIconGalleryPicker: View {
                 }
                 .padding(.vertical, 2)
             }
-            .frame(width: 460, height: 300)
+            .frame(
+                width: MenuBarIconSettingsMetrics.galleryContentWidth,
+                height: MenuBarIconSettingsMetrics.galleryContentHeight
+            )
         }
     }
 }
@@ -580,8 +618,14 @@ private struct MenuBarIconGalleryAssetCell: View {
         VStack(spacing: 6) {
             ZStack(alignment: .bottomTrailing) {
                 preview
-                    .frame(width: 32, height: 20)
-                    .frame(width: 54, height: 34)
+                    .frame(
+                        width: MenuBarIconSettingsMetrics.galleryPreviewSize.width,
+                        height: MenuBarIconSettingsMetrics.galleryPreviewSize.height
+                    )
+                    .frame(
+                        width: MenuBarIconSettingsMetrics.galleryTileSize.width,
+                        height: MenuBarIconSettingsMetrics.galleryTileSize.height
+                    )
                     .background(Color(nsColor: .controlBackgroundColor))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
@@ -596,9 +640,12 @@ private struct MenuBarIconGalleryAssetCell: View {
                 .font(PluginSettingsTheme.Typography.statusBadge)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(width: 64)
+                .frame(width: MenuBarIconSettingsMetrics.galleryTitleWidth)
         }
-        .frame(width: 70, height: 64)
+        .frame(
+            width: MenuBarIconSettingsMetrics.galleryCellSize.width,
+            height: MenuBarIconSettingsMetrics.galleryCellSize.height
+        )
     }
 
     @ViewBuilder
