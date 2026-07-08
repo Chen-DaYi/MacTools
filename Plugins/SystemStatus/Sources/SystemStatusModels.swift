@@ -1,7 +1,7 @@
 import Foundation
 import MacToolsPluginKit
 
-enum SystemStatusMetricKind: String, CaseIterable, Equatable, Sendable {
+enum SystemStatusMetricKind: String, CaseIterable, Codable, Equatable, Hashable, Identifiable, Sendable {
     case cpu
     case gpu
     case memory
@@ -9,6 +9,8 @@ enum SystemStatusMetricKind: String, CaseIterable, Equatable, Sendable {
     case battery
     case network
     case topProcesses
+
+    var id: String { rawValue }
 
     func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
@@ -54,23 +56,37 @@ struct SystemStatusGridPosition: Equatable, Sendable {
     let column: Int
 }
 
+enum SystemStatusComponentRow: Equatable, Sendable {
+    case metrics([SystemStatusMetricKind])
+    case topProcesses
+}
+
 enum SystemStatusComponentLayout {
     static let cardCornerRadius = PluginComponentPanelLayoutMetrics.cardCornerRadius
     static let cardSpacing: CGFloat = 6
     static let cardContentPadding: CGFloat = 8
     static let columns = 2
-    static let rows = 3
+    static let metricRows = 3
 
     static let dashboardSectionSpacing: CGFloat = cardSpacing
     static let dashboardMetricTileHeight: CGFloat = 99
     static let dashboardLowerTileHeight: CGFloat = 96
-    static let dashboardMetricGridHeight = CGFloat(rows) * dashboardMetricTileHeight
-        + CGFloat(max(rows - 1, 0)) * cardSpacing
-    static let dashboardContentHeight = dashboardMetricGridHeight
-        + dashboardSectionSpacing
-        + dashboardLowerTileHeight
+    static let dashboardMetricGridHeight = CGFloat(metricRows) * dashboardMetricTileHeight
+        + CGFloat(max(metricRows - 1, 0)) * cardSpacing
+    static let emptyContentHeight = dashboardLowerTileHeight
+    static let dashboardContentHeight = contentHeight(for: defaultPanelMetricKinds)
 
-    static let orderedMetricKinds: [SystemStatusMetricKind] = [
+    static let defaultPanelMetricKinds: [SystemStatusMetricKind] = [
+        .cpu,
+        .gpu,
+        .network,
+        .disk,
+        .memory,
+        .battery,
+        .topProcesses
+    ]
+
+    static let defaultMenuBarMetricKinds: [SystemStatusMetricKind] = [
         .cpu,
         .gpu,
         .network,
@@ -80,7 +96,8 @@ enum SystemStatusComponentLayout {
     ]
 
     static func position(for metric: SystemStatusMetricKind) -> SystemStatusGridPosition? {
-        guard let index = orderedMetricKinds.firstIndex(of: metric) else {
+        let metricKinds = defaultPanelMetricKinds.filter { $0 != .topProcesses }
+        guard let index = metricKinds.firstIndex(of: metric) else {
             return nil
         }
 
@@ -88,6 +105,54 @@ enum SystemStatusComponentLayout {
             row: index / columns,
             column: index % columns
         )
+    }
+
+    static func rows(for kinds: [SystemStatusMetricKind]) -> [SystemStatusComponentRow] {
+        var rows: [SystemStatusComponentRow] = []
+        var pendingMetrics: [SystemStatusMetricKind] = []
+
+        func flushPendingMetrics() {
+            guard !pendingMetrics.isEmpty else {
+                return
+            }
+
+            rows.append(.metrics(pendingMetrics))
+            pendingMetrics.removeAll(keepingCapacity: true)
+        }
+
+        for kind in kinds {
+            if kind == .topProcesses {
+                flushPendingMetrics()
+                rows.append(.topProcesses)
+                continue
+            }
+
+            pendingMetrics.append(kind)
+            if pendingMetrics.count == columns {
+                flushPendingMetrics()
+            }
+        }
+
+        flushPendingMetrics()
+        return rows
+    }
+
+    static func contentHeight(for kinds: [SystemStatusMetricKind]) -> CGFloat {
+        let rows = rows(for: kinds)
+        guard !rows.isEmpty else {
+            return emptyContentHeight
+        }
+
+        let rowHeight = rows.reduce(CGFloat(0)) { partialResult, row in
+            switch row {
+            case .metrics:
+                return partialResult + dashboardMetricTileHeight
+            case .topProcesses:
+                return partialResult + dashboardLowerTileHeight
+            }
+        }
+        let spacing = CGFloat(max(rows.count - 1, 0)) * dashboardSectionSpacing
+        return rowHeight + spacing
     }
 }
 

@@ -14,7 +14,7 @@ final class SystemStatusPluginTests: XCTestCase {
     }
 
     func testPluginDescriptorUsesExpandedFullWidthSpan() {
-        let plugin = SystemStatusPlugin()
+        let plugin = SystemStatusPlugin(storage: SystemStatusMemoryPluginStorage())
         let expectedHeight = PluginComponentPanelLayoutMetrics.default.heightSpan(
             fittingContentHeight: SystemStatusComponentLayout.dashboardContentHeight
         )
@@ -26,7 +26,7 @@ final class SystemStatusPluginTests: XCTestCase {
 
     func testPluginHostIncludesSystemStatusComponentOnlyWhenProvided() {
         let host = makePluginHostForTests(
-            plugins: [SystemStatusPlugin()],
+            plugins: [SystemStatusPlugin(storage: SystemStatusMemoryPluginStorage())],
             suiteName: suiteName
         )
 
@@ -37,16 +37,29 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(managementItem?.presentation, .componentPanel)
     }
 
+    func testPluginHostCanPresentSystemStatusSettings() {
+        let host = makePluginHostForTests(
+            plugins: [SystemStatusPlugin(storage: SystemStatusMemoryPluginStorage())],
+            suiteName: suiteName
+        )
+
+        host.presentPluginConfiguration(pluginID: "system-status")
+
+        XCTAssertEqual(host.selectedSettingsDestination, .pluginConfiguration)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .configuration("system-status"))
+    }
+
     func testSystemStatusLayoutUsesTwoColumnCoreMetricGridOrder() {
         XCTAssertEqual(SystemStatusComponentLayout.columns, 2)
-        XCTAssertEqual(SystemStatusComponentLayout.rows, 3)
+        XCTAssertEqual(SystemStatusComponentLayout.metricRows, 3)
         XCTAssertEqual(SystemStatusComponentLayout.cardSpacing, 6)
         XCTAssertEqual(SystemStatusComponentLayout.cardContentPadding, 8)
         XCTAssertEqual(SystemStatusComponentLayout.dashboardContentHeight, 411)
         XCTAssertEqual(
-            SystemStatusComponentLayout.orderedMetricKinds,
-            [.cpu, .gpu, .network, .disk, .memory, .battery]
+            SystemStatusComponentLayout.defaultPanelMetricKinds,
+            [.cpu, .gpu, .network, .disk, .memory, .battery, .topProcesses]
         )
+        XCTAssertEqual(SystemStatusComponentLayout.defaultMenuBarMetricKinds, [.cpu, .gpu, .network, .disk, .memory, .battery])
         XCTAssertEqual(SystemStatusComponentLayout.position(for: .cpu), SystemStatusGridPosition(row: 0, column: 0))
         XCTAssertEqual(SystemStatusComponentLayout.position(for: .gpu), SystemStatusGridPosition(row: 0, column: 1))
         XCTAssertEqual(SystemStatusComponentLayout.position(for: .network), SystemStatusGridPosition(row: 1, column: 0))
@@ -56,12 +69,106 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertNil(SystemStatusComponentLayout.position(for: .topProcesses))
     }
 
+    func testSystemStatusLayoutHeightFollowsVisibleMetricRows() {
+        XCTAssertEqual(SystemStatusComponentLayout.contentHeight(for: []), 96)
+        XCTAssertEqual(SystemStatusComponentLayout.contentHeight(for: [.cpu]), 99)
+        XCTAssertEqual(SystemStatusComponentLayout.contentHeight(for: [.cpu, .gpu, .topProcesses]), 201)
+    }
+
+    func testConfigurationDefaultsShowPanelMetricsAndHideMenuBarMetrics() {
+        let controller = SystemStatusSettingsController(
+            store: SystemStatusPluginStorageConfigurationStore(storage: SystemStatusMemoryPluginStorage())
+        )
+
+        XCTAssertEqual(
+            controller.configuration.visiblePanelMetricKinds,
+            SystemStatusComponentLayout.defaultPanelMetricKinds
+        )
+        XCTAssertTrue(controller.configuration.visibleMenuBarMetricKinds.isEmpty)
+    }
+
+    func testConfigurationPersistsVisibilityAndOrder() {
+        let storage = SystemStatusMemoryPluginStorage()
+        let controller = SystemStatusSettingsController(
+            store: SystemStatusPluginStorageConfigurationStore(storage: storage)
+        )
+
+        controller.setPanelMetric(.gpu, visible: false)
+        controller.movePanelMetric(.battery, toOffset: 0)
+        controller.setMenuBarMetric(.cpu, visible: true)
+        controller.setMenuBarMetric(.memory, visible: true)
+        controller.moveMenuBarMetric(.memory, toOffset: 0)
+
+        let restoredController = SystemStatusSettingsController(
+            store: SystemStatusPluginStorageConfigurationStore(storage: storage)
+        )
+
+        XCTAssertEqual(restoredController.configuration.panelItems.map(\.kind).first, .battery)
+        XCTAssertFalse(restoredController.configuration.panelItems.first { $0.kind == .gpu }?.isVisible ?? true)
+        XCTAssertEqual(restoredController.configuration.visibleMenuBarMetricKinds, [.memory, .cpu])
+    }
+
+    func testPluginDescriptorShrinksWhenPanelMetricsAreHidden() {
+        let controller = SystemStatusSettingsController(
+            store: SystemStatusPluginStorageConfigurationStore(storage: SystemStatusMemoryPluginStorage())
+        )
+        controller.setPanelMetric(.gpu, visible: false)
+        controller.setPanelMetric(.network, visible: false)
+        controller.setPanelMetric(.disk, visible: false)
+        controller.setPanelMetric(.memory, visible: false)
+        controller.setPanelMetric(.battery, visible: false)
+        controller.setPanelMetric(.topProcesses, visible: false)
+
+        let plugin = SystemStatusPlugin(
+            settingsController: controller,
+            storage: SystemStatusMemoryPluginStorage()
+        )
+
+        let expectedHeight = PluginComponentPanelLayoutMetrics.default.heightSpan(
+            fittingContentHeight: SystemStatusComponentLayout.contentHeight(for: [.cpu])
+        )
+        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: expectedHeight)!)
+    }
+
+    func testMenuBarFormatterUsesSelectedOrder() {
+        var snapshot = SystemStatusSnapshot.empty
+        snapshot.cpu = SystemStatusCPUSnapshot(
+            usage: 0.125,
+            loadAverage1Minute: nil,
+            temperatureCelsius: 42.4,
+            systemPowerWatts: nil,
+            isCollecting: false
+        )
+        snapshot.memory = SystemStatusMemorySnapshot(
+            usedBytes: 6_000,
+            totalBytes: 10_000,
+            swapUsedBytes: nil,
+            swapTotalBytes: nil
+        )
+        snapshot.network = SystemStatusNetworkSnapshot(
+            interfaceName: "en0",
+            ipAddress: nil,
+            publicIPAddress: nil,
+            downloadBytesPerSecond: 1_024,
+            uploadBytesPerSecond: 2_048,
+            isConnected: true,
+            isCollecting: false
+        )
+
+        XCTAssertEqual(
+            SystemStatusMenuBarMetricsFormatter.text(snapshot: snapshot, kinds: [.memory, .cpu, .network]),
+            "RAM 60% | CPU 13% 42° | NET ↓1K ↑2K"
+        )
+    }
+
     func testProductionSamplingScheduleBalancesForegroundDetailAndBackgroundCost() {
         let schedule = SystemStatusSamplingSchedule.production
 
         XCTAssertEqual(schedule.backgroundFastInterval, .seconds(30))
+        XCTAssertEqual(schedule.menuBarFastInterval, .seconds(3))
         XCTAssertEqual(schedule.foregroundFastInterval, .seconds(3))
         XCTAssertEqual(schedule.backgroundSlowInterval, 300)
+        XCTAssertEqual(schedule.menuBarSlowInterval, 3)
         XCTAssertEqual(schedule.foregroundSlowInterval, 15)
         XCTAssertEqual(schedule.backgroundProcessInterval, 300)
         XCTAssertEqual(schedule.foregroundProcessInterval, 15)
@@ -123,7 +230,7 @@ final class SystemStatusPluginTests: XCTestCase {
 
     func testPluginReusesViewModelAcrossComponentViews() {
         let viewModel = SystemStatusViewModel(sampler: StubSystemStatusSampler())
-        let plugin = SystemStatusPlugin(viewModel: viewModel)
+        let plugin = SystemStatusPlugin(viewModel: viewModel, storage: SystemStatusMemoryPluginStorage())
 
         let first = plugin.makeView(
             context: PluginComponentContext(
@@ -262,11 +369,64 @@ private actor StubSystemStatusHistoryStore: SystemStatusHistoryStoring {
     }
 }
 
+@MainActor
+private final class SystemStatusMemoryPluginStorage: PluginStorage {
+    private var values: [String: Any] = [:]
+
+    func object(forKey key: String) -> Any? {
+        values[key]
+    }
+
+    func data(forKey key: String) -> Data? {
+        values[key] as? Data
+    }
+
+    func string(forKey key: String) -> String? {
+        values[key] as? String
+    }
+
+    func stringArray(forKey key: String) -> [String]? {
+        values[key] as? [String]
+    }
+
+    func integer(forKey key: String) -> Int {
+        values[key] as? Int ?? 0
+    }
+
+    func bool(forKey key: String) -> Bool {
+        values[key] as? Bool ?? false
+    }
+
+    func set(_ value: Any?, forKey key: String) {
+        guard let value else {
+            removeObject(forKey: key)
+            return
+        }
+
+        values[key] = value
+    }
+
+    func removeObject(forKey key: String) {
+        values.removeValue(forKey: key)
+    }
+
+    func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
+        guard values[key] == nil, let value = values[legacyKey] else {
+            return
+        }
+
+        values[key] = value
+        values.removeValue(forKey: legacyKey)
+    }
+}
+
 private extension SystemStatusSamplingSchedule {
     static let test = SystemStatusSamplingSchedule(
         backgroundFastInterval: .milliseconds(20),
+        menuBarFastInterval: .milliseconds(20),
         foregroundFastInterval: .milliseconds(20),
         backgroundSlowInterval: 0,
+        menuBarSlowInterval: 0,
         foregroundSlowInterval: 0,
         backgroundProcessInterval: 0,
         foregroundProcessInterval: 0,
@@ -276,8 +436,10 @@ private extension SystemStatusSamplingSchedule {
 
     static let foregroundRestart = SystemStatusSamplingSchedule(
         backgroundFastInterval: .seconds(30),
+        menuBarFastInterval: .milliseconds(20),
         foregroundFastInterval: .milliseconds(20),
         backgroundSlowInterval: 30,
+        menuBarSlowInterval: 30,
         foregroundSlowInterval: 30,
         backgroundProcessInterval: 30,
         foregroundProcessInterval: 30,

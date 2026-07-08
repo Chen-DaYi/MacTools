@@ -25,6 +25,7 @@ private enum SystemStatusHUDLayout {
 
 struct SystemStatusDashboardView: View {
     let snapshot: SystemStatusSnapshot
+    let visibleKinds: [SystemStatusMetricKind]
     let localization: PluginLocalization
 
     private var metricColumns: [GridItem] {
@@ -35,32 +36,81 @@ struct SystemStatusDashboardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SystemStatusHUDLayout.sectionSpacing) {
-            metricGrid
-            statusRows
+        Group {
+            if visibleRows.isEmpty {
+                emptyState
+            } else {
+                VStack(alignment: .leading, spacing: SystemStatusHUDLayout.sectionSpacing) {
+                    ForEach(Array(visibleRows.enumerated()), id: \.offset) { _, row in
+                        rowView(row)
+                    }
+                }
+            }
         }
         .padding(SystemStatusHUDLayout.outerPadding)
-        .frame(height: SystemStatusComponentLayout.dashboardContentHeight, alignment: .topLeading)
+        .frame(
+            height: SystemStatusComponentLayout.contentHeight(for: visibleKinds),
+            alignment: .topLeading
+        )
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    private var metricGrid: some View {
-        let visibleHistory = chartHistory
-        return LazyVGrid(columns: metricColumns, spacing: SystemStatusHUDLayout.metricSpacing) {
-            cpuTile(history: visibleHistory)
-            gpuTile(history: visibleHistory)
-            networkTile(history: visibleHistory)
-            diskTile(history: visibleHistory)
-            memoryTile(history: visibleHistory)
-            batteryTile(history: visibleHistory)
-        }
-        .frame(height: SystemStatusComponentLayout.dashboardMetricGridHeight, alignment: .top)
+    private var visibleRows: [SystemStatusComponentRow] {
+        SystemStatusComponentLayout.rows(for: visibleKinds)
     }
 
-    private var statusRows: some View {
-        VStack(alignment: .leading, spacing: SystemStatusHUDLayout.sectionSpacing) {
+    @ViewBuilder
+    private func rowView(_ row: SystemStatusComponentRow) -> some View {
+        switch row {
+        case let .metrics(kinds):
+            metricRow(kinds)
+        case .topProcesses:
             topProcessesSection
         }
+    }
+
+    private func metricRow(_ kinds: [SystemStatusMetricKind]) -> some View {
+        let visibleHistory = chartHistory
+        return LazyVGrid(columns: metricColumns, spacing: SystemStatusHUDLayout.metricSpacing) {
+            ForEach(kinds) { kind in
+                metricTile(kind, history: visibleHistory)
+            }
+        }
+        .frame(height: SystemStatusComponentLayout.dashboardMetricTileHeight, alignment: .top)
+    }
+
+    @ViewBuilder
+    private func metricTile(_ kind: SystemStatusMetricKind, history: [SystemStatusHistoryPoint]) -> some View {
+        switch kind {
+        case .cpu:
+            cpuTile(history: history)
+        case .gpu:
+            gpuTile(history: history)
+        case .network:
+            networkTile(history: history)
+        case .disk:
+            diskTile(history: history)
+        case .memory:
+            memoryTile(history: history)
+        case .battery:
+            batteryTile(history: history)
+        case .topProcesses:
+            EmptyView()
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(SystemStatusHUDPalette.textSecondary)
+
+            Text(localization.string("component.empty.title", defaultValue: "未选择显示内容"))
+                .font(SystemStatusHUDFont.sans(11, .semibold))
+                .foregroundStyle(SystemStatusHUDPalette.textSecondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: SystemStatusComponentLayout.emptyContentHeight)
+        .background(SystemStatusHUDCardBackground())
     }
 
     private func cpuTile(history: [SystemStatusHistoryPoint]) -> some View {

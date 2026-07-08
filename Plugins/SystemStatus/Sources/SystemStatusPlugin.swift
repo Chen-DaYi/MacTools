@@ -14,6 +14,7 @@ private struct SystemStatusPluginProvider: PluginProvider {
 
     func makePlugins() -> [any MacToolsPlugin] {
         [SystemStatusPlugin(
+            storage: context.storage,
             supportDirectory: context.supportDirectory,
             localization: PluginLocalization(bundle: context.resourceBundle)
         )]
@@ -21,33 +22,50 @@ private struct SystemStatusPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
+final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling, PluginFeatureVisibilityLifecycleHandling, PluginConfigurationPresenting {
     let metadata: PluginMetadata
 
-    let descriptor = PluginComponentDescriptor(
-        span: PluginComponentSpan(
-            width: 4,
-            height: PluginComponentPanelLayoutMetrics.default.heightSpan(
-                fittingContentHeight: SystemStatusComponentLayout.dashboardContentHeight
-            )
-        )!
-    )
+    var descriptor: PluginComponentDescriptor {
+        PluginComponentDescriptor(
+            span: PluginComponentSpan(
+                width: 4,
+                height: PluginComponentPanelLayoutMetrics.default.heightSpan(
+                    fittingContentHeight: SystemStatusComponentLayout.contentHeight(
+                        for: settingsController.configuration.visiblePanelMetricKinds
+                    )
+                )
+            )!
+        )
+    }
 
     private let viewModel: SystemStatusViewModel
+    private let settingsController: SystemStatusSettingsController
+    private let menuBarMetricsController: SystemStatusMenuBarMetricsController
     private let localization: PluginLocalization
+    private var isFeatureVisible = true
 
     init(
         viewModel: SystemStatusViewModel? = nil,
+        settingsController: SystemStatusSettingsController? = nil,
+        storage: PluginStorage? = nil,
         supportDirectory: URL? = nil,
         localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        self.viewModel = viewModel
+        let resolvedViewModel = viewModel
             ?? SystemStatusViewModel(
                 sampler: SystemStatusSampler(localization: localization),
                 historyStore: SystemStatusHistoryStore(
                     fileURL: SystemStatusHistoryStore.defaultFileURL(supportDirectory: supportDirectory)
                 )
             )
+        let resolvedSettingsController = settingsController
+            ?? SystemStatusSettingsController(
+                store: SystemStatusPluginStorageConfigurationStore(
+                    storage: storage ?? UserDefaultsPluginStorage(pluginID: "system-status")
+                )
+            )
+        self.viewModel = resolvedViewModel
+        self.settingsController = resolvedSettingsController
         self.localization = localization
         self.metadata = PluginMetadata(
             id: "system-status",
@@ -57,11 +75,23 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
             order: 10,
             defaultDescription: localization.string("metadata.description", defaultValue: "实时查看系统状态")
         )
+        self.menuBarMetricsController = SystemStatusMenuBarMetricsController(
+            viewModel: resolvedViewModel,
+            settingsController: resolvedSettingsController
+        )
+        resolvedSettingsController.onConfigurationChange = { [weak self] in
+            self?.onStateChange?()
+        }
     }
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requestConfigurationPresentation: (() -> Void)? {
+        didSet {
+            menuBarMetricsController.requestConfigurationPresentation = requestConfigurationPresentation
+        }
+    }
 
     var componentPanelState: PluginComponentState {
         PluginComponentState(
@@ -77,21 +107,57 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(description: metadata.defaultDescription) { [settingsController, localization] _ in
+            SystemStatusSettingsView(
+                controller: settingsController,
+                localization: localization
+            )
+        }
+    }
+
     func makeView(context: PluginComponentContext) -> AnyView {
         AnyView(
             SystemStatusComponentView(
                 viewModel: viewModel,
+                settingsController: settingsController,
                 localization: localization
             )
         )
     }
 
     func refresh() {
+        guard isFeatureVisible else {
+            return
+        }
+
         viewModel.startBackground()
+        menuBarMetricsController.activate()
+    }
+
+    func activate(context: PluginRuntimeContext) {
+        isFeatureVisible = true
+        refresh()
     }
 
     func deactivate(reason: PluginDeactivationReason) {
+        isFeatureVisible = false
+        menuBarMetricsController.stop()
         viewModel.stop()
+    }
+
+    func featureVisibilityDidChange(_ isVisible: Bool) {
+        guard isFeatureVisible != isVisible else {
+            return
+        }
+
+        isFeatureVisible = isVisible
+        if isVisible {
+            refresh()
+        } else {
+            menuBarMetricsController.stop()
+            viewModel.stop()
+        }
     }
 
     func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
@@ -122,8 +188,10 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
 @MainActor
 struct SystemStatusSamplingSchedule: Sendable {
     let backgroundFastInterval: Duration
+    let menuBarFastInterval: Duration
     let foregroundFastInterval: Duration
     let backgroundSlowInterval: TimeInterval
+    let menuBarSlowInterval: TimeInterval
     let foregroundSlowInterval: TimeInterval
     let backgroundProcessInterval: TimeInterval
     let foregroundProcessInterval: TimeInterval
@@ -132,8 +200,10 @@ struct SystemStatusSamplingSchedule: Sendable {
 
     static let production = SystemStatusSamplingSchedule(
         backgroundFastInterval: .seconds(30),
+        menuBarFastInterval: .seconds(3),
         foregroundFastInterval: .seconds(3),
         backgroundSlowInterval: 300,
+        menuBarSlowInterval: 3,
         foregroundSlowInterval: 15,
         backgroundProcessInterval: 300,
         foregroundProcessInterval: 15,
@@ -148,12 +218,15 @@ final class SystemStatusViewModel: ObservableObject {
 
     private enum SamplingMode: Equatable {
         case background
+        case menuBar(requiresSlowSampling: Bool)
         case foreground
 
         func fastInterval(schedule: SystemStatusSamplingSchedule) -> Duration {
             switch self {
             case .background:
                 return schedule.backgroundFastInterval
+            case .menuBar:
+                return schedule.menuBarFastInterval
             case .foreground:
                 return schedule.foregroundFastInterval
             }
@@ -163,6 +236,8 @@ final class SystemStatusViewModel: ObservableObject {
             switch self {
             case .background:
                 return schedule.backgroundSlowInterval
+            case let .menuBar(requiresSlowSampling):
+                return requiresSlowSampling ? schedule.menuBarSlowInterval : schedule.backgroundSlowInterval
             case .foreground:
                 return schedule.foregroundSlowInterval
             }
@@ -170,7 +245,7 @@ final class SystemStatusViewModel: ObservableObject {
 
         func processInterval(schedule: SystemStatusSamplingSchedule) -> TimeInterval {
             switch self {
-            case .background:
+            case .background, .menuBar:
                 return schedule.backgroundProcessInterval
             case .foreground:
                 return schedule.foregroundProcessInterval
@@ -179,7 +254,7 @@ final class SystemStatusViewModel: ObservableObject {
 
         func historyInterval(schedule: SystemStatusSamplingSchedule) -> TimeInterval {
             switch self {
-            case .background:
+            case .background, .menuBar:
                 return schedule.backgroundHistoryInterval
             case .foreground:
                 return schedule.foregroundHistoryInterval
@@ -192,6 +267,7 @@ final class SystemStatusViewModel: ObservableObject {
     private let schedule: SystemStatusSamplingSchedule
     private var samplingTask: Task<Void, Never>?
     private var mode: SamplingMode = .background
+    private var menuBarMode: SamplingMode?
     private var lastSlowDate: Date?
     private var lastProcessDate: Date?
     private var lastHistoryDate: Date?
@@ -232,17 +308,39 @@ final class SystemStatusViewModel: ObservableObject {
         startSamplingIfNeeded()
     }
 
-    func startBackground() {
+    func startMenuBar(requiresSlowSampling: Bool) {
+        menuBarMode = .menuBar(requiresSlowSampling: requiresSlowSampling)
+        guard mode != .foreground else {
+            startSamplingIfNeeded()
+            return
+        }
+
+        let previousMode = mode
+        mode = menuBarMode ?? .background
+
+        if previousMode != mode, samplingTask != nil {
+            restartSamplingLoop()
+            return
+        }
+
+        startSamplingIfNeeded()
+    }
+
+    func stopMenuBar() {
+        menuBarMode = nil
         guard mode != .foreground else {
             return
         }
 
         mode = .background
+    }
+
+    func startBackground() {
         startSamplingIfNeeded()
     }
 
     func returnToBackground() {
-        mode = .background
+        mode = menuBarMode ?? .background
     }
 
     func refreshSnapshotNow(referenceDate: Date = Date()) async {
@@ -274,6 +372,7 @@ final class SystemStatusViewModel: ObservableObject {
         samplingTask?.cancel()
         samplingTask = nil
         mode = .background
+        menuBarMode = nil
     }
 
     private func startSamplingIfNeeded() {
@@ -429,7 +528,7 @@ final class SystemStatusViewModel: ObservableObject {
         switch mode {
         case .foreground:
             interval = Self.foregroundDisplayHistoryInterval
-        case .background:
+        case .background, .menuBar:
             interval = Self.backgroundDisplayHistoryInterval
         }
 
@@ -531,10 +630,15 @@ struct SystemStatusComponentView: View {
     }
 
     @ObservedObject var viewModel: SystemStatusViewModel
+    @ObservedObject var settingsController: SystemStatusSettingsController
     let localization: PluginLocalization
 
     var body: some View {
-        SystemStatusDashboardView(snapshot: viewModel.snapshot, localization: localization)
+        SystemStatusDashboardView(
+            snapshot: viewModel.snapshot,
+            visibleKinds: settingsController.configuration.visiblePanelMetricKinds,
+            localization: localization
+        )
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
