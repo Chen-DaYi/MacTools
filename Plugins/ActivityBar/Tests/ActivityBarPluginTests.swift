@@ -13,6 +13,10 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.plugin.descriptor.span, PluginComponentSpan(width: 4, height: 127)!)
     }
 
+    func testVisibleCodingToolsIncludeCursor() {
+        XCTAssertEqual(ActivityBarComponentView.visibleCodingTools, [.claudeCode, .cursor, .codex])
+    }
+
     func testPrimaryPanelStartsCollapsed() {
         let harness = makeHarness()
 

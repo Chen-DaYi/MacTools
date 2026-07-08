@@ -93,9 +93,31 @@ private enum ActivityBarFunFact {
 
 struct ActivityBarComponentView: View {
     private static let claudeColor = Color(red: 0xCB / 255.0, green: 0x64 / 255.0, blue: 0x41 / 255.0)
-    private static let cursorColor = Color.black
+    private static let cursorColor = Color.primary
     private static let codexColor = Color(red: 0x10 / 255.0, green: 0xA3 / 255.0, blue: 0x7F / 255.0)
-    private static let visibleCodingTools: [ActivityBarCodingTool] = [.claudeCode, .codex]
+    static let visibleCodingTools: [ActivityBarCodingTool] = [.claudeCode, .cursor, .codex]
+
+    private static func codingToolColor(_ tool: ActivityBarCodingTool) -> Color {
+        switch tool {
+        case .claudeCode:
+            return claudeColor
+        case .cursor:
+            return cursorColor
+        case .codex:
+            return codexColor
+        }
+    }
+
+    private static func codingToolLegendLabel(_ tool: ActivityBarCodingTool) -> String {
+        switch tool {
+        case .claudeCode:
+            return "Claude"
+        case .cursor:
+            return "Cursor"
+        case .codex:
+            return "Codex"
+        }
+    }
 
     @ObservedObject var controller: ActivityBarController
     let localization: PluginLocalization
@@ -651,11 +673,10 @@ struct ActivityBarComponentView: View {
         let dateLabels = days.map { chartLabel($0.date) }
         let hasData = days.contains { hasCodingStats(visibleCodingAggregateStats(in: $0)) }
         let maxMinutes = days
-            .map { day in
-                Swift.max(
-                    toolStats(.claudeCode, in: day).durationSeconds / 60,
-                    toolStats(.codex, in: day).durationSeconds / 60
-                )
+            .flatMap { day in
+                Self.visibleCodingTools.map { tool in
+                    toolStats(tool, in: day).durationSeconds / 60
+                }
             }
             .max() ?? 0
         let yUpperBound = Swift.max(maxMinutes * 1.15, 1)
@@ -664,8 +685,9 @@ struct ActivityBarComponentView: View {
             HStack {
                 rangePickerBar
                 Spacer(minLength: 8)
-                legendDot(color: Self.claudeColor, label: "Claude")
-                legendDot(color: Self.codexColor, label: "Codex")
+                ForEach(Self.visibleCodingTools, id: \.rawValue) { tool in
+                    legendDot(color: Self.codingToolColor(tool), label: Self.codingToolLegendLabel(tool))
+                }
             }
             .padding(.horizontal, 6)
 
@@ -677,15 +699,15 @@ struct ActivityBarComponentView: View {
                     ForEach(hasData ? days : []) { day in
                         let d = chartLabel(day.date)
                         let isHovered = hoveredDate == d
-                        let claudeMins = toolStats(.claudeCode, in: day).durationSeconds / 60
-                        let codexMins = toolStats(.codex, in: day).durationSeconds / 60
 
-                        LineMark(x: .value("Date", d), y: .value("Minutes", claudeMins), series: .value("Tool", "Claude"))
-                            .foregroundStyle(by: .value("Tool", "Claude"))
-                            .interpolationMethod(.catmullRom)
-                        LineMark(x: .value("Date", d), y: .value("Minutes", codexMins), series: .value("Tool", "Codex"))
-                            .foregroundStyle(by: .value("Tool", "Codex"))
-                            .interpolationMethod(.catmullRom)
+                        ForEach(Self.visibleCodingTools, id: \.rawValue) { tool in
+                            let label = Self.codingToolLegendLabel(tool)
+                            let minutes = toolStats(tool, in: day).durationSeconds / 60
+
+                            LineMark(x: .value("Date", d), y: .value("Minutes", minutes), series: .value("Tool", label))
+                                .foregroundStyle(by: .value("Tool", label))
+                                .interpolationMethod(.catmullRom)
+                        }
 
                         // Unconditional marks; opacity/symbol size carry the hover state (the old
                         // if/else-if produced _ConditionalContent). The annotation body is a plain
@@ -700,8 +722,11 @@ struct ActivityBarComponentView: View {
                                             .font(.system(size: 9))
                                             .foregroundStyle(.primary.opacity(0.55))
                                         HStack(spacing: 6) {
-                                            Text(shortDuration(claudeMins * 60)).foregroundStyle(Self.claudeColor)
-                                            Text(shortDuration(codexMins * 60)).foregroundStyle(Self.codexColor)
+                                            ForEach(Self.visibleCodingTools, id: \.rawValue) { tool in
+                                                let minutes = toolStats(tool, in: day).durationSeconds / 60
+                                                Text(shortDuration(minutes * 60))
+                                                    .foregroundStyle(Self.codingToolColor(tool))
+                                            }
                                         }
                                         .font(.system(size: 10).bold().monospacedDigit())
                                     }
@@ -712,12 +737,20 @@ struct ActivityBarComponentView: View {
                                 }
                             }
 
-                        chartPoint(x: d, y: claudeMins, color: Self.claudeColor, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
-                        chartPoint(x: d, y: codexMins, color: Self.codexColor, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
+                        ForEach(Self.visibleCodingTools, id: \.rawValue) { tool in
+                            let minutes = toolStats(tool, in: day).durationSeconds / 60
+                            chartPoint(
+                                x: d,
+                                y: minutes,
+                                color: Self.codingToolColor(tool),
+                                size: hoverPointSize(isHovered: isHovered, compactMode: compactMode)
+                            )
+                        }
                     }
                 }
                 .chartForegroundStyleScale([
                     "Claude": Self.claudeColor,
+                    "Cursor": Self.cursorColor,
                     "Codex": Self.codexColor,
                 ])
                 .chartLegend(.hidden)
@@ -1095,7 +1128,7 @@ struct ActivityBarComponentView: View {
         return [
             CodingToolDisplayRow(
                 id: "ai-tools",
-                name: "Claude / Codex",
+                name: "AI Tools",
                 duration: aggregateStats.durationSeconds,
                 detail: codingDetailText(for: aggregateStats),
                 tint: Self.codexColor,
