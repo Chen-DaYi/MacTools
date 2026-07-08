@@ -2,7 +2,7 @@ import Foundation
 
 /// Writes battery charge-control SMC values via the bundled privileged helper.
 /// Follows the same setuid-helper + AppleScript install pattern used by
-/// `FanControlSMCWriter`, with helper-side handling of CHIE / CH0B+CH0C /
+/// `FanControlSMCWriter`, with helper-side handling of CHTE / CH0B+CH0C /
 /// BCLM key probing and CH0I force-discharge.
 @MainActor
 final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
@@ -53,7 +53,7 @@ final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
         }
 
         let caps = BatterySMCCapabilities(
-            hasCHIE: dict["CHIE"] ?? false,
+            hasCHTE: dict["CHTE"] ?? false,
             hasCH0BC: dict["CH0B_CH0C"] ?? false,
             hasBCLM: dict["BCLM"] ?? false,
             hasCH0I: dict["CH0I"] ?? false

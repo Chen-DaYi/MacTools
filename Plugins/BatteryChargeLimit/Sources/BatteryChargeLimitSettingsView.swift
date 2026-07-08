@@ -170,8 +170,8 @@ struct BatteryChargeLimitSettingsView: View {
     }
 
     private var capabilityDescription: String {
-        if capabilities.hasCHIE {
-            return "CHIE (macOS 15+)"
+        if capabilities.hasCHTE {
+            return "CHTE (macOS 26+)"
         }
         if capabilities.hasCH0BC {
             return "CH0B + CH0C (Apple Silicon)"

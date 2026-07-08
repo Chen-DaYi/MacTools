@@ -34,7 +34,7 @@ private final class MockBatteryWriter: BatteryChargeLimitWriting {
         isHelperAvailable: Bool = true,
         isInstalledHelperAvailable: Bool = true,
         capabilities: BatterySMCCapabilities = BatterySMCCapabilities(
-            hasCHIE: false, hasCH0BC: true, hasBCLM: false, hasCH0I: true
+            hasCHTE: false, hasCH0BC: true, hasBCLM: false, hasCH0I: true
         )
     ) {
         self.isHelperAvailable = isHelperAvailable

@@ -74,6 +74,7 @@ private enum SMCHelperError: LocalizedError {
     case invalidKeyInfo(String)
     case readFailed(String, kern_return_t)
     case writeFailed(String, kern_return_t)
+    case writeVerificationFailed(String, expected: [UInt8], actual: [UInt8])
     case noWritableInhibitKey
     case invalidArguments
 
@@ -91,6 +92,8 @@ private enum SMCHelperError: LocalizedError {
             return "Failed to read \(key): \(String(format: "%08x", code))"
         case .writeFailed(let key, let code):
             return "Failed to write \(key): \(String(format: "%08x", code))"
+        case .writeVerificationFailed(let key, let expected, let actual):
+            return "Failed to verify \(key): expected \(hexString(expected)), read \(hexString(actual))"
         case .noWritableInhibitKey:
             return "No supported charge-inhibit SMC key is writable on this Mac"
         case .invalidArguments:
@@ -239,53 +242,145 @@ private final class SMCConnection {
 /// Charge-inhibit keys that are written as a paired set on Apple Silicon.
 /// Both must flip together; community-standard pattern from AlDente / batt.
 private let appleSiliconInhibitKeys = ["CH0B", "CH0C"]
-/// Newer single key seen on macOS 15.x ("Tahoe") firmware.
-private let modernInhibitKey = "CHIE"
+/// Newer charging-control key seen on macOS 26 ("Tahoe") firmware.
+private let tahoeChargingKey = "CHTE"
+/// Newer adapter-control key seen on macOS 26 ("Tahoe") firmware.
+private let tahoeAdapterKey = "CHIE"
 /// Intel-only persistent charge ceiling key.
 private let intelCeilingKey = "BCLM"
 /// Force-discharge key (drains battery even while plugged in).
 private let forceDischargeKey = "CH0I"
+/// Secondary adapter-control key found on legacy force-discharge firmware.
+private let secondaryForceDischargeKey = "CH0J"
 /// MagSafe LED color hint (optional cosmetic).
 private let magSafeLEDKey = "ACLC"
+private let writeMaxAttempts = 3
+private let writeInitialBackoff: TimeInterval = 0.05
+private let writeVerifyReads = 6
+private let writeVerifyInterval: TimeInterval = 0.2
 
 private struct Capabilities {
-    var hasCHIE: Bool
+    var hasCHTE: Bool
     var hasCH0BC: Bool
     var hasBCLM: Bool
     var hasCH0I: Bool
 
-    var canInhibit: Bool { hasCHIE || hasCH0BC || hasBCLM }
+    var canInhibit: Bool { hasCHTE || hasCH0BC || hasBCLM }
 }
 
 private func probeCapabilities(connection: SMCConnection) -> Capabilities {
     Capabilities(
-        hasCHIE: connection.hasKey(modernInhibitKey),
+        hasCHTE: connection.hasKey(tahoeChargingKey),
         hasCH0BC: appleSiliconInhibitKeys.allSatisfy { connection.hasKey($0) },
         hasBCLM: connection.hasKey(intelCeilingKey),
         hasCH0I: connection.hasKey(forceDischargeKey)
     )
 }
 
+/// Write bytes to an SMC key and verify the firmware applied the value.
+/// Some Macs report the old value for a short window after a successful write.
+private func writeBytes(_ bytes: [UInt8], key: String, connection: SMCConnection) throws {
+    let original = try connection.readValue(key: key)
+    let dataSize = max(1, Int(original.dataSize))
+    guard bytes.count <= dataSize else {
+        throw SMCHelperError.invalidKeyInfo(key)
+    }
+
+    let payload = bytes + Array(repeating: UInt8(0), count: dataSize - bytes.count)
+    if Array(original.bytes.prefix(dataSize)) == payload {
+        return
+    }
+
+    var writeValue = original
+    writeValue.bytes = payload + Array(repeating: UInt8(0), count: max(0, 32 - payload.count))
+    writeValue.dataSize = UInt32(dataSize)
+    var actual: [UInt8] = []
+    var lastError: Error?
+    var retryBackoff = writeInitialBackoff
+
+    for writeAttempt in 1...writeMaxAttempts {
+        do {
+            try connection.writeValue(key: key, value: writeValue)
+
+            for verifyAttempt in 1...writeVerifyReads {
+                let readBack = try connection.readValue(key: key)
+                actual = Array(readBack.bytes.prefix(dataSize))
+                if actual == payload {
+                    return
+                }
+                if verifyAttempt < writeVerifyReads {
+                    Thread.sleep(forTimeInterval: writeVerifyInterval)
+                }
+            }
+
+            lastError = SMCHelperError.writeVerificationFailed(key, expected: payload, actual: actual)
+        } catch {
+            lastError = error
+        }
+
+        if writeAttempt < writeMaxAttempts, retryBackoff > 0 {
+            Thread.sleep(forTimeInterval: retryBackoff)
+            retryBackoff *= 2
+        }
+    }
+
+    throw lastError ?? SMCHelperError.writeVerificationFailed(key, expected: payload, actual: actual)
+}
+
 /// Write a single byte to a 1-byte SMC key.
 private func writeByte(_ byte: UInt8, key: String, connection: SMCConnection) throws {
-    let original = try connection.readValue(key: key)
-    var value = original
-    value.bytes = [byte] + Array(repeating: UInt8(0), count: 31)
-    // Keep dataSize/dataType from the read so the kernel accepts the write.
-    value.dataSize = max(1, original.dataSize)
-    try connection.writeValue(key: key, value: value)
+    try writeBytes([byte], key: key, connection: connection)
+}
+
+/// Older helper builds incorrectly used CHIE as a charging-control key. CHIE is
+/// adapter control on Tahoe firmware, so clear it whenever we touch charging
+/// state to avoid carrying forward a stale adapter setting after upgrade.
+@discardableResult
+private func clearStaleAdapterControl(connection: SMCConnection) -> Bool {
+    guard connection.hasKey(tahoeAdapterKey) else { return false }
+    return (try? writeByte(0x00, key: tahoeAdapterKey, connection: connection)) != nil
+}
+
+private func writeForceDischarge(_ on: Bool, connection: SMCConnection) throws {
+    let byte: UInt8 = on ? 0x01 : 0x00
+    let keys = [forceDischargeKey]
+        + (connection.hasKey(secondaryForceDischargeKey) ? [secondaryForceDischargeKey] : [])
+    var lastError: Error?
+
+    for key in keys {
+        do {
+            try writeByte(byte, key: key, connection: connection)
+        } catch {
+            lastError = error
+        }
+    }
+
+    if let lastError {
+        throw lastError
+    }
 }
 
 /// Inhibit charging across all supported key families on this Mac.
-/// On Apple Silicon both CH0B+CH0C are written; on Intel BCLM is set to the
-/// limit value (0–100 percent). If `limit` is nil, BCLM is set to 0 (block).
+/// Prefer BCLM when a limit is supplied because it behaves like a soft ceiling
+/// and avoids hard adapter renegotiation on USB-C display power chains.
+/// If no BCLM ceiling is available, fall back to Apple Silicon hard-inhibit
+/// keys or Intel's blocking BCLM value for older firmware.
 private func inhibitCharging(limit: Int?, connection: SMCConnection) throws {
+    clearStaleAdapterControl(connection: connection)
+
     let caps = probeCapabilities(connection: connection)
     guard caps.canInhibit else { throw SMCHelperError.noWritableInhibitKey }
 
+    if let limit, caps.hasBCLM {
+        let bclmValue = UInt8(clamping: max(0, min(100, limit)))
+        if (try? writeByte(bclmValue, key: intelCeilingKey, connection: connection)) != nil {
+            return
+        }
+    }
+
     var anyOK = false
-    if caps.hasCHIE {
-        if (try? writeByte(0x02, key: modernInhibitKey, connection: connection)) != nil {
+    if caps.hasCHTE {
+        if (try? writeBytes([0x01, 0x00, 0x00, 0x00], key: tahoeChargingKey, connection: connection)) != nil {
             anyOK = true
         }
     }
@@ -299,8 +394,6 @@ private func inhibitCharging(limit: Int?, connection: SMCConnection) throws {
         if allPairOK { anyOK = true }
     }
     if caps.hasBCLM {
-        // Use limit if provided (Intel "soft" charge ceiling). When the goal is
-        // a hard stop regardless of current level, write the supplied limit.
         let bclmValue = UInt8(clamping: max(0, min(100, limit ?? 0)))
         if (try? writeByte(bclmValue, key: intelCeilingKey, connection: connection)) != nil {
             anyOK = true
@@ -315,9 +408,9 @@ private func inhibitCharging(limit: Int?, connection: SMCConnection) throws {
 private func resumeCharging(connection: SMCConnection) throws {
     let caps = probeCapabilities(connection: connection)
 
-    var anyOK = false
-    if caps.hasCHIE {
-        if (try? writeByte(0x00, key: modernInhibitKey, connection: connection)) != nil {
+    var anyOK = clearStaleAdapterControl(connection: connection)
+    if caps.hasCHTE {
+        if (try? writeBytes([0x00, 0x00, 0x00, 0x00], key: tahoeChargingKey, connection: connection)) != nil {
             anyOK = true
         }
     }
@@ -337,7 +430,7 @@ private func resumeCharging(connection: SMCConnection) throws {
     }
     // Stop any force-discharge as part of resume.
     if caps.hasCH0I {
-        _ = try? writeByte(0x00, key: forceDischargeKey, connection: connection)
+        _ = try? writeForceDischarge(false, connection: connection)
     }
     if !anyOK {
         throw SMCHelperError.noWritableInhibitKey
@@ -347,7 +440,7 @@ private func resumeCharging(connection: SMCConnection) throws {
 private func setForceDischarge(_ on: Bool, connection: SMCConnection) throws {
     let caps = probeCapabilities(connection: connection)
     guard caps.hasCH0I else { throw SMCHelperError.noWritableInhibitKey }
-    try writeByte(on ? 0x01 : 0x00, key: forceDischargeKey, connection: connection)
+    try writeForceDischarge(on, connection: connection)
 }
 
 // MARK: - JSON Output Helpers
@@ -356,7 +449,7 @@ private func printProbe(connection: SMCConnection) {
     let caps = probeCapabilities(connection: connection)
     let lines = [
         "{",
-        "  \"CHIE\": \(caps.hasCHIE),",
+        "  \"CHTE\": \(caps.hasCHTE),",
         "  \"CH0B_CH0C\": \(caps.hasCH0BC),",
         "  \"BCLM\": \(caps.hasBCLM),",
         "  \"CH0I\": \(caps.hasCH0I)",
@@ -367,9 +460,7 @@ private func printProbe(connection: SMCConnection) {
 
 private func printRead(key: String, connection: SMCConnection) throws {
     let value = try connection.readValue(key: key)
-    let hex = value.bytes.prefix(Int(value.dataSize))
-        .map { String(format: "%02x", $0) }
-        .joined()
+    let hex = hexString(Array(value.bytes.prefix(Int(value.dataSize))))
     print("Key: \(key)")
     print("Type: \(fourCCString(value.dataType))")
     print("Size: \(value.dataSize)")
@@ -380,6 +471,10 @@ private func printRead(key: String, connection: SMCConnection) throws {
 }
 
 // MARK: - Utilities
+
+private func hexString(_ bytes: [UInt8]) -> String {
+    bytes.map { String(format: "%02x", $0) }.joined()
+}
 
 private func fourCC(_ value: String) -> UInt32 {
     var result: UInt32 = 0

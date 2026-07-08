@@ -33,22 +33,22 @@ enum BatteryChargeLimits {
 // MARK: - SMC Capabilities (reported by helper `probe`)
 
 struct BatterySMCCapabilities: Equatable {
-    var hasCHIE: Bool
+    var hasCHTE: Bool
     var hasCH0BC: Bool
     var hasBCLM: Bool
     var hasCH0I: Bool
 
     /// True when we have at least one writable charge-inhibit key family.
-    var canInhibit: Bool { hasCHIE || hasCH0BC || hasBCLM }
+    var canInhibit: Bool { hasCHTE || hasCH0BC || hasBCLM }
     /// True when force-discharge (CH0I) is available on this hardware.
     var canForceDischarge: Bool { hasCH0I }
     /// True when the only inhibit path is Intel's BCLM (soft ceiling that
     /// auto-resumes once battery drops below limit). The plugin surfaces a
     /// caveat in the UI in this case.
-    var isBCLMOnly: Bool { hasBCLM && !hasCHIE && !hasCH0BC }
+    var isBCLMOnly: Bool { hasBCLM && !hasCHTE && !hasCH0BC }
 
     static let none = BatterySMCCapabilities(
-        hasCHIE: false, hasCH0BC: false, hasBCLM: false, hasCH0I: false
+        hasCHTE: false, hasCH0BC: false, hasBCLM: false, hasCH0I: false
     )
 }
 
