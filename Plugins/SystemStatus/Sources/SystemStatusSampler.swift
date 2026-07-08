@@ -460,11 +460,12 @@ actor SystemStatusSampler: SystemStatusSampling {
         let matching = IOServiceMatching("IOAccelerator")
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else {
+            let isAvailable = temperature != nil
             return SystemStatusGPUSnapshot(
-                usage: nil,
+                usage: isAvailable ? 0 : nil,
                 name: nil,
                 temperatureCelsius: temperature,
-                isAvailable: temperature != nil,
+                isAvailable: isAvailable,
                 isCollecting: false
             )
         }
@@ -473,6 +474,7 @@ actor SystemStatusSampler: SystemStatusSampling {
         var usages: [Double] = []
         var names: [String] = []
         var performanceTemperatures: [Double] = []
+        var didFindAccelerator = false
         var service = IOIteratorNext(iterator)
         while service != 0 {
             defer {
@@ -480,25 +482,22 @@ actor SystemStatusSampler: SystemStatusSampling {
                 service = IOIteratorNext(iterator)
             }
 
-            var rawProperties: Unmanaged<CFMutableDictionary>?
-            guard IORegistryEntryCreateCFProperties(service, &rawProperties, kCFAllocatorDefault, 0) == KERN_SUCCESS,
-                  let properties = rawProperties?.takeRetainedValue() as? [String: Any] else {
-                continue
-            }
+            didFindAccelerator = true
 
-            if let name = Self.gpuName(from: properties) {
+            if let name = Self.gpuName(service: service) {
                 names.append(name)
             }
 
+            let performance = Self.registryPerformanceStatistics(service: service)
             if
-                let performance = properties["PerformanceStatistics"] as? [String: Any],
+                let performance,
                 let usage = Self.gpuUtilization(from: performance)
             {
                 usages.append(usage)
             }
 
             if
-                let performance = properties["PerformanceStatistics"] as? [String: Any],
+                let performance,
                 let temperature = Self.gpuPerformanceTemperature(from: performance)
             {
                 performanceTemperatures.append(temperature)
@@ -508,13 +507,14 @@ actor SystemStatusSampler: SystemStatusSampling {
         let usage = usages.isEmpty ? nil : min(max(usages.max() ?? 0, 0), 1)
         let name = names.first
         let resolvedTemperature = temperature ?? performanceTemperatures.max()
+        let isAvailable = didFindAccelerator || name != nil || resolvedTemperature != nil
 
         guard !usages.isEmpty else {
             return SystemStatusGPUSnapshot(
-                usage: nil,
+                usage: isAvailable ? 0 : nil,
                 name: name,
                 temperatureCelsius: resolvedTemperature,
-                isAvailable: name != nil || resolvedTemperature != nil,
+                isAvailable: isAvailable,
                 isCollecting: false
             )
         }
@@ -569,20 +569,51 @@ actor SystemStatusSampler: SystemStatusSampling {
     }
 
     nonisolated static func gpuUtilization(from performanceStatistics: [String: Any]) -> Double? {
-        let keys = ["Device Utilization %", "GPU Activity(%)", "Renderer Utilization %", "Tiler Utilization %"]
-        let values = keys.compactMap { key -> Double? in
-            guard let rawValue = numberValue(performanceStatistics[key]) else {
-                return nil
+        for key in ["Device Utilization %", "GPU Activity(%)"] {
+            guard let value = gpuUtilizationValue(performanceStatistics[key]) else {
+                continue
             }
 
-            return rawValue > 1 ? rawValue / 100 : rawValue
+            return value
         }
 
-        guard let value = values.max() else {
+        return nil
+    }
+
+    private static func gpuUtilizationValue(_ rawValue: Any?) -> Double? {
+        let value: Double
+        let isPercentValue: Bool
+
+        switch rawValue {
+        case let intValue as Int:
+            value = Double(intValue)
+            isPercentValue = true
+        case let doubleValue as Double:
+            value = doubleValue
+            isPercentValue = doubleValue > 1
+        case let floatValue as Float:
+            value = Double(floatValue)
+            isPercentValue = value > 1
+        case let numberValue as NSNumber:
+            value = numberValue.doubleValue
+            isPercentValue = !CFNumberIsFloatType(numberValue) || value > 1
+        case let stringValue as String:
+            let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let parsedValue = Double(trimmed) else {
+                return nil
+            }
+            value = parsedValue
+            isPercentValue = parsedValue > 1
+        default:
             return nil
         }
 
-        return min(max(value, 0), 1)
+        guard value.isFinite else {
+            return nil
+        }
+
+        let fraction = isPercentValue ? value / 100 : value
+        return min(max(fraction, 0), 1)
     }
 
     nonisolated static func gpuPerformanceTemperature(from performanceStatistics: [String: Any]) -> Double? {
@@ -594,8 +625,20 @@ actor SystemStatusSampler: SystemStatusSampling {
     }
 
     nonisolated static func gpuName(from properties: [String: Any]) -> String? {
+        gpuName { key in
+            properties[key]
+        }
+    }
+
+    private static func gpuName(service: io_registry_entry_t) -> String? {
+        gpuName { key in
+            registryRawValue(service: service, key: key)
+        }
+    }
+
+    private static func gpuName(rawValueForKey: (String) -> Any?) -> String? {
         for key in ["model", "IOName", "name"] {
-            guard let rawValue = properties[key] else {
+            guard let rawValue = rawValueForKey(key) else {
                 continue
             }
 
@@ -1093,6 +1136,20 @@ actor SystemStatusSampler: SystemStatusSampling {
         }
 
         return rawValue as? NSDictionary
+    }
+
+    private static func registryPerformanceStatistics(service: io_registry_entry_t) -> [String: Any]? {
+        guard let rawValue = registryRawValue(service: service, key: "PerformanceStatistics") else {
+            return nil
+        }
+
+        if let value = rawValue as? [String: Any] {
+            return value
+        }
+        if let value = rawValue as? NSDictionary {
+            return value as? [String: Any]
+        }
+        return nil
     }
 
     private static func dictionaryNumberValue(_ dictionary: NSDictionary, key: String) -> Double? {

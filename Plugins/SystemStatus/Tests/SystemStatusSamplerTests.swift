@@ -64,6 +64,41 @@ final class SystemStatusSamplerTests: XCTestCase {
         XCTAssertEqual(rate?.writeBytesPerSecond, 2_500)
     }
 
+    func testGPUUtilizationPrefersDeviceUtilizationOverPipelineCounters() throws {
+        let usage = try XCTUnwrap(SystemStatusSampler.gpuUtilization(from: [
+            "Device Utilization %": 18,
+            "Renderer Utilization %": 100,
+            "Tiler Utilization %": 100
+        ]))
+
+        XCTAssertEqual(usage, 0.18, accuracy: 0.0001)
+    }
+
+    func testGPUUtilizationTreatsIntegerOneAsOnePercent() throws {
+        let usage = try XCTUnwrap(SystemStatusSampler.gpuUtilization(from: [
+            "Device Utilization %": 1
+        ]))
+
+        XCTAssertEqual(usage, 0.01, accuracy: 0.0001)
+    }
+
+    func testGPUUtilizationFallsBackToGPUActivity() throws {
+        let usage = try XCTUnwrap(SystemStatusSampler.gpuUtilization(from: [
+            "GPU Activity(%)": 42,
+            "Renderer Utilization %": 100,
+            "Tiler Utilization %": 100
+        ]))
+
+        XCTAssertEqual(usage, 0.42, accuracy: 0.0001)
+    }
+
+    func testGPUUtilizationDoesNotUsePipelineCountersAsTotalUsage() {
+        XCTAssertNil(SystemStatusSampler.gpuUtilization(from: [
+            "Renderer Utilization %": 100,
+            "Tiler Utilization %": 100
+        ]))
+    }
+
     func testBatteryHealthPercentPrefersNominalChargeCapacity() {
         let health = SystemStatusSampler.batteryHealthPercent(
             designCapacity: 10_000,
