@@ -46,14 +46,99 @@ final class ActivityBarPluginTests: XCTestCase {
 
         XCTAssertTrue(harness.controller.isTrackingEnabled)
         XCTAssertEqual(harness.inputMonitor.startCallCount, 1)
-        XCTAssertEqual(harness.socketServer.startCallCount, 1)
+        XCTAssertEqual(harness.socketServer.startCallCount, 0)
         XCTAssertTrue(harness.plugin.primaryPanelState.isOn)
 
         harness.plugin.handleAction(.setSwitch(false))
 
         XCTAssertFalse(harness.controller.isTrackingEnabled)
         XCTAssertEqual(harness.inputMonitor.stopCallCount, 1)
+        XCTAssertEqual(harness.socketServer.stopCallCount, 0)
+    }
+
+    func testActivateStartsInstalledHookSocketWithoutInputTracking() {
+        let storage = ActivityBarMemoryStorage()
+        storage.set("2026-05-18 09:00", forKey: "activity-bar.hooks.installed-at")
+        let harness = makeHarness(storage: storage)
+
+        harness.plugin.activate(context: harness.context)
+
+        XCTAssertFalse(harness.controller.isTrackingEnabled)
+        XCTAssertEqual(harness.inputMonitor.startCallCount, 0)
+        XCTAssertEqual(harness.socketServer.startCallCount, 1)
+        XCTAssertTrue(harness.socketServer.isRunning)
+        XCTAssertTrue(harness.plugin.componentPanelState.isActive)
+        XCTAssertEqual(harness.plugin.componentPanelState.subtitle, "AI 监听中")
+    }
+
+    func testInstallHooksStartsSocketWithoutTrackingSwitch() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ActivityBarPluginTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+        let paths = ActivityBarHookInstallerPaths(
+            homeDirectory: root,
+            hookScriptsDirectory: root.appendingPathComponent("hooks")
+        )
+        let harness = makeHarness(hookInstallerPaths: paths)
+
+        harness.controller.installHooks()
+
+        XCTAssertFalse(harness.controller.isTrackingEnabled)
+        XCTAssertEqual(harness.inputMonitor.startCallCount, 0)
+        XCTAssertEqual(harness.socketServer.startCallCount, 1)
+        XCTAssertTrue(harness.socketServer.isRunning)
+    }
+
+    func testDisablingTrackingKeepsInstalledHookSocketRunning() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ActivityBarPluginTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+        let paths = ActivityBarHookInstallerPaths(
+            homeDirectory: root,
+            hookScriptsDirectory: root.appendingPathComponent("hooks")
+        )
+        let harness = makeHarness(hookInstallerPaths: paths)
+
+        harness.controller.installHooks()
+        harness.plugin.handleAction(.setSwitch(true))
+        harness.plugin.handleAction(.setSwitch(false))
+
+        XCTAssertFalse(harness.controller.isTrackingEnabled)
+        XCTAssertEqual(harness.inputMonitor.stopCallCount, 1)
+        XCTAssertEqual(harness.socketServer.startCallCount, 1)
+        XCTAssertEqual(harness.socketServer.stopCallCount, 0)
+        XCTAssertTrue(harness.socketServer.isRunning)
+    }
+
+    func testDeactivateForUpdatingStopsHookSocket() {
+        let storage = ActivityBarMemoryStorage()
+        storage.set("2026-05-18 09:00", forKey: "activity-bar.hooks.installed-at")
+        let harness = makeHarness(storage: storage)
+
+        harness.plugin.activate(context: harness.context)
+        harness.plugin.deactivate(reason: .updating)
+
+        XCTAssertEqual(harness.socketServer.startCallCount, 1)
         XCTAssertEqual(harness.socketServer.stopCallCount, 1)
+        XCTAssertFalse(harness.socketServer.isRunning)
+    }
+
+    func testInputTrackingDoesNotHideHookSocketStartError() {
+        let storage = ActivityBarMemoryStorage()
+        storage.set("2026-05-18 09:00", forKey: "activity-bar.hooks.installed-at")
+        storage.set(true, forKey: "activity-bar.tracking.enabled")
+        let harness = makeHarness(storage: storage)
+        harness.socketServer.startError = ActivityBarSocketError.socketFailed(1)
+
+        harness.plugin.activate(context: harness.context)
+
+        XCTAssertEqual(harness.inputMonitor.startCallCount, 1)
+        XCTAssertEqual(harness.socketServer.startCallCount, 1)
+        XCTAssertTrue(harness.controller.lastErrorMessage?.contains("AI 活动监听启动失败") == true)
     }
 
     func testExpandedTrackingSwitchReflectsEnabledState() throws {
@@ -167,6 +252,7 @@ final class ActivityBarPluginTests: XCTestCase {
     private func makeHarness(
         storage providedStorage: ActivityBarMemoryStorage? = nil,
         codingStats: ActivityBarCodingSessionStore? = nil,
+        hookInstallerPaths: ActivityBarHookInstallerPaths? = nil,
         inputEventNotificationDelay: Duration = .milliseconds(750)
     ) -> Harness {
         let storage = providedStorage ?? ActivityBarMemoryStorage()
@@ -183,6 +269,7 @@ final class ActivityBarPluginTests: XCTestCase {
             inputMonitor: inputMonitor,
             socketServer: socketServer,
             codingStats: codingStats,
+            hookInstallerPaths: hookInstallerPaths,
             inputEventNotificationDelay: inputEventNotificationDelay
         )
         let plugin = ActivityBarPlugin(context: context, controller: controller)
@@ -190,6 +277,7 @@ final class ActivityBarPluginTests: XCTestCase {
         return Harness(
             plugin: plugin,
             controller: controller,
+            context: context,
             storage: storage,
             inputMonitor: inputMonitor,
             socketServer: socketServer
@@ -199,6 +287,7 @@ final class ActivityBarPluginTests: XCTestCase {
     private struct Harness {
         let plugin: ActivityBarPlugin
         let controller: ActivityBarController
+        let context: PluginRuntimeContext
         let storage: ActivityBarMemoryStorage
         let inputMonitor: ActivityBarFakeInputMonitor
         let socketServer: ActivityBarFakeSocketServer

@@ -83,6 +83,10 @@ final class ActivityBarFakeSocketServer: ActivityBarSocketServing {
     private(set) var stopCallCount = 0
 
     func start() throws {
+        guard !isRunning else {
+            return
+        }
+
         startCallCount += 1
         if let startError {
             throw startError

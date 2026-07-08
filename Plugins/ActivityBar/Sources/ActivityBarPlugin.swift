@@ -92,7 +92,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     var componentPanelState: PluginComponentState {
         PluginComponentState(
             subtitle: controller.componentSubtitle,
-            isActive: controller.isTrackingEnabled,
+            isActive: controller.isTrackingEnabled || controller.isHookListenerRunning,
             isEnabled: true,
             isVisible: true,
             errorMessage: controller.lastErrorMessage
@@ -271,6 +271,14 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     private var hookSettingsStatus: PluginSettingsSection.Status {
         switch controller.hookInstallState {
         case .installed:
+            if controller.isHookListenerRunning {
+                return PluginSettingsSection.Status(
+                    text: localization.string("hook.status.listening", defaultValue: "监听中"),
+                    systemImage: "checkmark.circle.fill",
+                    tone: .positive
+                )
+            }
+
             return PluginSettingsSection.Status(
                 text: localization.string("hook.status.installed", defaultValue: "已安装"),
                 systemImage: "checkmark.circle.fill",

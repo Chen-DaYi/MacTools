@@ -110,6 +110,10 @@ final class ActivityBarController: ObservableObject {
         }
     }
 
+    var isHookListenerRunning: Bool {
+        socketServer.isRunning
+    }
+
     var monitorStatus: ActivityBarInputMonitorStatus {
         inputMonitor.status
     }
@@ -135,6 +139,10 @@ final class ActivityBarController: ObservableObject {
             )
         }
 
+        if isHookListenerRunning {
+            return localization.string("panel.subtitle.aiListening", defaultValue: "AI 活动监听中")
+        }
+
         return localization.string("panel.subtitle.default", defaultValue: "统计输入与 AI 编程活动")
     }
 
@@ -145,6 +153,9 @@ final class ActivityBarController: ObservableObject {
                 defaultValue: "%@ 次输入",
                 ActivityBarFormatting.count(todayInputStats.totalInputs)
             )
+        }
+        if isHookListenerRunning {
+            return localization.string("component.subtitle.aiListening", defaultValue: "AI 监听中")
         }
         return localization.string("component.subtitle.disabled", defaultValue: "未开启")
     }
@@ -164,7 +175,7 @@ final class ActivityBarController: ObservableObject {
     var hookInstallFootnote: String {
         localization.string(
             "settings.aiHooks.footnote",
-            defaultValue: "点击后会写入 Claude Code、Cursor 和 Codex 的 hook 配置；脚本只在本机通过 Unix socket 发送活动事件。"
+            defaultValue: "点击后会写入 Claude Code、Cursor 和 Codex 的 hook 配置；AI 活动监听不需要输入监控权限。"
         )
     }
 
@@ -174,20 +185,16 @@ final class ActivityBarController: ObservableObject {
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser
         )
 
+        startHookListenerIfNeeded()
         if isTrackingEnabled {
-            startTracking()
+            startInputTracking()
         }
     }
 
     func deactivate(reason: PluginDeactivationReason) {
-        guard reason.requiresStateCleanup else {
-            return
-        }
-
         stopRuntime()
         inputEventNotificationTask?.cancel()
         inputEventNotificationTask = nil
-        inputStats.flushPendingChanges()
     }
 
     func refresh() {
@@ -201,10 +208,13 @@ final class ActivityBarController: ObservableObject {
         storage.set(enabled, forKey: StorageKey.isTrackingEnabled)
 
         if enabled {
-            startTracking()
+            startInputTracking()
+            startHookListenerIfNeeded()
         } else {
-            stopRuntime()
-            lastErrorMessage = nil
+            stopInputTracking()
+            if !shouldRunHookListener {
+                lastErrorMessage = nil
+            }
         }
 
         notifyChange()
@@ -225,6 +235,7 @@ final class ActivityBarController: ObservableObject {
             storage.set(timestamp, forKey: StorageKey.hooksInstalledAt)
             hookInstallState = .installed(timestamp: timestamp)
             lastErrorMessage = nil
+            startHookListenerIfNeeded()
             ActivityBarLog.hooks.info(
                 "Activity bar hooks installed in \(summary.scriptDirectory.path, privacy: .public)"
             )
@@ -245,9 +256,22 @@ final class ActivityBarController: ObservableObject {
         openPrivacyPane(anchor: "Privacy_ListenEvent")
     }
 
-    private func startTracking() {
-        lastErrorMessage = nil
+    private var shouldRunHookListener: Bool {
+        if case .installed = hookInstallState {
+            return true
+        }
+
+        return false
+    }
+
+    private func startInputTracking() {
         inputMonitor.start()
+    }
+
+    private func startHookListenerIfNeeded() {
+        guard shouldRunHookListener else {
+            return
+        }
 
         do {
             try socketServer.start()
@@ -262,10 +286,14 @@ final class ActivityBarController: ObservableObject {
     }
 
     private func stopRuntime() {
-        inputMonitor.stop()
+        stopInputTracking()
         socketServer.stop()
-        inputStats.flushPendingChanges()
         codingStats.flushActiveDurations()
+    }
+
+    private func stopInputTracking() {
+        inputMonitor.stop()
+        inputStats.flushPendingChanges()
     }
 
     private func openPrivacyPane(anchor: String) {

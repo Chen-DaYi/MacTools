@@ -2202,6 +2202,77 @@
         }
       }
     },
+    "component.subtitle.aiListening": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الاستماع للذكاء الاصطناعي"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI lauscht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI listening"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escuchando IA"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écoute IA"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 監視中"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 수신 중"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IA ouvindo"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ИИ слушает"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 监听中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 監聽中"
+          }
+        }
+      }
+    },
     "component.subtitle.disabled": {
       "extractionState": "manual",
       "localizations": {
@@ -2983,6 +3054,77 @@
         }
       }
     },
+    "hook.status.listening": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يستمع"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lauscht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escuchando"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À l'écoute"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "監視中"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "수신 중"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvindo"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Слушает"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "监听中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "監聽中"
+          }
+        }
+      }
+    },
     "hook.status.installedWithDate": {
       "extractionState": "manual",
       "localizations": {
@@ -3551,6 +3693,77 @@
         }
       }
     },
+    "panel.subtitle.aiListening": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الاستماع إلى نشاط الذكاء الاصطناعي"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-Aktivität wird überwacht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening for AI activity"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escuchando actividad de IA"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écoute de l'activité IA"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI アクティビティを監視中"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 활동 수신 중"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvindo atividade de IA"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прослушивание активности ИИ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 活动监听中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 活動監聽中"
+          }
+        }
+      }
+    },
     "panel.subtitle.default": {
       "extractionState": "manual",
       "localizations": {
@@ -3853,7 +4066,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Writes hook settings for Claude Code, Cursor, and Codex. Scripts send activity events locally through a Unix socket."
+            "value": "Writes hook settings for Claude Code, Cursor, and Codex. AI activity listening does not require Input Monitoring."
           }
         },
         "es": {
@@ -3895,13 +4108,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "点击后会写入 Claude Code、Cursor 和 Codex 的 hook 配置；脚本只在本机通过 Unix socket 发送活动事件。"
+            "value": "点击后会写入 Claude Code、Cursor 和 Codex 的 hook 配置；AI 活动监听不需要输入监控权限。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "點擊後會寫入 Claude Code、Cursor 和 Codex 的 hook 配置；腳本只在本機通過 Unix socket 發送活動事件。"
+            "value": "點擊後會寫入 Claude Code、Cursor 和 Codex 的 hook 配置；AI 活動監聽不需要輸入監控權限。"
           }
         }
       }
