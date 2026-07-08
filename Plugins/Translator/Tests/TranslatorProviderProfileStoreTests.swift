@@ -55,6 +55,17 @@ final class TranslatorProviderProfileStoreTests: XCTestCase {
         XCTAssertEqual(reloaded[0].model, "deepseek-chat")
     }
 
+    func testSaveProfilesPreservesUserOrder() throws {
+        let storage = TranslatorInMemoryPluginStorage()
+        let store = TranslatorProviderProfileStore(storage: storage)
+        let deepSeek = TranslatorProviderProfile(id: "deepseek", name: "DeepSeek")
+        let openAI = TranslatorProviderProfile(id: "openai", name: "OpenAI")
+
+        try store.saveProfiles([deepSeek, openAI])
+
+        XCTAssertEqual(store.loadProfiles().map(\.id), ["deepseek", "openai"])
+    }
+
     func testDisabledDraftProfileCanHaveInvalidConfiguration() {
         let profile = TranslatorProviderProfile(
             name: "草稿",

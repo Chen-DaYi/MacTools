@@ -6,6 +6,7 @@ struct TranslatorSettingsView: View {
     @State private var secondLanguage: TranslatorLanguage
     @State private var profiles: [TranslatorProviderProfile]
     @State private var apiKeys: [String: String]
+    @State private var savedLanguagePair: TranslatorLanguagePair
     @State private var selectedProfileID: String?
     @State private var message: String?
     @State private var messageIsError = false
@@ -26,6 +27,7 @@ struct TranslatorSettingsView: View {
         _secondLanguage = State(initialValue: languagePair.second)
         _profiles = State(initialValue: profiles.isEmpty ? [TranslatorProviderProfile.defaultProfile(localization: localization)] : profiles)
         _apiKeys = State(initialValue: apiKeys)
+        _savedLanguagePair = State(initialValue: languagePair)
         _selectedProfileID = State(initialValue: profiles.first?.id ?? TranslatorProviderProfile.defaultID)
         self.localization = localization
         self.onSave = onSave
@@ -81,10 +83,12 @@ struct TranslatorSettingsView: View {
             }
 
             VStack(spacing: 0) {
-                ForEach(profiles.indices, id: \.self) { index in
-                    providerRow(index: index)
-                    if index != profiles.indices.last {
-                        PluginSettingsListDivider()
+                ForEach(profiles) { profile in
+                    if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
+                        providerRow(index: index)
+                        if profile.id != profiles.last?.id {
+                            PluginSettingsListDivider()
+                        }
                     }
                 }
             }
@@ -189,7 +193,7 @@ struct TranslatorSettingsView: View {
         // The row toggle and move/delete buttons handle their own clicks. Only the name/model area
         // selects the row, avoiding nested interactive controls inside one row-level Button.
         return HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Toggle("", isOn: binding(for: index, keyPath: \.isEnabled))
+            Toggle("", isOn: providerEnabledBinding(for: index))
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -367,6 +371,23 @@ struct TranslatorSettingsView: View {
         )
     }
 
+    private func providerEnabledBinding(for index: Int) -> Binding<Bool> {
+        Binding(
+            get: { profiles[index].isEnabled },
+            set: { isEnabled in
+                guard profiles[index].isEnabled != isEnabled else {
+                    return
+                }
+
+                let previousState = providerListState()
+                profiles[index].isEnabled = isEnabled
+                message = nil
+                messageIsError = false
+                persistProviderListChange(previousState: previousState)
+            }
+        )
+    }
+
     /// Wraps a language binding and clears the "saved" message when the user makes unsaved edits.
     private func messageClearing(_ binding: Binding<TranslatorLanguage>) -> Binding<TranslatorLanguage> {
         Binding(
@@ -380,20 +401,24 @@ struct TranslatorSettingsView: View {
     }
 
     private func addProfile() {
+        let previousState = providerListState()
         let profile = onMakeNewProfile(profiles)
         profiles.append(profile)
         selectedProfileID = profile.id
         message = nil
         messageIsError = false
+        persistProviderListChange(previousState: previousState)
     }
 
     private func deleteProfile(at index: Int) {
+        let previousState = providerListState()
         let deletedID = profiles[index].id
         profiles.remove(at: index)
         apiKeys.removeValue(forKey: deletedID)
         selectedProfileID = profiles.indices.contains(index) ? profiles[index].id : profiles.last?.id
         message = nil
         messageIsError = false
+        persistProviderListChange(previousState: previousState)
     }
 
     private func moveProfile(from index: Int, offset: Int) {
@@ -402,10 +427,12 @@ struct TranslatorSettingsView: View {
             return
         }
 
+        let previousState = providerListState()
         profiles.swapAt(index, target)
         selectedProfileID = profiles[target].id
         message = nil
         messageIsError = false
+        persistProviderListChange(previousState: previousState)
     }
 
     private func save() {
@@ -421,8 +448,37 @@ struct TranslatorSettingsView: View {
             message = errorMessage
             messageIsError = true
         } else {
+            savedLanguagePair = languagePair
             message = localization.string("settings.message.saved", defaultValue: "已保存")
             messageIsError = false
         }
+    }
+
+    private struct ProviderListState {
+        var profiles: [TranslatorProviderProfile]
+        var apiKeys: [String: String]
+        var selectedProfileID: String?
+    }
+
+    private func providerListState() -> ProviderListState {
+        ProviderListState(
+            profiles: profiles,
+            apiKeys: apiKeys,
+            selectedProfileID: selectedProfileID
+        )
+    }
+
+    private func persistProviderListChange(previousState: ProviderListState) {
+        if let errorMessage = onSave(profiles, apiKeys, savedLanguagePair) {
+            profiles = previousState.profiles
+            apiKeys = previousState.apiKeys
+            selectedProfileID = previousState.selectedProfileID
+            message = errorMessage
+            messageIsError = true
+            return
+        }
+
+        message = localization.string("settings.message.saved", defaultValue: "已保存")
+        messageIsError = false
     }
 }
