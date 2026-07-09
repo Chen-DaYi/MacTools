@@ -5,17 +5,17 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.30</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.30</link>
-            <sparkle:version>60</sparkle:version>
-            <sparkle:shortVersionString>1.0.30</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[### Fixed
+            <title>Version 1.0.31</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.31</link>
+            <sparkle:version>61</sparkle:version>
+            <sparkle:shortVersionString>1.0.31</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[### Changed
 
-- Reduce unnecessary menu bar refresh work when plugins report state changes, keeping panels steadier during frequent updates.
+- Improved the menu bar icon settings previews so uploaded and online icons are easier to inspect.
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Tue, 07 Jul 2026 15:42:45 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.30/MacTools.dmg" length="6563572" type="application/octet-stream" sparkle:edSignature="8hBHDv9NvGKiFO2jPNMJRqyP68v/aU5/O2rhcXgaHjSvtRIkwzJEmjLJ5J/OtcNCKz3EjF50VigPofO71j9dBQ==" />
+            <pubDate>Thu, 09 Jul 2026 15:25:47 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.31/MacTools.dmg" length="6563514" type="application/octet-stream" sparkle:edSignature="ckpGnK0hY3OD5c2rQsLzeRmusnsx9DaglvHG3ZGfGjrKasaHN9gky8QyY8RUP1OSBqIdNS2QCBbohy6Z9ACkCg==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
