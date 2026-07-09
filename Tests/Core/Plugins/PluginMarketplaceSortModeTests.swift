@@ -207,6 +207,24 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
         )
     }
 
+    func testNameComparePreservesOrderedSameWhenTitleAndIDMatch() {
+        let item = makeItem(id: "same-id", title: "Same", state: .available)
+        let duplicate = makeItem(id: "same-id", title: "Same", state: .enabled)
+
+        XCTAssertEqual(
+            PluginMarketplaceSortMode.compare(item, duplicate, mode: .nameAscending),
+            .orderedSame
+        )
+        XCTAssertEqual(
+            PluginMarketplaceSortMode.compare(item, duplicate, mode: .nameDescending),
+            .orderedSame
+        )
+        XCTAssertEqual(
+            PluginMarketplaceSortMode.compare(duplicate, item, mode: .nameDescending),
+            .orderedSame
+        )
+    }
+
     private func sampleStatusItems() -> [PluginManagementItem] {
         [
             makeItem(id: "installed-z", title: "Zeta", state: .enabled),

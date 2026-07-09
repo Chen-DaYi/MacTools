@@ -9770,7 +9770,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sort"
+            "value": "並べ替え"
           }
         },
         "ko": {
@@ -9841,7 +9841,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Change marketplace list order. Does not affect menu bar feature order."
+            "value": "マーケットプレイス一覧の順序を変更します。メニューバーの機能順には影響しません。"
           }
         },
         "ko": {
@@ -9912,7 +9912,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Name A → Z"
+            "value": "名前 A → Z"
           }
         },
         "ko": {
@@ -9983,7 +9983,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Name Z → A"
+            "value": "名前 Z → A"
           }
         },
         "ko": {
@@ -10054,7 +10054,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not Installed First"
+            "value": "未インストール優先"
           }
         },
         "ko": {
@@ -10125,7 +10125,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installed First"
+            "value": "インストール済み優先"
           }
         },
         "ko": {

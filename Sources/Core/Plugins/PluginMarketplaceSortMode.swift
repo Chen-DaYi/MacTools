@@ -114,16 +114,22 @@ enum PluginMarketplaceSortMode: String, CaseIterable, Identifiable {
     ) -> ComparisonResult {
         let titleOrder = lhs.title.localizedStandardCompare(rhs.title)
         if titleOrder != .orderedSame {
-            if ascending {
-                return titleOrder
-            }
-            return titleOrder == .orderedAscending ? .orderedDescending : .orderedAscending
+            return ascending ? titleOrder : inverted(titleOrder)
         }
 
         let idOrder = lhs.id.localizedStandardCompare(rhs.id)
-        if ascending {
-            return idOrder
+        return ascending ? idOrder : inverted(idOrder)
+    }
+
+    /// Inverts ascending/descending while preserving `.orderedSame`.
+    private static func inverted(_ order: ComparisonResult) -> ComparisonResult {
+        switch order {
+        case .orderedAscending:
+            return .orderedDescending
+        case .orderedDescending:
+            return .orderedAscending
+        case .orderedSame:
+            return .orderedSame
         }
-        return idOrder == .orderedAscending ? .orderedDescending : .orderedAscending
     }
 }
