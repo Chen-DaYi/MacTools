@@ -1,0 +1,37 @@
+{
+  "id": "window-switcher",
+  "displayName": "窗口切换",
+  "summary": "用可配置快捷键快速切换正在运行的窗口",
+  "localizedMetadata": {
+    "en": {
+      "displayName": "Window Switcher",
+      "summary": "Quickly switch between running windows with a configurable shortcut."
+    },
+    "zh-Hans": {
+      "displayName": "窗口切换",
+      "summary": "用可配置快捷键快速切换正在运行的窗口"
+    },
+    "zh-Hant": {
+      "displayName": "視窗切換",
+      "summary": "用可設定快速鍵快速切換正在執行的視窗"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "WindowSwitcher.bundle",
+  "factoryClass": "WindowSwitcherPlugin.WindowSwitcherPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "WindowSwitcherPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": false,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [
+    "accessibility"
+  ],
+  "category": "productivity"
+}
