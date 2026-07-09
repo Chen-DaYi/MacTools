@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.0.31] - 2026-07-09
+
+### Changed
+
+- Improved the menu bar icon settings previews so uploaded and online icons are easier to inspect.
+
 ## [plugins-1.0.32] - 2026-07-09
 
 ### Added
