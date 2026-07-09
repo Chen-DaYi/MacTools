@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-07-07T15:26:04Z",
-  "minimumHostVersion": "1.0.29",
+  "generatedAt": "2026-07-09T15:20:56Z",
+  "minimumHostVersion": "1.0.30",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -61,16 +61,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "3be4e17de4467a9aec2b89d494cbf0cb0389a174529de78201190f8e8e068dfc",
-        "size": 792698,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.31/activity-bar.mactoolsplugin.zip"
+        "sha256": "29b2ea74e34e0b47ef37998530d78a505028ea3ce30cb664333b68f7e9e0c495",
+        "size": 822680,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.32/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.31",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.32",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.13"
+      "version": "1.0.14"
     },
     {
       "capabilities": {
@@ -401,16 +401,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "b48c180ba0e3ddb9064059a13bd3e52ed7b3560b7a0c6e6844d33d47fd98af6b",
-        "size": 288411,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/battery-charge-limit.mactoolsplugin.zip"
+        "sha256": "7a0606dac27b9a10ea11f81f5aba247d24ba6ad1dd8b62225977c8309b565cf4",
+        "size": 292629,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.32/battery-charge-limit.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.32",
       "summary": "设置电池充电上限，达到上限后停止充电；不自动恢复，由用户决定何时继续充电",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -2286,7 +2286,7 @@
     {
       "capabilities": {
         "componentPanel": true,
-        "configuration": false,
+        "configuration": true,
         "primaryPanel": false
       },
       "category": "monitoring",
@@ -2340,16 +2340,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "7b1bb470bfd96bda0bb9c88feb92908851f76967e4276acc1e17f4999d7050d3",
-        "size": 518153,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.30/system-status.mactoolsplugin.zip"
+        "sha256": "d39b1774f4641aba666c0aa0316c6222d3d4c50b74438293d7910585b97be1fc",
+        "size": 693348,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.32/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.30",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.32",
       "summary": "实时查看系统状态",
-      "version": "1.0.11"
+      "version": "1.0.12"
     },
     {
       "capabilities": {
@@ -2408,9 +2408,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "65c9ac8b01815b1010a5ed45fce9d1e7c6aaa85810558d2094e017bfa0507fc8",
-        "size": 791939,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/translator.mactoolsplugin.zip"
+        "sha256": "de9870694f6804b0ae43794ce9bbe6b5ebdbd508800cbd78e7e46a3c757219f2",
+        "size": 795982,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.32/translator.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -2419,9 +2419,47 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.32",
       "summary": "划词与截图快捷键翻译",
-      "version": "0.1.6"
+      "version": "0.1.7"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": false
+      },
+      "category": "productivity",
+      "displayName": "窗口切换",
+      "id": "window-switcher",
+      "localizedMetadata": {
+        "en": {
+          "displayName": "Window Switcher",
+          "summary": "Quickly switch between running windows with a configurable shortcut."
+        },
+        "zh-Hans": {
+          "displayName": "窗口切换",
+          "summary": "用可配置快捷键快速切换正在运行的窗口"
+        },
+        "zh-Hant": {
+          "displayName": "視窗切換",
+          "summary": "用可設定快速鍵快速切換正在執行的視窗"
+        }
+      },
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "25f3024e4a3c94fb2478562ad90ee6d9eef849da0835d99a3af2ec0ebcbcb16f",
+        "size": 403203,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.32/window-switcher.mactoolsplugin.zip"
+      },
+      "permissions": [
+        "accessibility"
+      ],
+      "pluginKitVersion": 2,
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.32",
+      "summary": "用可配置快捷键快速切换正在运行的窗口",
+      "version": "1.0.0"
     },
     {
       "capabilities": {
@@ -2564,6 +2602,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "97xtRlK2oGyoMziok48cNqN3PkS7zsENHpTWWC8yAMfw/S6SwwBu1n5ADqPacloR6ZWvBSokfyzqTzfPhdxQAg=="
+    "value": "EMQ29I2mLM6Rifyk34rLeBR3ofgiZq32xit8iqRJxmvQi6WQm0Q3xr6iiCpibQug4uaF5SN+bUJEdKGNFVTKDg=="
   }
 }
