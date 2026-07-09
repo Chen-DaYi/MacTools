@@ -114,6 +114,14 @@ final class ActivityBarController: ObservableObject {
         socketServer.isRunning
     }
 
+    var areHooksInstalled: Bool {
+        if case .installed = hookInstallState {
+            return true
+        }
+
+        return false
+    }
+
     var monitorStatus: ActivityBarInputMonitorStatus {
         inputMonitor.status
     }
@@ -177,6 +185,17 @@ final class ActivityBarController: ObservableObject {
             "settings.aiHooks.footnote",
             defaultValue: "点击后会写入 Claude Code、Cursor 和 Codex 的 hook 配置；AI 活动监听不需要输入监控权限。"
         )
+    }
+
+    var hookUninstallFootnote: String {
+        localization.string(
+            "settings.aiHooks.uninstallFootnote",
+            defaultValue: "只移除 MacTools 写入的 Hook 条目和脚本，不会清空其他工具配置。"
+        )
+    }
+
+    var hookActionFootnote: String {
+        areHooksInstalled ? hookUninstallFootnote : hookInstallFootnote
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -247,6 +266,32 @@ final class ActivityBarController: ObservableObject {
             )
             hookInstallState = .failed
             ActivityBarLog.hooks.error("Activity bar hook installation failed: \(error.localizedDescription, privacy: .public)")
+        }
+
+        notifyChange()
+    }
+
+    func uninstallHooks() {
+        let installer = ActivityBarHookInstaller(paths: hookInstallerPaths)
+
+        do {
+            let summary = try installer.uninstall()
+            storage.removeObject(forKey: StorageKey.hooksInstalledAt)
+            hookInstallState = .notInstalled
+            lastErrorMessage = nil
+            socketServer.stop()
+            codingStats.flushActiveDurations()
+            ActivityBarLog.hooks.info(
+                "Activity bar hooks uninstalled from \(summary.scriptDirectory.path, privacy: .public)"
+            )
+        } catch {
+            lastErrorMessage = localization.format(
+                "error.hook.uninstallFailed",
+                defaultValue: "Hook 卸载失败：%@",
+                localizedDescription(for: error)
+            )
+            hookInstallState = .failed
+            ActivityBarLog.hooks.error("Activity bar hook uninstallation failed: \(error.localizedDescription, privacy: .public)")
         }
 
         notifyChange()

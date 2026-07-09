@@ -1067,9 +1067,13 @@ struct ActivityBarComponentView: View {
     private var footerBar: some View {
         HStack(spacing: 12) {
             Button {
-                controller.installHooks()
+                if controller.areHooksInstalled {
+                    controller.uninstallHooks()
+                } else {
+                    controller.installHooks()
+                }
             } label: {
-                Text(localization.string("component.footer.hooks", defaultValue: "Hooks"))
+                Text(hookActionTitle)
                     .font(.subheadline)
                     .foregroundStyle(.primary.opacity(0.55))
             }
@@ -1171,6 +1175,14 @@ struct ActivityBarComponentView: View {
                 iconSize: 13
             )
         }
+    }
+
+    private var hookActionTitle: String {
+        if controller.areHooksInstalled {
+            return localization.string("component.footer.uninstallHooks", defaultValue: "卸载 Hook")
+        }
+
+        return localization.string("component.footer.hooks", defaultValue: "Hooks")
     }
 
     private func toolStats(_ tool: ActivityBarCodingTool, in day: ActivityBarCodingDailyStats) -> ActivityBarProjectStats {

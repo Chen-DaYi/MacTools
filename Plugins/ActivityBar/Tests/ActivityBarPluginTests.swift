@@ -43,6 +43,59 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertFalse(state.isOn)
     }
 
+    func testHookSettingUsesSingleDynamicAction() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ActivityBarPluginTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+        let paths = ActivityBarHookInstallerPaths(
+            homeDirectory: root,
+            hookScriptsDirectory: root.appendingPathComponent("hooks")
+        )
+        let harness = makeHarness(hookInstallerPaths: paths)
+
+        var hookSections = harness.plugin.settingsSections.filter { $0.id.hasPrefix("ai-hooks") }
+
+        XCTAssertEqual(hookSections.count, 1)
+        XCTAssertEqual(hookSections.first?.id, "ai-hooks")
+        XCTAssertEqual(hookSections.first?.buttonTitle, "安装或更新 Hook")
+        XCTAssertEqual(hookSections.first?.actionID, "install-hooks")
+
+        harness.controller.installHooks()
+        hookSections = harness.plugin.settingsSections.filter { $0.id.hasPrefix("ai-hooks") }
+
+        XCTAssertEqual(hookSections.count, 1)
+        XCTAssertEqual(hookSections.first?.id, "ai-hooks")
+        XCTAssertEqual(hookSections.first?.buttonTitle, "卸载 Hook")
+        XCTAssertEqual(hookSections.first?.actionID, "uninstall-hooks")
+    }
+
+    func testPrimaryPanelShowsUninstallActionAfterHooksInstalled() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ActivityBarPluginTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+        let paths = ActivityBarHookInstallerPaths(
+            homeDirectory: root,
+            hookScriptsDirectory: root.appendingPathComponent("hooks")
+        )
+        let harness = makeHarness(hookInstallerPaths: paths)
+
+        harness.controller.installHooks()
+        harness.plugin.handleAction(.setDisclosureExpanded(true))
+
+        let controls = try XCTUnwrap(harness.plugin.primaryPanelState.detail?.primaryControls)
+
+        XCTAssertEqual(controls.map(\.id), [
+            "tracking-enabled",
+            "open-input-monitoring",
+            "uninstall-hooks",
+            "reset-today"
+        ])
+    }
+
     func testSwitchStartsAndStopsRuntime() {
         let harness = makeHarness()
 
@@ -116,6 +169,28 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.socketServer.startCallCount, 1)
         XCTAssertEqual(harness.socketServer.stopCallCount, 0)
         XCTAssertTrue(harness.socketServer.isRunning)
+    }
+
+    func testUninstallHooksStopsSocketAndClearsInstalledState() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ActivityBarPluginTests-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+        let paths = ActivityBarHookInstallerPaths(
+            homeDirectory: root,
+            hookScriptsDirectory: root.appendingPathComponent("hooks")
+        )
+        let harness = makeHarness(hookInstallerPaths: paths)
+
+        harness.controller.installHooks()
+        harness.controller.uninstallHooks()
+
+        XCTAssertNil(harness.storage.string(forKey: "activity-bar.hooks.installed-at"))
+        XCTAssertEqual(harness.controller.hookInstallState, .notInstalled)
+        XCTAssertEqual(harness.socketServer.stopCallCount, 1)
+        XCTAssertFalse(harness.socketServer.isRunning)
+        XCTAssertFalse(harness.plugin.componentPanelState.isActive)
     }
 
     func testDeactivateForUpdatingStopsHookSocket() {

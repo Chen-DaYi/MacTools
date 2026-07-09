@@ -6,6 +6,11 @@ struct ActivityBarHookInstallSummary: Equatable, Sendable {
     let installedTools: [String]
 }
 
+struct ActivityBarHookUninstallSummary: Equatable, Sendable {
+    let scriptDirectory: URL
+    let removedTools: [String]
+}
+
 struct ActivityBarHookInstallerPaths: Equatable, Sendable {
     let hookScriptsDirectory: URL
     let claudeSettingsPath: URL
@@ -85,6 +90,18 @@ struct ActivityBarHookInstaller {
         )
     }
 
+    func uninstall() throws -> ActivityBarHookUninstallSummary {
+        try unregisterClaudeHooks()
+        try unregisterCursorHooks()
+        try unregisterCodexHooks()
+        try removeInstalledScripts()
+
+        return ActivityBarHookUninstallSummary(
+            scriptDirectory: paths.hookScriptsDirectory,
+            removedTools: ["Claude Code", "Cursor", "Codex"]
+        )
+    }
+
     private var claudeScriptURL: URL {
         paths.hookScriptsDirectory.appendingPathComponent(FileName.claude)
     }
@@ -159,6 +176,10 @@ struct ActivityBarHookInstaller {
         try writeJSONObject(settings, to: paths.claudeSettingsPath)
     }
 
+    private func unregisterClaudeHooks() throws {
+        try unregisterGroupedHooks(at: paths.claudeSettingsPath, scriptFileName: FileName.claude)
+    }
+
     private func registerCursorHooks() throws {
         let events = [
             "beforeSubmitPrompt", "stop", "afterFileEdit",
@@ -192,6 +213,51 @@ struct ActivityBarHookInstaller {
         }
 
         root["hooks"] = hooks
+        try writeJSONObject(root, to: paths.cursorHooksPath)
+    }
+
+    private func unregisterCursorHooks() throws {
+        guard fileManager.fileExists(atPath: paths.cursorHooksPath.path) else {
+            return
+        }
+
+        var root = try readJSONObject(at: paths.cursorHooksPath)
+        guard var hooks = root["hooks"] as? [String: Any] else {
+            return
+        }
+
+        var needsWrite = false
+
+        for event in Array(hooks.keys) {
+            guard let entries = hooks[event] as? [[String: Any]] else {
+                continue
+            }
+
+            let filteredEntries = entries.filter { entry in
+                !containsHookCommand(entry["command"], scriptFileName: FileName.cursor)
+            }
+
+            guard filteredEntries.count != entries.count else {
+                continue
+            }
+
+            if filteredEntries.isEmpty {
+                hooks.removeValue(forKey: event)
+            } else {
+                hooks[event] = filteredEntries
+            }
+            needsWrite = true
+        }
+
+        guard needsWrite else {
+            return
+        }
+
+        if hooks.isEmpty {
+            root.removeValue(forKey: "hooks")
+        } else {
+            root["hooks"] = hooks
+        }
         try writeJSONObject(root, to: paths.cursorHooksPath)
     }
 
@@ -278,6 +344,91 @@ struct ActivityBarHookInstaller {
         try writeJSONObject(root, to: paths.codexHooksPath)
     }
 
+    private func unregisterCodexHooks() throws {
+        try unregisterGroupedHooks(at: paths.codexHooksPath, scriptFileName: FileName.codex)
+    }
+
+    private func unregisterGroupedHooks(at url: URL, scriptFileName: String) throws {
+        guard fileManager.fileExists(atPath: url.path) else {
+            return
+        }
+
+        var root = try readJSONObject(at: url)
+        guard var hooks = root["hooks"] as? [String: Any] else {
+            return
+        }
+
+        var needsWrite = false
+
+        for event in Array(hooks.keys) {
+            guard let groups = hooks[event] as? [[String: Any]] else {
+                continue
+            }
+
+            var updatedGroups: [[String: Any]] = []
+
+            for group in groups {
+                guard let groupHooks = group["hooks"] as? [[String: Any]] else {
+                    updatedGroups.append(group)
+                    continue
+                }
+
+                let filteredHooks = groupHooks.filter { hook in
+                    !containsHookCommand(hook["command"], scriptFileName: scriptFileName)
+                }
+
+                if filteredHooks.count != groupHooks.count {
+                    needsWrite = true
+                }
+
+                guard !filteredHooks.isEmpty else {
+                    continue
+                }
+
+                var updatedGroup = group
+                updatedGroup["hooks"] = filteredHooks
+                updatedGroups.append(updatedGroup)
+            }
+
+            if updatedGroups.isEmpty {
+                hooks.removeValue(forKey: event)
+                needsWrite = true
+            } else {
+                hooks[event] = updatedGroups
+            }
+        }
+
+        guard needsWrite else {
+            return
+        }
+
+        if hooks.isEmpty {
+            root.removeValue(forKey: "hooks")
+        } else {
+            root["hooks"] = hooks
+        }
+        try writeJSONObject(root, to: url)
+    }
+
+    private func removeInstalledScripts() throws {
+        for scriptURL in [claudeScriptURL, cursorScriptURL, codexScriptURL] {
+            guard fileManager.fileExists(atPath: scriptURL.path) else {
+                continue
+            }
+
+            try fileManager.removeItem(at: scriptURL)
+        }
+
+        guard
+            fileManager.fileExists(atPath: paths.hookScriptsDirectory.path),
+            (try? fileManager.contentsOfDirectory(atPath: paths.hookScriptsDirectory.path).isEmpty) == true
+        else {
+            return
+        }
+
+        try? fileManager.removeItem(at: paths.hookScriptsDirectory)
+    }
+
     private func readJSONObject(at url: URL) throws -> [String: Any] {
         guard fileManager.fileExists(atPath: url.path) else {
             return [:]
@@ -306,6 +457,10 @@ struct ActivityBarHookInstaller {
 
     private func shellQuoted(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private func containsHookCommand(_ value: Any?, scriptFileName: String) -> Bool {
+        (value as? String)?.contains(scriptFileName) == true
     }
 }
 

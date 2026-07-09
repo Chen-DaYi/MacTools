@@ -27,6 +27,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     private enum ControlID {
         static let trackingEnabled = "tracking-enabled"
         static let installHooks = "install-hooks"
+        static let uninstallHooks = "uninstall-hooks"
         static let resetToday = "reset-today"
         static let openInputMonitoring = "open-input-monitoring"
     }
@@ -121,9 +122,9 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
                     defaultValue: "记录 Claude Code、Cursor 和 Codex 的提示、工具调用与执行时长。"
                 ),
                 status: hookSettingsStatus,
-                footnote: controller.hookInstallFootnote,
-                buttonTitle: localization.string("settings.aiHooks.button", defaultValue: "安装或更新 Hook"),
-                actionID: ControlID.installHooks
+                footnote: controller.hookActionFootnote,
+                buttonTitle: hookActionButtonTitle,
+                actionID: hookActionControlID
             )
         ]
     }
@@ -208,8 +209,8 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
             isEnabled: true
         )
 
-        let installHooksControl = PluginPanelControl(
-            id: ControlID.installHooks,
+        let hookActionControl = PluginPanelControl(
+            id: hookActionControlID,
             kind: .actionRow,
             options: [],
             selectedOptionID: nil,
@@ -218,8 +219,8 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: localization.string("panel.action.installHooks", defaultValue: "安装或更新 AI Hook"),
-            actionIconSystemName: "terminal",
+            actionTitle: hookActionPanelTitle,
+            actionIconSystemName: controller.areHooksInstalled ? "trash" : "terminal",
             isEnabled: true
         )
 
@@ -240,9 +241,29 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         )
 
         return PluginPanelDetail(
-            primaryControls: [trackingControl, openSettingsControl, installHooksControl, resetControl],
+            primaryControls: [trackingControl, openSettingsControl, hookActionControl, resetControl],
             secondaryPanel: nil
         )
+    }
+
+    private var hookActionControlID: String {
+        controller.areHooksInstalled ? ControlID.uninstallHooks : ControlID.installHooks
+    }
+
+    private var hookActionButtonTitle: String {
+        if controller.areHooksInstalled {
+            return localization.string("settings.aiHooks.uninstallButton", defaultValue: "卸载 Hook")
+        }
+
+        return localization.string("settings.aiHooks.button", defaultValue: "安装或更新 Hook")
+    }
+
+    private var hookActionPanelTitle: String {
+        if controller.areHooksInstalled {
+            return localization.string("panel.action.uninstallHooks", defaultValue: "卸载 AI Hook")
+        }
+
+        return localization.string("panel.action.installHooks", defaultValue: "安装或更新 AI Hook")
     }
 
     private var inputMonitoringSettingsStatus: PluginSettingsSection.Status {
@@ -303,6 +324,8 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         switch controlID {
         case ControlID.installHooks:
             controller.installHooks()
+        case ControlID.uninstallHooks:
+            controller.uninstallHooks()
         case ControlID.resetToday:
             controller.resetToday()
         case ControlID.openInputMonitoring:
