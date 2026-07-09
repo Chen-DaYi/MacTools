@@ -48,7 +48,7 @@
       "summary": "統計輸入、前臺應用使用時長和 AI 編程活動"
     }
   },
-  "version": "1.0.13",
+  "version": "1.0.14",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "ActivityBar.bundle",

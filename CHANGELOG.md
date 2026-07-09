@@ -7,6 +7,22 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [plugins-1.0.32] - 2026-07-09
+
+### Added
+
+- System Status now includes settings for arranging component-panel metrics and optional compact menu bar metrics.
+- Added Window Switcher for shortcut-driven window switching with direct cycling, key-based selection, configurable ordering, stable key hints, and hover quit buttons.
+
+### Fixed
+
+- Activity Bar now includes Cursor coding activity in AI work summaries and coding tool trends.
+- Activity Bar now listens for installed AI hooks independently of Input Monitoring tracking.
+- Activity Bar can now uninstall the AI activity hooks it adds for Claude Code, Cursor, and Codex.
+- Battery Charge Limit now prefers the system charge ceiling path when available, uses the correct macOS 26 charging key, and verifies SMC writes to reduce USB-C display disconnects when charging stops at the limit.
+- System Status now reports total GPU usage from the accelerator's total activity metric instead of pipeline-specific counters, avoiding false 100% history samples.
+- Translator service order and enabled-state changes now persist immediately.
+
 ## [v1.0.30] - 2026-07-07
 
 ### Fixed
