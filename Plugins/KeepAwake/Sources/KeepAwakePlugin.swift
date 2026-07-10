@@ -31,10 +31,12 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private enum StorageKey {
         static let persistentEnabled = "persistent-enabled"
+        static let keepDisplayOn = "keep-display-on"
     }
 
     private enum ControlID {
         static let duration = "duration"
+        static let keepDisplayOn = "keep-display-on"
     }
 
     private enum DurationPreset: String {
@@ -68,6 +70,11 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         static let fiveHours = DurationPreset.fiveHours.rawValue
     }
 
+    private enum KeepDisplayOptionID {
+        static let allowSleep = "allow-sleep"
+        static let keepOn = "keep-on"
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -86,6 +93,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var lastErrorMessage: String?
     private var session: (any KeepAwakeSessionManaging)?
     private var selectedDurationPreset: DurationPreset = .forever
+    private var keepDisplayOn = false
     private var scheduledEndDate: Date?
     private var subtitleRefreshTimer: Timer?
 
@@ -99,6 +107,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.localization = localization
         self.storage = context.storage
         self.sessionFactory = sessionFactory
+        self.keepDisplayOn = context.storage.bool(forKey: StorageKey.keepDisplayOn)
         self.metadata = PluginMetadata(
             id: "keep-awake",
             title: localization.string("metadata.title", defaultValue: "阻止休眠"),
@@ -107,7 +116,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             order: 50,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "阻止系统空闲休眠，允许显示器息屏"
+                defaultValue: "阻止系统空闲休眠；可选保持屏幕常亮"
             )
         )
     }
@@ -132,6 +141,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func activate(context: PluginRuntimeContext) {
         storage = context.storage
+        keepDisplayOn = storage.bool(forKey: StorageKey.keepDisplayOn)
 
         guard storage.bool(forKey: StorageKey.persistentEnabled) else {
             return
@@ -158,11 +168,14 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         case .setDisclosureExpanded, .setNavigationSelection, .clearNavigationSelection:
             return
         case let .setSelection(controlID, optionID):
-            guard controlID == ControlID.duration else {
+            switch controlID {
+            case ControlID.duration:
+                updateDurationPreset(using: optionID)
+            case ControlID.keepDisplayOn:
+                updateKeepDisplayOn(using: optionID)
+            default:
                 return
             }
-
-            updateDurationPreset(using: optionID)
         case .setDate, .setSlider, .invokeAction:
             return
         }
@@ -183,11 +196,33 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             return metadata.defaultDescription
         }
 
-        guard let scheduledEndDate else {
-            return localization.string("panel.subtitle.enabled", defaultValue: "已启用")
+        if let scheduledEndDate {
+            let remaining = remainingTimeDescription(until: scheduledEndDate, referenceDate: Date())
+            if keepDisplayOn {
+                return localization.format(
+                    "panel.subtitle.remainingWithDisplayFormat",
+                    defaultValue: "%@ · 屏幕保持常亮",
+                    remaining
+                )
+            }
+            return localization.format(
+                "panel.subtitle.remainingAllowDisplaySleepFormat",
+                defaultValue: "%@ · 允许屏幕关闭",
+                remaining
+            )
         }
 
-        return remainingTimeDescription(until: scheduledEndDate, referenceDate: Date())
+        if keepDisplayOn {
+            return localization.string(
+                "panel.subtitle.enabledWithDisplay",
+                defaultValue: "已启用 · 屏幕保持常亮"
+            )
+        }
+
+        return localization.string(
+            "panel.subtitle.enabled",
+            defaultValue: "已启用 · 允许屏幕关闭"
+        )
     }
 
     private var panelDetail: PluginPanelDetail? {
@@ -216,6 +251,47 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
                     displayedComponents: nil,
                     datePickerStyle: nil,
                     sectionTitle: nil,
+                    isEnabled: true
+                ),
+                PluginPanelControl(
+                    id: ControlID.keepDisplayOn,
+                    kind: .selectList,
+                    options: [
+                        PluginPanelControlOption(
+                            id: KeepDisplayOptionID.allowSleep,
+                            title: localization.string(
+                                "panel.display.allowSleep",
+                                defaultValue: "允许关闭"
+                            ),
+                            subtitle: localization.string(
+                                "panel.display.allowSleep.subtitle",
+                                defaultValue: "系统保持唤醒，屏幕可按系统设置关闭"
+                            )
+                        ),
+                        PluginPanelControlOption(
+                            id: KeepDisplayOptionID.keepOn,
+                            title: localization.string(
+                                "panel.display.keepOn",
+                                defaultValue: "保持常亮"
+                            ),
+                            subtitle: localization.string(
+                                "panel.display.keepOn.subtitle",
+                                defaultValue: "系统与屏幕均不因空闲而关闭"
+                            )
+                        )
+                    ],
+                    selectedOptionID: keepDisplayOn
+                        ? KeepDisplayOptionID.keepOn
+                        : KeepDisplayOptionID.allowSleep,
+                    dateValue: nil,
+                    minimumDate: nil,
+                    displayedComponents: nil,
+                    datePickerStyle: nil,
+                    sectionTitle: localization.string(
+                        "panel.display.section",
+                        defaultValue: "空闲时屏幕"
+                    ),
+                    showsLeadingDivider: true,
                     isEnabled: true
                 )
             ],
@@ -259,6 +335,33 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         applyKeepAwakeConfiguration()
     }
 
+    private func updateKeepDisplayOn(using optionID: String) {
+        let shouldKeepDisplayOn: Bool
+        switch optionID {
+        case KeepDisplayOptionID.keepOn:
+            shouldKeepDisplayOn = true
+        case KeepDisplayOptionID.allowSleep:
+            shouldKeepDisplayOn = false
+        default:
+            return
+        }
+
+        guard keepDisplayOn != shouldKeepDisplayOn else {
+            return
+        }
+
+        keepDisplayOn = shouldKeepDisplayOn
+        persistKeepDisplayOnPreference()
+        lastErrorMessage = nil
+
+        guard session != nil else {
+            notifyChange()
+            return
+        }
+
+        applyKeepAwakeConfiguration()
+    }
+
     private func applyKeepAwakeConfiguration() {
         let session = session ?? sessionFactory(localization) { [weak self] reason in
             self?.handleSessionEnd(reason)
@@ -266,7 +369,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         let endDate = resolvedScheduledEndDate(referenceDate: Date())
 
         do {
-            try session.start(until: endDate)
+            try session.start(until: endDate, preventDisplaySleep: keepDisplayOn)
             self.session = session
             scheduledEndDate = endDate
             persistCurrentSelectionIfRunning()
@@ -388,6 +491,14 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func clearPersistentEnabled() {
         storage.removeObject(forKey: StorageKey.persistentEnabled)
+    }
+
+    private func persistKeepDisplayOnPreference() {
+        if keepDisplayOn {
+            storage.set(true, forKey: StorageKey.keepDisplayOn)
+        } else {
+            storage.removeObject(forKey: StorageKey.keepDisplayOn)
+        }
     }
 
     private func resetSelectionToDefaults() {

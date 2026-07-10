@@ -14,8 +14,9 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertTrue(firstPlugin.primaryPanelState.isOn)
         XCTAssertEqual(storage.values["persistent-enabled"] as? Bool, true)
         XCTAssertEqual(firstFactory.sessions.count, 1)
-        XCTAssertEqual(firstFactory.sessions[0].startedEndDates.count, 1)
-        XCTAssertNil(firstFactory.sessions[0].startedEndDates[0])
+        XCTAssertEqual(firstFactory.sessions[0].startedConfigurations.count, 1)
+        XCTAssertNil(firstFactory.sessions[0].startedConfigurations[0].endDate)
+        XCTAssertFalse(firstFactory.sessions[0].startedConfigurations[0].preventDisplaySleep)
 
         firstPlugin.deactivate(reason: .hostShutdown)
 
@@ -30,8 +31,9 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertTrue(secondPlugin.primaryPanelState.isOn)
         XCTAssertEqual(storage.values["persistent-enabled"] as? Bool, true)
         XCTAssertEqual(secondFactory.sessions.count, 1)
-        XCTAssertEqual(secondFactory.sessions[0].startedEndDates.count, 1)
-        XCTAssertNil(secondFactory.sessions[0].startedEndDates[0])
+        XCTAssertEqual(secondFactory.sessions[0].startedConfigurations.count, 1)
+        XCTAssertNil(secondFactory.sessions[0].startedConfigurations[0].endDate)
+        XCTAssertFalse(secondFactory.sessions[0].startedConfigurations[0].preventDisplaySleep)
     }
 
     func testTemporarySessionDoesNotRestoreAfterHostShutdown() {
@@ -45,8 +47,8 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertTrue(firstPlugin.primaryPanelState.isOn)
         XCTAssertNil(storage.values["persistent-enabled"])
         XCTAssertEqual(firstFactory.sessions.count, 1)
-        XCTAssertEqual(firstFactory.sessions[0].startedEndDates.count, 2)
-        XCTAssertNotNil(firstFactory.sessions[0].startedEndDates[1])
+        XCTAssertEqual(firstFactory.sessions[0].startedConfigurations.count, 2)
+        XCTAssertNotNil(firstFactory.sessions[0].startedConfigurations[1].endDate)
 
         firstPlugin.deactivate(reason: .hostShutdown)
 
@@ -83,6 +85,65 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertTrue(secondFactory.sessions.isEmpty)
     }
 
+    func testKeepDisplayOnDefaultsToOffAndUpdatesRunningSession() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.handleAction(.setSwitch(true))
+        XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, false)
+        XCTAssertNil(storage.values["keep-display-on"])
+
+        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+
+        XCTAssertEqual(factory.sessions[0].startedConfigurations.count, 2)
+        XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, true)
+        XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
+        XCTAssertEqual(
+            plugin.primaryPanelState.subtitle,
+            "已启用 · 屏幕保持常亮"
+        )
+
+        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "allow-sleep"))
+
+        XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, false)
+        XCTAssertNil(storage.values["keep-display-on"])
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已启用 · 允许屏幕关闭")
+    }
+
+    func testKeepDisplayOnPreferenceRestoresWithPermanentSession() {
+        let storage = KeepAwakeMemoryStorage()
+        let firstFactory = KeepAwakeSessionFactory()
+        let firstPlugin = firstFactory.makePlugin(storage: storage)
+
+        firstPlugin.handleAction(.setSwitch(true))
+        firstPlugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+        firstPlugin.deactivate(reason: .hostShutdown)
+
+        let secondFactory = KeepAwakeSessionFactory()
+        let secondPlugin = secondFactory.makePlugin(storage: storage)
+        secondPlugin.activate(context: Self.context(storage: storage))
+
+        XCTAssertTrue(secondPlugin.primaryPanelState.isOn)
+        XCTAssertEqual(secondFactory.sessions[0].startedConfigurations.last?.preventDisplaySleep, true)
+        XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
+    }
+
+    func testKeepDisplayOnPreferenceSurvivesSessionOff() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.handleAction(.setSwitch(true))
+        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+        plugin.handleAction(.setSwitch(false))
+
+        XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
+
+        plugin.handleAction(.setSwitch(true))
+        XCTAssertEqual(factory.sessions.last?.startedConfigurations.last?.preventDisplaySleep, true)
+    }
+
     private static func context(storage: KeepAwakeMemoryStorage) -> PluginRuntimeContext {
         PluginRuntimeContext(pluginID: "keep-awake", storage: storage)
     }
@@ -106,16 +167,23 @@ private final class KeepAwakeSessionFactory {
 
 @MainActor
 private final class MockKeepAwakeSession: KeepAwakeSessionManaging {
+    struct Configuration: Equatable {
+        let endDate: Date?
+        let preventDisplaySleep: Bool
+    }
+
     private let onEnd: (KeepAwakeSession.EndReason) -> Void
-    private(set) var startedEndDates: [Date?] = []
+    private(set) var startedConfigurations: [Configuration] = []
     private(set) var stopRequestCount = 0
 
     init(onEnd: @escaping (KeepAwakeSession.EndReason) -> Void) {
         self.onEnd = onEnd
     }
 
-    func start(until endDate: Date?) throws {
-        startedEndDates.append(endDate)
+    func start(until endDate: Date?, preventDisplaySleep: Bool) throws {
+        startedConfigurations.append(
+            Configuration(endDate: endDate, preventDisplaySleep: preventDisplaySleep)
+        )
     }
 
     func requestStop(reason: KeepAwakeSession.EndReason) {

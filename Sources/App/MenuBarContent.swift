@@ -210,7 +210,8 @@ enum MenuBarPanelLayout {
             }
         case .selectList:
             let titleHeight = control.sectionTitle == nil ? CGFloat(0) : CGFloat(15)
-            return titleHeight + CGFloat(control.options.count) * 26
+            let rowHeight: CGFloat = control.options.contains(where: { $0.subtitle != nil }) ? 36 : 26
+            return titleHeight + CGFloat(control.options.count) * rowHeight
         case .navigationList:
             return CGFloat(control.options.count) * navigationRowHeight
         case .slider:
@@ -1380,6 +1381,7 @@ private struct SelectListControl: View {
                 ForEach(control.options) { option in
                     SelectListRow(
                         title: option.title,
+                        subtitle: option.subtitle,
                         isSelected: option.id == control.selectedOptionID,
                         isEnabled: control.isEnabled,
                         action: { onSelect(option.id) }
@@ -1393,6 +1395,7 @@ private struct SelectListControl: View {
 
 private struct SelectListRow: View {
     let title: String
+    let subtitle: String?
     let isSelected: Bool
     let isEnabled: Bool
     let action: () -> Void
@@ -1407,17 +1410,29 @@ private struct SelectListRow: View {
 
             action()
         } label: {
-            HStack(spacing: 7) {
+            HStack(alignment: subtitle == nil ? .center : .top, spacing: 7) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .semibold))
                     .opacity(isSelected ? 1 : 0)
                     .frame(width: 12)
+                    .padding(.top, subtitle == nil ? 0 : 2)
 
-                Text(title)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                Spacer()
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 7)
             .padding(.vertical, MenuBarPanelLayout.selectRowVerticalPadding)
