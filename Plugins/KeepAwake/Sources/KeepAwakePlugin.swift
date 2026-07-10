@@ -198,42 +198,41 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         if let scheduledEndDate {
             let referenceDate = Date()
-            let remaining = remainingTimeDescription(until: scheduledEndDate, referenceDate: referenceDate)
+            let remaining = compactRemainingTimeDescription(
+                until: scheduledEndDate,
+                referenceDate: referenceDate
+            )
             let stopAt = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
                 until: scheduledEndDate,
                 referenceDate: referenceDate,
                 localization: localization
             )
-            let timedCore = localization.format(
-                "panel.subtitle.remainingWithStopFormat",
-                defaultValue: "%@（%@）",
-                remaining,
-                stopAt
-            )
             if keepDisplayOn {
                 return localization.format(
-                    "panel.subtitle.withDisplayFormat",
-                    defaultValue: "%@ · 屏幕保持常亮",
-                    timedCore
+                    "panel.subtitle.timedKeepDisplayFormat",
+                    defaultValue: "%@ · %@ · 常亮",
+                    remaining,
+                    stopAt
                 )
             }
             return localization.format(
-                "panel.subtitle.allowDisplaySleepFormat",
-                defaultValue: "%@ · 允许屏幕关闭",
-                timedCore
+                "panel.subtitle.timedAllowDisplayFormat",
+                defaultValue: "%@ · %@ · 可息屏",
+                remaining,
+                stopAt
             )
         }
 
         if keepDisplayOn {
             return localization.string(
                 "panel.subtitle.enabledWithDisplay",
-                defaultValue: "已启用 · 屏幕保持常亮"
+                defaultValue: "已启用 · 常亮"
             )
         }
 
         return localization.string(
             "panel.subtitle.enabled",
-            defaultValue: "已启用 · 允许屏幕关闭"
+            defaultValue: "已启用 · 可息屏"
         )
     }
 
@@ -399,7 +398,8 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         selectedDurationPreset.timeInterval.map(referenceDate.addingTimeInterval)
     }
 
-    private func remainingTimeDescription(
+    /// Compact remaining time for the feature-row subtitle (must stay short).
+    private func compactRemainingTimeDescription(
         until endDate: Date,
         referenceDate: Date
     ) -> String {
@@ -414,23 +414,23 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         if hours == 0 {
             return localization.format(
-                "panel.subtitle.remainingMinutesFormat",
-                defaultValue: "%d 分钟后自动停止",
+                "panel.subtitle.remainingMinutesShortFormat",
+                defaultValue: "%d分钟后",
                 remainingMinutes
             )
         }
 
         if minutes == 0 {
             return localization.format(
-                "panel.subtitle.remainingHoursFormat",
-                defaultValue: "%d 小时后自动停止",
+                "panel.subtitle.remainingHoursShortFormat",
+                defaultValue: "%d小时后",
                 hours
             )
         }
 
         return localization.format(
-            "panel.subtitle.remainingHoursMinutesFormat",
-            defaultValue: "%d 小时 %d 分钟后自动停止",
+            "panel.subtitle.remainingHoursMinutesShortFormat",
+            defaultValue: "%d小时%d分钟后",
             hours,
             minutes
         )
@@ -571,8 +571,13 @@ enum KeepAwakeStopScheduleFormatting {
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = timeZone
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
+        // Prefer compact hour+minute (often 24h), avoiding long "上午/下午" prefixes.
+        if let format = DateFormatter.dateFormat(fromTemplate: "Hm", options: 0, locale: locale) {
+            formatter.dateFormat = format
+        } else {
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+        }
         return formatter.string(from: date)
     }
 

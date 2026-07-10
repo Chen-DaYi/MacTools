@@ -149,67 +149,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "مفعّل · يمكن إطفاء الشاشة"
+            "value": "مفعّل · يمكن الإطفاء"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aktiv · Display darf ausgehen"
+            "value": "An · Darf aus"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On · Display may turn off"
+            "value": "On · May dim"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activado · La pantalla puede apagarse"
+            "value": "On · Puede apagar"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activé · L’écran peut s’éteindre"
+            "value": "On · Peut s’éteindre"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "オン · ディスプレイ消灯可"
+            "value": "オン · 消灯可"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용 중 · 디스플레이 끄기 허용"
+            "value": "사용 · 끄기 가능"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ativo · Tela pode desligar"
+            "value": "On · Pode desligar"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Вкл. · Экран может гаснуть"
+            "value": "Вкл · Можно гасить"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已启用 · 允许屏幕关闭"
+            "value": "已启用 · 可息屏"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已啟用 · 允許螢幕關閉"
+            "value": "已啟用 · 可息屏"
           }
         }
       }
@@ -220,67 +220,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "مفعّل · الشاشة تبقى مضاءة"
+            "value": "مفعّل · مضاءة"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aktiv · Display bleibt an"
+            "value": "An · Bleibt an"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On · Display stays on"
+            "value": "On · Stay on"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activado · Pantalla encendida"
+            "value": "On · Encendida"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activé · Écran allumé"
+            "value": "On · Allumé"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "オン · ディスプレイ常時オン"
+            "value": "オン · 常時オン"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용 중 · 디스플레이 유지"
+            "value": "사용 · 항상 켜짐"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ativo · Tela ligada"
+            "value": "On · Ligada"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Вкл. · Экран не гаснет"
+            "value": "Вкл · Не гаснет"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已启用 · 屏幕保持常亮"
+            "value": "已启用 · 常亮"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已啟用 · 螢幕保持常亮"
+            "value": "已啟用 · 常亮"
           }
         }
       }
@@ -711,219 +711,6 @@
         }
       }
     },
-    "panel.subtitle.remainingMinutesFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "يتوقف تلقائيًا خلال %d دقيقة"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stoppt automatisch in %d Minuten"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stops automatically in %d minutes"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Se detiene automáticamente en %d minutos"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "S'arrête automatiquement dans %d minutes"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 分後に自動的に停止します"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d분 후에 자동으로 중지"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Para automaticamente em %d minutos"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Останавливается автоматически через %d минут"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 分钟后自动停止"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 分鐘後自動停止"
-          }
-        }
-      }
-    },
-    "panel.subtitle.remainingHoursFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "يتوقف تلقائيًا خلال %d ساعة"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stoppt automatisch in %d Stunden"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stops automatically in %d hours"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Se detiene automáticamente en %d horas"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "S'arrête automatiquement dans %d heures"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 時間後に自動的に停止します"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d시간 후에 자동으로 중지"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Para automaticamente em %d horas"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Останавливается автоматически через %d часов"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 小时后自动停止"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 小時後自動停止"
-          }
-        }
-      }
-    },
-    "panel.subtitle.remainingHoursMinutesFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "يتوقف تلقائيًا خلال %d ساعة %d دقيقة"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stoppt automatisch in %d Stunden %d Minuten"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stops automatically in %d hours %d minutes"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Se detiene automáticamente en %d horas %d minutos"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "S'arrête automatiquement dans %d heures %d minutes"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 時間 %d 分後に自動的に停止します"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d시간 %d분 후에 자동으로 중지"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Para automaticamente em %d horas %d minutos"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Остановится автоматически через %d часов %d минут"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 小时 %d 分钟后自动停止"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%d 小時 %d 分鐘後自動停止"
-          }
-        }
-      }
-    },
     "error.invalidEndDate": {
       "extractionState": "manual",
       "localizations": {
@@ -1137,219 +924,6 @@
         }
       }
     },
-    "panel.subtitle.remainingWithStopFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%@)"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%@)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%@)"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%@)"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%@)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@（%@）"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%@)"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%@)"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%@)"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@（%@）"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@（%@）"
-          }
-        }
-      }
-    },
-    "panel.subtitle.withDisplayFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · الشاشة تبقى مضاءة"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Display bleibt an"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Display stays on"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Pantalla encendida"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Écran allumé"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · ディスプレイ常時オン"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · 디스플레이 유지"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Tela ligada"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Экран не гаснет"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · 屏幕保持常亮"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · 螢幕保持常亮"
-          }
-        }
-      }
-    },
-    "panel.subtitle.allowDisplaySleepFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · يمكن إطفاء الشاشة"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Display darf ausgehen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Display may turn off"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · La pantalla puede apagarse"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · L’écran peut s’éteindre"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · ディスプレイ消灯可"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · 디스플레이 끄기 허용"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Tela pode desligar"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Экран может гаснуть"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · 允许屏幕关闭"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · 允許螢幕關閉"
-          }
-        }
-      }
-    },
     "panel.subtitle.stopTomorrowAtTimeFormat": {
       "extractionState": "manual",
       "localizations": {
@@ -1488,6 +1062,361 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ %@"
+          }
+        }
+      }
+    },
+    "panel.subtitle.remainingMinutesShortFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "خلال %d د"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "noch %d Min."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%dm left"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d min"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d min"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d分後"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d분 후"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d min"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %d мин"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d分钟后"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d分鐘後"
+          }
+        }
+      }
+    },
+    "panel.subtitle.remainingHoursShortFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "خلال %d س"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "noch %d Std."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%dh left"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d h"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d h"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d時間後"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d시간 후"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d h"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %d ч"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d小时后"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d小時後"
+          }
+        }
+      }
+    },
+    "panel.subtitle.remainingHoursMinutesShortFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "خلال %d س %d د"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "noch %d Std. %d Min."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%dh %dm left"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d h %d min"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d h %d min"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d時間%d分後"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d시간 %d분 후"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d h %d min"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %d ч %d мин"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d小时%d分钟后"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d小時%d分鐘後"
+          }
+        }
+      }
+    },
+    "panel.subtitle.timedKeepDisplayFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · مضاءة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · An"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · Stay on"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · On"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · On"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · 常時オン"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · 켜짐"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · On"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · Вкл"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · 常亮"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · 常亮"
+          }
+        }
+      }
+    },
+    "panel.subtitle.timedAllowDisplayFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · يمكن الإطفاء"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · Darf aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · May dim"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · Off ok"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · Off ok"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · 消灯可"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · 끄기 가능"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · Off ok"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · Можно"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · 可息屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · 可息屏"
           }
         }
       }

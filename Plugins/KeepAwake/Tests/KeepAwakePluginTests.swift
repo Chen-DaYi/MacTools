@@ -101,14 +101,14 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
         XCTAssertEqual(
             plugin.primaryPanelState.subtitle,
-            "已启用 · 屏幕保持常亮"
+            "已启用 · 常亮"
         )
 
         plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "allow-sleep"))
 
         XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, false)
         XCTAssertNil(storage.values["keep-display-on"])
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已启用 · 允许屏幕关闭")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已启用 · 可息屏")
     }
 
     func testKeepDisplayOnPreferenceRestoresWithPermanentSession() {
@@ -154,9 +154,12 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
 
         let subtitle = plugin.primaryPanelState.subtitle
-        XCTAssertTrue(subtitle.contains("自动停止"), subtitle)
-        XCTAssertTrue(subtitle.contains("（") && subtitle.contains("）"), subtitle)
-        XCTAssertTrue(subtitle.contains("屏幕保持常亮"), subtitle)
+        XCTAssertTrue(subtitle.contains("小时后") || subtitle.contains("h"), subtitle)
+        XCTAssertTrue(subtitle.contains("·"), subtitle)
+        XCTAssertTrue(subtitle.contains("常亮") || subtitle.contains("On") || subtitle.contains("on"), subtitle)
+        // Compact form should not use the long phrases that truncate in the row.
+        XCTAssertFalse(subtitle.contains("自动停止"), subtitle)
+        XCTAssertFalse(subtitle.contains("屏幕保持常亮"), subtitle)
     }
 
     private static func context(storage: KeepAwakeMemoryStorage) -> PluginRuntimeContext {
@@ -186,9 +189,8 @@ final class KeepAwakeStopScheduleFormattingTests: XCTestCase {
             locale: locale
         )
 
-        // Locale/time formatting can vary (e.g. narrow no-break space before AM/PM).
-        XCTAssertTrue(label.contains("4:30"), label)
-        XCTAssertTrue(label.contains("PM") || label.contains("pm") || label.contains("下午"), label)
+        // Compact "Hm" template is often 24h (16:30) depending on locale.
+        XCTAssertTrue(label.contains("4:30") || label.contains("16:30"), label)
     }
 
     func testNextDayStopUsesTomorrowPrefix() {
