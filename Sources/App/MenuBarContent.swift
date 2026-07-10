@@ -23,6 +23,9 @@ enum MenuBarPanelLayout {
     static let detailControlSpacing: CGFloat = 8
     static let emptyContentHeight: CGFloat = 150
     static let actionRowVerticalPadding: CGFloat = 8
+    static let segmentedControlHeight: CGFloat = 24
+    static let segmentedStatusSpacing: CGFloat = 4
+    static let segmentedStatusHeight: CGFloat = 12
     static let selectRowVerticalPadding: CGFloat = 5
     static let selectRowHeight: CGFloat = 26
     // Reserve the complete title plus two-line subtitle layout in every localized row.
@@ -203,7 +206,9 @@ enum MenuBarPanelLayout {
     private static func controlHeight(for control: PluginPanelControl) -> CGFloat {
         switch control.kind {
         case .segmented:
-            return 24
+            let hasStatus = control.valueLabel?.isEmpty == false
+            return segmentedControlHeight
+                + (hasStatus ? segmentedStatusSpacing + segmentedStatusHeight : 0)
         case .datePicker:
             switch control.datePickerStyle ?? .compact {
             case .compact:
@@ -1198,23 +1203,41 @@ private struct PluginPanelDetailView: View {
     private func panelControl(_ control: PluginPanelControl) -> some View {
         switch control.kind {
         case .segmented:
-            Picker(
-                String(),
-                selection: Binding(
-                    get: { control.selectedOptionID ?? "" },
-                    set: { newValue in
-                        onSelectionChange(control.id, newValue)
+            VStack(alignment: .leading, spacing: MenuBarPanelLayout.segmentedStatusSpacing) {
+                Picker(
+                    String(),
+                    selection: Binding(
+                        get: { control.selectedOptionID ?? "" },
+                        set: { newValue in
+                            onSelectionChange(control.id, newValue)
+                        }
+                    )
+                ) {
+                    ForEach(control.options) { option in
+                        Text(option.title).tag(option.id)
                     }
-                )
-            ) {
-                ForEach(control.options) { option in
-                    Text(option.title).tag(option.id)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: MenuBarPanelLayout.segmentedControlHeight)
+                .disabled(!control.isEnabled)
+
+                if let status = control.valueLabel, !status.isEmpty {
+                    Text(status)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: MenuBarPanelLayout.segmentedStatusHeight,
+                            maxHeight: MenuBarPanelLayout.segmentedStatusHeight,
+                            alignment: .leading
+                        )
+                        .help(status)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .disabled(!control.isEnabled)
         case .datePicker:
             switch control.datePickerStyle ?? .compact {
             case .compact:

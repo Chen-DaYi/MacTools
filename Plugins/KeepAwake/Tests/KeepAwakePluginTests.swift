@@ -94,6 +94,8 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.handleAction(.setSwitch(true))
         XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, false)
         XCTAssertNil(storage.values["keep-display-on"])
+        XCTAssertEqual(durationStatusText(in: plugin.primaryPanelState), "不会自动停止")
+        XCTAssertEqual(displayPolicySectionTitle(in: plugin.primaryPanelState), "屏幕")
 
         plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
 
@@ -209,12 +211,15 @@ final class KeepAwakePluginTests: XCTestCase {
 
         let subtitle = plugin.primaryPanelState.subtitle
         let displayOptionTitle = selectedDisplayOptionTitle(in: plugin.primaryPanelState)
+        let durationStatus = durationStatusText(in: plugin.primaryPanelState)
         XCTAssertTrue(subtitle.contains(":"), subtitle)
         XCTAssertTrue(subtitle.contains("·"), subtitle)
         XCTAssertNotNil(displayOptionTitle)
         XCTAssertTrue(displayOptionTitle.map(subtitle.hasSuffix) ?? false, subtitle)
         XCTAssertFalse(subtitle.contains("小时后") || subtitle.contains("h left"), subtitle)
         XCTAssertEqual(subtitle.filter { $0 == "·" }.count, 1, subtitle)
+        XCTAssertNotNil(durationStatus)
+        XCTAssertTrue(durationStatus?.contains("剩余") == true, durationStatus ?? "")
     }
 
     private func selectedDisplayOptionTitle(in state: PluginPanelState) -> String? {
@@ -223,6 +228,14 @@ final class KeepAwakePluginTests: XCTestCase {
         }
 
         return control.options.first(where: { $0.id == control.selectedOptionID })?.title
+    }
+
+    private func durationStatusText(in state: PluginPanelState) -> String? {
+        state.detail?.primaryControls.first(where: { $0.id == "duration" })?.valueLabel
+    }
+
+    private func displayPolicySectionTitle(in state: PluginPanelState) -> String? {
+        state.detail?.primaryControls.first(where: { $0.id == "keep-display-on" })?.sectionTitle
     }
 
     private static func context(storage: KeepAwakeMemoryStorage) -> PluginRuntimeContext {

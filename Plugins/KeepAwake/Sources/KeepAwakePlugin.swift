@@ -95,7 +95,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var selectedDurationPreset: DurationPreset = .forever
     private var keepDisplayOn = false
     private var scheduledEndDate: Date?
-    private var subtitleRefreshTimer: Timer?
+    private var timedStateRefreshTimer: Timer?
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "keep-awake"),
@@ -153,7 +153,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func refresh() {
-        scheduleSubtitleRefreshIfNeeded()
+        scheduleTimedStateRefreshIfNeeded()
     }
 
     func deactivate(reason: PluginDeactivationReason) {
@@ -232,6 +232,20 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         )
     }
 
+    private var durationStatusText: String {
+        guard let scheduledEndDate else {
+            return localization.string(
+                "panel.duration.noAutomaticStop",
+                defaultValue: "不会自动停止"
+            )
+        }
+
+        return remainingTimeDescription(
+            until: scheduledEndDate,
+            referenceDate: Date()
+        )
+    }
+
     private var panelDetail: PluginPanelDetail? {
         guard session != nil else {
             return nil
@@ -258,6 +272,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
                     displayedComponents: nil,
                     datePickerStyle: nil,
                     sectionTitle: nil,
+                    valueLabel: durationStatusText,
                     isEnabled: true
                 ),
                 PluginPanelControl(
@@ -290,7 +305,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
                     datePickerStyle: nil,
                     sectionTitle: localization.string(
                         "panel.display.section",
-                        defaultValue: "空闲时屏幕"
+                        defaultValue: "屏幕"
                     ),
                     showsLeadingDivider: true,
                     isEnabled: true
@@ -383,7 +398,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             self.session = session
             scheduledEndDate = endDate
             persistCurrentSelectionIfRunning()
-            scheduleSubtitleRefreshIfNeeded()
+            scheduleTimedStateRefreshIfNeeded()
             lastErrorMessage = nil
             notifyChange()
         } catch {
@@ -397,8 +412,45 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         selectedDurationPreset.timeInterval.map(referenceDate.addingTimeInterval)
     }
 
-    private func scheduleSubtitleRefreshIfNeeded() {
-        invalidateSubtitleRefreshTimer()
+    private func remainingTimeDescription(
+        until endDate: Date,
+        referenceDate: Date
+    ) -> String {
+        let remainingDuration = max(endDate.timeIntervalSince(referenceDate), 0)
+        let remainingMinutes = max(
+            Int(ceil(remainingDuration / Timing.secondsPerMinute)),
+            1
+        )
+
+        let hours = remainingMinutes / 60
+        let minutes = remainingMinutes % 60
+
+        if hours == 0 {
+            return localization.format(
+                "panel.duration.remainingMinutesFormat",
+                defaultValue: "剩余 %d 分钟",
+                remainingMinutes
+            )
+        }
+
+        if minutes == 0 {
+            return localization.format(
+                "panel.duration.remainingHoursFormat",
+                defaultValue: "剩余 %d 小时",
+                hours
+            )
+        }
+
+        return localization.format(
+            "panel.duration.remainingHoursMinutesFormat",
+            defaultValue: "剩余 %d 小时 %d 分钟",
+            hours,
+            minutes
+        )
+    }
+
+    private func scheduleTimedStateRefreshIfNeeded() {
+        invalidateTimedStateRefreshTimer()
 
         guard session != nil, let scheduledEndDate else {
             return
@@ -418,27 +470,27 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.handleSubtitleRefreshTimerFired()
+                self?.handleTimedStateRefreshTimerFired()
             }
         }
         timer.tolerance = min(1, nextRefreshInterval * 0.1)
         RunLoop.main.add(timer, forMode: .common)
-        subtitleRefreshTimer = timer
+        timedStateRefreshTimer = timer
     }
 
-    private func handleSubtitleRefreshTimerFired() {
+    private func handleTimedStateRefreshTimerFired() {
         guard session != nil, scheduledEndDate != nil else {
-            invalidateSubtitleRefreshTimer()
+            invalidateTimedStateRefreshTimer()
             return
         }
 
         notifyChange()
-        scheduleSubtitleRefreshIfNeeded()
+        scheduleTimedStateRefreshIfNeeded()
     }
 
-    private func invalidateSubtitleRefreshTimer() {
-        subtitleRefreshTimer?.invalidate()
-        subtitleRefreshTimer = nil
+    private func invalidateTimedStateRefreshTimer() {
+        timedStateRefreshTimer?.invalidate()
+        timedStateRefreshTimer = nil
     }
 
     private func handleSessionEnd(_ reason: KeepAwakeSession.EndReason) {
@@ -477,7 +529,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     private func resetSelectionToDefaults() {
         selectedDurationPreset = .forever
         scheduledEndDate = nil
-        invalidateSubtitleRefreshTimer()
+        invalidateTimedStateRefreshTimer()
     }
 
     private func notifyChange() {

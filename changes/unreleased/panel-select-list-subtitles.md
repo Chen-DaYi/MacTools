@@ -4,4 +4,4 @@ type: changed
 area: Feature Panel
 ---
 
-Feature-panel select lists can show option subtitles for clearer choices.
+Feature-panel controls can show supporting status text and option subtitles for clearer choices.
