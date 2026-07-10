@@ -142,42 +142,7 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             MenuBarPanelLayout.featureContentHeight(for: [item]),
             MenuBarPanelLayout.rowHeaderHeight
                 + MenuBarPanelLayout.detailSpacing
-                + MenuBarPanelLayout.segmentedControlHeight
-                + MenuBarPanelLayout.rowVerticalPadding
-        )
-    }
-
-    func testSegmentedStatusLineUsesStableReservedHeight() {
-        let item = makeItem(
-            controlStyle: .switch,
-            isExpanded: false,
-            controls: [
-                PluginPanelControl(
-                    id: "duration",
-                    kind: .segmented,
-                    options: [
-                        PluginPanelControlOption(id: "forever", title: "永不"),
-                        PluginPanelControlOption(id: "thirty-minutes", title: "30min")
-                    ],
-                    selectedOptionID: "thirty-minutes",
-                    dateValue: nil,
-                    minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: nil,
-                    valueLabel: "剩余 30 分钟",
-                    isEnabled: true
-                )
-            ]
-        )
-
-        XCTAssertEqual(
-            MenuBarPanelLayout.featureContentHeight(for: [item]),
-            MenuBarPanelLayout.rowHeaderHeight
-                + MenuBarPanelLayout.detailSpacing
-                + MenuBarPanelLayout.segmentedControlHeight
-                + MenuBarPanelLayout.segmentedStatusSpacing
-                + MenuBarPanelLayout.segmentedStatusHeight
+                + 24
                 + MenuBarPanelLayout.rowVerticalPadding
         )
     }

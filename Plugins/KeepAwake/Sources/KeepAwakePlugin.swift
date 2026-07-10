@@ -198,6 +198,10 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         if let scheduledEndDate {
             let referenceDate = Date()
+            let remaining = remainingTimeDescription(
+                until: scheduledEndDate,
+                referenceDate: referenceDate
+            )
             let stopAt = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
                 until: scheduledEndDate,
                 referenceDate: referenceDate,
@@ -206,16 +210,15 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             return localization.format(
                 "panel.subtitle.timedFormat",
                 defaultValue: "%@ · %@",
-                stopAt,
-                selectedDisplayOptionTitle
+                remaining,
+                stopAt
             )
         }
 
-        return selectedDisplayOptionTitle
-    }
-
-    private var selectedDisplayOptionTitle: String {
-        keepDisplayOn ? keepDisplayOnOptionTitle : allowDisplayOffOptionTitle
+        return localization.string(
+            "panel.duration.noAutomaticStop",
+            defaultValue: "不会自动停止"
+        )
     }
 
     private var allowDisplayOffOptionTitle: String {
@@ -229,20 +232,6 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         localization.string(
             "panel.display.keepOn",
             defaultValue: "保持常亮"
-        )
-    }
-
-    private var durationStatusText: String {
-        guard let scheduledEndDate else {
-            return localization.string(
-                "panel.duration.noAutomaticStop",
-                defaultValue: "不会自动停止"
-            )
-        }
-
-        return remainingTimeDescription(
-            until: scheduledEndDate,
-            referenceDate: Date()
         )
     }
 
@@ -272,7 +261,6 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
                     displayedComponents: nil,
                     datePickerStyle: nil,
                     sectionTitle: nil,
-                    valueLabel: durationStatusText,
                     isEnabled: true
                 ),
                 PluginPanelControl(
