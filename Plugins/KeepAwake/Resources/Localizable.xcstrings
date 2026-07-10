@@ -1,6 +1,5 @@
 {
   "sourceLanguage": "zh-Hans",
-  "version": "1.0",
   "strings": {
     "metadata.title": {
       "extractionState": "manual",
@@ -1280,5 +1279,6 @@
         }
       }
     }
-  }
+  },
+  "version": "1.0"
 }
