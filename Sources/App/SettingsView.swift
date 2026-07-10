@@ -695,12 +695,12 @@ private struct PluginConfigurationDetailPane: View {
                                 )
                             }
 
-                            if !item.shortcutItems.isEmpty {
-                                PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
-                            }
-
                             if item.hasCustomConfiguration {
                                 pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
+                            }
+
+                            if !item.shortcutItems.isEmpty {
+                                PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
                             }
                         }
                         .padding(PluginSettingsTheme.Spacing.pagePadding)
