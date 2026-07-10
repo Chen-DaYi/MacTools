@@ -217,7 +217,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             }
             return localization.format(
                 "panel.subtitle.timedAllowDisplayFormat",
-                defaultValue: "%@ · %@ · 可息屏",
+                defaultValue: "%@ · %@ · 可关屏",
                 remaining,
                 stopAt
             )
@@ -232,7 +232,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         return localization.string(
             "panel.subtitle.enabled",
-            defaultValue: "已启用 · 可息屏"
+            defaultValue: "已启用 · 可关屏"
         )
     }
 

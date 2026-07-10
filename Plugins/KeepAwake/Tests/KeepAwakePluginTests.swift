@@ -108,7 +108,7 @@ final class KeepAwakePluginTests: XCTestCase {
 
         XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, false)
         XCTAssertNil(storage.values["keep-display-on"])
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已启用 · 可息屏")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已启用 · 可关屏")
     }
 
     func testKeepDisplayOnPreferenceRestoresWithPermanentSession() {

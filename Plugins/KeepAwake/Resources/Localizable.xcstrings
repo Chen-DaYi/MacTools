@@ -161,7 +161,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On · May sleep"
+            "value": "On · Allow off"
           }
         },
         "es": {
@@ -203,13 +203,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已启用 · 可息屏"
+            "value": "已启用 · 可关屏"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已啟用 · 可息屏"
+            "value": "已啟用 · 可關屏"
           }
         }
       }
@@ -1368,19 +1368,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %@ · May sleep"
+            "value": "%@ · %@ · Allow off"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %@ · Off ok"
+            "value": "%@ · %@ · Puede apagar"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %@ · Off ok"
+            "value": "%@ · %@ · Peut s’éteindre"
           }
         },
         "ja": {
@@ -1398,25 +1398,25 @@
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %@ · Off ok"
+            "value": "%@ · %@ · Pode desligar"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %@ · Можно"
+            "value": "%@ · %@ · Можно гасить"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %@ · 可息屏"
+            "value": "%@ · %@ · 可关屏"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %@ · 可息屏"
+            "value": "%@ · %@ · 可關屏"
           }
         }
       }
