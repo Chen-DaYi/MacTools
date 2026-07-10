@@ -197,18 +197,30 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
 
         if let scheduledEndDate {
-            let remaining = remainingTimeDescription(until: scheduledEndDate, referenceDate: Date())
+            let referenceDate = Date()
+            let remaining = remainingTimeDescription(until: scheduledEndDate, referenceDate: referenceDate)
+            let stopAt = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
+                until: scheduledEndDate,
+                referenceDate: referenceDate,
+                localization: localization
+            )
+            let timedCore = localization.format(
+                "panel.subtitle.remainingWithStopFormat",
+                defaultValue: "%@（%@）",
+                remaining,
+                stopAt
+            )
             if keepDisplayOn {
                 return localization.format(
-                    "panel.subtitle.remainingWithDisplayFormat",
+                    "panel.subtitle.withDisplayFormat",
                     defaultValue: "%@ · 屏幕保持常亮",
-                    remaining
+                    timedCore
                 )
             }
             return localization.format(
-                "panel.subtitle.remainingAllowDisplaySleepFormat",
+                "panel.subtitle.allowDisplaySleepFormat",
                 defaultValue: "%@ · 允许屏幕关闭",
-                remaining
+                timedCore
             )
         }
 
@@ -509,5 +521,73 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func notifyChange() {
         onStateChange?()
+    }
+}
+
+/// Formats the scheduled stop moment for Keep Awake subtitles.
+enum KeepAwakeStopScheduleFormatting {
+    static func absoluteStopLabel(
+        until endDate: Date,
+        referenceDate: Date,
+        calendar: Calendar = .current,
+        localization: PluginLocalization,
+        locale: Locale = .current
+    ) -> String {
+        let timeZone = calendar.timeZone
+        let timeText = timeString(from: endDate, locale: locale, timeZone: timeZone)
+
+        if calendar.isDate(endDate, inSameDayAs: referenceDate) {
+            return timeText
+        }
+
+        if let tomorrowStart = calendar.date(
+            byAdding: .day,
+            value: 1,
+            to: calendar.startOfDay(for: referenceDate)
+        ), calendar.isDate(endDate, inSameDayAs: tomorrowStart) {
+            return localization.format(
+                "panel.subtitle.stopTomorrowAtTimeFormat",
+                defaultValue: "明天 %@",
+                timeText
+            )
+        }
+
+        let dateText = dateString(
+            from: endDate,
+            referenceDate: referenceDate,
+            calendar: calendar,
+            locale: locale,
+            timeZone: timeZone
+        )
+        return localization.format(
+            "panel.subtitle.stopAtDateTimeFormat",
+            defaultValue: "%@ %@",
+            dateText,
+            timeText
+        )
+    }
+
+    private static func timeString(from date: Date, locale: Locale, timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
+    }
+
+    private static func dateString(
+        from date: Date,
+        referenceDate: Date,
+        calendar: Calendar,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: referenceDate)
+        formatter.setLocalizedDateFormatFromTemplate(sameYear ? "MMMd" : "yMMMd")
+        return formatter.string(from: date)
     }
 }

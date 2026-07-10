@@ -144,8 +144,98 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions.last?.startedConfigurations.last?.preventDisplaySleep, true)
     }
 
+    func testTimedSessionSubtitleIncludesRelativeAndAbsoluteStop() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.handleAction(.setSwitch(true))
+        plugin.handleAction(.setSelection(controlID: "duration", optionID: "twoHours"))
+        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+
+        let subtitle = plugin.primaryPanelState.subtitle
+        XCTAssertTrue(subtitle.contains("自动停止"), subtitle)
+        XCTAssertTrue(subtitle.contains("（") && subtitle.contains("）"), subtitle)
+        XCTAssertTrue(subtitle.contains("屏幕保持常亮"), subtitle)
+    }
+
     private static func context(storage: KeepAwakeMemoryStorage) -> PluginRuntimeContext {
         PluginRuntimeContext(pluginID: "keep-awake", storage: storage)
+    }
+}
+
+final class KeepAwakeStopScheduleFormattingTests: XCTestCase {
+    private let localization = PluginLocalization(bundle: .main)
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private var locale: Locale { Locale(identifier: "en_US_POSIX") }
+
+    func testSameDayStopUsesTimeOnly() {
+        let reference = date(year: 2026, month: 7, day: 10, hour: 14, minute: 0)
+        let end = date(year: 2026, month: 7, day: 10, hour: 16, minute: 30)
+
+        let label = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
+            until: end,
+            referenceDate: reference,
+            calendar: calendar,
+            localization: localization,
+            locale: locale
+        )
+
+        // Locale/time formatting can vary (e.g. narrow no-break space before AM/PM).
+        XCTAssertTrue(label.contains("4:30"), label)
+        XCTAssertTrue(label.contains("PM") || label.contains("pm") || label.contains("下午"), label)
+    }
+
+    func testNextDayStopUsesTomorrowPrefix() {
+        let reference = date(year: 2026, month: 7, day: 10, hour: 22, minute: 0)
+        let end = date(year: 2026, month: 7, day: 11, hour: 1, minute: 15)
+
+        let label = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
+            until: end,
+            referenceDate: reference,
+            calendar: calendar,
+            localization: localization,
+            locale: locale
+        )
+
+        // PluginLocalization falls back to default Chinese copy when the key is not in the test host bundle.
+        XCTAssertTrue(label.contains("1:15"), label)
+        XCTAssertTrue(
+            label.contains("Tomorrow") || label.contains("明天"),
+            label
+        )
+    }
+
+    func testLaterDayStopIncludesDate() {
+        let reference = date(year: 2026, month: 7, day: 10, hour: 12, minute: 0)
+        let end = date(year: 2026, month: 7, day: 12, hour: 9, minute: 5)
+
+        let label = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
+            until: end,
+            referenceDate: reference,
+            calendar: calendar,
+            localization: localization,
+            locale: locale
+        )
+
+        XCTAssertTrue(label.contains("9:05"), label)
+        XCTAssertFalse(label.contains("Tomorrow") || label.contains("明天"), label)
+        XCTAssertTrue(label.contains("Jul") || label.contains("7") || label.contains("12"), label)
+    }
+
+    private func date(year: Int, month: Int, day: Int, hour: Int, minute: Int) -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        return calendar.date(from: components)!
     }
 }
 
