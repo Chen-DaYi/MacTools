@@ -2,16 +2,100 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
+enum FeatureManagementTableMode: Equatable {
+    case installed
+    case surface(PluginDisplaySurface)
+
+    var supportsReordering: Bool {
+        if case .surface = self {
+            return true
+        }
+        return false
+    }
+}
+
+enum FeatureManagementReorderPolicy {
+    static func canReorder(
+        mode: FeatureManagementTableMode,
+        isReorderEnabled: Bool
+    ) -> Bool {
+        mode.supportsReordering && isReorderEnabled
+    }
+
+    static func targetOffset(
+        for pluginID: String,
+        proposedRow: Int,
+        items: [FeatureManagementTableItem],
+        mode: FeatureManagementTableMode,
+        isReorderEnabled: Bool
+    ) -> Int? {
+        guard canReorder(mode: mode, isReorderEnabled: isReorderEnabled) else {
+            return nil
+        }
+        guard items.contains(where: { $0.id == pluginID }) else {
+            return nil
+        }
+
+        return min(max(proposedRow, 0), items.count)
+    }
+}
+
+struct FeatureManagementTableItem: Identifiable {
+    let id: String
+    let title: String
+    let description: String
+    let iconName: String
+    let iconTint: Color
+    let capabilities: PluginHostCapabilities
+    let isGloballyEnabled: Bool
+    let isVisible: Bool
+    let isVisibleOnOtherSurface: Bool
+    let isActive: Bool
+    let category: String?
+    let releaseChannel: String?
+
+    init(installedItem item: InstalledPluginItem) {
+        id = item.id
+        title = item.title
+        description = item.description
+        iconName = item.iconName
+        iconTint = item.iconTint
+        capabilities = item.capabilities
+        isGloballyEnabled = item.isGloballyEnabled
+        isVisible = item.isGloballyEnabled
+        isVisibleOnOtherSurface = false
+        isActive = item.isActive
+        category = item.category
+        releaseChannel = item.releaseChannel
+    }
+
+    init(surfaceItem item: PluginSurfaceLayoutItem) {
+        id = item.id
+        title = item.title
+        description = item.description
+        iconName = item.iconName
+        iconTint = item.iconTint
+        capabilities = item.capabilities
+        isGloballyEnabled = item.isGloballyEnabled
+        isVisible = item.isVisible
+        isVisibleOnOtherSurface = item.isVisibleOnOtherSurface
+        isActive = item.isActive
+        category = item.category
+        releaseChannel = item.releaseChannel
+    }
+}
+
 struct FeatureManagementTableView: NSViewRepresentable {
     static let rowHeight: CGFloat = 62
     static let rowSpacing: CGFloat = 6
     static let verticalContentInset: CGFloat = 6
     private static let dragType = NSPasteboard.PasteboardType("com.ggbond.mactools.feature-management-item")
 
-    let items: [PluginFeatureManagementItem]
+    let items: [FeatureManagementTableItem]
+    let mode: FeatureManagementTableMode
     var isReorderEnabled: Bool = true
-    let onVisibilityChange: (String, Bool) -> Void
-    let onMove: (String, Int) -> Void
+    let onToggleChange: (String, Bool) -> Void
+    var onMove: (String, Int) -> Void = { _, _ in }
 
     static func preferredHeight(for itemCount: Int) -> CGFloat {
         let visibleItemCount = max(itemCount, 1)
@@ -90,6 +174,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
         let contentWidth = max(scrollView.contentSize.width, 1)
         let signature = FeatureManagementTableSignature(
             items: items,
+            mode: mode,
             isReorderEnabled: isReorderEnabled,
             contentWidth: contentWidth
         )
@@ -139,16 +224,20 @@ struct FeatureManagementTableView: NSViewRepresentable {
             let item = parent.items[row]
             view.configure(
                 item: item,
-                showsHandle: parent.isReorderEnabled,
+                mode: parent.mode,
+                showsHandle: parent.mode.supportsReordering && parent.isReorderEnabled,
                 onVisibilityChange: { [weak self] isVisible in
-                    self?.parent.onVisibilityChange(item.id, isVisible)
+                    self?.parent.onToggleChange(item.id, isVisible)
                 }
             )
             return view
         }
 
         func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
-            guard parent.isReorderEnabled else {
+            guard FeatureManagementReorderPolicy.canReorder(
+                mode: parent.mode,
+                isReorderEnabled: parent.isReorderEnabled
+            ) else {
                 return nil
             }
 
@@ -199,6 +288,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
 
                 let image = FeatureManagementDragPreview.image(
                     for: item,
+                    mode: parent.mode,
                     width: tableView.bounds.width
                 )
                 let frame = NSRect(
@@ -215,7 +305,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
             proposedRow row: Int,
             proposedDropOperation dropOperation: NSTableView.DropOperation
         ) -> NSDragOperation {
-            guard parent.isReorderEnabled else {
+            guard FeatureManagementReorderPolicy.canReorder(
+                mode: parent.mode,
+                isReorderEnabled: parent.isReorderEnabled
+            ) else {
                 return []
             }
 
@@ -234,17 +327,19 @@ struct FeatureManagementTableView: NSViewRepresentable {
             row: Int,
             dropOperation: NSTableView.DropOperation
         ) -> Bool {
-            guard parent.isReorderEnabled else {
-                return false
-            }
-
             guard
-                let draggedID = info.draggingPasteboard.string(forType: FeatureManagementTableView.dragType)
+                let draggedID = info.draggingPasteboard.string(forType: FeatureManagementTableView.dragType),
+                let targetRow = FeatureManagementReorderPolicy.targetOffset(
+                    for: draggedID,
+                    proposedRow: row,
+                    items: parent.items,
+                    mode: parent.mode,
+                    isReorderEnabled: parent.isReorderEnabled
+                )
             else {
                 return false
             }
 
-            let targetRow = min(max(row, 0), parent.items.count)
             parent.onMove(draggedID, targetRow)
             return true
         }
@@ -258,18 +353,22 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
         let description: String
         let iconName: String
         let isVisible: Bool
+        let isGloballyEnabled: Bool
+        let isVisibleOnOtherSurface: Bool
         let isActive: Bool
-        let presentation: PluginFeaturePresentation
+        let capabilities: PluginHostCapabilities
         let category: String?
         let releaseChannel: String?
     }
 
     let rows: [Row]
+    let mode: FeatureManagementTableMode
     let isReorderEnabled: Bool
     let contentWidth: CGFloat
 
     init(
-        items: [PluginFeatureManagementItem],
+        items: [FeatureManagementTableItem],
+        mode: FeatureManagementTableMode,
         isReorderEnabled: Bool,
         contentWidth: CGFloat
     ) {
@@ -280,12 +379,15 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
                 description: $0.description,
                 iconName: $0.iconName,
                 isVisible: $0.isVisible,
+                isGloballyEnabled: $0.isGloballyEnabled,
+                isVisibleOnOtherSurface: $0.isVisibleOnOtherSurface,
                 isActive: $0.isActive,
-                presentation: $0.presentation,
+                capabilities: $0.capabilities,
                 category: $0.category,
                 releaseChannel: $0.releaseChannel
             )
         }
+        self.mode = mode
         self.isReorderEnabled = isReorderEnabled
         self.contentWidth = contentWidth.rounded(.toNearestOrAwayFromZero)
     }
@@ -294,8 +396,10 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
 #if DEBUG
 enum FeatureManagementTableUpdatePolicy {
     static func needsUpdate(
-        previousItems: [PluginFeatureManagementItem],
-        currentItems: [PluginFeatureManagementItem],
+        previousItems: [FeatureManagementTableItem],
+        currentItems: [FeatureManagementTableItem],
+        previousMode: FeatureManagementTableMode,
+        currentMode: FeatureManagementTableMode,
         previousIsReorderEnabled: Bool,
         currentIsReorderEnabled: Bool,
         previousContentWidth: CGFloat,
@@ -303,10 +407,12 @@ enum FeatureManagementTableUpdatePolicy {
     ) -> Bool {
         FeatureManagementTableSignature(
             items: previousItems,
+            mode: previousMode,
             isReorderEnabled: previousIsReorderEnabled,
             contentWidth: previousContentWidth
         ) != FeatureManagementTableSignature(
             items: currentItems,
+            mode: currentMode,
             isReorderEnabled: currentIsReorderEnabled,
             contentWidth: currentContentWidth
         )
@@ -330,7 +436,11 @@ private final class LockedClipView: NSClipView {
 
 @MainActor
 private enum FeatureManagementDragPreview {
-    static func image(for item: PluginFeatureManagementItem, width: CGFloat) -> NSImage {
+    static func image(
+        for item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        width: CGFloat
+    ) -> NSImage {
         let imageSize = NSSize(
             width: min(max(width, 320), 620),
             height: FeatureManagementTableView.rowHeight
@@ -381,7 +491,7 @@ private enum FeatureManagementDragPreview {
         )
 
         drawText(
-            "\(item.description) · \(featureManagementPresentationText(for: item.presentation))",
+            featureManagementDescription(for: item, mode: mode),
             in: descriptionRect,
             font: .systemFont(ofSize: 11, weight: .medium),
             color: .secondaryLabelColor
@@ -513,7 +623,8 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     }
 
     func configure(
-        item: PluginFeatureManagementItem,
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
         showsHandle: Bool,
         onVisibilityChange: @escaping (Bool) -> Void
     ) {
@@ -521,18 +632,22 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
         titleLabel.stringValue = item.title
         configureReleaseChannelBadge(item.releaseChannel)
-        descriptionLabel.stringValue = "\(item.description) · \(featureManagementPresentationText(for: item.presentation))"
+        descriptionLabel.stringValue = featureManagementDescription(for: item, mode: mode)
         iconImageView.image = NSImage(
             systemSymbolName: item.iconName,
             accessibilityDescription: item.title
         )
         iconImageView.contentTintColor = NSColor(item.iconTint)
         iconBackgroundView.layer?.backgroundColor = NSColor(item.iconTint.opacity(0.14)).cgColor
-        activeDotView.isHidden = !item.isActive
+        activeDotView.isHidden = !item.isActive || !item.isGloballyEnabled
         visibilityButton.state = item.isVisible ? .on : .off
+        visibilityButton.isEnabled = mode == .installed || item.isGloballyEnabled
         handleImageView.isHidden = !showsHandle
+        containerView.alphaValue = mode == .installed || item.isGloballyEnabled ? 1 : 0.62
         toolTip = item.title
-        visibilityButton.toolTip = item.title
+        visibilityButton.toolTip = featureManagementToggleHelp(for: mode)
+        visibilityButton.setAccessibilityLabel(featureManagementToggleHelp(for: mode))
+        visibilityButton.setAccessibilityHelp(item.title)
     }
 
     private func buildViewHierarchy() {
@@ -659,14 +774,62 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     }
 }
 
-private func featureManagementPresentationText(for presentation: PluginFeaturePresentation) -> String {
-    switch presentation {
-    case .featurePanel:
-        return AppL10n.plugins("plugin.presentation.featurePanel", defaultValue: "操作面板")
-    case .componentPanel:
-        return AppL10n.plugins("plugin.presentation.componentPanel", defaultValue: "组件")
-    case .featureAndComponentPanel:
-        return AppL10n.plugins("plugin.presentation.featureAndComponentPanel", defaultValue: "操作面板与组件")
+func featureManagementDescription(
+    for item: FeatureManagementTableItem,
+    mode: FeatureManagementTableMode
+) -> String {
+    var details = [item.description]
+
+    switch mode {
+    case .installed:
+        details.append(pluginCapabilitySummary(item.capabilities))
+    case let .surface(surface):
+        if !item.isGloballyEnabled {
+            details.append(AppL10n.plugins("plugin.management.disabled", defaultValue: "插件已停用"))
+        } else if item.isVisibleOnOtherSurface {
+            switch surface {
+            case .dashboard:
+                details.append(AppL10n.plugins(
+                    "plugin.management.alsoInFeaturePanel",
+                    defaultValue: "同时显示在功能面板"
+                ))
+            case .featurePanel:
+                details.append(AppL10n.plugins(
+                    "plugin.management.alsoOnDashboard",
+                    defaultValue: "同时显示在仪表盘"
+                ))
+            }
+        }
+    }
+
+    if item.isGloballyEnabled, item.isActive {
+        details.append(AppL10n.plugins("plugin.management.active", defaultValue: "使用中"))
+    }
+
+    return details.joined(separator: " · ")
+}
+
+func pluginCapabilitySummary(_ capabilities: PluginHostCapabilities) -> String {
+    switch (capabilities.supportsDashboard, capabilities.supportsFeaturePanel) {
+    case (true, true):
+        return AppL10n.plugins("plugin.capability.both", defaultValue: "仪表盘与功能面板")
+    case (true, false):
+        return AppL10n.plugins("plugin.capability.dashboard", defaultValue: "仪表盘")
+    case (false, true):
+        return AppL10n.plugins("plugin.capability.featurePanel", defaultValue: "功能面板")
+    case (false, false):
+        return AppL10n.plugins("plugin.capability.settingsOnly", defaultValue: "仅设置")
+    }
+}
+
+func featureManagementToggleHelp(for mode: FeatureManagementTableMode) -> String {
+    switch mode {
+    case .installed:
+        return AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
+    case .surface(.dashboard):
+        return AppL10n.plugins("plugin.management.dashboardToggle", defaultValue: "在仪表盘中显示")
+    case .surface(.featurePanel):
+        return AppL10n.plugins("plugin.management.featurePanelToggle", defaultValue: "在功能面板中显示")
     }
 }
 

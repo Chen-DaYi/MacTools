@@ -1,6 +1,158 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "plugins.dashboard.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose which components appear on the Dashboard and drag to reorder them." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择仪表盘中显示的组件，并拖拽调整排列顺序。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇儀表板中顯示的組件，並拖曳調整排列順序。" } }
+      }
+    },
+    "plugins.dashboard.empty.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Plugins that support the Dashboard will appear here." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "支持仪表盘的插件会显示在这里。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "支援儀表板的外掛會顯示在這裡。" } }
+      }
+    },
+    "plugins.dashboard.empty.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No Dashboard Components" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无仪表盘组件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "暫無儀表板組件" } }
+      }
+    },
+    "plugins.dashboard.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open Dashboard" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開儀表板" } }
+      }
+    },
+    "plugins.dashboard.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板" } }
+      }
+    },
+    "plugins.featurePanel.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose which actions appear in the Feature Panel and drag to reorder them." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择功能面板中显示的操作，并拖拽调整排列顺序。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇功能面板中顯示的操作，並拖曳調整排列順序。" } }
+      }
+    },
+    "plugins.featurePanel.empty.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Plugins that support the Feature Panel will appear here." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "支持功能面板的插件会显示在这里。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "支援功能面板的外掛會顯示在這裡。" } }
+      }
+    },
+    "plugins.featurePanel.empty.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No Feature Panel Actions" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无功能面板操作" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "暫無功能面板操作" } }
+      }
+    },
+    "plugins.featurePanel.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open Feature Panel" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開功能面板" } }
+      }
+    },
+    "plugins.featurePanel.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Feature Panel" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
+      }
+    },
+    "plugins.installed.globalDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enable or disable plugins and see which menu bar surfaces each plugin supports." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用或停用插件，并查看每个插件支持的菜单栏位置。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "啟用或停用外掛，並查看每個外掛支援的選單列位置。" } }
+      }
+    },
+    "plugins.layout.disabledHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Visibility cannot be changed for disabled plugins. Re-enable them in Installed." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已停用插件的显示开关不可更改；请前往「已安装」重新启用。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已停用外掛的顯示開關無法更改；請前往「已安裝」重新啟用。" } }
+      }
+    },
+    "plugins.layout.filteringReorderHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reordering is unavailable while filtering. Clear the filters to reorder again." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "筛选中暂时不能拖拽排序，清除筛选条件后即可重新排序。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "篩選中暫時不能拖曳排序，清除篩選條件後即可重新排序。" } }
+      }
+    },
+    "plugins.layout.restoreDefaultOrder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Restore Default Order" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复默认排列" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "恢復預設排列" } }
+      }
+    },
+    "plugins.layout.searchPrompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Search plugins" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "搜索插件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "搜尋外掛" } }
+      }
+    },
+    "plugins.sidebar.dashboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板" } }
+      }
+    },
+    "plugins.sidebar.featurePanel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Feature Panel" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
+      }
+    },
+    "plugins.sidebar.layoutSection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Menu Bar Layout" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "菜单栏布局" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選單列佈局" } }
+      }
+    },
+    "plugins.sidebar.pluginsSection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Plugins" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛" } }
+      }
+    },
     "about.description": {
       "extractionState": "manual",
       "localizations": {

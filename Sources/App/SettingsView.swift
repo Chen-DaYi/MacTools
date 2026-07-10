@@ -17,6 +17,8 @@ struct SettingsView: View {
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
+    var showDashboard: () -> Void = {}
+    var showFeaturePanel: () -> Void = {}
 
     var body: some View {
         // Recreate native AppKit-backed controls when the shared locale changes.
@@ -33,7 +35,11 @@ struct SettingsView: View {
                     Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
                 }
 
-            FeatureSettingsView(pluginHost: pluginHost)
+            FeatureSettingsView(
+                pluginHost: pluginHost,
+                showDashboard: showDashboard,
+                showFeaturePanel: showFeaturePanel
+            )
                 .tag(SettingsDestination.pluginConfiguration)
                 .tabItem {
                     Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
@@ -377,6 +383,8 @@ private struct LaunchAtLoginSettingsRow: View {
 
 private struct FeatureSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    let showDashboard: () -> Void
+    let showFeaturePanel: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -386,7 +394,11 @@ private struct FeatureSettingsView: View {
             )
             .frame(width: 220)
 
-            FeatureSettingsDetailPane(pluginHost: pluginHost)
+            FeatureSettingsDetailPane(
+                pluginHost: pluginHost,
+                showDashboard: showDashboard,
+                showFeaturePanel: showFeaturePanel
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsStyle.windowBackground)
@@ -408,8 +420,35 @@ private struct FeatureSettingsSidebar: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
-                FeatureSettingsSidebarSectionTitle(AppL10n.settings("plugins.sidebar.marketplaceSection", defaultValue: "插件市场"))
+                FeatureSettingsSidebarSectionTitle(AppL10n.settings(
+                    "plugins.sidebar.layoutSection",
+                    defaultValue: "菜单栏布局"
+                ))
                     .padding(.top, 14)
+
+                FeatureSettingsSidebarRow(
+                    title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
+                    systemImage: "square.grid.2x2",
+                    iconTint: .blue,
+                    isSelected: selection == .dashboardLayout
+                ) {
+                    selection = .dashboardLayout
+                }
+
+                FeatureSettingsSidebarRow(
+                    title: AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板"),
+                    systemImage: "switch.2",
+                    iconTint: .purple,
+                    isSelected: selection == .featurePanelLayout
+                ) {
+                    selection = .featurePanelLayout
+                }
+
+                FeatureSettingsSidebarSectionTitle(AppL10n.settings(
+                    "plugins.sidebar.pluginsSection",
+                    defaultValue: "插件"
+                ))
+                    .padding(.top, 16)
 
                 FeatureSettingsSidebarRow(
                     title: AppL10n.settings("plugins.sidebar.installed", defaultValue: "已安装"),
@@ -525,9 +564,63 @@ private struct FeatureSettingsSidebarRow: View {
 
 private struct FeatureSettingsDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
+    let showDashboard: () -> Void
+    let showFeaturePanel: () -> Void
 
     var body: some View {
         switch pluginHost.selectedFeatureSettingsPane {
+        case .dashboardLayout:
+            SurfaceLayoutSettingsView(
+                surface: .dashboard,
+                title: AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘"),
+                description: AppL10n.settings(
+                    "plugins.dashboard.description",
+                    defaultValue: "选择仪表盘中显示的组件，并拖拽调整排列顺序。"
+                ),
+                systemImage: "square.grid.2x2",
+                iconTint: .blue,
+                items: pluginHost.dashboardLayoutItems,
+                openButtonTitle: AppL10n.settings("plugins.dashboard.open", defaultValue: "打开仪表盘"),
+                emptyTitle: AppL10n.settings("plugins.dashboard.empty.title", defaultValue: "暂无仪表盘组件"),
+                emptyDescription: AppL10n.settings(
+                    "plugins.dashboard.empty.description",
+                    defaultValue: "支持仪表盘的插件会显示在这里。"
+                ),
+                onVisibilityChange: { pluginID, isVisible in
+                    pluginHost.setPluginVisibility(isVisible, for: pluginID, on: .dashboard)
+                },
+                onMove: { pluginID, targetOffset in
+                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
+                },
+                onResetOrder: { pluginHost.resetPluginOrder(on: .dashboard) },
+                onOpenPanel: showDashboard
+            )
+        case .featurePanelLayout:
+            SurfaceLayoutSettingsView(
+                surface: .featurePanel,
+                title: AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板"),
+                description: AppL10n.settings(
+                    "plugins.featurePanel.description",
+                    defaultValue: "选择功能面板中显示的操作，并拖拽调整排列顺序。"
+                ),
+                systemImage: "switch.2",
+                iconTint: .purple,
+                items: pluginHost.featurePanelLayoutItems,
+                openButtonTitle: AppL10n.settings("plugins.featurePanel.open", defaultValue: "打开功能面板"),
+                emptyTitle: AppL10n.settings("plugins.featurePanel.empty.title", defaultValue: "暂无功能面板操作"),
+                emptyDescription: AppL10n.settings(
+                    "plugins.featurePanel.empty.description",
+                    defaultValue: "支持功能面板的插件会显示在这里。"
+                ),
+                onVisibilityChange: { pluginID, isVisible in
+                    pluginHost.setPluginVisibility(isVisible, for: pluginID, on: .featurePanel)
+                },
+                onMove: { pluginID, targetOffset in
+                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
+                },
+                onResetOrder: { pluginHost.resetPluginOrder(on: .featurePanel) },
+                onOpenPanel: showFeaturePanel
+            )
         case .installed:
             InstalledFeaturesSettingsView(pluginHost: pluginHost)
         case .marketplace:
@@ -556,14 +649,14 @@ private struct InstalledFeaturesSettingsView: View {
                 SettingsPageHeader(
                     title: AppL10n.settings("plugins.installed.title", defaultValue: "已安装"),
                     description: AppL10n.settings(
-                        "plugins.installed.description",
-                        defaultValue: "启用、隐藏并拖拽调整插件在菜单栏里的显示顺序。"
+                        "plugins.installed.globalDescription",
+                        defaultValue: "启用或停用插件，并查看每个插件支持的菜单栏位置。"
                     ),
                     systemImage: "checkmark.circle",
                     iconTint: .green
                 )
 
-                if !pluginHost.featureManagementItems.isEmpty {
+                if !pluginHost.installedPluginItems.isEmpty {
                     PluginFilterBarView(
                         searchText: $searchText,
                         selectedFilter: $selectedFilter,
@@ -573,7 +666,7 @@ private struct InstalledFeaturesSettingsView: View {
                 }
 
                 SettingsCardContainer {
-                    if pluginHost.featureManagementItems.isEmpty {
+                    if pluginHost.installedPluginItems.isEmpty {
                         ContentUnavailableView(
                             AppL10n.settings("plugins.installed.empty.title", defaultValue: "暂无已安装插件"),
                             systemImage: "checkmark.circle",
@@ -589,27 +682,15 @@ private struct InstalledFeaturesSettingsView: View {
                         .frame(maxWidth: .infinity, minHeight: 180)
                     } else {
                         FeatureManagementTableView(
-                            items: filteredItems,
-                            isReorderEnabled: !isFiltering,
-                            onVisibilityChange: { pluginID, isVisible in
-                                pluginHost.setFeatureVisibility(isVisible, for: pluginID)
-                            },
-                            onMove: { pluginID, targetOffset in
-                                pluginHost.moveFeatureManagementItem(id: pluginID, toOffset: targetOffset)
+                            items: filteredItems.map(FeatureManagementTableItem.init(installedItem:)),
+                            mode: .installed,
+                            isReorderEnabled: false,
+                            onToggleChange: { pluginID, isEnabled in
+                                pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: pluginID)
                             }
                         )
                         .frame(height: featureManagementListHeight)
                     }
-                }
-
-                if isFiltering && !filteredItems.isEmpty {
-                    Text(AppL10n.settings(
-                        "plugins.installed.filteringReorderHint",
-                        defaultValue: "筛选中暂时不能拖拽排序，清除关键字或选择「全部」即可重新排序。"
-                    ))
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
                 }
             }
             .padding(PluginSettingsTheme.Spacing.pagePadding)
@@ -618,25 +699,148 @@ private struct InstalledFeaturesSettingsView: View {
         .background(SettingsStyle.contentBackground)
     }
 
-    private var filteredItems: [PluginFeatureManagementItem] {
-        pluginHost.featureManagementItems.filter {
-            PluginListFilter.matches(featureItem: $0, query: searchText, filter: selectedFilter)
+    private var filteredItems: [InstalledPluginItem] {
+        pluginHost.installedPluginItems.filter {
+            PluginListFilter.matches(installedItem: $0, query: searchText, filter: selectedFilter)
         }
     }
 
     private var countsByFilter: [PluginCategoryFilter: Int] {
         PluginListFilter.countsByFilter(
-            featureItems: pluginHost.featureManagementItems,
+            installedItems: pluginHost.installedPluginItems,
             query: searchText
         )
     }
 
-    private var isFiltering: Bool {
-        !PluginListFilter.normalized(searchText).isEmpty || selectedFilter != .all
-    }
-
     private var featureManagementListHeight: CGFloat {
         FeatureManagementTableView.preferredHeight(for: filteredItems.count)
+    }
+}
+
+private struct SurfaceLayoutSettingsView: View {
+    let surface: PluginDisplaySurface
+    let title: String
+    let description: String
+    let systemImage: String
+    let iconTint: Color
+    let items: [PluginSurfaceLayoutItem]
+    let openButtonTitle: String
+    let emptyTitle: String
+    let emptyDescription: String
+    let onVisibilityChange: (String, Bool) -> Void
+    let onMove: (String, Int) -> Void
+    let onResetOrder: () -> Void
+    let onOpenPanel: () -> Void
+
+    @State private var searchText = ""
+    @State private var selectedFilter: PluginCategoryFilter = .all
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .center, spacing: 12) {
+                    SettingsPageHeader(
+                        title: title,
+                        description: description,
+                        systemImage: systemImage,
+                        iconTint: iconTint
+                    )
+
+                    Button(AppL10n.settings(
+                        "plugins.layout.restoreDefaultOrder",
+                        defaultValue: "恢复默认排列"
+                    ), action: onResetOrder)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(items.count < 2)
+
+                    Button(action: onOpenPanel) {
+                        Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+
+                if !items.isEmpty {
+                    PluginFilterBarView(
+                        searchText: $searchText,
+                        selectedFilter: $selectedFilter,
+                        countsByFilter: countsByFilter,
+                        searchPrompt: AppL10n.settings(
+                            "plugins.layout.searchPrompt",
+                            defaultValue: "搜索插件"
+                        )
+                    )
+                }
+
+                SettingsCardContainer {
+                    if items.isEmpty {
+                        ContentUnavailableView(
+                            emptyTitle,
+                            systemImage: systemImage,
+                            description: Text(emptyDescription)
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                    } else if filteredItems.isEmpty {
+                        ContentUnavailableView(
+                            AppL10n.settings("plugins.filter.empty.title", defaultValue: "未找到匹配的插件"),
+                            systemImage: "magnifyingglass",
+                            description: Text(AppL10n.settings(
+                                "plugins.filter.empty.description",
+                                defaultValue: "尝试调整关键字或切换分类。"
+                            ))
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                    } else {
+                        FeatureManagementTableView(
+                            items: filteredItems.map(FeatureManagementTableItem.init(surfaceItem:)),
+                            mode: .surface(surface),
+                            isReorderEnabled: !isFiltering,
+                            onToggleChange: onVisibilityChange,
+                            onMove: onMove
+                        )
+                        .frame(height: FeatureManagementTableView.preferredHeight(for: filteredItems.count))
+                    }
+                }
+
+                if isFiltering && !filteredItems.isEmpty {
+                    Text(AppL10n.settings(
+                        "plugins.layout.filteringReorderHint",
+                        defaultValue: "筛选中暂时不能拖拽排序，清除筛选条件后即可重新排序。"
+                    ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                }
+
+                if items.contains(where: { !$0.isGloballyEnabled }) {
+                    Text(AppL10n.settings(
+                        "plugins.layout.disabledHint",
+                        defaultValue: "已停用插件的显示开关不可更改；请前往「已安装」重新启用。"
+                    ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                }
+            }
+            .padding(PluginSettingsTheme.Spacing.pagePadding)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .background(SettingsStyle.contentBackground)
+    }
+
+    private var filteredItems: [PluginSurfaceLayoutItem] {
+        items.filter {
+            PluginListFilter.matches(surfaceItem: $0, query: searchText, filter: selectedFilter)
+        }
+    }
+
+    private var countsByFilter: [PluginCategoryFilter: Int] {
+        PluginListFilter.countsByFilter(surfaceItems: items, query: searchText)
+    }
+
+    private var isFiltering: Bool {
+        !PluginListFilter.normalized(searchText).isEmpty || selectedFilter != .all
     }
 }
 

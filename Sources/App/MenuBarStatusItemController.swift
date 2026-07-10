@@ -108,6 +108,10 @@ final class MenuBarStatusItemController: NSObject {
         pluginHost.statusItemButtonFrameProvider = { [weak self] in
             self?.statusItemButtonScreenRect()
         }
+        windowRouter.setPanelPresentationActions(
+            showDashboard: { [weak self] in self?.showDashboard() },
+            showFeaturePanel: { [weak self] in self?.showFeaturePanel() }
+        )
     }
 
     private func statusItemButtonScreenRect() -> NSRect? {
@@ -135,6 +139,26 @@ final class MenuBarStatusItemController: NSObject {
     func dismissPanels() {
         panelPresenter.dismissPanels()
         removeDismissMonitorsIfNeeded()
+    }
+
+    func showDashboard() {
+        guard let button = statusItem.button else {
+            AppLog.pluginHost.error("Cannot show Dashboard because the status item button is unavailable")
+            return
+        }
+
+        panelPresenter.showDashboard(relativeTo: button)
+        handlePresentationResult()
+    }
+
+    func showFeaturePanel() {
+        guard let button = statusItem.button else {
+            AppLog.pluginHost.error("Cannot show Feature Panel because the status item button is unavailable")
+            return
+        }
+
+        panelPresenter.showFeaturePanel(relativeTo: button)
+        handlePresentationResult()
     }
 
     /// Single close gate for user-driven dismissals. While an expanded

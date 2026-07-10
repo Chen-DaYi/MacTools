@@ -76,6 +76,16 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         XCTAssertEqual(host.settingsPresentationRequestCount, 2)
     }
 
+    func testLayoutSettingsDestinationsCanBeSelectedIndependently() {
+        let host = makeHost(plugin: MockNavigationPlugin())
+
+        host.selectFeatureSettingsPane(.dashboardLayout)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
+
+        host.selectFeatureSettingsPane(.featurePanelLayout)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .featurePanelLayout)
+    }
+
     private func makeHost(plugin: MockNavigationPlugin) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)

@@ -360,7 +360,7 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     /// Deactivate a loaded plugin without unloading it.
-    /// Used when the user hides the plugin — it stays in the list but its side effects stop.
+    /// Used when the user globally disables the plugin — it stays in the list but its side effects stop.
     func pausePlugin(_ pluginID: String) {
         guard let plugins = loadedPluginsByID[pluginID] else { return }
         for plugin in plugins {
