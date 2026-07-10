@@ -161,7 +161,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On · May dim"
+            "value": "On · May sleep"
           }
         },
         "es": {
@@ -1368,7 +1368,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ · %@ · May dim"
+            "value": "%@ · %@ · May sleep"
           }
         },
         "es": {
