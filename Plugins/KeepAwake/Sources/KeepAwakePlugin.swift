@@ -198,41 +198,37 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         if let scheduledEndDate {
             let referenceDate = Date()
-            let remaining = compactRemainingTimeDescription(
-                until: scheduledEndDate,
-                referenceDate: referenceDate
-            )
             let stopAt = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
                 until: scheduledEndDate,
                 referenceDate: referenceDate,
                 localization: localization
             )
-            if keepDisplayOn {
-                return localization.format(
-                    "panel.subtitle.timedKeepDisplayFormat",
-                    defaultValue: "%@ · %@ · 常亮",
-                    remaining,
-                    stopAt
-                )
-            }
             return localization.format(
-                "panel.subtitle.timedAllowDisplayFormat",
-                defaultValue: "%@ · %@ · 可关屏",
-                remaining,
-                stopAt
+                "panel.subtitle.timedFormat",
+                defaultValue: "%@ · %@",
+                stopAt,
+                selectedDisplayOptionTitle
             )
         }
 
-        if keepDisplayOn {
-            return localization.string(
-                "panel.subtitle.enabledWithDisplay",
-                defaultValue: "已启用 · 常亮"
-            )
-        }
+        return selectedDisplayOptionTitle
+    }
 
-        return localization.string(
-            "panel.subtitle.enabled",
-            defaultValue: "已启用 · 可关屏"
+    private var selectedDisplayOptionTitle: String {
+        keepDisplayOn ? keepDisplayOnOptionTitle : allowDisplayOffOptionTitle
+    }
+
+    private var allowDisplayOffOptionTitle: String {
+        localization.string(
+            "panel.display.allowSleep",
+            defaultValue: "允许关闭"
+        )
+    }
+
+    private var keepDisplayOnOptionTitle: String {
+        localization.string(
+            "panel.display.keepOn",
+            defaultValue: "保持常亮"
         )
     }
 
@@ -270,10 +266,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
                     options: [
                         PluginPanelControlOption(
                             id: KeepDisplayOptionID.allowSleep,
-                            title: localization.string(
-                                "panel.display.allowSleep",
-                                defaultValue: "允许关闭"
-                            ),
+                            title: allowDisplayOffOptionTitle,
                             subtitle: localization.string(
                                 "panel.display.allowSleep.subtitle",
                                 defaultValue: "系统保持唤醒，屏幕可按系统设置关闭"
@@ -281,10 +274,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
                         ),
                         PluginPanelControlOption(
                             id: KeepDisplayOptionID.keepOn,
-                            title: localization.string(
-                                "panel.display.keepOn",
-                                defaultValue: "保持常亮"
-                            ),
+                            title: keepDisplayOnOptionTitle,
                             subtitle: localization.string(
                                 "panel.display.keepOn.subtitle",
                                 defaultValue: "系统与屏幕均不因空闲而关闭"
@@ -361,16 +351,25 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             return
         }
 
-        keepDisplayOn = shouldKeepDisplayOn
-        persistKeepDisplayOnPreference()
         lastErrorMessage = nil
 
-        guard session != nil else {
+        guard let session else {
+            keepDisplayOn = shouldKeepDisplayOn
+            persistKeepDisplayOnPreference()
             notifyChange()
             return
         }
 
-        applyKeepAwakeConfiguration()
+        do {
+            try session.setPreventDisplaySleep(shouldKeepDisplayOn)
+            keepDisplayOn = shouldKeepDisplayOn
+            persistKeepDisplayOnPreference()
+            notifyChange()
+        } catch {
+            logger.error("keep-awake display update failed: \(error.localizedDescription, privacy: .public)")
+            lastErrorMessage = error.localizedDescription
+            notifyChange()
+        }
     }
 
     private func applyKeepAwakeConfiguration() {
@@ -396,44 +395,6 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func resolvedScheduledEndDate(referenceDate: Date) -> Date? {
         selectedDurationPreset.timeInterval.map(referenceDate.addingTimeInterval)
-    }
-
-    /// Compact remaining time for the feature-row subtitle (must stay short).
-    private func compactRemainingTimeDescription(
-        until endDate: Date,
-        referenceDate: Date
-    ) -> String {
-        let remainingDuration = max(endDate.timeIntervalSince(referenceDate), 0)
-        let remainingMinutes = max(
-            Int(ceil(remainingDuration / Timing.secondsPerMinute)),
-            1
-        )
-
-        let hours = remainingMinutes / 60
-        let minutes = remainingMinutes % 60
-
-        if hours == 0 {
-            return localization.format(
-                "panel.subtitle.remainingMinutesShortFormat",
-                defaultValue: "%d分钟后",
-                remainingMinutes
-            )
-        }
-
-        if minutes == 0 {
-            return localization.format(
-                "panel.subtitle.remainingHoursShortFormat",
-                defaultValue: "%d小时后",
-                hours
-            )
-        }
-
-        return localization.format(
-            "panel.subtitle.remainingHoursMinutesShortFormat",
-            defaultValue: "%d小时%d分钟后",
-            hours,
-            minutes
-        )
     }
 
     private func scheduleSubtitleRefreshIfNeeded() {
@@ -571,8 +532,8 @@ enum KeepAwakeStopScheduleFormatting {
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = timeZone
-        // Prefer compact hour+minute (often 24h), avoiding long "上午/下午" prefixes.
-        if let format = DateFormatter.dateFormat(fromTemplate: "Hm", options: 0, locale: locale) {
+        // Follow the user's locale and preferred 12/24-hour clock while keeping minutes explicit.
+        if let format = DateFormatter.dateFormat(fromTemplate: "jm", options: 0, locale: locale) {
             formatter.dateFormat = format
         } else {
             formatter.timeStyle = .short

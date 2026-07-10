@@ -7,11 +7,57 @@ import MacToolsPluginKit
 @MainActor
 protocol KeepAwakeSessionManaging: AnyObject {
     func start(until endDate: Date?, preventDisplaySleep: Bool) throws
+    func setPreventDisplaySleep(_ preventDisplaySleep: Bool) throws
     func requestStop(reason: KeepAwakeSession.EndReason)
 }
 
 @MainActor
 final class KeepAwakeSession: KeepAwakeSessionManaging {
+    enum AssertionKind: Equatable {
+        case system
+        case display
+
+        var type: CFString {
+            switch self {
+            case .system:
+                return kIOPMAssertionTypePreventUserIdleSystemSleep as CFString
+            case .display:
+                return kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString
+            }
+        }
+
+        var name: CFString {
+            switch self {
+            case .system:
+                return "MacTools Keep Awake" as CFString
+            case .display:
+                return "MacTools Keep Awake Display" as CFString
+            }
+        }
+    }
+
+    typealias AssertionCreator = (AssertionKind) -> (result: IOReturn, assertionID: IOPMAssertionID)
+    typealias AssertionReleaser = (IOPMAssertionID) -> IOReturn
+
+    // IOKit releases are safe during nonisolated teardown; tests inject equivalent deterministic operations.
+    private final class AssertionOperations: @unchecked Sendable {
+        private let creator: AssertionCreator
+        private let releaser: AssertionReleaser
+
+        init(creator: @escaping AssertionCreator, releaser: @escaping AssertionReleaser) {
+            self.creator = creator
+            self.releaser = releaser
+        }
+
+        func create(_ kind: AssertionKind) -> (result: IOReturn, assertionID: IOPMAssertionID) {
+            creator(kind)
+        }
+
+        func release(_ assertionID: IOPMAssertionID) -> IOReturn {
+            releaser(assertionID)
+        }
+    }
+
     enum EndReason {
         case userRequested
         case completed
@@ -21,6 +67,7 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
         case invalidEndDate(PluginLocalization)
         case systemAssertionCreationFailed(IOReturn, PluginLocalization)
         case displayAssertionCreationFailed(IOReturn, PluginLocalization)
+        case displayAssertionReleaseFailed(IOReturn, PluginLocalization)
 
         var errorDescription: String? {
             switch self {
@@ -41,6 +88,12 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
                     defaultValue: "无法保持屏幕常亮，系统返回错误 %d。",
                     result
                 )
+            case let .displayAssertionReleaseFailed(result, localization):
+                return localization.format(
+                    "error.displayAssertionReleaseFailedFormat",
+                    defaultValue: "无法允许屏幕关闭，系统返回错误 %d。",
+                    result
+                )
             }
         }
     }
@@ -48,6 +101,7 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "KeepAwakeSession")
     private let localization: PluginLocalization
     private let onEnd: (EndReason) -> Void
+    private let assertionOperations: AssertionOperations
 
     private var systemAssertionID = IOPMAssertionID(0)
     private var displayAssertionID = IOPMAssertionID(0)
@@ -57,21 +111,40 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
 
     init(
         localization: PluginLocalization = PluginLocalization(bundle: .main),
-        onEnd: @escaping (EndReason) -> Void
+        onEnd: @escaping (EndReason) -> Void,
+        assertionCreator: AssertionCreator? = nil,
+        assertionReleaser: AssertionReleaser? = nil
     ) {
         self.localization = localization
         self.onEnd = onEnd
+        let resolvedCreator: AssertionCreator = assertionCreator ?? { kind in
+            var assertionID = IOPMAssertionID(0)
+            let result = IOPMAssertionCreateWithName(
+                kind.type,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                kind.name,
+                &assertionID
+            )
+            return (result, assertionID)
+        }
+        let resolvedReleaser: AssertionReleaser = assertionReleaser ?? { assertionID in
+            IOPMAssertionRelease(assertionID)
+        }
+        self.assertionOperations = AssertionOperations(
+            creator: resolvedCreator,
+            releaser: resolvedReleaser
+        )
     }
 
     deinit {
         autoStopTask?.cancel()
 
         if systemAssertionID != IOPMAssertionID(0) {
-            IOPMAssertionRelease(systemAssertionID)
+            _ = assertionOperations.release(systemAssertionID)
         }
 
         if displayAssertionID != IOPMAssertionID(0) {
-            IOPMAssertionRelease(displayAssertionID)
+            _ = assertionOperations.release(displayAssertionID)
         }
 
         if isObservingTermination {
@@ -93,6 +166,10 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
         installTerminationObserverIfNeeded()
     }
 
+    func setPreventDisplaySleep(_ preventDisplaySleep: Bool) throws {
+        try updateDisplayAssertion(preventDisplaySleep: preventDisplaySleep)
+    }
+
     func requestStop(reason: EndReason) {
         finish(reason: reason)
     }
@@ -112,20 +189,14 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
     }
 
     private func createSystemAssertionIfNeeded() throws {
-        var newAssertionID = IOPMAssertionID(0)
-        let result = IOPMAssertionCreateWithName(
-            kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            "MacTools Keep Awake" as CFString,
-            &newAssertionID
-        )
+        let creation = assertionOperations.create(.system)
 
-        guard result == kIOReturnSuccess else {
-            logger.error("failed to create keep-awake system assertion result=\(result, privacy: .public)")
-            throw SessionError.systemAssertionCreationFailed(result, localization)
+        guard creation.result == kIOReturnSuccess else {
+            logger.error("failed to create keep-awake system assertion result=\(creation.result, privacy: .public)")
+            throw SessionError.systemAssertionCreationFailed(creation.result, localization)
         }
 
-        systemAssertionID = newAssertionID
+        systemAssertionID = creation.assertionID
     }
 
     private func updateDisplayAssertion(preventDisplaySleep: Bool) throws {
@@ -136,38 +207,33 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
             return
         }
 
-        releaseDisplayAssertionIfNeeded()
+        try releaseDisplayAssertionIfNeeded()
     }
 
     private func createDisplayAssertionIfNeeded() throws {
-        var newAssertionID = IOPMAssertionID(0)
-        let result = IOPMAssertionCreateWithName(
-            kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            "MacTools Keep Awake Display" as CFString,
-            &newAssertionID
-        )
+        let creation = assertionOperations.create(.display)
 
-        guard result == kIOReturnSuccess else {
-            logger.error("failed to create keep-awake display assertion result=\(result, privacy: .public)")
-            throw SessionError.displayAssertionCreationFailed(result, localization)
+        guard creation.result == kIOReturnSuccess else {
+            logger.error("failed to create keep-awake display assertion result=\(creation.result, privacy: .public)")
+            throw SessionError.displayAssertionCreationFailed(creation.result, localization)
         }
 
-        displayAssertionID = newAssertionID
+        displayAssertionID = creation.assertionID
     }
 
-    private func releaseDisplayAssertionIfNeeded() {
+    private func releaseDisplayAssertionIfNeeded() throws {
         guard displayAssertionID != IOPMAssertionID(0) else {
             return
         }
 
         let existingAssertionID = displayAssertionID
-        displayAssertionID = IOPMAssertionID(0)
-
-        let result = IOPMAssertionRelease(existingAssertionID)
-        if result != kIOReturnSuccess {
+        let result = assertionOperations.release(existingAssertionID)
+        guard result == kIOReturnSuccess else {
             logger.error("failed to release keep-awake display assertion result=\(result, privacy: .public)")
+            throw SessionError.displayAssertionReleaseFailed(result, localization)
         }
+
+        displayAssertionID = IOPMAssertionID(0)
     }
 
     private func scheduleAutoStop(until endDate: Date?) throws {
@@ -208,13 +274,13 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
         autoStopTask?.cancel()
         autoStopTask = nil
 
-        releaseDisplayAssertionIfNeeded()
+        try? releaseDisplayAssertionIfNeeded()
 
         if systemAssertionID != IOPMAssertionID(0) {
             let existingAssertionID = systemAssertionID
             systemAssertionID = IOPMAssertionID(0)
 
-            let result = IOPMAssertionRelease(existingAssertionID)
+            let result = assertionOperations.release(existingAssertionID)
 
             if result != kIOReturnSuccess {
                 logger.error("failed to release keep-awake system assertion result=\(result, privacy: .public)")

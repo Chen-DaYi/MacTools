@@ -51,6 +51,15 @@ final class PluginHostDisclosureStateTests: XCTestCase {
         XCTAssertEqual(plugin.stateReadCount, 1)
     }
 
+    func testPanelHelpTextUsesCompleteCurrentSubtitle() {
+        let plugin = MockDisclosurePlugin()
+        plugin.subtitle = "Tomorrow 12:10 AM · Allow turning off"
+        let host = makeHost(plugin: plugin)
+
+        XCTAssertEqual(host.panelItems[0].description, plugin.subtitle)
+        XCTAssertEqual(host.panelItems[0].helpText, plugin.subtitle)
+    }
+
     private func makeHost(plugin: MockDisclosurePlugin) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -85,12 +94,13 @@ private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var isExpanded = false
     var errorMessage: String?
+    var subtitle = "Mock plugin"
     var stateReadCount = 0
 
     var primaryPanelState: PluginPanelState {
         stateReadCount += 1
         return PluginPanelState(
-            subtitle: "Mock plugin",
+            subtitle: subtitle,
             isOn: false,
             isExpanded: isExpanded,
             isEnabled: true,

@@ -1,4 +1,5 @@
 import XCTest
+import IOKit.pwr_mgt
 import MacToolsPluginKit
 @testable import KeepAwakePlugin
 
@@ -96,19 +97,72 @@ final class KeepAwakePluginTests: XCTestCase {
 
         plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
 
-        XCTAssertEqual(factory.sessions[0].startedConfigurations.count, 2)
-        XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, true)
+        XCTAssertEqual(factory.sessions[0].startedConfigurations.count, 1)
+        XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true])
         XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
         XCTAssertEqual(
             plugin.primaryPanelState.subtitle,
-            "已启用 · 常亮"
+            selectedDisplayOptionTitle(in: plugin.primaryPanelState)
         )
 
         plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "allow-sleep"))
 
-        XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, false)
+        XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, false])
         XCTAssertNil(storage.values["keep-display-on"])
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已启用 · 可关屏")
+        XCTAssertEqual(
+            plugin.primaryPanelState.subtitle,
+            selectedDisplayOptionTitle(in: plugin.primaryPanelState)
+        )
+    }
+
+    func testKeepDisplayOnUpdatePreservesTimedSessionEndDate() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.handleAction(.setSwitch(true))
+        plugin.handleAction(.setSelection(controlID: "duration", optionID: "oneHour"))
+
+        let session = factory.sessions[0]
+        let scheduledEndDate = session.startedConfigurations.last?.endDate
+        XCTAssertNotNil(scheduledEndDate)
+
+        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+
+        XCTAssertEqual(session.startedConfigurations.count, 2)
+        XCTAssertEqual(session.startedConfigurations.last?.endDate, scheduledEndDate)
+        XCTAssertEqual(session.displaySleepPreventionUpdates, [true])
+    }
+
+    func testFailedKeepDisplayOnUpdateKeepsAppliedPreferenceAndCanRetry() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.handleAction(.setSwitch(true))
+        let session = factory.sessions[0]
+        session.displayUpdateError = MockKeepAwakeSessionError.displayUpdateFailed
+
+        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+
+        XCTAssertEqual(session.displaySleepPreventionUpdates, [true])
+        XCTAssertNil(storage.values["keep-display-on"])
+        XCTAssertEqual(
+            plugin.primaryPanelState.subtitle,
+            selectedDisplayOptionTitle(in: plugin.primaryPanelState)
+        )
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+
+        session.displayUpdateError = nil
+        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+
+        XCTAssertEqual(session.displaySleepPreventionUpdates, [true, true])
+        XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
+        XCTAssertEqual(
+            plugin.primaryPanelState.subtitle,
+            selectedDisplayOptionTitle(in: plugin.primaryPanelState)
+        )
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 
     func testKeepDisplayOnPreferenceRestoresWithPermanentSession() {
@@ -144,7 +198,7 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions.last?.startedConfigurations.last?.preventDisplaySleep, true)
     }
 
-    func testTimedSessionSubtitleIncludesRelativeAndAbsoluteStop() {
+    func testTimedSessionSubtitleKeepsAbsoluteStopAndDisplayStateCompact() {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: storage)
@@ -154,12 +208,21 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
 
         let subtitle = plugin.primaryPanelState.subtitle
-        XCTAssertTrue(subtitle.contains("小时后") || subtitle.contains("h"), subtitle)
+        let displayOptionTitle = selectedDisplayOptionTitle(in: plugin.primaryPanelState)
+        XCTAssertTrue(subtitle.contains(":"), subtitle)
         XCTAssertTrue(subtitle.contains("·"), subtitle)
-        XCTAssertTrue(subtitle.contains("常亮") || subtitle.contains("On") || subtitle.contains("on"), subtitle)
-        // Compact form should not use the long phrases that truncate in the row.
-        XCTAssertFalse(subtitle.contains("自动停止"), subtitle)
-        XCTAssertFalse(subtitle.contains("屏幕保持常亮"), subtitle)
+        XCTAssertNotNil(displayOptionTitle)
+        XCTAssertTrue(displayOptionTitle.map(subtitle.hasSuffix) ?? false, subtitle)
+        XCTAssertFalse(subtitle.contains("小时后") || subtitle.contains("h left"), subtitle)
+        XCTAssertEqual(subtitle.filter { $0 == "·" }.count, 1, subtitle)
+    }
+
+    private func selectedDisplayOptionTitle(in state: PluginPanelState) -> String? {
+        guard let control = state.detail?.primaryControls.first(where: { $0.id == "keep-display-on" }) else {
+            return nil
+        }
+
+        return control.options.first(where: { $0.id == control.selectedOptionID })?.title
     }
 
     private static func context(storage: KeepAwakeMemoryStorage) -> PluginRuntimeContext {
@@ -189,8 +252,23 @@ final class KeepAwakeStopScheduleFormattingTests: XCTestCase {
             locale: locale
         )
 
-        // Compact "Hm" template is often 24h (16:30) depending on locale.
-        XCTAssertTrue(label.contains("4:30") || label.contains("16:30"), label)
+        XCTAssertTrue(label.contains("4:30"), label)
+        XCTAssertFalse(label.contains("16:30"), label)
+    }
+
+    func testSameDayStopUsesLocalePreferred24HourClock() {
+        let reference = date(year: 2026, month: 7, day: 10, hour: 14, minute: 0)
+        let end = date(year: 2026, month: 7, day: 10, hour: 16, minute: 30)
+
+        let label = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
+            until: end,
+            referenceDate: reference,
+            calendar: calendar,
+            localization: localization,
+            locale: Locale(identifier: "en_GB")
+        )
+
+        XCTAssertTrue(label.contains("16:30"), label)
     }
 
     func testNextDayStopUsesTomorrowPrefix() {
@@ -242,6 +320,97 @@ final class KeepAwakeStopScheduleFormattingTests: XCTestCase {
 }
 
 @MainActor
+final class KeepAwakeSessionTests: XCTestCase {
+    func testDisplayAssertionCanBeUpdatedWithoutRestartingSystemAssertion() throws {
+        var createdKinds: [KeepAwakeSession.AssertionKind] = []
+        var releasedAssertionIDs: [IOPMAssertionID] = []
+        var nextAssertionID = IOPMAssertionID(1)
+        let session = KeepAwakeSession(
+            onEnd: { _ in },
+            assertionCreator: { kind in
+                createdKinds.append(kind)
+                defer { nextAssertionID += 1 }
+                return (kIOReturnSuccess, nextAssertionID)
+            },
+            assertionReleaser: { assertionID in
+                releasedAssertionIDs.append(assertionID)
+                return kIOReturnSuccess
+            }
+        )
+
+        try session.start(until: nil, preventDisplaySleep: false)
+        try session.setPreventDisplaySleep(true)
+        try session.setPreventDisplaySleep(false)
+        session.requestStop(reason: .userRequested)
+
+        XCTAssertEqual(createdKinds, [.system, .display])
+        XCTAssertEqual(releasedAssertionIDs, [2, 1])
+    }
+
+    func testFailedDisplayAssertionCreationCanBeRetried() throws {
+        var displayCreationAttempts = 0
+        var releasedAssertionIDs: [IOPMAssertionID] = []
+        let session = KeepAwakeSession(
+            onEnd: { _ in },
+            assertionCreator: { kind in
+                switch kind {
+                case .system:
+                    return (kIOReturnSuccess, 1)
+                case .display:
+                    displayCreationAttempts += 1
+                    return displayCreationAttempts == 1
+                        ? (kIOReturnError, 0)
+                        : (kIOReturnSuccess, 2)
+                }
+            },
+            assertionReleaser: { assertionID in
+                releasedAssertionIDs.append(assertionID)
+                return kIOReturnSuccess
+            }
+        )
+
+        try session.start(until: nil, preventDisplaySleep: false)
+        XCTAssertThrowsError(try session.setPreventDisplaySleep(true))
+        try session.setPreventDisplaySleep(true)
+        session.requestStop(reason: .userRequested)
+
+        XCTAssertEqual(displayCreationAttempts, 2)
+        XCTAssertEqual(releasedAssertionIDs, [2, 1])
+    }
+
+    func testFailedDisplayAssertionReleaseRetainsAssertionForRetry() throws {
+        var shouldFailDisplayRelease = true
+        var releasedAssertionIDs: [IOPMAssertionID] = []
+        let session = KeepAwakeSession(
+            onEnd: { _ in },
+            assertionCreator: { kind in
+                switch kind {
+                case .system:
+                    return (kIOReturnSuccess, 1)
+                case .display:
+                    return (kIOReturnSuccess, 2)
+                }
+            },
+            assertionReleaser: { assertionID in
+                releasedAssertionIDs.append(assertionID)
+                if assertionID == 2, shouldFailDisplayRelease {
+                    return kIOReturnError
+                }
+                return kIOReturnSuccess
+            }
+        )
+
+        try session.start(until: nil, preventDisplaySleep: true)
+        XCTAssertThrowsError(try session.setPreventDisplaySleep(false))
+        shouldFailDisplayRelease = false
+        try session.setPreventDisplaySleep(false)
+        session.requestStop(reason: .userRequested)
+
+        XCTAssertEqual(releasedAssertionIDs, [2, 2, 1])
+    }
+}
+
+@MainActor
 private final class KeepAwakeSessionFactory {
     private(set) var sessions: [MockKeepAwakeSession] = []
 
@@ -266,7 +435,9 @@ private final class MockKeepAwakeSession: KeepAwakeSessionManaging {
 
     private let onEnd: (KeepAwakeSession.EndReason) -> Void
     private(set) var startedConfigurations: [Configuration] = []
+    private(set) var displaySleepPreventionUpdates: [Bool] = []
     private(set) var stopRequestCount = 0
+    var displayUpdateError: Error?
 
     init(onEnd: @escaping (KeepAwakeSession.EndReason) -> Void) {
         self.onEnd = onEnd
@@ -278,9 +449,24 @@ private final class MockKeepAwakeSession: KeepAwakeSessionManaging {
         )
     }
 
+    func setPreventDisplaySleep(_ preventDisplaySleep: Bool) throws {
+        displaySleepPreventionUpdates.append(preventDisplaySleep)
+        if let displayUpdateError {
+            throw displayUpdateError
+        }
+    }
+
     func requestStop(reason: KeepAwakeSession.EndReason) {
         stopRequestCount += 1
         onEnd(reason)
+    }
+}
+
+private enum MockKeepAwakeSessionError: LocalizedError {
+    case displayUpdateFailed
+
+    var errorDescription: String? {
+        "无法更新屏幕状态。"
     }
 }
 

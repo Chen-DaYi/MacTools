@@ -24,6 +24,9 @@ enum MenuBarPanelLayout {
     static let emptyContentHeight: CGFloat = 150
     static let actionRowVerticalPadding: CGFloat = 8
     static let selectRowVerticalPadding: CGFloat = 5
+    static let selectRowHeight: CGFloat = 26
+    // Reserve the complete title plus two-line subtitle layout in every localized row.
+    static let selectRowWithSubtitleHeight: CGFloat = 50
     static let sliderVerticalPadding: CGFloat = 9
     static let navigationRowHeight: CGFloat = 52
     static let secondaryPanelMinimumHeight: CGFloat = 148
@@ -210,8 +213,10 @@ enum MenuBarPanelLayout {
             }
         case .selectList:
             let titleHeight = control.sectionTitle == nil ? CGFloat(0) : CGFloat(15)
-            let rowHeight: CGFloat = control.options.contains(where: { $0.subtitle != nil }) ? 36 : 26
-            return titleHeight + CGFloat(control.options.count) * rowHeight
+            let rowsHeight = control.options.reduce(CGFloat(0)) { partialResult, option in
+                partialResult + selectRowHeight(for: option)
+            }
+            return titleHeight + rowsHeight
         case .navigationList:
             return CGFloat(control.options.count) * navigationRowHeight
         case .slider:
@@ -223,6 +228,14 @@ enum MenuBarPanelLayout {
         case .actionRow:
             return 16 + actionRowVerticalPadding * 2
         }
+    }
+
+    private static func selectRowHeight(for option: PluginPanelControlOption) -> CGFloat {
+        guard let subtitle = option.subtitle, !subtitle.isEmpty else {
+            return selectRowHeight
+        }
+
+        return selectRowWithSubtitleHeight
     }
 
 }
@@ -1402,6 +1415,14 @@ private struct SelectListRow: View {
 
     @State private var isHovered = false
 
+    private var hasSubtitle: Bool {
+        guard let subtitle else {
+            return false
+        }
+
+        return !subtitle.isEmpty
+    }
+
     var body: some View {
         Button {
             guard isInteractive else {
@@ -1410,12 +1431,12 @@ private struct SelectListRow: View {
 
             action()
         } label: {
-            HStack(alignment: subtitle == nil ? .center : .top, spacing: 7) {
+            HStack(alignment: hasSubtitle ? .top : .center, spacing: 7) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .semibold))
                     .opacity(isSelected ? 1 : 0)
                     .frame(width: 12)
-                    .padding(.top, subtitle == nil ? 0 : 2)
+                    .padding(.top, hasSubtitle ? 2 : 0)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -1436,6 +1457,11 @@ private struct SelectListRow: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, MenuBarPanelLayout.selectRowVerticalPadding)
+            .frame(
+                minHeight: hasSubtitle
+                    ? MenuBarPanelLayout.selectRowWithSubtitleHeight
+                    : MenuBarPanelLayout.selectRowHeight
+            )
             .contentShape(Rectangle())
             .background(alignment: .center) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
