@@ -110,6 +110,21 @@ final class WindowSwitcherPluginTests: XCTestCase {
         XCTAssertFalse(loaded.configuration.isEnabled)
     }
 
+    func testObsoleteShortcutAssignmentsAreDiscarded() throws {
+        let storage = WindowSwitcherMemoryStorage()
+        storage.set(
+            try JSONEncoder().encode(["bundle:com.apple.Safari": "s"]),
+            forKey: "shortcut-assignments"
+        )
+
+        let store = WindowSwitcherStore(storage: storage)
+
+        XCTAssertEqual(store.shortcutBindings.manual, [:])
+        XCTAssertEqual(store.shortcutBindings.automatic, [:])
+        XCTAssertNil(storage.data(forKey: "shortcut-assignments"))
+        XCTAssertNil(storage.data(forKey: "shortcut-bindings"))
+    }
+
     func testShortcutDefinitionDefaultsToCommandTab() {
         let plugin = makePlugin()
         let definition = plugin.shortcutDefinitions.first
@@ -139,8 +154,65 @@ final class WindowSwitcherPluginTests: XCTestCase {
         XCTAssertFalse(plugin.permissionState(for: "accessibility").isGranted)
     }
 
-    func testShortcutAssignmentUsesSingleKeysBeforeTwoKeySequences() {
-        let entries = (0..<28).map { index in
+    func testOverlayMaskUsesSharedRoundedGeometry() {
+        let image = WindowSwitcherOverlayMetrics.roundedMaskImage()
+        let radius = WindowSwitcherOverlayMetrics.cornerRadius
+
+        XCTAssertEqual(image.size, NSSize(width: radius * 2 + 1, height: radius * 2 + 1))
+        XCTAssertEqual(image.capInsets.top, radius)
+        XCTAssertEqual(image.capInsets.left, radius)
+        XCTAssertEqual(image.capInsets.bottom, radius)
+        XCTAssertEqual(image.capInsets.right, radius)
+        XCTAssertEqual(image.resizingMode, .stretch)
+    }
+
+    func testOverlayIconGeometryUsesCompactHoverWithQuitButtonOutside() {
+        XCTAssertEqual(
+            WindowSwitcherOverlayMetrics.iconHighlightSize,
+            WindowSwitcherOverlayMetrics.iconSize
+                + WindowSwitcherOverlayMetrics.iconHighlightPadding * 2
+        )
+        XCTAssertLessThan(
+            WindowSwitcherOverlayMetrics.iconHighlightSize,
+            WindowSwitcherOverlayMetrics.iconLayoutSize
+        )
+        let contentTopOffset = WindowSwitcherOverlayMetrics.shortcutHeight
+            + WindowSwitcherOverlayMetrics.shortcutContentSpacing
+        let center = WindowSwitcherOverlayMetrics.quitButtonCenter(
+            tileWidth: WindowSwitcherOverlayMetrics.keyWindowTileWidth,
+            contentTopOffset: contentTopOffset
+        )
+        let highlightTop = contentTopOffset
+            + (WindowSwitcherOverlayMetrics.iconLayoutSize
+                - WindowSwitcherOverlayMetrics.iconHighlightSize) / 2
+        let cornerCenter = CGPoint(
+            x: WindowSwitcherOverlayMetrics.keyWindowTileWidth / 2
+                + WindowSwitcherOverlayMetrics.iconHighlightSize / 2
+                - WindowSwitcherOverlayMetrics.iconHighlightCornerRadius,
+            y: highlightTop + WindowSwitcherOverlayMetrics.iconHighlightCornerRadius
+        )
+        XCTAssertEqual(
+            hypot(center.x - cornerCenter.x, center.y - cornerCenter.y),
+            WindowSwitcherOverlayMetrics.iconHighlightCornerRadius
+                + WindowSwitcherOverlayMetrics.quitButtonSize / 2
+                + WindowSwitcherOverlayMetrics.quitButtonGap,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            WindowSwitcherOverlayMetrics.directTileHeight,
+            WindowSwitcherOverlayMetrics.directTopSpacing
+                + WindowSwitcherOverlayMetrics.tileContentHeight
+        )
+        XCTAssertEqual(
+            WindowSwitcherOverlayMetrics.keyWindowTileHeight,
+            WindowSwitcherOverlayMetrics.shortcutHeight
+                + WindowSwitcherOverlayMetrics.shortcutContentSpacing
+                + WindowSwitcherOverlayMetrics.tileContentHeight
+        )
+    }
+
+    func testShortcutAssignmentUsesLettersThenDigitsThenCommandKeys() {
+        let entries = (0..<73).map { index in
             makeEntry(index: index, appName: "\(index)")
         }
 
@@ -149,8 +221,11 @@ final class WindowSwitcherPluginTests: XCTestCase {
         XCTAssertEqual(assigned[0].shortcutToken, "f")
         XCTAssertEqual(assigned[1].shortcutToken, "j")
         XCTAssertEqual(assigned[25].shortcutToken, "y")
-        XCTAssertEqual(assigned[26].shortcutToken, "ff")
-        XCTAssertEqual(assigned[27].shortcutToken, "fj")
+        XCTAssertEqual(assigned[26].shortcutToken, "1")
+        XCTAssertEqual(assigned[35].shortcutToken, "0")
+        XCTAssertEqual(assigned[36].shortcutToken, "cmd+f")
+        XCTAssertEqual(assigned[71].shortcutToken, "cmd+0")
+        XCTAssertNil(assigned[72].shortcutToken)
     }
 
     func testShortcutAssignmentPrefersApplicationInitials() {
@@ -170,7 +245,10 @@ final class WindowSwitcherPluginTests: XCTestCase {
             makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
             makeEntry(index: 1, appName: "Slack", bundleIdentifier: "com.tinyspeck.slackmacgap"),
         ]
-        let first = WindowSwitcherShortcutAssignment.assignShortcuts(to: entries, storedAssignments: [:])
+        let first = WindowSwitcherShortcutAssignment.assignShortcuts(
+            to: entries,
+            bindingState: WindowSwitcherShortcutBindingState()
+        )
         let reordered = [
             makeEntry(index: 1, appName: "Slack", bundleIdentifier: "com.tinyspeck.slackmacgap"),
             makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
@@ -178,7 +256,7 @@ final class WindowSwitcherPluginTests: XCTestCase {
 
         let second = WindowSwitcherShortcutAssignment.assignShortcuts(
             to: reordered,
-            storedAssignments: first.assignments
+            bindingState: first.bindingState
         )
 
         XCTAssertEqual(first.entries[0].shortcutToken, "s")
@@ -195,27 +273,235 @@ final class WindowSwitcherPluginTests: XCTestCase {
 
         let result = WindowSwitcherShortcutAssignment.assignShortcuts(
             to: entries,
-            storedAssignments: stored
+            bindingState: WindowSwitcherShortcutBindingState(automatic: stored)
         )
 
         XCTAssertEqual(result.entries[0].shortcutToken, "s")
-        XCTAssertNil(result.assignments["bundle:com.apple.Safari"])
-        XCTAssertEqual(result.assignments["bundle:com.bohemiancoding.sketch3"], "s")
+        XCTAssertNil(result.bindingState.automatic["bundle:com.apple.Safari"])
+        XCTAssertEqual(result.bindingState.automatic["bundle:com.bohemiancoding.sketch3"], "s")
     }
 
-    func testShortcutAssignmentKeepsTwoKeyStoredTokenWhenListShrinks() {
+    func testShortcutAssignmentKeepsCommandKeyWhenListShrinks() {
         let entries = [
             makeEntry(index: 0, appName: "Numbers", bundleIdentifier: "com.apple.Numbers"),
         ]
-        let stored = ["bundle:com.apple.Numbers": "ff"]
+        let stored = ["bundle:com.apple.Numbers": "cmd+f"]
 
         let result = WindowSwitcherShortcutAssignment.assignShortcuts(
             to: entries,
-            storedAssignments: stored
+            bindingState: WindowSwitcherShortcutBindingState(automatic: stored)
         )
 
-        XCTAssertEqual(result.entries[0].shortcutToken, "ff")
-        XCTAssertEqual(result.assignments["bundle:com.apple.Numbers"], "ff")
+        XCTAssertEqual(result.entries[0].shortcutToken, "cmd+f")
+        XCTAssertEqual(result.bindingState.automatic["bundle:com.apple.Numbers"], "cmd+f")
+    }
+
+    func testManualShortcutTakesPriorityOverConflictingAutomaticShortcut() {
+        let entries = [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+            makeEntry(index: 1, appName: "Finder", bundleIdentifier: "com.apple.finder"),
+        ]
+        let state = WindowSwitcherShortcutBindingState(
+            manual: ["bundle:com.apple.Safari": "f"],
+            automatic: ["bundle:com.apple.finder": "f"]
+        )
+
+        let result = WindowSwitcherShortcutAssignment.assignShortcuts(
+            to: entries,
+            bindingState: state
+        )
+
+        XCTAssertEqual(result.entries[0].shortcutToken, "f")
+        XCTAssertEqual(result.entries[1].shortcutToken, "j")
+        XCTAssertEqual(result.bindingState.manual["bundle:com.apple.Safari"], "f")
+        XCTAssertEqual(result.bindingState.automatic["bundle:com.apple.finder"], "j")
+    }
+
+    func testManualShortcutRejectsConflictWithRunningEntry() {
+        let store = WindowSwitcherStore(storage: WindowSwitcherMemoryStorage())
+        let entries = store.assignShortcuts(to: [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+            makeEntry(index: 1, appName: "Finder", bundleIdentifier: "com.apple.finder"),
+        ])
+        let finderToken = entries[1].shortcutToken
+        let bindingsBeforeConflict = store.shortcutBindings
+
+        let result = store.setManualShortcut(finderToken, for: entries[0].id, in: entries)
+
+        guard case .conflict = result else {
+            return XCTFail("Expected an active shortcut conflict.")
+        }
+        XCTAssertEqual(store.shortcutBindings, bindingsBeforeConflict)
+        XCTAssertEqual(store.assignShortcuts(to: entries), entries)
+    }
+
+    func testManualShortcutPersistsAndSurvivesSortingChanges() {
+        let storage = WindowSwitcherMemoryStorage()
+        let store = WindowSwitcherStore(storage: storage)
+        let entries = store.assignShortcuts(to: [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+            makeEntry(index: 1, appName: "Finder", bundleIdentifier: "com.apple.finder"),
+        ])
+
+        let result = store.setManualShortcut("q", for: entries[0].id, in: entries)
+        guard case let .updated(updatedEntries) = result else {
+            return XCTFail("Expected a saved manual shortcut.")
+        }
+
+        XCTAssertEqual(updatedEntries[0].shortcutToken, "q")
+        let loaded = WindowSwitcherStore(storage: storage)
+        let reordered = loaded.assignShortcuts(to: [entries[1], entries[0]])
+        XCTAssertEqual(reordered[0].shortcutToken, entries[1].shortcutToken)
+        XCTAssertEqual(reordered[1].shortcutToken, "q")
+        XCTAssertEqual(loaded.shortcutBindings.manual["bundle:com.apple.Safari"], "q")
+    }
+
+    func testManualShortcutSupportsDigitsAndCommandKeys() {
+        let store = WindowSwitcherStore(storage: WindowSwitcherMemoryStorage())
+        let entries = store.assignShortcuts(to: [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+            makeEntry(index: 1, appName: "Finder", bundleIdentifier: "com.apple.finder"),
+        ])
+
+        let digitResult = store.setManualShortcut("7", for: entries[0].id, in: entries)
+
+        guard case let .updated(digitEntries) = digitResult else {
+            return XCTFail("Expected a digit manual shortcut.")
+        }
+        XCTAssertEqual(digitEntries[0].shortcutToken, "7")
+
+        let commandResult = store.setManualShortcut("cmd+q", for: entries[0].id, in: digitEntries)
+        guard case let .updated(commandEntries) = commandResult else {
+            return XCTFail("Expected a Command-key manual shortcut.")
+        }
+        XCTAssertEqual(commandEntries[0].shortcutToken, "cmd+q")
+        XCTAssertEqual(store.shortcutBindings.manual["bundle:com.apple.Safari"], "cmd+q")
+    }
+
+    func testManualShortcutRejectsMultiKeyAndUnsupportedInput() {
+        let store = WindowSwitcherStore(storage: WindowSwitcherMemoryStorage())
+        let entries = store.assignShortcuts(to: [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+        ])
+
+        for invalidToken in ["ff", "s1", "cmd+ff", "cmd+-", "⌘a", "窗口"] {
+            guard case .unavailable = store.setManualShortcut(
+                invalidToken,
+                for: entries[0].id,
+                in: entries
+            ) else {
+                return XCTFail("Expected \(invalidToken) to be rejected.")
+            }
+        }
+        XCTAssertTrue(store.shortcutBindings.manual.isEmpty)
+    }
+
+    func testCommandAndUnmodifiedShortcutsDoNotConflict() throws {
+        let store = WindowSwitcherStore(storage: WindowSwitcherMemoryStorage())
+        let entries = store.assignShortcuts(to: [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+            makeEntry(index: 1, appName: "Finder", bundleIdentifier: "com.apple.finder"),
+        ])
+        let finderToken = try XCTUnwrap(entries[1].shortcutToken)
+
+        XCTAssertTrue(store.hasShortcutConflict(finderToken, for: entries[0].id, in: entries))
+        XCTAssertFalse(store.hasShortcutConflict("cmd+\(finderToken)", for: entries[0].id, in: entries))
+    }
+
+    func testSelectionShortcutNormalizesStorageAndDisplayValues() throws {
+        let letter = try XCTUnwrap(WindowSwitcherSelectionShortcut(storageValue: "CMD+Q"))
+        let digit = try XCTUnwrap(WindowSwitcherSelectionShortcut(storageValue: "7"))
+
+        XCTAssertEqual(letter.storageValue, "cmd+q")
+        XCTAssertEqual(letter.displayValue, "⌘Q")
+        XCTAssertEqual(digit.storageValue, "7")
+        XCTAssertEqual(digit.displayValue, "7")
+        XCTAssertNil(WindowSwitcherSelectionShortcut(storageValue: "qq"))
+        XCTAssertNil(WindowSwitcherSelectionShortcut(storageValue: "cmd+77"))
+    }
+
+    func testAssignmentRemovesUnsupportedStoredBindings() {
+        let entries = [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+            makeEntry(index: 1, appName: "Finder", bundleIdentifier: "com.apple.finder"),
+        ]
+        let state = WindowSwitcherShortcutBindingState(
+            manual: ["bundle:com.apple.Safari": "safari"],
+            automatic: ["bundle:com.apple.finder": "ff"]
+        )
+
+        let result = WindowSwitcherShortcutAssignment.assignShortcuts(
+            to: entries,
+            bindingState: state
+        )
+
+        XCTAssertTrue(result.bindingState.manual.isEmpty)
+        XCTAssertEqual(result.entries.map(\.shortcutToken), ["s", "f"])
+        XCTAssertEqual(result.bindingState.automatic["bundle:com.apple.Safari"], "s")
+        XCTAssertEqual(result.bindingState.automatic["bundle:com.apple.finder"], "f")
+    }
+
+    func testClearingManualShortcutRestoresAutomaticShortcut() {
+        let store = WindowSwitcherStore(storage: WindowSwitcherMemoryStorage())
+        let entries = store.assignShortcuts(to: [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+        ])
+        XCTAssertEqual(entries[0].shortcutToken, "s")
+        guard case let .updated(customized) = store.setManualShortcut(
+            "q",
+            for: entries[0].id,
+            in: entries
+        ) else {
+            return XCTFail("Expected a saved manual shortcut.")
+        }
+
+        let result = store.setManualShortcut(nil, for: customized[0].id, in: customized)
+
+        guard case let .updated(restored) = result else {
+            return XCTFail("Expected the manual shortcut to be cleared.")
+        }
+        XCTAssertEqual(restored[0].shortcutToken, "s")
+        XCTAssertTrue(store.shortcutBindings.manual.isEmpty)
+        XCTAssertEqual(store.shortcutBindings.automatic["bundle:com.apple.Safari"], "s")
+    }
+
+    func testSavedManualShortcutStaysReservedWhenApplicationIsNotRunning() {
+        let entries = [
+            makeEntry(index: 0, appName: "Finder", bundleIdentifier: "com.apple.finder"),
+        ]
+        let state = WindowSwitcherShortcutBindingState(
+            manual: ["bundle:com.apple.Safari": "f"],
+            automatic: ["bundle:com.apple.finder": "f"]
+        )
+
+        let result = WindowSwitcherShortcutAssignment.assignShortcuts(
+            to: entries,
+            bindingState: state
+        )
+
+        XCTAssertEqual(result.entries[0].shortcutToken, "j")
+        XCTAssertEqual(result.bindingState.manual["bundle:com.apple.Safari"], "f")
+        XCTAssertEqual(result.bindingState.automatic["bundle:com.apple.finder"], "j")
+    }
+
+    func testMultiWindowEntriesUseDistinctPersistentBindingIdentities() {
+        let store = WindowSwitcherStore(storage: WindowSwitcherMemoryStorage())
+        let entries = store.assignShortcuts(to: [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+            makeEntry(index: 1, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+        ])
+
+        let result = store.setManualShortcut("q", for: entries[1].id, in: entries)
+
+        guard case let .updated(updated) = result else {
+            return XCTFail("Expected a saved shortcut for the second window.")
+        }
+        XCTAssertEqual(updated[0].shortcutToken, "s")
+        XCTAssertEqual(updated[1].shortcutToken, "q")
+        XCTAssertEqual(
+            store.shortcutBindings.manual["bundle:com.apple.Safari#window:2"],
+            "q"
+        )
     }
 
     private func makePlugin(accessibilityTrusted: Bool = true) -> WindowSwitcherPlugin {

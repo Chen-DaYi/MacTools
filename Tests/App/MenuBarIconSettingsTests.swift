@@ -57,6 +57,74 @@ final class MenuBarIconSettingsTests: XCTestCase {
         )
     }
 
+    func testRenderedImageNormalizesNonSquareSourceToStandardHeight() throws {
+        let sourceURL = try makeImageFile(
+            name: "wide.png",
+            color: .systemOrange,
+            size: NSSize(width: 120, height: 36)
+        )
+        let sourceImage = try XCTUnwrap(NSImage(contentsOf: sourceURL))
+
+        let renderedImage = try XCTUnwrap(MenuBarIconProcessing.renderedImage(from: sourceImage))
+
+        XCTAssertEqual(renderedImage.size.height, MenuBarIconProcessing.standardIconPointSize)
+        XCTAssertGreaterThan(renderedImage.size.width, MenuBarIconProcessing.standardIconPointSize)
+    }
+
+    func testGalleryPreviewUsesTheSameStandardHeight() async throws {
+        let sourceURL = try makeImageFile(
+            name: "gallery-wide.png",
+            color: .systemOrange,
+            size: NSSize(width: 120, height: 36)
+        )
+        let baseURL = URL(fileURLWithPath: sourceURL.deletingLastPathComponent().path + "/", isDirectory: true)
+        let asset = MenuBarIconGalleryAsset(
+            id: "gallery-wide",
+            title: "Gallery Wide",
+            categoryID: "tests",
+            version: "1",
+            previewPath: sourceURL.lastPathComponent,
+            framePaths: nil,
+            framePathPattern: nil,
+            archivePath: nil,
+            archiveFramePathPattern: nil,
+            frameCount: 1,
+            frameDuration: 1.0 / 6.0
+        )
+        let store = MenuBarIconRemoteAssetStore(rootDirectory: rootDirectory)
+
+        let preview = try await store.loadPreviewImage(
+            for: asset,
+            contentBaseURL: baseURL,
+            allowsFileResources: true
+        )
+
+        XCTAssertEqual(preview.size.height, MenuBarIconProcessing.standardIconPointSize)
+        XCTAssertGreaterThan(preview.size.width, MenuBarIconProcessing.standardIconPointSize)
+    }
+
+    func testAnimatedFramesShareVisibleBounds() throws {
+        let firstFrame = NSImage(size: NSSize(width: 120, height: 36))
+        firstFrame.lockFocus()
+        NSColor.systemOrange.setFill()
+        NSRect(x: 0, y: 0, width: 60, height: 36).fill()
+        firstFrame.unlockFocus()
+
+        let secondFrame = NSImage(size: NSSize(width: 120, height: 36))
+        secondFrame.lockFocus()
+        NSColor.systemOrange.setFill()
+        NSRect(x: 60, y: 0, width: 60, height: 36).fill()
+        secondFrame.unlockFocus()
+
+        let renderedFrames = MenuBarIconProcessing.renderedImages(from: [firstFrame, secondFrame])
+
+        guard renderedFrames.count == 2 else {
+            return XCTFail("Expected both animation frames to render.")
+        }
+        XCTAssertEqual(renderedFrames[0].size, renderedFrames[1].size)
+        XCTAssertEqual(renderedFrames[0].size.height, MenuBarIconProcessing.standardIconPointSize)
+    }
+
     func testResetToDefaultClearsCustomSelectionButKeepsRecents() throws {
         let sourceURL = try makeImageFile(name: "reset.png", color: .systemGreen)
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
@@ -103,14 +171,18 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertLessThanOrEqual(highLoadMultiplier, MenuBarIconAnimationSpeedPolicy.maximumMultiplier)
     }
 
-    private func makeImageFile(name: String, color: NSColor) throws -> URL {
+    private func makeImageFile(
+        name: String,
+        color: NSColor,
+        size: NSSize = NSSize(width: 32, height: 32)
+    ) throws -> URL {
         let directory = rootDirectory.appendingPathComponent("Fixtures", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent(name)
-        let image = NSImage(size: NSSize(width: 32, height: 32))
+        let image = NSImage(size: size)
         image.lockFocus()
         color.setFill()
-        NSRect(x: 0, y: 0, width: 32, height: 32).fill()
+        NSRect(origin: .zero, size: size).fill()
         image.unlockFocus()
         let data = try XCTUnwrap(MenuBarIconProcessing.pngData(from: image))
         try data.write(to: url)

@@ -15,6 +15,8 @@ CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
 FRAGMENT_DIR = ROOT_DIR / "changes" / "unreleased"
 FRONT_MATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 VERSION_HEADER_RE = re.compile(r"(?m)^## \[([^\]]+)\](?: - .*)?$")
+SECTION_HEADER_RE = re.compile(r"(?m)^### ([^\n]+)$")
+APP_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+(?:[.-][0-9A-Za-z.-]+)?$")
 CJK_RE = re.compile(r"[\u3400-\u9fff]")
 
 TYPE_ORDER = [
@@ -296,23 +298,110 @@ def prepare(release: str, title: str, release_date: str, dry_run: bool) -> None:
         fragment.path.unlink()
 
 
-def extract(title: str) -> str:
-    if not CHANGELOG_PATH.exists():
-        fail("CHANGELOG.md does not exist.")
-    content = CHANGELOG_PATH.read_text(encoding="utf-8")
+def release_notes_from_match(content: str, matches: list[re.Match[str]], index: int) -> str:
+    match = matches[index]
+    start = content.find("\n", match.end())
+    if start == -1:
+        fail(f"CHANGELOG.md entry for {match.group(1)} is empty.")
+    end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
+    notes = content[start + 1 : end].strip()
+    if not notes:
+        fail(f"CHANGELOG.md entry for {match.group(1)} is empty.")
+    return notes + "\n"
+
+
+def extract_from_content(content: str, title: str) -> str:
     matches = list(VERSION_HEADER_RE.finditer(content))
     for index, match in enumerate(matches):
         if match.group(1) != title:
             continue
-        start = content.find("\n", match.end())
-        if start == -1:
-            fail(f"CHANGELOG.md entry for {title} is empty.")
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
-        notes = content[start + 1 : end].strip()
-        if not notes:
-            fail(f"CHANGELOG.md entry for {title} is empty.")
-        return notes + "\n"
+        return release_notes_from_match(content, matches, index)
     fail(f"CHANGELOG.md has no entry for {title}.")
+
+
+def extract(title: str) -> str:
+    if not CHANGELOG_PATH.exists():
+        fail("CHANGELOG.md does not exist.")
+    return extract_from_content(CHANGELOG_PATH.read_text(encoding="utf-8"), title)
+
+
+def parsed_release_sections(notes: str) -> dict[str, list[str]]:
+    title_to_type = {title: entry_type for entry_type, title in TYPE_TITLES.items()}
+    sections: dict[str, list[str]] = {}
+    matches = list(SECTION_HEADER_RE.finditer(notes))
+    for index, match in enumerate(matches):
+        entry_type = title_to_type.get(match.group(1).strip())
+        if entry_type is None:
+            continue
+        start = notes.find("\n", match.end())
+        if start == -1:
+            continue
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(notes)
+        body = notes[start + 1 : end].strip()
+        if not body:
+            continue
+        if entry_type == "summary":
+            entries = [clean_entry(paragraph) for paragraph in re.split(r"\n\s*\n", body)]
+        else:
+            entries = [clean_entry(line) for line in body.splitlines() if line.strip().startswith("- ")]
+        sections.setdefault(entry_type, []).extend(entry for entry in entries if entry)
+    return sections
+
+
+def plugin_sections_since_previous_app(content: str, title: str) -> dict[str, list[str]]:
+    if not APP_TAG_RE.fullmatch(title):
+        fail(f"Sparkle notes require an app tag, got {title}.")
+
+    matches = list(VERSION_HEADER_RE.finditer(content))
+    target_index = next((index for index, match in enumerate(matches) if match.group(1) == title), None)
+    if target_index is None:
+        fail(f"CHANGELOG.md has no entry for {title}.")
+
+    grouped: dict[str, list[str]] = {entry_type: [] for entry_type in TYPE_ORDER}
+    seen: set[str] = set()
+    for index in range(target_index + 1, len(matches)):
+        release_title = matches[index].group(1)
+        if APP_TAG_RE.fullmatch(release_title):
+            break
+        if not release_title.startswith("plugins-"):
+            continue
+        sections = parsed_release_sections(release_notes_from_match(content, matches, index))
+        for entry_type, entries in sections.items():
+            for entry in entries:
+                key = normalized_entry(entry)
+                if key in seen:
+                    continue
+                seen.add(key)
+                grouped[entry_type].append(entry)
+    return {entry_type: entries for entry_type, entries in grouped.items() if entries}
+
+
+def render_note_sections(sections: dict[str, list[str]]) -> str:
+    lines: list[str] = []
+    for entry_type in TYPE_ORDER:
+        entries = sections.get(entry_type)
+        if not entries:
+            continue
+        lines.extend([f"### {TYPE_TITLES[entry_type]}", ""])
+        if entry_type == "summary":
+            for entry in entries:
+                lines.extend([entry, ""])
+        else:
+            lines.extend(f"- {entry}" for entry in entries)
+            lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def compose_sparkle_notes(content: str, title: str, app_notes: str) -> str:
+    app_notes = app_notes.strip()
+    if not app_notes:
+        fail("App release notes are empty.")
+
+    parts = ["## App Updates", "", app_notes]
+    plugin_sections = plugin_sections_since_previous_app(content, title)
+    if plugin_sections:
+        parts.extend(["", "## Plugin Updates", "", render_note_sections(plugin_sections)])
+    return "\n".join(parts).rstrip() + "\n"
 
 
 def validate(require_pending: bool, release: str | None) -> None:
@@ -344,6 +433,14 @@ def parse_args() -> argparse.Namespace:
     extract_parser = subparsers.add_parser("extract", help="Extract one version from CHANGELOG.md.")
     extract_parser.add_argument("--tag", required=True, help="Release tag, for example v1.0.28 or plugins-1.0.29.")
     extract_parser.add_argument("--output", help="Write notes to this file instead of stdout.")
+
+    sparkle_parser = subparsers.add_parser(
+        "compose-sparkle",
+        help="Compose app and intervening plugin notes for the Sparkle update dialog.",
+    )
+    sparkle_parser.add_argument("--tag", required=True, help="App release tag, for example v1.0.31.")
+    sparkle_parser.add_argument("--app-notes", required=True, help="App-only release notes file.")
+    sparkle_parser.add_argument("--output", help="Write notes to this file instead of stdout.")
     return parser.parse_args()
 
 
@@ -356,6 +453,21 @@ def main() -> int:
             prepare(args.release, args.tag, args.date, args.dry_run)
         elif args.command == "extract":
             notes = extract(args.tag)
+            if args.output:
+                Path(args.output).write_text(notes, encoding="utf-8")
+            else:
+                sys.stdout.write(notes)
+        elif args.command == "compose-sparkle":
+            if not CHANGELOG_PATH.exists():
+                fail("CHANGELOG.md does not exist.")
+            app_notes_path = Path(args.app_notes)
+            if not app_notes_path.is_file():
+                fail(f"App release notes file does not exist: {app_notes_path}")
+            notes = compose_sparkle_notes(
+                CHANGELOG_PATH.read_text(encoding="utf-8"),
+                args.tag,
+                app_notes_path.read_text(encoding="utf-8"),
+            )
             if args.output:
                 Path(args.output).write_text(notes, encoding="utf-8")
             else:

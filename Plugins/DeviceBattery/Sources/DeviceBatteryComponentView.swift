@@ -706,6 +706,16 @@ func deviceSymbolName(for item: DeviceBatteryItem) -> String {
             return "desktopcomputer"
         }
         return "desktopcomputer.and.macbook"
+    case .phone:
+        return "iphone.gen2"
+    case .tablet:
+        return "ipad"
+    case .mediaPlayer:
+        return "ipodtouch"
+    case .watch:
+        return "applewatch"
+    case .spatialComputer:
+        return "visionpro"
     case .rapooMouse:
         return "computermouse.fill"
     case .airPodsPart:

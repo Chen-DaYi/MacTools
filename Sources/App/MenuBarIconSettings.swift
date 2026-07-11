@@ -21,30 +21,6 @@ enum MenuBarIconAppearance: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-enum MenuBarIconRenderMode: String, CaseIterable, Identifiable, Codable {
-    case original
-    case template
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .original:
-            return AppL10n.settings("menuBarIcon.renderMode.original", defaultValue: "保留原图")
-        case .template:
-            return AppL10n.settings("menuBarIcon.renderMode.template", defaultValue: "模板图标")
-        }
-    }
-}
-
-struct MenuBarIconAdjustment: Codable, Equatable {
-    var scale: Double
-    var offsetX: Double
-    var offsetY: Double
-
-    static let `default` = MenuBarIconAdjustment(scale: 1, offsetX: 0, offsetY: 0)
-}
-
 enum MenuBarIconAnimationSpeedMode: String, CaseIterable, Identifiable, Codable {
     case manual
     case adaptiveSystemLoad
@@ -162,13 +138,6 @@ struct MenuBarIconImagePayload: Equatable {
     }
 }
 
-struct MenuBarIconBackgroundRemovalOptions: Codable, Equatable {
-    var isEnabled: Bool
-    var tolerance: Double
-
-    static let `default` = MenuBarIconBackgroundRemovalOptions(isEnabled: true, tolerance: 0.16)
-}
-
 struct MenuBarIconContrastReport: Equatable {
     var lightContrast: Double?
     var darkContrast: Double?
@@ -197,6 +166,8 @@ enum MenuBarIconProcessing {
     static let maxAnimationSourceFrames = 120
     static let animationFramesPerSecond: TimeInterval = 6
     static let maxSourcePixelArea = 1_600 * 1_600
+    static let standardIconPointSize: CGFloat = 18
+    private static let standardIconContentPointSize: CGFloat = 16
 
     static let supportedImageContentTypes: [UTType] = [
         .png,
@@ -213,62 +184,152 @@ enum MenuBarIconProcessing {
         .movie
     ].compactMap { $0 }
 
-    static func renderedImage(
-        from image: NSImage,
-        adjustment: MenuBarIconAdjustment,
-        pointSize: CGFloat = 18,
-        scaleFactor: CGFloat = 2
-    ) -> NSImage? {
+    static func renderedImage(from image: NSImage) -> NSImage? {
         guard let source = cgImage(from: image) else {
             return nil
         }
 
-        let pixelSize = Int((pointSize * scaleFactor).rounded())
-        guard pixelSize > 0 else {
+        return renderedImage(from: source, visibleBounds: nil)
+    }
+
+    static func renderedImages(from images: [NSImage]) -> [NSImage] {
+        let sources = images.compactMap { image -> CGImage? in
+            cgImage(from: image)
+        }
+        guard !sources.isEmpty else {
+            return []
+        }
+
+        let sharedVisibleBounds = sources
+            .compactMap { alphaBounds(in: $0) }
+            .reduce(CGRect?.none) { partialBounds, bounds in
+                partialBounds?.union(bounds) ?? bounds
+            }
+
+        return sources.compactMap { source in
+            renderedImage(from: source, visibleBounds: sharedVisibleBounds)
+        }
+    }
+
+    private static func renderedImage(from source: CGImage, visibleBounds: CGRect?) -> NSImage? {
+
+        let pointSize = standardIconPointSize
+        let scaleFactor: CGFloat = 2
+        let canvasHeightPixels = Int((pointSize * scaleFactor).rounded())
+        let contentHeightPixels = Int((standardIconContentPointSize * scaleFactor).rounded())
+        let paddingPixels = max(0, (canvasHeightPixels - contentHeightPixels) / 2)
+        guard canvasHeightPixels > 0, contentHeightPixels > 0 else {
             return nil
         }
 
-        let canvasSize = CGSize(width: pixelSize, height: pixelSize)
-        guard
-            let context = CGContext(
-                data: nil,
-                width: pixelSize,
-                height: pixelSize,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )
-        else {
+        // Normalize artwork bounds before fitting so transparent source padding does not change its visual size.
+        let visibleSource: CGImage
+        let sourceBounds = CGRect(x: 0, y: 0, width: source.width, height: source.height)
+        let cropBounds = (visibleBounds ?? alphaBounds(in: source))?.intersection(sourceBounds)
+        if let cropBounds, let cropped = source.cropping(to: cropBounds) {
+            visibleSource = cropped
+        } else {
+            visibleSource = source
+        }
+        let sourceWidth = CGFloat(visibleSource.width)
+        let sourceHeight = CGFloat(visibleSource.height)
+        let renderScale = CGFloat(contentHeightPixels) / sourceHeight
+        let drawWidth = sourceWidth * renderScale
+        let drawHeight = sourceHeight * renderScale
+        let canvasWidthPixels = max(
+            contentHeightPixels + (paddingPixels * 2),
+            Int(ceil(drawWidth)) + (paddingPixels * 2)
+        )
+        let canvasSize = CGSize(width: canvasWidthPixels, height: canvasHeightPixels)
+        guard let context = CGContext(
+            data: nil,
+            width: canvasWidthPixels,
+            height: canvasHeightPixels,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
             return nil
         }
 
         context.clear(CGRect(origin: .zero, size: canvasSize))
         context.interpolationQuality = .high
 
-        let sourceWidth = CGFloat(source.width)
-        let sourceHeight = CGFloat(source.height)
-        let baseScale = min(canvasSize.width / sourceWidth, canvasSize.height / sourceHeight)
-        let renderScale = max(0.2, min(3, adjustment.scale)) * baseScale
-        let drawWidth = sourceWidth * renderScale
-        let drawHeight = sourceHeight * renderScale
-        let originX = ((canvasSize.width - drawWidth) / 2) + (CGFloat(adjustment.offsetX) * scaleFactor)
-        let originY = ((canvasSize.height - drawHeight) / 2) - (CGFloat(adjustment.offsetY) * scaleFactor)
+        let originX = (canvasSize.width - drawWidth) / 2
+        let originY = (canvasSize.height - drawHeight) / 2
         let drawSize = CGSize(width: drawWidth, height: drawHeight)
         let origin = CGPoint(
             x: originX,
             y: originY
         )
 
-        context.draw(source, in: CGRect(origin: origin, size: drawSize))
+        context.draw(visibleSource, in: CGRect(origin: origin, size: drawSize))
 
         guard let rendered = context.makeImage() else {
             return nil
         }
 
-        let output = NSImage(cgImage: rendered, size: NSSize(width: pointSize, height: pointSize))
-        output.size = NSSize(width: pointSize, height: pointSize)
+        let output = NSImage(
+            cgImage: rendered,
+            size: NSSize(
+                width: CGFloat(canvasWidthPixels) / scaleFactor,
+                height: pointSize
+            )
+        )
+        output.size = NSSize(width: CGFloat(canvasWidthPixels) / scaleFactor, height: pointSize)
         return output
+    }
+
+    private static func alphaBounds(in image: CGImage) -> CGRect? {
+        let width = image.width
+        let height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        var minX = width
+        var minY = height
+        var maxX = 0
+        var maxY = 0
+        var hasVisiblePixel = false
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let alpha = pixels[((y * width) + x) * 4 + 3]
+                guard alpha > 8 else {
+                    continue
+                }
+
+                hasVisiblePixel = true
+                minX = min(minX, x)
+                minY = min(minY, y)
+                maxX = max(maxX, x + 1)
+                maxY = max(maxY, y + 1)
+            }
+        }
+
+        guard hasVisiblePixel else {
+            return nil
+        }
+
+        return CGRect(
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
+        )
     }
 
     static func pngData(from image: NSImage) -> Data? {
@@ -523,15 +584,11 @@ final class MenuBarIconSettings: ObservableObject {
     }
 
     private struct StoredState: Codable, Equatable {
-        var renderMode: MenuBarIconRenderMode = .template
         var animationSpeedMode: MenuBarIconAnimationSpeedMode = .manual
         var manualAnimationSpeedMultiplier: Double = MenuBarIconAnimationSpeedPolicy.defaultManualMultiplier
-        var backgroundRemovalOptions: MenuBarIconBackgroundRemovalOptions = .default
         var lightIconFileName: String?
         var darkIconFileName: String?
         var remoteAssetSelection: MenuBarIconRemoteAssetSelection?
-        var lightAdjustment: MenuBarIconAdjustment = .default
-        var darkAdjustment: MenuBarIconAdjustment = .default
         var recentItems: [MenuBarIconRecentItem] = []
     }
 
@@ -553,7 +610,6 @@ final class MenuBarIconSettings: ObservableObject {
     }
 
     private static let defaultIconName = NSImage.Name("MenuBarIcon")
-    private static let iconPointSize = NSSize(width: 18, height: 18)
     private static let maxRecentItems = 6
 
     @Published private var storedState: StoredState
@@ -588,25 +644,8 @@ final class MenuBarIconSettings: ObservableObject {
             fileManager: fileManager
         )
         self.storedState = Self.loadState(userDefaults: userDefaults)
-        self.storedState.lightAdjustment = .default
-        self.storedState.darkAdjustment = .default
-        self.storedState.backgroundRemovalOptions = .default
-        self.storedState.renderMode = .original
         pruneMissingRecentItems()
         pruneMissingRemoteAssetSelection()
-    }
-
-    var renderMode: MenuBarIconRenderMode {
-        get { storedState.renderMode }
-        set {
-            guard storedState.renderMode != newValue else {
-                return
-            }
-
-            storedState.renderMode = newValue
-            invalidateSelectedIconCaches()
-            persist()
-        }
     }
 
     var recentItems: [MenuBarIconRecentItem] {
@@ -673,10 +712,7 @@ final class MenuBarIconSettings: ObservableObject {
             lastErrorMessage = AppL10n.settings("menuBarIcon.error.readSelectedImage", defaultValue: "无法读取所选图片。")
             return
         }
-        let processedImage = MenuBarIconBackgroundRemover.removingBackground(
-            from: sourceImage,
-            options: .default
-        ) ?? sourceImage
+        let processedImage = MenuBarIconBackgroundRemover.removingBackground(from: sourceImage) ?? sourceImage
 
         let displayName = sourceURL.deletingPathExtension().lastPathComponent
         let recentFileName = "recent-\(UUID().uuidString).png"
@@ -703,7 +739,6 @@ final class MenuBarIconSettings: ObservableObject {
         clearRemoteAssetSelection()
         pruneUnusedRecentFiles()
         setIconFileNameForAllAppearances(recentFileName)
-        resetAdjustmentsForAllAppearances()
         invalidateAllIconCaches()
         persist()
     }
@@ -732,10 +767,7 @@ final class MenuBarIconSettings: ObservableObject {
         }
 
         let processedFrames = sourceFrames.map { frame in
-            MenuBarIconBackgroundRemover.removingBackground(
-                from: frame,
-                options: .default
-            ) ?? frame
+            MenuBarIconBackgroundRemover.removingBackground(from: frame) ?? frame
         }
 
         guard saveAnimationFrames(processedFrames, fileNames: fileNames) else {
@@ -760,7 +792,6 @@ final class MenuBarIconSettings: ObservableObject {
         clearRemoteAssetSelection()
         pruneUnusedRecentFiles()
         setIconFileNameForAllAppearances(recentItem.fileName)
-        resetAdjustmentsForAllAppearances()
         invalidateAllIconCaches()
         persist()
     }
@@ -778,7 +809,6 @@ final class MenuBarIconSettings: ObservableObject {
         storedState.darkIconFileName = nil
         storeRemoteRecentItem(selection)
         pruneUnusedRecentFiles()
-        resetAdjustmentsForAllAppearances()
         invalidateAllIconCaches()
         remoteAssetStore.pruneRemoteAssets(keeping: selection)
         persist()
@@ -803,7 +833,6 @@ final class MenuBarIconSettings: ObservableObject {
             storedState.darkIconFileName = nil
             storeRemoteRecentItem(remoteSelection)
             pruneUnusedRecentFiles()
-            resetAdjustmentsForAllAppearances()
             invalidateSelectedIconCaches()
             remoteAssetStore.pruneRemoteAssets(keeping: remoteSelection)
             persist()
@@ -819,7 +848,6 @@ final class MenuBarIconSettings: ObservableObject {
 
         setIconFileNameForAllAppearances(item.fileName)
         clearRemoteAssetSelection()
-        resetAdjustmentsForAllAppearances()
         invalidateSelectedIconCaches()
         persist()
     }
@@ -829,8 +857,6 @@ final class MenuBarIconSettings: ObservableObject {
         storedState.darkIconFileName = nil
         storedState.remoteAssetSelection = nil
         remoteAssetStore.pruneRemoteAssets(keeping: nil)
-        storedState.lightAdjustment = .default
-        storedState.darkAdjustment = .default
         invalidateAllIconCaches()
         persist()
     }
@@ -980,8 +1006,12 @@ final class MenuBarIconSettings: ObservableObject {
     }
 
     private static func defaultImage() -> NSImage {
-        let image = NSImage(named: defaultIconName) ?? NSImage(size: iconPointSize)
-        image.size = iconPointSize
+        let imageSize = NSSize(
+            width: MenuBarIconProcessing.standardIconPointSize,
+            height: MenuBarIconProcessing.standardIconPointSize
+        )
+        let image = NSImage(named: defaultIconName) ?? NSImage(size: imageSize)
+        image.size = imageSize
         return image
     }
 
@@ -1015,7 +1045,13 @@ final class MenuBarIconSettings: ObservableObject {
         }
 
         let frameFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
-        let images = frameFileNames.compactMap(renderedImage(fileName:))
+        let sourceImages = frameFileNames.compactMap { fileName in
+            let url = recentsDirectory.appendingPathComponent(fileName)
+            return NSImage(contentsOf: url)
+        }
+        let images = item.mediaKind == .animation
+            ? MenuBarIconProcessing.renderedImages(from: sourceImages)
+            : sourceImages.compactMap { MenuBarIconProcessing.renderedImage(from: $0) }
         renderedFramesCache[cacheKey] = images
         return images
     }
@@ -1030,18 +1066,10 @@ final class MenuBarIconSettings: ObservableObject {
             return cachedImages
         }
 
-        let images = remoteAssetStore.frameURLs(for: selection).compactMap { url -> NSImage? in
-            guard let sourceImage = NSImage(contentsOf: url) else {
-                return nil
-            }
-
-            let image = MenuBarIconProcessing.renderedImage(
-                from: sourceImage,
-                adjustment: .default
-            ) ?? sourceImage
-            image.size = Self.iconPointSize
-            return image
+        let sourceImages = remoteAssetStore.frameURLs(for: selection).compactMap { url in
+            NSImage(contentsOf: url)
         }
+        let images = MenuBarIconProcessing.renderedImages(from: sourceImages)
 
         remoteFramesCache[cacheKey] = images
         return images
@@ -1053,12 +1081,7 @@ final class MenuBarIconSettings: ObservableObject {
             return nil
         }
 
-        let image = MenuBarIconProcessing.renderedImage(
-            from: sourceImage,
-            adjustment: .default
-        ) ?? sourceImage
-        image.size = Self.iconPointSize
-        return image
+        return MenuBarIconProcessing.renderedImage(from: sourceImage)
     }
 
     private func iconSelection(for appearance: MenuBarIconAppearance) -> (fileName: String, appearance: MenuBarIconAppearance)? {
@@ -1129,11 +1152,6 @@ final class MenuBarIconSettings: ObservableObject {
     private func clearRemoteAssetSelection() {
         storedState.remoteAssetSelection = nil
         remoteAssetStore.pruneRemoteAssets(keeping: nil)
-    }
-
-    private func resetAdjustmentsForAllAppearances() {
-        storedState.lightAdjustment = .default
-        storedState.darkAdjustment = .default
     }
 
     private func saveRemoteThumbnailIfNeeded(for selection: MenuBarIconRemoteAssetSelection) -> String? {
