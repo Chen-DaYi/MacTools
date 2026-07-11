@@ -321,20 +321,26 @@ final class PluginHost: ObservableObject {
     }
 
     func preferencesImportPreview(for backup: PreferencesBackup) throws -> PreferencesImportPreview {
-        try backup.validate()
-
-        let availablePluginIDs = Set(defaultPluginIDs)
-        let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs)
-            .union(backup.pluginDisplay.hiddenPluginIDs)
-        let availableShortcutIDs = Set(shortcutDescriptors().map(\.itemID))
-        let backedUpShortcutIDs = Set(backup.shortcutCustomizations.keys)
-
-        return PreferencesImportPreview(
-            pluginCount: backedUpPluginIDs.intersection(availablePluginIDs).count,
-            unavailablePluginIDs: backedUpPluginIDs.subtracting(availablePluginIDs).sorted(),
-            shortcutCount: backedUpShortcutIDs.intersection(availableShortcutIDs).count,
-            unavailableShortcutIDs: backedUpShortcutIDs.subtracting(availableShortcutIDs).sorted()
+        try PreferencesImportPreview.make(
+            backup: backup,
+            availablePluginIDs: Set(defaultPluginIDs),
+            availableShortcutIDs: Set(shortcutDescriptors().map(\.itemID)),
+            pluginManagementItems: pluginManagementItems
         )
+    }
+
+    func importPreferences(
+        _ backup: PreferencesBackup,
+        installingMissingPluginIDs requestedPluginIDs: Set<String>
+    ) async throws {
+        let preview = try preferencesImportPreview(for: backup)
+        let installablePluginIDs = Set(preview.installablePlugins.map(\.id))
+
+        for pluginID in requestedPluginIDs.intersection(installablePluginIDs).sorted() {
+            try await installPluginFromCatalog(pluginID: pluginID)
+        }
+
+        try importPreferences(backup)
     }
 
     func importPreferences(_ backup: PreferencesBackup) throws {

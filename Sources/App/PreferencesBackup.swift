@@ -68,6 +68,45 @@ struct PreferencesImportPreview: Equatable {
     let unavailablePluginIDs: [String]
     let shortcutCount: Int
     let unavailableShortcutIDs: [String]
+    let installablePlugins: [PreferencesImportInstallablePlugin]
+
+    static func make(
+        backup: PreferencesBackup,
+        availablePluginIDs: Set<String>,
+        availableShortcutIDs: Set<String>,
+        pluginManagementItems: [PluginManagementItem]
+    ) throws -> PreferencesImportPreview {
+        try backup.validate()
+
+        let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs)
+            .union(backup.pluginDisplay.hiddenPluginIDs)
+        let missingPluginIDs = backedUpPluginIDs.subtracting(availablePluginIDs)
+        let managementItemsByID = Dictionary(
+            uniqueKeysWithValues: pluginManagementItems.map { ($0.id, $0) }
+        )
+        let installablePlugins = missingPluginIDs.compactMap { pluginID -> PreferencesImportInstallablePlugin? in
+            guard let item = managementItemsByID[pluginID], item.canInstall else {
+                return nil
+            }
+
+            return PreferencesImportInstallablePlugin(
+                id: item.id,
+                title: item.title,
+                summary: item.summary,
+                version: item.version
+            )
+        }
+        let installablePluginIDs = Set(installablePlugins.map(\.id))
+        let backedUpShortcutIDs = Set(backup.shortcutCustomizations.keys)
+
+        return PreferencesImportPreview(
+            pluginCount: backedUpPluginIDs.intersection(availablePluginIDs).count,
+            unavailablePluginIDs: missingPluginIDs.subtracting(installablePluginIDs).sorted(),
+            shortcutCount: backedUpShortcutIDs.intersection(availableShortcutIDs).count,
+            unavailableShortcutIDs: backedUpShortcutIDs.subtracting(availableShortcutIDs).sorted(),
+            installablePlugins: installablePlugins.sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+        )
+    }
 
     var applicationSummary: String {
         AppL10n.preferencesBackup(
@@ -75,6 +114,13 @@ struct PreferencesImportPreview: Equatable {
             defaultValue: "应用外观、语言和状态栏点击行为"
         )
     }
+}
+
+struct PreferencesImportInstallablePlugin: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let summary: String?
+    let version: String
 }
 
 enum PreferencesBackupError: LocalizedError {

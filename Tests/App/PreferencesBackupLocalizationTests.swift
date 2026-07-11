@@ -4,21 +4,43 @@ import XCTest
 
 final class PreferencesBackupLocalizationTests: XCTestCase {
     func testCatalogContainsEverySupportedLanguageForEveryBackupString() throws {
-        let catalog = try loadCatalog()
-        let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
         let supportedLanguages: Set<String> = [
             "ar", "de", "en", "es", "fr", "ja", "ko", "pt", "ru", "zh-Hans", "zh-Hant"
         ]
 
-        for key in backupStringKeys {
-            let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing \(key) in PreferencesBackup.xcstrings")
+        try assertTranslations(
+            in: "PreferencesBackup",
+            keys: backupStringKeys,
+            supportedLanguages: supportedLanguages
+        )
+        try assertTranslations(
+            in: "PreferencesBackupImport",
+            keys: backupImportStringKeys,
+            supportedLanguages: supportedLanguages
+        )
+    }
+
+    private var backupImportStringKeys: [String] {
+        [
+            "preferencesBackup.preview.installablePlugins",
+            "preferencesBackup.preview.installablePluginsDescription",
+            "preferencesBackup.preview.installAndImport"
+        ]
+    }
+
+    private func assertTranslations(
+        in catalogName: String,
+        keys: [String],
+        supportedLanguages: Set<String>
+    ) throws {
+        let catalog = try loadCatalog(named: catalogName)
+        let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
+
+        for key in keys {
+            let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing \(key) in \(catalogName).xcstrings")
             let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
 
-            XCTAssertEqual(
-                Set(localizations.keys),
-                supportedLanguages,
-                "\(key) must be translated for every supported language"
-            )
+            XCTAssertEqual(Set(localizations.keys), supportedLanguages, "\(key) must be translated for every supported language")
         }
     }
 
@@ -49,13 +71,13 @@ final class PreferencesBackupLocalizationTests: XCTestCase {
         ]
     }
 
-    private func loadCatalog() throws -> [String: Any] {
+    private func loadCatalog(named name: String) throws -> [String: Any] {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let catalogURL = repositoryRoot
-            .appending(path: "Sources/Resources/Localization/PreferencesBackup.xcstrings")
+            .appending(path: "Sources/Resources/Localization/\(name).xcstrings")
         let data = try Data(contentsOf: catalogURL)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }

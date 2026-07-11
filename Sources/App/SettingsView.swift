@@ -194,6 +194,8 @@ private struct PreferencesBackupSettingsRow: View {
     @ObservedObject var pluginHost: PluginHost
     @State private var pendingImport: PendingPreferencesImport?
     @State private var alertMessage: String?
+    @State private var isPreparingImport = false
+    @State private var isImporting = false
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -224,9 +226,11 @@ private struct PreferencesBackupSettingsRow: View {
             HStack(spacing: 8) {
                 Button(AppL10n.preferencesBackup("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
                     .buttonStyle(.bordered)
+                    .disabled(isPreparingImport || isImporting)
 
                 Button(AppL10n.preferencesBackup("preferencesBackup.import", defaultValue: "导入偏好设置…"), action: choosePreferencesImport)
                     .buttonStyle(.bordered)
+                    .disabled(isPreparingImport || isImporting)
             }
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
@@ -235,19 +239,13 @@ private struct PreferencesBackupSettingsRow: View {
         .sheet(item: $pendingImport) { pending in
             PreferencesImportPreviewSheet(
                 preview: pending.preview,
+                isImporting: isImporting,
                 onCancel: { pendingImport = nil },
-                onImport: {
-                    do {
-                        try pluginHost.importPreferences(pending.backup)
-                        pendingImport = nil
-                        alertMessage = AppL10n.preferencesBackup(
-                            "preferencesBackup.imported",
-                            defaultValue: "偏好设置已导入。语言设置将在重启 MacTools 后生效。"
-                        )
-                    } catch {
-                        pendingImport = nil
-                        alertMessage = error.localizedDescription
-                    }
+                onImport: { selectedPluginIDs in
+                    importPreferences(
+                        pending.backup,
+                        installingMissingPluginIDs: selectedPluginIDs
+                    )
                 }
             )
         }
@@ -298,32 +296,62 @@ private struct PreferencesBackupSettingsRow: View {
             return
         }
 
-        do {
-            let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: url))
-            pendingImport = PendingPreferencesImport(
-                backup: backup,
-                preview: try pluginHost.preferencesImportPreview(for: backup)
-            )
-        } catch {
-            alertMessage = error.localizedDescription
+        Task { @MainActor in
+            isPreparingImport = true
+            defer { isPreparingImport = false }
+
+            do {
+                let backup = try PreferencesBackup.decodeJSON(Data(contentsOf: url))
+                await pluginHost.refreshPluginCatalog()
+                pendingImport = PendingPreferencesImport(
+                    backup: backup,
+                    preview: try pluginHost.preferencesImportPreview(for: backup)
+                )
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func importPreferences(
+        _ backup: PreferencesBackup,
+        installingMissingPluginIDs pluginIDs: Set<String>
+    ) {
+        Task { @MainActor in
+            isImporting = true
+            defer { isImporting = false }
+
+            do {
+                try await pluginHost.importPreferences(
+                    backup,
+                    installingMissingPluginIDs: pluginIDs
+                )
+                pendingImport = nil
+                alertMessage = AppL10n.preferencesBackup(
+                    "preferencesBackup.imported",
+                    defaultValue: "偏好设置已导入。语言设置将在重启 MacTools 后生效。"
+                )
+            } catch {
+                pendingImport = nil
+                alertMessage = error.localizedDescription
+            }
         }
     }
 }
 
 private struct PreferencesImportPreviewSheet: View {
     let preview: PreferencesImportPreview
+    let isImporting: Bool
     let onCancel: () -> Void
-    let onImport: () -> Void
+    let onImport: (Set<String>) -> Void
+    @State private var selectedInstallablePluginIDs: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(AppL10n.preferencesBackup("preferencesBackup.preview.title", defaultValue: "导入偏好设置"))
                 .font(PluginSettingsTheme.Typography.pageTitle)
 
-            Text(AppL10n.preferencesBackup(
-                "preferencesBackup.preview.description",
-                defaultValue: "请确认以下更改。导入不会安装插件，也不会修改权限、缓存、Keychain 密钥或插件私有数据。"
-            ))
+            Text(previewDescription)
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -355,6 +383,30 @@ private struct PreferencesImportPreviewSheet: View {
             }
             .font(PluginSettingsTheme.Typography.rowDescription)
 
+            if !preview.installablePlugins.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(AppL10n.preferencesBackupImport(
+                        "preferencesBackup.preview.installablePlugins",
+                        defaultValue: "可安装的缺失插件"
+                    ))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                    ForEach(preview.installablePlugins) { plugin in
+                        Toggle(isOn: installationSelectionBinding(for: plugin.id)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(plugin.title)
+                                    .font(PluginSettingsTheme.Typography.rowTitle)
+
+                                Text("\(plugin.version) · \(plugin.summary ?? plugin.id)")
+                                    .font(PluginSettingsTheme.Typography.rowDescription)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+            }
+
             if !preview.unavailablePluginIDs.isEmpty || !preview.unavailableShortcutIDs.isEmpty {
                 Text(AppL10n.preferencesBackupFormat(
                     "preferencesBackup.preview.skipped",
@@ -370,12 +422,58 @@ private struct PreferencesImportPreviewSheet: View {
                 Spacer()
                 Button(AppL10n.settings("common.cancel", defaultValue: "取消"), action: onCancel)
                     .buttonStyle(.bordered)
-                Button(AppL10n.preferencesBackup("preferencesBackup.preview.confirm", defaultValue: "导入"), action: onImport)
+                    .disabled(isImporting)
+                Button(confirmTitle) {
+                    onImport(selectedInstallablePluginIDs)
+                }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isImporting)
+            }
+
+            if isImporting {
+                ProgressView()
+                    .controlSize(.small)
             }
         }
         .padding(24)
         .frame(width: 500)
+    }
+
+    private var confirmTitle: String {
+        if selectedInstallablePluginIDs.isEmpty {
+            return AppL10n.preferencesBackup("preferencesBackup.preview.confirm", defaultValue: "导入")
+        }
+
+        return AppL10n.preferencesBackupImport(
+            "preferencesBackup.preview.installAndImport",
+            defaultValue: "安装所选插件并导入"
+        )
+    }
+
+    private var previewDescription: String {
+        if preview.installablePlugins.isEmpty {
+            return AppL10n.preferencesBackup(
+                "preferencesBackup.preview.description",
+                defaultValue: "请确认以下更改。导入不会安装插件，也不会修改权限、缓存、Keychain 密钥或插件私有数据。"
+            )
+        }
+
+        return AppL10n.preferencesBackupImport(
+            "preferencesBackup.preview.installablePluginsDescription",
+            defaultValue: "仅会从已验证的插件列表下载你选中的插件。"
+        )
+    }
+
+    private func installationSelectionBinding(for pluginID: String) -> Binding<Bool> {
+        Binding {
+            selectedInstallablePluginIDs.contains(pluginID)
+        } set: { isSelected in
+            if isSelected {
+                selectedInstallablePluginIDs.insert(pluginID)
+            } else {
+                selectedInstallablePluginIDs.remove(pluginID)
+            }
+        }
     }
 }
 

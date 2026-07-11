@@ -63,7 +63,7 @@
 | Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, and restore the default icon. |
 | Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance. |
 
-> **Preferences backup:** Import restores only portable host preferences, plugin display settings, and shortcut customizations. It never installs missing plugins; the preview reports their skipped settings and shortcuts before import.
+> **Preferences backup:** Import restores only portable host preferences, plugin display settings, and shortcut customizations. Missing plugins are never installed automatically: the preview lets you explicitly select catalog-verified plugins to install, while unavailable or unselected plugins and their shortcuts are skipped.
 
 > **Right-click action:** You can use Option + left-click on the MacTools icon to trigger the right-click action.
 

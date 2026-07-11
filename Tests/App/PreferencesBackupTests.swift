@@ -79,6 +79,47 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(preview.unavailableShortcutIDs, ["unavailable.shortcut.toggle"])
     }
 
+    func testPreviewOffersOnlyCatalogInstallableMissingPlugins() throws {
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: ["available", "installable", "incompatible"],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [:]
+        )
+        let preview = try PreferencesImportPreview.make(
+            backup: backup,
+            availablePluginIDs: ["available"],
+            availableShortcutIDs: [],
+            pluginManagementItems: [
+                PluginManagementItem(
+                    id: "installable",
+                    title: "Installable",
+                    summary: "Available from the verified catalog.",
+                    version: "1.0.0",
+                    state: .available,
+                    packageURL: nil,
+                    requiresRestartToFullyUnload: false,
+                    releaseNotesURL: nil
+                ),
+                PluginManagementItem(
+                    id: "incompatible",
+                    title: "Incompatible",
+                    summary: nil,
+                    version: "1.0.0",
+                    state: .incompatible("Requires a newer MacTools version."),
+                    packageURL: nil,
+                    requiresRestartToFullyUnload: false,
+                    releaseNotesURL: nil
+                )
+            ]
+        )
+
+        XCTAssertEqual(preview.installablePlugins.map(\.id), ["installable"])
+        XCTAssertEqual(preview.unavailablePluginIDs, ["incompatible"])
+    }
+
     func testImportRestoresDisplayPreferencesAndShortcutCustomizations() throws {
         let defaults = makeDefaults()
         let host = makeHost(
