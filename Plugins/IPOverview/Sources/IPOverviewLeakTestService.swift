@@ -119,7 +119,7 @@ struct IPOverviewLeakTestService: IPOverviewLeakTesting {
     }
 
     private func geoEndpoint(ip: String, natType: String?) async -> IPOverviewLeakEndpoint {
-        let url = IPOverviewGeoSource.ipwhois.url(ip: ip, localization: localization)
+        let url = IPOverviewGeoSource.ipwhois.url(ip: ip)
 
         do {
             let (data, response) = try await fetch(url)

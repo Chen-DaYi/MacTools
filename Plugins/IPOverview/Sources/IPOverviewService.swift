@@ -270,7 +270,7 @@ struct IPOverviewService: IPOverviewProviding {
     private func fetchGeoInfo(ip: String) async -> IPOverviewGeoInfo? {
         for source in IPOverviewGeoSource.allCases {
             do {
-                let (data, response) = try await fetch(source.url(ip: ip, localization: localization))
+                let (data, response) = try await fetch(source.url(ip: ip))
                 guard (200..<300).contains(response.statusCode) else {
                     continue
                 }
@@ -557,10 +557,10 @@ enum IPOverviewGeoSource: CaseIterable {
     case ipwhois
     case ipapi
 
-    func url(ip: String, localization: PluginLocalization = PluginLocalization(bundle: .main)) -> URL {
+    func url(ip: String) -> URL {
         switch self {
         case .ipwhois:
-            return url(ip: ip, languageCode: IPOverviewLocale.geoLanguageCode(localization: localization))
+            return url(ip: ip, languageCode: IPOverviewLocale.geoLanguageCode())
         case .ipapi:
             return URL(string: "https://ipapi.co/\(ip)/json/")!
         }
@@ -581,7 +581,7 @@ enum IPOverviewGeoSource: CaseIterable {
 }
 
 enum IPOverviewLocale {
-    static func geoLanguageCode(localization: PluginLocalization) -> String? {
+    static func geoLanguageCode() -> String? {
         let preferredLocalization = PluginRuntimeLocalization.preferredLanguages.first
             ?? Locale.current.identifier
         return geoLanguageCode(preferredLocalization: preferredLocalization)

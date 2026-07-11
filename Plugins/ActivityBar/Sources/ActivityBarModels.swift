@@ -215,6 +215,13 @@ struct ActivityBarCodingDailyStats: Codable, Identifiable, Equatable, Sendable {
 }
 
 enum ActivityBarFormatting {
+    static func monthDay(_ date: Date, locale: Locale = PluginRuntimeLocalization.locale) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter.string(from: date)
+    }
+
     static func decimal(_ value: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
