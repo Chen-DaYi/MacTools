@@ -17,6 +17,7 @@ final class PreferencesBackupTests: XCTestCase {
         defaults.set(AppAppearancePreference.dark.rawValue, forKey: AppAppearancePreference.userDefaultsKey)
         defaults.set(AppLanguagePreference.en.rawValue, forKey: AppLanguagePreference.userDefaultsKey)
         defaults.set(MenuBarClickBehaviorPreference.swapped.rawValue, forKey: MenuBarClickBehaviorPreference.userDefaultsKey)
+        defaults.set("api-key-value", forKey: "translator.apiKey")
 
         let firstPlugin = BackupTestPlugin(id: "first", order: 1, shortcutID: "toggle")
         let secondPlugin = BackupTestPlugin(id: "second", order: 2, shortcutID: "open")
@@ -45,6 +46,7 @@ final class PreferencesBackupTests: XCTestCase {
             .custom(ShortcutBinding(keyCode: 12, modifiers: [.command, .shift]))
         )
         XCTAssertNil(backup.shortcutCustomizations["second.shortcut.open"])
+        XCTAssertFalse(try XCTUnwrap(String(data: backup.encodedJSON(), encoding: .utf8)).contains("api-key-value"))
     }
 
     func testPreviewReportsUnavailablePluginAndShortcutSettings() throws {
@@ -86,6 +88,10 @@ final class PreferencesBackupTests: XCTestCase {
             ],
             defaults: defaults
         )
+        host.setShortcutBinding(
+            ShortcutBinding(keyCode: 12, modifiers: [.command]),
+            for: "first.shortcut.toggle"
+        )
         let backup = PreferencesBackup(
             application: PreferencesBackup.ApplicationPreferences(
                 appearancePreference: AppAppearancePreference.system.rawValue,
@@ -93,10 +99,13 @@ final class PreferencesBackupTests: XCTestCase {
                 menuBarClickBehavior: MenuBarClickBehaviorPreference.standard.rawValue
             ),
             pluginDisplay: PluginDisplayPreferencesBackup(
-                orderedPluginIDs: ["second", "first"],
-                hiddenPluginIDs: ["first"]
+                orderedPluginIDs: ["second", "unavailable", "first"],
+                hiddenPluginIDs: ["first", "unavailable"]
             ),
-            shortcutCustomizations: ["second.shortcut.open": .cleared]
+            shortcutCustomizations: [
+                "second.shortcut.open": .cleared,
+                "unavailable.shortcut.toggle": .cleared
+            ]
         )
 
         try host.importPreferences(backup)
@@ -104,6 +113,49 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(host.featureManagementItems.map(\.id), ["second", "first"])
         XCTAssertFalse(host.featureManagementItems.first(where: { $0.id == "first" })?.isVisible ?? true)
         XCTAssertFalse(host.shortcutItems.first(where: { $0.id == "second.shortcut.open" })?.canClear ?? true)
+        XCTAssertTrue(host.shortcutItems.first(where: { $0.id == "first.shortcut.toggle" })?.usesDefaultValue ?? false)
+    }
+
+    func testDecodeRejectsUnsupportedFormatVersion() throws {
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:]
+        )
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
+        json["formatVersion"] = 2
+
+        XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
+            guard case PreferencesBackupError.unsupportedFormatVersion(2) = error else {
+                return XCTFail("Expected unsupported format version error, got \(error)")
+            }
+        }
+    }
+
+    func testDecodeRejectsInvalidApplicationPreferences() throws {
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:]
+        )
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
+        var application = try XCTUnwrap(json["application"] as? [String: Any])
+        application["languagePreference"] = "unsupported-language"
+        json["application"] = application
+
+        XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
+            guard case PreferencesBackupError.invalidApplicationPreferences = error else {
+                return XCTFail("Expected invalid application preferences error, got \(error)")
+            }
+        }
+    }
+
+    private var validApplicationPreferences: PreferencesBackup.ApplicationPreferences {
+        PreferencesBackup.ApplicationPreferences(
+            appearancePreference: AppAppearancePreference.system.rawValue,
+            languagePreference: AppLanguagePreference.system.rawValue,
+            menuBarClickBehavior: MenuBarClickBehaviorPreference.standard.rawValue
+        )
     }
 
     private func makeDefaults() -> UserDefaults {
