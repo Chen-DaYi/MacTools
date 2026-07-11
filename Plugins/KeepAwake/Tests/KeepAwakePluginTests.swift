@@ -315,6 +315,33 @@ final class KeepAwakeStopScheduleFormattingTests: XCTestCase {
 
 @MainActor
 final class KeepAwakeSessionTests: XCTestCase {
+    func testDisplayAssertionFailureDoesNotPreventSessionStart() throws {
+        var createdKinds: [KeepAwakeSession.AssertionKind] = []
+        var releasedAssertionIDs: [IOPMAssertionID] = []
+        let session = KeepAwakeSession(
+            onEnd: { _ in },
+            assertionCreator: { kind in
+                createdKinds.append(kind)
+                switch kind {
+                case .system:
+                    return (kIOReturnSuccess, 1)
+                case .display:
+                    return (kIOReturnError, 0)
+                }
+            },
+            assertionReleaser: { assertionID in
+                releasedAssertionIDs.append(assertionID)
+                return kIOReturnSuccess
+            }
+        )
+
+        try session.start(until: nil, preventDisplaySleep: true)
+        session.requestStop(reason: .userRequested)
+
+        XCTAssertEqual(createdKinds, [.system, .display])
+        XCTAssertEqual(releasedAssertionIDs, [1])
+    }
+
     func testDisplayAssertionCanBeUpdatedWithoutRestartingSystemAssertion() throws {
         var createdKinds: [KeepAwakeSession.AssertionKind] = []
         var releasedAssertionIDs: [IOPMAssertionID] = []

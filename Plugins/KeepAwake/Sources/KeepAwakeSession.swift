@@ -161,7 +161,11 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
             try createSystemAssertionIfNeeded()
         }
 
-        try updateDisplayAssertion(preventDisplaySleep: preventDisplaySleep)
+        do {
+            try updateDisplayAssertion(preventDisplaySleep: preventDisplaySleep)
+        } catch {
+            logger.error("failed to update keep-awake display assertion at session start: \(error.localizedDescription, privacy: .public)")
+        }
         try scheduleAutoStop(until: endDate)
         installTerminationObserverIfNeeded()
     }

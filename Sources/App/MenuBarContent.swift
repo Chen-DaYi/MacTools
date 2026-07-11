@@ -231,7 +231,7 @@ enum MenuBarPanelLayout {
     }
 
     private static func selectRowHeight(for option: PluginPanelControlOption) -> CGFloat {
-        guard let subtitle = option.subtitle, !subtitle.isEmpty else {
+        guard option.hasNonEmptySubtitle else {
             return selectRowHeight
         }
 
@@ -1393,8 +1393,7 @@ private struct SelectListControl: View {
             VStack(spacing: 0) {
                 ForEach(control.options) { option in
                     SelectListRow(
-                        title: option.title,
-                        subtitle: option.subtitle,
+                        option: option,
                         isSelected: option.id == control.selectedOptionID,
                         isEnabled: control.isEnabled,
                         action: { onSelect(option.id) }
@@ -1407,8 +1406,7 @@ private struct SelectListControl: View {
 }
 
 private struct SelectListRow: View {
-    let title: String
-    let subtitle: String?
+    let option: PluginPanelControlOption
     let isSelected: Bool
     let isEnabled: Bool
     let action: () -> Void
@@ -1416,11 +1414,7 @@ private struct SelectListRow: View {
     @State private var isHovered = false
 
     private var hasSubtitle: Bool {
-        guard let subtitle else {
-            return false
-        }
-
-        return !subtitle.isEmpty
+        option.hasNonEmptySubtitle
     }
 
     var body: some View {
@@ -1439,12 +1433,12 @@ private struct SelectListRow: View {
                     .padding(.top, hasSubtitle ? 2 : 0)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
+                    Text(option.title)
                         .font(.system(size: 11.5))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
-                    if let subtitle, !subtitle.isEmpty {
+                    if option.hasNonEmptySubtitle, let subtitle = option.subtitle {
                         Text(subtitle)
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)

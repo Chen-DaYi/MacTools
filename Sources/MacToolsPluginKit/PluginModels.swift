@@ -571,6 +571,10 @@ public struct PluginPanelControlOption: Identifiable, Equatable {
         self.title = title
         self.subtitle = subtitle
     }
+
+    public var hasNonEmptySubtitle: Bool {
+        subtitle?.isEmpty == false
+    }
 }
 
 public struct PluginPanelControl: Identifiable {
