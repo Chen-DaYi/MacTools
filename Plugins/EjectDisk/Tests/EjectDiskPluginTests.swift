@@ -49,4 +49,41 @@ final class EjectDiskPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "无可推出的磁盘")
     }
+
+    func testEjectableVolumeRequiresExplicitExternalLocalVolumeProperties() {
+        XCTAssertTrue(EjectDiskPlugin.isEjectableVolume(
+            isEjectable: true,
+            isInternal: false,
+            isLocal: true
+        ))
+    }
+
+    func testEjectableVolumeRejectsInternalSystemVolume() {
+        XCTAssertFalse(EjectDiskPlugin.isEjectableVolume(
+            isEjectable: true,
+            isInternal: true,
+            isLocal: true
+        ))
+    }
+
+    func testEjectableVolumeRejectsNetworkVolume() {
+        XCTAssertFalse(EjectDiskPlugin.isEjectableVolume(
+            isEjectable: true,
+            isInternal: false,
+            isLocal: false
+        ))
+    }
+
+    func testEjectableVolumeRejectsUnknownProperties() {
+        XCTAssertFalse(EjectDiskPlugin.isEjectableVolume(
+            isEjectable: true,
+            isInternal: nil,
+            isLocal: true
+        ))
+        XCTAssertFalse(EjectDiskPlugin.isEjectableVolume(
+            isEjectable: nil,
+            isInternal: false,
+            isLocal: true
+        ))
+    }
 }

@@ -4,20 +4,21 @@ import UniformTypeIdentifiers
 import MacToolsPluginKit
 
 private enum MenuBarIconSettingsMetrics {
-    static let recentIconSize = CGSize(width: 44, height: 44)
+    static let recentPreviewHeight: CGFloat = 44
     static let recentTileSize = CGSize(width: 58, height: 58)
     static let recentBadgeSize: CGFloat = 18
 
-    static let galleryColumnWidth: CGFloat = 84
+    static let galleryColumnWidth: CGFloat = 128
     static let galleryColumnSpacing: CGFloat = 10
-    static let galleryColumnCount = 6
+    static let galleryColumnCount = 4
     static let galleryContentWidth: CGFloat = 554
     static let galleryContentHeight: CGFloat = 340
     static let galleryPopoverWidth: CGFloat = 582
-    static let galleryPreviewSize = CGSize(width: 48, height: 40)
-    static let galleryTileSize = CGSize(width: 66, height: 52)
-    static let galleryCellSize = CGSize(width: 84, height: 82)
-    static let galleryTitleWidth: CGFloat = 80
+    static let galleryPreviewHeight: CGFloat = 34
+    static let galleryPreviewMaxWidth: CGFloat = 122
+    static let galleryTileSize = CGSize(width: 128, height: 52)
+    static let galleryCellSize = CGSize(width: 128, height: 82)
+    static let galleryTitleWidth: CGFloat = 120
 }
 
 struct MenuBarIconSettingsView: View {
@@ -81,12 +82,9 @@ private struct MenuBarIconEditorControls: View {
     @State private var sliderID = UUID()
 
     private let rowLabelWidth: CGFloat = 76
-    private let contentWidth: CGFloat = 520
+    private let contentMaxWidth: CGFloat = 520
     private let animationModePickerWidth: CGFloat = 240
     private let manualSpeedSliderWidth: CGFloat = 180
-    private var sourceButtonWidth: CGFloat {
-        (contentWidth - 8) / 2
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -94,20 +92,21 @@ private struct MenuBarIconEditorControls: View {
                 actionButtons
             }
 
-            Text(AppL10n.settings(
-                "menuBarIcon.sourceDescription",
-                defaultValue: "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会自动扣除纯色背景。"
-            ))
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-                .frame(width: contentWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            contentOnlyRow {
+                Text(AppL10n.settings(
+                    "menuBarIcon.sourceDescription",
+                    defaultValue: "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会自动扣除纯色背景。"
+                ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: contentMaxWidth, alignment: .leading)
+            }
 
             animationSpeedControls
 
             controlRow(AppL10n.settings("menuBarIcon.recent", defaultValue: "最近使用"), alignment: .top) {
                 MenuBarIconRecentGrid(iconSettings: iconSettings, gallery: gallery)
-                    .frame(width: contentWidth, alignment: .leading)
+                    .frame(maxWidth: contentMaxWidth, alignment: .leading)
             }
 
             if let warningText = iconSettings.contrastReport(for: .light).warningText
@@ -154,7 +153,7 @@ private struct MenuBarIconEditorControls: View {
                 .frame(width: rowLabelWidth, height: 1)
 
             content()
-                .frame(width: contentWidth, alignment: .leading)
+                .frame(maxWidth: contentMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,12 +168,11 @@ private struct MenuBarIconEditorControls: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .frame(width: sourceButtonWidth)
 
             MenuBarIconGalleryPicker(iconSettings: iconSettings, gallery: gallery)
-            .frame(width: sourceButtonWidth)
+                .frame(maxWidth: .infinity)
         }
-        .frame(width: contentWidth, alignment: .leading)
+        .frame(maxWidth: contentMaxWidth, alignment: .leading)
     }
 
     private var animationSpeedControls: some View {
@@ -191,7 +189,7 @@ private struct MenuBarIconEditorControls: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .frame(width: animationModePickerWidth, alignment: .leading)
-                .frame(width: contentWidth, alignment: .leading)
+                .frame(maxWidth: contentMaxWidth, alignment: .leading)
             }
 
             controlRow(AppL10n.settings("menuBarIcon.multiplier", defaultValue: "倍率")) {
@@ -228,7 +226,7 @@ private struct MenuBarIconEditorControls: View {
 
             Spacer(minLength: 0)
         }
-        .frame(width: contentWidth, height: PluginSettingsTheme.Size.controlHeight, alignment: .leading)
+        .frame(maxWidth: contentMaxWidth, minHeight: PluginSettingsTheme.Size.controlHeight, alignment: .leading)
         .onAppear {
             DispatchQueue.main.async {
                 sliderID = UUID()
@@ -281,96 +279,6 @@ private struct MenuBarIconEditorControls: View {
     }
 }
 
-private struct MenuBarIconPreviewPair: View {
-    let lightPayload: MenuBarIconImagePayload
-    let darkPayload: MenuBarIconImagePayload
-
-    var body: some View {
-        HStack(spacing: 8) {
-            MenuBarIconPreviewStrip(
-                title: AppL10n.settings("menuBarIcon.preview.light", defaultValue: "浅色"),
-                payload: lightPayload,
-                backgroundColor: Color(nsColor: .windowBackgroundColor),
-                foregroundColor: .black
-            )
-            .frame(maxWidth: .infinity)
-
-            MenuBarIconPreviewStrip(
-                title: AppL10n.settings("menuBarIcon.preview.dark", defaultValue: "深色"),
-                payload: darkPayload,
-                backgroundColor: Color(red: 0.12, green: 0.12, blue: 0.13),
-                foregroundColor: .white
-            )
-            .frame(maxWidth: .infinity)
-        }
-    }
-}
-
-private struct MenuBarIconPreviewStrip: View {
-    let title: String
-    let payload: MenuBarIconImagePayload
-    let backgroundColor: Color
-    let foregroundColor: Color
-
-    private var frameDuration: TimeInterval {
-        switch payload.speedMode {
-        case .manual:
-            return max(payload.frameDuration / payload.manualSpeedMultiplier, 1.0 / 30.0)
-        case .adaptiveSystemLoad:
-            return max(payload.frameDuration, 1.0 / 30.0)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(PluginSettingsTheme.Typography.statusBadge)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(.red)
-                    .frame(width: 8, height: 8)
-                Circle()
-                    .fill(.yellow)
-                    .frame(width: 8, height: 8)
-                Circle()
-                    .fill(.green)
-                    .frame(width: 8, height: 8)
-
-                Spacer()
-
-                TimelineView(.periodic(from: .now, by: frameDuration)) { context in
-                    Image(nsImage: frame(for: context.date))
-                        .renderingMode(.original)
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundStyle(foregroundColor)
-                        .frame(width: 18, height: 18)
-                }
-                .frame(width: 18, height: 18)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 34)
-            .background(backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-            )
-        }
-    }
-
-    private func frame(for date: Date) -> NSImage {
-        guard payload.animationFrames.count > 1 else {
-            return payload.image
-        }
-
-        let frameIndex = Int(date.timeIntervalSinceReferenceDate / frameDuration) % payload.animationFrames.count
-        return payload.animationFrames[frameIndex]
-    }
-}
-
 private struct MenuBarIconRecentGrid: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
     @ObservedObject var gallery: MenuBarIconGalleryLibrary
@@ -384,46 +292,54 @@ private struct MenuBarIconRecentGrid: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
             } else {
-                HStack(spacing: 8) {
-                    ForEach(iconSettings.recentItems.prefix(6)) { item in
-                        Button {
-                            Task {
-                                activeRecentID = item.id
-                                _ = await gallery.selectRecentItem(item, iconSettings: iconSettings)
-                                activeRecentID = nil
-                            }
-                        } label: {
-                            ZStack(alignment: .bottomTrailing) {
-                                Image(nsImage: iconSettings.previewImage(for: item))
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(
-                                        width: MenuBarIconSettingsMetrics.recentIconSize.width,
-                                        height: MenuBarIconSettingsMetrics.recentIconSize.height
-                                    )
-                                    .frame(
-                                        width: MenuBarIconSettingsMetrics.recentTileSize.width,
-                                        height: MenuBarIconSettingsMetrics.recentTileSize.height
-                                    )
-                                    .background(Color(nsColor: .controlBackgroundColor))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-                                    )
-
-                                badge(for: item)
-                            }
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(iconSettings.recentItems.prefix(6)) { item in
+                            recentItemButton(for: item)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(activeRecentID != nil)
-                        .help(item.displayName)
                     }
+                    .frame(minHeight: MenuBarIconSettingsMetrics.recentTileSize.height, alignment: .leading)
                 }
+                .scrollIndicators(.never)
                 .frame(maxWidth: .infinity, minHeight: MenuBarIconSettingsMetrics.recentTileSize.height, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func recentItemButton(for item: MenuBarIconRecentItem) -> some View {
+        let previewImage = iconSettings.previewImage(for: item)
+
+        return Button {
+            Task {
+                activeRecentID = item.id
+                _ = await gallery.selectRecentItem(item, iconSettings: iconSettings)
+                activeRecentID = nil
+            }
+        } label: {
+            ZStack(alignment: .bottomTrailing) {
+                MenuBarIconThumbnail(
+                    image: previewImage,
+                    height: MenuBarIconSettingsMetrics.recentPreviewHeight,
+                    maxWidth: nil
+                )
+                .frame(
+                    minWidth: MenuBarIconSettingsMetrics.recentTileSize.width,
+                    minHeight: MenuBarIconSettingsMetrics.recentTileSize.height
+                )
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+
+                badge(for: item)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(activeRecentID != nil)
+        .help(item.displayName)
     }
 
     @ViewBuilder
@@ -619,10 +535,6 @@ private struct MenuBarIconGalleryAssetCell: View {
             ZStack(alignment: .bottomTrailing) {
                 preview
                     .frame(
-                        width: MenuBarIconSettingsMetrics.galleryPreviewSize.width,
-                        height: MenuBarIconSettingsMetrics.galleryPreviewSize.height
-                    )
-                    .frame(
                         width: MenuBarIconSettingsMetrics.galleryTileSize.width,
                         height: MenuBarIconSettingsMetrics.galleryTileSize.height
                     )
@@ -651,14 +563,17 @@ private struct MenuBarIconGalleryAssetCell: View {
     @ViewBuilder
     private var preview: some View {
         if let previewImage {
-            Image(nsImage: previewImage)
-                .resizable()
-                .renderingMode(.original)
-                .scaledToFit()
+            MenuBarIconThumbnail(
+                image: previewImage,
+                height: MenuBarIconSettingsMetrics.galleryPreviewHeight,
+                maxWidth: MenuBarIconSettingsMetrics.galleryPreviewMaxWidth
+            )
         } else {
-            Image(systemName: "photo")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.secondary)
+            MenuBarIconThumbnail(
+                image: nil,
+                height: MenuBarIconSettingsMetrics.galleryPreviewHeight,
+                maxWidth: MenuBarIconSettingsMetrics.galleryPreviewMaxWidth
+            )
         }
     }
 
@@ -703,5 +618,29 @@ private struct MenuBarIconGalleryAssetCell: View {
 
     private var borderColor: Color {
         isSelected ? .accentColor : Color.primary.opacity(0.1)
+    }
+}
+
+private struct MenuBarIconThumbnail: View {
+    let image: NSImage?
+    let height: CGFloat
+    let maxWidth: CGFloat?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .renderingMode(.original)
+                    .scaledToFit()
+                    .frame(height: height)
+            } else {
+                Image(systemName: "photo")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: height, height: height)
+            }
+        }
+        .frame(maxWidth: maxWidth, maxHeight: height)
     }
 }

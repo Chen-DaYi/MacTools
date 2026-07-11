@@ -5,12 +5,8 @@ import simd
 
 enum MenuBarIconBackgroundRemover {
     static func removingBackground(
-        from image: NSImage,
-        options: MenuBarIconBackgroundRemovalOptions
+        from image: NSImage
     ) -> NSImage? {
-        guard options.isEnabled else {
-            return image
-        }
         guard
             let source = cgImage(from: image),
             let context = bitmapContext(width: source.width, height: source.height)
@@ -32,7 +28,7 @@ enum MenuBarIconBackgroundRemover {
             width: source.width,
             height: source.height,
             backgroundColor: backgroundColor,
-            tolerance: options.tolerance
+            tolerance: 0.16
         )
 
         guard let output = context.makeImage() else {

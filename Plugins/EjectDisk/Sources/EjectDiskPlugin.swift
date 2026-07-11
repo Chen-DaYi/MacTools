@@ -152,40 +152,49 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     nonisolated private static func ejectableDiskCountSync() -> Int {
-        let fileManager = FileManager.default
         let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EjectDiskPlugin")
-        
-        do {
-            let volumesPath = "/Volumes"
-            guard fileManager.fileExists(atPath: volumesPath) else {
-                return 0
-            }
-            
-            let ejectableVolumes = try getEjectableVolumes(from: volumesPath)
-            logger.debug("Found \(ejectableVolumes.count) ejectable volumes")
-            return ejectableVolumes.count
-            
-        } catch {
-            logger.error("Failed to check ejectable disks: \(error)")
-            return 0
+
+        let ejectableVolumes = getEjectableVolumes()
+        logger.debug("Found \(ejectableVolumes.count) ejectable volumes")
+        return ejectableVolumes.count
+    }
+
+    nonisolated private static let volumeResourceKeys: Set<URLResourceKey> = [
+        .volumeIsEjectableKey,
+        .volumeIsInternalKey,
+        .volumeIsLocalKey
+    ]
+
+    nonisolated static func isEjectableVolume(
+        isEjectable: Bool?,
+        isInternal: Bool?,
+        isLocal: Bool?
+    ) -> Bool {
+        isEjectable == true && isInternal == false && isLocal == true
+    }
+
+    nonisolated private static func getEjectableVolumes() -> [URL] {
+        let fileManager = FileManager.default
+        let volumes = fileManager.mountedVolumeURLs(
+            includingResourceValuesForKeys: Array(volumeResourceKeys),
+            options: []
+        ) ?? []
+
+        return volumes.filter { volumeURL in
+            isEjectableVolume(at: volumeURL)
         }
     }
-    
-    nonisolated private static func getEjectableVolumes(from volumesPath: String) throws -> [String] {
-        let fileManager = FileManager.default
-        let contents = try fileManager.contentsOfDirectory(atPath: volumesPath)
-        
-        return contents.filter { name in
-            if name == "Macintosh HD" || name.hasPrefix(".") {
-                return false
-            }
-            
-            let volumePath = "\(volumesPath)/\(name)"
-            var isDir: ObjCBool = false
-            let exists = fileManager.fileExists(atPath: volumePath, isDirectory: &isDir)
-            
-            return exists && isDir.boolValue
+
+    nonisolated private static func isEjectableVolume(at volumeURL: URL) -> Bool {
+        guard let values = try? volumeURL.resourceValues(forKeys: volumeResourceKeys) else {
+            return false
         }
+
+        return isEjectableVolume(
+            isEjectable: values.volumeIsEjectable,
+            isInternal: values.volumeIsInternal,
+            isLocal: values.volumeIsLocal
+        )
     }
 
     private func ejectAllDisks() {
@@ -202,6 +211,7 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 await MainActor.run {
                     isEjecting = false
                     lastErrorMessage = nil
+                    ejectableDiskCount = Self.ejectableDiskCountSync()
                     onStateChange?()
                 }
             } catch {
@@ -211,6 +221,7 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 await MainActor.run {
                     isEjecting = false
                     lastErrorMessage = errorMessage
+                    ejectableDiskCount = Self.ejectableDiskCountSync()
                     onStateChange?()
                 }
             }
@@ -218,23 +229,7 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private func executeEjectAll() async throws {
-        let fileManager = FileManager.default
-        let volumesPath = "/Volumes"
-        
-        guard fileManager.fileExists(atPath: volumesPath) else {
-            throw NSError(
-                domain: "EjectDiskPlugin",
-                code: 1,
-                userInfo: [
-                    NSLocalizedDescriptionKey: localization.string(
-                        "error.volumesUnavailable",
-                        defaultValue: "/Volumes 目录不可用"
-                    )
-                ]
-            )
-        }
-        
-        let ejectableVolumes = try Self.getEjectableVolumes(from: volumesPath)
+        let ejectableVolumes = Self.getEjectableVolumes()
         
         guard !ejectableVolumes.isEmpty else {
             throw NSError(
@@ -252,11 +247,13 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
         var successCount = 0
         var errorMessages: [String] = []
         
-        for volumeName in ejectableVolumes {
-            let volumePath = "\(volumesPath)/\(volumeName)"
-            
+        for volumeURL in ejectableVolumes {
+            // Ejecting one volume can remove sibling volumes on the same physical disk.
+            guard Self.isEjectableVolume(at: volumeURL) else { continue }
+
+            let volumeName = volumeURL.lastPathComponent
             do {
-                try await ejectVolume(at: volumePath)
+                try await ejectVolume(at: volumeURL)
                 successCount += 1
                 logger.info("Successfully ejected volume: \(volumeName)")
             } catch {
@@ -277,25 +274,47 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
     }
 
-    private func ejectVolume(at volumePath: String) async throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
-        process.arguments = ["eject", volumePath]
+    private func ejectVolume(at volumeURL: URL) async throws {
+        let result = try await Self.runEjectCommand(at: volumeURL)
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if result.terminationStatus != 0 {
+            let output = result.output
             let errorMessage = output.isEmpty
                 ? localization.string("error.ejectFailed", defaultValue: "推出失败")
                 : output
-            throw NSError(domain: "EjectDiskPlugin", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: errorMessage])
+            throw NSError(
+                domain: "EjectDiskPlugin",
+                code: Int(result.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: errorMessage]
+            )
         }
     }
+
+    nonisolated private static func runEjectCommand(at volumeURL: URL) async throws -> EjectCommandResult {
+        try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
+            process.arguments = ["eject", volumeURL.path]
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+
+            let output = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return EjectCommandResult(
+                terminationStatus: process.terminationStatus,
+                output: output
+            )
+        }.value
+    }
+}
+
+private struct EjectCommandResult: Sendable {
+    let terminationStatus: Int32
+    let output: String
 }

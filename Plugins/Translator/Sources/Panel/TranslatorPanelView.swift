@@ -52,28 +52,28 @@ struct TranslatorPanelView: View {
     }
 
     private var sourceEditor: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(panelCardColor)
-
-            if presentation.usesSourceCaretPlaceholder {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.accentColor.opacity(0.65))
-                    .frame(width: 2.5, height: 18)
-                    .padding(.leading, 11)
-                    .padding(.top, 11)
-            } else {
-                ScrollView {
-                    Text(presentation.sourceText)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 10)
-                        .padding(.bottom, 38)
+        VStack(spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                if presentation.usesSourceCaretPlaceholder {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.accentColor.opacity(0.65))
+                        .frame(width: 2.5, height: 18)
+                        .padding(.leading, 11)
+                        .padding(.top, 11)
+                } else {
+                    ScrollView {
+                        Text(presentation.sourceText)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .padding(.horizontal, 12)
+                            .padding(.top, 10)
+                            .padding(.bottom, 8)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             HStack(spacing: 8) {
                 sourceIconButton(
@@ -88,12 +88,15 @@ struct TranslatorPanelView: View {
                     action: .copySource,
                     isDisabled: presentation.sourceText.isEmpty
                 )
+                Spacer(minLength: 0)
             }
-            .padding(.leading, 12)
+            .padding(.horizontal, 12)
             .padding(.bottom, 10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .frame(height: 36)
         }
         .frame(height: 86)
+        .background(panelCardColor, in: RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var languageRow: some View {

@@ -387,8 +387,9 @@ struct MenuBarIconRemoteAssetStore {
         let url = try resolvedResourceURL(path: path, contentBaseURL: contentBaseURL, allowsFileResources: allowsFileResources)
         let data = try await data(from: url)
         guard data.count <= Self.maximumFrameFileSize,
-              let image = NSImage(data: data),
-              isDecodedImageSizeAcceptable(image)
+              let sourceImage = NSImage(data: data),
+              isDecodedImageSizeAcceptable(sourceImage),
+              let image = MenuBarIconProcessing.renderedImage(from: sourceImage)
         else {
             throw MenuBarIconGalleryError.invalidFrame(asset.id)
         }

@@ -2634,67 +2634,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "عرض مستويات البطارية لجهاز Mac، وملحقات Bluetooth، وأجهزة الماوس Rapoo."
+            "value": "عرض مستويات البطارية لجهاز Mac وأجهزة Apple المحمولة وملحقات Bluetooth وأجهزة الماوس Rapoo."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zeigen Sie den Akkustand Ihres Mac, Ihres Bluetooth-Zubehörs und Ihrer Rapoo Mäuse an."
+            "value": "Zeigen Sie den Akkustand Ihres Mac, mobiler Apple-Geräte, von Bluetooth-Zubehör und Rapoo-Mäusen an."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "View battery levels for your Mac, Bluetooth accessories, and Rapoo mice."
+            "value": "View battery levels for your Mac, Apple mobile devices, Bluetooth accessories, and Rapoo mice."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ver los niveles de batería de tu Mac, accesorios Bluetooth y Rapoo ratones."
+            "value": "Consulta la batería del Mac, dispositivos móviles Apple, accesorios Bluetooth y ratones Rapoo."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Affichez les niveaux de batterie de votre Mac, de vos accessoires Bluetooth et de vos souris Rapoo."
+            "value": "Affichez la batterie du Mac, des appareils mobiles Apple, des accessoires Bluetooth et des souris Rapoo."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac、Bluetooth アクセサリ、Rapoo マウスのバッテリー レベルを表示します。"
+            "value": "Mac、Apple モバイルデバイス、Bluetooth アクセサリ、Rapoo マウスのバッテリー残量を表示します。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac, Bluetooth 액세서리 및 Rapoo 마우스의 배터리 잔량을 확인하세요."
+            "value": "Mac, Apple 모바일 기기, Bluetooth 액세서리 및 Rapoo 마우스의 배터리를 확인합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Veja os níveis de bateria do seu Mac, acessórios Bluetooth e mouses Rapoo."
+            "value": "Veja a bateria do Mac, dispositivos móveis Apple, acessórios Bluetooth e mouses Rapoo."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Просматривайте уровень заряда батареи вашего Mac, аксессуаров Bluetooth и мышей Rapoo."
+            "value": "Просматривайте заряд Mac, мобильных устройств Apple, Bluetooth-аксессуаров и мышей Rapoo."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "查看 Mac、蓝牙外设和雷柏鼠标电量"
+            "value": "查看 Mac、Apple 移动设备、蓝牙外设和雷柏鼠标电量"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "查看 Mac、藍牙外設和雷柏滑鼠電量"
+            "value": "查看 Mac、Apple 行動裝置、藍牙外設和雷柏滑鼠電量"
           }
         }
       }
@@ -4614,6 +4614,38 @@
             "value": "低電量通知"
           }
         }
+      }
+    },
+    "settings.source.appleMobile.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "قراءة أجهزة Apple المحمولة الموثوقة والمتصلة عبر USB أو Wi-Fi." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Liest vertrauenswürdige Apple-Mobilgeräte über USB oder WLAN." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Read trusted Apple mobile devices connected over USB or Wi-Fi." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Lee dispositivos móviles Apple de confianza conectados por USB o Wi-Fi." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Lit les appareils mobiles Apple approuvés connectés par USB ou Wi-Fi." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "USB または Wi-Fi で接続された信頼済み Apple モバイルデバイスを読み取ります。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "USB 또는 Wi-Fi로 연결된 신뢰하는 Apple 모바일 기기를 읽습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Lê dispositivos móveis Apple confiáveis conectados por USB ou Wi-Fi." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Читает доверенные мобильные устройства Apple через USB или Wi-Fi." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "读取已信任并通过 USB 或 Wi-Fi 连接的 Apple 移动设备。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "讀取已信任並透過 USB 或 Wi-Fi 連接的 Apple 行動裝置。" } }
+      }
+    },
+    "settings.source.appleMobile.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "iPhone وiPad وApple Watch" } },
+        "de": { "stringUnit": { "state": "translated", "value": "iPhone, iPad und Apple Watch" } },
+        "en": { "stringUnit": { "state": "translated", "value": "iPhone, iPad, and Apple Watch" } },
+        "es": { "stringUnit": { "state": "translated", "value": "iPhone, iPad y Apple Watch" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "iPhone, iPad et Apple Watch" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhone、iPad、Apple Watch" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "iPhone, iPad 및 Apple Watch" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "iPhone, iPad e Apple Watch" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "iPhone, iPad и Apple Watch" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "iPhone、iPad 与 Apple Watch" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "iPhone、iPad 與 Apple Watch" } }
       }
     },
     "settings.source.bluetooth.description": {

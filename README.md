@@ -39,11 +39,11 @@
 | Microphone Mute | Mute or restore the default microphone input through CoreAudio without requesting recording permission. |
 | Disk Cleanup | Scan caches, developer caches, and browser caches, with path safety checks and sensitive data protection before deletion. |
 | Xcode Cleanup | Scan DerivedData, device support files, archives, simulators, and preview caches by category; deletion is disabled while Xcode is running and only runs inside allowlisted roots. |
-| Eject Disks | Eject all removable disks in one click, automatically skipping system volumes and reporting when no disk can be ejected. |
+| Eject Disks | Eject all removable disks in one click, automatically skipping system and non-ejectable volumes and reporting when no disk can be ejected. |
 | Empty Trash | Show the number of Trash items and empty Trash through Finder; the action is disabled when Trash is empty. |
 | Clear Clipboard | Clear the current clipboard content to protect privacy and avoid accidental paste. |
 | IP Check | View domestic/international egress IP, local LAN IP, location, ISP, ASN, and macOS network quality results, with copy support for single fields or the full result. |
-| Translator | Translate the currently selected text with a global shortcut; the first version supports OpenAI-compatible services and automatic language selection. |
+| Translator | Translate the currently selected text with a global shortcut; the first version supports OpenAI-compatible services, automatic language selection, and a source editor whose actions stay clear of multi-line text. |
 | Window Switcher | Replace or customize the window-switching shortcut with direct cycling or a fixed key-selection window for running windows; click a key hint to record a stable letter, digit, or Command-key binding. |
 | App Shortcuts | Bind global shortcuts to common apps; pressing a shortcut opens or activates the app, and hides it if it is already frontmost. |
 | Launchpad | Summon an app grid in fullscreen or a compact window, with instant search, horizontal paging, keyboard navigation, drag-to-stack folders with inline rename (click an open folder's title, or right-click a folder to rename/dissolve), an adjustable glass background (clear/standard/deep presets or a custom material + dimming, with a live preview in settings), adjustable appearance (icon size 48–96 pt with rows/columns adapting, optional icons-only mode that hides app names, label appearance presets (color: automatic/light/dark/accent, weight, and a size tier that scales with the icon — shared by app names and the open-folder title), and a compact-window size slider — the compact panel now scales with the screen instead of capping at 960×680, so any display whose usable area exceeds ~1333×829 pt renders a larger panel than before, including modern built-in laptop screens (~13% on a 14″ MacBook Pro); all previewed live by a layout thumbnail in settings that mirrors the real grid math), a global shortcut, and IME-composition safety. |
@@ -53,14 +53,14 @@
 | Calendar Widget | View a monthly calendar, lunar calendar data, holidays, and today's events in the component panel. |
 | System Status | Show 1-hour charts for CPU, GPU, memory, disk, network, battery, and high-usage processes. |
 | Activity Stats | Track keyboard, mouse, scroll, and foreground app usage, with install/update and uninstall actions for Claude Code, Cursor, and Codex activity hooks. |
-| Device Battery | Aggregate battery levels for the Mac, Bluetooth peripherals, AirPods/Beats split batteries and charging state, and Rapoo VT series mice, with multiple widget layouts and optional low-battery notifications. |
+| Device Battery | Aggregate battery levels for the Mac, trusted iPhone/iPad/Apple Watch devices over USB or Wi-Fi, Bluetooth peripherals, AirPods/Beats split batteries and charging state, and Rapoo VT series mice, with multiple widget layouts and optional low-battery notifications. |
 | Fan Control | Manage fan speed presets with automatic, full-speed, and custom fixed-RPM modes; installs the bundled helper and requests administrator authorization on first control. |
 | Battery Charge Limit | Limit battery charging to a chosen cap, defaulting to 80%; charging stops at the cap and does not automatically resume below it unless the user chooses to continue or force discharge. |
 | Fix Damaged Apps | Remove quarantine attributes to resolve "damaged and can't be opened" prompts by selecting a .app in a file panel and running the fix with administrator privileges. |
 | Quit Apps | Select and quit running apps, or quit all at once; reverse selection helps quickly choose the target set. |
 | zsh Config | View and edit zsh configuration files such as .zshrc and .zshenv inside the app, with syntax highlighting, common snippets, and automatic backup before saving. |
 | Plugins & Settings | Install, update, and batch-update plugins in the plugin marketplace (filter by category/search; sort by not-installed first, installed first, or name); manage permissions, shortcuts, and plugin-specific settings; and export/import portable app preferences, plugin display settings, and shortcut customizations as JSON. |
-| Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, and restore the default icon. |
+| Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, restore the default icon, and preview every source with the same standard icon height and content inset as the default. |
 | Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance. |
 
 > **Preferences backup:** Import restores only portable host preferences, plugin display settings, and shortcut customizations. Missing plugins are never installed automatically: the preview lets you explicitly select catalog-verified plugins to install, while unavailable or unselected plugins and their shortcuts are skipped.
@@ -83,6 +83,8 @@ brew install --cask mactools
 brew update
 brew upgrade --cask --greedy mactools
 ```
+
+The in-app update dialog separates App Updates from Plugin Updates and includes plugin releases published since the previous app version.
 
 If Homebrew still reports that the cask is already up to date, check the locally resolved cask version first:
 

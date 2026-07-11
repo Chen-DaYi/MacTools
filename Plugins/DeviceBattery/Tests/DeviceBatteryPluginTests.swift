@@ -30,12 +30,14 @@ final class DeviceBatteryPluginTests: XCTestCase {
 
         store.setLayoutMode(.list)
         store.setShowBluetoothDevices(false)
+        store.setShowAppleMobileDevices(false)
         store.setShowRapooDevices(false)
 
         let reloaded = DeviceBatteryStore(storage: storage)
         XCTAssertEqual(reloaded.layoutMode, .list)
         XCTAssertTrue(reloaded.showInternalBattery)
         XCTAssertFalse(reloaded.showBluetoothDevices)
+        XCTAssertFalse(reloaded.showAppleMobileDevices)
         XCTAssertFalse(reloaded.showRapooDevices)
     }
 
@@ -52,6 +54,35 @@ final class DeviceBatteryPluginTests: XCTestCase {
         let reloaded = DeviceBatteryStore(storage: storage)
         XCTAssertTrue(reloaded.lowBatteryNotificationEnabled)
         XCTAssertEqual(reloaded.lowBatteryNotificationThreshold, 15)
+    }
+
+    func testAppleMobileRefreshIntervalTracksComponentVisibility() {
+        let viewModel = DeviceBatteryViewModel(
+            sampler: StubDeviceBatterySampler(items: []),
+            rapooMonitor: StubRapooBatteryMonitor()
+        )
+        let plugin = DeviceBatteryPlugin(
+            context: makeContext(),
+            viewModel: viewModel,
+            inputMonitoringAuthorizationStatus: { .unknown }
+        )
+
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
+
+        plugin.panelSurfaceDidBecomeVisible(.primary)
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
+
+        plugin.panelSurfaceDidBecomeVisible(.component)
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 90)
+
+        viewModel.stop()
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
+
+        plugin.panelSurfaceDidBecomeVisible(.component)
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 90)
+
+        plugin.panelSurfaceDidBecomeHidden(.component)
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
     }
 
     func testStoreClampsLowBatteryNotificationThreshold() {
@@ -128,6 +159,125 @@ final class DeviceBatteryPluginTests: XCTestCase {
             RapooBatteryParser.parseInputReport(reportID: 7, bytes: report),
             RapooBatteryReading(level: 83, chargeState: .normal, statusCode: 1)
         )
+    }
+
+    func testMobileBatteryParserReadsChargingIPhone() throws {
+        let record = try XCTUnwrap(DeviceBatteryMobileBatteryParser.record(
+            identifier: "phone-id",
+            name: "测试 iPhone",
+            productType: "iPhone18,1",
+            deviceClass: "iPhone",
+            connectionType: "Wi-Fi",
+            battery: [
+                "BatteryCurrentCapacity": 67,
+                "BatteryIsCharging": true,
+                "ExternalConnected": true
+            ]
+        ))
+
+        XCTAssertEqual(record.category, .phone)
+        XCTAssertEqual(record.level, 67)
+        XCTAssertEqual(record.chargeState, .charging)
+        XCTAssertEqual(record.batteryItem(referenceDate: Date()).kind, .phone)
+    }
+
+    func testMobileBatteryParserDistinguishesPluggedAndFullyCharged() throws {
+        let plugged = try XCTUnwrap(DeviceBatteryMobileBatteryParser.record(
+            identifier: "tablet-id",
+            name: "iPad",
+            productType: "iPad17,2",
+            deviceClass: "iPad",
+            connectionType: "USB",
+            battery: [
+                "BatteryCurrentCapacity": 80,
+                "BatteryIsCharging": false,
+                "ExternalConnected": true
+            ]
+        ))
+        let charged = try XCTUnwrap(DeviceBatteryMobileBatteryParser.record(
+            identifier: "watch-id",
+            name: "Apple Watch",
+            productType: "Watch7,5",
+            deviceClass: "Watch",
+            connectionType: "Wi-Fi",
+            battery: [
+                "BatteryCurrentCapacity": 100,
+                "FullyCharged": true,
+                "ExternalConnected": true
+            ]
+        ))
+
+        XCTAssertEqual(plugged.category, .tablet)
+        XCTAssertEqual(plugged.chargeState, .plugged)
+        XCTAssertEqual(charged.category, .watch)
+        XCTAssertEqual(charged.chargeState, .charged)
+    }
+
+    func testMobileBatteryParserNormalizesIORegistryCapacity() throws {
+        let record = try XCTUnwrap(DeviceBatteryMobileBatteryParser.record(
+            identifier: "vision-id",
+            name: "Vision Pro",
+            productType: "RealityDevice15,1",
+            deviceClass: "RealityDevice",
+            connectionType: "Wi-Fi",
+            battery: [
+                "AppleRawCurrentCapacity": 3_200,
+                "AppleRawMaxCapacity": 4_000,
+                "IsCharging": false
+            ]
+        ))
+
+        XCTAssertEqual(record.category, .spatialComputer)
+        XCTAssertEqual(record.level, 80)
+        XCTAssertEqual(record.chargeState, .normal)
+    }
+
+    func testMobileBatteryParserRecognizesIPodTouch() throws {
+        let record = try XCTUnwrap(DeviceBatteryMobileBatteryParser.record(
+            identifier: "ipod-id",
+            name: "iPod touch",
+            productType: "iPod9,1",
+            deviceClass: "iPod",
+            connectionType: "USB",
+            battery: ["BatteryCurrentCapacity": 42]
+        ))
+
+        XCTAssertEqual(record.category, .mediaPlayer)
+        XCTAssertEqual(record.batteryItem(referenceDate: Date()).kind, .mediaPlayer)
+    }
+
+    func testMobileDeviceReadingWinsOverStaleChargingLog() throws {
+        let now = Date()
+        let mobile = try XCTUnwrap(DeviceBatteryMobileBatteryParser.record(
+            identifier: "phone-id",
+            name: "测试 iPhone",
+            productType: "iPhone18,1",
+            deviceClass: "iPhone",
+            connectionType: "Wi-Fi",
+            battery: [
+                "BatteryCurrentCapacity": 66,
+                "BatteryIsCharging": false,
+                "ExternalConnected": false
+            ]
+        )).batteryItem(referenceDate: now)
+        let staleLog = DeviceBatteryItem(
+            id: "batterycenter-phone-id",
+            name: "测试 iPhone",
+            model: "iPhone18,1",
+            kind: .phone,
+            level: 65,
+            chargeState: .charging,
+            parentName: nil,
+            source: "BatteryCenter",
+            lastUpdated: now,
+            isConnected: true,
+            detail: nil
+        )
+
+        let item = try XCTUnwrap(DeviceBatterySampler.deduplicated([staleLog, mobile]).first)
+        XCTAssertEqual(item.source, "MobileDevice")
+        XCTAssertEqual(item.level, 66)
+        XCTAssertEqual(item.chargeState, .normal)
     }
 
     func testItemNormalizerDropsAirPodsAggregateWhenComponentsExist() {
@@ -467,7 +617,10 @@ private final class DeviceBatteryMemoryStorage: PluginStorage {
 private struct StubDeviceBatterySampler: DeviceBatterySampling {
     let items: [DeviceBatteryItem]
 
-    func collectSystemDevices(referenceDate: Date) async -> [DeviceBatteryItem] {
+    func collectSystemDevices(
+        referenceDate: Date,
+        options: DeviceBatterySamplingOptions
+    ) async -> [DeviceBatteryItem] {
         items
     }
 }
