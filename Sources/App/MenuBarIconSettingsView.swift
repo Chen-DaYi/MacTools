@@ -81,12 +81,9 @@ private struct MenuBarIconEditorControls: View {
     @State private var sliderID = UUID()
 
     private let rowLabelWidth: CGFloat = 76
-    private let contentWidth: CGFloat = 520
+    private let contentMaxWidth: CGFloat = 520
     private let animationModePickerWidth: CGFloat = 240
     private let manualSpeedSliderWidth: CGFloat = 180
-    private var sourceButtonWidth: CGFloat {
-        (contentWidth - 8) / 2
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -94,20 +91,21 @@ private struct MenuBarIconEditorControls: View {
                 actionButtons
             }
 
-            Text(AppL10n.settings(
-                "menuBarIcon.sourceDescription",
-                defaultValue: "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会自动扣除纯色背景。"
-            ))
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-                .frame(width: contentWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            contentOnlyRow {
+                Text(AppL10n.settings(
+                    "menuBarIcon.sourceDescription",
+                    defaultValue: "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会自动扣除纯色背景。"
+                ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: contentMaxWidth, alignment: .leading)
+            }
 
             animationSpeedControls
 
             controlRow(AppL10n.settings("menuBarIcon.recent", defaultValue: "最近使用"), alignment: .top) {
                 MenuBarIconRecentGrid(iconSettings: iconSettings, gallery: gallery)
-                    .frame(width: contentWidth, alignment: .leading)
+                    .frame(maxWidth: contentMaxWidth, alignment: .leading)
             }
 
             if let warningText = iconSettings.contrastReport(for: .light).warningText
@@ -154,7 +152,7 @@ private struct MenuBarIconEditorControls: View {
                 .frame(width: rowLabelWidth, height: 1)
 
             content()
-                .frame(width: contentWidth, alignment: .leading)
+                .frame(maxWidth: contentMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,12 +167,11 @@ private struct MenuBarIconEditorControls: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .frame(width: sourceButtonWidth)
 
             MenuBarIconGalleryPicker(iconSettings: iconSettings, gallery: gallery)
-            .frame(width: sourceButtonWidth)
+                .frame(maxWidth: .infinity)
         }
-        .frame(width: contentWidth, alignment: .leading)
+        .frame(maxWidth: contentMaxWidth, alignment: .leading)
     }
 
     private var animationSpeedControls: some View {
@@ -191,7 +188,7 @@ private struct MenuBarIconEditorControls: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .frame(width: animationModePickerWidth, alignment: .leading)
-                .frame(width: contentWidth, alignment: .leading)
+                .frame(maxWidth: contentMaxWidth, alignment: .leading)
             }
 
             controlRow(AppL10n.settings("menuBarIcon.multiplier", defaultValue: "倍率")) {
@@ -228,7 +225,7 @@ private struct MenuBarIconEditorControls: View {
 
             Spacer(minLength: 0)
         }
-        .frame(width: contentWidth, height: PluginSettingsTheme.Size.controlHeight, alignment: .leading)
+        .frame(maxWidth: contentMaxWidth, minHeight: PluginSettingsTheme.Size.controlHeight, alignment: .leading)
         .onAppear {
             DispatchQueue.main.async {
                 sliderID = UUID()
