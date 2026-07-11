@@ -352,6 +352,14 @@ final class DynamicPluginManager: ObservableObject {
         )
     }
 
+    func installedManifestsByID() -> [String: PluginPackageManifest] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.manifest)
+            }
+        )
+    }
+
     /// Deactivate a loaded plugin without unloading it.
     /// Used when the user hides the plugin — it stays in the list but its side effects stop.
     func pausePlugin(_ pluginID: String) {

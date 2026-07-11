@@ -1,5 +1,7 @@
 import AppKit
+import Combine
 import SwiftUI
+import MacToolsPluginKit
 
 @MainActor
 final class AppWindowRouter: NSObject, NSWindowDelegate {
@@ -9,6 +11,11 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let menuBarIconGallery: MenuBarIconGalleryLibrary
     private let launchAtLoginController: LaunchAtLoginController
     private var settingsWindow: NSWindow?
+    private var runtimeLocaleCancellable: AnyCancellable?
+
+    static var settingsWindowTitle: String {
+        AppL10n.settings("settings.window.title", defaultValue: "设置")
+    }
 
     init(
         pluginHost: PluginHost,
@@ -23,6 +30,19 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
         super.init()
+        runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
+            .dropFirst()
+            .sink { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.settingsWindow?.title = Self.settingsWindowTitle
+            }
+        }
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            runtimeLocaleCancellable?.cancel()
+        }
     }
 
     func showSettings() {
@@ -43,7 +63,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = AppL10n.settings("settings.window.title", defaultValue: "设置")
+        window.title = Self.settingsWindowTitle
         window.minSize = NSSize(width: 860, height: 560)
         window.contentView = NSHostingView(
             rootView: SettingsView(

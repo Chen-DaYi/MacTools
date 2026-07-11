@@ -10,13 +10,18 @@ public struct PluginLocalization: @unchecked Sendable {
     }
 
     public func string(_ key: String, defaultValue: String) -> String {
-        bundle.localizedString(forKey: key, value: defaultValue, table: table)
+        PluginRuntimeLocalization.string(
+            key,
+            defaultValue: defaultValue,
+            table: table,
+            bundle: bundle
+        )
     }
 
     public func format(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: string(key, defaultValue: defaultValue),
-            locale: Locale.current,
+            locale: PluginRuntimeLocalization.locale,
             arguments: arguments
         )
     }

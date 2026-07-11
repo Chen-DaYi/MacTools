@@ -88,7 +88,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .keepPresented,
-            buttonTitle: localization.string("panel.button.settings", defaultValue: "设置")
+            buttonTitleProvider: { localization.string("panel.button.settings", defaultValue: "设置") }
         )
         self.metadata = PluginMetadata(
             id: "mouse-enhancer",

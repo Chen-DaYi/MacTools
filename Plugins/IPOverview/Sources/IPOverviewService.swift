@@ -582,8 +582,7 @@ enum IPOverviewGeoSource: CaseIterable {
 
 enum IPOverviewLocale {
     static func geoLanguageCode(localization: PluginLocalization) -> String? {
-        let preferredLocalization = localization.bundle.preferredLocalizations.first
-            ?? Bundle.main.preferredLocalizations.first
+        let preferredLocalization = PluginRuntimeLocalization.preferredLanguages.first
             ?? Locale.current.identifier
         return geoLanguageCode(preferredLocalization: preferredLocalization)
     }

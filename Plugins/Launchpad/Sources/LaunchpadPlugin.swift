@@ -74,7 +74,7 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
-            buttonTitle: localization.string("panel.button.open", defaultValue: "打开")
+            buttonTitleProvider: { localization.string("panel.button.open", defaultValue: "打开") }
         )
         let preferences = LaunchpadPreferences(storage: context.storage)
         // Same scoped storage as preferences; owned here so the layout (and its @Published

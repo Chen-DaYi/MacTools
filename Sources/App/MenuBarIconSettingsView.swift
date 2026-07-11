@@ -78,6 +78,7 @@ struct MenuBarIconSettingsView: View {
 private struct MenuBarIconEditorControls: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
     @ObservedObject var gallery: MenuBarIconGalleryLibrary
+    @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
     @State private var sliderID = UUID()
 
     private let rowLabelWidth: CGFloat = 76
@@ -192,6 +193,7 @@ private struct MenuBarIconEditorControls: View {
                 .pickerStyle(.segmented)
                 .frame(width: animationModePickerWidth, alignment: .leading)
                 .frame(width: contentWidth, alignment: .leading)
+                .id(languagePreferenceRawValue)
             }
 
             controlRow(AppL10n.settings("menuBarIcon.multiplier", defaultValue: "倍率")) {

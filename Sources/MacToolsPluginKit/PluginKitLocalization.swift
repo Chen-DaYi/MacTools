@@ -30,22 +30,24 @@ public enum PluginKitLocalization {
     static func shortcutValidationDuplicate(ownerDescription: String) -> String {
         String(
             format: string("shortcutValidation.duplicateFormat", defaultValue: "该快捷键已被“%@”占用。"),
-            ownerDescription
+            locale: PluginRuntimeLocalization.locale,
+            arguments: [ownerDescription]
         )
     }
 
     static func shortcutRecorderHelp(title: String) -> String {
         String(
             format: string("shortcutRecorder.helpFormat", defaultValue: "点击录制%@"),
-            title
+            locale: PluginRuntimeLocalization.locale,
+            arguments: [title]
         )
     }
 
     static func string(_ key: String, defaultValue: String) -> String {
-        Bundle(for: PluginKitBundleToken.self).localizedString(
-            forKey: key,
-            value: defaultValue,
-            table: nil
+        PluginRuntimeLocalization.string(
+            key,
+            defaultValue: defaultValue,
+            bundle: Bundle(for: PluginKitBundleToken.self)
         )
     }
 }

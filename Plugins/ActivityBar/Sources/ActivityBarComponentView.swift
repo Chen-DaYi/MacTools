@@ -1247,6 +1247,7 @@ struct ActivityBarComponentView: View {
         }
 
         let formatter = DateFormatter()
+        formatter.locale = PluginRuntimeLocalization.locale
         formatter.dateFormat = "MMM d"
         return formatter.string(from: selectedDate)
     }
@@ -1263,6 +1264,7 @@ struct ActivityBarComponentView: View {
         }
 
         let formatter = DateFormatter()
+        formatter.locale = PluginRuntimeLocalization.locale
         formatter.setLocalizedDateFormatFromTemplate("MMM d")
         return formatter.string(from: date)
     }

@@ -105,7 +105,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
-            buttonTitle: localization.string("panel.button.choose", defaultValue: "选择")
+            buttonTitleProvider: { localization.string("panel.button.choose", defaultValue: "选择") }
         )
     }
 

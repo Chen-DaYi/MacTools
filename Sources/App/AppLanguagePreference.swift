@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum AppLanguagePreference: String, CaseIterable, Identifiable {
     case system
@@ -15,7 +16,6 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
     case ar
 
     static let userDefaultsKey = "app.languagePreference"
-    static let didChangeNotification = Notification.Name("AppLanguagePreferenceDidChange")
 
     private static let appleLanguagesKey = "AppleLanguages"
     private static let rightClickFinderSyncBundleSuffix = ".right-click.finder-sync"
@@ -84,7 +84,7 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
         userDefaults.set(rawValue, forKey: Self.userDefaultsKey)
         applyAppleLanguagesOverride(in: userDefaults)
         userDefaults.synchronize()
-        NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+        PluginRuntimeLocalization.source.setPreference(rawValue)
     }
 
     func applyAppleLanguagesOverride(in userDefaults: UserDefaults = .standard) {
@@ -115,7 +115,9 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
     }
 
     static func applyStoredPreference(userDefaults: UserDefaults = .standard) {
-        stored(in: userDefaults).applyAppleLanguagesOverride(in: userDefaults)
+        let preference = stored(in: userDefaults)
+        preference.applyAppleLanguagesOverride(in: userDefaults)
+        PluginRuntimeLocalization.source.setPreference(preference.rawValue)
     }
 
     private static func rightClickFinderSyncBundleIdentifier(bundle: Bundle = .main) -> String? {

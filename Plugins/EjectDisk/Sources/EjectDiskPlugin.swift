@@ -48,7 +48,7 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .keepPresented,
-            buttonTitle: localization.string("panel.button.eject", defaultValue: "推出")
+            buttonTitleProvider: { localization.string("panel.button.eject", defaultValue: "推出") }
         )
     }
 

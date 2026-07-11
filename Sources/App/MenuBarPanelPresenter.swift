@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import MacToolsPluginKit
 
 enum MenuBarPanelWindowRegistry {
     private static let secondaryPanelIdentifier = NSUserInterfaceItemIdentifier(
@@ -38,6 +39,7 @@ final class MenuBarPanelPresenter: NSObject {
     private let panelModel: MenuBarUnifiedPanelModel
     private let hostingController: NSHostingController<MenuBarUnifiedPanelContent>
     private var appearanceObserver: NSObjectProtocol?
+    private var runtimeLocaleCancellable: AnyCancellable?
     private var heightRefreshCancellables: Set<AnyCancellable> = []
     private var selectedPanel: PanelKind = .components
 
@@ -81,6 +83,13 @@ final class MenuBarPanelPresenter: NSObject {
         }
         configure(popover)
         observeAppearancePreference()
+        runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
+            .dropFirst()
+            .sink { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshLocalization()
+            }
+        }
         observePanelItemChanges()
         applyCurrentAppearance()
         prewarm()
@@ -92,11 +101,24 @@ final class MenuBarPanelPresenter: NSObject {
             if let appearanceObserver {
                 NotificationCenter.default.removeObserver(appearanceObserver)
             }
+            runtimeLocaleCancellable?.cancel()
         }
     }
 
     var isAnyPanelShown: Bool {
         popover.isShown
+    }
+
+    private func refreshLocalization() {
+        hostingController.rootView = MenuBarUnifiedPanelContent(
+            pluginHost: pluginHost,
+            model: panelModel,
+            onDismiss: onDismiss,
+            onOpenSettings: onOpenSettings,
+            onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
+            onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
+        )
+        scheduleHeightRefresh(for: tab(for: selectedPanel))
     }
 
     #if DEBUG
@@ -476,6 +498,7 @@ final class MenuBarUnifiedPanelModel: ObservableObject {
 
 struct MenuBarUnifiedPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
     @ObservedObject var model: MenuBarUnifiedPanelModel
     let onDismiss: () -> Void
     let onOpenSettings: () -> Void
@@ -483,6 +506,7 @@ struct MenuBarUnifiedPanelContent: View {
     let onPresentLaunchControlConfiguration: () -> Void
 
     var body: some View {
+        let _ = runtimeLocale.revision
         let contentBodyHeight = MenuBarPanelLayout.contentBodyHeight(
             forContentHeight: model.contentHeight
         )
@@ -509,6 +533,15 @@ struct MenuBarUnifiedPanelContent: View {
             height: MenuBarPanelLayout.panelHeight(forContentHeight: model.contentHeight),
             alignment: .topLeading
         )
+        .id(runtimeLocale.revision)
+        .environment(\.locale, PluginRuntimeLocalization.locale)
+        .environment(\.layoutDirection, layoutDirection)
+    }
+
+    private var layoutDirection: LayoutDirection {
+        PluginRuntimeLocalization.locale.language.characterDirection == .rightToLeft
+            ? .rightToLeft
+            : .leftToRight
     }
 
     private func panelContent(contentBodyHeight: CGFloat) -> some View {

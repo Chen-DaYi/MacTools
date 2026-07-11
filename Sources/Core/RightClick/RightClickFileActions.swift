@@ -12,14 +12,14 @@ enum RightClickLocalization {
         bundle: Bundle = .main,
         preferredLanguages: [String]? = nil
     ) -> String {
-        if let localizedBundle = localizedBundle(in: bundle, preferredLanguages: preferredLanguages) {
+        for localizedBundle in localizedBundles(in: bundle, preferredLanguages: preferredLanguages) {
             let localizedValue = localizedBundle.localizedString(forKey: key, value: nil, table: rightClickTable)
             if localizedValue != key {
                 return localizedValue
             }
         }
 
-        return bundle.localizedString(forKey: key, value: defaultValue, table: rightClickTable)
+        return defaultValue
     }
 
     static func format(
@@ -36,16 +36,23 @@ enum RightClickLocalization {
                 bundle: bundle,
                 preferredLanguages: preferredLanguages
             ),
-            locale: Locale.current,
+            locale: Locale(
+                identifier: (preferredLanguages ?? effectivePreferredLanguages(for: bundle)).first
+                    ?? Locale.current.identifier
+            ),
             arguments: arguments
         )
     }
 
-    private static func localizedBundle(
+    /// Right Click runs in the Finder Sync extension, so it cannot share the
+    /// host process's language list. Resolve its saved preference explicitly,
+    /// then use the base language for keys missing from that translation.
+    private static func localizedBundles(
         in bundle: Bundle,
         preferredLanguages: [String]? = nil
-    ) -> Bundle? {
-        for language in preferredLanguages ?? effectivePreferredLanguages(for: bundle) {
+    ) -> [Bundle] {
+        var bundles: [Bundle] = []
+        for language in (preferredLanguages ?? effectivePreferredLanguages(for: bundle)) + ["en"] {
             for candidate in candidateLanguageIdentifiers(for: language) {
                 guard
                     let path = bundle.path(forResource: candidate, ofType: "lproj"),
@@ -54,11 +61,14 @@ enum RightClickLocalization {
                     continue
                 }
 
-                return localizedBundle
+                if !bundles.contains(where: { $0.bundleURL == localizedBundle.bundleURL }) {
+                    bundles.append(localizedBundle)
+                }
+                break
             }
         }
 
-        return nil
+        return bundles
     }
 
     private static func effectivePreferredLanguages(for bundle: Bundle) -> [String] {
@@ -113,21 +123,20 @@ enum RightClickLocalization {
         let components = normalized.split(separator: "-").map(String.init)
         if let languageCode = components.first {
             if languageCode == "zh" {
-                if components.contains(where: { ["Hant", "HK", "MO", "TW"].contains($0) }) {
-                    candidates.append("zh-Hant")
-                } else {
-                    candidates.append("zh-Hans")
-                }
+                candidates.append(
+                    components.contains(where: { ["Hant", "HK", "MO", "TW"].contains($0) })
+                        ? "zh-Hant"
+                        : "zh-Hans"
+                )
             }
-
             candidates.append(languageCode)
         }
 
-        var unique: [String] = []
-        for candidate in candidates where !unique.contains(candidate) {
-            unique.append(candidate)
+        return candidates.reduce(into: []) { result, candidate in
+            if !result.contains(candidate) {
+                result.append(candidate)
+            }
         }
-        return unique
     }
 
     #if DEBUG

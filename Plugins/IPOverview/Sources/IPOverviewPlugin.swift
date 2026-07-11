@@ -58,7 +58,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
-            buttonTitle: localization.string("panel.button.check", defaultValue: "检测")
+            buttonTitleProvider: { localization.string("panel.button.check", defaultValue: "检测") }
         )
         self.viewModel.onSnapshotChange = { [weak self] in
             self?.onStateChange?()

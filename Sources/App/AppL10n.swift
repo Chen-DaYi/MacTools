@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum AppL10n {
     static func string(
@@ -7,7 +8,12 @@ enum AppL10n {
         table: String = "Localizable",
         bundle: Bundle = .main
     ) -> String {
-        bundle.localizedString(forKey: key, value: defaultValue, table: table)
+        PluginRuntimeLocalization.string(
+            key,
+            defaultValue: defaultValue,
+            table: table,
+            bundle: bundle
+        )
     }
 
     static func settings(_ key: String, defaultValue: String) -> String {
@@ -21,7 +27,7 @@ enum AppL10n {
     static func settingsFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: settings(key, defaultValue: defaultValue),
-            locale: Locale.current,
+            locale: PluginRuntimeLocalization.locale,
             arguments: arguments
         )
     }
@@ -29,7 +35,7 @@ enum AppL10n {
     static func pluginsFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: plugins(key, defaultValue: defaultValue),
-            locale: Locale.current,
+            locale: PluginRuntimeLocalization.locale,
             arguments: arguments
         )
     }

@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum ActivityBarConstants {
     static let pluginID = "activity-bar"
@@ -215,7 +216,10 @@ struct ActivityBarCodingDailyStats: Codable, Identifiable, Equatable, Sendable {
 
 enum ActivityBarFormatting {
     static func decimal(_ value: Int) -> String {
-        NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = PluginRuntimeLocalization.locale
+        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     static func count(_ value: Int) -> String {

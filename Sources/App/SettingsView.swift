@@ -12,13 +12,17 @@ enum GeneralSettingsCardLayout {
 
 struct SettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
     @ObservedObject var appUpdater: AppUpdater
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
 
     var body: some View {
-        TabView(selection: $pluginHost.selectedSettingsDestination) {
+        // Recreate native AppKit-backed controls when the shared locale changes.
+        let _ = runtimeLocale.revision
+
+        return TabView(selection: $pluginHost.selectedSettingsDestination) {
             GeneralSettingsView(
                 menuBarIconSettings: menuBarIconSettings,
                 menuBarIconGallery: menuBarIconGallery,
@@ -41,7 +45,16 @@ struct SettingsView: View {
                     Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
                 }
         }
+        .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
+        .environment(\.locale, PluginRuntimeLocalization.locale)
+        .environment(\.layoutDirection, layoutDirection)
+    }
+
+    private var layoutDirection: LayoutDirection {
+        PluginRuntimeLocalization.locale.language.characterDirection == .rightToLeft
+            ? .rightToLeft
+            : .leftToRight
     }
 }
 
@@ -98,8 +111,6 @@ struct GeneralSettingsView: View {
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
     @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
-    @State private var showsLanguageRestartAlert = false
-    private let appRelauncher: any AppRelaunching = AppRelauncher()
 
     var body: some View {
         Form {
@@ -127,18 +138,6 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .alert(
-            AppL10n.settings("language.restartAlert.title", defaultValue: "需要重启应用"),
-            isPresented: $showsLanguageRestartAlert
-        ) {
-            Button(AppL10n.settings("language.restartAlert.restart", defaultValue: "重启"), role: .none) {
-                appRelauncher.relaunch()
-            }
-
-            Button(AppL10n.settings("language.restartAlert.later", defaultValue: "稍后"), role: .cancel) {}
-        } message: {
-            Text(AppL10n.settings("language.restartAlert.message", defaultValue: "语言设置将在重启 MacTools 后生效。"))
-        }
     }
 
     private var appearancePreferenceBinding: Binding<AppAppearancePreference> {
@@ -161,7 +160,6 @@ struct GeneralSettingsView: View {
 
             languagePreferenceRawValue = preference.rawValue
             preference.store()
-            showsLanguageRestartAlert = true
         }
     }
 
@@ -237,6 +235,7 @@ private struct MenuBarClickBehaviorSettingsRow: View {
 
 private struct AppearanceSettingsRow: View {
     @Binding var selection: AppAppearancePreference
+    @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -269,6 +268,8 @@ private struct AppearanceSettingsRow: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            // NSSegmentedControl keeps its original labels unless its identity changes.
+            .id(languagePreferenceRawValue)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
@@ -279,6 +280,7 @@ private struct AppearanceSettingsRow: View {
 
 private struct LanguageSettingsRow: View {
     @Binding var selection: AppLanguagePreference
+    @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -312,6 +314,7 @@ private struct LanguageSettingsRow: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .frame(width: 150, alignment: .trailing)
+            .id(languagePreferenceRawValue)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)

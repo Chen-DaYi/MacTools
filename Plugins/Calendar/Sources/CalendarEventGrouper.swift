@@ -99,7 +99,7 @@ enum CalendarEventGrouper {
 
     private static func formatTime(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale.autoupdatingCurrent
+        formatter.locale = PluginRuntimeLocalization.locale
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         return formatter.string(from: date)
