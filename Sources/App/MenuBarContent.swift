@@ -1438,7 +1438,7 @@ private struct SelectListRow: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
-                    if option.hasNonEmptySubtitle, let subtitle = option.subtitle {
+                    if hasSubtitle, let subtitle = option.subtitle {
                         Text(subtitle)
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
