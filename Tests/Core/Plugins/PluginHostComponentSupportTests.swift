@@ -39,32 +39,22 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertTrue(host.componentItems.first?.isActive == false)
     }
 
-    func testTwoLanguageSwitchesRefreshHostWithoutRefreshingPluginState() async {
-        let plugin = MockComponentPanelPlugin(id: "component")
+    func testTwoLocalizationRefreshesPreservePluginState() {
+        let plugin = MockComponentPanelPlugin(id: "component", isActive: true)
         let host = makeHost(plugins: [plugin])
         let refreshCallCount = plugin.refreshCallCount
-        let originalPreference = UserDefaults.standard.string(forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey)
-        defer {
-            PluginRuntimeLocalization.source.setPreference(originalPreference)
-        }
-
-        // Establish a known distinct starting value; the user's active
-        // language may already be English when this test starts.
-        PluginRuntimeLocalization.source.setPreference("ar")
-        await Task.yield()
-        await Task.yield()
         let initialRevision = host.localizationRevision
 
-        PluginRuntimeLocalization.source.setPreference("en")
-        await Task.yield()
-        await Task.yield()
-        PluginRuntimeLocalization.source.setPreference("zh-Hans")
-        await Task.yield()
-        await Task.yield()
+        // Runtime language switches are covered by PluginRuntimeLocalizationTests.
+        // Exercise the host refresh twice directly so this state-preservation
+        // test is independent of the global locale source shared by parallel tests.
+        host.refreshLocalization()
+        host.refreshLocalization()
 
         XCTAssertEqual(host.localizationRevision, initialRevision + 2)
         XCTAssertEqual(plugin.refreshCallCount, refreshCallCount)
         XCTAssertEqual(plugin.localizationRefreshCount, 2)
+        XCTAssertTrue(host.componentItems.first?.isActive == true)
     }
 
     func testComponentVisibilityUsesSharedDisplayPreferences() {
