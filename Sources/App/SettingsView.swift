@@ -133,7 +133,7 @@ struct GeneralSettingsView: View {
             Section {
                 PreferencesBackupSettingsRow(pluginHost: pluginHost)
             } header: {
-                Text(AppL10n.settings("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
+                Text(AppL10n.preferencesBackup("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
             }
         }
         .formStyle(.grouped)
@@ -208,10 +208,10 @@ private struct PreferencesBackupSettingsRow: View {
             .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(AppL10n.settings("preferencesBackup.title", defaultValue: "导出与导入偏好设置"))
+                Text(AppL10n.preferencesBackup("preferencesBackup.title", defaultValue: "导出与导入偏好设置"))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
-                Text(AppL10n.settings(
+                Text(AppL10n.preferencesBackup(
                     "preferencesBackup.description",
                     defaultValue: "包含应用偏好、插件显示顺序与快捷键；不会包含权限、缓存或私有插件数据。"
                 ))
@@ -222,10 +222,10 @@ private struct PreferencesBackupSettingsRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 8) {
-                Button(AppL10n.settings("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
+                Button(AppL10n.preferencesBackup("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
                     .buttonStyle(.bordered)
 
-                Button(AppL10n.settings("preferencesBackup.import", defaultValue: "导入偏好设置…"), action: choosePreferencesImport)
+                Button(AppL10n.preferencesBackup("preferencesBackup.import", defaultValue: "导入偏好设置…"), action: choosePreferencesImport)
                     .buttonStyle(.bordered)
             }
         }
@@ -240,7 +240,7 @@ private struct PreferencesBackupSettingsRow: View {
                     do {
                         try pluginHost.importPreferences(pending.backup)
                         pendingImport = nil
-                        alertMessage = AppL10n.settings(
+                        alertMessage = AppL10n.preferencesBackup(
                             "preferencesBackup.imported",
                             defaultValue: "偏好设置已导入。语言设置将在重启 MacTools 后生效。"
                         )
@@ -252,7 +252,7 @@ private struct PreferencesBackupSettingsRow: View {
             )
         }
         .alert(
-            AppL10n.settings("preferencesBackup.alert.title", defaultValue: "偏好设置备份"),
+            AppL10n.preferencesBackup("preferencesBackup.alert.title", defaultValue: "偏好设置备份"),
             isPresented: Binding(
                 get: { alertMessage != nil },
                 set: { isPresented in
@@ -273,7 +273,7 @@ private struct PreferencesBackupSettingsRow: View {
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = "MacTools Preferences.json"
-        panel.message = AppL10n.settings("preferencesBackup.export.prompt", defaultValue: "将可移植的 MacTools 偏好设置保存为 JSON 文件。")
+        panel.message = AppL10n.preferencesBackup("preferencesBackup.export.prompt", defaultValue: "将可移植的 MacTools 偏好设置保存为 JSON 文件。")
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return
@@ -281,7 +281,7 @@ private struct PreferencesBackupSettingsRow: View {
 
         do {
             try pluginHost.makePreferencesBackup().encodedJSON().write(to: url, options: .atomic)
-            alertMessage = AppL10n.settings("preferencesBackup.exported", defaultValue: "偏好设置已导出。")
+            alertMessage = AppL10n.preferencesBackup("preferencesBackup.exported", defaultValue: "偏好设置已导出。")
         } catch {
             alertMessage = error.localizedDescription
         }
@@ -292,7 +292,7 @@ private struct PreferencesBackupSettingsRow: View {
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.message = AppL10n.settings("preferencesBackup.import.prompt", defaultValue: "选择 MacTools 导出的偏好设置 JSON 文件。")
+        panel.message = AppL10n.preferencesBackup("preferencesBackup.import.prompt", defaultValue: "选择 MacTools 导出的偏好设置 JSON 文件。")
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return
@@ -317,12 +317,12 @@ private struct PreferencesImportPreviewSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(AppL10n.settings("preferencesBackup.preview.title", defaultValue: "导入偏好设置"))
+            Text(AppL10n.preferencesBackup("preferencesBackup.preview.title", defaultValue: "导入偏好设置"))
                 .font(PluginSettingsTheme.Typography.pageTitle)
 
-            Text(AppL10n.settings(
+            Text(AppL10n.preferencesBackup(
                 "preferencesBackup.preview.description",
-                defaultValue: "请确认以下更改。导入不会修改权限、缓存、Keychain 密钥或插件私有数据。"
+                defaultValue: "请确认以下更改。导入不会安装插件，也不会修改权限、缓存、Keychain 密钥或插件私有数据。"
             ))
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
@@ -330,23 +330,23 @@ private struct PreferencesImportPreviewSheet: View {
 
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
                 GridRow {
-                    Text(AppL10n.settings("preferencesBackup.preview.application", defaultValue: "应用偏好"))
+                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.application", defaultValue: "应用偏好"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     Text(preview.applicationSummary)
                 }
                 GridRow {
-                    Text(AppL10n.settings("preferencesBackup.preview.plugins", defaultValue: "插件显示设置"))
+                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.plugins", defaultValue: "插件显示设置"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text(AppL10n.settingsFormat(
+                    Text(AppL10n.preferencesBackupFormat(
                         "preferencesBackup.preview.pluginsCount",
                         defaultValue: "%d 个可用插件",
                         preview.pluginCount
                     ))
                 }
                 GridRow {
-                    Text(AppL10n.settings("preferencesBackup.preview.shortcuts", defaultValue: "快捷键"))
+                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.shortcuts", defaultValue: "快捷键"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text(AppL10n.settingsFormat(
+                    Text(AppL10n.preferencesBackupFormat(
                         "preferencesBackup.preview.shortcutsCount",
                         defaultValue: "%d 项自定义",
                         preview.shortcutCount
@@ -356,9 +356,9 @@ private struct PreferencesImportPreviewSheet: View {
             .font(PluginSettingsTheme.Typography.rowDescription)
 
             if !preview.unavailablePluginIDs.isEmpty || !preview.unavailableShortcutIDs.isEmpty {
-                Text(AppL10n.settingsFormat(
+                Text(AppL10n.preferencesBackupFormat(
                     "preferencesBackup.preview.skipped",
-                    defaultValue: "将跳过 %d 个本机不可用的插件设置和 %d 项快捷键。",
+                    defaultValue: "将跳过 %d 个本机不可用的插件设置和 %d 项快捷键；不会安装缺失插件。",
                     preview.unavailablePluginIDs.count,
                     preview.unavailableShortcutIDs.count
                 ))
@@ -370,7 +370,7 @@ private struct PreferencesImportPreviewSheet: View {
                 Spacer()
                 Button(AppL10n.settings("common.cancel", defaultValue: "取消"), action: onCancel)
                     .buttonStyle(.bordered)
-                Button(AppL10n.settings("preferencesBackup.preview.confirm", defaultValue: "导入"), action: onImport)
+                Button(AppL10n.preferencesBackup("preferencesBackup.preview.confirm", defaultValue: "导入"), action: onImport)
                     .buttonStyle(.borderedProminent)
             }
         }

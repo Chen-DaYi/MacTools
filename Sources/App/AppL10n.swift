@@ -18,6 +18,10 @@ enum AppL10n {
         string(key, defaultValue: defaultValue, table: "Plugins")
     }
 
+    static func preferencesBackup(_ key: String, defaultValue: String) -> String {
+        string(key, defaultValue: defaultValue, table: "PreferencesBackup")
+    }
+
     static func settingsFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: settings(key, defaultValue: defaultValue),
@@ -29,6 +33,14 @@ enum AppL10n {
     static func pluginsFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: plugins(key, defaultValue: defaultValue),
+            locale: Locale.current,
+            arguments: arguments
+        )
+    }
+
+    static func preferencesBackupFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
+        String(
+            format: preferencesBackup(key, defaultValue: defaultValue),
             locale: Locale.current,
             arguments: arguments
         )

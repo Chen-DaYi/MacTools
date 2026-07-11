@@ -70,7 +70,10 @@ struct PreferencesImportPreview: Equatable {
     let unavailableShortcutIDs: [String]
 
     var applicationSummary: String {
-        "应用外观、语言和状态栏点击行为"
+        AppL10n.preferencesBackup(
+            "preferencesBackup.preview.applicationSummary",
+            defaultValue: "应用外观、语言和状态栏点击行为"
+        )
     }
 }
 
@@ -81,9 +84,16 @@ enum PreferencesBackupError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .unsupportedFormatVersion(version):
-            return "不支持的偏好设置备份版本（\(version)）。"
+            return AppL10n.preferencesBackupFormat(
+                "preferencesBackup.error.unsupportedFormat",
+                defaultValue: "不支持的偏好设置备份版本（%d）。",
+                version
+            )
         case .invalidApplicationPreferences:
-            return "备份中的应用偏好设置无效。"
+            return AppL10n.preferencesBackup(
+                "preferencesBackup.error.invalidApplicationPreferences",
+                defaultValue: "备份中的应用偏好设置无效。"
+            )
         }
     }
 }
