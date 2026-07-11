@@ -132,6 +132,7 @@ final class PluginHost: ObservableObject {
     private let builtInPlugins: [any MacToolsPlugin]
     private let shortcutStore: ShortcutStore
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
+    private let preferencesBackupStore: PreferencesBackupStore
     private let globalShortcutManager: GlobalShortcutManager
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
@@ -194,6 +195,7 @@ final class PluginHost: ObservableObject {
             pluginCatalogManager: pluginCatalogManager,
             shortcutStore: ShortcutStore(),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
+            preferencesBackupStore: PreferencesBackupStore(),
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: SystemDisplayConfigurationObserver(),
             accessibilityPermissionObserver: AccessibilityPermissionObserver(),
@@ -207,6 +209,7 @@ final class PluginHost: ObservableObject {
         pluginCatalogManager: PluginCatalogManager? = nil,
         shortcutStore: ShortcutStore,
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
+        preferencesBackupStore: PreferencesBackupStore = PreferencesBackupStore(),
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
@@ -223,6 +226,7 @@ final class PluginHost: ObservableObject {
         }
         self.shortcutStore = shortcutStore
         self.pluginDisplayPreferencesStore = pluginDisplayPreferencesStore
+        self.preferencesBackupStore = preferencesBackupStore
         self.globalShortcutManager = globalShortcutManager
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
@@ -300,6 +304,68 @@ final class PluginHost: ObservableObject {
 
         syncGlobalShortcuts()
         rebuildDerivedState()
+    }
+
+    func makePreferencesBackup() -> PreferencesBackup {
+        let shortcutDescriptors = shortcutDescriptors()
+
+        return PreferencesBackup(
+            application: preferencesBackupStore.applicationPreferences(),
+            pluginDisplay: pluginDisplayPreferencesStore.backupSnapshot(
+                defaultPluginIDs: defaultPluginIDs
+            ),
+            shortcutCustomizations: shortcutStore.customizations(
+                for: shortcutDescriptors.map(\.itemID)
+            )
+        )
+    }
+
+    func preferencesImportPreview(for backup: PreferencesBackup) throws -> PreferencesImportPreview {
+        try backup.validate()
+
+        let availablePluginIDs = Set(defaultPluginIDs)
+        let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs)
+            .union(backup.pluginDisplay.hiddenPluginIDs)
+        let availableShortcutIDs = Set(shortcutDescriptors().map(\.itemID))
+        let backedUpShortcutIDs = Set(backup.shortcutCustomizations.keys)
+
+        return PreferencesImportPreview(
+            pluginCount: backedUpPluginIDs.intersection(availablePluginIDs).count,
+            unavailablePluginIDs: backedUpPluginIDs.subtracting(availablePluginIDs).sorted(),
+            shortcutCount: backedUpShortcutIDs.intersection(availableShortcutIDs).count,
+            unavailableShortcutIDs: backedUpShortcutIDs.subtracting(availableShortcutIDs).sorted()
+        )
+    }
+
+    func importPreferences(_ backup: PreferencesBackup) throws {
+        _ = try preferencesImportPreview(for: backup)
+        preferencesBackupStore.apply(backup.application)
+
+        let hiddenPluginIDs = Set(backup.pluginDisplay.hiddenPluginIDs)
+        for pluginID in defaultPluginIDs {
+            let shouldBeVisible = !hiddenPluginIDs.contains(pluginID)
+            guard pluginDisplayPreferencesStore.isVisible(
+                pluginID,
+                defaultPluginIDs: defaultPluginIDs
+            ) != shouldBeVisible else {
+                continue
+            }
+
+            setFeatureVisibility(shouldBeVisible, for: pluginID)
+        }
+
+        pluginDisplayPreferencesStore.setOrderedPluginIDs(
+            backup.pluginDisplay.orderedPluginIDs,
+            defaultPluginIDs: defaultPluginIDs
+        )
+
+        for descriptor in shortcutDescriptors() {
+            let customization = backup.shortcutCustomizations[descriptor.itemID] ?? .inheritDefault
+            _ = applyShortcutCustomization(customization, for: descriptor)
+        }
+
+        rebuildDerivedState()
+        syncGlobalShortcuts()
     }
 
     func refreshDisplayTopology() {
