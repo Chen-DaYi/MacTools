@@ -82,6 +82,8 @@ brew update
 brew upgrade --cask --greedy mactools
 ```
 
+The in-app update dialog separates App Updates from Plugin Updates and includes plugin releases published since the previous app version.
+
 If Homebrew still reports that the cask is already up to date, check the locally resolved cask version first:
 
 ```bash

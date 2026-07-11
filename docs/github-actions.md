@@ -215,7 +215,7 @@ appearance.mactoolsplugin/
 
 ## Release Notes 规范
 
-App 和 Plugin Release 共用 `CHANGELOG.md` 作为唯一更新日志来源，但各自生成不同的 release notes。开发完成用户可见变更时，先添加一个简洁英文 fragment 到 `changes/unreleased/*.md`；`scripts/release.py --type app` 只消费 `release: app` fragments 并写入 `## [vX.Y.Z]`，`scripts/release.py --type plugin` 只消费 `release: plugin` fragments 并写入 `## [plugins-X.Y.Z]`。已消费 fragments 会在发布提交中删除。随后对应 workflow 从 tag 对应的 `CHANGELOG.md` 段落提取 Markdown：App notes 写入 GitHub Release 和 Sparkle appcast，Plugin notes 写入插件批次 GitHub Release。
+App 和 Plugin Release 共用 `CHANGELOG.md` 作为唯一更新日志来源，但各自生成不同的 release notes。开发完成用户可见变更时，先添加一个简洁英文 fragment 到 `changes/unreleased/*.md`；`scripts/release.py --type app` 只消费 `release: app` fragments 并写入 `## [vX.Y.Z]`，`scripts/release.py --type plugin` 只消费 `release: plugin` fragments 并写入 `## [plugins-X.Y.Z]`。已消费 fragments 会在发布提交中删除。随后对应 workflow 从 tag 对应的 `CHANGELOG.md` 段落提取 Markdown：App notes 写入 GitHub Release，Plugin notes 写入插件批次 GitHub Release。Sparkle appcast 使用单独生成的英文说明，在 `App Updates` 后附加自上一个 App 版本以来发布的插件条目，并按 changelog 类型合并到 `Plugin Updates`；没有插件更新时省略该分组，因此不会改变 GitHub Release 的日志内容。
 
 fragment 使用简化的 front matter：
 

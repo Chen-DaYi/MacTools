@@ -355,8 +355,15 @@ jobs:
             cat "$GENERATED_NOTES" > "$RELEASE_NOTES"
           fi
 
+          SPARKLE_RELEASE_NOTES="$RUNNER_TEMP/sparkle-release-notes.md"
+          python3 scripts/changelog.py compose-sparkle \
+            --tag "$TAG" \
+            --app-notes "$RELEASE_NOTES" \
+            --output "$SPARKLE_RELEASE_NOTES"
+
           {
             echo "RELEASE_NOTES_PATH=$RELEASE_NOTES"
+            echo "SPARKLE_RELEASE_NOTES_PATH=$SPARKLE_RELEASE_NOTES"
           } >> "$GITHUB_ENV"
 
       - name: Generate Sparkle appcast
@@ -411,7 +418,7 @@ jobs:
                   "MINIMUM_SYSTEM_VERSION",
               ]
           }
-          release_notes = Path(os.environ["RELEASE_NOTES_PATH"]).read_text(encoding="utf-8")
+          release_notes = Path(os.environ["SPARKLE_RELEASE_NOTES_PATH"]).read_text(encoding="utf-8")
           cdata_release_notes = release_notes.replace("]]>", "]]]]><![CDATA[>")
 
           content = f'''<?xml version="1.0" encoding="utf-8"?>
@@ -419,7 +426,7 @@ jobs:
               <channel>
                   <title>{xml.escape(values["PROJECT_NAME"])} Releases</title>
                   <description>Latest release metadata for {xml.escape(values["PROJECT_NAME"])}.</description>
-                  <language>zh-CN</language>
+                  <language>en</language>
                   <item>
                       <title>Version {xml.escape(values["VERSION"])}</title>
                       <link>{xml.escape(values["RELEASE_NOTES_URL"])}</link>
