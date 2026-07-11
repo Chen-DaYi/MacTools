@@ -9,6 +9,7 @@ struct PluginManagementSettingsView: View {
     @State private var activeOperationID: String?
     @State private var searchText: String = ""
     @State private var selectedFilter: PluginCategoryFilter = .all
+    @AppStorage(PluginMarketplaceSortMode.userDefaultsKey) private var sortMode = PluginMarketplaceSortMode.notInstalledFirst
     @State private var bulkUpdateProgressText: String?
     @State private var bulkUpdateProgressOpacity: Double = 0
     @State private var bulkUpdateProgressHideTask: Task<Void, Never>?
@@ -28,11 +29,15 @@ struct PluginManagementSettingsView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                PluginFilterBarView(
-                    searchText: $searchText,
-                    selectedFilter: $selectedFilter,
-                    countsByFilter: countsByFilter
-                )
+                VStack(alignment: .leading, spacing: 10) {
+                    PluginFilterBarView(
+                        searchText: $searchText,
+                        selectedFilter: $selectedFilter,
+                        countsByFilter: countsByFilter
+                    )
+
+                    marketplaceSortPicker
+                }
 
                 if filteredItems.isEmpty {
                     ContentUnavailableView(
@@ -97,9 +102,10 @@ struct PluginManagementSettingsView: View {
     }
 
     private var filteredItems: [PluginManagementItem] {
-        pluginHost.pluginManagementItems.filter {
+        let filtered = pluginHost.pluginManagementItems.filter {
             PluginListFilter.matches(managementItem: $0, query: searchText, filter: selectedFilter)
         }
+        return PluginMarketplaceSortMode.sorted(filtered, by: sortMode)
     }
 
     private var countsByFilter: [PluginCategoryFilter: Int] {
@@ -107,6 +113,37 @@ struct PluginManagementSettingsView: View {
             managementItems: pluginHost.pluginManagementItems,
             query: searchText
         )
+    }
+
+    private var marketplaceSortPicker: some View {
+        let sortLabel = AppL10n.plugins("plugin.marketplace.sort.label", defaultValue: "排序")
+        let sortHelp = AppL10n.plugins(
+            "plugin.marketplace.sort.help",
+            defaultValue: "调整市场列表排序，不影响菜单栏功能顺序。"
+        )
+
+        return HStack(spacing: 8) {
+            Spacer(minLength: 0)
+
+            Text(sortLabel)
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+
+            Picker(sortLabel, selection: $sortMode) {
+                ForEach(PluginMarketplaceSortMode.allCases) { mode in
+                    Text(mode.displayName)
+                        .tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help(sortHelp)
+            .accessibilityLabel(sortLabel)
+            .accessibilityValue(sortMode.displayName)
+            .accessibilityHint(sortHelp)
+        }
     }
 
     private var header: some View {
