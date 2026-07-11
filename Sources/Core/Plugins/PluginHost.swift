@@ -156,9 +156,11 @@ final class PluginHost: ObservableObject {
     private var pluginStateChangeRebuildTask: Task<Void, Never>?
     private var dirtyPluginIDs: Set<String> = []
     private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
+    private var cachedPrimaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
     private var cachedComponentStatesByID: [String: PluginComponentState] = [:]
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
+    private(set) var primaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
     @Published private(set) var componentItems: [PluginComponentItem] = []
     @Published private(set) var featureManagementItems: [PluginFeatureManagementItem] = []
     @Published private(set) var pluginConfigurationItems: [PluginConfigurationItem] = []
@@ -1059,6 +1061,9 @@ final class PluginHost: ObservableObject {
         var panelStatesByID = dirtyPluginIDs == nil ? [:] : cachedPanelStatesByID.filter {
             descriptorIDs.contains($0.key)
         }
+        var primaryPanelIndicatorsByID = dirtyPluginIDs == nil
+            ? [:]
+            : cachedPrimaryPanelIndicatorsByID.filter { descriptorIDs.contains($0.key) }
         var componentStatesByID = dirtyPluginIDs == nil ? [:] : cachedComponentStatesByID.filter {
             descriptorIDs.contains($0.key)
         }
@@ -1082,8 +1087,25 @@ final class PluginHost: ObservableObject {
                         panelStatesByID.removeValue(forKey: pluginID)
                     }
                 }
+
+                if let indicatorProvider = plugin as? any PluginPrimaryPanelIndicatorProviding {
+                    if shouldReadPlugin || primaryPanelIndicatorsByID[pluginID] == nil {
+                        if let indicator = guardedOptionalValue(
+                            for: plugin,
+                            operation: "read primary panel indicator",
+                            indicatorProvider.primaryPanelIndicator
+                        ) {
+                            primaryPanelIndicatorsByID[pluginID] = indicator
+                        } else {
+                            primaryPanelIndicatorsByID.removeValue(forKey: pluginID)
+                        }
+                    }
+                } else {
+                    primaryPanelIndicatorsByID.removeValue(forKey: pluginID)
+                }
             } else {
                 panelStatesByID.removeValue(forKey: pluginID)
+                primaryPanelIndicatorsByID.removeValue(forKey: pluginID)
             }
 
             if descriptor.hasComponentPanel,
@@ -1106,7 +1128,9 @@ final class PluginHost: ObservableObject {
         }
 
         cachedPanelStatesByID = panelStatesByID
+        cachedPrimaryPanelIndicatorsByID = primaryPanelIndicatorsByID
         cachedComponentStatesByID = componentStatesByID
+        self.primaryPanelIndicatorsByID = primaryPanelIndicatorsByID
 
         panelItems = orderedDescriptors.compactMap { descriptor in
             guard descriptor.hasPrimaryPanel else {

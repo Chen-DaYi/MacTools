@@ -546,6 +546,16 @@ public struct PluginPanelState {
     }
 }
 
+public struct PluginPrimaryPanelIndicator: Equatable {
+    public let text: String
+    public let systemImage: String
+
+    public init(text: String, systemImage: String) {
+        self.text = text
+        self.systemImage = systemImage
+    }
+}
+
 public enum PluginPanelControlKind {
     case segmented
     case datePicker
@@ -570,10 +580,6 @@ public struct PluginPanelControlOption: Identifiable, Equatable {
         self.id = id
         self.title = title
         self.subtitle = subtitle
-    }
-
-    public var hasNonEmptySubtitle: Bool {
-        subtitle?.isEmpty == false
     }
 }
 

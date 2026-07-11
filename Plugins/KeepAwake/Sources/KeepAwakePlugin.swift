@@ -19,7 +19,7 @@ private struct KeepAwakePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelIndicatorProviding {
     typealias SessionFactory = (
         PluginLocalization,
         @escaping (KeepAwakeSession.EndReason) -> Void
@@ -36,7 +36,6 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private enum ControlID {
         static let duration = "duration"
-        static let keepDisplayOn = "keep-display-on"
     }
 
     private enum DurationPreset: String {
@@ -68,11 +67,6 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         static let oneHour = DurationPreset.oneHour.rawValue
         static let twoHours = DurationPreset.twoHours.rawValue
         static let fiveHours = DurationPreset.fiveHours.rawValue
-    }
-
-    private enum KeepDisplayOptionID {
-        static let allowSleep = "allow-sleep"
-        static let keepOn = "keep-on"
     }
 
     let metadata: PluginMetadata
@@ -133,11 +127,34 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         )
     }
 
+    var primaryPanelIndicator: PluginPrimaryPanelIndicator? {
+        guard keepDisplayOn, session != nil else {
+            return nil
+        }
+
+        return PluginPrimaryPanelIndicator(
+            text: localization.string("panel.display.indicator", defaultValue: "屏幕常亮"),
+            systemImage: "display"
+        )
+    }
+
     var permissionRequirements: [PluginPermissionRequirement] { [] }
 
     var settingsSections: [PluginSettingsSection] { [] }
 
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(description: metadata.defaultDescription) { [weak self, localization] _ in
+            KeepAwakeSettingsView(
+                keepDisplayOn: Binding(
+                    get: { self?.keepDisplayOn ?? false },
+                    set: { [weak self] in self?.setKeepDisplayOn($0) }
+                ),
+                localization: localization
+            )
+        }
+    }
 
     func activate(context: PluginRuntimeContext) {
         storage = context.storage
@@ -168,14 +185,10 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         case .setDisclosureExpanded, .setNavigationSelection, .clearNavigationSelection:
             return
         case let .setSelection(controlID, optionID):
-            switch controlID {
-            case ControlID.duration:
-                updateDurationPreset(using: optionID)
-            case ControlID.keepDisplayOn:
-                updateKeepDisplayOn(using: optionID)
-            default:
+            guard controlID == ControlID.duration else {
                 return
             }
+            updateDurationPreset(using: optionID)
         case .setDate, .setSlider, .invokeAction:
             return
         }
@@ -221,20 +234,6 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         )
     }
 
-    private var allowDisplayOffOptionTitle: String {
-        localization.string(
-            "panel.display.allowSleep",
-            defaultValue: "允许关闭"
-        )
-    }
-
-    private var keepDisplayOnOptionTitle: String {
-        localization.string(
-            "panel.display.keepOn",
-            defaultValue: "保持常亮"
-        )
-    }
-
     private var panelDetail: PluginPanelDetail? {
         guard session != nil else {
             return nil
@@ -261,41 +260,6 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
                     displayedComponents: nil,
                     datePickerStyle: nil,
                     sectionTitle: nil,
-                    isEnabled: true
-                ),
-                PluginPanelControl(
-                    id: ControlID.keepDisplayOn,
-                    kind: .selectList,
-                    options: [
-                        PluginPanelControlOption(
-                            id: KeepDisplayOptionID.allowSleep,
-                            title: allowDisplayOffOptionTitle,
-                            subtitle: localization.string(
-                                "panel.display.allowSleep.subtitle",
-                                defaultValue: "系统保持唤醒，屏幕可按系统设置关闭"
-                            )
-                        ),
-                        PluginPanelControlOption(
-                            id: KeepDisplayOptionID.keepOn,
-                            title: keepDisplayOnOptionTitle,
-                            subtitle: localization.string(
-                                "panel.display.keepOn.subtitle",
-                                defaultValue: "系统与屏幕均不因空闲而关闭"
-                            )
-                        )
-                    ],
-                    selectedOptionID: keepDisplayOn
-                        ? KeepDisplayOptionID.keepOn
-                        : KeepDisplayOptionID.allowSleep,
-                    dateValue: nil,
-                    minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: localization.string(
-                        "panel.display.section",
-                        defaultValue: "屏幕"
-                    ),
-                    showsLeadingDivider: true,
                     isEnabled: true
                 )
             ],
@@ -339,17 +303,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         applyKeepAwakeConfiguration()
     }
 
-    private func updateKeepDisplayOn(using optionID: String) {
-        let shouldKeepDisplayOn: Bool
-        switch optionID {
-        case KeepDisplayOptionID.keepOn:
-            shouldKeepDisplayOn = true
-        case KeepDisplayOptionID.allowSleep:
-            shouldKeepDisplayOn = false
-        default:
-            return
-        }
-
+    func setKeepDisplayOn(_ shouldKeepDisplayOn: Bool) {
         guard keepDisplayOn != shouldKeepDisplayOn else {
             return
         }

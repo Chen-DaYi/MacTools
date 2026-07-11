@@ -51,13 +51,12 @@ final class PluginHostDisclosureStateTests: XCTestCase {
         XCTAssertEqual(plugin.stateReadCount, 1)
     }
 
-    func testPanelHelpTextUsesCompleteCurrentSubtitle() {
+    func testOptionalPrimaryPanelIndicatorMapsByPluginID() {
         let plugin = MockDisclosurePlugin()
-        plugin.subtitle = "Tomorrow 12:10 AM · Allow turning off"
+        plugin.indicator = PluginPrimaryPanelIndicator(text: "屏幕常亮", systemImage: "display")
         let host = makeHost(plugin: plugin)
 
-        XCTAssertEqual(host.panelItems[0].description, plugin.subtitle)
-        XCTAssertEqual(host.panelItems[0].helpText, plugin.subtitle)
+        XCTAssertEqual(host.primaryPanelIndicatorsByID[plugin.metadata.id], plugin.indicator)
     }
 
     private func makeHost(plugin: MockDisclosurePlugin) -> PluginHost {
@@ -74,7 +73,7 @@ final class PluginHostDisclosureStateTests: XCTestCase {
 }
 
 @MainActor
-private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel {
+private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelIndicatorProviding {
     let metadata = PluginMetadata(
         id: "mock-disclosure",
         title: "Mock Disclosure",
@@ -94,13 +93,17 @@ private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var isExpanded = false
     var errorMessage: String?
-    var subtitle = "Mock plugin"
+    var indicator: PluginPrimaryPanelIndicator?
     var stateReadCount = 0
+
+    var primaryPanelIndicator: PluginPrimaryPanelIndicator? {
+        indicator
+    }
 
     var primaryPanelState: PluginPanelState {
         stateReadCount += 1
         return PluginPanelState(
-            subtitle: subtitle,
+            subtitle: "Mock plugin",
             isOn: false,
             isExpanded: isExpanded,
             isEnabled: true,

@@ -36,7 +36,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Plugins implement `MacToolsPlugin`; menu panel plugins implement `PluginPrimaryPanel`, and component panel plugins implement `PluginComponentPanel`.
 - `plugin.json.id` must be stable, readable, and exactly match the runtime `PluginMetadata.id`; each plugin package should return exactly one plugin instance.
 - Plugin display state should be expressed through `PluginPanelState`, `PluginPanelDetail`, `PluginPanelControl`, and related models. Do not bypass the existing panel framework.
-- Prefer declarative plugin settings through `settingsSections`, `permissionRequirements`, `shortcutDefinitions`, and related models. Use a custom `PluginConfiguration` view only for complex managers or specialized interactions.
+- Prefer declarative plugin settings through `settingsSections`, `permissionRequirements`, `shortcutDefinitions`, and related models. Use a custom `PluginConfiguration` view for interactive preferences, complex managers, or specialized interactions the declarative models cannot express.
 - If ordinary plugin resources rarely change, prefer bundling them into the executable. If extra bundle resources are needed, declare the smallest necessary differences in the plugin's own `project.yml`.
 - Custom plugin settings views must reuse `MacToolsPluginKit.PluginSettingsTheme` and `.pluginSettingsCardBackground(...)`. Do not copy private plugin settings styles, and do not make plugins depend on `Sources/App/SettingsStyle.swift`.
 - Call `onStateChange?()` after plugin state changes. Long-running scans, file system work, and system calls should not block the main thread for extended periods.

@@ -498,7 +498,78 @@
         }
       }
     },
-    "panel.display.section": {
+    "panel.display.indicator": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الشاشة قيد التشغيل"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display an"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display on"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pantalla encendida"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écran allumé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面をオン"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "화면 켜짐"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tela ligada"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Экран включён"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕常亮"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "螢幕常亮"
+          }
+        }
+      }
+    },
+    "settings.display.section": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -711,7 +782,7 @@
         }
       }
     },
-    "panel.display.keepOn": {
+    "settings.display.keepOn": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
@@ -782,7 +853,7 @@
         }
       }
     },
-    "panel.display.keepOn.subtitle": {
+    "settings.display.keepOn.description": {
       "extractionState": "manual",
       "localizations": {
         "ar": {

@@ -147,51 +147,6 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         )
     }
 
-    func testSelectListSubtitleRowsUseStablePerOptionHeight() {
-        let item = makeItem(
-            controlStyle: .switch,
-            isExpanded: false,
-            controls: [
-                PluginPanelControl(
-                    id: "display-policy",
-                    kind: .selectList,
-                    options: [
-                        PluginPanelControlOption(
-                            id: "keep-on",
-                            title: "Keep display on",
-                            subtitle: "Neither Mac nor display idle-sleep; does not bypass lock"
-                        ),
-                        PluginPanelControlOption(
-                            id: "allow-off",
-                            title: "Allow turning off"
-                        ),
-                        PluginPanelControlOption(
-                            id: "empty-subtitle",
-                            title: "Empty subtitle",
-                            subtitle: ""
-                        )
-                    ],
-                    selectedOptionID: "keep-on",
-                    dateValue: nil,
-                    minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: nil,
-                    isEnabled: true
-                )
-            ]
-        )
-
-        XCTAssertEqual(
-            MenuBarPanelLayout.featureContentHeight(for: [item]),
-            MenuBarPanelLayout.rowHeaderHeight
-                + MenuBarPanelLayout.detailSpacing
-                + MenuBarPanelLayout.selectRowWithSubtitleHeight
-                + MenuBarPanelLayout.selectRowHeight * 2
-                + MenuBarPanelLayout.rowVerticalPadding
-        )
-    }
-
     func testButtonFeatureContentHeightIncludesDisplayedDetail() {
         let item = makeItem(
             controlStyle: .button,

@@ -86,7 +86,7 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertTrue(secondFactory.sessions.isEmpty)
     }
 
-    func testKeepDisplayOnDefaultsToOffAndUpdatesRunningSession() {
+    func testKeepDisplayOnSettingDefaultsToOffAndUpdatesRunningSession() {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: storage)
@@ -95,20 +95,46 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, false)
         XCTAssertNil(storage.values["keep-display-on"])
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "不会自动停止")
-        XCTAssertEqual(displayPolicySectionTitle(in: plugin.primaryPanelState), "屏幕")
+        XCTAssertEqual(plugin.primaryPanelState.detail?.primaryControls.map(\.id), ["duration"])
+        XCTAssertNotNil(plugin.configuration)
+        XCTAssertNil(plugin.primaryPanelIndicator)
 
-        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+        plugin.setKeepDisplayOn(true)
 
         XCTAssertEqual(factory.sessions[0].startedConfigurations.count, 1)
         XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true])
         XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "不会自动停止")
+        XCTAssertEqual(
+            plugin.primaryPanelIndicator,
+            PluginPrimaryPanelIndicator(text: "屏幕常亮", systemImage: "display")
+        )
 
-        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "allow-sleep"))
+        plugin.setKeepDisplayOn(false)
 
         XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, false])
         XCTAssertNil(storage.values["keep-display-on"])
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "不会自动停止")
+        XCTAssertNil(plugin.primaryPanelIndicator)
+    }
+
+    func testKeepDisplayOnSettingAppliesToFutureSession() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.setKeepDisplayOn(true)
+
+        XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
+        XCTAssertTrue(factory.sessions.isEmpty)
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertNil(plugin.primaryPanelIndicator)
+
+        plugin.handleAction(.setSwitch(true))
+
+        XCTAssertEqual(factory.sessions.count, 1)
+        XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventDisplaySleep, true)
+        XCTAssertNotNil(plugin.primaryPanelIndicator)
     }
 
     func testKeepDisplayOnUpdatePreservesTimedSessionEndDate() {
@@ -123,7 +149,7 @@ final class KeepAwakePluginTests: XCTestCase {
         let scheduledEndDate = session.startedConfigurations.last?.endDate
         XCTAssertNotNil(scheduledEndDate)
 
-        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+        plugin.setKeepDisplayOn(true)
 
         XCTAssertEqual(session.startedConfigurations.count, 2)
         XCTAssertEqual(session.startedConfigurations.last?.endDate, scheduledEndDate)
@@ -139,7 +165,7 @@ final class KeepAwakePluginTests: XCTestCase {
         let session = factory.sessions[0]
         session.displayUpdateError = MockKeepAwakeSessionError.displayUpdateFailed
 
-        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+        plugin.setKeepDisplayOn(true)
 
         XCTAssertEqual(session.displaySleepPreventionUpdates, [true])
         XCTAssertNil(storage.values["keep-display-on"])
@@ -147,7 +173,7 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
 
         session.displayUpdateError = nil
-        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+        plugin.setKeepDisplayOn(true)
 
         XCTAssertEqual(session.displaySleepPreventionUpdates, [true, true])
         XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
@@ -161,7 +187,7 @@ final class KeepAwakePluginTests: XCTestCase {
         let firstPlugin = firstFactory.makePlugin(storage: storage)
 
         firstPlugin.handleAction(.setSwitch(true))
-        firstPlugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+        firstPlugin.setKeepDisplayOn(true)
         firstPlugin.deactivate(reason: .hostShutdown)
 
         let secondFactory = KeepAwakeSessionFactory()
@@ -179,7 +205,7 @@ final class KeepAwakePluginTests: XCTestCase {
         let plugin = factory.makePlugin(storage: storage)
 
         plugin.handleAction(.setSwitch(true))
-        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
+        plugin.setKeepDisplayOn(true)
         plugin.handleAction(.setSwitch(false))
 
         XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
@@ -195,28 +221,12 @@ final class KeepAwakePluginTests: XCTestCase {
 
         plugin.handleAction(.setSwitch(true))
         plugin.handleAction(.setSelection(controlID: "duration", optionID: "twoHours"))
-        plugin.handleAction(.setSelection(controlID: "keep-display-on", optionID: "keep-on"))
 
         let subtitle = plugin.primaryPanelState.subtitle
-        let displayOptionTitle = selectedDisplayOptionTitle(in: plugin.primaryPanelState)
         XCTAssertTrue(subtitle.contains(":"), subtitle)
         XCTAssertTrue(subtitle.contains("·"), subtitle)
-        XCTAssertNotNil(displayOptionTitle)
-        XCTAssertFalse(displayOptionTitle.map(subtitle.contains) ?? true, subtitle)
         XCTAssertTrue(subtitle.contains("剩余"), subtitle)
         XCTAssertEqual(subtitle.filter { $0 == "·" }.count, 1, subtitle)
-    }
-
-    private func selectedDisplayOptionTitle(in state: PluginPanelState) -> String? {
-        guard let control = state.detail?.primaryControls.first(where: { $0.id == "keep-display-on" }) else {
-            return nil
-        }
-
-        return control.options.first(where: { $0.id == control.selectedOptionID })?.title
-    }
-
-    private func displayPolicySectionTitle(in state: PluginPanelState) -> String? {
-        state.detail?.primaryControls.first(where: { $0.id == "keep-display-on" })?.sectionTitle
     }
 
     private static func context(storage: KeepAwakeMemoryStorage) -> PluginRuntimeContext {

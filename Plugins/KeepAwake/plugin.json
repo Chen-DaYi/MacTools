@@ -60,7 +60,7 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": false
+    "configuration": true
   },
   "permissions": [],
   "category": "system"

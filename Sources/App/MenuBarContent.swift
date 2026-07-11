@@ -24,9 +24,6 @@ enum MenuBarPanelLayout {
     static let emptyContentHeight: CGFloat = 150
     static let actionRowVerticalPadding: CGFloat = 8
     static let selectRowVerticalPadding: CGFloat = 5
-    static let selectRowHeight: CGFloat = 26
-    // Reserve the complete title plus two-line subtitle layout in every localized row.
-    static let selectRowWithSubtitleHeight: CGFloat = 50
     static let sliderVerticalPadding: CGFloat = 9
     static let navigationRowHeight: CGFloat = 52
     static let secondaryPanelMinimumHeight: CGFloat = 148
@@ -213,10 +210,7 @@ enum MenuBarPanelLayout {
             }
         case .selectList:
             let titleHeight = control.sectionTitle == nil ? CGFloat(0) : CGFloat(15)
-            let rowsHeight = control.options.reduce(CGFloat(0)) { partialResult, option in
-                partialResult + selectRowHeight(for: option)
-            }
-            return titleHeight + rowsHeight
+            return titleHeight + CGFloat(control.options.count) * 26
         case .navigationList:
             return CGFloat(control.options.count) * navigationRowHeight
         case .slider:
@@ -228,14 +222,6 @@ enum MenuBarPanelLayout {
         case .actionRow:
             return 16 + actionRowVerticalPadding * 2
         }
-    }
-
-    private static func selectRowHeight(for option: PluginPanelControlOption) -> CGFloat {
-        guard option.hasNonEmptySubtitle else {
-            return selectRowHeight
-        }
-
-        return selectRowWithSubtitleHeight
     }
 
 }
@@ -814,6 +800,7 @@ struct MenuBarContent: View {
                 ForEach(pluginHost.panelItems) { item in
                     FeatureRowView(
                         item: item,
+                        indicator: pluginHost.primaryPanelIndicatorsByID[item.id],
                         isOn: Binding(
                             get: { pluginHost.isSwitchOn(for: item.id) },
                             set: { newValue in
@@ -942,6 +929,7 @@ final class DeferredPanelActionDispatcher: ObservableObject {
 
 struct FeatureRowView: View {
     let item: PluginPanelItem
+    let indicator: PluginPrimaryPanelIndicator?
     @Binding var isOn: Bool
     let onDisclosureToggle: (Bool) -> Void
     let onSelectionChange: (String, String) -> Void
@@ -1097,9 +1085,22 @@ struct FeatureRowView: View {
 
     private var rowText: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(item.title)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
+            HStack(spacing: 5) {
+                Text(item.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+
+                if let indicator {
+                    Label(indicator.text, systemImage: indicator.systemImage)
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.07), in: Capsule())
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
 
             HStack(spacing: 3) {
                 Text(item.description)
@@ -1393,7 +1394,7 @@ private struct SelectListControl: View {
             VStack(spacing: 0) {
                 ForEach(control.options) { option in
                     SelectListRow(
-                        option: option,
+                        title: option.title,
                         isSelected: option.id == control.selectedOptionID,
                         isEnabled: control.isEnabled,
                         action: { onSelect(option.id) }
@@ -1406,16 +1407,12 @@ private struct SelectListControl: View {
 }
 
 private struct SelectListRow: View {
-    let option: PluginPanelControlOption
+    let title: String
     let isSelected: Bool
     let isEnabled: Bool
     let action: () -> Void
 
     @State private var isHovered = false
-
-    private var hasSubtitle: Bool {
-        option.hasNonEmptySubtitle
-    }
 
     var body: some View {
         Button {
@@ -1425,37 +1422,20 @@ private struct SelectListRow: View {
 
             action()
         } label: {
-            HStack(alignment: hasSubtitle ? .top : .center, spacing: 7) {
+            HStack(spacing: 7) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .semibold))
                     .opacity(isSelected ? 1 : 0)
                     .frame(width: 12)
-                    .padding(.top, hasSubtitle ? 2 : 0)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(option.title)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                Text(title)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.primary)
 
-                    if hasSubtitle, let subtitle = option.subtitle {
-                        Text(subtitle)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                Spacer(minLength: 0)
+                Spacer()
             }
             .padding(.horizontal, 7)
             .padding(.vertical, MenuBarPanelLayout.selectRowVerticalPadding)
-            .frame(
-                minHeight: hasSubtitle
-                    ? MenuBarPanelLayout.selectRowWithSubtitleHeight
-                    : MenuBarPanelLayout.selectRowHeight
-            )
             .contentShape(Rectangle())
             .background(alignment: .center) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)

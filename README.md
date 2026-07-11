@@ -27,7 +27,7 @@
 | Display Sleep | Put all displays to sleep immediately, then wake them with mouse movement or keyboard input. |
 | Dark Mode | Toggle the system light and dark appearances, with live state sync when the system theme changes. |
 | Night Shift | Toggle Night Shift to reduce blue light and warm the screen colors at night. |
-| Prevent Sleep | Keep the system awake while idle, optionally keep the display on, and stop automatically after 30 minutes, 1 hour, 2 hours, or 5 hours. |
+| Prevent Sleep | Keep the system awake while idle, optionally keep the display on by default from plugin settings with an active-session indicator, and stop automatically after 30 minutes, 1 hour, 2 hours, or 5 hours. |
 | Clean Mode | Show a full-screen black overlay and temporarily disable input for cleaning the screen, keyboard, or trackpad. |
 | Mouse Enhancer | Enhance mouse and trackpad controls, with separate horizontal and vertical scroll reversing plus trackpad-tap middle-click simulation. |
 | Hide Notch | Mask the top notch area on built-in notch displays without modifying the original wallpaper. |
