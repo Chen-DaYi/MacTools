@@ -33,16 +33,14 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.settingsWindow?.title = Self.settingsWindowTitle
+                Task { @MainActor [weak self] in
+                    self?.settingsWindow?.title = Self.settingsWindowTitle
+                }
             }
-        }
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            runtimeLocaleCancellable?.cancel()
-        }
+    isolated deinit {
+        runtimeLocaleCancellable?.cancel()
     }
 
     func showSettings() {

@@ -354,9 +354,8 @@ final class DynamicPluginManager: ObservableObject {
 
     func installedManifestsByID() -> [String: PluginPackageManifest] {
         Dictionary(
-            uniqueKeysWithValues: packageStore.installedRecords().map {
-                ($0.id, $0.manifest)
-            }
+            packageStore.installedRecords().map { ($0.id, $0.manifest) },
+            uniquingKeysWith: { _, latest in latest }
         )
     }
 

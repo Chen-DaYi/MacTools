@@ -1,5 +1,5 @@
 import XCTest
-import MacToolsPluginKit
+@testable import MacToolsPluginKit
 @testable import MacTools
 
 @MainActor
@@ -29,6 +29,36 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
 
         XCTAssertEqual(PluginRuntimeLocalization.preferredLanguages, ["ar"])
         XCTAssertEqual(PluginRuntimeLocalization.locale.language.languageCode?.identifier, "ar")
+    }
+
+    func testFixedPreferenceThenSystemUsesTheSystemLanguageSnapshot() {
+        let source = makeLocaleSource(
+            systemLanguages: ["en-GB"],
+            currentLocale: Locale(identifier: "en_DE@calendar=gregorian")
+        )
+
+        source.setPreference("fr")
+        XCTAssertEqual(source.preferredLanguages, ["fr"])
+        XCTAssertEqual(source.locale.language.languageCode?.identifier, "fr")
+        XCTAssertEqual(source.locale.region?.identifier, "DE")
+
+        source.setPreference("system")
+        XCTAssertEqual(source.preferredLanguages, ["en-GB"])
+        XCTAssertEqual(source.locale.language.languageCode?.identifier, "en")
+        XCTAssertEqual(source.locale.region?.identifier, "DE")
+    }
+
+    func testFixedLanguageKeepsTheCurrentLocaleFormatSettings() {
+        let source = makeLocaleSource(
+            systemLanguages: ["en"],
+            currentLocale: Locale(identifier: "en_DE@calendar=japanese")
+        )
+
+        source.setPreference("ja")
+
+        XCTAssertEqual(source.locale.language.languageCode?.identifier, "ja")
+        XCTAssertEqual(source.locale.region?.identifier, "DE")
+        XCTAssertEqual(source.locale.calendar.identifier, .japanese)
     }
 
     func testChineseRegionUsesSimplifiedChineseResourceFallback() {
@@ -94,6 +124,24 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
                 bundle: bundle
             ),
             "Base Language"
+        )
+    }
+
+    func testMissingAllTranslationsFallsBackToTheCallerDefault() throws {
+        let bundleURL = try makeLocalizedTestBundle()
+        defer { try? FileManager.default.removeItem(at: bundleURL.deletingLastPathComponent()) }
+        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
+
+        setRuntimePreference("fr")
+
+        XCTAssertEqual(
+            PluginRuntimeLocalization.string(
+                "missing.title",
+                defaultValue: "Caller Default",
+                table: "Settings",
+                bundle: bundle
+            ),
+            "Caller Default"
         )
     }
 
@@ -163,5 +211,19 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
             UserDefaults.standard.removeObject(forKey: preferenceKey)
         }
         PluginRuntimeLocalization.source.setPreference(preference)
+    }
+
+    private func makeLocaleSource(
+        systemLanguages: [String],
+        currentLocale: Locale
+    ) -> PluginRuntimeLocaleSource {
+        let suiteName = "PluginRuntimeLocalizationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return PluginRuntimeLocaleSource(
+            userDefaults: defaults,
+            systemPreferredLanguages: { systemLanguages },
+            currentLocale: { currentLocale }
+        )
     }
 }

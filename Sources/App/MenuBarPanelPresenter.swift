@@ -86,23 +86,21 @@ final class MenuBarPanelPresenter: NSObject {
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshLocalization()
+                Task { @MainActor [weak self] in
+                    self?.refreshLocalization()
+                }
             }
-        }
         observePanelItemChanges()
         applyCurrentAppearance()
         prewarm()
         scheduleComponentViewPrewarm()
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            if let appearanceObserver {
-                NotificationCenter.default.removeObserver(appearanceObserver)
-            }
-            runtimeLocaleCancellable?.cancel()
+    isolated deinit {
+        if let appearanceObserver {
+            NotificationCenter.default.removeObserver(appearanceObserver)
         }
+        runtimeLocaleCancellable?.cancel()
     }
 
     var isAnyPanelShown: Bool {

@@ -275,21 +275,19 @@ final class PluginHost: ObservableObject {
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshLocalization()
+                Task { @MainActor [weak self] in
+                    self?.refreshLocalization()
+                }
             }
-        }
 
         pauseHiddenBuiltInVisibilityLifecyclePlugins()
         refreshAll()
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            displayTopologyRefreshTask?.cancel()
-            pluginStateChangeRebuildTask?.cancel()
-            runtimeLocaleCancellable?.cancel()
-        }
+    isolated deinit {
+        displayTopologyRefreshTask?.cancel()
+        pluginStateChangeRebuildTask?.cancel()
+        runtimeLocaleCancellable?.cancel()
     }
 
     func deactivateAllPlugins(reason: PluginDeactivationReason = .hostShutdown) {
@@ -1748,6 +1746,8 @@ final class PluginHost: ObservableObject {
         pluginMetadata: PluginMetadata,
         localizedMetadata: PluginMetadata
     ) -> String {
+        // Replace only the metadata default; panel-specific descriptions and
+        // errors must remain intact even if their text happens to be localized.
         description == pluginMetadata.defaultDescription
             ? localizedMetadata.defaultDescription
             : description

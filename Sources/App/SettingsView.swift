@@ -235,7 +235,6 @@ private struct MenuBarClickBehaviorSettingsRow: View {
 
 private struct AppearanceSettingsRow: View {
     @Binding var selection: AppAppearancePreference
-    @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -268,8 +267,6 @@ private struct AppearanceSettingsRow: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            // NSSegmentedControl keeps its original labels unless its identity changes.
-            .id(languagePreferenceRawValue)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
@@ -280,7 +277,6 @@ private struct AppearanceSettingsRow: View {
 
 private struct LanguageSettingsRow: View {
     @Binding var selection: AppLanguagePreference
-    @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -314,7 +310,6 @@ private struct LanguageSettingsRow: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .frame(width: 150, alignment: .trailing)
-            .id(languagePreferenceRawValue)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)

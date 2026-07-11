@@ -12,7 +12,11 @@ enum RightClickLocalization {
         bundle: Bundle = .main,
         preferredLanguages: [String]? = nil
     ) -> String {
-        for localizedBundle in localizedBundles(in: bundle, preferredLanguages: preferredLanguages) {
+        for localizedBundle in LocalizedBundleResolver.localizedBundles(
+            in: bundle,
+            preferredLanguages: preferredLanguages ?? effectivePreferredLanguages(for: bundle),
+            baseLanguage: "en"
+        ) {
             let localizedValue = localizedBundle.localizedString(forKey: key, value: nil, table: rightClickTable)
             if localizedValue != key {
                 return localizedValue
@@ -29,49 +33,22 @@ enum RightClickLocalization {
         preferredLanguages: [String]? = nil,
         _ arguments: CVarArg...
     ) -> String {
-        String(
+        let languages = preferredLanguages ?? effectivePreferredLanguages(for: bundle)
+        return String(
             format: string(
                 key,
                 defaultValue: defaultValue,
                 bundle: bundle,
                 preferredLanguages: preferredLanguages
             ),
-            locale: Locale(
-                identifier: (preferredLanguages ?? effectivePreferredLanguages(for: bundle)).first
-                    ?? Locale.current.identifier
-            ),
+            locale: LocalizedBundleResolver.locale(for: languages.first),
             arguments: arguments
         )
     }
 
-    /// Right Click runs in the Finder Sync extension, so it cannot share the
-    /// host process's language list. Resolve its saved preference explicitly,
-    /// then use the base language for keys missing from that translation.
-    private static func localizedBundles(
-        in bundle: Bundle,
-        preferredLanguages: [String]? = nil
-    ) -> [Bundle] {
-        var bundles: [Bundle] = []
-        for language in (preferredLanguages ?? effectivePreferredLanguages(for: bundle)) + ["en"] {
-            for candidate in candidateLanguageIdentifiers(for: language) {
-                guard
-                    let path = bundle.path(forResource: candidate, ofType: "lproj"),
-                    let localizedBundle = Bundle(path: path)
-                else {
-                    continue
-                }
-
-                if !bundles.contains(where: { $0.bundleURL == localizedBundle.bundleURL }) {
-                    bundles.append(localizedBundle)
-                }
-                break
-            }
-        }
-
-        return bundles
-    }
-
     private static func effectivePreferredLanguages(for bundle: Bundle) -> [String] {
+        // Finder Sync is a separate process. It must read the host app's
+        // explicit AppleLanguages override rather than this extension's list.
         for bundleIdentifier in preferenceBundleIdentifiers(for: bundle) {
             if let appleLanguages = explicitAppleLanguages(forBundleIdentifier: bundleIdentifier) {
                 return appleLanguages
@@ -114,29 +91,6 @@ enum RightClickLocalization {
         }
 
         return value
-    }
-
-    private static func candidateLanguageIdentifiers(for language: String) -> [String] {
-        let normalized = language.replacingOccurrences(of: "_", with: "-")
-        var candidates = [normalized]
-
-        let components = normalized.split(separator: "-").map(String.init)
-        if let languageCode = components.first {
-            if languageCode == "zh" {
-                candidates.append(
-                    components.contains(where: { ["Hant", "HK", "MO", "TW"].contains($0) })
-                        ? "zh-Hant"
-                        : "zh-Hans"
-                )
-            }
-            candidates.append(languageCode)
-        }
-
-        return candidates.reduce(into: []) { result, candidate in
-            if !result.contains(candidate) {
-                result.append(candidate)
-            }
-        }
     }
 
     #if DEBUG

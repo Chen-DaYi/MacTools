@@ -166,10 +166,11 @@ public protocol PluginFeatureVisibilityLifecycleHandling: AnyObject {
     func featureVisibilityDidChange(_ isVisible: Bool)
 }
 
-/// Optional hook for plugins that cache localized descriptors or other
-/// language-dependent presentation data. The host invokes it when the app
-/// language changes; implementations must not activate, deactivate, or reset
-/// the plugin's functional state.
+/// Optional hook for built-in plugins that cache localized descriptors or
+/// other language-dependent presentation data. The host invokes it when the
+/// app language changes; implementations must not activate, deactivate, or
+/// reset the plugin's functional state. Dynamic plugins read localization at
+/// render time and do not need this hook.
 @MainActor
 public protocol PluginRuntimeLocalizationRefreshing: AnyObject {
     func refreshLocalization()
