@@ -4,6 +4,11 @@ import MacToolsPluginKit
 
 @MainActor
 final class DeviceBatteryViewModel: ObservableObject {
+    private enum MobileRefreshInterval {
+        static let componentVisible: TimeInterval = 90
+        static let background: TimeInterval = 5 * 60
+    }
+
     @Published private(set) var snapshot: DeviceBatterySnapshot = .idle {
         didSet {
             guard oldValue != snapshot else {
@@ -26,7 +31,9 @@ final class DeviceBatteryViewModel: ObservableObject {
     private var isStarted = false
     private var includeInternalBattery = true
     private var includeBluetoothDevices = true
+    private var includeAppleMobileDevices = true
     private var includeRapooDevices = true
+    private var isComponentPanelVisible = false
 
     var onSnapshotChange: (() -> Void)?
 
@@ -53,11 +60,13 @@ final class DeviceBatteryViewModel: ObservableObject {
     func start(
         includeInternalBattery: Bool,
         includeBluetoothDevices: Bool,
+        includeAppleMobileDevices: Bool,
         includeRapooDevices: Bool
     ) {
         updateOptions(
             includeInternalBattery: includeInternalBattery,
             includeBluetoothDevices: includeBluetoothDevices,
+            includeAppleMobileDevices: includeAppleMobileDevices,
             includeRapooDevices: includeRapooDevices
         )
 
@@ -87,6 +96,7 @@ final class DeviceBatteryViewModel: ObservableObject {
         refreshTask?.cancel()
         samplingTask = nil
         refreshTask = nil
+        isComponentPanelVisible = false
         rapooMonitor.stop()
         rapooMonitor.onSnapshotChange = nil
         isStarted = false
@@ -95,11 +105,13 @@ final class DeviceBatteryViewModel: ObservableObject {
     func refresh(
         includeInternalBattery: Bool,
         includeBluetoothDevices: Bool,
+        includeAppleMobileDevices: Bool,
         includeRapooDevices: Bool
     ) {
         updateOptions(
             includeInternalBattery: includeInternalBattery,
             includeBluetoothDevices: includeBluetoothDevices,
+            includeAppleMobileDevices: includeAppleMobileDevices,
             includeRapooDevices: includeRapooDevices
         )
 
@@ -114,13 +126,32 @@ final class DeviceBatteryViewModel: ObservableObject {
         collectNow()
     }
 
+    func setComponentPanelVisible(_ isVisible: Bool) {
+        guard isComponentPanelVisible != isVisible else {
+            return
+        }
+
+        isComponentPanelVisible = isVisible
+        if isVisible, isStarted {
+            collectNow()
+        }
+    }
+
+    var appleMobileRefreshInterval: TimeInterval {
+        isComponentPanelVisible
+            ? MobileRefreshInterval.componentVisible
+            : MobileRefreshInterval.background
+    }
+
     private func updateOptions(
         includeInternalBattery: Bool,
         includeBluetoothDevices: Bool,
+        includeAppleMobileDevices: Bool,
         includeRapooDevices: Bool
     ) {
         self.includeInternalBattery = includeInternalBattery
         self.includeBluetoothDevices = includeBluetoothDevices
+        self.includeAppleMobileDevices = includeAppleMobileDevices
         self.includeRapooDevices = includeRapooDevices
     }
 
@@ -164,7 +195,15 @@ final class DeviceBatteryViewModel: ObservableObject {
             rebuildSnapshot(accessOverride: .scanning)
 
             let referenceDate = Date()
-            let collectedItems = await sampler.collectSystemDevices(referenceDate: referenceDate)
+            let collectedItems = await sampler.collectSystemDevices(
+                referenceDate: referenceDate,
+                options: DeviceBatterySamplingOptions(
+                    includeInternalBattery: includeInternalBattery,
+                    includeBluetoothDevices: includeBluetoothDevices,
+                    includeAppleMobileDevices: includeAppleMobileDevices,
+                    appleMobileRefreshInterval: appleMobileRefreshInterval
+                )
+            )
             guard !Task.isCancelled else {
                 pendingCollectRequest = false
                 return
@@ -183,6 +222,8 @@ final class DeviceBatteryViewModel: ObservableObject {
             switch item.kind {
             case .internalBattery:
                 return includeInternalBattery
+            case .phone, .tablet, .mediaPlayer, .watch, .spatialComputer:
+                return includeAppleMobileDevices
             case .bluetooth, .magicAccessory, .airPodsPart, .other:
                 return includeBluetoothDevices
             case .rapooMouse:

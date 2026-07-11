@@ -6,7 +6,17 @@ import IOKit.ps
 import MacToolsPluginKit
 
 protocol DeviceBatterySampling: Sendable {
-    func collectSystemDevices(referenceDate: Date) async -> [DeviceBatteryItem]
+    func collectSystemDevices(
+        referenceDate: Date,
+        options: DeviceBatterySamplingOptions
+    ) async -> [DeviceBatteryItem]
+}
+
+struct DeviceBatterySamplingOptions: Equatable, Sendable {
+    let includeInternalBattery: Bool
+    let includeBluetoothDevices: Bool
+    let includeAppleMobileDevices: Bool
+    let appleMobileRefreshInterval: TimeInterval
 }
 
 struct DeviceBatterySampler: DeviceBatterySampling {
@@ -15,28 +25,48 @@ struct DeviceBatterySampler: DeviceBatterySampling {
     private static let batteryCenterLogLookback = "2m"
     private static let batteryCenterLogTimeout: TimeInterval = 1.0
     private let localization: PluginLocalization
+    private let mobileDeviceReader: any DeviceBatteryMobileDeviceSampling
 
-    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+    init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        mobileDeviceReader: any DeviceBatteryMobileDeviceSampling = DeviceBatteryMobileDeviceReader()
+    ) {
         self.localization = localization
+        self.mobileDeviceReader = mobileDeviceReader
     }
 
-    func collectSystemDevices(referenceDate: Date) async -> [DeviceBatteryItem] {
+    func collectSystemDevices(
+        referenceDate: Date,
+        options: DeviceBatterySamplingOptions
+    ) async -> [DeviceBatteryItem] {
         let localization = localization
         let baseSample = await Task.detached(priority: .utility) {
             var items: [DeviceBatteryItem] = []
-            items.append(contentsOf: Self.collectInternalBattery(referenceDate: referenceDate, localization: localization))
-            let bluetoothData = Self.collectBluetoothProfile()
-            items.append(contentsOf: Self.collectBluetoothDevices(
-                from: bluetoothData,
-                referenceDate: referenceDate,
-                localization: localization
-            ))
-            items.append(contentsOf: Self.collectMagicAccessoryDevices(
-                from: bluetoothData,
-                referenceDate: referenceDate,
-                localization: localization
-            ))
-            let targets = Self.bluetoothBatteryTargets(from: bluetoothData)
+            if options.includeInternalBattery {
+                items.append(contentsOf: Self.collectInternalBattery(
+                    referenceDate: referenceDate,
+                    localization: localization
+                ))
+            }
+
+            let bluetoothData = options.includeBluetoothDevices
+                ? Self.collectBluetoothProfile()
+                : BluetoothProfile(connectedDevices: [], batteryDevices: [])
+            if options.includeBluetoothDevices {
+                items.append(contentsOf: Self.collectBluetoothDevices(
+                    from: bluetoothData,
+                    referenceDate: referenceDate,
+                    localization: localization
+                ))
+                items.append(contentsOf: Self.collectMagicAccessoryDevices(
+                    from: bluetoothData,
+                    referenceDate: referenceDate,
+                    localization: localization
+                ))
+            }
+            let targets = options.includeBluetoothDevices
+                ? Self.bluetoothBatteryTargets(from: bluetoothData)
+                : []
             return DeviceBatteryBaseSample(
                 items: Self.deduplicated(items),
                 bluetoothBatteryTargets: targets,
@@ -46,6 +76,12 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             )
         }.value
 
+        async let mobileDeviceItems = options.includeAppleMobileDevices
+            ? mobileDeviceReader.collectDevices(
+                referenceDate: referenceDate,
+                minimumRefreshInterval: options.appleMobileRefreshInterval
+            )
+            : []
         async let bluetoothPowerLogItems = Task.detached(priority: .utility) {
             Self.collectBluetoothPowerLogDevices(
                 targets: baseSample.bluetoothBatteryTargets,
@@ -75,7 +111,15 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         let batteryLogItems = await batteryCenterLogItems
         let advertisementItems = await appleHeadphoneAdvertisementItems
         let bleItems = await bluetoothBatteryItems
-        return Self.deduplicated(baseSample.items + powerLogItems + batteryLogItems + advertisementItems + bleItems)
+        let mobileItems = await mobileDeviceItems
+        return Self.deduplicated(
+            baseSample.items
+                + mobileItems
+                + powerLogItems
+                + batteryLogItems
+                + advertisementItems
+                + bleItems
+        )
     }
 
     private static func collectInternalBattery(
@@ -534,6 +578,21 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             .compactMap { $0?.lowercased() }
             .joined(separator: " ")
 
+        if haystack.contains("iphone") || haystack.contains("mobilephone") || haystack.contains("phone") {
+            return .phone
+        }
+        if haystack.contains("ipad") || haystack.contains("tablet") {
+            return .tablet
+        }
+        if haystack.contains("ipod") {
+            return .mediaPlayer
+        }
+        if haystack.contains("watch") {
+            return .watch
+        }
+        if haystack.contains("vision") || haystack.contains("realitydevice") {
+            return .spatialComputer
+        }
         if haystack.contains("airpods")
             || haystack.contains("beats")
             || haystack.contains("headphone")
@@ -1337,7 +1396,7 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         return normalizedHexIdentifier(rawValue)
     }
 
-    private static func deduplicated(_ items: [DeviceBatteryItem]) -> [DeviceBatteryItem] {
+    static func deduplicated(_ items: [DeviceBatteryItem]) -> [DeviceBatteryItem] {
         var bestByNameAndKind: [String: DeviceBatteryItem] = [:]
         var orderedKeys: [String] = []
 
@@ -1358,6 +1417,10 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         _ left: DeviceBatteryItem,
         _ right: DeviceBatteryItem
     ) -> DeviceBatteryItem {
+        if left.source == "MobileDevice" || right.source == "MobileDevice" {
+            return left.source == "MobileDevice" ? left : right
+        }
+
         if left.chargeState.isActiveChargingState != right.chargeState.isActiveChargingState {
             return left.chargeState.isActiveChargingState ? left : right
         }
@@ -1365,6 +1428,7 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         let sourceRank = [
             "IORegistry": 0,
             "IOPowerSources": 0,
+            "MobileDevice": 0,
             "CoreBluetooth": 1,
             "AppleHeadphoneAdvertisement": 2,
             "BatteryCenter": 3,

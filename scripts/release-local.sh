@@ -18,6 +18,7 @@ VERSION=""
 BUILD_NUMBER=""
 TAG=""
 NOTES_FILE=""
+SPARKLE_NOTES_FILE=""
 PUBLISH=0
 PUBLISH_EXISTING=0
 SKIP_BUILD=0
@@ -238,26 +239,63 @@ function write_appcast() {
 
   mkdir -p "$DOCS_DIR"
 
-  cat >"$APPCAST_PATH" <<EOF
-<?xml version="1.0" encoding="utf-8"?>
+  APP_NAME="$APP_NAME" \
+  VERSION="$VERSION" \
+  BUILD_NUMBER="$BUILD_NUMBER" \
+  DOWNLOAD_URL="$download_url" \
+  RELEASE_NOTES_URL="$notes_url" \
+  PUB_DATE="$pub_date" \
+  FILE_SIZE="$file_size" \
+  ED_SIGNATURE="$signature" \
+  MINIMUM_SYSTEM_VERSION="$minimum_system_version" \
+  SPARKLE_NOTES_FILE="$SPARKLE_NOTES_FILE" \
+  APPCAST_PATH="$APPCAST_PATH" \
+  python3 <<'PY_APPCAST'
+import os
+import xml.sax.saxutils as xml
+from pathlib import Path
+
+values = {
+    key: os.environ[key]
+    for key in [
+        "APP_NAME",
+        "VERSION",
+        "BUILD_NUMBER",
+        "DOWNLOAD_URL",
+        "RELEASE_NOTES_URL",
+        "PUB_DATE",
+        "FILE_SIZE",
+        "ED_SIGNATURE",
+        "MINIMUM_SYSTEM_VERSION",
+    ]
+}
+release_notes = Path(os.environ["SPARKLE_NOTES_FILE"]).read_text(encoding="utf-8")
+cdata_release_notes = release_notes.replace("]]>", "]]]]><![CDATA[>")
+
+content = f'''<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
     <channel>
-        <title>${APP_NAME} Releases</title>
-        <description>Latest release metadata for ${APP_NAME}.</description>
-        <language>zh-CN</language>
+        <title>{xml.escape(values["APP_NAME"])} Releases</title>
+        <description>Latest release metadata for {xml.escape(values["APP_NAME"])}.</description>
+        <language>en</language>
         <item>
-            <title>Version ${VERSION}</title>
-            <link>${notes_url}</link>
-            <sparkle:version>${BUILD_NUMBER}</sparkle:version>
-            <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-            <sparkle:releaseNotesLink>${notes_url}</sparkle:releaseNotesLink>
-            <pubDate>${pub_date}</pubDate>
-            <enclosure url="${download_url}" length="${file_size}" type="application/octet-stream" sparkle:edSignature="${signature}" />
-            <sparkle:minimumSystemVersion>${minimum_system_version}</sparkle:minimumSystemVersion>
+            <title>Version {xml.escape(values["VERSION"])}</title>
+            <link>{xml.escape(values["RELEASE_NOTES_URL"])}</link>
+            <sparkle:version>{xml.escape(values["BUILD_NUMBER"])}</sparkle:version>
+            <sparkle:shortVersionString>{xml.escape(values["VERSION"])}</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[{cdata_release_notes}]]></description>
+            <sparkle:fullReleaseNotesLink>{xml.escape(values["RELEASE_NOTES_URL"])}</sparkle:fullReleaseNotesLink>
+            <pubDate>{xml.escape(values["PUB_DATE"])}</pubDate>
+            <enclosure url="{xml.escape(values["DOWNLOAD_URL"])}" length="{xml.escape(values["FILE_SIZE"])}" type="application/octet-stream" sparkle:edSignature="{xml.escape(values["ED_SIGNATURE"])}" />
+            <sparkle:minimumSystemVersion>{xml.escape(values["MINIMUM_SYSTEM_VERSION"])}</sparkle:minimumSystemVersion>
         </item>
     </channel>
 </rss>
-EOF
+'''
+Path(os.environ["APPCAST_PATH"]).write_text(content, encoding="utf-8")
+PY_APPCAST
+
+  python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$APPCAST_PATH"
 
   info "Appcast updated: $APPCAST_PATH"
 }
@@ -547,6 +585,12 @@ function publish_release() {
     NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/mactools-release-notes.XXXXXX.md")"
     python3 "$ROOT_DIR/scripts/changelog.py" extract --tag "$TAG" --output "$NOTES_FILE"
   fi
+
+  SPARKLE_NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/mactools-sparkle-notes.XXXXXX.md")"
+  python3 "$ROOT_DIR/scripts/changelog.py" compose-sparkle \
+    --tag "$TAG" \
+    --app-notes "$NOTES_FILE" \
+    --output "$SPARKLE_NOTES_FILE"
 
   info "Syncing asset to GitHub Release $TAG ($repository)"
 

@@ -62,6 +62,11 @@ enum DeviceBatteryChargeState: Equatable, Sendable {
 
 enum DeviceBatteryKind: Equatable, Sendable {
     case internalBattery
+    case phone
+    case tablet
+    case mediaPlayer
+    case watch
+    case spatialComputer
     case bluetooth
     case magicAccessory
     case rapooMouse
@@ -72,6 +77,16 @@ enum DeviceBatteryKind: Equatable, Sendable {
         switch self {
         case .internalBattery:
             return "laptopcomputer"
+        case .phone:
+            return "iphone"
+        case .tablet:
+            return "ipad"
+        case .mediaPlayer:
+            return "ipodtouch"
+        case .watch:
+            return "applewatch"
+        case .spatialComputer:
+            return "visionpro"
         case .bluetooth:
             return "dot.radiowaves.left.and.right"
         case .magicAccessory:
@@ -89,6 +104,16 @@ enum DeviceBatteryKind: Equatable, Sendable {
         switch self {
         case .internalBattery:
             return "Mac"
+        case .phone:
+            return "iPhone"
+        case .tablet:
+            return "iPad"
+        case .mediaPlayer:
+            return "iPod touch"
+        case .watch:
+            return "Apple Watch"
+        case .spatialComputer:
+            return "Apple Vision Pro"
         case .bluetooth:
             return localization.string("deviceKind.bluetooth", defaultValue: "蓝牙")
         case .magicAccessory:
@@ -352,16 +377,18 @@ struct DeviceBatterySnapshot: Equatable, Sendable {
         switch item.kind {
         case .internalBattery:
             return 1
-        case .rapooMouse:
+        case .phone, .tablet, .mediaPlayer, .watch, .spatialComputer:
             return 2
-        case .magicAccessory:
+        case .rapooMouse:
             return 3
-        case .airPodsPart:
+        case .magicAccessory:
             return 4
-        case .bluetooth:
+        case .airPodsPart:
             return 5
-        case .other:
+        case .bluetooth:
             return 6
+        case .other:
+            return 7
         }
     }
 }

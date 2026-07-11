@@ -60,15 +60,40 @@ struct WindowSwitcherConfiguration: Codable, Equatable {
     }
 }
 
+struct WindowSwitcherShortcutBindingState: Codable, Equatable {
+    static let currentVersion = 1
+
+    var version: Int
+    var manual: [String: String]
+    var automatic: [String: String]
+
+    init(
+        version: Int = currentVersion,
+        manual: [String: String] = [:],
+        automatic: [String: String] = [:]
+    ) {
+        self.version = version
+        self.manual = manual
+        self.automatic = automatic
+    }
+}
+
+enum WindowSwitcherShortcutCustomizationResult {
+    case updated([WindowSwitcherAppEntry])
+    case conflict
+    case unavailable
+}
+
 @MainActor
 final class WindowSwitcherStore: ObservableObject {
     private enum Keys {
         static let configuration = "configuration"
-        static let shortcutAssignments = "shortcut-assignments"
+        static let shortcutBindings = "shortcut-bindings"
+        static let obsoleteShortcutAssignments = "shortcut-assignments"
     }
 
     @Published private(set) var configuration: WindowSwitcherConfiguration
-    @Published private(set) var shortcutAssignments: [String: String]
+    @Published private(set) var shortcutBindings: WindowSwitcherShortcutBindingState
 
     private let storage: PluginStorage
     private let encoder = JSONEncoder()
@@ -83,12 +108,13 @@ final class WindowSwitcherStore: ObservableObject {
             self.configuration = .default
         }
 
-        if let data = storage.data(forKey: Keys.shortcutAssignments),
-           let loaded = try? decoder.decode([String: String].self, from: data) {
-            self.shortcutAssignments = loaded
+        if let data = storage.data(forKey: Keys.shortcutBindings),
+           let loaded = try? decoder.decode(WindowSwitcherShortcutBindingState.self, from: data) {
+            self.shortcutBindings = loaded
         } else {
-            self.shortcutAssignments = [:]
+            self.shortcutBindings = WindowSwitcherShortcutBindingState()
         }
+        storage.removeObject(forKey: Keys.obsoleteShortcutAssignments)
     }
 
     func setMode(_ mode: WindowSwitcherMode) {
@@ -129,23 +155,117 @@ final class WindowSwitcherStore: ObservableObject {
     func assignShortcuts(to entries: [WindowSwitcherAppEntry]) -> [WindowSwitcherAppEntry] {
         let result = WindowSwitcherShortcutAssignment.assignShortcuts(
             to: entries,
-            storedAssignments: shortcutAssignments
+            bindingState: shortcutBindings
         )
 
-        if result.assignments != shortcutAssignments {
-            shortcutAssignments = result.assignments
-            persistShortcutAssignments()
+        if result.bindingState != shortcutBindings {
+            shortcutBindings = result.bindingState
+            persistShortcutBindings()
         }
 
         return result.entries
     }
 
-    private func persistShortcutAssignments() {
-        guard let data = try? encoder.encode(shortcutAssignments) else {
+    func setManualShortcut(
+        _ rawToken: String?,
+        for entryID: String,
+        in entries: [WindowSwitcherAppEntry]
+    ) -> WindowSwitcherShortcutCustomizationResult {
+        let identities = WindowSwitcherShortcutAssignment.identities(for: entries)
+        guard let targetIndex = entries.firstIndex(where: { $0.id == entryID }),
+              identities.indices.contains(targetIndex)
+        else {
+            return .unavailable
+        }
+
+        let targetIdentity = identities[targetIndex]
+        let current = WindowSwitcherShortcutAssignment.assignShortcuts(
+            to: entries,
+            bindingState: shortcutBindings
+        )
+        var updatedState = current.bindingState
+
+        if let rawToken {
+            guard let token = WindowSwitcherShortcutAssignment.normalizedManualToken(rawToken) else {
+                return .unavailable
+            }
+
+            guard !hasShortcutConflict(
+                token,
+                targetIdentity: targetIdentity,
+                identities: identities,
+                current: current
+            ) else {
+                return .conflict
+            }
+
+            updatedState.manual[targetIdentity] = token
+        } else {
+            updatedState.manual.removeValue(forKey: targetIdentity)
+        }
+
+        let updated = WindowSwitcherShortcutAssignment.assignShortcuts(
+            to: entries,
+            bindingState: updatedState
+        )
+        if updated.bindingState != shortcutBindings {
+            shortcutBindings = updated.bindingState
+            persistShortcutBindings()
+        }
+        return .updated(updated.entries)
+    }
+
+    func hasShortcutConflict(
+        _ rawToken: String,
+        for entryID: String,
+        in entries: [WindowSwitcherAppEntry]
+    ) -> Bool {
+        guard let token = WindowSwitcherShortcutAssignment.normalizedManualToken(rawToken) else {
+            return true
+        }
+
+        let identities = WindowSwitcherShortcutAssignment.identities(for: entries)
+        guard let targetIndex = entries.firstIndex(where: { $0.id == entryID }),
+              identities.indices.contains(targetIndex)
+        else {
+            return true
+        }
+
+        let current = WindowSwitcherShortcutAssignment.assignShortcuts(
+            to: entries,
+            bindingState: shortcutBindings
+        )
+        return hasShortcutConflict(
+            token,
+            targetIdentity: identities[targetIndex],
+            identities: identities,
+            current: current
+        )
+    }
+
+    private func hasShortcutConflict(
+        _ token: String,
+        targetIdentity: String,
+        identities: [String],
+        current: WindowSwitcherShortcutAssignment.Result
+    ) -> Bool {
+        let conflictsWithSavedManualBinding = current.bindingState.manual.contains {
+            identity, assignedToken in
+            identity != targetIdentity
+                && WindowSwitcherShortcutAssignment.normalizedManualToken(assignedToken) == token
+        }
+        let conflictsWithRunningEntry = current.entries.enumerated().contains { index, entry in
+            identities[index] != targetIdentity && entry.shortcutToken == token
+        }
+        return conflictsWithSavedManualBinding || conflictsWithRunningEntry
+    }
+
+    private func persistShortcutBindings() {
+        guard let data = try? encoder.encode(shortcutBindings) else {
             return
         }
 
-        storage.set(data, forKey: Keys.shortcutAssignments)
+        storage.set(data, forKey: Keys.shortcutBindings)
     }
 }
 
@@ -179,7 +299,7 @@ struct WindowSwitcherAppEntry: Identifiable {
     }
 
     var shortcutDisplay: String? {
-        shortcutToken?.uppercased()
+        shortcutToken.flatMap(WindowSwitcherSelectionShortcut.init(storageValue:))?.displayValue
     }
 
     var isWindowEntry: Bool {
@@ -205,6 +325,51 @@ struct WindowSwitcherAppEntry: Identifiable {
     }
 }
 
+struct WindowSwitcherSelectionShortcut: Equatable {
+    private static let commandPrefix = "cmd+"
+
+    let key: String
+    let usesCommand: Bool
+
+    init?(key: String, usesCommand: Bool) {
+        let normalizedKey = key.lowercased()
+        guard Self.isAllowedKey(normalizedKey) else {
+            return nil
+        }
+
+        self.key = normalizedKey
+        self.usesCommand = usesCommand
+    }
+
+    init?(storageValue: String) {
+        let normalized = storageValue.lowercased()
+        let usesCommand = normalized.hasPrefix(Self.commandPrefix)
+        let key = usesCommand
+            ? String(normalized.dropFirst(Self.commandPrefix.count))
+            : normalized
+        self.init(key: key, usesCommand: usesCommand)
+    }
+
+    var storageValue: String {
+        usesCommand ? Self.commandPrefix + key : key
+    }
+
+    var displayValue: String {
+        (usesCommand ? "⌘" : "") + key.uppercased()
+    }
+
+    private static func isAllowedKey(_ key: String) -> Bool {
+        guard key.unicodeScalars.count == 1,
+              let scalar = key.unicodeScalars.first
+        else {
+            return false
+        }
+
+        return (scalar.value >= 97 && scalar.value <= 122)
+            || (scalar.value >= 48 && scalar.value <= 57)
+    }
+}
+
 extension WindowSwitcherAppEntry: Equatable {
     static func == (lhs: WindowSwitcherAppEntry, rhs: WindowSwitcherAppEntry) -> Bool {
         lhs.id == rhs.id
@@ -217,42 +382,54 @@ extension WindowSwitcherAppEntry: Equatable {
 enum WindowSwitcherShortcutAssignment {
     struct Result {
         let entries: [WindowSwitcherAppEntry]
-        let assignments: [String: String]
+        let bindingState: WindowSwitcherShortcutBindingState
     }
 
     private struct Target {
         let index: Int
-        let identity: String?
+        let identity: String
         let preferredToken: String?
     }
 
-    static let singleKeyOrder: [String] = [
+    static let letterKeyOrder: [String] = [
         "f", "j", "d", "k", "s", "l", "a", "g", "h",
         "e", "i", "r", "u", "w", "o", "q", "p",
         "c", "m", "v", "n", "x", "b", "z", "t", "y",
     ]
+    static let digitKeyOrder: [String] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+    static let maximumShortcutCount = (letterKeyOrder.count + digitKeyOrder.count) * 2
 
     static func assignShortcuts(to entries: [WindowSwitcherAppEntry]) -> [WindowSwitcherAppEntry] {
-        assignShortcuts(to: entries, storedAssignments: [:]).entries
+        assignShortcuts(to: entries, bindingState: WindowSwitcherShortcutBindingState()).entries
     }
 
     static func assignShortcuts(
         to entries: [WindowSwitcherAppEntry],
-        storedAssignments: [String: String]
+        bindingState: WindowSwitcherShortcutBindingState
     ) -> Result {
         guard !entries.isEmpty else {
-            return Result(entries: [], assignments: storedAssignments)
+            return Result(entries: [], bindingState: bindingState)
         }
 
         let targets = assignmentTargets(for: entries)
-        let availableTokens = shortcutTokens(count: max(entries.count, singleKeyOrder.count))
+        let reservedManualTokens = Set(bindingState.manual.values.compactMap(normalizedManualToken))
+        let availableTokens = shortcutTokens(count: maximumShortcutCount)
         var assignedTokens = Array<String?>(repeating: nil, count: entries.count)
-        var usedTokens = Set<String>()
+        var activeManualTokens = Set<String>()
+        var usedTokens = reservedManualTokens
 
         for target in targets {
-            guard let identity = target.identity,
-                  let token = storedAssignments[identity],
-                  isValidShortcutToken(token),
+            guard let token = bindingState.manual[target.identity].flatMap(normalizedManualToken),
+                  activeManualTokens.insert(token).inserted
+            else {
+                continue
+            }
+
+            assignedTokens[target.index] = token
+        }
+
+        for target in targets where assignedTokens[target.index] == nil {
+            guard let token = bindingState.automatic[target.identity].flatMap(normalizedShortcutToken),
                   !usedTokens.contains(token)
             else {
                 continue
@@ -287,12 +464,12 @@ enum WindowSwitcherShortcutAssignment {
             copy.shortcutToken = assignedTokens[index]
             return copy
         }
-        let updatedAssignments = updatedStoredAssignments(
-            from: storedAssignments,
+        let updatedState = updatedBindingState(
+            from: bindingState,
             targets: targets,
             assignedTokens: assignedTokens
         )
-        return Result(entries: assignedEntries, assignments: updatedAssignments)
+        return Result(entries: assignedEntries, bindingState: updatedState)
     }
 
     static func shortcutTokens(count: Int) -> [String] {
@@ -300,74 +477,94 @@ enum WindowSwitcherShortcutAssignment {
             return []
         }
 
-        var tokens = Array(singleKeyOrder.prefix(count))
-        guard tokens.count < count else {
-            return tokens
-        }
+        let plainTokens = letterKeyOrder + digitKeyOrder
+        let commandTokens = plainTokens.map { "cmd+\($0)" }
+        return Array((plainTokens + commandTokens).prefix(count))
+    }
 
-        outer: for first in singleKeyOrder {
-            for second in singleKeyOrder {
-                tokens.append(first + second)
-                if tokens.count == count {
-                    break outer
-                }
-            }
-        }
+    static func identities(for entries: [WindowSwitcherAppEntry]) -> [String] {
+        assignmentTargets(for: entries).map(\.identity)
+    }
 
-        return tokens
+    static func normalizedManualToken(_ token: String) -> String? {
+        WindowSwitcherSelectionShortcut(storageValue: token)?.storageValue
     }
 
     private static func assignmentTargets(for entries: [WindowSwitcherAppEntry]) -> [Target] {
-        var seenApps = Set<String>()
+        var appOccurrences: [String: Int] = [:]
 
         return entries.enumerated().map { index, entry in
             let appIdentifier = entry.appIdentifier
-            let isPrimaryAppEntry = seenApps.insert(appIdentifier).inserted
+            let occurrence = appOccurrences[appIdentifier, default: 0]
+            appOccurrences[appIdentifier] = occurrence + 1
             return Target(
                 index: index,
-                identity: isPrimaryAppEntry ? appIdentifier : nil,
-                preferredToken: isPrimaryAppEntry ? preferredSingleKeyToken(for: entry) : nil
+                identity: occurrence == 0
+                    ? appIdentifier
+                    : "\(appIdentifier)#window:\(occurrence + 1)",
+                preferredToken: occurrence == 0 ? preferredSingleKeyToken(for: entry) : nil
             )
         }
     }
 
-    private static func updatedStoredAssignments(
-        from storedAssignments: [String: String],
+    private static func updatedBindingState(
+        from bindingState: WindowSwitcherShortcutBindingState,
         targets: [Target],
         assignedTokens: [String?]
-    ) -> [String: String] {
-        var assignments = storedAssignments
+    ) -> WindowSwitcherShortcutBindingState {
+        var state = bindingState
+        state.version = WindowSwitcherShortcutBindingState.currentVersion
+        let validManualBindings = state.manual.compactMapValues(normalizedManualToken)
+        state.manual = validManualBindings
+        let manualIdentities = Set(validManualBindings.keys)
+        let manualTokens = Set(validManualBindings.values)
         var activeTokens = Set<String>()
         var activeIdentities = Set<String>()
 
         for target in targets {
-            guard let identity = target.identity,
-                  let token = assignedTokens[target.index]
+            guard let token = assignedTokens[target.index]
             else {
                 continue
             }
 
-            assignments[identity] = token
             activeTokens.insert(token)
-            activeIdentities.insert(identity)
+            guard !manualIdentities.contains(target.identity) else {
+                continue
+            }
+
+            state.automatic[target.identity] = token
+            activeIdentities.insert(target.identity)
         }
 
-        for (identity, token) in assignments where !activeIdentities.contains(identity) && activeTokens.contains(token) {
-            assignments.removeValue(forKey: identity)
+        for (identity, rawToken) in state.automatic {
+            guard let token = normalizedShortcutToken(rawToken) else {
+                state.automatic.removeValue(forKey: identity)
+                continue
+            }
+
+            let conflictsWithManual = !manualIdentities.contains(identity) && manualTokens.contains(token)
+            let conflictsWithActive = !activeIdentities.contains(identity)
+                && !manualIdentities.contains(identity)
+                && activeTokens.contains(token)
+            if conflictsWithManual || conflictsWithActive {
+                state.automatic.removeValue(forKey: identity)
+            }
         }
 
-        guard assignments.count > 256 else {
-            return assignments
+        guard state.automatic.count > 256 else {
+            return state
         }
 
-        let active = assignments.filter { activeIdentities.contains($0.key) }
-        let inactive = assignments
-            .filter { !activeIdentities.contains($0.key) }
+        let retainedIdentities = activeIdentities.union(manualIdentities)
+        let retained = state.automatic.filter { retainedIdentities.contains($0.key) }
+        let inactive = state.automatic
+            .filter { !retainedIdentities.contains($0.key) }
             .sorted { $0.key < $1.key }
-            .prefix(max(0, 256 - active.count))
-        return inactive.reduce(into: active) { result, item in
+            .prefix(max(0, 256 - retained.count))
+        state.automatic = inactive.reduce(into: retained) { result, item in
             result[item.key] = item.value
         }
+        return state
     }
 
     private static func preferredSingleKeyToken(for entry: WindowSwitcherAppEntry) -> String? {
@@ -398,15 +595,8 @@ enum WindowSwitcherShortcutAssignment {
         return nil
     }
 
-    private static func isValidShortcutToken(_ token: String) -> Bool {
-        let scalars = token.unicodeScalars
-        guard (1...2).contains(scalars.count) else {
-            return false
-        }
-
-        return scalars.allSatisfy { scalar in
-            scalar.value >= 97 && scalar.value <= 122
-        }
+    private static func normalizedShortcutToken(_ token: String) -> String? {
+        WindowSwitcherSelectionShortcut(storageValue: token)?.storageValue
     }
 }
 

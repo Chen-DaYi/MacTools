@@ -87,6 +87,9 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         self.overlayController.onQuit = { [weak self] entry in
             self?.quit(entry)
         }
+        self.overlayController.onShortcutChange = { [weak self] entry, token in
+            self?.changeShortcut(for: entry, to: token) ?? .unavailable
+        }
         self.overlayController.onCancel = { [weak self] in
             self?.cancelSession()
         }
@@ -382,6 +385,22 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
     private func quit(_ entry: WindowSwitcherAppEntry) {
         appCatalog.quitApplication(entry)
         removeEntries(forAppIdentifier: entry.appIdentifier)
+    }
+
+    private func changeShortcut(
+        for entry: WindowSwitcherAppEntry,
+        to token: String?
+    ) -> WindowSwitcherShortcutCustomizationResult {
+        guard case let .keyWindow(entries) = session else {
+            return .unavailable
+        }
+
+        let result = store.setManualShortcut(token, for: entry.id, in: entries)
+        if case let .updated(updatedEntries) = result {
+            session = .keyWindow(entries: updatedEntries)
+            onStateChange?()
+        }
+        return result
     }
 
     private func cancelSession() {

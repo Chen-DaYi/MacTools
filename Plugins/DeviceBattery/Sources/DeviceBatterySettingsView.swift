@@ -81,6 +81,18 @@ struct DeviceBatterySettingsView: View {
                     action: store.setShowInternalBattery
                 )
                 sourceToggle(
+                    title: localization.string(
+                        "settings.source.appleMobile.title",
+                        defaultValue: "iPhone、iPad 与 Apple Watch"
+                    ),
+                    description: localization.string(
+                        "settings.source.appleMobile.description",
+                        defaultValue: "读取已信任并通过 USB 或 Wi-Fi 连接的 Apple 移动设备。"
+                    ),
+                    isOn: store.showAppleMobileDevices,
+                    action: store.setShowAppleMobileDevices
+                )
+                sourceToggle(
                     title: localization.string("settings.source.bluetooth.title", defaultValue: "蓝牙与 Apple 外设"),
                     description: localization.string(
                         "settings.source.bluetooth.description",

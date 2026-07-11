@@ -14,4 +14,6 @@ This directory records third-party assets, dependencies, and implementation refe
 - [designsbymuzeer/Bye-Mac-App](https://github.com/designsbymuzeer/Bye-Mac-App)
 - [gbammc/Thor](https://github.com/gbammc/Thor)
 - [lihaoyun6/AirBattery](https://github.com/lihaoyun6/AirBattery)
+- [darrylmorley/whatbattery](https://github.com/darrylmorley/whatbattery)
+- [libimobiledevice/libimobiledevice](https://github.com/libimobiledevice/libimobiledevice)
 - [SuveenE/activity-bar](https://github.com/SuveenE/activity-bar)
