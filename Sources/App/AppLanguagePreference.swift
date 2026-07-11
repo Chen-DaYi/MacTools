@@ -51,6 +51,33 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
         }
     }
 
+    /// A language picker option combines the name as written in the system's
+    /// language with the language's own name, so it remains recognizable even
+    /// when the app is currently displayed in another language.
+    var pickerTitle: String {
+        pickerTitle(systemLanguageIdentifier: Self.systemPreferredLanguageIdentifier)
+    }
+
+    func pickerTitle(systemLanguageIdentifier: String) -> String {
+        switch self {
+        case .system:
+            let languageCode = Locale(identifier: systemLanguageIdentifier).language.languageCode?.identifier
+                ?? systemLanguageIdentifier
+            let systemLanguageName = Self.localizedLanguageName(
+                for: languageCode,
+                in: systemLanguageIdentifier
+            )
+            return "\(title) (\(systemLanguageName))"
+        default:
+            let localizedName = Self.localizedLanguageName(
+                for: localeIdentifier,
+                in: systemLanguageIdentifier
+            )
+            let nativeName = nativeTitle
+            return localizedName == nativeName ? nativeName : "\(localizedName) / \(nativeName)"
+        }
+    }
+
     var appleLanguagesOverride: [String]? {
         switch self {
         case .system:
@@ -77,6 +104,64 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
             return ["ko"]
         case .ar:
             return ["ar"]
+        }
+    }
+
+    private var localeIdentifier: String {
+        switch self {
+        case .system:
+            Self.systemPreferredLanguageIdentifier
+        case .zhHans:
+            "zh-Hans"
+        case .zhHant:
+            "zh-Hant"
+        case .en:
+            "en"
+        case .es:
+            "es"
+        case .fr:
+            "fr"
+        case .ru:
+            "ru"
+        case .pt:
+            "pt-BR"
+        case .de:
+            "de"
+        case .ja:
+            "ja"
+        case .ko:
+            "ko"
+        case .ar:
+            "ar"
+        }
+    }
+
+    private var nativeTitle: String {
+        switch self {
+        case .system:
+            title
+        case .zhHans:
+            "简体中文"
+        case .zhHant:
+            "繁體中文"
+        case .en:
+            "English"
+        case .es:
+            "Español"
+        case .fr:
+            "Français"
+        case .ru:
+            "Русский"
+        case .pt:
+            "Português (Brasil)"
+        case .de:
+            "Deutsch"
+        case .ja:
+            "日本語"
+        case .ko:
+            "한국어"
+        case .ar:
+            "العربية"
         }
     }
 
@@ -118,6 +203,30 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
         let preference = stored(in: userDefaults)
         preference.applyAppleLanguagesOverride(in: userDefaults)
         PluginRuntimeLocalization.source.setPreference(preference.rawValue)
+    }
+
+    private static var systemPreferredLanguageIdentifier: String {
+        let globalDomain = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)
+        if let languages = globalDomain?[appleLanguagesKey] as? [String],
+           let language = languages.first,
+           !language.isEmpty {
+            return language
+        }
+
+        return Locale.current.identifier
+    }
+
+    private static func localizedLanguageName(
+        for languageIdentifier: String,
+        in displayLanguageIdentifier: String
+    ) -> String {
+        let displayLocale = Locale(identifier: displayLanguageIdentifier)
+        return displayLocale.localizedString(forIdentifier: languageIdentifier)
+            ?? displayLocale.localizedString(
+                forLanguageCode: Locale(identifier: languageIdentifier).language.languageCode?.identifier
+                    ?? languageIdentifier
+            )
+            ?? languageIdentifier
     }
 
     private static func rightClickFinderSyncBundleIdentifier(bundle: Bundle = .main) -> String? {

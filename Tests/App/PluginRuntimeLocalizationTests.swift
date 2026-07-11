@@ -2,6 +2,7 @@ import XCTest
 import MacToolsPluginKit
 @testable import MacTools
 
+@MainActor
 final class PluginRuntimeLocalizationTests: XCTestCase {
     private let preferenceKey = PluginRuntimeLocalization.preferenceUserDefaultsKey
     private var originalPreference: String?

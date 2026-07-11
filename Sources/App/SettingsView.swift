@@ -307,7 +307,7 @@ private struct LanguageSettingsRow: View {
 
             Picker(AppL10n.settings("language.picker", defaultValue: "语言"), selection: $selection) {
                 ForEach(AppLanguagePreference.allCases) { preference in
-                    Text(preference.title)
+                    Text(preference.pickerTitle)
                         .tag(preference)
                 }
             }
