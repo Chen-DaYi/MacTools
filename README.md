@@ -39,7 +39,7 @@
 | Microphone Mute | Mute or restore the default microphone input through CoreAudio without requesting recording permission. |
 | Disk Cleanup | Scan caches, developer caches, and browser caches, with path safety checks and sensitive data protection before deletion. |
 | Xcode Cleanup | Scan DerivedData, device support files, archives, simulators, and preview caches by category; deletion is disabled while Xcode is running and only runs inside allowlisted roots. |
-| Eject Disks | Eject all removable disks in one click, automatically skipping system volumes and reporting when no disk can be ejected. |
+| Eject Disks | Eject all removable disks in one click, automatically skipping system and non-ejectable volumes and reporting when no disk can be ejected. |
 | Empty Trash | Show the number of Trash items and empty Trash through Finder; the action is disabled when Trash is empty. |
 | Clear Clipboard | Clear the current clipboard content to protect privacy and avoid accidental paste. |
 | IP Check | View domestic/international egress IP, local LAN IP, location, ISP, ASN, and macOS network quality results, with copy support for single fields or the full result. |
