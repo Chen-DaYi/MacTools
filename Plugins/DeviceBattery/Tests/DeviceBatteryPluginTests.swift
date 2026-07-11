@@ -56,6 +56,35 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertEqual(reloaded.lowBatteryNotificationThreshold, 15)
     }
 
+    func testAppleMobileRefreshIntervalTracksComponentVisibility() {
+        let viewModel = DeviceBatteryViewModel(
+            sampler: StubDeviceBatterySampler(items: []),
+            rapooMonitor: StubRapooBatteryMonitor()
+        )
+        let plugin = DeviceBatteryPlugin(
+            context: makeContext(),
+            viewModel: viewModel,
+            inputMonitoringAuthorizationStatus: { .unknown }
+        )
+
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
+
+        plugin.panelSurfaceDidBecomeVisible(.primary)
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
+
+        plugin.panelSurfaceDidBecomeVisible(.component)
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 90)
+
+        viewModel.stop()
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
+
+        plugin.panelSurfaceDidBecomeVisible(.component)
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 90)
+
+        plugin.panelSurfaceDidBecomeHidden(.component)
+        XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
+    }
+
     func testStoreClampsLowBatteryNotificationThreshold() {
         let store = DeviceBatteryStore(storage: DeviceBatteryMemoryStorage())
 

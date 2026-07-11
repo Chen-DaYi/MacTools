@@ -16,6 +16,7 @@ struct DeviceBatterySamplingOptions: Equatable, Sendable {
     let includeInternalBattery: Bool
     let includeBluetoothDevices: Bool
     let includeAppleMobileDevices: Bool
+    let appleMobileRefreshInterval: TimeInterval
 }
 
 struct DeviceBatterySampler: DeviceBatterySampling {
@@ -76,7 +77,10 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         }.value
 
         async let mobileDeviceItems = options.includeAppleMobileDevices
-            ? mobileDeviceReader.collectDevices(referenceDate: referenceDate)
+            ? mobileDeviceReader.collectDevices(
+                referenceDate: referenceDate,
+                minimumRefreshInterval: options.appleMobileRefreshInterval
+            )
             : []
         async let bluetoothPowerLogItems = Task.detached(priority: .utility) {
             Self.collectBluetoothPowerLogDevices(

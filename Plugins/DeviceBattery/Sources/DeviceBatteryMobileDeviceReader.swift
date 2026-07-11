@@ -2,20 +2,21 @@ import Darwin
 import Foundation
 
 protocol DeviceBatteryMobileDeviceSampling: Sendable {
-    func collectDevices(referenceDate: Date) async -> [DeviceBatteryItem]
+    func collectDevices(
+        referenceDate: Date,
+        minimumRefreshInterval: TimeInterval
+    ) async -> [DeviceBatteryItem]
 }
 
 actor DeviceBatteryMobileDeviceReader: DeviceBatteryMobileDeviceSampling {
-    private let minimumRefreshInterval: TimeInterval
     private var cachedItems: [DeviceBatteryItem] = []
     private var lastCollectionDate: Date?
     private var inFlightTask: (id: UUID, task: Task<[DeviceBatteryMobileDeviceRecord], Never>)?
 
-    init(minimumRefreshInterval: TimeInterval = 90) {
-        self.minimumRefreshInterval = minimumRefreshInterval
-    }
-
-    func collectDevices(referenceDate: Date) async -> [DeviceBatteryItem] {
+    func collectDevices(
+        referenceDate: Date,
+        minimumRefreshInterval: TimeInterval
+    ) async -> [DeviceBatteryItem] {
         if let lastCollectionDate,
            referenceDate.timeIntervalSince(lastCollectionDate) < minimumRefreshInterval {
             return cachedItems

@@ -25,7 +25,7 @@ enum DeviceBatteryInputMonitoringAuthorizationStatus {
 }
 
 @MainActor
-final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
+final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
     private enum ControlID {
         static let openInputMonitoring = "open-input-monitoring"
     }
@@ -202,6 +202,22 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
             includeRapooDevices: store.showRapooDevices
         )
         onStateChange?()
+    }
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        viewModel.setComponentPanelVisible(true)
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        viewModel.setComponentPanelVisible(false)
     }
 
     func makeView(context: PluginComponentContext) -> AnyView {
