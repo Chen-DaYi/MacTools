@@ -1,0 +1,601 @@
+import Darwin
+import Foundation
+
+protocol DeviceBatteryMobileDeviceSampling: Sendable {
+    func collectDevices(referenceDate: Date) async -> [DeviceBatteryItem]
+}
+
+actor DeviceBatteryMobileDeviceReader: DeviceBatteryMobileDeviceSampling {
+    private let minimumRefreshInterval: TimeInterval
+    private var cachedItems: [DeviceBatteryItem] = []
+    private var lastCollectionDate: Date?
+    private var inFlightTask: (id: UUID, task: Task<[DeviceBatteryMobileDeviceRecord], Never>)?
+
+    init(minimumRefreshInterval: TimeInterval = 90) {
+        self.minimumRefreshInterval = minimumRefreshInterval
+    }
+
+    func collectDevices(referenceDate: Date) async -> [DeviceBatteryItem] {
+        if let lastCollectionDate,
+           referenceDate.timeIntervalSince(lastCollectionDate) < minimumRefreshInterval {
+            return cachedItems
+        }
+
+        let requestID: UUID
+        let task: Task<[DeviceBatteryMobileDeviceRecord], Never>
+        if let inFlightTask {
+            requestID = inFlightTask.id
+            task = inFlightTask.task
+        } else {
+            requestID = UUID()
+            let newTask = Task.detached(priority: .utility) {
+                DeviceBatteryMobileDeviceBridge.readRecords()
+            }
+            inFlightTask = (requestID, newTask)
+            task = newTask
+        }
+
+        let records = await task.value
+        if inFlightTask?.id == requestID {
+            inFlightTask = nil
+        }
+
+        let items = records.map { $0.batteryItem(referenceDate: referenceDate) }
+        cachedItems = items
+        lastCollectionDate = referenceDate
+        return items
+    }
+}
+
+enum DeviceBatteryMobileDeviceCategory: Equatable, Sendable {
+    case phone
+    case tablet
+    case mediaPlayer
+    case watch
+    case spatialComputer
+    case other
+
+    var itemKind: DeviceBatteryKind {
+        switch self {
+        case .phone:
+            return .phone
+        case .tablet:
+            return .tablet
+        case .mediaPlayer:
+            return .mediaPlayer
+        case .watch:
+            return .watch
+        case .spatialComputer:
+            return .spatialComputer
+        case .other:
+            return .other
+        }
+    }
+
+    static func resolve(deviceClass: String?, productType: String) -> Self {
+        let value = [deviceClass, productType]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+        if value.contains("iphone") || value.contains("mobilephone") {
+            return .phone
+        }
+        if value.contains("ipad") || value.contains("tablet") {
+            return .tablet
+        }
+        if value.contains("ipod") {
+            return .mediaPlayer
+        }
+        if value.contains("watch") {
+            return .watch
+        }
+        if value.contains("reality") || value.contains("vision") {
+            return .spatialComputer
+        }
+        return .other
+    }
+}
+
+struct DeviceBatteryMobileDeviceRecord: Equatable, Sendable {
+    let identifier: String
+    let name: String
+    let productType: String
+    let category: DeviceBatteryMobileDeviceCategory
+    let level: Int
+    let chargeState: DeviceBatteryChargeState
+    let connectionType: String
+    let parentName: String?
+
+    func batteryItem(referenceDate: Date) -> DeviceBatteryItem {
+        DeviceBatteryItem(
+            id: "mobile-device-\(identifier)",
+            name: name,
+            model: productType.isEmpty ? nil : productType,
+            kind: category.itemKind,
+            level: level,
+            chargeState: chargeState,
+            parentName: parentName,
+            source: "MobileDevice",
+            lastUpdated: referenceDate,
+            isConnected: true,
+            detail: connectionType.isEmpty ? nil : connectionType,
+            componentIdentity: nil
+        )
+    }
+}
+
+enum DeviceBatteryMobileBatteryParser {
+    static func record(
+        identifier: String,
+        name: String,
+        productType: String,
+        deviceClass: String?,
+        connectionType: String,
+        parentName: String? = nil,
+        battery: [String: Any]
+    ) -> DeviceBatteryMobileDeviceRecord? {
+        guard let level = batteryLevel(from: battery) else {
+            return nil
+        }
+
+        return DeviceBatteryMobileDeviceRecord(
+            identifier: identifier,
+            name: name.isEmpty ? fallbackName(deviceClass: deviceClass, productType: productType) : name,
+            productType: productType,
+            category: DeviceBatteryMobileDeviceCategory.resolve(
+                deviceClass: deviceClass,
+                productType: productType
+            ),
+            level: level,
+            chargeState: chargeState(from: battery),
+            connectionType: connectionType,
+            parentName: parentName
+        )
+    }
+
+    static func batteryLevel(from battery: [String: Any]) -> Int? {
+        if let capacity = intValue(battery["BatteryCurrentCapacity"]), (0...100).contains(capacity) {
+            return capacity
+        }
+
+        let current = firstPositiveInt(
+            battery["AppleRawCurrentCapacity"],
+            battery["CurrentCapacity"]
+        )
+        let maximum = firstPositiveInt(
+            battery["AppleRawMaxCapacity"],
+            battery["NominalChargeCapacity"],
+            battery["MaxCapacity"]
+        )
+        guard let current, let maximum, maximum > 0 else {
+            return nil
+        }
+
+        return min(max(Int((Double(current) / Double(maximum) * 100).rounded()), 0), 100)
+    }
+
+    static func chargeState(from battery: [String: Any]) -> DeviceBatteryChargeState {
+        if boolValue(battery["BatteryIsFullyCharged"])
+            || boolValue(battery["FullyCharged"]) {
+            return .charged
+        }
+        if boolValue(battery["BatteryIsCharging"])
+            || boolValue(battery["IsCharging"]) {
+            return .charging
+        }
+        if boolValue(battery["ExternalConnected"])
+            || boolValue(battery["AppleRawExternalConnected"]) {
+            return .plugged
+        }
+        return .normal
+    }
+
+    private static func fallbackName(deviceClass: String?, productType: String) -> String {
+        switch DeviceBatteryMobileDeviceCategory.resolve(deviceClass: deviceClass, productType: productType) {
+        case .phone:
+            return "iPhone"
+        case .tablet:
+            return "iPad"
+        case .mediaPlayer:
+            return "iPod touch"
+        case .watch:
+            return "Apple Watch"
+        case .spatialComputer:
+            return "Apple Vision Pro"
+        case .other:
+            return productType.isEmpty ? "Apple 设备" : productType
+        }
+    }
+
+    private static func firstPositiveInt(_ values: Any?...) -> Int? {
+        values.lazy.compactMap(intValue).first { $0 > 0 }
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        if let number = value as? NSNumber {
+            return number.intValue
+        }
+        if let value = value as? Int {
+            return value
+        }
+        if let value = value as? String {
+            return Int(value)
+        }
+        return nil
+    }
+
+    private static func boolValue(_ value: Any?) -> Bool {
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+        if let value = value as? Bool {
+            return value
+        }
+        if let value = value as? String {
+            return value.caseInsensitiveCompare("true") == .orderedSame
+                || value.caseInsensitiveCompare("yes") == .orderedSame
+                || value == "1"
+        }
+        return false
+    }
+}
+
+private enum DeviceBatteryMobileDeviceBridge {
+    private static let frameworkPath = "/System/Library/PrivateFrameworks/MobileDevice.framework/MobileDevice"
+    private static let success: Int32 = 0
+    private static let serviceTimeoutSeconds: Int = 2
+    private static let lock = NSLock()
+
+    private typealias DevicePointer = UnsafeMutableRawPointer
+    private typealias CreateDeviceListFunction = @convention(c) () -> Unmanaged<CFArray>?
+    private typealias DeviceResultFunction = @convention(c) (DevicePointer) -> Int32
+    private typealias CopyDeviceIdentifierFunction = @convention(c) (DevicePointer) -> Unmanaged<CFString>?
+    private typealias CopyValueFunction = @convention(c) (DevicePointer, CFString?, CFString?) -> Unmanaged<CFTypeRef>?
+    private typealias StartServiceFunction = @convention(c) (
+        DevicePointer,
+        CFString,
+        CFDictionary?,
+        UnsafeMutablePointer<DevicePointer?>
+    ) -> Int32
+    private typealias SendMessageFunction = @convention(c) (
+        DevicePointer,
+        CFTypeRef,
+        CFPropertyListFormat
+    ) -> Int32
+    private typealias ReceiveMessageFunction = @convention(c) (
+        DevicePointer,
+        UnsafeMutablePointer<Unmanaged<CFTypeRef>?>,
+        UnsafeMutablePointer<CFPropertyListFormat>
+    ) -> Int32
+
+    private struct Symbols: @unchecked Sendable {
+        let createDeviceList: CreateDeviceListFunction
+        let connect: DeviceResultFunction
+        let disconnect: DeviceResultFunction
+        let validatePairing: DeviceResultFunction
+        let startSession: DeviceResultFunction
+        let stopSession: DeviceResultFunction
+        let interfaceType: DeviceResultFunction
+        let copyDeviceIdentifier: CopyDeviceIdentifierFunction
+        let copyValue: CopyValueFunction
+        let startService: StartServiceFunction
+        let sendMessage: SendMessageFunction
+        let receiveMessage: ReceiveMessageFunction
+        let invalidateConnection: DeviceResultFunction
+        let connectionSocket: DeviceResultFunction
+    }
+
+    private static let symbols: Symbols? = loadSymbols()
+
+    static func readRecords() -> [DeviceBatteryMobileDeviceRecord] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let symbols,
+              let unmanagedList = symbols.createDeviceList()
+        else {
+            return []
+        }
+
+        let list = unmanagedList.takeRetainedValue()
+        var records: [DeviceBatteryMobileDeviceRecord] = []
+        for index in 0..<CFArrayGetCount(list) {
+            guard let value = CFArrayGetValueAtIndex(list, index) else {
+                continue
+            }
+            let device = UnsafeMutableRawPointer(mutating: value)
+            records.append(contentsOf: readDevice(device, symbols: symbols))
+        }
+        return records
+    }
+
+    private static func readDevice(
+        _ device: DevicePointer,
+        symbols: Symbols
+    ) -> [DeviceBatteryMobileDeviceRecord] {
+        guard symbols.connect(device) == success else {
+            return []
+        }
+        defer { _ = symbols.disconnect(device) }
+
+        guard symbols.validatePairing(device) == success,
+              symbols.startSession(device) == success
+        else {
+            return []
+        }
+        defer { _ = symbols.stopSession(device) }
+
+        let identifier = symbols.copyDeviceIdentifier(device)?.takeRetainedValue() as String? ?? ""
+        guard !identifier.isEmpty else {
+            return []
+        }
+
+        let name = copiedString("DeviceName", device: device, symbols: symbols)
+        let productType = copiedString("ProductType", device: device, symbols: symbols)
+        let deviceClass = copiedString("DeviceClass", device: device, symbols: symbols)
+        let connectionType = connectionLabel(symbols.interfaceType(device))
+        let directBattery = copiedDictionary(
+            domain: "com.apple.mobile.battery",
+            key: nil,
+            device: device,
+            symbols: symbols
+        )
+        let battery = directBattery.flatMap {
+            DeviceBatteryMobileBatteryParser.batteryLevel(from: $0) == nil ? nil : $0
+        } ?? readIORegistryBattery(device: device, symbols: symbols)
+
+        var records: [DeviceBatteryMobileDeviceRecord] = []
+        if let battery,
+           let record = DeviceBatteryMobileBatteryParser.record(
+               identifier: opaqueIdentifier(identifier),
+               name: name,
+               productType: productType,
+               deviceClass: deviceClass,
+               connectionType: connectionType,
+               battery: battery
+           ) {
+            records.append(record)
+        }
+
+        if DeviceBatteryMobileDeviceCategory.resolve(
+            deviceClass: deviceClass,
+            productType: productType
+        ) == .phone {
+            records.append(contentsOf: readPairedWatches(
+                device: device,
+                parentName: name,
+                connectionType: connectionType,
+                symbols: symbols
+            ))
+        }
+        return records
+    }
+
+    private static func readPairedWatches(
+        device: DevicePointer,
+        parentName: String,
+        connectionType: String,
+        symbols: Symbols
+    ) -> [DeviceBatteryMobileDeviceRecord] {
+        let registryRequest: [String: Any] = ["Command": "GetDeviceRegistry"]
+        guard let registry = sendServiceRequest(
+            service: "com.apple.companion_proxy",
+            request: registryRequest,
+            format: .binaryFormat_v1_0,
+            device: device,
+            symbols: symbols
+        ),
+        let identifiers = registry["PairedDevicesArray"] as? [String]
+        else {
+            return []
+        }
+
+        return identifiers.compactMap { watchIdentifier in
+            var values: [String: Any] = [:]
+            for key in ["DeviceName", "ProductType", "BatteryCurrentCapacity", "BatteryIsCharging"] {
+                if let value = companionValue(
+                    watchIdentifier: watchIdentifier,
+                    key: key,
+                    device: device,
+                    symbols: symbols
+                ) {
+                    values[key] = value
+                }
+            }
+
+            return DeviceBatteryMobileBatteryParser.record(
+                identifier: "watch-\(opaqueIdentifier(watchIdentifier))",
+                name: values["DeviceName"] as? String ?? "Apple Watch",
+                productType: values["ProductType"] as? String ?? "Watch",
+                deviceClass: "Watch",
+                connectionType: connectionType,
+                parentName: parentName.isEmpty ? nil : parentName,
+                battery: values
+            )
+        }
+    }
+
+    private static func companionValue(
+        watchIdentifier: String,
+        key: String,
+        device: DevicePointer,
+        symbols: Symbols
+    ) -> Any? {
+        let request: [String: Any] = [
+            "Command": "GetValueFromRegistry",
+            "GetValueGizmoUDIDKey": watchIdentifier,
+            "GetValueKeyKey": key
+        ]
+        guard let response = sendServiceRequest(
+            service: "com.apple.companion_proxy",
+            request: request,
+            format: .binaryFormat_v1_0,
+            device: device,
+            symbols: symbols
+        ),
+        let dictionary = response["RetrievedValueDictionary"] as? [String: Any]
+        else {
+            return nil
+        }
+        return dictionary[key]
+    }
+
+    private static func readIORegistryBattery(
+        device: DevicePointer,
+        symbols: Symbols
+    ) -> [String: Any]? {
+        let request: [String: Any] = [
+            "Request": "IORegistry",
+            "EntryClass": "AppleSmartBattery"
+        ]
+        guard let response = sendServiceRequest(
+            service: "com.apple.mobile.diagnostics_relay",
+            request: request,
+            format: .xmlFormat_v1_0,
+            device: device,
+            symbols: symbols
+        ),
+        response["Status"] as? String == "Success",
+        let diagnostics = response["Diagnostics"] as? [String: Any],
+        let registry = diagnostics["IORegistry"] as? [String: Any]
+        else {
+            return nil
+        }
+        return registry
+    }
+
+    private static func sendServiceRequest(
+        service: String,
+        request: [String: Any],
+        format: CFPropertyListFormat,
+        device: DevicePointer,
+        symbols: Symbols
+    ) -> [String: Any]? {
+        var connection: DevicePointer?
+        guard symbols.startService(device, service as CFString, nil, &connection) == success,
+              let connection
+        else {
+            return nil
+        }
+        defer { _ = symbols.invalidateConnection(connection) }
+
+        configureTimeout(on: connection, symbols: symbols)
+        guard symbols.sendMessage(connection, request as CFDictionary, format) == success else {
+            return nil
+        }
+
+        var response: Unmanaged<CFTypeRef>?
+        var responseFormat = format
+        guard symbols.receiveMessage(connection, &response, &responseFormat) == success else {
+            return nil
+        }
+        return response?.takeRetainedValue() as? [String: Any]
+    }
+
+    private static func configureTimeout(on connection: DevicePointer, symbols: Symbols) {
+        let socket = symbols.connectionSocket(connection)
+        guard socket >= 0 else {
+            return
+        }
+        var timeout = timeval(tv_sec: serviceTimeoutSeconds, tv_usec: 0)
+        withUnsafePointer(to: &timeout) { pointer in
+            _ = setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, pointer, socklen_t(MemoryLayout<timeval>.size))
+            _ = setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, pointer, socklen_t(MemoryLayout<timeval>.size))
+        }
+    }
+
+    private static func copiedString(
+        _ key: String,
+        device: DevicePointer,
+        symbols: Symbols
+    ) -> String {
+        symbols.copyValue(device, nil, key as CFString)?.takeRetainedValue() as? String ?? ""
+    }
+
+    private static func copiedDictionary(
+        domain: String?,
+        key: String?,
+        device: DevicePointer,
+        symbols: Symbols
+    ) -> [String: Any]? {
+        symbols.copyValue(device, domain as CFString?, key as CFString?)?
+            .takeRetainedValue() as? [String: Any]
+    }
+
+    private static func connectionLabel(_ type: Int32) -> String {
+        switch type {
+        case 1:
+            return "USB"
+        case 2, 3:
+            return "Wi-Fi"
+        default:
+            return ""
+        }
+    }
+
+    private static func opaqueIdentifier(_ identifier: String) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in identifier.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
+    }
+
+    private static func loadSymbols() -> Symbols? {
+        guard let handle = dlopen(frameworkPath, RTLD_NOW | RTLD_LOCAL) else {
+            return nil
+        }
+
+        func symbol<T>(_ name: String, as type: T.Type) -> T? {
+            guard let pointer = dlsym(handle, name) else {
+                return nil
+            }
+            return unsafeBitCast(pointer, to: T.self)
+        }
+
+        guard let createDeviceList = symbol("AMDCreateDeviceList", as: CreateDeviceListFunction.self),
+              let connect = symbol("AMDeviceConnect", as: DeviceResultFunction.self),
+              let disconnect = symbol("AMDeviceDisconnect", as: DeviceResultFunction.self),
+              let validatePairing = symbol("AMDeviceValidatePairing", as: DeviceResultFunction.self),
+              let startSession = symbol("AMDeviceStartSession", as: DeviceResultFunction.self),
+              let stopSession = symbol("AMDeviceStopSession", as: DeviceResultFunction.self),
+              let interfaceType = symbol("AMDeviceGetInterfaceType", as: DeviceResultFunction.self),
+              let copyDeviceIdentifier = symbol(
+                  "AMDeviceCopyDeviceIdentifier",
+                  as: CopyDeviceIdentifierFunction.self
+              ),
+              let copyValue = symbol("AMDeviceCopyValue", as: CopyValueFunction.self),
+              let startService = symbol("AMDeviceSecureStartService", as: StartServiceFunction.self),
+              let sendMessage = symbol("AMDServiceConnectionSendMessage", as: SendMessageFunction.self),
+              let receiveMessage = symbol("AMDServiceConnectionReceiveMessage", as: ReceiveMessageFunction.self),
+              let invalidateConnection = symbol(
+                  "AMDServiceConnectionInvalidate",
+                  as: DeviceResultFunction.self
+              ),
+              let connectionSocket = symbol(
+                  "AMDServiceConnectionGetSocket",
+                  as: DeviceResultFunction.self
+              )
+        else {
+            dlclose(handle)
+            return nil
+        }
+
+        return Symbols(
+            createDeviceList: createDeviceList,
+            connect: connect,
+            disconnect: disconnect,
+            validatePairing: validatePairing,
+            startSession: startSession,
+            stopSession: stopSession,
+            interfaceType: interfaceType,
+            copyDeviceIdentifier: copyDeviceIdentifier,
+            copyValue: copyValue,
+            startService: startService,
+            sendMessage: sendMessage,
+            receiveMessage: receiveMessage,
+            invalidateConnection: invalidateConnection,
+            connectionSocket: connectionSocket
+        )
+    }
+}

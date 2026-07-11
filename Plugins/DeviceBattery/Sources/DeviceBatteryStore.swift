@@ -7,6 +7,7 @@ final class DeviceBatteryStore: ObservableObject {
         static let layoutMode = "layout-mode"
         static let showInternalBattery = "show-internal-battery"
         static let showBluetoothDevices = "show-bluetooth-devices"
+        static let showAppleMobileDevices = "show-apple-mobile-devices"
         static let showRapooDevices = "show-rapoo-devices"
         static let lowBatteryNotificationEnabled = "low-battery-notification-enabled"
         static let lowBatteryNotificationThreshold = "low-battery-notification-threshold"
@@ -15,6 +16,7 @@ final class DeviceBatteryStore: ObservableObject {
     @Published private(set) var layoutMode: DeviceBatteryLayoutMode
     @Published private(set) var showInternalBattery: Bool
     @Published private(set) var showBluetoothDevices: Bool
+    @Published private(set) var showAppleMobileDevices: Bool
     @Published private(set) var showRapooDevices: Bool
     @Published private(set) var lowBatteryNotificationEnabled: Bool
     @Published private(set) var lowBatteryNotificationThreshold: Int
@@ -28,6 +30,7 @@ final class DeviceBatteryStore: ObservableObject {
         ) ?? .grid
         showInternalBattery = Self.boolValue(storage, key: Key.showInternalBattery, defaultValue: true)
         showBluetoothDevices = Self.boolValue(storage, key: Key.showBluetoothDevices, defaultValue: true)
+        showAppleMobileDevices = Self.boolValue(storage, key: Key.showAppleMobileDevices, defaultValue: true)
         showRapooDevices = Self.boolValue(storage, key: Key.showRapooDevices, defaultValue: true)
         lowBatteryNotificationEnabled = Self.boolValue(
             storage,
@@ -66,6 +69,15 @@ final class DeviceBatteryStore: ObservableObject {
 
         showBluetoothDevices = isShown
         storage.set(isShown, forKey: Key.showBluetoothDevices)
+    }
+
+    func setShowAppleMobileDevices(_ isShown: Bool) {
+        guard showAppleMobileDevices != isShown else {
+            return
+        }
+
+        showAppleMobileDevices = isShown
+        storage.set(isShown, forKey: Key.showAppleMobileDevices)
     }
 
     func setShowRapooDevices(_ isShown: Bool) {

@@ -105,7 +105,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
             order: 20,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "查看 Mac、蓝牙外设和雷柏鼠标电量"
+                defaultValue: "查看 Mac、Apple 移动设备、蓝牙外设和雷柏鼠标电量"
             )
         )
         viewModel.onSnapshotChange = { [weak self] in
@@ -163,6 +163,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
                     viewModel.refresh(
                         includeInternalBattery: store.showInternalBattery,
                         includeBluetoothDevices: store.showBluetoothDevices,
+                        includeAppleMobileDevices: store.showAppleMobileDevices,
                         includeRapooDevices: store.showRapooDevices
                     )
                 },
@@ -182,6 +183,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
         viewModel.start(
             includeInternalBattery: store.showInternalBattery,
             includeBluetoothDevices: store.showBluetoothDevices,
+            includeAppleMobileDevices: store.showAppleMobileDevices,
             includeRapooDevices: store.showRapooDevices
         )
         onStateChange?()
@@ -196,6 +198,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
         viewModel.refresh(
             includeInternalBattery: store.showInternalBattery,
             includeBluetoothDevices: store.showBluetoothDevices,
+            includeAppleMobileDevices: store.showAppleMobileDevices,
             includeRapooDevices: store.showRapooDevices
         )
         onStateChange?()
