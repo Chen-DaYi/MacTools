@@ -45,7 +45,7 @@ final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
-            buttonTitle: localization.string("panel.button.sleep", defaultValue: "休眠")
+            buttonTitleProvider: { localization.string("panel.button.sleep", defaultValue: "休眠") }
         )
     }
 

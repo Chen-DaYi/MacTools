@@ -49,7 +49,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
-            buttonTitle: localization.string("panel.action.manage", defaultValue: "管理")
+            buttonTitleProvider: { localization.string("panel.action.manage", defaultValue: "管理") }
         )
         
         self.metadata = PluginMetadata(

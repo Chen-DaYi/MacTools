@@ -98,6 +98,46 @@ final class RightClickConfigurationStoreTests: XCTestCase {
         XCTAssertFalse(loaded.copyFileName)
         XCTAssertEqual(loaded.openWithApps.first?.name, "Code")
     }
+
+    func testTwoLanguageSwitchesPreserveFinderMenuStateAndUseFreshStrings() {
+        let fileURL = makeTempFileURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        var config = RightClickConfiguration.activeDefault
+        config.copyFileName = false
+        config.openInTerminal = true
+
+        config.preferredLanguages = ["en"]
+        XCTAssertTrue(RightClickConfigurationStore.save(config, to: fileURL))
+        var loaded = RightClickConfigurationStore.load(from: fileURL)
+        XCTAssertEqual(
+            RightClickLocalization.string(
+                "finder.openInTerminal",
+                defaultValue: "在终端打开",
+                preferredLanguages: loaded.preferredLanguages
+            ),
+            "Open in Terminal"
+        )
+
+        config.preferredLanguages = ["zh-Hans"]
+        XCTAssertTrue(RightClickConfigurationStore.save(config, to: fileURL))
+        loaded = RightClickConfigurationStore.load(from: fileURL)
+        XCTAssertEqual(
+            RightClickLocalization.string(
+                "finder.openInTerminal",
+                defaultValue: "Open in Terminal",
+                preferredLanguages: loaded.preferredLanguages
+            ),
+            "在终端打开"
+        )
+
+        config.preferredLanguages = ["en"]
+        XCTAssertTrue(RightClickConfigurationStore.save(config, to: fileURL))
+        loaded = RightClickConfigurationStore.load(from: fileURL)
+        XCTAssertEqual(loaded.preferredLanguages, ["en"])
+        XCTAssertFalse(loaded.copyFileName)
+        XCTAssertTrue(loaded.openInTerminal)
+    }
 }
 
 final class RightClickOpenWithAppTests: XCTestCase {

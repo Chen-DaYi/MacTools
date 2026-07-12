@@ -144,6 +144,7 @@ final class PluginHost: ObservableObject {
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
     private var dynamicPluginCategoriesByID: [String: String?] = [:]
     private var dynamicPluginReleaseChannelsByID: [String: String?] = [:]
+    private var dynamicPluginManifestsByID: [String: PluginPackageManifest] = [:]
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
@@ -154,6 +155,7 @@ final class PluginHost: ObservableObject {
     private var didLoadDynamicPlugins = false
     private var displayTopologyRefreshTask: Task<Void, Never>?
     private var pluginStateChangeRebuildTask: Task<Void, Never>?
+    private var runtimeLocaleCancellable: AnyCancellable?
     private var dirtyPluginIDs: Set<String> = []
     private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
     private var cachedPrimaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
@@ -173,6 +175,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
     @Published private(set) var hasActivePlugin = false
     @Published private(set) var settingsPresentationRequestCount = 0
+    @Published private(set) var localizationRevision = 0
     @Published var selectedSettingsDestination: SettingsDestination = .general
     @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .installed
 
@@ -246,6 +249,7 @@ final class PluginHost: ObservableObject {
             self.dynamicPluginCapabilitiesByID = dynamicPluginManager.installedCapabilitiesByID()
             self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
             self.dynamicPluginReleaseChannelsByID = dynamicPluginManager.installedReleaseChannelsByID()
+            self.dynamicPluginManifestsByID = dynamicPluginManager.installedManifestsByID()
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
@@ -271,13 +275,22 @@ final class PluginHost: ObservableObject {
             self?.refreshAccessibilityPermissionNow()
         }
 
+        runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.refreshLocalization()
+                }
+            }
+
         pauseHiddenBuiltInVisibilityLifecyclePlugins()
         refreshAll()
     }
 
-    deinit {
+    isolated deinit {
         displayTopologyRefreshTask?.cancel()
         pluginStateChangeRebuildTask?.cancel()
+        runtimeLocaleCancellable?.cancel()
     }
 
     func deactivateAllPlugins(reason: PluginDeactivationReason = .hostShutdown) {
@@ -302,6 +315,27 @@ final class PluginHost: ObservableObject {
         }
 
         syncGlobalShortcuts()
+        rebuildDerivedState()
+    }
+
+    /// Rebuild language-dependent host data without refreshing or reactivating
+    /// plugins, which keeps active plugin sessions and external side effects intact.
+    func refreshLocalization() {
+        for plugin in activePlugins {
+            guard let localizationRefreshing = plugin as? any PluginRuntimeLocalizationRefreshing else {
+                continue
+            }
+
+            guardPluginCall(plugin, operation: "refresh localization") {
+                localizationRefreshing.refreshLocalization()
+            }
+        }
+        componentViewCache.removeAll()
+        configurationViewCache.removeAll()
+        cachedPanelStatesByID.removeAll()
+        cachedComponentStatesByID.removeAll()
+        syncPluginManagementState()
+        localizationRevision &+= 1
         rebuildDerivedState()
     }
 
@@ -677,7 +711,7 @@ final class PluginHost: ObservableObject {
 
         let item = PluginComponentViewItem(
             id: itemID,
-            content: content
+            content: AnyView(content.id(localizationRevision))
         )
         componentViewCache[itemID] = item
         if isPluginIsolated(plugin) {
@@ -765,7 +799,10 @@ final class PluginHost: ObservableObject {
             return PluginConfigurationViewItem(id: pluginID, content: AnyView(EmptyView()))
         }
 
-        let item = PluginConfigurationViewItem(id: pluginID, content: content)
+        let item = PluginConfigurationViewItem(
+            id: pluginID,
+            content: AnyView(content.id(localizationRevision))
+        )
         configurationViewCache[pluginID] = item
         return item
     }
@@ -800,10 +837,11 @@ final class PluginHost: ObservableObject {
         return !dynamicPluginManager.installedPackageVersionsByID().isEmpty
     }
 
-    func automaticUpdateInstalledPluginsBeforeLoading() async {
+    @discardableResult
+    func automaticUpdateInstalledPluginsBeforeLoading() async -> Bool {
         guard let pluginCatalogManager else {
             loadDynamicPluginsIfNeeded()
-            return
+            return true
         }
 
         automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
@@ -822,7 +860,7 @@ final class PluginHost: ObservableObject {
                 message: errorMessage
             )
             loadDynamicPluginsIfNeeded()
-            return
+            return false
         }
 
         let updatePlan = pluginCatalogManager.automaticUpdatePlanForInstalledPlugins()
@@ -833,7 +871,7 @@ final class PluginHost: ObservableObject {
                 message: AppL10n.plugins("plugin.autoUpdate.message.noInstalledUpdates", defaultValue: "已安装插件都是最新版本。")
             )
             loadDynamicPluginsIfNeeded()
-            return
+            return true
         }
 
         presentPluginMarketplace()
@@ -882,6 +920,7 @@ final class PluginHost: ObservableObject {
         }
 
         loadDynamicPluginsIfNeeded()
+        return automaticPluginUpdateStatus.phase == .completed
     }
 
     func installPluginFromCatalog(pluginID: String) async throws {
@@ -1047,6 +1086,7 @@ final class PluginHost: ObservableObject {
         dynamicPluginCapabilitiesByID = dynamicPluginManager?.installedCapabilitiesByID() ?? [:]
         dynamicPluginCategoriesByID = dynamicPluginManager?.installedCategoriesByID() ?? [:]
         dynamicPluginReleaseChannelsByID = dynamicPluginManager?.installedReleaseChannelsByID() ?? [:]
+        dynamicPluginManifestsByID = dynamicPluginManager?.installedManifestsByID() ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
@@ -1146,7 +1186,7 @@ final class PluginHost: ObservableObject {
             }
 
             let plugin = descriptor.plugin
-            let metadata = plugin.metadata
+            let metadata = descriptor.metadata
             guard
                 let primaryPanel = plugin.primaryPanel,
                 let state = panelStatesByID[metadata.id]
@@ -1164,7 +1204,11 @@ final class PluginHost: ObservableObject {
                 return nil
             }
 
-            let description = state.errorMessage ?? state.subtitle
+            let description = localizedDescription(
+                state.errorMessage ?? state.subtitle,
+                pluginMetadata: plugin.metadata,
+                localizedMetadata: metadata
+            )
             let descriptor = primaryPanel.primaryPanelDescriptor
 
             return PluginPanelItem(
@@ -1192,7 +1236,7 @@ final class PluginHost: ObservableObject {
             }
 
             let plugin = descriptor.plugin
-            let metadata = plugin.metadata
+            let metadata = descriptor.metadata
             guard
                 let componentPanel = plugin.componentPanel,
                 let state = componentStatesByID[metadata.id]
@@ -1210,7 +1254,11 @@ final class PluginHost: ObservableObject {
                 return nil
             }
 
-            let description = state.errorMessage ?? state.subtitle
+            let description = localizedDescription(
+                state.errorMessage ?? state.subtitle,
+                pluginMetadata: plugin.metadata,
+                localizedMetadata: metadata
+            )
 
             return PluginComponentItem(
                 id: metadata.id,
@@ -1692,7 +1740,7 @@ final class PluginHost: ObservableObject {
             .map { PluginDescriptor(metadata: $0.metadata, plugin: $0, capabilities: nil) }
             + dynamicPlugins.map {
                 PluginDescriptor(
-                    metadata: $0.metadata,
+                    metadata: localizedMetadata(for: $0.metadata),
                     plugin: $0,
                     capabilities: dynamicPluginCapabilitiesByID[$0.metadata.id]
                 )
@@ -1707,6 +1755,36 @@ final class PluginHost: ObservableObject {
 
                 return lhs.metadata.order < rhs.metadata.order
             }
+    }
+
+    private func localizedMetadata(for metadata: PluginMetadata) -> PluginMetadata {
+        guard let localized = PluginLocalizationMatcher.localizedMetadata(
+            from: dynamicPluginManifestsByID[metadata.id]?.localizedMetadata ?? [:]
+        )
+        else {
+            return metadata
+        }
+
+        return PluginMetadata(
+            id: metadata.id,
+            title: localized.displayName ?? metadata.title,
+            iconName: metadata.iconName,
+            iconTint: metadata.iconTint,
+            order: metadata.order,
+            defaultDescription: localized.summary ?? metadata.defaultDescription
+        )
+    }
+
+    private func localizedDescription(
+        _ description: String,
+        pluginMetadata: PluginMetadata,
+        localizedMetadata: PluginMetadata
+    ) -> String {
+        // Replace only the metadata default; panel-specific descriptions and
+        // errors must remain intact even if their text happens to be localized.
+        description == pluginMetadata.defaultDescription
+            ? localizedMetadata.defaultDescription
+            : description
     }
 
     private func presentation(for descriptor: PluginDescriptor) -> PluginFeaturePresentation {

@@ -6,7 +6,7 @@
 - `Prepare Release`：在 GitHub Actions 页面手动触发。输入发布类型、目标版本和是否继续发布；它会检查、bump、提交版本变更、创建 tag，并在需要时显式触发 `Release` 或 `Plugin Release`。
 - `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release，并提交最新 `docs/appcast.xml`。
 - `Homebrew Cask Update`：在 `Release` 成功完成后，或手动输入版本时运行。读取稳定版 Release 里的 `MacTools.dmg` 与 `MacTools.sha256`，通过 `brew bump-cask-pr` 向官方 `Homebrew/homebrew-cask` 提交 cask bump PR。
-- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。默认只构建和上传增量变化插件包，使用 Developer ID 签名插件 bundle，合并并提交签名后的 `docs/plugins/catalog.json`。
+- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。它按 PluginKit 版本选择 catalog：v2 保留使用 `docs/plugins/catalog.json`，v3 及以后使用 `docs/plugins/vN/catalog.json`；首次 ABI 升级默认全量构建、签名并提交新版本 catalog。
 - `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它先构建 `site/` 下的 Astro 官网，再合并 `docs/` 中的 appcast、插件 catalog、图标库等静态发布资源并发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
 
 ## 需要配置的 Secrets
@@ -23,7 +23,7 @@
 | `ASC_API_KEY_ID` | App Store Connect API Key ID。 |
 | `ASC_API_ISSUER_ID` | App Store Connect Issuer ID。 |
 | `SPARKLE_PRIVATE_KEY` | Sparkle EdDSA 私钥，必须与 `project.yml` 中的 `SPARKLE_PUBLIC_ED_KEY` 配对。 |
-| `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` | 插件 catalog Ed25519 私钥的 Base64 内容，用于签名 `docs/plugins/catalog.json`。 |
+| `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` | 插件 catalog Ed25519 私钥的 Base64 内容，用于签名当前 PluginKit 版本的 catalog。 |
 | `HOMEBREW_GITHUB_API_TOKEN` | 可选。GitHub Personal Access Token，至少需要 `public_repo` 权限，用于稳定版发布后通过 `brew bump-cask-pr` 自动向官方 `Homebrew/homebrew-cask` 提交 cask bump PR；未配置时 Homebrew 同步会失败，可手动运行 workflow 或手动提交 PR。 |
 
 不要把 `LocalConfig.xcconfig`、`.p12`、`.p8`、Sparkle 私钥、证书密码或 Apple ID 写入仓库。
@@ -154,7 +154,7 @@ Release 工作流会校验 `v0.9.3` 与 `Configs/AppVersion.xcconfig` 的 `MARKE
 make release ARGS="--type plugin"
 ```
 
-默认 `auto` 模式会读取生产 `docs/plugins/catalog.json`，找出新插件、已手动 bump 的插件、`pluginKitVersion` 已变化的插件，以及包相关文件变化但版本未递增的插件；对未递增的插件会按选择的 `patch`/`minor`/`major` 自动更新 `plugin.json.version`。随后命令会运行 `make generate` 和增量发布计划检查，提交版本 bump，推送 `plugins-*` 批次 tag。
+默认 `auto` 模式会读取当前 PluginKit 版本的 catalog；首次 v3 发布时以旧 v2 catalog 作为比较基线。它会找出新插件、已手动 bump 的插件、`pluginKitVersion` 已变化的插件，以及包相关文件变化但版本未递增的插件。ABI 变化会自动切换为全量发布；对未递增的插件会按选择的 `patch`/`minor`/`major` 自动更新 `plugin.json.version`。随后命令会运行 `make generate` 和发布计划检查，提交版本 bump，推送 `plugins-*` 批次 tag。
 
 常用非交互示例：
 
@@ -164,11 +164,11 @@ make release ARGS="--type plugin --version 1.0.10 --plugin-mode selected --plugi
 make release ARGS="--type plugin --version 1.1.0 --plugin-mode all --yes"
 ```
 
-插件按批次单独发布，不和 app DMG 混在同一条 Release。默认发布方式是增量发布：只构建和上传本批实际变化的插件包，然后把这些新条目合并进生产 `docs/plugins/catalog.json`。未变化插件会继续保留上一版 catalog 中的 `package.url`、`sha256`、`size` 和 `releaseNotesURL`，所以一个 catalog 可以同时指向多个 `plugins-*` tag。
+插件按批次单独发布，不和 app DMG 混在同一条 Release。相同 PluginKit 版本内默认是增量发布：只构建和上传本批实际变化的插件包，然后把这些新条目合并进对应的版本化 catalog。首次 ABI 升级则全量构建并生成新 catalog，旧版本 catalog 不会被覆盖。
 
 应用内是否显示“可更新”只比较插件版本，不比较 batch tag 或 asset URL。因此只有实际变化的插件需要递增各自 `plugin.json.version`；未变化插件不会因为新批次 tag 而显示可更新或无效。
 
-`pluginKitVersion` 是插件 ABI 边界。升级 PluginKit 时必须全量重建插件包并递增每个插件自己的 `plugin.json.version`，推荐使用 `plugin_mode=all`。发布脚本会禁止把不同 `pluginKitVersion` 的插件混进同一个生产 catalog，避免新宿主加载旧 ABI 插件导致启动崩溃。
+`pluginKitVersion` 是插件 ABI 边界。升级 PluginKit 时必须全量重建插件包并递增每个插件自己的 `plugin.json.version`。发布脚本会在 ABI 变化时自动使用 `plugin_mode=all`，并将完整 catalog 写入 `docs/plugins/vN/catalog.json`；它禁止把不同 `pluginKitVersion` 的插件混进同一个 catalog，避免新宿主加载旧 ABI 插件导致启动崩溃。
 
 推送插件批次 tag：
 
@@ -179,15 +179,15 @@ git push origin plugins-1.0.1
 
 `Plugin Release` 工作流会：
 
-1. 从 `origin/main` 读取上一版生产 `docs/plugins/catalog.json` 作为基线。
+1. 从 `origin/main` 读取当前 PluginKit 版本的 catalog 作为基线；首次 v3 发布时回退到旧 `docs/plugins/catalog.json`，仅用于版本比较。
 2. 生成增量发布计划。`auto` 模式会选择新插件和 `plugin.json.version` 高于上一版 catalog 的插件。
-3. 如果插件自身源码、资源或 `pluginKitVersion` 有包相关变化，但插件版本没有递增，工作流会失败并提示需要 bump 对应 `plugin.json.version`。`MacToolsPluginKit` ABI 变化必须使用 `mode=all` 全量重发；展示或宿主侧改动如果也需要重发，可使用 `mode=all` 或传入特定 `--shared-path`。
+3. 如果插件自身源码、资源或 `pluginKitVersion` 有包相关变化，但插件版本没有递增，工作流会失败并提示需要 bump 对应 `plugin.json.version`。`MacToolsPluginKit` ABI 变化会自动切换到 `mode=all` 全量重发；展示或宿主侧改动如果也需要重发，可使用 `mode=all` 或传入特定 `--shared-path`。
 4. 只以 Release 配置构建计划中的插件 target。
 5. 用 Developer ID 重新签名这些插件 bundle，并打包为 `*.mactoolsplugin.zip`。
 6. 创建或更新对应的 `plugins-*` GitHub Release，并只上传本批变化插件的 zip。catalog-only 变化可以创建没有 zip asset 的插件 Release。
-7. 生成本批 delta catalog，把 delta 条目合并进上一版生产 catalog，保留未变化插件的旧下载链接和校验信息。
-8. 使用 `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` 签名合并后的 catalog，并写入 `docs/plugins/catalog.json`。
-9. 将 `docs/plugins/catalog.json` 提交回 `main`，再由 `Deploy Pages` 发布到 GitHub Pages。
+7. 相同 ABI 内生成本批 delta catalog 并合并进该 ABI 的 catalog；ABI 首次升级则生成包含全部插件的完整 catalog。
+8. 使用 `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` 签名 catalog，并写入 `docs/plugins/catalog.json`（v2）或 `docs/plugins/vN/catalog.json`（v3+）。
+9. 将对应版本化 catalog 提交回 `main`，再由 `Deploy Pages` 发布到 GitHub Pages。
 
 如果 `auto` 模式没有发现插件包或 catalog 变化，工作流会成功结束，不创建或更新 GitHub Release。
 
@@ -274,7 +274,7 @@ Finder right-click menu items now stay hidden when the plugin is disabled.
 
 - PR 构建不读取发布 Secrets，只执行未签名构建和测试。
 - Release 工作流只使用 `contents: write` 创建或更新 GitHub Release，并把 `docs/appcast.xml` 提交回 `main`；普通 Build 工作流只有 `contents: read`。
-- Plugin Release 工作流只使用 `contents: write` 创建或更新插件批次 Release，并把签名后的 `docs/plugins/catalog.json` 提交回 `main`。
+- Plugin Release 工作流只使用 `contents: write` 创建或更新插件批次 Release，并把当前 PluginKit 版本的签名 catalog 提交回 `main`；v2 仍写入旧 `docs/plugins/catalog.json`，v3+ 写入版本化路径。
 - Deploy Pages 工作流只在 Release 或 Plugin Release 成功后发布 `docs/`，使用 `contents: read`、`pages: write` 和 `id-token: write`。
 - 签名证书导入临时 keychain，任务结束后清理。
 - App Store Connect `.p8`、Sparkle 私钥和插件 catalog 私钥只写入 runner 临时目录或进程环境，使用后删除。

@@ -22,6 +22,41 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.featureManagementItems.map(\.presentation), [.componentPanel])
     }
 
+    func testRefreshingLocalizationDiscardsCachedComponentViewsWithoutRefreshingPlugin() {
+        let plugin = MockComponentPanelPlugin(id: "component")
+        let host = makeHost(plugins: [plugin])
+
+        _ = host.componentViewItem(for: "component", dismiss: {})
+        let makeViewCallCount = plugin.makeViewCallCount
+        let refreshCallCount = plugin.refreshCallCount
+
+        host.refreshLocalization()
+
+        XCTAssertFalse(host.isComponentViewCached(for: "component"))
+        XCTAssertEqual(plugin.makeViewCallCount, makeViewCallCount)
+        XCTAssertEqual(plugin.refreshCallCount, refreshCallCount)
+        XCTAssertEqual(plugin.localizationRefreshCount, 1)
+        XCTAssertTrue(host.componentItems.first?.isActive == false)
+    }
+
+    func testTwoLocalizationRefreshesPreservePluginState() {
+        let plugin = MockComponentPanelPlugin(id: "component", isActive: true)
+        let host = makeHost(plugins: [plugin])
+        let refreshCallCount = plugin.refreshCallCount
+        let initialRevision = host.localizationRevision
+
+        // Runtime language switches are covered by PluginRuntimeLocalizationTests.
+        // Exercise the host refresh twice directly so this state-preservation
+        // test is independent of the global locale source shared by parallel tests.
+        host.refreshLocalization()
+        host.refreshLocalization()
+
+        XCTAssertEqual(host.localizationRevision, initialRevision + 2)
+        XCTAssertEqual(plugin.refreshCallCount, refreshCallCount)
+        XCTAssertEqual(plugin.localizationRefreshCount, 2)
+        XCTAssertTrue(host.componentItems.first?.isActive == true)
+    }
+
     func testComponentVisibilityUsesSharedDisplayPreferences() {
         let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
         let host = makeHost(plugins: [componentPanelPlugin])
@@ -721,7 +756,7 @@ private final class MockVisibilityLifecyclePlugin: MacToolsPlugin, PluginPrimary
 }
 
 @MainActor
-private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
+private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling, PluginRuntimeLocalizationRefreshing {
     enum SurfaceEvent: Equatable {
         case visible(PluginPanelSurface)
         case hidden(PluginPanelSurface)
@@ -738,6 +773,8 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     private let isActive: Bool
     private(set) var makeViewCallCount = 0
+    private(set) var refreshCallCount = 0
+    private(set) var localizationRefreshCount = 0
     private(set) var receivedPanelVisibilityValues: [Bool] = []
     private(set) var surfaceEvents: [SurfaceEvent] = []
 
@@ -791,7 +828,13 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
         surfaceEvents.append(.hidden(surface))
     }
 
-    func refresh() {}
+    func refresh() {
+        refreshCallCount += 1
+    }
+
+    func refreshLocalization() {
+        localizationRefreshCount += 1
+    }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)

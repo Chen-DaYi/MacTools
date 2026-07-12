@@ -69,7 +69,7 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
-            buttonTitle: localization.string("panel.button.edit", defaultValue: "编辑")
+            buttonTitleProvider: { localization.string("panel.button.edit", defaultValue: "编辑") }
         )
     }
 

@@ -50,7 +50,7 @@
   },
   "version": "1.0.8",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 2,
+  "pluginKitVersion": 3,
   "bundleRelativePath": "KeepAwake.bundle",
   "factoryClass": "KeepAwakePlugin.KeepAwakePluginFactory",
   "build": {

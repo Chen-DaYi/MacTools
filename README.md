@@ -61,7 +61,7 @@
 | zsh Config | View and edit zsh configuration files such as .zshrc and .zshenv inside the app, with syntax highlighting, common snippets, and automatic backup before saving. |
 | Plugins & Settings | Install, update, and batch-update plugins in the plugin marketplace (filter by category/search; sort by not-installed first, installed first, or name), and manage permissions, shortcuts, and plugin-specific settings. |
 | Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, and preview every source with the same standard icon height and content inset as the default. |
-| Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance. |
+| Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance; the picker shows each language in the system language and its native spelling. |
 
 > **Right-click action:** You can use Option + left-click on the MacTools icon to trigger the right-click action.
 
