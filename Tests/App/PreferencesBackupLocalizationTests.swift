@@ -24,6 +24,21 @@ final class PreferencesBackupLocalizationTests: XCTestCase {
         }
     }
 
+    func testCompiledSettingsCatalogContainsCancelForEverySupportedLanguage() throws {
+        let resourcesURL = try XCTUnwrap(Bundle.main.resourceURL)
+
+        for language in supportedLanguages {
+            let stringsURL = resourcesURL
+                .appending(path: "\(language).lproj/Settings.strings")
+            let strings = try XCTUnwrap(
+                NSDictionary(contentsOf: stringsURL) as? [String: String],
+                "Missing compiled Settings strings for \(language)"
+            )
+
+            XCTAssertNotNil(strings["common.cancel"], "common.cancel must be compiled for \(language)")
+        }
+    }
+
     private var backupStringKeys: [String] {
         [
             "general.section.preferencesBackup",

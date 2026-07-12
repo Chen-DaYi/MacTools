@@ -268,7 +268,7 @@ private struct PreferencesBackupSettingsRow: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "MacTools Preferences.json"
+        panel.nameFieldStringValue = PreferencesBackupExportFileName.make()
         panel.message = AppL10n.preferencesBackup("preferencesBackup.export.prompt", defaultValue: "将可移植的 MacTools 偏好设置保存为 JSON 文件。")
 
         guard panel.runModal() == .OK, let url = panel.url else {
@@ -367,6 +367,17 @@ private struct PreferencesBackupSettingsRow: View {
         case nil:
             return error.localizedDescription
         }
+    }
+}
+
+enum PreferencesBackupExportFileName {
+    static func make(date: Date = .now, timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        return "MacTools Preferences \(formatter.string(from: date)).json"
     }
 }
 

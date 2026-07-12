@@ -349,6 +349,16 @@ final class PreferencesBackupTests: XCTestCase {
         }
     }
 
+    func testExportFileNameIncludesLocalDateAndTime() {
+        XCTAssertEqual(
+            PreferencesBackupExportFileName.make(
+                date: Date(timeIntervalSince1970: 0),
+                timeZone: TimeZone(secondsFromGMT: 0)!
+            ),
+            "MacTools Preferences 1970-01-01_00-00-00.json"
+        )
+    }
+
     private var validApplicationPreferences: PreferencesBackup.ApplicationPreferences {
         PreferencesBackup.ApplicationPreferences(
             appearancePreference: AppAppearancePreference.system.rawValue,
