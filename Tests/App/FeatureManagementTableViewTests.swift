@@ -103,7 +103,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
         )
     }
 
-    func testSurfaceDescriptionsShowTheOtherVisibleSurface() {
+    func testSurfaceDescriptionsDoNotConflateLayoutWithVisibility() {
         let item = makeItem(
             id: "activity-bar",
             isVisible: true,
@@ -111,56 +111,46 @@ final class FeatureManagementTableViewTests: XCTestCase {
             isVisibleOnOtherSurface: true
         )
 
-        XCTAssertTrue(featureManagementDescription(for: item, mode: .surface(.dashboard)).contains(
-            AppL10n.plugins(
-                "plugin.management.alsoInFeaturePanel",
-                defaultValue: "同时显示在功能面板"
-            )
-        ))
-        XCTAssertTrue(featureManagementDescription(for: item, mode: .surface(.featurePanel)).contains(
-            AppL10n.plugins(
-                "plugin.management.alsoOnDashboard",
-                defaultValue: "同时显示在仪表盘"
-            )
-        ))
-    }
-
-    func testDisabledSurfaceDescriptionSuppressesOtherSurfaceAndActiveIndicators() {
-        let item = makeItem(
-            id: "activity-bar",
-            isVisible: true,
-            isActive: true,
-            isGloballyEnabled: false,
-            isVisibleOnOtherSurface: true
-        )
-        let description = featureManagementDescription(for: item, mode: .surface(.dashboard))
-
-        XCTAssertTrue(description.contains(
-            AppL10n.plugins("plugin.management.disabled", defaultValue: "插件已停用")
-        ))
-        XCTAssertFalse(description.contains(
-            AppL10n.plugins(
-                "plugin.management.alsoInFeaturePanel",
-                defaultValue: "同时显示在功能面板"
-            )
-        ))
-        XCTAssertFalse(description.contains(
-            AppL10n.plugins("plugin.management.active", defaultValue: "使用中")
-        ))
-    }
-
-    func testToggleHelpMatchesInstalledAndSurfaceModes() {
         XCTAssertEqual(
-            featureManagementToggleHelp(for: .installed),
+            featureManagementDescription(for: item, mode: .surface(.dashboard)),
+            item.description
+        )
+        XCTAssertEqual(
+            featureManagementDescription(for: item, mode: .surface(.featurePanel)),
+            item.description
+        )
+    }
+
+    func testSurfaceLayoutSeparatesGloballyDisabledPlugins() {
+        let items = [
+            makeSurfaceItem(id: "enabled", isGloballyEnabled: true),
+            makeSurfaceItem(id: "disabled", isGloballyEnabled: false),
+            makeSurfaceItem(id: "enabled-second", isGloballyEnabled: true)
+        ]
+
+        XCTAssertEqual(
+            PluginSurfaceLayoutDisplayPolicy.enabledItems(from: items).map(\.id),
+            ["enabled", "enabled-second"]
+        )
+        XCTAssertEqual(
+            PluginSurfaceLayoutDisplayPolicy.disabledItems(from: items).map(\.id),
+            ["disabled"]
+        )
+        XCTAssertEqual(PluginSurfaceLayoutDisplayPolicy.disabledItemCount(in: items), 1)
+    }
+
+    func testControlHelpMatchesInstalledAndSurfaceModes() {
+        XCTAssertEqual(
+            featureManagementControlHelp(for: .installed),
             AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
         )
         XCTAssertEqual(
-            featureManagementToggleHelp(for: .surface(.dashboard)),
-            AppL10n.plugins("plugin.management.dashboardToggle", defaultValue: "在仪表盘中显示")
+            featureManagementControlHelp(for: .surface(.dashboard)),
+            AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
         )
         XCTAssertEqual(
-            featureManagementToggleHelp(for: .surface(.featurePanel)),
-            AppL10n.plugins("plugin.management.featurePanelToggle", defaultValue: "在功能面板中显示")
+            featureManagementControlHelp(for: .surface(.featurePanel)),
+            AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
         )
     }
 
@@ -223,7 +213,25 @@ final class FeatureManagementTableViewTests: XCTestCase {
         isVisibleOnOtherSurface: Bool = true,
         capabilities: PluginHostCapabilities? = nil
     ) -> FeatureManagementTableItem {
-        FeatureManagementTableItem(surfaceItem: PluginSurfaceLayoutItem(
+        FeatureManagementTableItem(surfaceItem: makeSurfaceItem(
+            id: id,
+            isVisible: isVisible,
+            isActive: isActive,
+            isGloballyEnabled: isGloballyEnabled,
+            isVisibleOnOtherSurface: isVisibleOnOtherSurface,
+            capabilities: capabilities
+        ))
+    }
+
+    private func makeSurfaceItem(
+        id: String,
+        isVisible: Bool = true,
+        isActive: Bool = false,
+        isGloballyEnabled: Bool,
+        isVisibleOnOtherSurface: Bool = true,
+        capabilities: PluginHostCapabilities? = nil
+    ) -> PluginSurfaceLayoutItem {
+        PluginSurfaceLayoutItem(
             id: id,
             title: "活动统计",
             description: "统计输入与活动",
@@ -237,7 +245,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
             dashboardSpan: .oneByOne,
             category: nil,
             releaseChannel: nil
-        ))
+        )
     }
 
     private func capabilities(
@@ -251,9 +259,13 @@ final class FeatureManagementTableViewTests: XCTestCase {
         )
     }
 
-    func testInstalledModeHasNoDragHandleAndSurfaceModeSupportsReordering() {
+    func testEveryModeUsesGlobalEnablementAndOnlySurfaceRowsCanReorder() {
         XCTAssertFalse(FeatureManagementTableMode.installed.supportsReordering)
         XCTAssertTrue(FeatureManagementTableMode.surface(.dashboard).supportsReordering)
         XCTAssertTrue(FeatureManagementTableMode.surface(.featurePanel).supportsReordering)
+        XCTAssertFalse(FeatureManagementReorderPolicy.canReorder(
+            mode: .surface(.dashboard),
+            isReorderEnabled: false
+        ))
     }
 }

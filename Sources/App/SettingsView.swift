@@ -483,7 +483,8 @@ private struct FeatureSettingsSidebar: View {
                             title: item.title,
                             systemImage: item.iconName,
                             iconTint: item.iconTint,
-                            isSelected: selection == .configuration(item.id)
+                            isSelected: selection == .configuration(item.id),
+                            isEnabled: item.isGloballyEnabled
                         ) {
                             selection = .configuration(item.id)
                         }
@@ -520,24 +521,42 @@ private struct FeatureSettingsSidebarRow: View {
     let systemImage: String
     let iconTint: Color
     let isSelected: Bool
+    var isEnabled = true
     let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: systemImage)
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(isSelected ? Color.accentColor : iconTint)
-                    .frame(width: 18, height: 18)
+                Group {
+                    Image(systemName: systemImage)
+                        .font(PluginSettingsTheme.Typography.sectionTitle)
+                        .foregroundStyle(isSelected ? Color.accentColor : iconTint)
+                        .frame(width: 18, height: 18)
 
-                Text(title)
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    Text(title)
+                        .font(PluginSettingsTheme.Typography.sectionTitle)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .opacity(isEnabled ? 1 : 0.6)
 
                 Spacer(minLength: 0)
+
+                if !isEnabled {
+                    Image(systemName: "pause.circle")
+                        .font(PluginSettingsTheme.Typography.statusBadge)
+                        .foregroundStyle(.tertiary)
+                        .help(AppL10n.plugins(
+                            "plugin.management.disabled",
+                            defaultValue: "插件已停用"
+                        ))
+                        .accessibilityLabel(AppL10n.plugins(
+                            "plugin.management.disabled",
+                            defaultValue: "插件已停用"
+                        ))
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -575,7 +594,7 @@ private struct FeatureSettingsDetailPane: View {
                 title: AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘"),
                 description: AppL10n.settings(
                     "plugins.dashboard.description",
-                    defaultValue: "选择仪表盘中显示的组件，并拖拽调整排列顺序。"
+                    defaultValue: "拖拽调整已启用仪表盘组件的排列顺序。"
                 ),
                 systemImage: "square.grid.2x2",
                 iconTint: .blue,
@@ -584,16 +603,18 @@ private struct FeatureSettingsDetailPane: View {
                 emptyTitle: AppL10n.settings("plugins.dashboard.empty.title", defaultValue: "暂无仪表盘组件"),
                 emptyDescription: AppL10n.settings(
                     "plugins.dashboard.empty.description",
-                    defaultValue: "支持仪表盘的插件会显示在这里。"
+                    defaultValue: "已启用且支持仪表盘的插件会显示在这里。"
                 ),
-                onVisibilityChange: { pluginID, isVisible in
-                    pluginHost.setPluginVisibility(isVisible, for: pluginID, on: .dashboard)
-                },
                 onMove: { pluginID, targetOffset in
                     pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
                 },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .dashboard) },
-                onOpenPanel: showDashboard
+                onOpenPanel: showDashboard,
+                configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
+                onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
+                onEnablementChange: { pluginID, isEnabled in
+                    pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: pluginID)
+                }
             )
         case .featurePanelLayout:
             SurfaceLayoutSettingsView(
@@ -601,7 +622,7 @@ private struct FeatureSettingsDetailPane: View {
                 title: AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板"),
                 description: AppL10n.settings(
                     "plugins.featurePanel.description",
-                    defaultValue: "选择功能面板中显示的操作，并拖拽调整排列顺序。"
+                    defaultValue: "拖拽调整已启用功能面板操作的排列顺序。"
                 ),
                 systemImage: "switch.2",
                 iconTint: .purple,
@@ -610,16 +631,18 @@ private struct FeatureSettingsDetailPane: View {
                 emptyTitle: AppL10n.settings("plugins.featurePanel.empty.title", defaultValue: "暂无功能面板操作"),
                 emptyDescription: AppL10n.settings(
                     "plugins.featurePanel.empty.description",
-                    defaultValue: "支持功能面板的插件会显示在这里。"
+                    defaultValue: "已启用且支持功能面板的插件会显示在这里。"
                 ),
-                onVisibilityChange: { pluginID, isVisible in
-                    pluginHost.setPluginVisibility(isVisible, for: pluginID, on: .featurePanel)
-                },
                 onMove: { pluginID, targetOffset in
                     pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
                 },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .featurePanel) },
-                onOpenPanel: showFeaturePanel
+                onOpenPanel: showFeaturePanel,
+                configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
+                onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
+                onEnablementChange: { pluginID, isEnabled in
+                    pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: pluginID)
+                }
             )
         case .installed:
             InstalledFeaturesSettingsView(pluginHost: pluginHost)
@@ -650,7 +673,7 @@ private struct InstalledFeaturesSettingsView: View {
                     title: AppL10n.settings("plugins.installed.title", defaultValue: "已安装"),
                     description: AppL10n.settings(
                         "plugins.installed.globalDescription",
-                        defaultValue: "启用或停用插件，并查看每个插件支持的菜单栏位置。"
+                        defaultValue: "启用或停用插件；仪表盘和功能面板仅管理显示位置与顺序。"
                     ),
                     systemImage: "checkmark.circle",
                     iconTint: .green
@@ -727,13 +750,12 @@ private struct SurfaceLayoutSettingsView: View {
     let openButtonTitle: String
     let emptyTitle: String
     let emptyDescription: String
-    let onVisibilityChange: (String, Bool) -> Void
     let onMove: (String, Int) -> Void
     let onResetOrder: () -> Void
     let onOpenPanel: () -> Void
-
-    @State private var searchText = ""
-    @State private var selectedFilter: PluginCategoryFilter = .all
+    let configurationPluginIDs: Set<String>
+    let onOpenSettings: (String) -> Void
+    let onEnablementChange: (String, Bool) -> Void
 
     var body: some View {
         ScrollView {
@@ -752,7 +774,7 @@ private struct SurfaceLayoutSettingsView: View {
                     ), action: onResetOrder)
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .disabled(items.count < 2)
+                        .disabled(enabledItems.count < 2)
 
                     Button(action: onOpenPanel) {
                         Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
@@ -761,66 +783,60 @@ private struct SurfaceLayoutSettingsView: View {
                     .controlSize(.small)
                 }
 
-                if !items.isEmpty {
-                    PluginFilterBarView(
-                        searchText: $searchText,
-                        selectedFilter: $selectedFilter,
-                        countsByFilter: countsByFilter,
-                        searchPrompt: AppL10n.settings(
-                            "plugins.layout.searchPrompt",
-                            defaultValue: "搜索插件"
-                        )
-                    )
-                }
-
                 SettingsCardContainer {
-                    if items.isEmpty {
+                    if enabledItems.isEmpty {
                         ContentUnavailableView(
                             emptyTitle,
                             systemImage: systemImage,
                             description: Text(emptyDescription)
                         )
                         .frame(maxWidth: .infinity, minHeight: 180)
-                    } else if filteredItems.isEmpty {
-                        ContentUnavailableView(
-                            AppL10n.settings("plugins.filter.empty.title", defaultValue: "未找到匹配的插件"),
-                            systemImage: "magnifyingglass",
-                            description: Text(AppL10n.settings(
-                                "plugins.filter.empty.description",
-                                defaultValue: "尝试调整关键字或切换分类。"
-                            ))
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 180)
                     } else {
                         FeatureManagementTableView(
-                            items: filteredItems.map(FeatureManagementTableItem.init(surfaceItem:)),
+                            items: enabledItems.map {
+                                FeatureManagementTableItem(
+                                    surfaceItem: $0,
+                                    hasSettings: configurationPluginIDs.contains($0.id)
+                                )
+                            },
                             mode: .surface(surface),
-                            isReorderEnabled: !isFiltering,
-                            onToggleChange: onVisibilityChange,
-                            onMove: onMove
+                            onToggleChange: onEnablementChange,
+                            onMove: onMove,
+                            onOpenSettings: onOpenSettings
                         )
-                        .frame(height: FeatureManagementTableView.preferredHeight(for: filteredItems.count))
+                        .frame(height: FeatureManagementTableView.preferredHeight(for: enabledItems.count))
                     }
                 }
 
-                if isFiltering && !filteredItems.isEmpty {
-                    Text(AppL10n.settings(
-                        "plugins.layout.filteringReorderHint",
-                        defaultValue: "筛选中暂时不能拖拽排序，清除筛选条件后即可重新排序。"
-                    ))
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
-                }
+                if !disabledItems.isEmpty {
+                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                        Label(
+                            AppL10n.settingsFormat(
+                                "plugins.layout.disabledSectionFormat",
+                                defaultValue: "已停用插件（%d）",
+                                disabledItems.count
+                            ),
+                            systemImage: "pause.circle"
+                        )
+                        .font(PluginSettingsTheme.Typography.sectionTitle)
+                        .foregroundStyle(.secondary)
 
-                if items.contains(where: { !$0.isGloballyEnabled }) {
-                    Text(AppL10n.settings(
-                        "plugins.layout.disabledHint",
-                        defaultValue: "已停用插件的显示开关不可更改；请前往「已安装」重新启用。"
-                    ))
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
+                        SettingsCardContainer {
+                            FeatureManagementTableView(
+                                items: disabledItems.map {
+                                    FeatureManagementTableItem(
+                                        surfaceItem: $0,
+                                        hasSettings: configurationPluginIDs.contains($0.id)
+                                    )
+                                },
+                                mode: .surface(surface),
+                                isReorderEnabled: false,
+                                onToggleChange: onEnablementChange,
+                                onOpenSettings: onOpenSettings
+                            )
+                            .frame(height: FeatureManagementTableView.preferredHeight(for: disabledItems.count))
+                        }
+                    }
                 }
             }
             .padding(PluginSettingsTheme.Spacing.pagePadding)
@@ -829,18 +845,12 @@ private struct SurfaceLayoutSettingsView: View {
         .background(SettingsStyle.contentBackground)
     }
 
-    private var filteredItems: [PluginSurfaceLayoutItem] {
-        items.filter {
-            PluginListFilter.matches(surfaceItem: $0, query: searchText, filter: selectedFilter)
-        }
+    private var enabledItems: [PluginSurfaceLayoutItem] {
+        PluginSurfaceLayoutDisplayPolicy.enabledItems(from: items)
     }
 
-    private var countsByFilter: [PluginCategoryFilter: Int] {
-        PluginListFilter.countsByFilter(surfaceItems: items, query: searchText)
-    }
-
-    private var isFiltering: Bool {
-        !PluginListFilter.normalized(searchText).isEmpty || selectedFilter != .all
+    private var disabledItems: [PluginSurfaceLayoutItem] {
+        PluginSurfaceLayoutDisplayPolicy.disabledItems(from: items)
     }
 }
 
@@ -867,7 +877,7 @@ private struct PluginConfigurationDetailPane: View {
             if let item {
                 if item.prefersFullHeight {
                     VStack(alignment: .leading, spacing: 0) {
-                        PluginConfigurationHeader(item: item)
+                        PluginConfigurationHeader(pluginHost: pluginHost, item: item)
                             .padding(PluginSettingsTheme.Spacing.pagePadding)
 
                         if item.hasCustomConfiguration {
@@ -881,7 +891,7 @@ private struct PluginConfigurationDetailPane: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
-                            PluginConfigurationHeader(item: item)
+                            PluginConfigurationHeader(pluginHost: pluginHost, item: item)
 
                             if !item.settingsCards.isEmpty {
                                 PluginSettingsCardSection(
@@ -927,16 +937,38 @@ private struct PluginConfigurationDetailPane: View {
 }
 
 private struct PluginConfigurationHeader: View {
+    @ObservedObject var pluginHost: PluginHost
     let item: PluginConfigurationItem
 
     var body: some View {
-        SettingsPageHeader(
-            title: item.title,
-            description: item.description,
-            systemImage: item.iconName,
-            iconTint: item.iconTint
-        )
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            SettingsPageHeader(
+                title: item.title,
+                description: item.description,
+                systemImage: item.iconName,
+                iconTint: item.iconTint
+            )
+
+            Toggle(
+                AppL10n.settings("plugins.configuration.enabled", defaultValue: "已启用"),
+                isOn: enabledBinding
+            )
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .help(AppL10n.settings(
+                "plugins.configuration.enabled",
+                defaultValue: "已启用"
+            ))
+        }
         .padding(.bottom, 2)
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding {
+            pluginHost.installedPluginItems.first { $0.id == item.pluginID }?.isGloballyEnabled ?? true
+        } set: { isEnabled in
+            pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: item.pluginID)
+        }
     }
 }
 

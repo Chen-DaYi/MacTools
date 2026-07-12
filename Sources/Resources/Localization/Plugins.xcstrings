@@ -1,6 +1,14 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "plugin.management.actions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Plugin Actions" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件操作" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛操作" } }
+      }
+    },
     "plugin.management.active": {
       "extractionState": "manual",
       "localizations": {
@@ -65,6 +73,14 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "在儀表板中顯示" } }
       }
     },
+    "plugin.management.disable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disable Plugin" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "停用插件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "停用外掛" } }
+      }
+    },
     "plugin.management.disabled": {
       "extractionState": "manual",
       "localizations": {
@@ -87,6 +103,22 @@
         "en": { "stringUnit": { "state": "translated", "value": "Enable or disable plugin" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用或停用插件" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "啟用或停用外掛" } }
+      }
+    },
+    "plugin.management.openSettings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open Plugin Settings" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开插件设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開外掛設定" } }
+      }
+    },
+    "plugin.management.openSettingsForPlugin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open %@ Settings" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开%@设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開%@設定" } }
       }
     },
     "plugin.autoUpdate.detail.checking": {

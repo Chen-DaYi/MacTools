@@ -590,41 +590,37 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["second", "first"])
     }
 
-    func testSurfaceOrderKeepsHiddenAndGloballyDisabledPluginsInLayout() {
+    func testSurfaceOrderKeepsGloballyDisabledPluginsInLayout() {
         let first = MockCombinedPlugin(id: "first", order: 1)
         let second = MockCombinedPlugin(id: "second", order: 2)
         let third = MockCombinedPlugin(id: "third", order: 3)
         let host = makeHost(plugins: [first, second, third])
 
-        host.setPluginVisibility(false, for: "second", on: .dashboard)
         host.setPluginGloballyEnabled(false, pluginID: "third")
         host.movePlugin(id: "third", toOffset: 0, on: .dashboard)
 
         XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["third", "first", "second"])
-        XCTAssertEqual(host.componentItems.map(\.id), ["first"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["first", "second"])
         XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["first", "second", "third"])
         XCTAssertEqual(host.panelItems.map(\.id), ["first", "second"])
 
         host.setPluginGloballyEnabled(true, pluginID: "third")
 
-        XCTAssertEqual(host.componentItems.map(\.id), ["third", "first"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["third", "first", "second"])
         XCTAssertEqual(host.panelItems.map(\.id), ["first", "second", "third"])
     }
 
-    func testResettingDashboardOrderPreservesFeaturePanelOrderAndVisibility() {
+    func testResettingDashboardOrderPreservesFeaturePanelOrder() {
         let first = MockCombinedPlugin(id: "first", order: 1)
         let second = MockCombinedPlugin(id: "second", order: 2)
         let host = makeHost(plugins: [first, second])
         host.movePlugin(id: "second", toOffset: 0, on: .dashboard)
         host.movePlugin(id: "second", toOffset: 0, on: .featurePanel)
-        host.setPluginVisibility(false, for: "first", on: .dashboard)
-
         host.resetPluginOrder(on: .dashboard)
 
         XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["first", "second"])
         XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["second", "first"])
-        XCTAssertFalse(host.dashboardLayoutItems[0].isVisible)
-        XCTAssertEqual(host.componentItems.map(\.id), ["second"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["first", "second"])
         XCTAssertEqual(host.panelItems.map(\.id), ["second", "first"])
     }
 
@@ -642,26 +638,17 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertTrue(host.featurePanelLayoutItems.isEmpty)
     }
 
-    func testHidingDualPluginOnOneSurfaceLeavesTheOtherSurfaceVisible() {
+    func testEnabledDualPluginAppearsOnBothSupportedSurfaces() {
         let plugin = MockCombinedPlugin(id: "dual")
         let host = makeHost(plugins: [plugin])
-
-        host.setPluginVisibility(false, for: "dual", on: .dashboard)
-
-        XCTAssertTrue(host.componentItems.isEmpty)
-        XCTAssertEqual(host.panelItems.map(\.id), ["dual"])
-
-        host.setPluginVisibility(true, for: "dual", on: .dashboard)
-        host.setPluginVisibility(false, for: "dual", on: .featurePanel)
 
         XCTAssertEqual(host.componentItems.map(\.id), ["dual"])
-        XCTAssertTrue(host.panelItems.isEmpty)
+        XCTAssertEqual(host.panelItems.map(\.id), ["dual"])
     }
 
-    func testGlobalDisableRemovesBothSurfacesAndReenableRestoresSurfaceChoices() {
+    func testGlobalDisableRemovesBothSurfacesAndReenableRestoresPlugin() {
         let plugin = MockCombinedPlugin(id: "dual")
         let host = makeHost(plugins: [plugin])
-        host.setPluginVisibility(false, for: "dual", on: .dashboard)
 
         host.setPluginGloballyEnabled(false, pluginID: "dual")
 
@@ -671,10 +658,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         host.setPluginGloballyEnabled(true, pluginID: "dual")
 
-        XCTAssertTrue(host.componentItems.isEmpty)
+        XCTAssertEqual(host.componentItems.map(\.id), ["dual"])
         XCTAssertEqual(host.panelItems.map(\.id), ["dual"])
-        XCTAssertFalse(host.dashboardLayoutItems[0].isVisible)
-        XCTAssertTrue(host.featurePanelLayoutItems[0].isVisible)
     }
 
     func testGlobalDisableRemovesPluginFromHostActiveState() {
@@ -686,28 +671,6 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         XCTAssertFalse(host.hasActivePlugin)
         XCTAssertFalse(host.installedPluginItems[0].isActive)
-    }
-
-    func testSurfaceHideNotifiesOnlyVisibleSurfaceAndDashboardHideTrimsCache() {
-        let plugin = MockCombinedPlugin(id: "dual")
-        let host = makeHost(plugins: [plugin])
-        _ = host.componentViewItem(for: "dual", dismiss: {})
-        host.setPanelSurface(.component, visible: true)
-        host.setPanelSurface(.primary, visible: true)
-
-        host.setPluginVisibility(false, for: "dual", on: .featurePanel)
-
-        XCTAssertTrue(host.isComponentViewCached(for: "dual"))
-        XCTAssertEqual(plugin.surfaceEvents, [
-            .visible(.component),
-            .visible(.primary),
-            .hidden(.primary)
-        ])
-
-        host.setPluginVisibility(false, for: "dual", on: .dashboard)
-
-        XCTAssertFalse(host.isComponentViewCached(for: "dual"))
-        XCTAssertEqual(plugin.surfaceEvents.last, .hidden(.component))
     }
 
     func testDynamicPluginManagerCanRemoveEnabledPluginFromDerivedState() {
@@ -790,8 +753,6 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
         let host = makeHost(plugins: [], dynamicPluginManager: manager)
         host.movePlugin(id: "second", toOffset: 0, on: .dashboard)
-        host.setPluginVisibility(false, for: "second", on: .dashboard)
-
         try? FileManager.default.removeItem(at: secondRecord.packageURL)
         manager.reloadInstalledPlugins()
 
@@ -806,8 +767,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         manager.reloadInstalledPlugins()
 
         XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["second", "first"])
-        XCTAssertFalse(host.dashboardLayoutItems[0].isVisible)
-        XCTAssertEqual(host.componentItems.map(\.id), ["first"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["second", "first"])
         XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["first", "second"])
     }
 

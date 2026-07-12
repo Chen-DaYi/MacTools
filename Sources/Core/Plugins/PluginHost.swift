@@ -1312,8 +1312,7 @@ final class PluginHost: ObservableObject {
 
             guard
                 state.isVisible,
-                pluginDisplayPreferencesStore.isPluginGloballyEnabled(metadata.id),
-                pluginDisplayPreferencesStore.isVisible(metadata.id, on: .featurePanel)
+                pluginDisplayPreferencesStore.isPluginGloballyEnabled(metadata.id)
             else {
                 return nil
             }
@@ -1360,8 +1359,7 @@ final class PluginHost: ObservableObject {
 
             guard
                 state.isVisible,
-                pluginDisplayPreferencesStore.isPluginGloballyEnabled(metadata.id),
-                pluginDisplayPreferencesStore.isVisible(metadata.id, on: .dashboard)
+                pluginDisplayPreferencesStore.isPluginGloballyEnabled(metadata.id)
             else {
                 return nil
             }
@@ -1818,7 +1816,8 @@ final class PluginHost: ObservableObject {
                 permissionCards: matchingPermissionCards,
                 shortcutItems: matchingShortcutItems,
                 hasCustomConfiguration: !configurations.isEmpty,
-                prefersFullHeight: configurations.first?.prefersFullHeight ?? false
+                prefersFullHeight: configurations.first?.prefersFullHeight ?? false,
+                isGloballyEnabled: pluginDisplayPreferencesStore.isPluginGloballyEnabled(pluginID)
             )
         }
     }

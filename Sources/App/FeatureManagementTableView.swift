@@ -14,6 +14,26 @@ enum FeatureManagementTableMode: Equatable {
     }
 }
 
+enum PluginSurfaceLayoutDisplayPolicy {
+    static func enabledItems(
+        from items: [PluginSurfaceLayoutItem]
+    ) -> [PluginSurfaceLayoutItem] {
+        items.filter(\.isGloballyEnabled)
+    }
+
+    static func disabledItemCount(
+        in items: [PluginSurfaceLayoutItem]
+    ) -> Int {
+        disabledItems(from: items).count
+    }
+
+    static func disabledItems(
+        from items: [PluginSurfaceLayoutItem]
+    ) -> [PluginSurfaceLayoutItem] {
+        items.filter { !$0.isGloballyEnabled }
+    }
+}
+
 enum FeatureManagementReorderPolicy {
     static func canReorder(
         mode: FeatureManagementTableMode,
@@ -51,6 +71,7 @@ struct FeatureManagementTableItem: Identifiable {
     let isVisible: Bool
     let isVisibleOnOtherSurface: Bool
     let isActive: Bool
+    let hasSettings: Bool
     let category: String?
     let releaseChannel: String?
 
@@ -65,11 +86,12 @@ struct FeatureManagementTableItem: Identifiable {
         isVisible = item.isGloballyEnabled
         isVisibleOnOtherSurface = false
         isActive = item.isActive
+        hasSettings = false
         category = item.category
         releaseChannel = item.releaseChannel
     }
 
-    init(surfaceItem item: PluginSurfaceLayoutItem) {
+    init(surfaceItem item: PluginSurfaceLayoutItem, hasSettings: Bool = false) {
         id = item.id
         title = item.title
         description = item.description
@@ -80,6 +102,7 @@ struct FeatureManagementTableItem: Identifiable {
         isVisible = item.isVisible
         isVisibleOnOtherSurface = item.isVisibleOnOtherSurface
         isActive = item.isActive
+        self.hasSettings = hasSettings
         category = item.category
         releaseChannel = item.releaseChannel
     }
@@ -96,6 +119,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
     var isReorderEnabled: Bool = true
     let onToggleChange: (String, Bool) -> Void
     var onMove: (String, Int) -> Void = { _, _ in }
+    var onOpenSettings: (String) -> Void = { _ in }
 
     static func preferredHeight(for itemCount: Int) -> CGFloat {
         let visibleItemCount = max(itemCount, 1)
@@ -226,8 +250,11 @@ struct FeatureManagementTableView: NSViewRepresentable {
                 item: item,
                 mode: parent.mode,
                 showsHandle: parent.mode.supportsReordering && parent.isReorderEnabled,
-                onVisibilityChange: { [weak self] isVisible in
-                    self?.parent.onToggleChange(item.id, isVisible)
+                onStateChange: { [weak self] value in
+                    self?.parent.onToggleChange(item.id, value)
+                },
+                onOpenSettings: { [weak self] in
+                    self?.parent.onOpenSettings(item.id)
                 }
             )
             return view
@@ -510,10 +537,13 @@ private enum FeatureManagementDragPreview {
             .fill()
         }
 
-        drawVisibilityCheckbox(
-            isOn: item.isVisible,
-            in: NSRect(x: imageSize.width - 50, y: 24, width: 14, height: 14)
-        )
+        switch mode {
+        case .installed, .surface:
+            drawEnablementCheckbox(
+                isOn: item.isGloballyEnabled,
+                in: NSRect(x: imageSize.width - 50, y: 24, width: 14, height: 14)
+            )
+        }
         drawSymbol(
             "line.3.horizontal",
             in: NSRect(x: imageSize.width - 20, y: 23, width: 13, height: 13),
@@ -562,7 +592,7 @@ private enum FeatureManagementDragPreview {
         tintedSymbol.draw(in: rect)
     }
 
-    private static func drawVisibilityCheckbox(isOn: Bool, in rect: NSRect) {
+    private static func drawEnablementCheckbox(isOn: Bool, in rect: NSRect) {
         let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
 
         if isOn {
@@ -597,6 +627,45 @@ private enum FeatureManagementDragPreview {
     }
 }
 
+private final class FeatureManagementIconActionButton: NSButton {
+    var onHoverChanged: ((Bool) -> Void)?
+    private var trackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        onHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onHoverChanged?(false)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard !isHidden, isEnabled else {
+            return
+        }
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+}
+
 private final class FeatureManagementTableCellView: NSTableCellView {
     private let containerView = NSView()
     private let iconBackgroundView = NSView()
@@ -606,9 +675,14 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private let releaseChannelBadgeView = NSHostingView(rootView: PluginReleaseChannelBadge(releaseChannel: nil))
     private let descriptionLabel = NSTextField(labelWithString: "")
     private let activeDotView = NSView()
-    private let visibilityButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let iconActionButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
+    private let trailingControlView = NSView()
+    private let enablementButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let handleImageView = NSImageView()
-    private var visibilityHandler: ((Bool) -> Void)?
+    private var stateChangeHandler: ((Bool) -> Void)?
+    private var openSettingsHandler: (() -> Void)?
+    private var hasSettings = false
+    private var iconTintColor = NSColor.controlAccentColor
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -626,9 +700,12 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         item: FeatureManagementTableItem,
         mode: FeatureManagementTableMode,
         showsHandle: Bool,
-        onVisibilityChange: @escaping (Bool) -> Void
+        onStateChange: @escaping (Bool) -> Void,
+        onOpenSettings: @escaping () -> Void
     ) {
-        visibilityHandler = onVisibilityChange
+        stateChangeHandler = onStateChange
+        openSettingsHandler = onOpenSettings
+        hasSettings = item.hasSettings
 
         titleLabel.stringValue = item.title
         configureReleaseChannelBadge(item.releaseChannel)
@@ -637,17 +714,27 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             systemSymbolName: item.iconName,
             accessibilityDescription: item.title
         )
-        iconImageView.contentTintColor = NSColor(item.iconTint)
-        iconBackgroundView.layer?.backgroundColor = NSColor(item.iconTint.opacity(0.14)).cgColor
+        iconTintColor = NSColor(item.iconTint)
+        iconImageView.contentTintColor = iconTintColor
+        setIconActionHovered(false)
         activeDotView.isHidden = !item.isActive || !item.isGloballyEnabled
-        visibilityButton.state = item.isVisible ? .on : .off
-        visibilityButton.isEnabled = mode == .installed || item.isGloballyEnabled
+        configureTrailingControl(item: item, mode: mode)
         handleImageView.isHidden = !showsHandle
-        containerView.alphaValue = mode == .installed || item.isGloballyEnabled ? 1 : 0.62
+        containerView.alphaValue = 1
         toolTip = item.title
-        visibilityButton.toolTip = featureManagementToggleHelp(for: mode)
-        visibilityButton.setAccessibilityLabel(featureManagementToggleHelp(for: mode))
-        visibilityButton.setAccessibilityHelp(item.title)
+        let controlHelp = featureManagementControlHelp(for: mode)
+        enablementButton.toolTip = controlHelp
+        enablementButton.setAccessibilityLabel(controlHelp)
+        enablementButton.setAccessibilityHelp(item.title)
+        iconActionButton.toolTip = hasSettings
+            ? AppL10n.pluginsFormat(
+                "plugin.management.openSettingsForPlugin",
+                defaultValue: "打开%@设置",
+                item.title
+            )
+            : nil
+        iconActionButton.setAccessibilityLabel(iconActionButton.toolTip ?? item.title)
+        iconActionButton.setAccessibilityHelp(iconActionButton.toolTip ?? "")
     }
 
     private func buildViewHierarchy() {
@@ -659,12 +746,14 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         addSubview(containerView)
         containerView.addSubview(iconBackgroundView)
         iconBackgroundView.addSubview(iconImageView)
+        iconBackgroundView.addSubview(iconActionButton)
         containerView.addSubview(titleRowStackView)
         titleRowStackView.addArrangedSubview(titleLabel)
         titleRowStackView.addArrangedSubview(releaseChannelBadgeView)
         containerView.addSubview(descriptionLabel)
         containerView.addSubview(activeDotView)
-        containerView.addSubview(visibilityButton)
+        containerView.addSubview(trailingControlView)
+        trailingControlView.addSubview(enablementButton)
         containerView.addSubview(handleImageView)
     }
 
@@ -696,10 +785,17 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         activeDotView.layer?.cornerRadius = 4
         activeDotView.layer?.backgroundColor = NSColor.systemGreen.cgColor
 
-        visibilityButton.setButtonType(.switch)
-        visibilityButton.title = ""
-        visibilityButton.target = self
-        visibilityButton.action = #selector(handleVisibilityToggle(_:))
+        enablementButton.setButtonType(.switch)
+        enablementButton.title = ""
+        enablementButton.target = self
+        enablementButton.action = #selector(handleEnablementToggle(_:))
+
+        iconActionButton.isBordered = false
+        iconActionButton.target = self
+        iconActionButton.action = #selector(handleOpenSettings(_:))
+        iconActionButton.onHoverChanged = { [weak self] isHovered in
+            self?.setIconActionHovered(isHovered)
+        }
 
         handleImageView.image = NSImage(
             systemSymbolName: "line.3.horizontal",
@@ -717,10 +813,12 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             containerView,
             iconBackgroundView,
             iconImageView,
+            iconActionButton,
             titleRowStackView,
             descriptionLabel,
             activeDotView,
-            visibilityButton,
+            trailingControlView,
+            enablementButton,
             handleImageView
         ].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -740,21 +838,31 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             iconImageView.centerXAnchor.constraint(equalTo: iconBackgroundView.centerXAnchor),
             iconImageView.centerYAnchor.constraint(equalTo: iconBackgroundView.centerYAnchor),
 
+            iconActionButton.leadingAnchor.constraint(equalTo: iconBackgroundView.leadingAnchor),
+            iconActionButton.trailingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor),
+            iconActionButton.topAnchor.constraint(equalTo: iconBackgroundView.topAnchor),
+            iconActionButton.bottomAnchor.constraint(equalTo: iconBackgroundView.bottomAnchor),
+
             titleRowStackView.leadingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor, constant: 12),
             titleRowStackView.trailingAnchor.constraint(lessThanOrEqualTo: activeDotView.leadingAnchor, constant: -10),
             titleRowStackView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
 
             descriptionLabel.leadingAnchor.constraint(equalTo: titleRowStackView.leadingAnchor),
-            descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: visibilityButton.leadingAnchor, constant: -12),
+            descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingControlView.leadingAnchor, constant: -12),
             descriptionLabel.topAnchor.constraint(equalTo: titleRowStackView.bottomAnchor, constant: 4),
 
             activeDotView.widthAnchor.constraint(equalToConstant: 8),
             activeDotView.heightAnchor.constraint(equalToConstant: 8),
             activeDotView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            activeDotView.trailingAnchor.constraint(equalTo: visibilityButton.leadingAnchor, constant: -14),
+            activeDotView.trailingAnchor.constraint(equalTo: trailingControlView.leadingAnchor, constant: -14),
 
-            visibilityButton.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            visibilityButton.trailingAnchor.constraint(equalTo: handleImageView.leadingAnchor, constant: -12),
+            trailingControlView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+            trailingControlView.trailingAnchor.constraint(equalTo: handleImageView.leadingAnchor, constant: -12),
+            trailingControlView.widthAnchor.constraint(equalToConstant: 22),
+            trailingControlView.heightAnchor.constraint(equalToConstant: 22),
+
+            enablementButton.centerXAnchor.constraint(equalTo: trailingControlView.centerXAnchor),
+            enablementButton.centerYAnchor.constraint(equalTo: trailingControlView.centerYAnchor),
 
             handleImageView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
             handleImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
@@ -763,9 +871,50 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         ])
     }
 
+    private func configureTrailingControl(
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode
+    ) {
+        switch mode {
+        case .installed:
+            enablementButton.isHidden = false
+            enablementButton.state = item.isGloballyEnabled ? .on : .off
+            iconActionButton.isHidden = true
+        case .surface:
+            enablementButton.isHidden = false
+            enablementButton.state = item.isGloballyEnabled ? .on : .off
+            iconActionButton.isHidden = !hasSettings
+        }
+        window?.invalidateCursorRects(for: iconActionButton)
+    }
+
     @objc
-    private func handleVisibilityToggle(_ sender: NSButton) {
-        visibilityHandler?(sender.state == .on)
+    private func handleEnablementToggle(_ sender: NSButton) {
+        stateChangeHandler?(sender.state == .on)
+    }
+
+    @objc
+    private func handleOpenSettings(_ sender: NSButton) {
+        openSettingsHandler?()
+    }
+
+    private func setIconActionHovered(_ isHovered: Bool) {
+        guard hasSettings else {
+            iconBackgroundView.layer?.setAffineTransform(.identity)
+            iconBackgroundView.layer?.backgroundColor = iconTintColor.withAlphaComponent(0.14).cgColor
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.allowsImplicitAnimation = true
+            iconBackgroundView.layer?.setAffineTransform(
+                isHovered ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
+            )
+            iconBackgroundView.layer?.backgroundColor = iconTintColor
+                .withAlphaComponent(isHovered ? 0.22 : 0.14)
+                .cgColor
+        }
     }
 
     private func configureReleaseChannelBadge(_ rawValue: String?) {
@@ -783,23 +932,8 @@ func featureManagementDescription(
     switch mode {
     case .installed:
         details.append(pluginCapabilitySummary(item.capabilities))
-    case let .surface(surface):
-        if !item.isGloballyEnabled {
-            details.append(AppL10n.plugins("plugin.management.disabled", defaultValue: "插件已停用"))
-        } else if item.isVisibleOnOtherSurface {
-            switch surface {
-            case .dashboard:
-                details.append(AppL10n.plugins(
-                    "plugin.management.alsoInFeaturePanel",
-                    defaultValue: "同时显示在功能面板"
-                ))
-            case .featurePanel:
-                details.append(AppL10n.plugins(
-                    "plugin.management.alsoOnDashboard",
-                    defaultValue: "同时显示在仪表盘"
-                ))
-            }
-        }
+    case .surface:
+        break
     }
 
     if item.isGloballyEnabled, item.isActive {
@@ -822,14 +956,12 @@ func pluginCapabilitySummary(_ capabilities: PluginHostCapabilities) -> String {
     }
 }
 
-func featureManagementToggleHelp(for mode: FeatureManagementTableMode) -> String {
+func featureManagementControlHelp(for mode: FeatureManagementTableMode) -> String {
     switch mode {
     case .installed:
         return AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
-    case .surface(.dashboard):
-        return AppL10n.plugins("plugin.management.dashboardToggle", defaultValue: "在仪表盘中显示")
-    case .surface(.featurePanel):
-        return AppL10n.plugins("plugin.management.featurePanelToggle", defaultValue: "在功能面板中显示")
+    case .surface:
+        return AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
     }
 }
 

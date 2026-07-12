@@ -1,28 +1,36 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "plugins.configuration.enabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enabled" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已启用" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已啟用" } }
+      }
+    },
     "plugins.dashboard.description": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Choose which components appear on the Dashboard and drag to reorder them." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择仪表盘中显示的组件，并拖拽调整排列顺序。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇儀表板中顯示的組件，並拖曳調整排列順序。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Drag to reorder enabled Dashboard components. Re-enable disabled plugins below." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "拖拽调整已启用仪表盘组件的排列顺序；可在下方重新启用已停用插件。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "拖曳調整已啟用儀表板組件的排列順序；可在下方重新啟用已停用外掛。" } }
       }
     },
     "plugins.dashboard.empty.description": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Plugins that support the Dashboard will appear here." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "支持仪表盘的插件会显示在这里。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "支援儀表板的外掛會顯示在這裡。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Enabled plugins that support the Dashboard will appear here." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已启用且支持仪表盘的插件会显示在这里。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已啟用且支援儀表板的外掛會顯示在這裡。" } }
       }
     },
     "plugins.dashboard.empty.title": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "No Dashboard Components" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无仪表盘组件" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "暫無儀表板組件" } }
+        "en": { "stringUnit": { "state": "translated", "value": "No Enabled Dashboard Components" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无已启用仪表盘组件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "暫無已啟用儀表板組件" } }
       }
     },
     "plugins.dashboard.open": {
@@ -44,25 +52,25 @@
     "plugins.featurePanel.description": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Choose which actions appear in the Feature Panel and drag to reorder them." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择功能面板中显示的操作，并拖拽调整排列顺序。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇功能面板中顯示的操作，並拖曳調整排列順序。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Drag to reorder enabled Feature Panel actions. Re-enable disabled plugins below." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "拖拽调整已启用功能面板操作的排列顺序；可在下方重新启用已停用插件。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "拖曳調整已啟用功能面板操作的排列順序；可在下方重新啟用已停用外掛。" } }
       }
     },
     "plugins.featurePanel.empty.description": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Plugins that support the Feature Panel will appear here." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "支持功能面板的插件会显示在这里。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "支援功能面板的外掛會顯示在這裡。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Enabled plugins that support the Feature Panel will appear here." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已启用且支持功能面板的插件会显示在这里。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已啟用且支援功能面板的外掛會顯示在這裡。" } }
       }
     },
     "plugins.featurePanel.empty.title": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "No Feature Panel Actions" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无功能面板操作" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "暫無功能面板操作" } }
+        "en": { "stringUnit": { "state": "translated", "value": "No Enabled Feature Panel Actions" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无已启用功能面板操作" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "暫無已啟用功能面板操作" } }
       }
     },
     "plugins.featurePanel.open": {
@@ -84,17 +92,25 @@
     "plugins.installed.globalDescription": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Enable or disable plugins and see which menu bar surfaces each plugin supports." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用或停用插件，并查看每个插件支持的菜单栏位置。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "啟用或停用外掛，並查看每個外掛支援的選單列位置。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Enable or disable plugins here. Dashboard and Feature Panel only manage placement and order." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在此启用或停用插件；仪表盘和功能面板仅管理显示位置与顺序。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在此啟用或停用外掛；儀表板和功能面板僅管理顯示位置與順序。" } }
       }
     },
-    "plugins.layout.disabledHint": {
+    "plugins.layout.disabledSummaryFormat": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Visibility cannot be changed for disabled plugins. Re-enable them in Installed." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已停用插件的显示开关不可更改；请前往「已安装」重新启用。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已停用外掛的顯示開關無法更改；請前往「已安裝」重新啟用。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "%d disabled plugin(s) are excluded from this layout." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%d 个已停用插件未显示在此布局中。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%d 個已停用外掛未顯示在此佈局中。" } }
+      }
+    },
+    "plugins.layout.disabledSectionFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disabled Plugins (%d)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已停用插件（%d）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已停用外掛（%d）" } }
       }
     },
     "plugins.layout.filteringReorderHint": {
@@ -103,6 +119,14 @@
         "en": { "stringUnit": { "state": "translated", "value": "Reordering is unavailable while filtering. Clear the filters to reorder again." } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "筛选中暂时不能拖拽排序，清除筛选条件后即可重新排序。" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "篩選中暫時不能拖曳排序，清除篩選條件後即可重新排序。" } }
+      }
+    },
+    "plugins.layout.manageInstalled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Manage Installed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "管理已安装插件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "管理已安裝外掛" } }
       }
     },
     "plugins.layout.restoreDefaultOrder": {

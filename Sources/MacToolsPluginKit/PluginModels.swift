@@ -904,6 +904,7 @@ public struct PluginConfigurationItem: Identifiable {
     public let shortcutItems: [ShortcutSettingsItem]
     public let hasCustomConfiguration: Bool
     public let prefersFullHeight: Bool
+    public let isGloballyEnabled: Bool
 
     public init(
         id: String,
@@ -916,7 +917,8 @@ public struct PluginConfigurationItem: Identifiable {
         permissionCards: [PluginPermissionCard],
         shortcutItems: [ShortcutSettingsItem],
         hasCustomConfiguration: Bool,
-        prefersFullHeight: Bool = false
+        prefersFullHeight: Bool = false,
+        isGloballyEnabled: Bool = true
     ) {
         self.id = id
         self.pluginID = pluginID
@@ -929,6 +931,7 @@ public struct PluginConfigurationItem: Identifiable {
         self.shortcutItems = shortcutItems
         self.hasCustomConfiguration = hasCustomConfiguration
         self.prefersFullHeight = prefersFullHeight
+        self.isGloballyEnabled = isGloballyEnabled
     }
 }
 
