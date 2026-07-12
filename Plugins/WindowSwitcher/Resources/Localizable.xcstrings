@@ -4,6 +4,48 @@
     "metadata.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تبديل النافذة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fensterumschalter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiador de ventana"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélecteur de fenêtre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "윈도우 스위처"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alternador de janela"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переключатель окон"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -33,6 +75,48 @@
     "metadata.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "التبديل بسرعة بين النوافذ قيد التشغيل."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wechseln Sie schnell zwischen laufenden Fenstern."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambie rápidamente entre ventanas en ejecución."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Basculez rapidement entre les fenêtres en cours d’exécution."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행 중인 창 사이를 빠르게 전환합니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alterne rapidamente entre janelas em execução."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Быстрое переключение между запущенными окнами."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -62,6 +146,48 @@
     "permission.accessibility.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إمكانية الوصول"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barrierefreiheit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accesibilidad"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibilité"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "접근성"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acessibilidade"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступность"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -91,6 +217,48 @@
     "permission.accessibility.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يستخدم اختصار التبديل لتبديل النوافذ في التطبيقات الأخرى."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwendet die Umschaltverknüpfung, um Fenster in anderen Apps zu wechseln."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliza el atajo de cambio para cambiar de ventana en otras aplicaciones."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilise le raccourci de changement pour changer de fenêtre dans d'autres applications."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전환 단축키를 사용하여 다른 앱의 창을 전환합니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa o atalho de alternância para alternar janelas em outros aplicativos."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Использует ярлык переключения для переключения окон в других приложениях."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -120,6 +288,48 @@
     "permission.accessibility.footnote": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "في إعدادات النظام ← الخصوصية والأمان ← إمكانية الوصول، اسمح بـ MacTools."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlauben Sie unter Systemeinstellungen → Datenschutz und Sicherheit → Barrierefreiheit MacTools."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En Configuración del sistema → Privacidad y seguridad → Accesibilidad, permita MacTools."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans Paramètres système → Confidentialité et sécurité → Accessibilité, autorisez MacTools."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시스템 설정 → 개인정보 보호 및 보안 → 접근성에서 MacTools를 허용하세요."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Em Configurações do sistema → Privacidade e segurança → Acessibilidade, permita MacTools."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В «Системных настройках» → «Конфиденциальность и безопасность» → «Доступность» разрешите MacTools."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -149,6 +359,48 @@
     "shortcut.switcher.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تبديل النافذة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fensterwechsel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambio de ventana"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changement de fenêtre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "창 전환"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Troca de janela"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переключение окон"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -178,6 +430,48 @@
     "shortcut.switcher.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إظهار أو التبديل بين النوافذ قيد التشغيل."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigen Sie laufende Fenster an oder wechseln Sie zwischen ihnen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muestra o cambia entre ventanas en ejecución."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher ou basculer entre les fenêtres en cours d'exécution."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행 중인 창을 표시하거나 전환합니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostre ou alterne entre janelas em execução."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показ или переключение между запущенными окнами."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -207,6 +501,48 @@
     "shortcut.group.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تبديل النافذة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fensterwechsel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambio de ventana"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changement de fenêtre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "창 전환"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Troca de janela"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переключение окон"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -236,6 +572,48 @@
     "shortcut.group.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "قم بتغيير الاختصار المستخدم لفتح Window Switcher."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändern Sie die Verknüpfung zum Öffnen von Window Switcher."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambie el acceso directo utilizado para abrir Window Switcher."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifiez le raccourci utilisé pour ouvrir Window Switcher."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Window Switcher를 여는 데 사용되는 바로가기를 변경합니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altere o atalho usado para abrir o Window Switcher."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Измените ярлык, используемый для открытия переключателя окон."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -265,6 +643,48 @@
     "shortcut.control.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تبديل الاختصار"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verknüpfung wechseln"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambio de atajo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raccourci de commutation"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전환 바로가기"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atalho de troca"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переключение ярлыка"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -294,6 +714,48 @@
     "settings.status.sectionTitle": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الحالة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statut"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상태"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estado"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статус"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -323,6 +785,48 @@
     "settings.status.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تمكين تبديل النوافذ"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktivieren Sie die Fensterumschaltung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Habilitar cambio de ventana"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer le changement de fenêtre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "창 전환 활성화"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Habilitar troca de janela"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить переключение окон"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -352,6 +856,48 @@
     "settings.status.enabled.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "استخدم الاختصار لإظهار نوافذ التطبيق وتبديلها."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwenden Sie die Verknüpfung, um App-Fenster anzuzeigen und zu wechseln."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilice el acceso directo para mostrar y cambiar las ventanas de aplicaciones."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisez le raccourci pour afficher et changer de fenêtre d'application."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "바로가기를 사용하여 앱 창을 표시하고 전환하세요."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use o atalho para mostrar e alternar janelas de aplicativos."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Используйте ярлык для отображения и переключения окон приложений."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -381,6 +927,48 @@
     "settings.status.disabled.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "قم بإيقاف مراقبة الاختصارات مؤقتًا واحتفظ بمبدل نافذة النظام دون تغيير."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unterbrechen Sie die Verknüpfungsüberwachung und lassen Sie den Systemfenster-Umschalter unverändert."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausar la supervisión de accesos directos y mantener el selector de ventanas del sistema sin cambios."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suspendez la surveillance des raccourcis et conservez le sélecteur de fenêtre système inchangé."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "바로가기 모니터링을 일시 중지하고 시스템 창 전환기를 변경하지 않은 상태로 유지합니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause o monitoramento de atalhos e mantenha o alternador de janelas do sistema inalterado."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приостановите мониторинг ярлыков и оставьте переключатель системных окон без изменений."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -410,6 +998,48 @@
     "settings.mode.sectionTitle": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "وضع التبديل"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schaltmodus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de conmutación"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode de commutation"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스위칭 모드"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de comutação"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Режим переключения"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -439,6 +1069,48 @@
     "settings.mode.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "السلوك الافتراضي"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardverhalten"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comportamiento predeterminado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comportement par défaut"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기본 동작"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comportamento padrão"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поведение по умолчанию"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -468,6 +1140,48 @@
     "settings.mode.keyWindow": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اضغط للتبديل"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Umschalten drücken"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Presione para cambiar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appuyez pour changer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전환하려면 누르세요."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pressione para mudar"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите, чтобы переключиться"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -497,6 +1211,48 @@
     "settings.mode.keyWindow.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "قم بعرض قائمة النوافذ الثابتة واضغط على الحرف الموجود أعلى الإدخال للتبديل إليه."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigen Sie eine feste Fensterliste an und drücken Sie den Buchstaben über einem Eintrag, um zu diesem zu wechseln."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muestre una lista de ventanas fijas y presione la letra que se encuentra encima de una entrada para cambiar a ella."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affichez une liste de fenêtres fixe et appuyez sur la lettre au-dessus d'une entrée pour y accéder."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "고정 창 목록을 표시하고 해당 항목 위의 문자를 누르면 해당 항목으로 전환됩니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostre uma lista de janelas fixas e pressione a letra acima de uma entrada para alternar para ela."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отобразите фиксированный список окон и нажмите букву над записью, чтобы переключиться на него."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -526,6 +1282,48 @@
     "settings.mode.directCycle": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "دورة ويندوز"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zyklusfenster"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciclo de ventanas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cycle des fenêtres"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "주기 창"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciclo de janelas"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Циклические окна"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -555,6 +1353,48 @@
     "settings.mode.directCycle.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اضغط مع الاستمرار على الاختصار للتنقل عبر النوافذ، ثم حرره للتبديل."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten Sie die Tastenkombination gedrückt, um durch die Fenster zu blättern, und lassen Sie sie dann los, um zu wechseln."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantenga presionado el acceso directo para recorrer las ventanas, luego suéltelo para cambiar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maintenez le raccourci pour parcourir les fenêtres, puis relâchez-le pour basculer."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "창을 순환하려면 바로가기를 누른 다음, 놓아서 전환하세요."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segure o atalho para percorrer as janelas e solte-o para alternar."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удерживайте ярлык для переключения между окнами, затем отпустите его для переключения."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -584,6 +1424,48 @@
     "settings.sort.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "النظام"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bestellen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commande"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "주문"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pedido"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заказать"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -613,6 +1495,48 @@
     "settings.sort.recentUse": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الاستخدام الأخير"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kürzliche Verwendung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uso reciente"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisation récente"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근 사용"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uso recente"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недавнее использование"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -642,6 +1566,48 @@
     "settings.sort.recentUse.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "قم بترتيب التطبيقات حسب الاستخدام الأخير حتى تتمكن من العودة بسرعة إلى النافذة السابقة."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordnen Sie Apps nach aktueller Nutzung, damit Sie schnell zum vorherigen Fenster zurückkehren können."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordene las aplicaciones por uso reciente para poder regresar rápidamente a la ventana anterior."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Classez les applications par utilisation récente afin de pouvoir revenir rapidement à la fenêtre précédente."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근 사용순으로 앱을 정렬하면 이전 창으로 빠르게 돌아갈 수 있습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordene os aplicativos por uso recente para poder retornar rapidamente à janela anterior."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Упорядочивайте приложения по последнему использованию, чтобы можно было быстро вернуться к предыдущему окну."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -671,6 +1637,48 @@
     "settings.sort.fixed": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "أمر ثابت"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feste Reihenfolge"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orden fija"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordre fixe"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "고정 순서"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordem Fixa"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фиксированный порядок"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -700,6 +1708,48 @@
     "settings.sort.fixed.description": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "اطلب التطبيقات باستمرار بالاسم حتى يسهل تذكر مواقعها."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordnen Sie Apps konsequent nach Namen, damit Sie sich ihre Positionen leichter merken können."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordene las aplicaciones constantemente por nombre para que sus posiciones sean más fáciles de recordar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Classez les applications de manière cohérente par nom afin que leurs positions soient plus faciles à mémoriser."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱의 위치를 더 쉽게 기억할 수 있도록 이름별로 일관되게 앱을 주문하세요."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordene os aplicativos de forma consistente por nome para que suas posições sejam mais fáceis de lembrar."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Упорядочивайте приложения по именам, чтобы их расположение было легче запомнить."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -729,6 +1779,48 @@
     "error.accessibilityRevoked": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تم إيقاف تشغيل الوصول إلى إمكانية الوصول، لذا تم إيقاف Window Switcher مؤقتًا."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der barrierefreie Zugriff wurde deaktiviert, daher ist Window Switcher angehalten."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El acceso de accesibilidad se desactivó, por lo que Window Switcher está en pausa."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'accès à l'accessibilité a été désactivé, donc Window Switcher est mis en pause."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "접근성 액세스가 사용 중지되어 창 전환기가 일시중지되었습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O acesso de acessibilidade foi desativado, então o Window Switcher está pausado."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ к специальным возможностям был отключен, поэтому переключение окон приостановлено."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -758,6 +1850,48 @@
     "error.accessibilityRequired": {
       "extractionState": "manual",
       "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يحتاج Window Switcher إلى الوصول إلى إمكانية الوصول. افتح الإعدادات للسماح بذلك."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Window Switcher benötigt Zugriff auf Barrierefreiheit. Öffnen Sie die Einstellungen, um dies zuzulassen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Window Switcher necesita acceso de accesibilidad. Abra Configuración para permitirlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Window Switcher a besoin d’un accès d’accessibilité. Ouvrez Paramètres pour l'autoriser."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "창 전환기에는 접근성 액세스 권한이 필요합니다. 설정을 열어 허용하세요."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Window Switcher precisa de acesso de acessibilidade. Abra Configurações para permitir isso."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для переключателя окон требуется доступ к специальным возможностям. Откройте «Настройки», чтобы разрешить это."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",

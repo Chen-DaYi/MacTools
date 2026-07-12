@@ -13,7 +13,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         ],
     ]
 
-    func testPluginStaticLocalizationKeysExistAndProvideEnglishFallback() throws {
+    func testPluginStaticLocalizationKeysCoverAllSupportedLanguages() throws {
         var failures: [String] = []
 
         for plugin in try pluginDirectories() {
@@ -45,15 +45,15 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
     }
 
-    func testPluginManifestsProvideEnglishMetadataFallback() throws {
+    func testPluginManifestsCoverAllSupportedLanguages() throws {
         var failures: [String] = []
 
         for plugin in try pluginDirectories() {
             let manifestURL = plugin.appending(path: "plugin.json")
             let manifest = try jsonObject(at: manifestURL)
             let metadata = manifest["localizedMetadata"] as? [String: Any]
-            if metadata?["en"] == nil {
-                failures.append("\(plugin.lastPathComponent): plugin.json is missing localizedMetadata.en")
+            for language in supportedLanguages where metadata?[language] == nil {
+                failures.append("\(plugin.lastPathComponent): plugin.json is missing localizedMetadata.\(language)")
             }
         }
 
@@ -79,8 +79,8 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         }
 
         let localizations = entry["localizations"] as? [String: Any]
-        if localizations?["en"] == nil {
-            failures.append("\(pluginName): localization key \(key) is missing English fallback")
+        for language in supportedLanguages where localizations?[language] == nil {
+            failures.append("\(pluginName): localization key \(key) is missing \(language)")
         }
     }
 
