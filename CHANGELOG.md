@@ -7,6 +7,24 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.1.0] - 2026-07-12
+
+### Added
+
+- The plugin marketplace can sort by install status (not installed first, or installed first with updates prioritized) or by name (A–Z / Z–A).
+
+### Changed
+
+- Placed plugin-specific settings between permission and shortcut sections for a more natural configuration flow.
+- The in-app update dialog now includes plugin changes released since the previous app version.
+- Changing the app language now refreshes all Settings and plugin controls immediately without requiring a restart.
+- The language picker now shows each option in the system language alongside its native name.
+- New app versions use a PluginKit-versioned plugin catalog and update installed plugins before loading them, while older app versions continue using the legacy catalog.
+
+### Fixed
+
+- Custom and gallery menu bar icons now use one standard height and content inset with consistent settings previews.
+
 ## [plugins-1.1.0] - 2026-07-12
 
 ### Added
