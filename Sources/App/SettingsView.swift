@@ -331,7 +331,13 @@ private struct PreferencesBackupSettingsRow: View {
                 )
                 let warnings = result.pluginInstallationFailures
                     .sorted { $0.key < $1.key }
-                    .map { "\($0.key): \($0.value)" }
+                    .map { pluginID, message in
+                        let title = pluginHost.pluginManagementItems
+                            .first(where: { $0.id == pluginID })?
+                            .title
+                            ?? pluginID
+                        return "\(title): \(message)"
+                    }
                     + result.shortcutErrors
                         .values
                         .sorted()

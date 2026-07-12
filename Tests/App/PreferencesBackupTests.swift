@@ -291,13 +291,7 @@ final class PreferencesBackupTests: XCTestCase {
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
         json["formatVersion"] = 2
 
-        let decodedBackup = try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))
-
-        XCTAssertThrowsError(try decodedBackup.validateApplicationPreferences(using: { preferences in
-            AppAppearancePreference(rawValue: preferences.appearancePreference) != nil
-                && AppLanguagePreference(rawValue: preferences.languagePreference) != nil
-                && MenuBarClickBehaviorPreference(rawValue: preferences.menuBarClickBehavior) != nil
-        })) { error in
+        XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
             guard case PreferencesBackupError.unsupportedFormatVersion(2) = error else {
                 return XCTFail("Expected unsupported format version error, got \(error)")
             }
@@ -315,7 +309,10 @@ final class PreferencesBackupTests: XCTestCase {
         application["languagePreference"] = "unsupported-language"
         json["application"] = application
 
-        XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
+        let decodedBackup = try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))
+        let store = PreferencesBackupStore(userDefaults: makeDefaults())
+
+        XCTAssertThrowsError(try decodedBackup.validateApplicationPreferences(using: store.validates)) { error in
             guard case PreferencesBackupError.invalidApplicationPreferences = error else {
                 return XCTFail("Expected invalid application preferences error, got \(error)")
             }
