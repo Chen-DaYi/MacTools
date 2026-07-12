@@ -48,7 +48,7 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
-            buttonTitle: localization.string("panel.button.clear", defaultValue: "清空")
+            buttonTitleProvider: { localization.string("panel.button.clear", defaultValue: "清空") }
         )
         canClearClipboard = Self.hasClipboardContents(in: pasteboard)
     }

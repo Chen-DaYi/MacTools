@@ -60,7 +60,7 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .keepPresented,
-            buttonTitle: localization.string("panel.button.empty", defaultValue: "清空")
+            buttonTitleProvider: { localization.string("panel.button.empty", defaultValue: "清空") }
         )
     }
 

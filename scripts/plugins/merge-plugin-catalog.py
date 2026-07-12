@@ -62,14 +62,6 @@ def main():
     if previous is None and updates is None:
         raise SystemExit("No previous catalog or update catalog is available.")
 
-    merged_entries = {
-        entry["id"]: entry
-        for entry in (previous or {}).get("plugins", [])
-    }
-
-    for plugin_id in removed_ids:
-        merged_entries.pop(plugin_id, None)
-
     update_entries = {
         entry["id"]: entry
         for entry in (updates or {}).get("plugins", [])
@@ -81,11 +73,27 @@ def main():
             + ", ".join(missing_updates)
         )
 
-    for plugin_id in selected_ids:
-        merged_entries[plugin_id] = update_entries[plugin_id]
+    full_release = bool(plan.get("fullRelease"))
+    if full_release:
+        if not update_entries:
+            raise SystemExit("A full catalog release requires a non-empty update catalog.")
+        merged_entries = update_entries
+        base_catalog = updates
+    else:
+        merged_entries = {
+            entry["id"]: entry
+            for entry in (previous or {}).get("plugins", [])
+        }
 
-    schema_version = update_field(previous, updates, "schemaVersion", 1)
-    plugin_kit_version = update_field(previous, updates, "pluginKitVersion", args.plugin_kit_version)
+        for plugin_id in removed_ids:
+            merged_entries.pop(plugin_id, None)
+
+        for plugin_id in selected_ids:
+            merged_entries[plugin_id] = update_entries[plugin_id]
+        base_catalog = previous or updates
+
+    schema_version = update_field(base_catalog, updates, "schemaVersion", 1)
+    plugin_kit_version = update_field(base_catalog, updates, "pluginKitVersion", args.plugin_kit_version)
     if plugin_kit_version != args.plugin_kit_version:
         raise SystemExit(
             "Merged catalog pluginKitVersion does not match the expected release version "
@@ -105,12 +113,12 @@ def main():
 
     catalog = {
         "schemaVersion": schema_version,
-        "catalogID": update_field(previous, updates, "catalogID", DEFAULT_CATALOG_ID),
+        "catalogID": update_field(base_catalog, updates, "catalogID", DEFAULT_CATALOG_ID),
         "generatedAt": now_iso8601(),
-        "minimumHostVersion": update_field(previous, updates, "minimumHostVersion", "0.15.2"),
+        "minimumHostVersion": update_field(base_catalog, updates, "minimumHostVersion", "0.15.2"),
         "pluginKitVersion": plugin_kit_version,
         "plugins": sorted(merged_entries.values(), key=lambda entry: entry["id"]),
-        "revoked": update_field(previous, updates, "revoked", []),
+        "revoked": update_field(base_catalog, updates, "revoked", []),
     }
 
     output = Path(args.output)

@@ -7,6 +7,42 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.1.0] - 2026-07-12
+
+### Added
+
+- The plugin marketplace can sort by install status (not installed first, or installed first with updates prioritized) or by name (A–Z / Z–A).
+
+### Changed
+
+- Placed plugin-specific settings between permission and shortcut sections for a more natural configuration flow.
+- The in-app update dialog now includes plugin changes released since the previous app version.
+- Changing the app language now refreshes all Settings and plugin controls immediately without requiring a restart.
+- The language picker now shows each option in the system language alongside its native name.
+- New app versions use a PluginKit-versioned plugin catalog and update installed plugins before loading them, while older app versions continue using the legacy catalog.
+
+### Fixed
+
+- Custom and gallery menu bar icons now use one standard height and content inset with consistent settings previews.
+
+## [plugins-1.1.0] - 2026-07-12
+
+### Added
+
+- Device Battery can show trusted iPhone, iPad, iPod touch, Vision Pro, and paired Apple Watch battery and charging status over USB or Wi-Fi.
+- Keep Awake can optionally keep the display on for every session through its plugin settings and shows an indicator while that mode is active.
+
+### Changed
+
+- Refined the native window switcher overlay and added editable, stable single-key app shortcuts.
+- Device Battery now refreshes Apple mobile devices less often while the component panel is hidden.
+- All plugin packages are rebuilt for PluginKit 3 and published together in a versioned catalog so they remain compatible with the new app runtime.
+
+### Fixed
+
+- Eject Disks no longer treats internal system or non-ejectable volumes as removable disks.
+- Translator source text no longer overlaps the copy and speech actions when the text spans multiple lines.
+
 ## [v1.0.31] - 2026-07-09
 
 ### Changed

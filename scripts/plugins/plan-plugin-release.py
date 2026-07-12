@@ -176,6 +176,15 @@ def plan_release(args):
     errors = []
     full_release = False
 
+    if (
+        previous_catalog_plugin_kit_version is not None
+        and previous_catalog_plugin_kit_version != plugin_kit_version
+    ):
+        # A catalog must never mix packages built against different PluginKit
+        # ABIs. The first release of a new ABI therefore replaces the entire
+        # catalog, even when the caller selected the default auto mode.
+        full_release = True
+
     def select(plugin_id, reason):
         if plugin_id not in selected:
             selected.append(plugin_id)

@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct PluginLocalizedMetadata: Codable, Equatable {
     let displayName: String?
@@ -11,8 +12,6 @@ struct PluginLocalizedMetadata: Codable, Equatable {
 }
 
 enum PluginLocalizationMatcher {
-    private static let appleLanguagesKey = "AppleLanguages"
-
     static func localizedMetadata(
         from metadataByLanguage: [String: PluginLocalizedMetadata],
         preferredLanguages: [String]? = nil,
@@ -43,7 +42,18 @@ enum PluginLocalizationMatcher {
     }
 
     private static func effectivePreferredLanguages(in userDefaults: UserDefaults) -> [String] {
-        if let appleLanguages = userDefaults.stringArray(forKey: appleLanguagesKey),
+        if userDefaults === UserDefaults.standard {
+            return PluginRuntimeLocalization.preferredLanguages
+        }
+
+        if let preference = userDefaults.string(forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey),
+           preference != "system" {
+            return [preference]
+        }
+
+        // Keep this fallback for manifest decoding in isolated stores and
+        // backwards-compatible callers that explicitly provide AppleLanguages.
+        if let appleLanguages = userDefaults.stringArray(forKey: "AppleLanguages"),
            !appleLanguages.isEmpty {
             return appleLanguages
         }
@@ -52,26 +62,6 @@ enum PluginLocalizationMatcher {
     }
 
     private static func candidateLanguageIdentifiers(for language: String) -> [String] {
-        let normalized = language.replacingOccurrences(of: "_", with: "-")
-        var candidates = [normalized]
-
-        let components = normalized.split(separator: "-").map(String.init)
-        if let languageCode = components.first {
-            if languageCode == "zh" {
-                if components.contains(where: { ["Hant", "HK", "MO", "TW"].contains($0) }) {
-                    candidates.append("zh-Hant")
-                } else {
-                    candidates.append("zh-Hans")
-                }
-            }
-
-            candidates.append(languageCode)
-        }
-
-        var unique: [String] = []
-        for candidate in candidates where !unique.contains(candidate) {
-            unique.append(candidate)
-        }
-        return unique
+        PluginRuntimeLocalization.candidateLanguageIdentifiers(for: language)
     }
 }

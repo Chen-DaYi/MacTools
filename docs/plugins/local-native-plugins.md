@@ -124,7 +124,7 @@ Plugin settings are hosted by MacTools. Prefer the descriptive surfaces first:
 - Use `settingsSections` for simple status/action cards.
 - Use `permissionRequirements` for system permission rows.
 - Use `shortcutDefinitions` for global shortcut rows.
-- Use `PluginConfiguration` only when the plugin needs a custom manager, list, editor, drag-and-drop surface, chart, or other interaction that cannot be expressed by the descriptive models.
+- Use `PluginConfiguration` when the plugin needs an interactive preference, custom manager, list, editor, drag-and-drop surface, chart, or other interaction that cannot be expressed by the descriptive models.
 
 Custom configuration views must provide only the plugin-specific content. The settings window header, plugin icon, plugin description, permission cards, and shortcut cards are derived by the host; do not repeat a full page title inside the custom view.
 

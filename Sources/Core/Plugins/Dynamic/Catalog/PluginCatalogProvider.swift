@@ -27,7 +27,21 @@ protocol PluginCatalogProviding {
 }
 
 struct PluginCatalogProviderConfiguration {
-    static let productionCatalogURL = URL(string: "https://mactools.ggbond.app/plugins/catalog.json")!
+    // PluginKit 2 used the original unversioned URL. Keep it stable so older
+    // app releases continue to receive the catalog format they understand.
+    static let legacyProductionCatalogURL = URL(string: "https://mactools.ggbond.app/plugins/catalog.json")!
+
+    static func productionCatalogURL(for pluginKitVersion: Int) -> URL {
+        if pluginKitVersion == 2 {
+            return legacyProductionCatalogURL
+        }
+
+        return URL(string: "https://mactools.ggbond.app/plugins/v\(pluginKitVersion)/catalog.json")!
+    }
+
+    static let productionCatalogURL = productionCatalogURL(
+        for: PluginPackageManifestLoader.supportedPluginKitVersion
+    )
 
     static func defaultSource(environment: [String: String] = ProcessInfo.processInfo.environment) -> PluginCatalogSource {
         #if DEBUG

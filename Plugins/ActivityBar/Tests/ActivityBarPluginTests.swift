@@ -4,6 +4,27 @@ import MacToolsPluginKit
 
 @MainActor
 final class ActivityBarPluginTests: XCTestCase {
+    func testMonthDayFormattingUsesLocaleSpecificFieldOrder() {
+        let date = Calendar(identifier: .gregorian).date(
+            from: DateComponents(
+                timeZone: TimeZone(secondsFromGMT: 0),
+                year: 2026,
+                month: 1,
+                day: 2,
+                hour: 12
+            )
+        )!
+        let locale = Locale(identifier: "de_DE")
+        let expectedFormatter = DateFormatter()
+        expectedFormatter.locale = locale
+        expectedFormatter.setLocalizedDateFormatFromTemplate("MMM d")
+
+        XCTAssertEqual(
+            ActivityBarFormatting.monthDay(date, locale: locale),
+            expectedFormatter.string(from: date)
+        )
+    }
+
     func testMetadataAndPanelsAreExposed() {
         let harness = makeHarness()
 

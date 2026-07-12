@@ -299,7 +299,12 @@ public struct PluginConfiguration {
 public struct PluginPrimaryPanelDescriptor {
     public let controlStyle: PluginControlStyle
     public let menuActionBehavior: PluginMenuActionBehavior
-    public let buttonTitle: String?
+    private let staticButtonTitle: String?
+    private let buttonTitleProvider: (() -> String?)?
+
+    public var buttonTitle: String? {
+        buttonTitleProvider?() ?? staticButtonTitle
+    }
 
     public init(
         controlStyle: PluginControlStyle,
@@ -308,7 +313,21 @@ public struct PluginPrimaryPanelDescriptor {
     ) {
         self.controlStyle = controlStyle
         self.menuActionBehavior = menuActionBehavior
-        self.buttonTitle = buttonTitle
+        self.staticButtonTitle = buttonTitle
+        self.buttonTitleProvider = nil
+    }
+
+    /// Keeps a button label current when a plugin supports runtime language
+    /// switching without recreating the plugin or its active state.
+    public init(
+        controlStyle: PluginControlStyle,
+        menuActionBehavior: PluginMenuActionBehavior,
+        buttonTitleProvider: @escaping () -> String?
+    ) {
+        self.controlStyle = controlStyle
+        self.menuActionBehavior = menuActionBehavior
+        self.staticButtonTitle = nil
+        self.buttonTitleProvider = buttonTitleProvider
     }
 }
 
@@ -543,6 +562,16 @@ public struct PluginPanelState {
         self.isVisible = isVisible
         self.detail = detail
         self.errorMessage = errorMessage
+    }
+}
+
+public struct PluginPrimaryPanelIndicator: Equatable {
+    public let text: String
+    public let systemImage: String
+
+    public init(text: String, systemImage: String) {
+        self.text = text
+        self.systemImage = systemImage
     }
 }
 

@@ -16,9 +16,9 @@
       "summary": "增強滑鼠與觸控板控制"
     }
   },
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 2,
+  "pluginKitVersion": 3,
   "bundleRelativePath": "MouseEnhancer.bundle",
   "factoryClass": "MouseEnhancerPlugin.MouseEnhancerPluginFactory",
   "build": {

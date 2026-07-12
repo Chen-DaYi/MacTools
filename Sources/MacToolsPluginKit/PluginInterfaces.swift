@@ -135,6 +135,13 @@ public protocol DisplayTopologyRefreshing {
     func refreshDisplayTopology()
 }
 
+/// Optional protocol for plugins that expose a compact, read-only status in the primary panel row.
+/// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
+@MainActor
+public protocol PluginPrimaryPanelIndicatorProviding: AnyObject {
+    var primaryPanelIndicator: PluginPrimaryPanelIndicator? { get }
+}
+
 /// Optional protocol for plugins that need a floating-window anchor.
 /// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
 @MainActor
@@ -164,4 +171,14 @@ public protocol PluginConfigurationPresenting: AnyObject {
 @MainActor
 public protocol PluginFeatureVisibilityLifecycleHandling: AnyObject {
     func featureVisibilityDidChange(_ isVisible: Bool)
+}
+
+/// Optional hook for built-in plugins that cache localized descriptors or
+/// other language-dependent presentation data. The host invokes it when the
+/// app language changes; implementations must not activate, deactivate, or
+/// reset the plugin's functional state. Dynamic plugins read localization at
+/// render time and do not need this hook.
+@MainActor
+public protocol PluginRuntimeLocalizationRefreshing: AnyObject {
+    func refreshLocalization()
 }

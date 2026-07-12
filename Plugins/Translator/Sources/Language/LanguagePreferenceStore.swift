@@ -10,7 +10,7 @@ struct LanguagePreferenceStore {
     }
 
     func loadPair() -> TranslatorLanguagePair {
-        let defaultPair = Self.defaultPair(fromPreferredLanguages: Locale.preferredLanguages)
+        let defaultPair = Self.defaultPair(fromPreferredLanguages: PluginRuntimeLocalization.preferredLanguages)
 
         guard let firstRawValue = storage.string(forKey: TranslatorConstants.StorageKey.firstPreferredLanguage),
               let secondRawValue = storage.string(forKey: TranslatorConstants.StorageKey.secondPreferredLanguage),

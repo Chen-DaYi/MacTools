@@ -13,7 +13,7 @@ enum DisplayBrightnessLocalization {
     static func format(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: string(key, defaultValue: defaultValue),
-            locale: Locale.current,
+            locale: PluginRuntimeLocalization.locale,
             arguments: arguments
         )
     }

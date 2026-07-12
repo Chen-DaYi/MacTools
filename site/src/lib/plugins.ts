@@ -37,20 +37,43 @@ export type PluginLocalizedText = {
   summary: string;
 };
 
-const remoteCatalogURL = "https://mactools.ggbond.app/plugins/catalog.json";
-const localCatalogPath = resolve(process.cwd(), "..", "docs", "plugins", "catalog.json");
+const legacyCatalogURL = "https://mactools.ggbond.app/plugins/catalog.json";
+const pluginKitVersion = Number(process.env.MACTOOLS_PLUGIN_KIT_VERSION ?? "3");
+const remoteCatalogURLs = pluginKitVersion === 2
+  ? [legacyCatalogURL]
+  : [
+      `https://mactools.ggbond.app/plugins/v${pluginKitVersion}/catalog.json`,
+      legacyCatalogURL,
+    ];
+const localCatalogPaths = pluginKitVersion === 2
+  ? [resolve(process.cwd(), "..", "docs", "plugins", "catalog.json")]
+  : [
+      resolve(process.cwd(), "..", "docs", "plugins", `v${pluginKitVersion}`, "catalog.json"),
+      resolve(process.cwd(), "..", "docs", "plugins", "catalog.json"),
+    ];
 
 export async function loadPluginCatalog(): Promise<PluginCatalog> {
-  try {
-    const response = await fetch(remoteCatalogURL);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+  for (const url of remoteCatalogURLs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        return await response.json() as PluginCatalog;
+      }
+    } catch {
+      // Try the next catalog source during the ABI catalog migration.
     }
-    return await response.json() as PluginCatalog;
-  } catch {
-    const content = await readFile(localCatalogPath, "utf-8");
-    return JSON.parse(content) as PluginCatalog;
   }
+
+  for (const path of localCatalogPaths) {
+    try {
+      const content = await readFile(path, "utf-8");
+      return JSON.parse(content) as PluginCatalog;
+    } catch {
+      // Try the next local catalog source.
+    }
+  }
+
+  throw new Error(`Plugin catalog unavailable for PluginKit ${pluginKitVersion}.`);
 }
 
 export function categoryLabel(category: string | null): { zh: string; en: string } {

@@ -18,6 +18,7 @@ targets:
     deploymentTarget: '14.0'
     sources:
     - path: Sources/MacToolsPluginKit
+    - path: Sources/Shared/Localization
     settings:
       base:
         PRODUCT_NAME: MacToolsPluginKit
@@ -88,6 +89,7 @@ targets:
     - path: Sources/Core/RightClick
       excludes:
       - RightClickURLRouter.swift
+    - path: Sources/Shared/Localization
     settings:
       base:
         PRODUCT_NAME: RightClickFinderSync

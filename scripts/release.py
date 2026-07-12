@@ -19,7 +19,7 @@ APP_VERSION_CONFIG = ROOT_DIR / "Configs" / "AppVersion.xcconfig"
 CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
 CHANGELOG_FRAGMENT_DIR = ROOT_DIR / "changes" / "unreleased"
 PLUGIN_SOURCE_DIR = ROOT_DIR / "Plugins"
-PLUGIN_CATALOG = ROOT_DIR / "docs/plugins/catalog.json"
+LEGACY_PLUGIN_CATALOG = ROOT_DIR / "docs/plugins/catalog.json"
 PLUGIN_PLAN_PATH = ROOT_DIR / "build/release/plugin-plan.json"
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 APP_TAG_RE = re.compile(r"^v(\d+\.\d+\.\d+)$")
@@ -403,10 +403,37 @@ def read_plugins() -> dict[str, PluginInfo]:
     return plugins
 
 
+def plugin_catalog_path(plugin_kit_version: int) -> Path:
+    if plugin_kit_version == 2:
+        return LEGACY_PLUGIN_CATALOG
+    return ROOT_DIR / "docs" / "plugins" / f"v{plugin_kit_version}" / "catalog.json"
+
+
+def previous_plugin_catalog_path() -> Path:
+    plugin_kit_version = current_plugin_kit_version(read_plugins())
+    preferred_path = plugin_catalog_path(plugin_kit_version)
+    if preferred_path.exists() or preferred_path == LEGACY_PLUGIN_CATALOG:
+        return preferred_path
+
+    previous_versioned_catalogs = []
+    for candidate in (ROOT_DIR / "docs" / "plugins").glob("v*/catalog.json"):
+        match = re.fullmatch(r"v(\d+)", candidate.parent.name)
+        if match and int(match.group(1)) < plugin_kit_version and candidate.exists():
+            previous_versioned_catalogs.append((int(match.group(1)), candidate))
+    if previous_versioned_catalogs:
+        return max(previous_versioned_catalogs, key=lambda item: item[0])[1]
+
+    # The first v3 release compares against the immutable v2 catalog. Once a
+    # versioned catalog exists, subsequent releases stay within the newest
+    # available ABI line.
+    return LEGACY_PLUGIN_CATALOG
+
+
 def read_previous_catalog() -> dict:
-    if not PLUGIN_CATALOG.exists():
+    catalog_path = previous_plugin_catalog_path()
+    if not catalog_path.exists():
         return {}
-    return json.loads(PLUGIN_CATALOG.read_text(encoding="utf-8"))
+    return json.loads(catalog_path.read_text(encoding="utf-8"))
 
 
 def load_previous_catalog() -> dict[str, dict]:
@@ -794,7 +821,7 @@ def run_plugin_plan_check(mode: str, selection: list[str], skip_check: bool, dry
         "--source-dir",
         "Plugins",
         "--previous-catalog",
-        "docs/plugins/catalog.json",
+        previous_plugin_catalog_path().relative_to(ROOT_DIR).as_posix(),
         "--output",
         PLUGIN_PLAN_PATH.relative_to(ROOT_DIR).as_posix(),
     ]
@@ -960,6 +987,15 @@ def release_app(args: argparse.Namespace) -> None:
 def release_plugin(args: argparse.Namespace) -> None:
     mode, raw_selection = choose_plugin_mode(args.plugin_mode, args.plugin)
     plugins = read_plugins()
+    previous_catalog = read_previous_catalog()
+    current_plugin_kit = current_plugin_kit_version(plugins)
+    previous_plugin_kit = previous_catalog.get("pluginKitVersion")
+    if mode == "auto" and previous_plugin_kit is not None and previous_plugin_kit != current_plugin_kit:
+        mode = "all"
+        info(
+            f"检测到 PluginKit ABI 升级（{previous_plugin_kit} -> {current_plugin_kit}），"
+            "插件发布模式自动切换为 all。"
+        )
     selection = normalize_plugin_selection(raw_selection, plugins) if raw_selection else []
     analysis = analyze_plugins(mode, selection)
     if not analysis.release_required:

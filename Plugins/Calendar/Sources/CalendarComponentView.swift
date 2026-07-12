@@ -460,7 +460,7 @@ private struct CalendarFloatingEventPopoverContent: View {
 private enum CalendarDayPresentation {
     static func dateTitle(for day: CalendarDayModel) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale.autoupdatingCurrent
+        formatter.locale = PluginRuntimeLocalization.locale
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: day.date)

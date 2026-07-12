@@ -48,9 +48,9 @@
       "summary": "實時查看系統狀態"
     }
   },
-  "version": "1.0.12",
+  "version": "1.0.13",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 2,
+  "pluginKitVersion": 3,
   "bundleRelativePath": "SystemStatus.bundle",
   "factoryClass": "SystemStatusPlugin.SystemStatusPluginFactory",
   "build": {

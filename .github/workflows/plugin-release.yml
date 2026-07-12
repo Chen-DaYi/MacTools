@@ -45,7 +45,6 @@ env:
   PLUGIN_RELEASE_PLAN_PATH: build/plugin-release/plan.json
   PLUGIN_CATALOG_DELTA_PATH: build/plugin-release/catalog.delta.json
   PLUGIN_CATALOG_PATH: build/plugin-release/catalog.json
-  SIGNED_PLUGIN_CATALOG_PATH: docs/plugins/catalog.json
 
 jobs:
   plugin-release:
@@ -77,6 +76,24 @@ jobs:
 
           PRERELEASE="${{ inputs.prerelease || 'false' }}"
           RELEASE_SUFFIX="${TAG#plugins-}"
+          PLUGIN_KIT_VERSION="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          versions = {
+              json.loads(path.read_text(encoding="utf-8"))["pluginKitVersion"]
+              for path in sorted(Path("Plugins").glob("*/plugin.json"))
+          }
+          if len(versions) != 1:
+              raise SystemExit("All plugin manifests must use one pluginKitVersion.")
+          print(next(iter(versions)))
+          PY
+          )"
+          if [[ "$PLUGIN_KIT_VERSION" == "2" ]]; then
+            PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/catalog.json"
+          else
+            PLUGIN_CATALOG_RELATIVE_PATH="docs/plugins/v${PLUGIN_KIT_VERSION}/catalog.json"
+          fi
           {
             echo "TAG=$TAG"
             echo "PLUGIN_RELEASE_MODE=$MODE"
@@ -85,17 +102,29 @@ jobs:
             echo "PLUGIN_RELEASE_NOTES_URL=https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
             echo "PLUGIN_ASSET_BASE_URL=https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
             echo "PLUGIN_PRERELEASE=$PRERELEASE"
+            echo "PLUGIN_KIT_VERSION=$PLUGIN_KIT_VERSION"
+            echo "PLUGIN_CATALOG_RELATIVE_PATH=$PLUGIN_CATALOG_RELATIVE_PATH"
+            echo "SIGNED_PLUGIN_CATALOG_PATH=$PLUGIN_CATALOG_RELATIVE_PATH"
           } >> "$GITHUB_ENV"
 
       - name: Prepare previous plugin catalog
         run: |
           mkdir -p "$PLUGIN_RELEASE_ROOT"
           git fetch --force --tags origin +refs/heads/main:refs/remotes/origin/main
-          if git show origin/main:docs/plugins/catalog.json > "$PLUGIN_PREVIOUS_CATALOG_PATH" 2>/dev/null; then
-            echo "Using docs/plugins/catalog.json from origin/main as the previous production catalog."
+          if git show "origin/main:${PLUGIN_CATALOG_RELATIVE_PATH}" > "$PLUGIN_PREVIOUS_CATALOG_PATH" 2>/dev/null; then
+            echo "Using ${PLUGIN_CATALOG_RELATIVE_PATH} from origin/main as the previous production catalog."
+          elif PREVIOUS_VERSIONED_CATALOG="$(git ls-tree -r --name-only origin/main docs/plugins | \
+               python3 -c 'import re,sys; current=int(sys.argv[1]); paths=[path.strip() for path in sys.stdin if re.fullmatch(r"docs/plugins/v\d+/catalog\.json", path.strip())]; candidates=[(int(re.search(r"/v(\d+)/", path).group(1)), path) for path in paths if int(re.search(r"/v(\d+)/", path).group(1)) < current]; print(max(candidates)[1] if candidates else "")' \
+               "$PLUGIN_KIT_VERSION")" && \
+               [[ -n "$PREVIOUS_VERSIONED_CATALOG" ]] && \
+               git show "origin/main:${PREVIOUS_VERSIONED_CATALOG}" > "$PLUGIN_PREVIOUS_CATALOG_PATH" 2>/dev/null; then
+            echo "Using ${PREVIOUS_VERSIONED_CATALOG} from origin/main as the ABI migration baseline."
+          elif [[ "$PLUGIN_CATALOG_RELATIVE_PATH" != "docs/plugins/catalog.json" ]] && \
+               git show origin/main:docs/plugins/catalog.json > "$PLUGIN_PREVIOUS_CATALOG_PATH" 2>/dev/null; then
+            echo "Using the legacy v2 catalog from origin/main as the v${PLUGIN_KIT_VERSION} release baseline."
           elif [[ -f "$SIGNED_PLUGIN_CATALOG_PATH" ]]; then
             cp "$SIGNED_PLUGIN_CATALOG_PATH" "$PLUGIN_PREVIOUS_CATALOG_PATH"
-            echo "Using docs/plugins/catalog.json from the checked-out ref as the previous production catalog."
+            echo "Using ${PLUGIN_CATALOG_RELATIVE_PATH} from the checked-out ref as the previous production catalog."
           else
             rm -f "$PLUGIN_PREVIOUS_CATALOG_PATH"
             echo "No previous plugin catalog found; auto mode will publish all plugins."
@@ -129,7 +158,12 @@ jobs:
               env.write(f"PLUGIN_CHANGED_COUNT={len(selected)}\n")
               env.write(f"PLUGIN_REMOVED_COUNT={len(removed)}\n")
               env.write(f"PLUGIN_FULL_RELEASE={'true' if plan.get('fullRelease') else 'false'}\n")
-              env.write(f"PLUGIN_KIT_VERSION={plan.get('pluginKitVersion')}\n")
+              planned_version = plan.get("pluginKitVersion")
+              if str(planned_version) != os.environ["PLUGIN_KIT_VERSION"]:
+                  raise SystemExit(
+                      f"Release plan PluginKit {planned_version} does not match manifest PluginKit "
+                      f"{os.environ['PLUGIN_KIT_VERSION']}."
+                  )
 
           lines = [
               "## Plugin release plan",
@@ -366,9 +400,9 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git checkout -B main origin/main
-          mkdir -p docs/plugins
-          cp "$RUNNER_TEMP/plugin-catalog.json" docs/plugins/catalog.json
-          git add docs/plugins/catalog.json
+          mkdir -p "$(dirname "$PLUGIN_CATALOG_RELATIVE_PATH")"
+          cp "$RUNNER_TEMP/plugin-catalog.json" "$PLUGIN_CATALOG_RELATIVE_PATH"
+          git add "$PLUGIN_CATALOG_RELATIVE_PATH"
           if git diff --cached --quiet; then
             echo "No plugin catalog changes to commit."
           else

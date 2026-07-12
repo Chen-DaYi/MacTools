@@ -1246,9 +1246,7 @@ struct ActivityBarComponentView: View {
             return localization.string("component.date.yesterday", defaultValue: "Yesterday")
         }
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter.string(from: selectedDate)
+        return ActivityBarFormatting.monthDay(selectedDate)
     }
 
     private func shortDate(_ dateString: String) -> String {
@@ -1262,9 +1260,7 @@ struct ActivityBarComponentView: View {
             return dateString
         }
 
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("MMM d")
-        return formatter.string(from: date)
+        return ActivityBarFormatting.monthDay(date)
     }
 
     private func chartLabel(_ dateString: String) -> String {

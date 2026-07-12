@@ -27,7 +27,7 @@
 | Display Sleep | Put all displays to sleep immediately, then wake them with mouse movement or keyboard input. |
 | Dark Mode | Toggle the system light and dark appearances, with live state sync when the system theme changes. |
 | Night Shift | Toggle Night Shift to reduce blue light and warm the screen colors at night. |
-| Prevent Sleep | Keep the system awake while idle, with automatic stop options after 30 minutes, 1 hour, 2 hours, or 5 hours. |
+| Prevent Sleep | Keep the system awake while idle, optionally keep the display on by default from plugin settings with an active-session indicator, and stop automatically after 30 minutes, 1 hour, 2 hours, or 5 hours. |
 | Clean Mode | Show a full-screen black overlay and temporarily disable input for cleaning the screen, keyboard, or trackpad. |
 | Mouse Enhancer | Enhance mouse and trackpad controls, with separate horizontal and vertical scroll reversing plus trackpad-tap middle-click simulation. |
 | Hide Notch | Mask the top notch area on built-in notch displays without modifying the original wallpaper. |
@@ -61,7 +61,7 @@
 | zsh Config | View and edit zsh configuration files such as .zshrc and .zshenv inside the app, with syntax highlighting, common snippets, and automatic backup before saving. |
 | Plugins & Settings | Install, update, and batch-update plugins in the plugin marketplace (filter by category/search; sort by not-installed first, installed first, or name); manage permissions, shortcuts, and plugin-specific settings; and export/import portable app preferences, plugin display settings, and shortcut customizations as JSON. |
 | Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, restore the default icon, and preview every source with the same standard icon height and content inset as the default. |
-| Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance. |
+| Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance; the picker shows each language in the system language and its native spelling. |
 
 > **Preferences backup:** Import restores only portable host preferences, plugin display settings, and shortcut customizations. Missing plugins are never installed automatically: the preview lets you explicitly select catalog-verified plugins to install, while unavailable or unselected plugins and their shortcuts are skipped.
 

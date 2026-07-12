@@ -16,9 +16,9 @@
       "summary": "用可設定快速鍵快速切換正在執行的視窗"
     }
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 2,
+  "pluginKitVersion": 3,
   "bundleRelativePath": "WindowSwitcher.bundle",
   "factoryClass": "WindowSwitcherPlugin.WindowSwitcherPluginFactory",
   "build": {

@@ -4,6 +4,31 @@ import XCTest
 @testable import MacTools
 
 final class PluginCatalogTests: XCTestCase {
+    func testPluginKit2KeepsLegacyProductionCatalogURL() throws {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.productionCatalogURL(for: 2),
+            URL(string: "https://mactools.ggbond.app/plugins/catalog.json")
+        )
+    }
+
+    func testPluginKit3UsesVersionedProductionCatalogURL() throws {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.productionCatalogURL(for: 3),
+            URL(string: "https://mactools.ggbond.app/plugins/v3/catalog.json")
+        )
+    }
+
+    func testCurrentVerifierRejectsLegacyPluginKit2Catalog() throws {
+        let catalog = makeCatalog(pluginKitVersion: 2)
+        let verifier = PluginCatalogVerifier.localDevelopment(hostVersion: "1.0.0")
+
+        XCTAssertThrowsError(
+            try verifier.verify(catalog, sourceKind: .localDevelopment)
+        ) { error in
+            XCTAssertEqual(error as? PluginCatalogVerifierError, .unsupportedPluginKitVersion(2))
+        }
+    }
+
     func testEnvironmentHTTPSCatalogURLUsesProductionSource() throws {
         let url = try XCTUnwrap(URL(string: "https://example.com/plugins/catalog.json"))
         let source = PluginCatalogProviderConfiguration.defaultSource(
@@ -105,6 +130,7 @@ final class PluginCatalogTests: XCTestCase {
 
     private func makeCatalog(
         minimumHostVersion: String = "0.1.0",
+        pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion,
         plugins: [PluginCatalogEntry]? = nil,
         revoked: [PluginCatalogRevocation] = [],
         signature: PluginCatalog.Signature? = nil
@@ -113,6 +139,7 @@ final class PluginCatalogTests: XCTestCase {
             catalogID: "com.example.catalog",
             generatedAt: Date(timeIntervalSince1970: 0),
             minimumHostVersion: minimumHostVersion,
+            pluginKitVersion: pluginKitVersion,
             plugins: plugins ?? [makeEntry()],
             revoked: revoked,
             signature: signature

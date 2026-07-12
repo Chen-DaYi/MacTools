@@ -14,13 +14,17 @@ enum GeneralSettingsCardLayout {
 
 struct SettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
     @ObservedObject var appUpdater: AppUpdater
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
 
     var body: some View {
-        TabView(selection: $pluginHost.selectedSettingsDestination) {
+        // Recreate native AppKit-backed controls when the shared locale changes.
+        let _ = runtimeLocale.revision
+
+        return TabView(selection: $pluginHost.selectedSettingsDestination) {
             GeneralSettingsView(
                 pluginHost: pluginHost,
                 menuBarIconSettings: menuBarIconSettings,
@@ -44,7 +48,16 @@ struct SettingsView: View {
                     Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
                 }
         }
+        .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
+        .environment(\.locale, PluginRuntimeLocalization.locale)
+        .environment(\.layoutDirection, layoutDirection)
+    }
+
+    private var layoutDirection: LayoutDirection {
+        PluginRuntimeLocalization.locale.language.characterDirection == .rightToLeft
+            ? .rightToLeft
+            : .leftToRight
     }
 }
 
@@ -102,8 +115,6 @@ struct GeneralSettingsView: View {
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
     @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
-    @State private var showsLanguageRestartAlert = false
-    private let appRelauncher: any AppRelaunching = AppRelauncher()
 
     var body: some View {
         Form {
@@ -137,18 +148,6 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .alert(
-            AppL10n.settings("language.restartAlert.title", defaultValue: "需要重启应用"),
-            isPresented: $showsLanguageRestartAlert
-        ) {
-            Button(AppL10n.settings("language.restartAlert.restart", defaultValue: "重启"), role: .none) {
-                appRelauncher.relaunch()
-            }
-
-            Button(AppL10n.settings("language.restartAlert.later", defaultValue: "稍后"), role: .cancel) {}
-        } message: {
-            Text(AppL10n.settings("language.restartAlert.message", defaultValue: "语言设置将在重启 MacTools 后生效。"))
-        }
     }
 
     private var appearancePreferenceBinding: Binding<AppAppearancePreference> {
@@ -171,7 +170,6 @@ struct GeneralSettingsView: View {
 
             languagePreferenceRawValue = preference.rawValue
             preference.store()
-            showsLanguageRestartAlert = true
         }
     }
 
@@ -608,7 +606,7 @@ private struct LanguageSettingsRow: View {
 
             Picker(AppL10n.settings("language.picker", defaultValue: "语言"), selection: $selection) {
                 ForEach(AppLanguagePreference.allCases) { preference in
-                    Text(preference.title)
+                    Text(preference.pickerTitle)
                         .tag(preference)
                 }
             }

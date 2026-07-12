@@ -800,6 +800,7 @@ struct MenuBarContent: View {
                 ForEach(pluginHost.panelItems) { item in
                     FeatureRowView(
                         item: item,
+                        indicator: pluginHost.primaryPanelIndicatorsByID[item.id],
                         isOn: Binding(
                             get: { pluginHost.isSwitchOn(for: item.id) },
                             set: { newValue in
@@ -928,6 +929,7 @@ final class DeferredPanelActionDispatcher: ObservableObject {
 
 struct FeatureRowView: View {
     let item: PluginPanelItem
+    let indicator: PluginPrimaryPanelIndicator?
     @Binding var isOn: Bool
     let onDisclosureToggle: (Bool) -> Void
     let onSelectionChange: (String, String) -> Void
@@ -1083,9 +1085,22 @@ struct FeatureRowView: View {
 
     private var rowText: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(item.title)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
+            HStack(spacing: 5) {
+                Text(item.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+
+                if let indicator {
+                    Label(indicator.text, systemImage: indicator.systemImage)
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.07), in: Capsule())
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
 
             HStack(spacing: 3) {
                 Text(item.description)

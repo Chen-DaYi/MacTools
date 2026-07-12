@@ -1024,7 +1024,7 @@ struct IPOverviewSnapshot: Codable, Equatable, Sendable {
 enum IPOverviewFormatter {
     static func dateTime(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale.current
+        formatter.locale = PluginRuntimeLocalization.locale
         formatter.dateStyle = .short
         formatter.timeStyle = .medium
         return formatter.string(from: date)

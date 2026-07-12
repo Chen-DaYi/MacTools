@@ -46,7 +46,7 @@ final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
-            buttonTitle: localization.string("panel.button.lock", defaultValue: "锁定")
+            buttonTitleProvider: { localization.string("panel.button.lock", defaultValue: "锁定") }
         )
     }
 
