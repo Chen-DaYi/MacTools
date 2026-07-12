@@ -309,7 +309,7 @@ private struct LanguageSettingsRow: View {
             }
             .pickerStyle(.menu)
             .labelsHidden()
-            .frame(width: 150, alignment: .trailing)
+            .frame(minWidth: 280, idealWidth: 320, maxWidth: 360, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)

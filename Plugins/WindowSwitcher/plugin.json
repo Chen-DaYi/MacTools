@@ -7,6 +7,10 @@
       "displayName": "Window Switcher",
       "summary": "Quickly switch between running windows with a configurable shortcut."
     },
+    "ja": {
+      "displayName": "ウインドウ切り替え",
+      "summary": "設定可能なショートカットで実行中のウインドウをすばやく切り替えます。"
+    },
     "zh-Hans": {
       "displayName": "窗口切换",
       "summary": "用可配置快捷键快速切换正在运行的窗口"
@@ -16,7 +20,7 @@
       "summary": "用可設定快速鍵快速切換正在執行的視窗"
     }
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 3,
   "bundleRelativePath": "WindowSwitcher.bundle",
