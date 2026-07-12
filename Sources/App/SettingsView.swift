@@ -333,8 +333,8 @@ private struct PreferencesBackupSettingsRow: View {
                     .sorted { $0.key < $1.key }
                     .map { "\($0.key): \($0.value)" }
                     + result.shortcutErrors
-                        .sorted { $0.key < $1.key }
-                        .map { "\($0.key): \($0.value)" }
+                        .values
+                        .sorted()
                 alertMessage = warnings.isEmpty
                     ? importedMessage
                     : ([importedMessage] + warnings).joined(separator: "\n")

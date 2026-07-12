@@ -16,6 +16,12 @@ final class PreferencesBackupStore: PreferencesBackupApplicationStoring {
         )
     }
 
+    func validates(_ preferences: PreferencesBackup.ApplicationPreferences) -> Bool {
+        AppAppearancePreference(rawValue: preferences.appearancePreference) != nil
+            && AppLanguagePreference(rawValue: preferences.languagePreference) != nil
+            && MenuBarClickBehaviorPreference(rawValue: preferences.menuBarClickBehavior) != nil
+    }
+
     func apply(_ preferences: PreferencesBackup.ApplicationPreferences) {
         guard let appearance = AppAppearancePreference(rawValue: preferences.appearancePreference),
               let language = AppLanguagePreference(rawValue: preferences.languagePreference),

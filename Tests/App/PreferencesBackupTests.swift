@@ -113,7 +113,8 @@ final class PreferencesBackupTests: XCTestCase {
                     requiresRestartToFullyUnload: false,
                     releaseNotesURL: nil
                 )
-            ]
+            ],
+            applicationPreferencesAreValid: { _ in true }
         )
 
         XCTAssertEqual(preview.installablePlugins.map(\.id), ["installable"])
@@ -290,7 +291,13 @@ final class PreferencesBackupTests: XCTestCase {
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
         json["formatVersion"] = 2
 
-        XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
+        let decodedBackup = try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))
+
+        XCTAssertThrowsError(try decodedBackup.validateApplicationPreferences(using: { preferences in
+            AppAppearancePreference(rawValue: preferences.appearancePreference) != nil
+                && AppLanguagePreference(rawValue: preferences.languagePreference) != nil
+                && MenuBarClickBehaviorPreference(rawValue: preferences.menuBarClickBehavior) != nil
+        })) { error in
             guard case PreferencesBackupError.unsupportedFormatVersion(2) = error else {
                 return XCTFail("Expected unsupported format version error, got \(error)")
             }
@@ -311,6 +318,36 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
             guard case PreferencesBackupError.invalidApplicationPreferences = error else {
                 return XCTFail("Expected invalid application preferences error, got \(error)")
+            }
+        }
+    }
+
+    func testApplicationPreferenceValidationAcceptsEveryCurrentAppEnumValue() throws {
+        let store = PreferencesBackupStore(userDefaults: makeDefaults())
+
+        for appearance in AppAppearancePreference.allCases {
+            for language in AppLanguagePreference.allCases {
+                for clickBehavior in [
+                    MenuBarClickBehaviorPreference.standard,
+                    .swapped
+                ] {
+                    let preferences = PreferencesBackup.ApplicationPreferences(
+                        appearancePreference: appearance.rawValue,
+                        languagePreference: language.rawValue,
+                        menuBarClickBehavior: clickBehavior.rawValue
+                    )
+
+                    XCTAssertNoThrow(
+                        try PreferencesBackup(
+                            application: preferences,
+                            pluginDisplay: PluginDisplayPreferencesBackup(
+                                orderedPluginIDs: [],
+                                hiddenPluginIDs: []
+                            ),
+                            shortcutCustomizations: [:]
+                        ).validateApplicationPreferences(using: store.validates)
+                    )
+                }
             }
         }
     }

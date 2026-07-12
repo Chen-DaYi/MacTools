@@ -84,6 +84,7 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
             plugins: [plugin],
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
     }

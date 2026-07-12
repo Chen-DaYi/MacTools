@@ -16,7 +16,12 @@ struct PreferencesBackup: Codable, Equatable {
     let pluginDisplay: PluginDisplayPreferencesBackup
     let shortcutCustomizations: [String: ShortcutCustomization]
 
-    init(application: ApplicationPreferences, pluginDisplay: PluginDisplayPreferencesBackup, shortcutCustomizations: [String: ShortcutCustomization], exportedAt: Date = .now) {
+    init(
+        application: ApplicationPreferences,
+        pluginDisplay: PluginDisplayPreferencesBackup,
+        shortcutCustomizations: [String: ShortcutCustomization],
+        exportedAt: Date = .now
+    ) {
         self.formatVersion = Self.currentFormatVersion
         self.exportedAt = exportedAt
         self.application = application
@@ -28,10 +33,12 @@ struct PreferencesBackup: Codable, Equatable {
         guard formatVersion == Self.currentFormatVersion else {
             throw PreferencesBackupError.unsupportedFormatVersion(formatVersion)
         }
-        guard Self.appearancePreferenceValues.contains(application.appearancePreference),
-              Self.languagePreferenceValues.contains(application.languagePreference),
-              Self.menuBarClickBehaviorValues.contains(application.menuBarClickBehavior)
-        else {
+    }
+
+    func validateApplicationPreferences(
+        using validator: (ApplicationPreferences) -> Bool
+    ) throws {
+        guard validator(application) else {
             throw PreferencesBackupError.invalidApplicationPreferences
         }
     }
@@ -51,9 +58,6 @@ struct PreferencesBackup: Codable, Equatable {
         return backup
     }
 
-    private static let appearancePreferenceValues: Set<String> = ["system", "dark", "light"]
-    private static let languagePreferenceValues: Set<String> = ["system", "zh-Hans", "zh-Hant", "en", "es", "fr", "ru", "pt", "de", "ja", "ko", "ar"]
-    private static let menuBarClickBehaviorValues: Set<String> = ["standard", "swapped"]
 }
 
 struct PluginDisplayPreferencesBackup: Codable, Equatable {
@@ -68,14 +72,31 @@ struct PreferencesImportPreview: Equatable {
     let unavailableShortcutIDs: [String]
     let installablePlugins: [PreferencesImportInstallablePlugin]
 
-    static func make(backup: PreferencesBackup, availablePluginIDs: Set<String>, availableShortcutIDs: Set<String>, pluginManagementItems: [PluginManagementItem]) throws -> PreferencesImportPreview {
+    static func make(
+        backup: PreferencesBackup,
+        availablePluginIDs: Set<String>,
+        availableShortcutIDs: Set<String>,
+        pluginManagementItems: [PluginManagementItem],
+        applicationPreferencesAreValid: (PreferencesBackup.ApplicationPreferences) -> Bool
+    ) throws -> PreferencesImportPreview {
         try backup.validate()
-        let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs).union(backup.pluginDisplay.hiddenPluginIDs)
+        try backup.validateApplicationPreferences(using: applicationPreferencesAreValid)
+
+        let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs)
+            .union(backup.pluginDisplay.hiddenPluginIDs)
         let missingPluginIDs = backedUpPluginIDs.subtracting(availablePluginIDs)
-        let managementItemsByID = Dictionary(pluginManagementItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let managementItemsByID = Dictionary(
+            pluginManagementItems.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let installablePlugins = missingPluginIDs.compactMap { pluginID -> PreferencesImportInstallablePlugin? in
             guard let item = managementItemsByID[pluginID], item.canInstall else { return nil }
-            return PreferencesImportInstallablePlugin(id: item.id, title: item.title, summary: item.summary, version: item.version)
+            return PreferencesImportInstallablePlugin(
+                id: item.id,
+                title: item.title,
+                summary: item.summary,
+                version: item.version
+            )
         }
         let installablePluginIDs = Set(installablePlugins.map(\.id))
         let backedUpShortcutIDs = Set(backup.shortcutCustomizations.keys)
@@ -110,28 +131,6 @@ enum PreferencesBackupError: Error, Equatable {
 @MainActor
 protocol PreferencesBackupApplicationStoring: AnyObject {
     func applicationPreferences() -> PreferencesBackup.ApplicationPreferences
+    func validates(_ preferences: PreferencesBackup.ApplicationPreferences) -> Bool
     func apply(_ preferences: PreferencesBackup.ApplicationPreferences)
-}
-
-@MainActor
-final class UserDefaultsPreferencesBackupStore: PreferencesBackupApplicationStoring {
-    private let userDefaults: UserDefaults
-
-    init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
-    }
-
-    func applicationPreferences() -> PreferencesBackup.ApplicationPreferences {
-        PreferencesBackup.ApplicationPreferences(
-            appearancePreference: userDefaults.string(forKey: "app.appearancePreference") ?? "system",
-            languagePreference: userDefaults.string(forKey: "app.languagePreference") ?? "system",
-            menuBarClickBehavior: userDefaults.string(forKey: "menuBar.clickBehaviorPreference") ?? "standard"
-        )
-    }
-
-    func apply(_ preferences: PreferencesBackup.ApplicationPreferences) {
-        userDefaults.set(preferences.appearancePreference, forKey: "app.appearancePreference")
-        userDefaults.set(preferences.languagePreference, forKey: "app.languagePreference")
-        userDefaults.set(preferences.menuBarClickBehavior, forKey: "menuBar.clickBehaviorPreference")
-    }
 }

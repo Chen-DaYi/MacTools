@@ -194,7 +194,7 @@ final class PluginHost: ObservableObject {
 
     convenience init(
         loadDynamicPluginsOnInit: Bool = true,
-        preferencesBackupStore: any PreferencesBackupApplicationStoring = UserDefaultsPreferencesBackupStore()
+        preferencesBackupStore: any PreferencesBackupApplicationStoring
     ) {
         let dynamicPluginManager = DynamicPluginManager()
         let pluginCatalogManager = PluginCatalogManager.live(dynamicPluginManager: dynamicPluginManager)
@@ -218,7 +218,7 @@ final class PluginHost: ObservableObject {
         pluginCatalogManager: PluginCatalogManager? = nil,
         shortcutStore: ShortcutStore,
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
-        preferencesBackupStore: any PreferencesBackupApplicationStoring = UserDefaultsPreferencesBackupStore(),
+        preferencesBackupStore: any PreferencesBackupApplicationStoring,
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
@@ -344,7 +344,8 @@ final class PluginHost: ObservableObject {
             backup: backup,
             availablePluginIDs: Set(defaultPluginIDs),
             availableShortcutIDs: Set(shortcutDescriptors().map(\.itemID)),
-            pluginManagementItems: pluginManagementItems
+            pluginManagementItems: pluginManagementItems,
+            applicationPreferencesAreValid: preferencesBackupStore.validates
         )
     }
 
@@ -2063,9 +2064,10 @@ final class PluginHost: ObservableObject {
     ) -> [String: String] {
         let descriptors = shortcutDescriptors()
         let targetCustomizations = Dictionary(
-            uniqueKeysWithValues: descriptors.map { descriptor in
+            descriptors.map { descriptor in
                 (descriptor.itemID, importedCustomizations[descriptor.itemID] ?? .inheritDefault)
-            }
+            },
+            uniquingKeysWith: { first, _ in first }
         )
         let errors = validateImportedShortcutCustomizations(
             targetCustomizations,
@@ -2073,8 +2075,7 @@ final class PluginHost: ObservableObject {
         )
 
         guard errors.isEmpty else {
-            shortcutErrors.merge(errors) { _, newValue in newValue }
-            return errors
+            return importShortcutErrorMessages(errors, descriptors: descriptors)
         }
 
         for descriptor in descriptors {
@@ -2087,6 +2088,26 @@ final class PluginHost: ObservableObject {
         }
 
         return [:]
+    }
+
+    private func importShortcutErrorMessages(
+        _ errors: [String: String],
+        descriptors: [ShortcutDescriptor]
+    ) -> [String: String] {
+        let descriptorsByID = Dictionary(
+            descriptors.map { ($0.itemID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        return Dictionary(
+            errors.map { shortcutID, message in
+                let title = descriptorsByID[shortcutID].map {
+                    "\($0.pluginTitle) · \($0.definition.title)"
+                } ?? shortcutID
+                return (shortcutID, "\(title): \(message)")
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     private func validateImportedShortcutCustomizations(
