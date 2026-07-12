@@ -48,9 +48,9 @@
       "summary": "推出所有可移動磁盤"
     }
   },
-  "version": "1.0.7",
+  "version": "1.0.8",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 2,
+  "pluginKitVersion": 3,
   "bundleRelativePath": "EjectDisk.bundle",
   "factoryClass": "EjectDiskPlugin.EjectDiskPluginFactory",
   "build": {

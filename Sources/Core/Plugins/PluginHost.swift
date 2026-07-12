@@ -834,10 +834,11 @@ final class PluginHost: ObservableObject {
         return !dynamicPluginManager.installedPackageVersionsByID().isEmpty
     }
 
-    func automaticUpdateInstalledPluginsBeforeLoading() async {
+    @discardableResult
+    func automaticUpdateInstalledPluginsBeforeLoading() async -> Bool {
         guard let pluginCatalogManager else {
             loadDynamicPluginsIfNeeded()
-            return
+            return true
         }
 
         automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
@@ -856,7 +857,7 @@ final class PluginHost: ObservableObject {
                 message: errorMessage
             )
             loadDynamicPluginsIfNeeded()
-            return
+            return false
         }
 
         let updatePlan = pluginCatalogManager.automaticUpdatePlanForInstalledPlugins()
@@ -867,7 +868,7 @@ final class PluginHost: ObservableObject {
                 message: AppL10n.plugins("plugin.autoUpdate.message.noInstalledUpdates", defaultValue: "已安装插件都是最新版本。")
             )
             loadDynamicPluginsIfNeeded()
-            return
+            return true
         }
 
         presentPluginMarketplace()
@@ -916,6 +917,7 @@ final class PluginHost: ObservableObject {
         }
 
         loadDynamicPluginsIfNeeded()
+        return automaticPluginUpdateStatus.phase == .completed
     }
 
     func installPluginFromCatalog(pluginID: String) async throws {
