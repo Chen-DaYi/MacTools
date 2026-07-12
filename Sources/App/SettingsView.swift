@@ -279,7 +279,7 @@ private struct PreferencesBackupSettingsRow: View {
             try pluginHost.makePreferencesBackup().encodedJSON().write(to: url, options: .atomic)
             alertMessage = AppL10n.preferencesBackup("preferencesBackup.exported", defaultValue: "偏好设置已导出。")
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = preferencesBackupErrorMessage(error)
         }
     }
 
@@ -306,7 +306,7 @@ private struct PreferencesBackupSettingsRow: View {
                     preview: try pluginHost.preferencesImportPreview(for: backup)
                 )
             } catch {
-                alertMessage = error.localizedDescription
+                alertMessage = preferencesBackupErrorMessage(error)
             }
         }
     }
@@ -320,19 +320,46 @@ private struct PreferencesBackupSettingsRow: View {
             defer { isImporting = false }
 
             do {
-                try await pluginHost.importPreferences(
+                let result = try await pluginHost.importPreferences(
                     backup,
                     installingMissingPluginIDs: pluginIDs
                 )
                 pendingImport = nil
-                alertMessage = AppL10n.preferencesBackup(
+                let importedMessage = AppL10n.preferencesBackup(
                     "preferencesBackup.imported",
-                    defaultValue: "偏好设置已导入。语言设置将在重启 MacTools 后生效。"
+                    defaultValue: "偏好设置已导入。"
                 )
+                let warnings = result.pluginInstallationFailures
+                    .sorted { $0.key < $1.key }
+                    .map { "\($0.key): \($0.value)" }
+                    + result.shortcutErrors
+                        .sorted { $0.key < $1.key }
+                        .map { "\($0.key): \($0.value)" }
+                alertMessage = warnings.isEmpty
+                    ? importedMessage
+                    : ([importedMessage] + warnings).joined(separator: "\n")
             } catch {
                 pendingImport = nil
-                alertMessage = error.localizedDescription
+                alertMessage = preferencesBackupErrorMessage(error)
             }
+        }
+    }
+
+    private func preferencesBackupErrorMessage(_ error: Error) -> String {
+        switch error as? PreferencesBackupError {
+        case let .unsupportedFormatVersion(version):
+            return AppL10n.preferencesBackupFormat(
+                "preferencesBackup.error.unsupportedFormat",
+                defaultValue: "不支持的偏好设置备份版本（%d）。",
+                version
+            )
+        case .invalidApplicationPreferences:
+            return AppL10n.preferencesBackup(
+                "preferencesBackup.error.invalidApplicationPreferences",
+                defaultValue: "备份中的应用偏好设置无效。"
+            )
+        case nil:
+            return error.localizedDescription
         }
     }
 }
@@ -358,7 +385,10 @@ private struct PreferencesImportPreviewSheet: View {
                 GridRow {
                     Text(AppL10n.preferencesBackup("preferencesBackup.preview.application", defaultValue: "应用偏好"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text(preview.applicationSummary)
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.preview.applicationSummary",
+                        defaultValue: "应用外观、语言和状态栏点击行为"
+                    ))
                 }
                 GridRow {
                     Text(AppL10n.preferencesBackup("preferencesBackup.preview.plugins", defaultValue: "插件显示设置"))
@@ -381,13 +411,29 @@ private struct PreferencesImportPreviewSheet: View {
             }
             .font(PluginSettingsTheme.Typography.rowDescription)
 
+            Text(AppL10n.preferencesBackup(
+                "preferencesBackup.preview.replaceNotice",
+                defaultValue: "将替换以上偏好类别；备份中未包含的设置会恢复为默认值。"
+            ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             if !preview.installablePlugins.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(AppL10n.preferencesBackupImport(
+                    Text(AppL10n.preferencesBackup(
                         "preferencesBackup.preview.installablePlugins",
                         defaultValue: "可安装的缺失插件"
                     ))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.preview.installablePluginsDescription",
+                        defaultValue: "仅会从已验证的插件列表下载你选中的插件。"
+                    ))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     ForEach(preview.installablePlugins) { plugin in
                         Toggle(isOn: installationSelectionBinding(for: plugin.id)) {
@@ -442,23 +488,23 @@ private struct PreferencesImportPreviewSheet: View {
             return AppL10n.preferencesBackup("preferencesBackup.preview.confirm", defaultValue: "导入")
         }
 
-        return AppL10n.preferencesBackupImport(
+        return AppL10n.preferencesBackup(
             "preferencesBackup.preview.installAndImport",
             defaultValue: "安装所选插件并导入"
         )
     }
 
     private var previewDescription: String {
-        if preview.installablePlugins.isEmpty {
+        if selectedInstallablePluginIDs.isEmpty {
             return AppL10n.preferencesBackup(
                 "preferencesBackup.preview.description",
                 defaultValue: "请确认以下更改。导入不会安装插件，也不会修改权限、缓存、Keychain 密钥或插件私有数据。"
             )
         }
 
-        return AppL10n.preferencesBackupImport(
-            "preferencesBackup.preview.installablePluginsDescription",
-            defaultValue: "仅会从已验证的插件列表下载你选中的插件。"
+        return AppL10n.preferencesBackup(
+            "preferencesBackup.description",
+            defaultValue: "备份包含应用偏好、插件显示顺序和快捷键；不会包含权限、缓存或插件私有数据。"
         )
     }
 

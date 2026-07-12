@@ -28,10 +28,6 @@ enum AppL10n {
         string(key, defaultValue: defaultValue, table: "PreferencesBackup")
     }
 
-    static func preferencesBackupImport(_ key: String, defaultValue: String) -> String {
-        string(key, defaultValue: defaultValue, table: "PreferencesBackupImport")
-    }
-
     static func settingsFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: settings(key, defaultValue: defaultValue),

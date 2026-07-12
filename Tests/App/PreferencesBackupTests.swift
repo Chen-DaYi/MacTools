@@ -149,12 +149,136 @@ final class PreferencesBackupTests: XCTestCase {
             ]
         )
 
-        try host.importPreferences(backup)
+        _ = try host.importPreferences(backup)
 
         XCTAssertEqual(host.featureManagementItems.map(\.id), ["second", "first"])
         XCTAssertFalse(host.featureManagementItems.first(where: { $0.id == "first" })?.isVisible ?? true)
         XCTAssertFalse(host.shortcutItems.first(where: { $0.id == "second.shortcut.open" })?.canClear ?? true)
         XCTAssertTrue(host.shortcutItems.first(where: { $0.id == "first.shortcut.toggle" })?.usesDefaultValue ?? false)
+    }
+
+    func testImportRestoresSwappedShortcutBindingsAtomically() throws {
+        let defaults = makeDefaults()
+        let host = makeHost(
+            plugins: [
+                BackupTestPlugin(id: "first", order: 1, shortcutID: "toggle"),
+                BackupTestPlugin(id: "second", order: 2, shortcutID: "open")
+            ],
+            defaults: defaults
+        )
+        let firstBinding = ShortcutBinding(keyCode: 12, modifiers: [.command])
+        let secondBinding = ShortcutBinding(keyCode: 13, modifiers: [.command])
+        host.setShortcutBinding(firstBinding, for: "first.shortcut.toggle")
+        host.setShortcutBinding(secondBinding, for: "second.shortcut.open")
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: ["first", "second"], hiddenPluginIDs: []),
+            shortcutCustomizations: [
+                "first.shortcut.toggle": .custom(secondBinding),
+                "second.shortcut.open": .custom(firstBinding)
+            ]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(
+            host.makePreferencesBackup().shortcutCustomizations,
+            backup.shortcutCustomizations
+        )
+    }
+
+    func testInvalidShortcutImportLeavesAllShortcutCustomizationsUntouched() throws {
+        let defaults = makeDefaults()
+        let host = makeHost(
+            plugins: [
+                BackupTestPlugin(id: "first", order: 1, shortcutID: "toggle"),
+                BackupTestPlugin(id: "second", order: 2, shortcutID: "open")
+            ],
+            defaults: defaults
+        )
+        let firstBinding = ShortcutBinding(keyCode: 12, modifiers: [.command])
+        let secondBinding = ShortcutBinding(keyCode: 13, modifiers: [.command])
+        host.setShortcutBinding(firstBinding, for: "first.shortcut.toggle")
+        host.setShortcutBinding(secondBinding, for: "second.shortcut.open")
+        let existingCustomizations = host.makePreferencesBackup().shortcutCustomizations
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: ["first", "second"], hiddenPluginIDs: []),
+            shortcutCustomizations: [
+                "first.shortcut.toggle": .custom(firstBinding),
+                "second.shortcut.open": .custom(firstBinding)
+            ]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertEqual(
+            Set(result.shortcutErrors.keys),
+            Set(["first.shortcut.toggle", "second.shortcut.open"])
+        )
+        XCTAssertEqual(host.makePreferencesBackup().shortcutCustomizations, existingCustomizations)
+    }
+
+    func testImportInstallsSelectedCatalogPluginThenAppliesItsDisplaySettings() async throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PreferencesBackupInstallTests-\(UUID().uuidString)", isDirectory: true)
+        let suiteName = "PreferencesBackupInstallTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            try? FileManager.default.removeItem(at: temporaryRoot)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let packageURL = try makeDynamicPluginPackage(
+            at: temporaryRoot,
+            id: "installable",
+            version: "1.0.0"
+        )
+        let packageStore = PluginPackageStore(
+            rootDirectory: temporaryRoot.appending(path: "Installed", directoryHint: .isDirectory),
+            userDefaults: defaults,
+            hostVersion: "1.0.0"
+        )
+        let dynamicManager = DynamicPluginManager(
+            packageStore: packageStore,
+            pluginLoader: BackupDynamicPluginLoader()
+        )
+        let entry = makeCatalogEntry(id: "installable", version: "1.0.0")
+        let catalogManager = PluginCatalogManager(
+            catalogProvider: BackupCatalogProvider(entries: [entry]),
+            packageResolver: BackupPackageResolver(packagesByID: ["installable": packageURL]),
+            dynamicPluginManager: dynamicManager,
+            source: .production(URL(string: "https://example.com/catalog.json")!)
+        )
+        let host = PluginHost(
+            plugins: [BackupTestPlugin(id: "built-in", order: 1, shortcutID: "toggle")],
+            dynamicPluginManager: dynamicManager,
+            pluginCatalogManager: catalogManager,
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager(),
+            loadDynamicPluginsOnInit: false
+        )
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: ["installable", "built-in"],
+                hiddenPluginIDs: ["installable"]
+            ),
+            shortcutCustomizations: [:]
+        )
+
+        await host.refreshPluginCatalog()
+        let result = try await host.importPreferences(
+            backup,
+            installingMissingPluginIDs: ["installable"]
+        )
+
+        XCTAssertEqual(result.installedPluginIDs, ["installable"])
+        XCTAssertTrue(result.pluginInstallationFailures.isEmpty)
+        XCTAssertFalse(host.featureManagementItems.first(where: { $0.id == "installable" })?.isVisible ?? true)
     }
 
     func testDecodeRejectsUnsupportedFormatVersion() throws {
@@ -216,6 +340,85 @@ final class PreferencesBackupTests: XCTestCase {
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
+    }
+
+    private func makeDynamicPluginPackage(at root: URL, id: String, version: String) throws -> URL {
+        let packageURL = root
+            .appending(path: "Source/\(id)-\(UUID().uuidString).mactoolsplugin", directoryHint: .isDirectory)
+        let bundleRelativePath = "Demo.bundle"
+        try FileManager.default.createDirectory(
+            at: packageURL.appending(path: bundleRelativePath, directoryHint: .isDirectory),
+            withIntermediateDirectories: true
+        )
+        let manifest = PluginPackageManifest(
+            id: id,
+            displayName: "Installable",
+            version: version,
+            minHostVersion: "0.1.0",
+            bundleRelativePath: bundleRelativePath
+        )
+        try JSONEncoder().encode(manifest).write(to: packageURL.appending(path: "plugin.json"))
+        return packageURL
+    }
+
+    private func makeCatalogEntry(id: String, version: String) -> PluginCatalogEntry {
+        PluginCatalogEntry(
+            id: id,
+            displayName: "Installable",
+            summary: "Available from the verified catalog.",
+            version: version,
+            minimumHostVersion: "0.1.0",
+            package: PluginCatalogPackage(
+                url: URL(fileURLWithPath: "/tmp/\(id).mactoolsplugin"),
+                sha256: String(repeating: "a", count: 64),
+                size: 42
+            )
+        )
+    }
+}
+
+@MainActor
+private struct BackupCatalogProvider: PluginCatalogProviding {
+    let entries: [PluginCatalogEntry]
+
+    func loadCatalog() async throws -> PluginCatalogSnapshot {
+        PluginCatalogSnapshot(
+            catalog: PluginCatalog(
+                catalogID: "com.example.backup-tests",
+                generatedAt: Date(timeIntervalSince1970: 0),
+                minimumHostVersion: "0.1.0",
+                plugins: entries
+            ),
+            sourceURL: URL(string: "https://example.com/catalog.json")!,
+            sourceKind: .production,
+            loadedAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+}
+
+@MainActor
+private struct BackupPackageResolver: PluginPackageResolving {
+    let packagesByID: [String: URL]
+
+    func resolvePackage(for entry: PluginCatalogEntry) async throws -> URL {
+        guard let packageURL = packagesByID[entry.id] else {
+            throw PluginCatalogManagerError.catalogEntryNotFound(entry.id)
+        }
+
+        return packageURL
+    }
+}
+
+@MainActor
+private final class BackupDynamicPluginLoader: DynamicPluginLoading {
+    func loadInstalledPlugins(from records: [PluginPackageRecord]) -> [DynamicPluginLoadResult] {
+        records.map { record in
+            DynamicPluginLoadResult(
+                record: record,
+                plugins: [BackupTestPlugin(id: record.id, order: 10, shortcutID: "toggle")],
+                errorMessage: nil
+            )
+        }
     }
 }
 

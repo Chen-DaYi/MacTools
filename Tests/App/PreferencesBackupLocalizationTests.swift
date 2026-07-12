@@ -3,44 +3,24 @@ import XCTest
 @testable import MacTools
 
 final class PreferencesBackupLocalizationTests: XCTestCase {
-    func testCatalogContainsEverySupportedLanguageForEveryBackupString() throws {
-        let supportedLanguages: Set<String> = [
+    private let supportedLanguages = [
             "ar", "de", "en", "es", "fr", "ja", "ko", "pt", "ru", "zh-Hans", "zh-Hant"
         ]
 
-        try assertTranslations(
-            in: "PreferencesBackup",
-            keys: backupStringKeys,
-            supportedLanguages: supportedLanguages
-        )
-        try assertTranslations(
-            in: "PreferencesBackupImport",
-            keys: backupImportStringKeys,
-            supportedLanguages: supportedLanguages
-        )
-    }
+    func testCompiledCatalogContainsEverySupportedLanguageForEveryBackupString() throws {
+        let resourcesURL = try XCTUnwrap(Bundle.main.resourceURL)
 
-    private var backupImportStringKeys: [String] {
-        [
-            "preferencesBackup.preview.installablePlugins",
-            "preferencesBackup.preview.installablePluginsDescription",
-            "preferencesBackup.preview.installAndImport"
-        ]
-    }
+        for language in supportedLanguages {
+            let stringsURL = resourcesURL
+                .appending(path: "\(language).lproj/PreferencesBackup.strings")
+            let strings = try XCTUnwrap(
+                NSDictionary(contentsOf: stringsURL) as? [String: String],
+                "Missing compiled PreferencesBackup strings for \(language)"
+            )
 
-    private func assertTranslations(
-        in catalogName: String,
-        keys: [String],
-        supportedLanguages: Set<String>
-    ) throws {
-        let catalog = try loadCatalog(named: catalogName)
-        let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
-
-        for key in keys {
-            let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing \(key) in \(catalogName).xcstrings")
-            let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
-
-            XCTAssertEqual(Set(localizations.keys), supportedLanguages, "\(key) must be translated for every supported language")
+            for key in backupStringKeys {
+                XCTAssertNotNil(strings[key], "\(key) must be compiled for \(language)")
+            }
         }
     }
 
@@ -61,24 +41,17 @@ final class PreferencesBackupLocalizationTests: XCTestCase {
             "preferencesBackup.preview.applicationSummary",
             "preferencesBackup.preview.confirm",
             "preferencesBackup.preview.description",
+            "preferencesBackup.preview.installablePlugins",
+            "preferencesBackup.preview.installablePluginsDescription",
+            "preferencesBackup.preview.installAndImport",
             "preferencesBackup.preview.plugins",
             "preferencesBackup.preview.pluginsCount",
+            "preferencesBackup.preview.replaceNotice",
             "preferencesBackup.preview.shortcuts",
             "preferencesBackup.preview.shortcutsCount",
             "preferencesBackup.preview.skipped",
             "preferencesBackup.preview.title",
             "preferencesBackup.title"
         ]
-    }
-
-    private func loadCatalog(named name: String) throws -> [String: Any] {
-        let repositoryRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let catalogURL = repositoryRoot
-            .appending(path: "Sources/Resources/Localization/\(name).xcstrings")
-        let data = try Data(contentsOf: catalogURL)
-        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 }

@@ -132,7 +132,7 @@ final class PluginHost: ObservableObject {
     private let builtInPlugins: [any MacToolsPlugin]
     private let shortcutStore: ShortcutStore
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
-    private let preferencesBackupStore: PreferencesBackupStore
+    private let preferencesBackupStore: any PreferencesBackupApplicationStoring
     private let globalShortcutManager: GlobalShortcutManager
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
@@ -192,7 +192,10 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    convenience init(loadDynamicPluginsOnInit: Bool = true) {
+    convenience init(
+        loadDynamicPluginsOnInit: Bool = true,
+        preferencesBackupStore: any PreferencesBackupApplicationStoring = UserDefaultsPreferencesBackupStore()
+    ) {
         let dynamicPluginManager = DynamicPluginManager()
         let pluginCatalogManager = PluginCatalogManager.live(dynamicPluginManager: dynamicPluginManager)
         self.init(
@@ -201,7 +204,7 @@ final class PluginHost: ObservableObject {
             pluginCatalogManager: pluginCatalogManager,
             shortcutStore: ShortcutStore(),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
-            preferencesBackupStore: PreferencesBackupStore(),
+            preferencesBackupStore: preferencesBackupStore,
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: SystemDisplayConfigurationObserver(),
             accessibilityPermissionObserver: AccessibilityPermissionObserver(),
@@ -215,7 +218,7 @@ final class PluginHost: ObservableObject {
         pluginCatalogManager: PluginCatalogManager? = nil,
         shortcutStore: ShortcutStore,
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
-        preferencesBackupStore: PreferencesBackupStore = PreferencesBackupStore(),
+        preferencesBackupStore: any PreferencesBackupApplicationStoring = UserDefaultsPreferencesBackupStore(),
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
@@ -348,18 +351,31 @@ final class PluginHost: ObservableObject {
     func importPreferences(
         _ backup: PreferencesBackup,
         installingMissingPluginIDs requestedPluginIDs: Set<String>
-    ) async throws {
+    ) async throws -> PreferencesImportResult {
         let preview = try preferencesImportPreview(for: backup)
         let installablePluginIDs = Set(preview.installablePlugins.map(\.id))
+        var installedPluginIDs: [String] = []
+        var pluginInstallationFailures: [String: String] = [:]
 
         for pluginID in requestedPluginIDs.intersection(installablePluginIDs).sorted() {
-            try await installPluginFromCatalog(pluginID: pluginID)
+            do {
+                try await installPluginFromCatalog(pluginID: pluginID)
+                installedPluginIDs.append(pluginID)
+            } catch {
+                pluginInstallationFailures[pluginID] = error.localizedDescription
+            }
         }
 
-        try importPreferences(backup)
+        var result = try importPreferences(backup)
+        result = PreferencesImportResult(
+            installedPluginIDs: installedPluginIDs,
+            pluginInstallationFailures: pluginInstallationFailures,
+            shortcutErrors: result.shortcutErrors
+        )
+        return result
     }
 
-    func importPreferences(_ backup: PreferencesBackup) throws {
+    func importPreferences(_ backup: PreferencesBackup) throws -> PreferencesImportResult {
         _ = try preferencesImportPreview(for: backup)
         preferencesBackupStore.apply(backup.application)
 
@@ -381,13 +397,15 @@ final class PluginHost: ObservableObject {
             defaultPluginIDs: defaultPluginIDs
         )
 
-        for descriptor in shortcutDescriptors() {
-            let customization = backup.shortcutCustomizations[descriptor.itemID] ?? .inheritDefault
-            _ = applyShortcutCustomization(customization, for: descriptor)
-        }
+        let shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)
 
         rebuildDerivedState()
         syncGlobalShortcuts()
+        return PreferencesImportResult(
+            installedPluginIDs: [],
+            pluginInstallationFailures: [:],
+            shortcutErrors: shortcutErrors
+        )
     }
 
     /// Rebuild language-dependent host data without refreshing or reactivating
@@ -2038,6 +2056,96 @@ final class PluginHost: ObservableObject {
         }
 
         return resolvedBinding(for: descriptor)
+    }
+
+    private func applyImportedShortcutCustomizations(
+        _ importedCustomizations: [String: ShortcutCustomization]
+    ) -> [String: String] {
+        let descriptors = shortcutDescriptors()
+        let targetCustomizations = Dictionary(
+            uniqueKeysWithValues: descriptors.map { descriptor in
+                (descriptor.itemID, importedCustomizations[descriptor.itemID] ?? .inheritDefault)
+            }
+        )
+        let errors = validateImportedShortcutCustomizations(
+            targetCustomizations,
+            descriptors: descriptors
+        )
+
+        guard errors.isEmpty else {
+            shortcutErrors.merge(errors) { _, newValue in newValue }
+            return errors
+        }
+
+        for descriptor in descriptors {
+            guard let customization = targetCustomizations[descriptor.itemID] else {
+                continue
+            }
+
+            shortcutStore.setCustomization(customization, for: descriptor.itemID)
+            shortcutErrors.removeValue(forKey: descriptor.itemID)
+        }
+
+        return [:]
+    }
+
+    private func validateImportedShortcutCustomizations(
+        _ customizations: [String: ShortcutCustomization],
+        descriptors: [ShortcutDescriptor]
+    ) -> [String: String] {
+        var bindingsByID: [String: ShortcutBinding?] = [:]
+        var errors: [String: String] = [:]
+
+        for descriptor in descriptors {
+            let customization = customizations[descriptor.itemID] ?? .inheritDefault
+            let binding = ShortcutStore.resolve(
+                customization: customization,
+                defaultBinding: descriptor.definition.defaultBinding
+            )
+            bindingsByID[descriptor.itemID] = binding
+
+            do {
+                if descriptor.definition.isRequired && binding == nil {
+                    throw ShortcutValidationError.requiredShortcut
+                }
+
+                if let binding {
+                    guard !binding.modifiers.isEmpty else {
+                        throw ShortcutValidationError.missingModifier
+                    }
+
+                    guard !ShortcutKeyCode.isModifier(binding.keyCode) else {
+                        throw ShortcutValidationError.modifierOnly
+                    }
+                }
+            } catch {
+                errors[descriptor.itemID] = error.localizedDescription
+            }
+        }
+
+        for (index, descriptor) in descriptors.enumerated() {
+            guard let binding = bindingsByID[descriptor.itemID] ?? nil else {
+                continue
+            }
+
+            for otherDescriptor in descriptors.dropFirst(index + 1) {
+                guard let otherBinding = bindingsByID[otherDescriptor.itemID] ?? nil,
+                      otherBinding == binding,
+                      !canShareShortcutBinding(descriptor, with: otherDescriptor)
+                else {
+                    continue
+                }
+
+                errors[descriptor.itemID] = ShortcutValidationError.duplicate(
+                    ownerDescription: "\(otherDescriptor.pluginTitle) · \(otherDescriptor.definition.title)"
+                ).localizedDescription
+                errors[otherDescriptor.itemID] = ShortcutValidationError.duplicate(
+                    ownerDescription: "\(descriptor.pluginTitle) · \(descriptor.definition.title)"
+                ).localizedDescription
+            }
+        }
+
+        return errors
     }
 
     @discardableResult

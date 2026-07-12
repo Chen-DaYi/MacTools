@@ -16,12 +16,7 @@ struct PreferencesBackup: Codable, Equatable {
     let pluginDisplay: PluginDisplayPreferencesBackup
     let shortcutCustomizations: [String: ShortcutCustomization]
 
-    init(
-        application: ApplicationPreferences,
-        pluginDisplay: PluginDisplayPreferencesBackup,
-        shortcutCustomizations: [String: ShortcutCustomization],
-        exportedAt: Date = .now
-    ) {
+    init(application: ApplicationPreferences, pluginDisplay: PluginDisplayPreferencesBackup, shortcutCustomizations: [String: ShortcutCustomization], exportedAt: Date = .now) {
         self.formatVersion = Self.currentFormatVersion
         self.exportedAt = exportedAt
         self.application = application
@@ -33,10 +28,9 @@ struct PreferencesBackup: Codable, Equatable {
         guard formatVersion == Self.currentFormatVersion else {
             throw PreferencesBackupError.unsupportedFormatVersion(formatVersion)
         }
-
-        guard AppAppearancePreference(rawValue: application.appearancePreference) != nil,
-              AppLanguagePreference(rawValue: application.languagePreference) != nil,
-              MenuBarClickBehaviorPreference(rawValue: application.menuBarClickBehavior) != nil
+        guard Self.appearancePreferenceValues.contains(application.appearancePreference),
+              Self.languagePreferenceValues.contains(application.languagePreference),
+              Self.menuBarClickBehaviorValues.contains(application.menuBarClickBehavior)
         else {
             throw PreferencesBackupError.invalidApplicationPreferences
         }
@@ -56,6 +50,10 @@ struct PreferencesBackup: Codable, Equatable {
         try backup.validate()
         return backup
     }
+
+    private static let appearancePreferenceValues: Set<String> = ["system", "dark", "light"]
+    private static let languagePreferenceValues: Set<String> = ["system", "zh-Hans", "zh-Hant", "en", "es", "fr", "ru", "pt", "de", "ja", "ko", "ar"]
+    private static let menuBarClickBehaviorValues: Set<String> = ["standard", "swapped"]
 }
 
 struct PluginDisplayPreferencesBackup: Codable, Equatable {
@@ -70,48 +68,23 @@ struct PreferencesImportPreview: Equatable {
     let unavailableShortcutIDs: [String]
     let installablePlugins: [PreferencesImportInstallablePlugin]
 
-    static func make(
-        backup: PreferencesBackup,
-        availablePluginIDs: Set<String>,
-        availableShortcutIDs: Set<String>,
-        pluginManagementItems: [PluginManagementItem]
-    ) throws -> PreferencesImportPreview {
+    static func make(backup: PreferencesBackup, availablePluginIDs: Set<String>, availableShortcutIDs: Set<String>, pluginManagementItems: [PluginManagementItem]) throws -> PreferencesImportPreview {
         try backup.validate()
-
-        let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs)
-            .union(backup.pluginDisplay.hiddenPluginIDs)
+        let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs).union(backup.pluginDisplay.hiddenPluginIDs)
         let missingPluginIDs = backedUpPluginIDs.subtracting(availablePluginIDs)
-        let managementItemsByID = Dictionary(
-            uniqueKeysWithValues: pluginManagementItems.map { ($0.id, $0) }
-        )
+        let managementItemsByID = Dictionary(pluginManagementItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let installablePlugins = missingPluginIDs.compactMap { pluginID -> PreferencesImportInstallablePlugin? in
-            guard let item = managementItemsByID[pluginID], item.canInstall else {
-                return nil
-            }
-
-            return PreferencesImportInstallablePlugin(
-                id: item.id,
-                title: item.title,
-                summary: item.summary,
-                version: item.version
-            )
+            guard let item = managementItemsByID[pluginID], item.canInstall else { return nil }
+            return PreferencesImportInstallablePlugin(id: item.id, title: item.title, summary: item.summary, version: item.version)
         }
         let installablePluginIDs = Set(installablePlugins.map(\.id))
         let backedUpShortcutIDs = Set(backup.shortcutCustomizations.keys)
-
         return PreferencesImportPreview(
             pluginCount: backedUpPluginIDs.intersection(availablePluginIDs).count,
             unavailablePluginIDs: missingPluginIDs.subtracting(installablePluginIDs).sorted(),
             shortcutCount: backedUpShortcutIDs.intersection(availableShortcutIDs).count,
             unavailableShortcutIDs: backedUpShortcutIDs.subtracting(availableShortcutIDs).sorted(),
             installablePlugins: installablePlugins.sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
-        )
-    }
-
-    var applicationSummary: String {
-        AppL10n.preferencesBackup(
-            "preferencesBackup.preview.applicationSummary",
-            defaultValue: "应用外观、语言和状态栏点击行为"
         )
     }
 }
@@ -123,29 +96,25 @@ struct PreferencesImportInstallablePlugin: Identifiable, Equatable {
     let version: String
 }
 
-enum PreferencesBackupError: LocalizedError {
+struct PreferencesImportResult: Equatable {
+    let installedPluginIDs: [String]
+    let pluginInstallationFailures: [String: String]
+    let shortcutErrors: [String: String]
+}
+
+enum PreferencesBackupError: Error, Equatable {
     case unsupportedFormatVersion(Int)
     case invalidApplicationPreferences
-
-    var errorDescription: String? {
-        switch self {
-        case let .unsupportedFormatVersion(version):
-            return AppL10n.preferencesBackupFormat(
-                "preferencesBackup.error.unsupportedFormat",
-                defaultValue: "不支持的偏好设置备份版本（%d）。",
-                version
-            )
-        case .invalidApplicationPreferences:
-            return AppL10n.preferencesBackup(
-                "preferencesBackup.error.invalidApplicationPreferences",
-                defaultValue: "备份中的应用偏好设置无效。"
-            )
-        }
-    }
 }
 
 @MainActor
-final class PreferencesBackupStore {
+protocol PreferencesBackupApplicationStoring: AnyObject {
+    func applicationPreferences() -> PreferencesBackup.ApplicationPreferences
+    func apply(_ preferences: PreferencesBackup.ApplicationPreferences)
+}
+
+@MainActor
+final class UserDefaultsPreferencesBackupStore: PreferencesBackupApplicationStoring {
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
@@ -154,23 +123,15 @@ final class PreferencesBackupStore {
 
     func applicationPreferences() -> PreferencesBackup.ApplicationPreferences {
         PreferencesBackup.ApplicationPreferences(
-            appearancePreference: AppAppearancePreference.stored(in: userDefaults).rawValue,
-            languagePreference: AppLanguagePreference.stored(in: userDefaults).rawValue,
-            menuBarClickBehavior: MenuBarClickBehaviorPreference.current(userDefaults).rawValue
+            appearancePreference: userDefaults.string(forKey: "app.appearancePreference") ?? "system",
+            languagePreference: userDefaults.string(forKey: "app.languagePreference") ?? "system",
+            menuBarClickBehavior: userDefaults.string(forKey: "menuBar.clickBehaviorPreference") ?? "standard"
         )
     }
 
     func apply(_ preferences: PreferencesBackup.ApplicationPreferences) {
-        guard let appearance = AppAppearancePreference(rawValue: preferences.appearancePreference),
-              let language = AppLanguagePreference(rawValue: preferences.languagePreference),
-              let clickBehavior = MenuBarClickBehaviorPreference(rawValue: preferences.menuBarClickBehavior)
-        else {
-            return
-        }
-
-        userDefaults.set(appearance.rawValue, forKey: AppAppearancePreference.userDefaultsKey)
-        appearance.apply()
-        language.store(in: userDefaults)
-        userDefaults.set(clickBehavior.rawValue, forKey: MenuBarClickBehaviorPreference.userDefaultsKey)
+        userDefaults.set(preferences.appearancePreference, forKey: "app.appearancePreference")
+        userDefaults.set(preferences.languagePreference, forKey: "app.languagePreference")
+        userDefaults.set(preferences.menuBarClickBehavior, forKey: "menuBar.clickBehaviorPreference")
     }
 }
