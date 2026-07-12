@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import XCTest
 import MacToolsPluginKit
@@ -51,29 +52,76 @@ final class PluginHostDisclosureStateTests: XCTestCase {
         XCTAssertEqual(plugin.stateReadCount, 1)
     }
 
+    func testOptionalPrimaryPanelIndicatorMapsByPluginID() {
+        let plugin = MockDisclosurePlugin()
+        plugin.indicator = PluginPrimaryPanelIndicator(text: "屏幕常亮", systemImage: "display")
+        let host = makeHost(plugin: plugin)
+
+        XCTAssertEqual(host.primaryPanelIndicatorsByID[plugin.metadata.id], plugin.indicator)
+    }
+
+    func testIncrementalRebuildDoesNotRereadNilIndicatorForUnrelatedPlugin() async throws {
+        let changingPlugin = MockDisclosurePlugin(id: "changing", order: 1)
+        let stablePlugin = MockDisclosurePlugin(id: "stable", order: 2)
+        let host = makeHost(
+            plugins: [changingPlugin, stablePlugin],
+            pluginStateChangeRebuildDelay: .milliseconds(20)
+        )
+        changingPlugin.indicatorReadCount = 0
+        stablePlugin.indicatorReadCount = 0
+
+        changingPlugin.onStateChange?()
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertEqual(changingPlugin.indicatorReadCount, 1)
+        XCTAssertEqual(stablePlugin.indicatorReadCount, 0)
+        XCTAssertTrue(host.primaryPanelIndicatorsByID.isEmpty)
+    }
+
+    func testPrimaryPanelIndicatorChangesPublishDirectly() async throws {
+        let plugin = MockDisclosurePlugin()
+        let host = makeHost(
+            plugins: [plugin],
+            pluginStateChangeRebuildDelay: .milliseconds(20)
+        )
+        let expectedIndicator = PluginPrimaryPanelIndicator(text: "屏幕常亮", systemImage: "display")
+        var publishedIndicators: [[String: PluginPrimaryPanelIndicator]] = []
+        let cancellable = host.$primaryPanelIndicatorsByID
+            .dropFirst()
+            .sink { publishedIndicators.append($0) }
+
+        plugin.indicator = expectedIndicator
+        plugin.onStateChange?()
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertEqual(publishedIndicators.last?[plugin.metadata.id], expectedIndicator)
+        withExtendedLifetime(cancellable) {}
+    }
+
     private func makeHost(plugin: MockDisclosurePlugin) -> PluginHost {
+        makeHost(plugins: [plugin])
+    }
+
+    private func makeHost(
+        plugins: [any MacToolsPlugin],
+        pluginStateChangeRebuildDelay: Duration = .milliseconds(80)
+    ) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
 
         return PluginHost(
-            plugins: [plugin],
+            plugins: plugins,
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
-            globalShortcutManager: GlobalShortcutManager()
+            globalShortcutManager: GlobalShortcutManager(),
+            pluginStateChangeRebuildDelay: pluginStateChangeRebuildDelay
         )
     }
 }
 
 @MainActor
-private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "mock-disclosure",
-        title: "Mock Disclosure",
-        iconName: "display",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 1,
-        defaultDescription: "Mock plugin"
-    )
+private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelIndicatorProviding {
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -85,7 +133,25 @@ private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var isExpanded = false
     var errorMessage: String?
+    var indicator: PluginPrimaryPanelIndicator?
     var stateReadCount = 0
+    var indicatorReadCount = 0
+
+    init(id: String = "mock-disclosure", order: Int = 1) {
+        metadata = PluginMetadata(
+            id: id,
+            title: "Mock Disclosure",
+            iconName: "display",
+            iconTint: Color(nsColor: .systemBlue),
+            order: order,
+            defaultDescription: "Mock plugin"
+        )
+    }
+
+    var primaryPanelIndicator: PluginPrimaryPanelIndicator? {
+        indicatorReadCount += 1
+        return indicator
+    }
 
     var primaryPanelState: PluginPanelState {
         stateReadCount += 1

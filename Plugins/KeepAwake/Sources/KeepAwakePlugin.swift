@@ -19,7 +19,7 @@ private struct KeepAwakePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelIndicatorProviding {
     typealias SessionFactory = (
         PluginLocalization,
         @escaping (KeepAwakeSession.EndReason) -> Void
@@ -31,6 +31,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private enum StorageKey {
         static let persistentEnabled = "persistent-enabled"
+        static let keepDisplayOn = "keep-display-on"
     }
 
     private enum ControlID {
@@ -86,8 +87,9 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var lastErrorMessage: String?
     private var session: (any KeepAwakeSessionManaging)?
     private var selectedDurationPreset: DurationPreset = .forever
+    private var keepDisplayOn = false
     private var scheduledEndDate: Date?
-    private var subtitleRefreshTimer: Timer?
+    private var timedStateRefreshTimer: Timer?
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "keep-awake"),
@@ -99,6 +101,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         self.localization = localization
         self.storage = context.storage
         self.sessionFactory = sessionFactory
+        self.keepDisplayOn = context.storage.bool(forKey: StorageKey.keepDisplayOn)
         self.metadata = PluginMetadata(
             id: "keep-awake",
             title: localization.string("metadata.title", defaultValue: "阻止休眠"),
@@ -107,7 +110,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             order: 50,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "阻止系统空闲休眠，允许显示器息屏"
+                defaultValue: "阻止系统空闲休眠；可选保持屏幕常亮"
             )
         )
     }
@@ -124,14 +127,38 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         )
     }
 
+    var primaryPanelIndicator: PluginPrimaryPanelIndicator? {
+        guard keepDisplayOn, session != nil else {
+            return nil
+        }
+
+        return PluginPrimaryPanelIndicator(
+            text: localization.string("panel.display.indicator", defaultValue: "屏幕常亮"),
+            systemImage: "display"
+        )
+    }
+
     var permissionRequirements: [PluginPermissionRequirement] { [] }
 
     var settingsSections: [PluginSettingsSection] { [] }
 
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(description: metadata.defaultDescription) { [weak self, localization] _ in
+            KeepAwakeSettingsView(
+                keepDisplayOn: Binding(
+                    get: { self?.keepDisplayOn ?? false },
+                    set: { [weak self] in self?.setKeepDisplayOn($0) }
+                ),
+                localization: localization
+            )
+        }
+    }
+
     func activate(context: PluginRuntimeContext) {
         storage = context.storage
+        keepDisplayOn = storage.bool(forKey: StorageKey.keepDisplayOn)
 
         guard storage.bool(forKey: StorageKey.persistentEnabled) else {
             return
@@ -143,7 +170,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func refresh() {
-        scheduleSubtitleRefreshIfNeeded()
+        scheduleTimedStateRefreshIfNeeded()
     }
 
     func deactivate(reason: PluginDeactivationReason) {
@@ -161,7 +188,6 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             guard controlID == ControlID.duration else {
                 return
             }
-
             updateDurationPreset(using: optionID)
         case .setDate, .setSlider, .invokeAction:
             return
@@ -183,11 +209,29 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             return metadata.defaultDescription
         }
 
-        guard let scheduledEndDate else {
-            return localization.string("panel.subtitle.enabled", defaultValue: "已启用")
+        if let scheduledEndDate {
+            let referenceDate = Date()
+            let remaining = remainingTimeDescription(
+                until: scheduledEndDate,
+                referenceDate: referenceDate
+            )
+            let stopAt = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
+                until: scheduledEndDate,
+                referenceDate: referenceDate,
+                localization: localization
+            )
+            return localization.format(
+                "panel.subtitle.timedFormat",
+                defaultValue: "%@ · %@",
+                remaining,
+                stopAt
+            )
         }
 
-        return remainingTimeDescription(until: scheduledEndDate, referenceDate: Date())
+        return localization.string(
+            "panel.duration.noAutomaticStop",
+            defaultValue: "不会自动停止"
+        )
     }
 
     private var panelDetail: PluginPanelDetail? {
@@ -259,6 +303,32 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         applyKeepAwakeConfiguration()
     }
 
+    func setKeepDisplayOn(_ shouldKeepDisplayOn: Bool) {
+        guard keepDisplayOn != shouldKeepDisplayOn else {
+            return
+        }
+
+        lastErrorMessage = nil
+
+        guard let session else {
+            keepDisplayOn = shouldKeepDisplayOn
+            persistKeepDisplayOnPreference()
+            notifyChange()
+            return
+        }
+
+        do {
+            try session.setPreventDisplaySleep(shouldKeepDisplayOn)
+            keepDisplayOn = shouldKeepDisplayOn
+            persistKeepDisplayOnPreference()
+            notifyChange()
+        } catch {
+            logger.error("keep-awake display update failed: \(error.localizedDescription, privacy: .public)")
+            lastErrorMessage = error.localizedDescription
+            notifyChange()
+        }
+    }
+
     private func applyKeepAwakeConfiguration() {
         let session = session ?? sessionFactory(localization) { [weak self] reason in
             self?.handleSessionEnd(reason)
@@ -266,11 +336,11 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         let endDate = resolvedScheduledEndDate(referenceDate: Date())
 
         do {
-            try session.start(until: endDate)
+            try session.start(until: endDate, preventDisplaySleep: keepDisplayOn)
             self.session = session
             scheduledEndDate = endDate
             persistCurrentSelectionIfRunning()
-            scheduleSubtitleRefreshIfNeeded()
+            scheduleTimedStateRefreshIfNeeded()
             lastErrorMessage = nil
             notifyChange()
         } catch {
@@ -299,30 +369,30 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         if hours == 0 {
             return localization.format(
-                "panel.subtitle.remainingMinutesFormat",
-                defaultValue: "%d 分钟后自动停止",
+                "panel.duration.remainingMinutesFormat",
+                defaultValue: "剩余 %d 分钟",
                 remainingMinutes
             )
         }
 
         if minutes == 0 {
             return localization.format(
-                "panel.subtitle.remainingHoursFormat",
-                defaultValue: "%d 小时后自动停止",
+                "panel.duration.remainingHoursFormat",
+                defaultValue: "剩余 %d 小时",
                 hours
             )
         }
 
         return localization.format(
-            "panel.subtitle.remainingHoursMinutesFormat",
-            defaultValue: "%d 小时 %d 分钟后自动停止",
+            "panel.duration.remainingHoursMinutesFormat",
+            defaultValue: "剩余 %d 小时 %d 分钟",
             hours,
             minutes
         )
     }
 
-    private func scheduleSubtitleRefreshIfNeeded() {
-        invalidateSubtitleRefreshTimer()
+    private func scheduleTimedStateRefreshIfNeeded() {
+        invalidateTimedStateRefreshTimer()
 
         guard session != nil, let scheduledEndDate else {
             return
@@ -342,27 +412,27 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.handleSubtitleRefreshTimerFired()
+                self?.handleTimedStateRefreshTimerFired()
             }
         }
         timer.tolerance = min(1, nextRefreshInterval * 0.1)
         RunLoop.main.add(timer, forMode: .common)
-        subtitleRefreshTimer = timer
+        timedStateRefreshTimer = timer
     }
 
-    private func handleSubtitleRefreshTimerFired() {
+    private func handleTimedStateRefreshTimerFired() {
         guard session != nil, scheduledEndDate != nil else {
-            invalidateSubtitleRefreshTimer()
+            invalidateTimedStateRefreshTimer()
             return
         }
 
         notifyChange()
-        scheduleSubtitleRefreshIfNeeded()
+        scheduleTimedStateRefreshIfNeeded()
     }
 
-    private func invalidateSubtitleRefreshTimer() {
-        subtitleRefreshTimer?.invalidate()
-        subtitleRefreshTimer = nil
+    private func invalidateTimedStateRefreshTimer() {
+        timedStateRefreshTimer?.invalidate()
+        timedStateRefreshTimer = nil
     }
 
     private func handleSessionEnd(_ reason: KeepAwakeSession.EndReason) {
@@ -390,13 +460,94 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         storage.removeObject(forKey: StorageKey.persistentEnabled)
     }
 
+    private func persistKeepDisplayOnPreference() {
+        if keepDisplayOn {
+            storage.set(true, forKey: StorageKey.keepDisplayOn)
+        } else {
+            storage.removeObject(forKey: StorageKey.keepDisplayOn)
+        }
+    }
+
     private func resetSelectionToDefaults() {
         selectedDurationPreset = .forever
         scheduledEndDate = nil
-        invalidateSubtitleRefreshTimer()
+        invalidateTimedStateRefreshTimer()
     }
 
     private func notifyChange() {
         onStateChange?()
+    }
+}
+
+/// Formats the scheduled stop moment for Keep Awake subtitles.
+enum KeepAwakeStopScheduleFormatting {
+    static func absoluteStopLabel(
+        until endDate: Date,
+        referenceDate: Date,
+        calendar: Calendar = .current,
+        localization: PluginLocalization,
+        locale: Locale = .current
+    ) -> String {
+        let timeZone = calendar.timeZone
+        let timeText = timeString(from: endDate, locale: locale, timeZone: timeZone)
+
+        if calendar.isDate(endDate, inSameDayAs: referenceDate) {
+            return timeText
+        }
+
+        if let tomorrowStart = calendar.date(
+            byAdding: .day,
+            value: 1,
+            to: calendar.startOfDay(for: referenceDate)
+        ), calendar.isDate(endDate, inSameDayAs: tomorrowStart) {
+            return localization.format(
+                "panel.subtitle.stopTomorrowAtTimeFormat",
+                defaultValue: "明天 %@",
+                timeText
+            )
+        }
+
+        let dateText = dateString(
+            from: endDate,
+            referenceDate: referenceDate,
+            calendar: calendar,
+            locale: locale,
+            timeZone: timeZone
+        )
+        return localization.format(
+            "panel.subtitle.stopAtDateTimeFormat",
+            defaultValue: "%@ %@",
+            dateText,
+            timeText
+        )
+    }
+
+    private static func timeString(from date: Date, locale: Locale, timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        // Follow the user's locale and preferred 12/24-hour clock while keeping minutes explicit.
+        if let format = DateFormatter.dateFormat(fromTemplate: "jm", options: 0, locale: locale) {
+            formatter.dateFormat = format
+        } else {
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+        }
+        return formatter.string(from: date)
+    }
+
+    private static func dateString(
+        from date: Date,
+        referenceDate: Date,
+        calendar: Calendar,
+        locale: Locale,
+        timeZone: TimeZone
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: referenceDate)
+        formatter.setLocalizedDateFormatFromTemplate(sameYear ? "MMMd" : "yMMMd")
+        return formatter.string(from: date)
     }
 }

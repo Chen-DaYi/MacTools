@@ -135,6 +135,13 @@ public protocol DisplayTopologyRefreshing {
     func refreshDisplayTopology()
 }
 
+/// Optional protocol for plugins that expose a compact, read-only status in the primary panel row.
+/// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
+@MainActor
+public protocol PluginPrimaryPanelIndicatorProviding: AnyObject {
+    var primaryPanelIndicator: PluginPrimaryPanelIndicator? { get }
+}
+
 /// Optional protocol for plugins that need a floating-window anchor.
 /// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
 @MainActor
