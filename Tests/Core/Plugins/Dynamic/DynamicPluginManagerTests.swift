@@ -104,7 +104,7 @@ final class DynamicPluginManagerTests: XCTestCase {
         )
     }
 
-    func testBatchUpdatingLoadedPluginsReloadsOnlyOnce() throws {
+    func testBatchUpdatingLoadedPluginsReloadsOnlyOnce() async throws {
         let firstAlphaURL = try makePackage(id: "com.example.alpha", version: "1.0.0", displayName: "Alpha")
         let firstBetaURL = try makePackage(id: "com.example.beta", version: "1.0.0", displayName: "Beta")
         let updateAlphaURL = try makePackage(id: "com.example.alpha", version: "2.0.0", displayName: "Alpha")
@@ -135,7 +135,7 @@ final class DynamicPluginManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.loadInstalledPlugins().map(\.metadata.id), ["com.example.alpha", "com.example.beta"])
 
-        let failures = manager.updatePluginPackages([
+        let failures = await manager.updatePluginPackages([
             (sourceURL: updateAlphaURL, catalogEntry: makeCatalogEntry(id: "com.example.alpha", version: "2.0.0")),
             (sourceURL: updateBetaURL, catalogEntry: makeCatalogEntry(id: "com.example.beta", version: "2.0.0")),
         ])
@@ -161,6 +161,43 @@ final class DynamicPluginManagerTests: XCTestCase {
 
             return false
         })
+    }
+
+    func testBatchUpdateYieldsMainActorBetweenProgressCallbacks() async throws {
+        let firstAlphaURL = try makePackage(id: "com.example.alpha", version: "1.0.0", displayName: "Alpha")
+        let firstBetaURL = try makePackage(id: "com.example.beta", version: "1.0.0", displayName: "Beta")
+        let updateAlphaURL = try makePackage(id: "com.example.alpha", version: "2.0.0", displayName: "Alpha")
+        let updateBetaURL = try makePackage(id: "com.example.beta", version: "2.0.0", displayName: "Beta")
+        let store = makeStore()
+        _ = try store.installPackage(from: firstAlphaURL)
+        _ = try store.installPackage(from: firstBetaURL)
+        let manager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        var processedCount = 0
+        var didRunScheduledMainActorWork = false
+        var observedScheduledWorkBeforeCompletion = false
+
+        _ = await manager.updatePluginPackages(
+            [
+                (sourceURL: updateAlphaURL, catalogEntry: makeCatalogEntry(id: "com.example.alpha", version: "2.0.0")),
+                (sourceURL: updateBetaURL, catalogEntry: makeCatalogEntry(id: "com.example.beta", version: "2.0.0")),
+            ],
+            onPackageProcessed: {
+                processedCount += 1
+
+                if processedCount == 1 {
+                    Task { @MainActor in
+                        didRunScheduledMainActorWork = true
+                    }
+                } else {
+                    observedScheduledWorkBeforeCompletion = didRunScheduledMainActorWork
+                }
+            }
+        )
+
+        XCTAssertTrue(observedScheduledWorkBeforeCompletion)
     }
 
     func testUninstallingLoadedPluginDeletesPackageAndRemovesManagementItem() throws {

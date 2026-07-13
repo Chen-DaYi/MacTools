@@ -254,7 +254,7 @@ final class DynamicPluginManager: ObservableObject {
         _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)],
         reloadAfterUpdate: Bool = true,
         onPackageProcessed: (() -> Void)? = nil
-    ) -> [PluginPackageUpdateFailure] {
+    ) async -> [PluginPackageUpdateFailure] {
         guard !updates.isEmpty else {
             return []
         }
@@ -285,6 +285,7 @@ final class DynamicPluginManager: ObservableObject {
             }
 
             onPackageProcessed?()
+            await Task.yield()
         }
 
         return failures

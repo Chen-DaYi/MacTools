@@ -218,6 +218,7 @@ final class PluginCatalogManager {
         }
 
         reportProgress()
+        await Task.yield()
 
         for entry in entries {
             do {
@@ -227,11 +228,12 @@ final class PluginCatalogManager {
                 failures.append(PluginPackageUpdateFailure(pluginID: entry.id, error: error))
                 completedCount += 1
                 reportProgress()
+                await Task.yield()
             }
         }
 
         failures.append(
-            contentsOf: dynamicPluginManager.updatePluginPackages(
+            contentsOf: await dynamicPluginManager.updatePluginPackages(
                 resolvedUpdates,
                 reloadAfterUpdate: reloadAfterUpdate,
                 onPackageProcessed: {
