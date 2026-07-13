@@ -19,7 +19,10 @@ struct MacToolsApp: App {
 
 @MainActor
 final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    private let pluginHost = PluginHost(loadDynamicPluginsOnInit: false)
+    private let pluginHost = PluginHost(
+        loadDynamicPluginsOnInit: false,
+        preferencesBackupStore: PreferencesBackupStore()
+    )
     private let appUpdater = AppUpdater()
     private let menuBarIconSettings = MenuBarIconSettings()
     private let menuBarIconGallery = MenuBarIconGalleryLibrary()

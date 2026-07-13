@@ -92,6 +92,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
             plugins: [plugin],
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: displayPreferencesStore,
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
 
@@ -525,6 +526,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
             plugins: [componentPanelPlugin],
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
 
@@ -880,6 +882,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
             dynamicPluginManager: manager,
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(),
             loadDynamicPluginsOnInit: false
         )
@@ -982,6 +985,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
             dynamicPluginManager: dynamicPluginManager,
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: displayConfigurationObserver,
             displayTopologyRefreshDelay: displayTopologyRefreshDelay,

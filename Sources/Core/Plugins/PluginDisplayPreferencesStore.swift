@@ -147,6 +147,20 @@ final class PluginDisplayPreferencesStore {
         )
     }
 
+    func backupSnapshot(defaultPluginIDs: [String]) -> PluginDisplayPreferencesBackup {
+        let preferences = loadPreferences()
+
+        return PluginDisplayPreferencesBackup(
+            orderedPluginIDs: normalizedVisibleOrder(
+                preferences.generalPluginOrder,
+                defaultPluginIDs: defaultPluginIDs
+            ),
+            hiddenPluginIDs: preferences.globallyHiddenPluginIDs
+                .filter { defaultPluginIDs.contains($0) }
+                .sorted()
+        )
+    }
+
     // MARK: - Persistence and migration
 
     private func loadPreferences() -> StoredPreferences {
