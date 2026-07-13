@@ -92,9 +92,9 @@
     "plugins.installed.globalDescription": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Enable or disable plugins here. Dashboard and Feature Panel only manage placement and order." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在此启用或停用插件；仪表盘和功能面板仅管理显示位置与顺序。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在此啟用或停用外掛；儀表板和功能面板僅管理顯示位置與順序。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Enable or disable plugins here or from Dashboard and Feature Panel." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "可在此处或仪表盘、功能面板中启用或停用插件。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "可在此處或儀表板、功能面板中啟用或停用外掛。" } }
       }
     },
     "plugins.layout.disabledSummaryFormat": {

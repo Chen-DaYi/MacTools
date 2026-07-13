@@ -23,9 +23,7 @@ final class PluginDisplayPreferencesStore {
         var generalPluginOrder: [String] = []
         var globallyHiddenPluginIDs: Set<String> = []
         var dashboardOrderedPluginIDs: [String] = []
-        var dashboardHiddenPluginIDs: Set<String> = []
         var featurePanelOrderedPluginIDs: [String] = []
-        var featurePanelHiddenPluginIDs: Set<String> = []
         var isDashboardOrderInitialized = false
         var isFeaturePanelOrderInitialized = false
     }
@@ -115,28 +113,6 @@ final class PluginDisplayPreferencesStore {
             storedOrder(for: surface, preferences: preferences),
             defaultPluginIDs: defaultPluginIDs
         )
-    }
-
-    func isVisible(_ pluginID: String, on surface: PluginDisplaySurface) -> Bool {
-        !hiddenPluginIDs(for: surface, preferences: loadPreferences()).contains(pluginID)
-    }
-
-    func setVisibility(
-        _ isVisible: Bool,
-        pluginID: String,
-        on surface: PluginDisplaySurface
-    ) {
-        var preferences = loadPreferences()
-        var hiddenPluginIDs = hiddenPluginIDs(for: surface, preferences: preferences)
-
-        if isVisible {
-            hiddenPluginIDs.remove(pluginID)
-        } else {
-            hiddenPluginIDs.insert(pluginID)
-        }
-
-        setHiddenPluginIDs(hiddenPluginIDs, for: surface, preferences: &preferences)
-        persist(preferences)
     }
 
     func setOrderedPluginIDs(
@@ -265,31 +241,6 @@ final class PluginDisplayPreferencesStore {
             preferences.dashboardOrderedPluginIDs = orderedPluginIDs
         case .featurePanel:
             preferences.featurePanelOrderedPluginIDs = orderedPluginIDs
-        }
-    }
-
-    private func hiddenPluginIDs(
-        for surface: PluginDisplaySurface,
-        preferences: StoredPreferences
-    ) -> Set<String> {
-        switch surface {
-        case .dashboard:
-            return preferences.dashboardHiddenPluginIDs
-        case .featurePanel:
-            return preferences.featurePanelHiddenPluginIDs
-        }
-    }
-
-    private func setHiddenPluginIDs(
-        _ hiddenPluginIDs: Set<String>,
-        for surface: PluginDisplaySurface,
-        preferences: inout StoredPreferences
-    ) {
-        switch surface {
-        case .dashboard:
-            preferences.dashboardHiddenPluginIDs = hiddenPluginIDs
-        case .featurePanel:
-            preferences.featurePanelHiddenPluginIDs = hiddenPluginIDs
         }
     }
 

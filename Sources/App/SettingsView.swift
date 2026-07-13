@@ -673,7 +673,7 @@ private struct InstalledFeaturesSettingsView: View {
                     title: AppL10n.settings("plugins.installed.title", defaultValue: "已安装"),
                     description: AppL10n.settings(
                         "plugins.installed.globalDescription",
-                        defaultValue: "启用或停用插件；仪表盘和功能面板仅管理显示位置与顺序。"
+                        defaultValue: "可在此处或仪表盘、功能面板中启用或停用插件。"
                     ),
                     systemImage: "checkmark.circle",
                     iconTint: .green

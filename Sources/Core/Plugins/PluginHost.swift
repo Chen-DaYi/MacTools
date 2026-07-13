@@ -49,8 +49,6 @@ struct PluginSurfaceLayoutItem: Identifiable {
     let iconTint: Color
     let capabilities: PluginHostCapabilities
     let isGloballyEnabled: Bool
-    let isVisible: Bool
-    let isVisibleOnOtherSurface: Bool
     let isActive: Bool
     let dashboardSpan: PluginComponentSpan?
     let category: String?
@@ -674,27 +672,6 @@ final class PluginHost: ObservableObject {
 
     func setFeatureVisibility(_ isVisible: Bool, for pluginID: String) {
         setPluginGloballyEnabled(isVisible, pluginID: pluginID)
-    }
-
-    func setPluginVisibility(
-        _ isVisible: Bool,
-        for pluginID: String,
-        on surface: PluginDisplaySurface
-    ) {
-        guard capabilities(for: pluginID)?.supportedSurfaces.contains(surface) == true else {
-            return
-        }
-
-        guard pluginDisplayPreferencesStore.isVisible(pluginID, on: surface) != isVisible else {
-            return
-        }
-
-        pluginDisplayPreferencesStore.setVisibility(
-            isVisible,
-            pluginID: pluginID,
-            on: surface
-        )
-        rebuildDerivedState()
     }
 
     func movePlugin(id pluginID: String, toOffset targetOffset: Int, on surface: PluginDisplaySurface) {
@@ -1846,11 +1823,6 @@ final class PluginHost: ObservableObject {
             iconTint: metadata.iconTint,
             capabilities: descriptor.capabilities,
             isGloballyEnabled: isGloballyEnabled,
-            isVisible: pluginDisplayPreferencesStore.isVisible(metadata.id, on: surface),
-            isVisibleOnOtherSurface: isVisibleOnOtherSurface(
-                descriptor: descriptor,
-                surface: surface
-            ),
             isActive: isGloballyEnabled && isActive,
             dashboardSpan: descriptor.capabilities.supportsDashboard
                 ? descriptor.plugin.componentPanel?.descriptor.span
@@ -1858,16 +1830,6 @@ final class PluginHost: ObservableObject {
             category: dynamicPluginCategoriesByID[metadata.id] ?? nil,
             releaseChannel: dynamicPluginReleaseChannelsByID[metadata.id] ?? nil
         )
-    }
-
-    private func isVisibleOnOtherSurface(
-        descriptor: PluginDescriptor,
-        surface: PluginDisplaySurface
-    ) -> Bool {
-        let otherSurface: PluginDisplaySurface = surface == .dashboard ? .featurePanel : .dashboard
-        return descriptor.capabilities.supportedSurfaces.contains(otherSurface)
-            && pluginDisplayPreferencesStore.isPluginGloballyEnabled(descriptor.metadata.id)
-            && pluginDisplayPreferencesStore.isVisible(descriptor.metadata.id, on: otherSurface)
     }
 
     private func shortcutDescriptors() -> [ShortcutDescriptor] {

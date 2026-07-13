@@ -106,20 +106,7 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         )
     }
 
-    func testSurfaceVisibilityIsIndependent() {
-        store.setVisibility(false, pluginID: "activity", on: .dashboard)
-
-        XCTAssertFalse(store.isVisible("activity", on: .dashboard))
-        XCTAssertTrue(store.isVisible("activity", on: .featurePanel))
-
-        store.setVisibility(false, pluginID: "activity", on: .featurePanel)
-        store.setVisibility(true, pluginID: "activity", on: .dashboard)
-
-        XCTAssertTrue(store.isVisible("activity", on: .dashboard))
-        XCTAssertFalse(store.isVisible("activity", on: .featurePanel))
-    }
-
-    func testNewPluginsAppendInDefaultOrderAndRemainVisible() {
+    func testNewPluginsAppendInDefaultOrder() {
         store.setOrderedPluginIDs(
             ["calendar", "activity"],
             for: .dashboard,
@@ -133,7 +120,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             ),
             ["calendar", "activity", "status"]
         )
-        XCTAssertTrue(store.isVisible("status", on: .dashboard))
     }
 
     func testTemporarilyMissingPluginOrderRemainsRecoverable() {
@@ -163,14 +149,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         )
     }
 
-    func testHiddenPluginSurvivesTemporaryAbsence() {
-        store.setVisibility(false, pluginID: "missing", on: .featurePanel)
-
-        _ = store.orderedPluginIDs(for: .featurePanel, defaultPluginIDs: [])
-
-        XCTAssertFalse(store.isVisible("missing", on: .featurePanel))
-    }
-
     func testCorruptDataFallsBackToCapabilityFilteredDefaults() {
         defaults.set(Data("not-json".utf8), forKey: "plugin.display.preferences")
 
@@ -181,7 +159,7 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         XCTAssertTrue(store.isPluginGloballyEnabled("calendar"))
     }
 
-    func testResettingOneSurfaceDoesNotAffectTheOtherOrVisibility() {
+    func testResettingOneSurfaceDoesNotAffectTheOther() {
         store.setOrderedPluginIDs(
             ["calendar", "activity"],
             for: .dashboard,
@@ -192,8 +170,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             for: .featurePanel,
             defaultPluginIDs: ["activity", "fan"]
         )
-        store.setVisibility(false, pluginID: "calendar", on: .dashboard)
-
         store.resetOrder(for: .dashboard, defaultPluginIDs: ["activity", "calendar"])
 
         XCTAssertEqual(
@@ -204,7 +180,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             store.orderedPluginIDs(for: .featurePanel, defaultPluginIDs: ["activity", "fan"]),
             ["fan", "activity"]
         )
-        XCTAssertFalse(store.isVisible("calendar", on: .dashboard))
     }
 
     func testSettingsOnlyPluginIsExcludedWhenNotInSurfaceDefaults() {

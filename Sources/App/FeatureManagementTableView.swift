@@ -68,8 +68,6 @@ struct FeatureManagementTableItem: Identifiable {
     let iconTint: Color
     let capabilities: PluginHostCapabilities
     let isGloballyEnabled: Bool
-    let isVisible: Bool
-    let isVisibleOnOtherSurface: Bool
     let isActive: Bool
     let hasSettings: Bool
     let category: String?
@@ -83,8 +81,6 @@ struct FeatureManagementTableItem: Identifiable {
         iconTint = item.iconTint
         capabilities = item.capabilities
         isGloballyEnabled = item.isGloballyEnabled
-        isVisible = item.isGloballyEnabled
-        isVisibleOnOtherSurface = false
         isActive = item.isActive
         hasSettings = false
         category = item.category
@@ -99,8 +95,6 @@ struct FeatureManagementTableItem: Identifiable {
         iconTint = item.iconTint
         capabilities = item.capabilities
         isGloballyEnabled = item.isGloballyEnabled
-        isVisible = item.isVisible
-        isVisibleOnOtherSurface = item.isVisibleOnOtherSurface
         isActive = item.isActive
         self.hasSettings = hasSettings
         category = item.category
@@ -379,9 +373,7 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
         let title: String
         let description: String
         let iconName: String
-        let isVisible: Bool
         let isGloballyEnabled: Bool
-        let isVisibleOnOtherSurface: Bool
         let isActive: Bool
         let capabilities: PluginHostCapabilities
         let category: String?
@@ -405,9 +397,7 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
                 title: $0.title,
                 description: $0.description,
                 iconName: $0.iconName,
-                isVisible: $0.isVisible,
                 isGloballyEnabled: $0.isGloballyEnabled,
-                isVisibleOnOtherSurface: $0.isVisibleOnOtherSurface,
                 isActive: $0.isActive,
                 capabilities: $0.capabilities,
                 category: $0.category,

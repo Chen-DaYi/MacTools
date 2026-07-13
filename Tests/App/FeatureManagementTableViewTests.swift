@@ -7,7 +7,7 @@ import MacToolsPluginKit
 final class FeatureManagementTableViewTests: XCTestCase {
     func testUpdatePolicySkipsUnchangedItems() {
         let items = [
-            makeItem(id: "activity-bar", isVisible: true, isActive: false)
+            makeItem(id: "activity-bar", isActive: false)
         ]
 
         XCTAssertFalse(FeatureManagementTableUpdatePolicy.needsUpdate(
@@ -24,10 +24,10 @@ final class FeatureManagementTableViewTests: XCTestCase {
 
     func testUpdatePolicyRefreshesWhenRowStateChanges() {
         let previousItems = [
-            makeItem(id: "activity-bar", isVisible: true, isActive: false)
+            makeItem(id: "activity-bar", isActive: false)
         ]
         let currentItems = [
-            makeItem(id: "activity-bar", isVisible: false, isActive: false)
+            makeItem(id: "activity-bar", isActive: false, isGloballyEnabled: false)
         ]
 
         XCTAssertTrue(FeatureManagementTableUpdatePolicy.needsUpdate(
@@ -44,7 +44,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
 
     func testUpdatePolicyRefreshesWhenWidthChangesByPoint() {
         let items = [
-            makeItem(id: "activity-bar", isVisible: true, isActive: false)
+            makeItem(id: "activity-bar", isActive: false)
         ]
 
         XCTAssertTrue(FeatureManagementTableUpdatePolicy.needsUpdate(
@@ -60,7 +60,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
     }
 
     func testUpdatePolicyRefreshesWhenModeOrReorderAvailabilityChanges() {
-        let items = [makeItem(id: "activity-bar", isVisible: true, isActive: false)]
+        let items = [makeItem(id: "activity-bar", isActive: false)]
 
         XCTAssertTrue(FeatureManagementTableUpdatePolicy.needsUpdate(
             previousItems: items,
@@ -103,12 +103,10 @@ final class FeatureManagementTableViewTests: XCTestCase {
         )
     }
 
-    func testSurfaceDescriptionsDoNotConflateLayoutWithVisibility() {
+    func testSurfaceDescriptionsStayFocusedOnLayout() {
         let item = makeItem(
             id: "activity-bar",
-            isVisible: true,
-            isActive: false,
-            isVisibleOnOtherSurface: true
+            isActive: false
         )
 
         XCTAssertEqual(
@@ -156,8 +154,8 @@ final class FeatureManagementTableViewTests: XCTestCase {
 
     func testReorderPolicyRejectsInstalledAndFilteredModes() {
         let items = [
-            makeItem(id: "first", isVisible: true, isActive: false),
-            makeItem(id: "second", isVisible: true, isActive: false)
+            makeItem(id: "first", isActive: false),
+            makeItem(id: "second", isActive: false)
         ]
 
         XCTAssertNil(FeatureManagementReorderPolicy.targetOffset(
@@ -178,8 +176,8 @@ final class FeatureManagementTableViewTests: XCTestCase {
 
     func testReorderPolicyUsesSurfaceLocalRowsAndClampsOffsets() {
         let surfaceItems = [
-            makeItem(id: "visible-first", isVisible: true, isActive: false),
-            makeItem(id: "visible-second", isVisible: true, isActive: false)
+            makeItem(id: "visible-first", isActive: false),
+            makeItem(id: "visible-second", isActive: false)
         ]
 
         XCTAssertEqual(FeatureManagementReorderPolicy.targetOffset(
@@ -207,28 +205,22 @@ final class FeatureManagementTableViewTests: XCTestCase {
 
     private func makeItem(
         id: String,
-        isVisible: Bool,
         isActive: Bool,
         isGloballyEnabled: Bool = true,
-        isVisibleOnOtherSurface: Bool = true,
         capabilities: PluginHostCapabilities? = nil
     ) -> FeatureManagementTableItem {
         FeatureManagementTableItem(surfaceItem: makeSurfaceItem(
             id: id,
-            isVisible: isVisible,
             isActive: isActive,
             isGloballyEnabled: isGloballyEnabled,
-            isVisibleOnOtherSurface: isVisibleOnOtherSurface,
             capabilities: capabilities
         ))
     }
 
     private func makeSurfaceItem(
         id: String,
-        isVisible: Bool = true,
         isActive: Bool = false,
         isGloballyEnabled: Bool,
-        isVisibleOnOtherSurface: Bool = true,
         capabilities: PluginHostCapabilities? = nil
     ) -> PluginSurfaceLayoutItem {
         PluginSurfaceLayoutItem(
@@ -239,8 +231,6 @@ final class FeatureManagementTableViewTests: XCTestCase {
             iconTint: Color(nsColor: .systemGreen),
             capabilities: capabilities ?? self.capabilities(dashboard: true, featurePanel: true),
             isGloballyEnabled: isGloballyEnabled,
-            isVisible: isVisible,
-            isVisibleOnOtherSurface: isVisibleOnOtherSurface,
             isActive: isActive,
             dashboardSpan: .oneByOne,
             category: nil,

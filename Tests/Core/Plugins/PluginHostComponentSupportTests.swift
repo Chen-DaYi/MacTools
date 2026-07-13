@@ -624,16 +624,13 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["second", "first"])
     }
 
-    func testSurfaceMutationsIgnoreUnsupportedAndMissingPlugins() {
+    func testSurfaceOrderingIgnoresMissingPlugins() {
         let plugin = MockComponentPanelPlugin(id: "dashboard")
         let host = makeHost(plugins: [plugin])
 
-        host.setPluginVisibility(false, for: "dashboard", on: .featurePanel)
-        host.setPluginVisibility(false, for: "missing", on: .dashboard)
         host.movePlugin(id: "missing", toOffset: 0, on: .dashboard)
 
         XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["dashboard"])
-        XCTAssertTrue(host.dashboardLayoutItems[0].isVisible)
         XCTAssertEqual(host.componentItems.map(\.id), ["dashboard"])
         XCTAssertTrue(host.featurePanelLayoutItems.isEmpty)
     }
@@ -936,7 +933,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         try? FileManager.default.removeItem(at: rootDirectory)
     }
 
-    func testSurfaceVisibilityDoesNotPauseDynamicPluginButGlobalDisableDoesOnce() {
+    func testGlobalDisablePausesDynamicPluginOnlyOnce() {
         let plugin = MockCombinedPlugin(id: "dynamic")
         let rootDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
@@ -958,12 +955,6 @@ final class PluginHostComponentSupportTests: XCTestCase {
         }
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
         let host = makeHost(plugins: [], dynamicPluginManager: manager)
-
-        host.setPluginVisibility(false, for: "dynamic", on: .dashboard)
-        host.setPluginVisibility(false, for: "dynamic", on: .dashboard)
-        host.setPluginVisibility(false, for: "dynamic", on: .featurePanel)
-        host.setPluginVisibility(false, for: "dynamic", on: .featurePanel)
-        XCTAssertEqual(plugin.deactivateCallCount, 0)
 
         host.setPluginGloballyEnabled(false, pluginID: "dynamic")
         host.setPluginGloballyEnabled(false, pluginID: "dynamic")
