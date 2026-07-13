@@ -794,6 +794,44 @@ final class PluginHost: ObservableObject {
         rebuildDerivedState()
     }
 
+    func moveEnabledPlugin(id pluginID: String, toOffset targetOffset: Int, on surface: PluginDisplaySurface) {
+        let defaultPluginIDs = defaultPluginIDs(for: surface)
+        let orderedPluginIDs = orderedPluginIDs(for: surface)
+        var enabledPluginIDs = orderedPluginIDs.filter {
+            pluginDisplayPreferencesStore.isPluginGloballyEnabled($0)
+        }
+
+        guard let currentIndex = enabledPluginIDs.firstIndex(of: pluginID) else {
+            return
+        }
+
+        let clampedOffset = min(max(targetOffset, 0), enabledPluginIDs.count)
+        guard currentIndex != clampedOffset, currentIndex + 1 != clampedOffset else {
+            return
+        }
+
+        enabledPluginIDs.move(
+            fromOffsets: IndexSet(integer: currentIndex),
+            toOffset: clampedOffset
+        )
+
+        var enabledIterator = enabledPluginIDs.makeIterator()
+        let mergedPluginIDs = orderedPluginIDs.map { pluginID in
+            if pluginDisplayPreferencesStore.isPluginGloballyEnabled(pluginID),
+               let reorderedPluginID = enabledIterator.next() {
+                return reorderedPluginID
+            }
+            return pluginID
+        }
+
+        pluginDisplayPreferencesStore.setOrderedPluginIDs(
+            mergedPluginIDs,
+            for: surface,
+            defaultPluginIDs: defaultPluginIDs
+        )
+        rebuildDerivedState()
+    }
+
     func resetPluginOrder(on surface: PluginDisplaySurface) {
         pluginDisplayPreferencesStore.resetOrder(
             for: surface,

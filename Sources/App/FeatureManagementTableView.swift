@@ -239,6 +239,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
                 ?? FeatureManagementTableCellView(frame: .zero)
             view.identifier = identifier
 
+            guard parent.items.indices.contains(row) else {
+                return view
+            }
+
             let item = parent.items[row]
             view.configure(
                 item: item,
@@ -259,6 +263,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
                 mode: parent.mode,
                 isReorderEnabled: parent.isReorderEnabled
             ) else {
+                return nil
+            }
+
+            guard parent.items.indices.contains(row) else {
                 return nil
             }
 
@@ -288,7 +296,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
         ) {
             isDragging = false
             lastSignature = nil
-            tableView.reloadData()
+            DispatchQueue.main.async { [weak tableView] in
+                tableView?.reloadData()
+                tableView?.noteNumberOfRowsChanged()
+            }
         }
 
         func tableView(_ tableView: NSTableView, updateDraggingItemsForDrag draggingInfo: NSDraggingInfo) {
@@ -361,7 +372,9 @@ struct FeatureManagementTableView: NSViewRepresentable {
                 return false
             }
 
-            parent.onMove(draggedID, targetRow)
+            DispatchQueue.main.async { [parent] in
+                parent.onMove(draggedID, targetRow)
+            }
             return true
         }
     }
@@ -664,7 +677,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private let iconImageView = NSImageView()
     private let titleRowStackView = NSStackView()
     private let titleLabel = NSTextField(labelWithString: "")
-    private let releaseChannelBadgeView = NSHostingView(rootView: PluginReleaseChannelBadge(releaseChannel: nil))
+    private let releaseChannelBadgeView = FeatureManagementReleaseChannelBadgeView()
     private let descriptionLabel = NSTextField(labelWithString: "")
     private let activeDotView = NSView()
     private let iconActionButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
@@ -910,10 +923,101 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     }
 
     private func configureReleaseChannelBadge(_ rawValue: String?) {
-        releaseChannelBadgeView.rootView = PluginReleaseChannelBadge(releaseChannel: rawValue)
-        releaseChannelBadgeView.isHidden = PluginReleaseChannel(rawString: rawValue) == nil
+        releaseChannelBadgeView.configure(releaseChannel: PluginReleaseChannel(rawString: rawValue))
     }
 }
+
+private final class FeatureManagementReleaseChannelBadgeView: NSView {
+    private let textField = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        buildViewHierarchy()
+        configureStyles()
+        configureLayout()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(releaseChannel: PluginReleaseChannel?) {
+        guard let releaseChannel else {
+            isHidden = true
+            return
+        }
+
+        textField.stringValue = releaseChannel.displayName
+        isHidden = false
+    }
+
+    private func buildViewHierarchy() {
+        wantsLayer = true
+        addSubview(textField)
+    }
+
+    private func configureStyles() {
+        layer?.cornerRadius = 8
+        layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.14).cgColor
+
+        textField.font = .systemFont(ofSize: 10, weight: .semibold)
+        textField.textColor = .systemOrange
+        textField.alignment = .center
+        textField.lineBreakMode = .byTruncatingTail
+
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    private func configureLayout() {
+        textField.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            textField.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            textField.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1)
+        ])
+    }
+}
+
+#if DEBUG
+enum FeatureManagementTableCellInspection {
+    @MainActor
+    static func containsSwiftUIHostingViewAfterConfiguring(
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        showsHandle: Bool
+    ) -> Bool {
+        let cell = FeatureManagementTableCellView(
+            frame: NSRect(
+                x: 0,
+                y: 0,
+                width: 480,
+                height: FeatureManagementTableView.rowHeight
+            )
+        )
+        cell.configure(
+            item: item,
+            mode: mode,
+            showsHandle: showsHandle,
+            onStateChange: { _ in },
+            onOpenSettings: {}
+        )
+        return containsSwiftUIHostingView(in: cell)
+    }
+
+    @MainActor
+    private static func containsSwiftUIHostingView(in view: NSView) -> Bool {
+        if NSStringFromClass(type(of: view)).contains("NSHostingView") {
+            return true
+        }
+
+        return view.subviews.contains { containsSwiftUIHostingView(in: $0) }
+    }
+}
+#endif
 
 func featureManagementDescription(
     for item: FeatureManagementTableItem,

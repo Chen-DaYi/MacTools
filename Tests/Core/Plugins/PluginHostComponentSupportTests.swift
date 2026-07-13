@@ -612,6 +612,57 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["first", "second", "third"])
     }
 
+    func testEnabledSurfaceReorderUsesEnabledPluginOffsets() {
+        let first = MockCombinedPlugin(id: "first", order: 1)
+        let second = MockCombinedPlugin(id: "second", order: 2)
+        let third = MockCombinedPlugin(id: "third", order: 3)
+        let fourth = MockCombinedPlugin(id: "fourth", order: 4)
+        let host = makeHost(plugins: [first, second, third, fourth])
+
+        host.setPluginGloballyEnabled(false, pluginID: "second")
+        host.moveEnabledPlugin(id: "fourth", toOffset: 1, on: .dashboard)
+
+        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["first", "second", "fourth", "third"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["first", "fourth", "third"])
+        XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["first", "second", "third", "fourth"])
+        XCTAssertEqual(host.panelItems.map(\.id), ["first", "third", "fourth"])
+
+        host.setPluginGloballyEnabled(true, pluginID: "second")
+
+        XCTAssertEqual(host.componentItems.map(\.id), ["first", "second", "fourth", "third"])
+        XCTAssertEqual(host.panelItems.map(\.id), ["first", "second", "third", "fourth"])
+    }
+
+    func testEnabledSurfaceReorderPreservesDisabledPluginPosition() {
+        let first = MockCombinedPlugin(id: "first", order: 1)
+        let second = MockCombinedPlugin(id: "second", order: 2)
+        let third = MockCombinedPlugin(id: "third", order: 3)
+        let fourth = MockCombinedPlugin(id: "fourth", order: 4)
+        let host = makeHost(plugins: [first, second, third, fourth])
+
+        host.setPluginGloballyEnabled(false, pluginID: "second")
+        host.moveEnabledPlugin(id: "third", toOffset: 0, on: .dashboard)
+        host.setPluginGloballyEnabled(true, pluginID: "second")
+
+        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["third", "second", "first", "fourth"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["third", "second", "first", "fourth"])
+        XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["first", "second", "third", "fourth"])
+        XCTAssertEqual(host.panelItems.map(\.id), ["first", "second", "third", "fourth"])
+    }
+
+    func testEnabledSurfaceReorderIgnoresDisabledPluginMoves() {
+        let first = MockCombinedPlugin(id: "first", order: 1)
+        let second = MockCombinedPlugin(id: "second", order: 2)
+        let third = MockCombinedPlugin(id: "third", order: 3)
+        let host = makeHost(plugins: [first, second, third])
+
+        host.setPluginGloballyEnabled(false, pluginID: "second")
+        host.moveEnabledPlugin(id: "second", toOffset: 0, on: .dashboard)
+
+        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["first", "second", "third"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["first", "third"])
+    }
+
     func testResettingDashboardOrderPreservesFeaturePanelOrder() {
         let first = MockCombinedPlugin(id: "first", order: 1)
         let second = MockCombinedPlugin(id: "second", order: 2)

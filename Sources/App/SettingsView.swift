@@ -978,7 +978,7 @@ private struct FeatureSettingsDetailPane: View {
                     defaultValue: "已启用且支持仪表盘的插件会显示在这里。"
                 ),
                 onMove: { pluginID, targetOffset in
-                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
+                    pluginHost.moveEnabledPlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
                 },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .dashboard) },
                 onOpenPanel: showDashboard,
@@ -1006,7 +1006,7 @@ private struct FeatureSettingsDetailPane: View {
                     defaultValue: "已启用且支持功能面板的插件会显示在这里。"
                 ),
                 onMove: { pluginID, targetOffset in
-                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
+                    pluginHost.moveEnabledPlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
                 },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .featurePanel) },
                 onOpenPanel: showFeaturePanel,

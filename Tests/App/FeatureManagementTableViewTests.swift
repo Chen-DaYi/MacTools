@@ -223,18 +223,36 @@ final class FeatureManagementTableViewTests: XCTestCase {
         ))
     }
 
+    @MainActor
+    func testConfiguredTableCellDoesNotEmbedSwiftUIHostingViews() {
+        let item = makeItem(
+            id: "beta-plugin",
+            isActive: true,
+            hasSettings: true,
+            releaseChannel: "beta"
+        )
+
+        XCTAssertFalse(FeatureManagementTableCellInspection.containsSwiftUIHostingViewAfterConfiguring(
+            item: item,
+            mode: .surface(.featurePanel),
+            showsHandle: true
+        ))
+    }
+
     private func makeItem(
         id: String,
         isActive: Bool,
         isGloballyEnabled: Bool = true,
         hasSettings: Bool = false,
-        capabilities: PluginHostCapabilities? = nil
+        capabilities: PluginHostCapabilities? = nil,
+        releaseChannel: String? = nil
     ) -> FeatureManagementTableItem {
         FeatureManagementTableItem(surfaceItem: makeSurfaceItem(
             id: id,
             isActive: isActive,
             isGloballyEnabled: isGloballyEnabled,
-            capabilities: capabilities
+            capabilities: capabilities,
+            releaseChannel: releaseChannel
         ), hasSettings: hasSettings)
     }
 
@@ -242,7 +260,8 @@ final class FeatureManagementTableViewTests: XCTestCase {
         id: String,
         isActive: Bool = false,
         isGloballyEnabled: Bool,
-        capabilities: PluginHostCapabilities? = nil
+        capabilities: PluginHostCapabilities? = nil,
+        releaseChannel: String? = nil
     ) -> PluginSurfaceLayoutItem {
         PluginSurfaceLayoutItem(
             id: id,
@@ -255,7 +274,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
             isActive: isActive,
             dashboardSpan: .oneByOne,
             category: nil,
-            releaseChannel: nil
+            releaseChannel: releaseChannel
         )
     }
 
