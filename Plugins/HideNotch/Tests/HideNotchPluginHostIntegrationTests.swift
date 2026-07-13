@@ -24,6 +24,7 @@ final class HideNotchPluginHostIntegrationTests: XCTestCase {
             plugins: [plugin],
             shortcutStore: ShortcutStore(userDefaults: userDefaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: userDefaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: userDefaults),
             globalShortcutManager: GlobalShortcutManager()
         )
 

@@ -142,6 +142,31 @@ final class PluginCatalogManagerTests: XCTestCase {
         )
     }
 
+    func testInstallPluginUsesTheVerifiedCatalogEntry() async throws {
+        let store = makeStore()
+        let packageURL = try makePackage(id: "com.example.restore", version: "1.0.0")
+        let dynamicManager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        let snapshot = makeCatalogSnapshot(entries: [
+            makeCatalogEntry(id: "com.example.restore", version: "1.0.0"),
+        ])
+        let manager = PluginCatalogManager(
+            catalogProvider: StubPluginCatalogProvider(snapshot: snapshot),
+            packageResolver: StubPluginPackageResolver(packagesByID: [
+                "com.example.restore": packageURL,
+            ]),
+            dynamicPluginManager: dynamicManager,
+            source: .production(snapshot.sourceURL)
+        )
+
+        await manager.refreshCatalog()
+        try await manager.installPlugin(id: "com.example.restore")
+
+        XCTAssertEqual(store.installedRecords().map(\.id), ["com.example.restore"])
+    }
+
     private func makeStore() -> PluginPackageStore {
         PluginPackageStore(
             rootDirectory: temporaryRoot,

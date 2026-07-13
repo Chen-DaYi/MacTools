@@ -45,6 +45,17 @@ final class ShortcutStore {
         }
     }
 
+    func customizations(for shortcutIDs: [String]) -> [String: ShortcutCustomization] {
+        shortcutIDs.reduce(into: [:]) { result, shortcutID in
+            let customization = customization(for: shortcutID)
+            guard customization != .inheritDefault else {
+                return
+            }
+
+            result[shortcutID] = customization
+        }
+    }
+
     func resolvedBinding(for shortcutID: String, default defaultBinding: ShortcutBinding?) -> ShortcutBinding? {
         ShortcutStore.resolve(
             customization: customization(for: shortcutID),
