@@ -1,10 +1,13 @@
 import Foundation
 import XCTest
+@testable import MacTools
 
 final class PluginLocalizationCatalogAuditTests: XCTestCase {
-    private let supportedLanguages = [
-        "ar", "de", "en", "es", "fr", "ja", "ko", "pt", "ru", "zh-Hans", "zh-Hant",
-    ]
+    private var supportedLanguages: [String] {
+        AppLanguagePreference.allCases
+            .compactMap { $0.appleLanguagesOverride?.first }
+            .sorted()
+    }
 
     private let dynamicLocalizationKeys = [
         "PhysicalCleanMode": [
@@ -70,13 +73,6 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
     }
 
-    func testSupportedLanguageListRemainsStable() {
-        XCTAssertEqual(
-            supportedLanguages,
-            ["ar", "de", "en", "es", "fr", "ja", "ko", "pt", "ru", "zh-Hans", "zh-Hant"]
-        )
-    }
-
     private func validate(
         key: String,
         in catalog: [String: [String: Any]],
@@ -89,8 +85,12 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         }
 
         let localizations = entry["localizations"] as? [String: Any]
-        for language in supportedLanguages where localizations?[language] == nil {
-            failures.append("\(pluginName): localization key \(key) is missing \(language)")
+        for language in supportedLanguages {
+            let value = ((localizations?[language] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
+            guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                failures.append("\(pluginName): localization key \(key) is missing a translated value for \(language)")
+                continue
+            }
         }
     }
 
