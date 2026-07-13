@@ -73,7 +73,7 @@ struct FeatureManagementTableItem: Identifiable {
     let category: String?
     let releaseChannel: String?
 
-    init(installedItem item: InstalledPluginItem) {
+    init(installedItem item: InstalledPluginItem, hasSettings: Bool = false) {
         id = item.id
         title = item.title
         description = item.description
@@ -82,7 +82,7 @@ struct FeatureManagementTableItem: Identifiable {
         capabilities = item.capabilities
         isGloballyEnabled = item.isGloballyEnabled
         isActive = item.isActive
-        hasSettings = false
+        self.hasSettings = hasSettings
         category = item.category
         releaseChannel = item.releaseChannel
     }
@@ -871,7 +871,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         case .installed:
             enablementButton.isHidden = false
             enablementButton.state = item.isGloballyEnabled ? .on : .off
-            iconActionButton.isHidden = true
+            iconActionButton.isHidden = !hasSettings
         case .surface:
             enablementButton.isHidden = false
             enablementButton.state = item.isGloballyEnabled ? .on : .off

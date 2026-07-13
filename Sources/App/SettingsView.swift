@@ -1077,12 +1077,18 @@ private struct InstalledFeaturesSettingsView: View {
                         .frame(maxWidth: .infinity, minHeight: 180)
                     } else {
                         FeatureManagementTableView(
-                            items: filteredItems.map(FeatureManagementTableItem.init(installedItem:)),
+                            items: filteredItems.map {
+                                FeatureManagementTableItem(
+                                    installedItem: $0,
+                                    hasSettings: configurationPluginIDs.contains($0.id)
+                                )
+                            },
                             mode: .installed,
                             isReorderEnabled: false,
                             onToggleChange: { pluginID, isEnabled in
                                 pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: pluginID)
-                            }
+                            },
+                            onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:)
                         )
                         .frame(height: featureManagementListHeight)
                     }
@@ -1092,6 +1098,10 @@ private struct InstalledFeaturesSettingsView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(SettingsStyle.contentBackground)
+    }
+
+    private var configurationPluginIDs: Set<String> {
+        Set(pluginHost.pluginConfigurationItems.map(\.pluginID))
     }
 
     private var filteredItems: [InstalledPluginItem] {
