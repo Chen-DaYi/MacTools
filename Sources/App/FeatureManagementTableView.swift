@@ -373,6 +373,7 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
         let title: String
         let description: String
         let iconName: String
+        let hasSettings: Bool
         let isGloballyEnabled: Bool
         let isActive: Bool
         let capabilities: PluginHostCapabilities
@@ -397,6 +398,7 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
                 title: $0.title,
                 description: $0.description,
                 iconName: $0.iconName,
+                hasSettings: $0.hasSettings,
                 isGloballyEnabled: $0.isGloballyEnabled,
                 isActive: $0.isActive,
                 capabilities: $0.capabilities,

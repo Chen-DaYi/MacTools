@@ -42,6 +42,26 @@ final class FeatureManagementTableViewTests: XCTestCase {
         ))
     }
 
+    func testUpdatePolicyRefreshesWhenSettingsAvailabilityChanges() {
+        let previousItems = [
+            makeItem(id: "activity-bar", isActive: false, hasSettings: false)
+        ]
+        let currentItems = [
+            makeItem(id: "activity-bar", isActive: false, hasSettings: true)
+        ]
+
+        XCTAssertTrue(FeatureManagementTableUpdatePolicy.needsUpdate(
+            previousItems: previousItems,
+            currentItems: currentItems,
+            previousMode: .surface(.dashboard),
+            currentMode: .surface(.dashboard),
+            previousIsReorderEnabled: true,
+            currentIsReorderEnabled: true,
+            previousContentWidth: 480,
+            currentContentWidth: 480
+        ))
+    }
+
     func testUpdatePolicyRefreshesWhenWidthChangesByPoint() {
         let items = [
             makeItem(id: "activity-bar", isActive: false)
@@ -207,6 +227,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
         id: String,
         isActive: Bool,
         isGloballyEnabled: Bool = true,
+        hasSettings: Bool = false,
         capabilities: PluginHostCapabilities? = nil
     ) -> FeatureManagementTableItem {
         FeatureManagementTableItem(surfaceItem: makeSurfaceItem(
@@ -214,7 +235,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
             isActive: isActive,
             isGloballyEnabled: isGloballyEnabled,
             capabilities: capabilities
-        ))
+        ), hasSettings: hasSettings)
     }
 
     private func makeSurfaceItem(
