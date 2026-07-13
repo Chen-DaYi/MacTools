@@ -52,8 +52,18 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
             let manifestURL = plugin.appending(path: "plugin.json")
             let manifest = try jsonObject(at: manifestURL)
             let metadata = manifest["localizedMetadata"] as? [String: Any]
-            for language in supportedLanguages where metadata?[language] == nil {
-                failures.append("\(plugin.lastPathComponent): plugin.json is missing localizedMetadata.\(language)")
+            for language in supportedLanguages {
+                guard let localizedMetadata = metadata?[language] as? [String: Any] else {
+                    failures.append("\(plugin.lastPathComponent): plugin.json is missing localizedMetadata.\(language)")
+                    continue
+                }
+
+                for field in ["displayName", "summary"] {
+                    guard let value = localizedMetadata[field] as? String, !value.isEmpty else {
+                        failures.append("\(plugin.lastPathComponent): plugin.json is missing localizedMetadata.\(language).\(field)")
+                        continue
+                    }
+                }
             }
         }
 
@@ -121,7 +131,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
 
     private func staticLocalizationKeys(in source: String) -> Set<String> {
         let expression = try! NSRegularExpression(
-            pattern: #"(?:\b(?:self\.)?[A-Za-z_]\w*|PluginLocalization\([^\n]*\))\.string\s*\(\s*\"([^\"]+)\"\s*,\s*defaultValue\s*:"#
+            pattern: #"(?:\b(?:self\.)?[A-Za-z_]\w*|PluginLocalization\([^\n]*\))\.(?:string|format)\s*\(\s*\"([^\"]+)\"\s*,\s*defaultValue\s*:"#
         )
         let range = NSRange(source.startIndex..., in: source)
         return Set(expression.matches(in: source, range: range).compactMap { match in

@@ -79,19 +79,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sauber"
+            "value": "Bereinigen"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "깨끗하다"
+            "value": "정리"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Чистый"
+            "value": "Очистить"
           }
         },
         "ar": {
@@ -487,7 +487,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wasserhahn hinzufügen?"
+            "value": "Homebrew-Repository hinzufügen?"
           }
         },
         "ko": {
@@ -499,7 +499,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Добавить кран?"
+            "value": "Добавить репозиторий Homebrew?"
           }
         },
         "ar": {
@@ -1196,7 +1196,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Klar"
+            "value": "Leeren"
           }
         },
         "ko": {
@@ -1338,19 +1338,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pin-Version"
+            "value": "Version anheften"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "핀 버전"
+            "value": "버전 고정"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Версия с контактом"
+            "value": "Закрепить версию"
           }
         },
         "ar": {
@@ -5828,7 +5828,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tippen Sie auf"
+            "value": "Homebrew-Repository hinzufügen"
           }
         },
         "ko": {
@@ -5840,7 +5840,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Добавить кран"
+            "value": "Добавить репозиторий Homebrew"
           }
         },
         "ar": {
