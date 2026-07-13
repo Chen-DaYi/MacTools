@@ -333,7 +333,15 @@
     },
     "panel.subtitle.enabledFormat": {
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "مفعّل · %@ · %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Ein · %@ · %@" } },
         "en": { "stringUnit": { "state": "translated", "value": "On · %@ · %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Activado · %@ · %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Activé · %@ · %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "オン · %@ · %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "켜짐 · %@ · %@" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ativado · %@ · %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Включено · %@ · %@" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "已开启 · %@ · %@" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "已開啟 · %@ · %@" } }
       }
@@ -450,7 +458,15 @@
     },
     "panel.subtitle.middleClickEnabledFormat": {
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "النقر الأوسط · %d أصابع" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Mittelklick · %d Finger" } },
         "en": { "stringUnit": { "state": "translated", "value": "Middle click · %d fingers" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Clic central · %d dedos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Clic central · %d doigts" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "中央クリック · %d 本指" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "가운데 클릭 · %d손가락" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Clique do meio · %d dedos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Средний щелчок · %d пальцев" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "模拟中键 · %d指" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "模擬中鍵 · %d指" } }
       }
@@ -1227,7 +1243,15 @@
     },
     "settings.middleClick.fingerCount.optionFormat": {
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "%d أصابع" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%d Finger" } },
         "en": { "stringUnit": { "state": "translated", "value": "%d fingers" } },
+        "es": { "stringUnit": { "state": "translated", "value": "%d dedos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "%d doigts" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%d 本指" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%d손가락" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "%d dedos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "%d пальцев" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "%d指" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "%d指" } }
       }

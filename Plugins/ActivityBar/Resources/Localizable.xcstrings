@@ -2486,6 +2486,22 @@
         }
       }
     },
+    "error.hook.uninstallFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل إلغاء تثبيت الخطافات: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Hooks konnten nicht deinstalliert werden: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Failed to uninstall Hooks: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudieron desinstalar los hooks: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de désinstaller les hooks : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Hook をアンインストールできませんでした: %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "Hook을 제거하지 못했습니다: %@" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível desinstalar os hooks: %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось удалить хуки: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Hook 卸载失败：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "Hook 解除安裝失敗：%@" } }
+      }
+    },
     "error.hook.invalidJSON": {
       "extractionState": "manual",
       "localizations": {
