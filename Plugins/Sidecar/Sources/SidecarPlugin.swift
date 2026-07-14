@@ -48,7 +48,7 @@ private struct SidecarSwitchRequest {
 }
 
 @MainActor
-final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePreferencesProviding {
+final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling, PluginPortablePreferencesProviding {
     let metadata: PluginMetadata
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -75,9 +75,12 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
     private var timeoutTask: Task<Void, Never>?
     private var operationFeedbackTask: Task<Void, Never>?
     private var deviceRefreshTask: Task<Void, Never>?
+    private var followUpRefreshTask: Task<Void, Never>?
     private var switchRequest: SidecarSwitchRequest?
     private var disconnectAllRemainingCount = 0
     private var disconnectAllErrorMessage: String?
+    private var isActive = false
+    private var isPrimaryPanelVisible = false
     private let operationTimeoutNanoseconds: UInt64
     private let operationFeedbackNanoseconds: UInt64
     private let initialDeviceRefreshDelayNanoseconds: UInt64
@@ -115,6 +118,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             )
         )
         service.onDevicesChanged = { [weak self] in
+            guard self?.isActive == true else { return }
             self?.refreshDevices(notify: true)
         }
         self.shortcutManager.onTrigger = { [weak self] id in
@@ -122,13 +126,13 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
         }
         refreshDevices(notify: false)
         isExpanded = !devices.isEmpty
-        scheduleDeviceRefresh()
     }
 
     deinit {
         timeoutTask?.cancel()
         operationFeedbackTask?.cancel()
         deviceRefreshTask?.cancel()
+        followUpRefreshTask?.cancel()
     }
 
     var primaryPanelState: PluginPanelState {
@@ -178,10 +182,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
                             : SidecarShortcutID.device(id)
                         self?.shortcutManager.temporarilyDisable(id: shortcutID)
                     },
-                    onEndRecording: { [weak self] in self?.syncShortcuts() },
-                    canRegisterShortcut: { [weak self] settingID, binding in
-                        self?.canRegisterShortcut(binding, for: settingID) ?? false
-                    }
+                    onEndRecording: { [weak self] in self?.syncShortcuts() }
                 )
             } else {
                 EmptyView()
@@ -190,12 +191,27 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
     }
 
     func activate(context: PluginRuntimeContext) {
+        isActive = true
+        refreshDevices(notify: false)
         syncShortcuts()
+        scheduleDeviceRefreshIfNeeded()
     }
 
-    func deactivate(reason: PluginDeactivationReason) {
-        guard reason.requiresStateCleanup else { return }
+    func deactivate(reason _: PluginDeactivationReason) {
+        isActive = false
+        isPrimaryPanelVisible = false
         shortcutManager.unregisterAll()
+        cancelDeviceRefresh()
+        followUpRefreshTask?.cancel()
+        followUpRefreshTask = nil
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        operationFeedbackTask?.cancel()
+        operationFeedbackTask = nil
+        operation = nil
+        operationDeviceID = nil
+        operationToken = nil
+        switchRequest = nil
     }
 
     func refresh() {
@@ -217,6 +233,20 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
         case .setSwitch, .setSelection, .setDate, .setSlider:
             return
         }
+    }
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .primary else { return }
+        isPrimaryPanelVisible = true
+        guard isActive else { return }
+        refreshDevices(notify: true)
+        scheduleDeviceRefreshIfNeeded()
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .primary else { return }
+        isPrimaryPanelVisible = false
+        cancelDeviceRefresh()
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
@@ -242,35 +272,46 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
         if let operation, operation.isPending {
             return operationSubtitle(operation)
         }
+        let deviceSummary: String
         if devices.isEmpty {
-            return localization.string("panel.subtitle.noDevices", defaultValue: "未发现可连接的 Sidecar 显示器")
+            deviceSummary = localization.string("panel.subtitle.noDevices", defaultValue: "未发现可连接的 Sidecar 显示器")
+        } else {
+            let connectedCount = devices.filter { $0.connectionState == .connected }.count
+            let availableCount = devices.filter { $0.connectionState == .disconnected }.count
+            let unknownCount = devices.filter { $0.connectionState == .unknown }.count
+            if unknownCount > 0 {
+                deviceSummary = localization.format(
+                    "panel.subtitle.unknownCount",
+                    defaultValue: "%d 台 Sidecar 显示器的连接状态不可用",
+                    unknownCount
+                )
+            } else if connectedCount > 0, availableCount > 0 {
+                deviceSummary = localization.format(
+                    "panel.subtitle.connectedAndAvailableCount",
+                    defaultValue: "%d 台已连接 · %d 台可连接",
+                    connectedCount,
+                    availableCount
+                )
+            } else if connectedCount > 0 {
+                deviceSummary = localization.format(
+                    "panel.subtitle.connectedCount",
+                    defaultValue: "%d 台显示器已通过 Sidecar 连接",
+                    connectedCount
+                )
+            } else {
+                deviceSummary = localization.format(
+                    "panel.subtitle.deviceCount",
+                    defaultValue: "%d 台可连接的 Sidecar 显示器",
+                    availableCount
+                )
+            }
         }
-        let connectedCount = devices.filter { $0.connectionState == .connected }.count
-        let availableCount = devices.filter { $0.connectionState == .disconnected }.count
-        let unknownCount = devices.filter { $0.connectionState == .unknown }.count
-        if unknownCount > 0 {
-            return localization.format(
-                "panel.subtitle.unknownCount",
-                defaultValue: "%d 台 Sidecar 显示器的连接状态不可用",
-                unknownCount
-            )
-        }
-        if connectedCount > 0, availableCount > 0 {
-            return localization.format(
-                "panel.subtitle.connectedAndAvailableCount",
-                defaultValue: "%d 台已连接 · %d 台可连接",
-                connectedCount,
-                availableCount
-            )
-        }
-        if connectedCount > 0 {
-            return localization.format(
-                "panel.subtitle.connectedCount",
-                defaultValue: "%d 台显示器已通过 Sidecar 连接",
-                connectedCount
-            )
-        }
-        return localization.format("panel.subtitle.deviceCount", defaultValue: "%d 台可连接的 Sidecar 显示器", devices.count)
+        guard !service.isMinimumTestedSystem else { return deviceSummary }
+        return localization.format(
+            "panel.subtitle.untestedSystem",
+            defaultValue: "%@ · 未在 macOS 14.2 之前测试",
+            deviceSummary
+        )
     }
 
     private var operationErrorMessage: String? {
@@ -292,9 +333,11 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
 
     private func refreshDevices(notify: Bool) {
         let updatedDevices = service.reachableDevices()
-        let changed = updatedDevices != devices
+        let previousDevices = devices
+        let previousPreferences = preferences.devices
         devices = updatedDevices
         preferences.reconcile(with: updatedDevices)
+        let changed = updatedDevices != previousDevices || preferences.devices != previousPreferences
         if let operationDeviceID, !devices.contains(where: { $0.id == operationDeviceID }) {
             operation = nil
             self.operationDeviceID = nil
@@ -306,13 +349,16 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             switchRequest = nil
         }
         clearCompletedOperationIfSnapshotConfirmsIt()
-        syncShortcuts()
+        if isActive {
+            syncShortcuts()
+        }
         if notify && changed {
             onStateChange?()
         }
     }
 
-    private func scheduleDeviceRefresh() {
+    private func scheduleDeviceRefreshIfNeeded() {
+        guard isActive, isPrimaryPanelVisible, deviceRefreshTask == nil else { return }
         deviceRefreshTask = Task { @MainActor [weak self] in
             guard let initialRefreshDelayNanoseconds = self?.initialDeviceRefreshDelayNanoseconds else {
                 return
@@ -325,10 +371,16 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
                     return
                 }
                 guard let self else { return }
+                guard self.isActive, self.isPrimaryPanelVisible else { return }
                 self.refreshDevices(notify: true)
                 refreshDelayNanoseconds = self.deviceRefreshIntervalNanoseconds
             }
         }
+    }
+
+    private func cancelDeviceRefresh() {
+        deviceRefreshTask?.cancel()
+        deviceRefreshTask = nil
     }
 
     private func clearCompletedOperationIfSnapshotConfirmsIt() {
@@ -570,30 +622,29 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
     }
 
     private func syncShortcuts() {
-        var bindings = Dictionary(
-            uniqueKeysWithValues: preferences.devices.compactMap { preference -> (String, ShortcutBinding)? in
-                guard let shortcut = preference.shortcut else { return nil }
-                return (SidecarShortcutID.device(preference.id), shortcut)
-            }
-        )
-        if let disconnectAllShortcut = preferences.disconnectAllShortcut {
-            bindings[SidecarShortcutID.disconnectAll] = disconnectAllShortcut
-        }
+        guard isActive else { return }
+
+        var bindings: [String: ShortcutBinding] = [:]
+        var usedBindings = Set<ShortcutBinding>()
         if let connectFirstAvailableShortcut = preferences.connectFirstAvailableShortcut {
             bindings[SidecarShortcutID.connectFirstAvailable] = connectFirstAvailableShortcut
+            usedBindings.insert(connectFirstAvailableShortcut)
+        }
+        if let disconnectAllShortcut = preferences.disconnectAllShortcut,
+           usedBindings.insert(disconnectAllShortcut).inserted {
+            bindings[SidecarShortcutID.disconnectAll] = disconnectAllShortcut
+        }
+        for preference in preferences.devices {
+            guard let shortcut = preference.shortcut, usedBindings.insert(shortcut).inserted else {
+                continue
+            }
+            bindings[SidecarShortcutID.device(preference.id)] = shortcut
         }
         shortcutManager.sync(bindings: bindings)
     }
 
-    func canRegisterShortcut(_ binding: ShortcutBinding, for settingID: String) -> Bool {
-        let shortcutID = SidecarShortcutID.isGlobal(settingID)
-            ? settingID
-            : SidecarShortcutID.device(settingID)
-        return shortcutManager.canRegister(binding: binding, replacing: shortcutID)
-    }
-
     private func handleConfiguredShortcut(id: String) {
-        guard !isOperationPending else { return }
+        guard isActive, !isOperationPending else { return }
         refreshDevices(notify: false)
 
         if id == SidecarShortcutID.connectFirstAvailable {
@@ -661,6 +712,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
         deviceID: String?,
         message: String
     ) {
+        operationFeedbackTask?.cancel()
+        operationFeedbackTask = nil
         operation = .failed(action, deviceName: deviceName, message: message)
         operationDeviceID = deviceID
         scheduleOperationFeedbackDismissal()
@@ -929,6 +982,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
     }
 
     private func scheduleOperationFeedbackDismissal() {
+        guard case .succeeded = operation else { return }
         operationFeedbackTask?.cancel()
         let feedbackNanoseconds = operationFeedbackNanoseconds
         operationFeedbackTask = Task { @MainActor [weak self] in
@@ -1070,8 +1124,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
 
     private func unsupportedKey(for reason: SidecarUnavailableReason) -> String {
         switch reason {
-        case .minimumTestedVersion:
-            "service.unsupported.minimumTestedVersion"
         case .frameworkLoadFailed:
             "service.unsupported.frameworkLoadFailed"
         case .missingManager:
@@ -1087,8 +1139,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
 
     private func unsupportedDefaultMessage(for reason: SidecarUnavailableReason) -> String {
         switch reason {
-        case .minimumTestedVersion:
-            "Sidecar 已在 macOS 14.2 及更高版本测试"
         case .frameworkLoadFailed:
             "此系统无法加载 SidecarCore"
         case .missingManager:
@@ -1103,9 +1153,17 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
     }
 
     private func scheduleFollowUpRefresh() {
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 750_000_000)
-            self?.refreshDevices(notify: true)
+        guard isActive else { return }
+        followUpRefreshTask?.cancel()
+        followUpRefreshTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 750_000_000)
+            } catch {
+                return
+            }
+            guard let self, self.isActive else { return }
+            self.refreshDevices(notify: true)
+            self.followUpRefreshTask = nil
         }
     }
 }

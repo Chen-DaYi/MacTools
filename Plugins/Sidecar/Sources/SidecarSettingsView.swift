@@ -18,7 +18,6 @@ struct SidecarSettingsView: View {
     let onUpdate: () -> Void
     let onBeginRecording: (String) -> Void
     let onEndRecording: () -> Void
-    let canRegisterShortcut: (String, ShortcutBinding) -> Bool
     private static let connectFirstAvailableID = "connect-first-available"
     private static let disconnectAllID = "disconnect-all"
 
@@ -81,7 +80,7 @@ struct SidecarSettingsView: View {
             Label(
                 localization.string(
                     "panel.wired.warning",
-                    defaultValue: "仅有线：不会回退到 Wi-Fi"
+                    defaultValue: "请求仅通过有线连接，不请求 Wi-Fi 回退"
                 ),
                 systemImage: "cable.connector"
             )
@@ -154,9 +153,6 @@ struct SidecarSettingsView: View {
                         guard !hasShortcutConflict(binding, excluding: Self.connectFirstAvailableID) else {
                             return shortcutConflictResult()
                         }
-                        guard canRegisterShortcut(Self.connectFirstAvailableID, binding) else {
-                            return shortcutUnavailableResult()
-                        }
                         store.updateConnectFirstAvailableShortcut(binding)
                         onUpdate()
                         return .accepted
@@ -180,9 +176,6 @@ struct SidecarSettingsView: View {
                     onRecord: { binding in
                         guard !hasShortcutConflict(binding, excluding: Self.disconnectAllID) else {
                             return shortcutConflictResult()
-                        }
-                        guard canRegisterShortcut(Self.disconnectAllID, binding) else {
-                            return shortcutUnavailableResult()
                         }
                         store.updateDisconnectAllShortcut(binding)
                         onUpdate()
@@ -241,9 +234,6 @@ struct SidecarSettingsView: View {
                             defaultValue: "此快捷键已用于其他 Sidecar 操作。"
                         ))
                     }
-                    guard canRegisterShortcut(item.preference.id, binding) else {
-                        return shortcutUnavailableResult()
-                    }
                     store.updateShortcut(binding, for: item.preference.id)
                     onUpdate()
                     return .accepted
@@ -285,12 +275,6 @@ struct SidecarSettingsView: View {
         ))
     }
 
-    private func shortcutUnavailableResult() -> PluginShortcutRecordingResult {
-        .rejected(localization.string(
-            "settings.shortcut.unavailable",
-            defaultValue: "此快捷键已被系统或其他应用占用。"
-        ))
-    }
 }
 
 private enum SidecarDeviceSettingsState: Equatable {

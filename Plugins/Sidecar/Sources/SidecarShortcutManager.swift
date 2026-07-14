@@ -1,13 +1,13 @@
 import Carbon
 import Foundation
 import MacToolsPluginKit
+import OSLog
 
 @MainActor
 protocol SidecarShortcutManaging: AnyObject {
     var onTrigger: ((String) -> Void)? { get set }
 
     func sync(bindings: [String: ShortcutBinding])
-    func canRegister(binding: ShortcutBinding, replacing id: String) -> Bool
     func temporarilyDisable(id: String)
     func unregisterAll()
 }
@@ -81,6 +81,10 @@ final class SidecarShortcutManager: SidecarShortcutManaging {
 
     var onTrigger: ((String) -> Void)?
 
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
+        category: "SidecarShortcutManager"
+    )
     private lazy var handlerRegistration = HandlerRegistration(manager: self)
     private var registeredHotKeys: [String: RegisteredHotKey] = [:]
     private var idsByCarbon: [UInt32: String] = [:]
@@ -106,27 +110,6 @@ final class SidecarShortcutManager: SidecarShortcutManaging {
         unregister(id: id)
     }
 
-    func canRegister(binding: ShortcutBinding, replacing id: String) -> Bool {
-        guard binding.isValid, handlerRegistration.isInstalled else { return false }
-        if registeredHotKeys[id]?.binding == binding {
-            return true
-        }
-
-        var reference: EventHotKeyRef?
-        let hotKeyID = EventHotKeyID(signature: Self.signature, id: nextCarbonID)
-        let status = RegisterEventHotKey(
-            UInt32(binding.keyCode),
-            binding.modifiers.carbonFlags,
-            hotKeyID,
-            GetEventDispatcherTarget(),
-            0,
-            &reference
-        )
-        guard status == noErr, let reference else { return false }
-        UnregisterEventHotKey(reference)
-        return true
-    }
-
     func unregisterAll() {
         for id in Array(registeredHotKeys.keys) {
             unregister(id: id)
@@ -147,7 +130,10 @@ final class SidecarShortcutManager: SidecarShortcutManaging {
             0,
             &reference
         )
-        guard status == noErr, let reference else { return }
+        guard status == noErr, let reference else {
+            logger.warning("Could not register Sidecar shortcut id=\(id, privacy: .public) status=\(status, privacy: .public)")
+            return
+        }
 
         registeredHotKeys[id] = RegisteredHotKey(
             binding: binding,

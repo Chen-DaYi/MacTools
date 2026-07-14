@@ -43,7 +43,6 @@ enum SidecarServiceAvailability: Equatable {
 }
 
 enum SidecarUnavailableReason: Equatable {
-    case minimumTestedVersion
     case frameworkLoadFailed
     case missingManager
     case missingTypes
@@ -74,8 +73,6 @@ enum SidecarServiceError: Error, Equatable, LocalizedError {
 extension SidecarUnavailableReason {
     var errorDescription: String {
         switch self {
-        case .minimumTestedVersion:
-            "Sidecar is tested on macOS 14.2 or later"
         case .frameworkLoadFailed:
             "SidecarCore cannot be loaded on this system"
         case .missingManager:

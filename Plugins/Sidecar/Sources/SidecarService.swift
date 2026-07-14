@@ -1,10 +1,12 @@
 import Darwin
 import Foundation
 import ObjectiveC.runtime
+import OSLog
 
 @MainActor
 protocol SidecarServicing: AnyObject {
     var availability: SidecarServiceAvailability { get }
+    var isMinimumTestedSystem: Bool { get }
     var onDevicesChanged: (() -> Void)? { get set }
 
     func reachableDevices() -> [SidecarDevice]
@@ -24,13 +26,18 @@ protocol SidecarServicing: AnyObject {
 final class SidecarCoreService: NSObject, SidecarServicing {
     private static let frameworkPath = "/System/Library/PrivateFrameworks/SidecarCore.framework/SidecarCore"
     private static let devicesChangedNotification = Notification.Name("SidecarDevicesChangedNotification")
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
+        category: "SidecarCoreService"
+    )
 
     // Private SidecarCore transport value mirrored from the local sidecarctl implementation that
     // was verified against this SidecarCore runtime. Keep this behind the explicit wired-only
-    // action so a failed private enum assumption cannot silently fall back to Wi-Fi.
+    // action so automatic transport selection is never requested for a wired-only connection.
     private static let wiredTransportRawValue: Int64 = 2
 
     private typealias IntegerSetter = @convention(c) (AnyObject, Selector, Int64) -> Void
+    private typealias IntegerGetter = @convention(c) (AnyObject, Selector) -> Int64
     private typealias OperationCompletion = @convention(block) (NSError?) -> Void
     private typealias WiredDeviceOperation = @convention(c) (
         AnyObject,
@@ -42,6 +49,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
 
     private let manager: NSObject?
     let availability: SidecarServiceAvailability
+    let isMinimumTestedSystem: Bool
     var onDevicesChanged: (() -> Void)?
 
     private let canReadConnectedDevices: Bool
@@ -50,13 +58,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
 
     init(processInfo: ProcessInfo = .processInfo) {
         let version = processInfo.operatingSystemVersion
-        guard version.majorVersion > 14 || (version.majorVersion == 14 && version.minorVersion >= 2) else {
-            manager = nil
-            canReadConnectedDevices = false
-            availability = .unsupported(.minimumTestedVersion)
-            super.init()
-            return
-        }
+        isMinimumTestedSystem = Self.isMinimumTested(version)
 
         guard dlopen(Self.frameworkPath, RTLD_LAZY) != nil else {
             manager = nil
@@ -123,6 +125,10 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         canReadConnectedDevices = shared.responds(to: NSSelectorFromString("connectedDevices"))
         availability = .available
         super.init()
+
+        if !isMinimumTestedSystem {
+            Self.logger.warning("SidecarCore is running on an untested macOS version")
+        }
 
         // Best-effort private notification. Operations also trigger explicit refreshes so the UI
         // does not depend on this guessed notification firing on every macOS release.
@@ -261,6 +267,20 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         }
         let setTransport = unsafeBitCast(transportIMP, to: IntegerSetter.self)
         setTransport(config, transportSelector, Self.wiredTransportRawValue)
+        if let configuredTransport = integerValue(from: config, selectorName: "transport") {
+            guard configuredTransport == Self.wiredTransportRawValue else {
+                Self.logger.error(
+                    "Sidecar wired transport verification failed requested=\(Self.wiredTransportRawValue, privacy: .public) readBack=\(configuredTransport, privacy: .public)"
+                )
+                completion(.failure(.operationUnavailable))
+                return
+            }
+            Self.logger.info(
+                "Sidecar wired transport configured value=\(configuredTransport, privacy: .public)"
+            )
+        } else {
+            Self.logger.warning("Sidecar wired transport getter is unavailable; requested value=\(Self.wiredTransportRawValue, privacy: .public)")
+        }
 
         let selector = NSSelectorFromString("connectToDevice:withConfig:completion:")
         guard let operationIMP = manager.method(for: selector) else {
@@ -308,6 +328,15 @@ final class SidecarCoreService: NSObject, SidecarServicing {
             : nil
     }
 
+    private func integerValue(from object: NSObject, selectorName: String) -> Int64? {
+        let selector = NSSelectorFromString(selectorName)
+        guard object.responds(to: selector), let getterIMP = object.method(for: selector) else {
+            return nil
+        }
+        let getter = unsafeBitCast(getterIMP, to: IntegerGetter.self)
+        return getter(object, selector)
+    }
+
     private func stringValue(from object: NSObject, selectorName: String) -> String? {
         objectValue(from: object, selectorName: selectorName) as? String
     }
@@ -327,6 +356,10 @@ final class SidecarCoreService: NSObject, SidecarServicing {
             return string
         }
         return nil
+    }
+
+    static func isMinimumTested(_ version: OperatingSystemVersion) -> Bool {
+        version.majorVersion > 14 || (version.majorVersion == 14 && version.minorVersion >= 2)
     }
 
 }

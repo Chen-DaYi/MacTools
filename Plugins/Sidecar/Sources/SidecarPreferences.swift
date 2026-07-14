@@ -62,25 +62,45 @@ final class SidecarPreferencesStore: ObservableObject {
 
     init(storage: PluginStorage) {
         self.storage = storage
+        let storedDevices: [SidecarDevicePreference]
         if let data = storage.data(forKey: StorageKey.devices),
            let savedDevices = try? decoder.decode([SidecarDevicePreference].self, from: data) {
-            devices = savedDevices
+            storedDevices = savedDevices
         } else {
-            devices = []
+            storedDevices = []
         }
 
+        let storedDisconnectAllShortcut: ShortcutBinding?
         if let data = storage.data(forKey: StorageKey.disconnectAllShortcut),
            let binding = try? decoder.decode(ShortcutBinding.self, from: data) {
-            disconnectAllShortcut = binding
+            storedDisconnectAllShortcut = binding
         } else {
-            disconnectAllShortcut = nil
+            storedDisconnectAllShortcut = nil
         }
 
+        let storedConnectFirstAvailableShortcut: ShortcutBinding?
         if let data = storage.data(forKey: StorageKey.connectFirstAvailableShortcut),
            let binding = try? decoder.decode(ShortcutBinding.self, from: data) {
-            connectFirstAvailableShortcut = binding
+            storedConnectFirstAvailableShortcut = binding
         } else {
-            connectFirstAvailableShortcut = nil
+            storedConnectFirstAvailableShortcut = nil
+        }
+
+        let normalized = Self.normalizedShortcuts(
+            devices: storedDevices,
+            disconnectAllShortcut: storedDisconnectAllShortcut,
+            connectFirstAvailableShortcut: storedConnectFirstAvailableShortcut
+        )
+        devices = normalized.devices
+        disconnectAllShortcut = normalized.disconnectAllShortcut
+        connectFirstAvailableShortcut = normalized.connectFirstAvailableShortcut
+
+        if normalized.devices != storedDevices
+            || normalized.disconnectAllShortcut != storedDisconnectAllShortcut
+            || normalized.connectFirstAvailableShortcut != storedConnectFirstAvailableShortcut {
+            persistDevices()
+            persistShortcut(disconnectAllShortcut, forKey: StorageKey.disconnectAllShortcut)
+            persistShortcut(connectFirstAvailableShortcut, forKey: StorageKey.connectFirstAvailableShortcut)
         }
     }
 
@@ -118,6 +138,7 @@ final class SidecarPreferencesStore: ObservableObject {
 
     func updateShortcut(_ shortcut: ShortcutBinding?, for deviceID: String) {
         update(deviceID: deviceID) { $0.shortcut = shortcut }
+        normalizeAndPersistShortcuts()
     }
 
     func updateDisconnectAllShortcut(_ shortcut: ShortcutBinding?) {
@@ -128,12 +149,14 @@ final class SidecarPreferencesStore: ObservableObject {
         } else {
             storage.removeObject(forKey: StorageKey.disconnectAllShortcut)
         }
+        normalizeAndPersistShortcuts()
     }
 
     func updateConnectFirstAvailableShortcut(_ shortcut: ShortcutBinding?) {
         guard connectFirstAvailableShortcut != shortcut else { return }
         connectFirstAvailableShortcut = shortcut
         persistShortcut(shortcut, forKey: StorageKey.connectFirstAvailableShortcut)
+        normalizeAndPersistShortcuts()
     }
 
     func move(deviceID: String, before beforeDeviceID: String?) {
@@ -165,9 +188,14 @@ final class SidecarPreferencesStore: ObservableObject {
         guard let portablePreferences = try? decoder.decode(PortablePreferences.self, from: data) else {
             return
         }
-        devices = uniqueDevices(portablePreferences.devices)
-        disconnectAllShortcut = portablePreferences.disconnectAllShortcut
-        connectFirstAvailableShortcut = portablePreferences.connectFirstAvailableShortcut
+        let normalized = Self.normalizedShortcuts(
+            devices: portablePreferences.devices,
+            disconnectAllShortcut: portablePreferences.disconnectAllShortcut,
+            connectFirstAvailableShortcut: portablePreferences.connectFirstAvailableShortcut
+        )
+        devices = normalized.devices
+        disconnectAllShortcut = normalized.disconnectAllShortcut
+        connectFirstAvailableShortcut = normalized.connectFirstAvailableShortcut
         persistDevices()
         persistShortcut(disconnectAllShortcut, forKey: StorageKey.disconnectAllShortcut)
         persistShortcut(connectFirstAvailableShortcut, forKey: StorageKey.connectFirstAvailableShortcut)
@@ -195,7 +223,57 @@ final class SidecarPreferencesStore: ObservableObject {
         }
     }
 
-    private func uniqueDevices(_ candidates: [SidecarDevicePreference]) -> [SidecarDevicePreference] {
+    private func normalizeAndPersistShortcuts() {
+        let normalized = Self.normalizedShortcuts(
+            devices: devices,
+            disconnectAllShortcut: disconnectAllShortcut,
+            connectFirstAvailableShortcut: connectFirstAvailableShortcut
+        )
+        guard normalized.devices != devices
+            || normalized.disconnectAllShortcut != disconnectAllShortcut
+            || normalized.connectFirstAvailableShortcut != connectFirstAvailableShortcut
+        else {
+            return
+        }
+        devices = normalized.devices
+        disconnectAllShortcut = normalized.disconnectAllShortcut
+        connectFirstAvailableShortcut = normalized.connectFirstAvailableShortcut
+        persistDevices()
+        persistShortcut(disconnectAllShortcut, forKey: StorageKey.disconnectAllShortcut)
+        persistShortcut(connectFirstAvailableShortcut, forKey: StorageKey.connectFirstAvailableShortcut)
+    }
+
+    private static func normalizedShortcuts(
+        devices candidates: [SidecarDevicePreference],
+        disconnectAllShortcut: ShortcutBinding?,
+        connectFirstAvailableShortcut: ShortcutBinding?
+    ) -> (
+        devices: [SidecarDevicePreference],
+        disconnectAllShortcut: ShortcutBinding?,
+        connectFirstAvailableShortcut: ShortcutBinding?
+    ) {
+        var usedBindings = Set<ShortcutBinding>()
+        func uniqueBinding(_ binding: ShortcutBinding?) -> ShortcutBinding? {
+            guard let binding, binding.isValid, usedBindings.insert(binding).inserted else {
+                return nil
+            }
+            return binding
+        }
+
+        let normalizedConnectFirstAvailableShortcut = uniqueBinding(connectFirstAvailableShortcut)
+        let normalizedDisconnectAllShortcut = uniqueBinding(disconnectAllShortcut)
+        var normalizedDevices = uniqueDevices(candidates)
+        for index in normalizedDevices.indices {
+            normalizedDevices[index].shortcut = uniqueBinding(normalizedDevices[index].shortcut)
+        }
+        return (
+            normalizedDevices,
+            normalizedDisconnectAllShortcut,
+            normalizedConnectFirstAvailableShortcut
+        )
+    }
+
+    private static func uniqueDevices(_ candidates: [SidecarDevicePreference]) -> [SidecarDevicePreference] {
         var seenIDs = Set<String>()
         return candidates.filter { seenIDs.insert($0.id).inserted }
     }

@@ -475,22 +475,6 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此系統無法初始化 SidecarDisplayManager" } }
       }
     },
-    "service.unsupported.minimumTestedVersion" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تم اختبار Sidecar على macOS 14.2 أو أحدث" } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar wurde mit macOS 14.2 oder neuer getestet" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar is tested on macOS 14.2 or later" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar se ha probado en macOS 14.2 o posterior" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar a été testé sur macOS 14.2 ou version ultérieure" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "SidecarはmacOS 14.2以降でテストされています" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar는 macOS 14.2 이상에서 테스트되었습니다" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "O Sidecar foi testado no macOS 14.2 ou posterior" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar протестирован на macOS 14.2 и новее" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 已在 macOS 14.2 及更高版本测试" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 已在 macOS 14.2 及更新版本測試" } }
-      }
-    },
     "service.unsupported.missingInterfaces" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -625,6 +609,12 @@
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "حالة اتصال %d من شاشات Sidecar غير متاحة" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Der Verbindungsstatus von %d Sidecar-Displays ist nicht verfügbar" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection state unavailable for %d Sidecar displays" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El estado de conexión no está disponible para %d pantallas Sidecar" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’état de connexion est indisponible pour %d écrans Sidecar" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%d台のSidecarディスプレイで接続状態を確認できません" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%d대 Sidecar 디스플레이의 연결 상태를 확인할 수 없습니다" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "O estado de ligação não está disponível para %d ecrãs Sidecar" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Состояние подключения недоступно для %d дисплеев Sidecar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台 Sidecar 显示器的连接状态不可用" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台 Sidecar 顯示器的連線狀態不可用" } }
       }
     },
+    "panel.subtitle.untestedSystem" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%@ · لم يتم اختبار Sidecar على إصدارات macOS الأقدم من 14.2" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ · Sidecar wurde nicht auf macOS vor 14.2 getestet" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ · Sidecar is untested before macOS 14.2" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "%@ · Sidecar no se ha probado antes de macOS 14.2" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%@ · Sidecar n’a pas été testé avant macOS 14.2" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@・macOS 14.2より前ではSidecarは未テストです" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ · Sidecar는 macOS 14.2 이전에서 테스트되지 않았습니다" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "%@ · O Sidecar não foi testado antes do macOS 14.2" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ · Sidecar не тестировался на macOS до 14.2" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ · 未在 macOS 14.2 之前测试" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%@ · 未在 macOS 14.2 之前測試" } }
+      }
+    },
     "panel.subtitle.noDevices" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -676,17 +666,17 @@
     "panel.wired.warning" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "سلكي فقط: لا يوجد رجوع تلقائي إلى Wi-Fi" } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nur Kabel: kein Rückfall auf WLAN" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wired only: never falls back to Wi-Fi" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solo con cable: no cambia a Wi-Fi" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Câble uniquement : pas de repli Wi-Fi" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "有線のみ：Wi-Fiには切り替えません" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "유선 전용: Wi-Fi로 전환하지 않음" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Só por cabo: sem recurso a Wi-Fi" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Только кабель: без перехода на Wi-Fi" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅有线：不会回退到 Wi-Fi" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅有線：不會回退至 Wi‑Fi" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "طلب اتصال سلكي فقط؛ لا يُطلب الرجوع إلى Wi-Fi" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kabelverbindung angefordert; kein WLAN-Fallback angefordert" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wired connection requested; no Wi-Fi fallback requested" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Se solicita conexión por cable; no se solicita Wi-Fi como alternativa" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connexion filaire demandée ; aucun repli Wi‑Fi demandé" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "有線接続を要求：Wi‑Fiへのフォールバックは要求しません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "유선 연결 요청: Wi-Fi 대체 연결을 요청하지 않음" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ligação por cabo solicitada; não é solicitado recurso a Wi-Fi" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запрошено проводное подключение; переход на Wi-Fi не запрашивается" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请求仅通过有线连接，不请求 Wi-Fi 回退" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "要求僅透過有線連線，不要求 Wi-Fi 備援" } }
       }
     },
     "settings.devices.description" : {
@@ -793,12 +783,6 @@
       "extractionState" : "manual",
       "localizations" : {
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "هذا الاختصار مستخدم لعملية Sidecar أخرى." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Kurzbefehl wird bereits für eine andere Sidecar-Aktion verwendet." } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "This shortcut is already used by another Sidecar action." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Este atajo ya se usa para otra acción de Sidecar." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ce raccourci est déjà utilisé par une autre action Sidecar." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このショートカットは別のSidecarアクションで使用されています。" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 단축키는 다른 Sidecar 동작에 이미 사용 중입니다." } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Este atalho já é utilizado por outra ação do Sidecar." } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это сочетание клавиш уже используется другим действием Sidecar." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此快捷键已用于其他 Sidecar 操作。" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此快速鍵已用於其他 Sidecar 操作。" } }
-      }
-    },
-    "settings.shortcut.unavailable" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "هذا الاختصار مستخدم من النظام أو تطبيق آخر." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Kurzbefehl wird bereits vom System oder einer anderen App verwendet." } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "This shortcut is already used by the system or another app." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El sistema u otra app ya usa este atajo." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ce raccourci est déjà utilisé par le système ou une autre app." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このショートカットはシステムまたはほかのアプリで使用されています。" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 단축키는 시스템 또는 다른 앱에서 이미 사용 중입니다." } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Este atalho já é usado pelo sistema ou por outra aplicação." } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это сочетание уже используется системой или другим приложением." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此快捷键已被系统或其他应用占用。" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此快速鍵已被系統或其他 App 使用。" } }
       }
     },
     "settings.shortcut.unset" : {
