@@ -1,0 +1,67 @@
+{
+  "id": "sidecar",
+  "displayName": "Sidecar",
+  "summary": "连接附近可用的 iPad 作为扩展显示器",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "Sidecar",
+      "summary": "وصّل iPad قريبًا كشاشة ممتدة."
+    },
+    "de": {
+      "displayName": "Sidecar",
+      "summary": "Ein iPad in der Nähe als erweiterten Bildschirm verbinden."
+    },
+    "en": {
+      "displayName": "Sidecar",
+      "summary": "Connect a nearby iPad as an extended display."
+    },
+    "es": {
+      "displayName": "Sidecar",
+      "summary": "Conecta un iPad cercano como pantalla ampliada."
+    },
+    "fr": {
+      "displayName": "Sidecar",
+      "summary": "Connecter un iPad à proximité comme écran étendu."
+    },
+    "ja": {
+      "displayName": "Sidecar",
+      "summary": "近くのiPadを拡張ディスプレイとして接続します。"
+    },
+    "ko": {
+      "displayName": "Sidecar",
+      "summary": "근처의 iPad를 확장 디스플레이로 연결합니다."
+    },
+    "pt": {
+      "displayName": "Sidecar",
+      "summary": "Ligue um iPad por perto como ecrã adicional."
+    },
+    "ru": {
+      "displayName": "Sidecar",
+      "summary": "Подключите ближайший iPad как дополнительный дисплей."
+    },
+    "zh-Hans": {
+      "displayName": "Sidecar",
+      "summary": "连接附近可用的 iPad 作为扩展显示器"
+    },
+    "zh-Hant": {
+      "displayName": "Sidecar",
+      "summary": "連接附近可用的 iPad 作為延伸顯示器"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 3,
+  "bundleRelativePath": "Sidecar.bundle",
+  "factoryClass": "SidecarPlugin.SidecarPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "SidecarPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": [],
+  "category": "display"
+}

@@ -1,0 +1,582 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "metadata.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "وصّل iPad قريبًا كشاشة ممتدة." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ein iPad in der Nähe als erweiterten Bildschirm verbinden." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect a nearby iPad as an extended display." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conecta un iPad cercano como pantalla ampliada." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connecter un iPad à proximité comme écran étendu." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "近くのiPadを拡張ディスプレイとして接続します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "근처의 iPad를 확장 디스플레이로 연결합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ligue um iPad por perto como ecrã adicional." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключите ближайший iPad как дополнительный дисплей." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接附近可用的 iPad 作为扩展显示器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連接附近可用的 iPad 作為延伸顯示器" } }
+      }
+    },
+    "metadata.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar" } }
+      }
+    },
+    "panel.action.connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اتصال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbinden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conectar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connecter" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ligar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключить" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連接" } }
+      }
+    },
+    "panel.action.disconnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "قطع الاتصال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Trennen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnect" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Desconectar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Déconnecter" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続解除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 해제" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Desligar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отключить" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "断开连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "中斷連接" } }
+      }
+    },
+    "panel.action.wiredConnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اتصال بالكابل فقط" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nur per Kabel verbinden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect via cable only" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conectar solo por cable" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connecter par câble uniquement" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ケーブルのみで接続" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "케이블로만 연결" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ligar apenas por cabo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Только по кабелю" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅通过有线连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅透過有線連接" } }
+      }
+    },
+    "panel.device.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "متاح لطلب Sidecar" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Für eine Sidecar-Anfrage verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Available for a Sidecar request" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Disponible para una solicitud de Sidecar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Disponible pour une demande Sidecar" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar接続を要求できます" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 연결 요청 가능" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Disponível para um pedido Sidecar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Доступно для запроса Sidecar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可请求 Sidecar 连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "可要求 Sidecar 連接" } }
+      }
+    },
+    "panel.device.subtitle.connected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "متصل عبر Sidecar" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Über Sidecar verbunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected through Sidecar" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conectado mediante Sidecar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connecté via Sidecar" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecarで接続中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar로 연결됨" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ligado através do Sidecar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключено через Sidecar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已通过 Sidecar 连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已透過 Sidecar 連接" } }
+      }
+    },
+    "panel.error.timeout" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "انتهت مهلة العملية. تحقق من iPad والكابل والشبكة، ثم حاول مجددًا." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zeitüberschreitung. Prüfe iPad, Kabel und Netzwerk und versuche es erneut." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation timed out. Check the iPad, cable, and network, then try again." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La operación agotó el tiempo. Comprueba el iPad, el cable y la red, e inténtalo de nuevo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’opération a expiré. Vérifiez l’iPad, le câble et le réseau, puis réessayez." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "操作がタイムアウトしました。iPad、ケーブル、ネットワークを確認してからやり直してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 시간이 초과되었습니다. iPad, 케이블, 네트워크를 확인한 다음 다시 시도하십시오." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A operação excedeu o tempo limite. Verifique o iPad, o cabo e a rede e tente novamente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время ожидания истекло. Проверьте iPad, кабель и сеть, затем повторите попытку." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作超时，请检查 iPad、线缆和网络后重试" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "操作逾時，請檢查 iPad、連接線和網路後重試" } }
+      }
+    },
+    "panel.operation.connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جارٍ الاتصال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbinden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conectando" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connexion" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 중" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A ligar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在連接" } }
+      }
+    },
+    "panel.operation.disconnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جارٍ قطع الاتصال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Trennen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnecting" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Desconectando" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Déconnexion" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続解除中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 해제 중" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A desligar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отключение" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在断开" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在中斷" } }
+      }
+    },
+    "panel.operation.wiredConnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جارٍ الاتصال بالكابل" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Per Kabel verbinden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting by cable" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conectando por cable" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connexion par câble" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ケーブルで接続中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "케이블로 연결 중" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A ligar por cabo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение по кабелю" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在通过有线连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在透過有線連接" } }
+      }
+    },
+    "panel.operation.pending.connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جارٍ الاتصال بـ %@…" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ wird verbunden …" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting %@…" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conectando %@…" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connexion à %@…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@に接続中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결 중…" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A ligar a %@…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение к %@…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在连接 %@…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在連接 %@…" } }
+      }
+    },
+    "panel.operation.pending.disconnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جارٍ قطع الاتصال بـ %@…" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ wird getrennt …" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnecting %@…" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Desconectando %@…" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Déconnexion de %@…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@との接続を解除中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결 해제 중…" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A desligar %@…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отключение от %@…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在断开 %@…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在中斷 %@…" } }
+      }
+    },
+    "panel.operation.pending.wiredConnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جارٍ الاتصال بـ %@ عبر الكابل…" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ wird per Kabel verbunden …" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting %@ by cable…" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conectando %@ por cable…" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connexion à %@ par câble…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@にケーブルで接続中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 케이블 연결 중…" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A ligar %@ por cabo…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение к %@ по кабелю…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在通过有线连接 %@…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在透過有線連接 %@…" } }
+      }
+    },
+    "panel.operation.succeeded.connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تم إرسال طلب الاتصال بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbindungsanfrage für %@ gesendet" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection request sent for %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solicitud de conexión enviada a %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Demande de connexion envoyée pour %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@への接続リクエストを送信しました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결 요청을 보냈습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Pedido de ligação enviado para %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запрос на подключение к %@ отправлен" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已提交连接 %@ 的请求" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已提交連接 %@ 的請求" } }
+      }
+    },
+    "panel.operation.succeeded.disconnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تم إرسال طلب قطع الاتصال بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Trennungsanfrage für %@ gesendet" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnect request sent for %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solicitud de desconexión enviada a %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Demande de déconnexion envoyée pour %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@の接続解除リクエストを送信しました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결 해제 요청을 보냈습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Pedido para desligar %@ enviado" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запрос на отключение %@ отправлен" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已提交断开 %@ 的请求" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已提交中斷 %@ 的請求" } }
+      }
+    },
+    "panel.operation.succeeded.wiredConnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تم إرسال طلب الاتصال السلكي بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kabelverbindungsanfrage für %@ gesendet" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cable connection request sent for %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solicitud de conexión por cable enviada a %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Demande de connexion par câble envoyée pour %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@へのケーブル接続リクエストを送信しました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 케이블 연결 요청을 보냈습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Pedido de ligação por cabo enviado para %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запрос на кабельное подключение к %@ отправлен" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已提交有线连接 %@ 的请求" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已提交有線連接 %@ 的請求" } }
+      }
+    },
+    "panel.operation.failed.connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذر الاتصال بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ konnte nicht verbunden werden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not connect to %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo conectar con %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de connecter %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@に接続できませんでした" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@에 연결할 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível ligar a %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось подключиться к %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法连接 %@" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法連接 %@" } }
+      }
+    },
+    "panel.operation.failed.disconnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذر قطع الاتصال بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ konnte nicht getrennt werden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not disconnect %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo desconectar %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de déconnecter %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@の接続を解除できませんでした" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결을 해제할 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível desligar %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось отключить %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法断开 %@" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法中斷 %@" } }
+      }
+    },
+    "panel.operation.failed.wiredConnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذر الاتصال السلكي بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ konnte nicht per Kabel verbunden werden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not connect %@ by cable" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo conectar %@ por cable" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de connecter %@ par câble" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@にケーブルで接続できませんでした" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@을(를) 케이블로 연결할 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível ligar %@ por cabo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось подключить %@ по кабелю" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法通过有线连接 %@" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法透過有線連接 %@" } }
+      }
+    },
+    "panel.operation.timedOut.connect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "انتهت مهلة الاتصال بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbindung zu %@ hat zu lange gedauert" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection to %@ timed out" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La conexión con %@ agotó el tiempo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La connexion à %@ a expiré" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@への接続がタイムアウトしました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결 시간이 초과되었습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A ligação a %@ excedeu o tempo limite" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время подключения к %@ истекло" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接 %@ 超时" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連接 %@ 逾時" } }
+      }
+    },
+    "panel.operation.timedOut.disconnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "انتهت مهلة قطع الاتصال بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Trennen von %@ hat zu lange gedauert" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnecting %@ timed out" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La desconexión de %@ agotó el tiempo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La déconnexion de %@ a expiré" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@の接続解除がタイムアウトしました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결 해제 시간이 초과되었습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Desligar %@ excedeu o tempo limite" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время отключения %@ истекло" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "断开 %@ 超时" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "中斷 %@ 逾時" } }
+      }
+    },
+    "panel.operation.timedOut.wiredConnect" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "انتهت مهلة الاتصال السلكي بـ %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kabelverbindung zu %@ hat zu lange gedauert" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cable connection to %@ timed out" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La conexión por cable con %@ agotó el tiempo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La connexion par câble à %@ a expiré" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@へのケーブル接続がタイムアウトしました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 케이블 연결 시간이 초과되었습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A ligação por cabo a %@ excedeu o tempo limite" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время кабельного подключения к %@ истекло" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "有线连接 %@ 超时" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "有線連接 %@ 逾時" } }
+      }
+    },
+    "service.error.deviceUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لم يعد iPad ضمن الأجهزة المتاحة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Das iPad ist nicht mehr verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The iPad is no longer available" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El iPad ya no está disponible" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’iPad n’est plus disponible" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "iPadが利用可能なデバイスにありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "iPad가 더 이상 사용 가능한 기기에 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "O iPad já não está disponível" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "iPad больше недоступен" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "iPad 已不在可用设备列表中" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "iPad 已不在可用裝置列表中" } }
+      }
+    },
+    "service.error.operationUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "عملية Sidecar هذه غير متاحة على هذا النظام" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese Sidecar-Aktion ist auf diesem System nicht verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This Sidecar action is unavailable on this system" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Esta acción de Sidecar no está disponible en este sistema" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Cette action Sidecar n’est pas disponible sur ce système" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このシステムではこのSidecar操作を利用できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 시스템에서는 이 Sidecar 동작을 사용할 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Esta ação Sidecar não está disponível neste sistema" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это действие Sidecar недоступно на этой системе" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前系统不支持此 Sidecar 操作" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "目前系統不支援此 Sidecar 操作" } }
+      }
+    },
+    "service.unsupported.frameworkLoadFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذّر تحميل SidecarCore على هذا النظام" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore kann auf diesem System nicht geladen werden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore cannot be loaded on this system" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se puede cargar SidecarCore en este sistema" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore ne peut pas être chargé sur ce système" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このシステムではSidecarCoreを読み込めません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 시스템에서 SidecarCore를 불러올 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não é possível carregar o SidecarCore neste sistema" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось загрузить SidecarCore на этой системе" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此系统无法加载 SidecarCore" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此系統無法載入 SidecarCore" } }
+      }
+    },
+    "service.unsupported.managerInitializationFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذّر بدء SidecarDisplayManager على هذا النظام" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "SidecarDisplayManager kann auf diesem System nicht gestartet werden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SidecarDisplayManager cannot be started on this system" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se puede iniciar SidecarDisplayManager en este sistema" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "SidecarDisplayManager ne peut pas démarrer sur ce système" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このシステムではSidecarDisplayManagerを開始できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 시스템에서 SidecarDisplayManager를 시작할 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não é possível iniciar o SidecarDisplayManager neste sistema" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось запустить SidecarDisplayManager на этой системе" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此系统无法初始化 SidecarDisplayManager" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此系統無法初始化 SidecarDisplayManager" } }
+      }
+    },
+    "service.unsupported.minimumTestedVersion" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تم اختبار Sidecar على macOS 14.2 أو أحدث" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar wurde mit macOS 14.2 oder neuer getestet" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar is tested on macOS 14.2 or later" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar se ha probado en macOS 14.2 o posterior" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar a été testé sur macOS 14.2 ou version ultérieure" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "SidecarはmacOS 14.2以降でテストされています" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar는 macOS 14.2 이상에서 테스트되었습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "O Sidecar foi testado no macOS 14.2 ou posterior" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar протестирован на macOS 14.2 и новее" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 已在 macOS 14.2 及更高版本测试" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 已在 macOS 14.2 及更新版本測試" } }
+      }
+    },
+    "service.unsupported.missingInterfaces" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يفتقد SidecarCore على هذا النظام الواجهات المطلوبة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore stellt die benötigten Schnittstellen nicht bereit" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore is missing required interfaces on this system" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore no incluye las interfaces necesarias en este sistema" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore ne fournit pas les interfaces requises sur ce système" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このシステムのSidecarCoreには必要なインターフェイスがありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 시스템의 SidecarCore에 필요한 인터페이스가 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "O SidecarCore não fornece as interfaces necessárias neste sistema" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В SidecarCore на этой системе нет нужных интерфейсов" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此系统的 SidecarCore 缺少所需接口" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此系統的 SidecarCore 缺少所需介面" } }
+      }
+    },
+    "service.unsupported.missingManager" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لا يوفر هذا النظام SidecarDisplayManager" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieses System stellt SidecarDisplayManager nicht bereit" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This system does not provide SidecarDisplayManager" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Este sistema no proporciona SidecarDisplayManager" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ce système ne fournit pas SidecarDisplayManager" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このシステムにはSidecarDisplayManagerがありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 시스템은 SidecarDisplayManager를 제공하지 않습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Este sistema não fornece o SidecarDisplayManager" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эта система не предоставляет SidecarDisplayManager" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此系统未提供 SidecarDisplayManager" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此系統未提供 SidecarDisplayManager" } }
+      }
+    },
+    "service.unsupported.missingTypes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يفتقد SidecarCore على هذا النظام الأنواع المطلوبة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore stellt die benötigten Typen nicht bereit" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore is missing required types on this system" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore no incluye los tipos necesarios en este sistema" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "SidecarCore ne fournit pas les types requis sur ce système" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このシステムのSidecarCoreには必要な型がありません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 시스템의 SidecarCore에 필요한 타입이 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "O SidecarCore não fornece os tipos necessários neste sistema" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В SidecarCore на этой системе нет нужных типов" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此系统的 SidecarCore 缺少所需类型" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此系統的 SidecarCore 缺少所需型別" } }
+      }
+    },
+    "panel.subtitle.deviceCount" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%d من أجهزة iPad متاحة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d available iPads" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d iPad disponibles" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d iPad disponibles" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "利用可能なiPad：%d台" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용 가능한 iPad %d대" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads disponíveis" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Доступно iPad: %d" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台可连接的 iPad" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台可連接的 iPad" } }
+      }
+    },
+    "panel.subtitle.connectedCount" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%d من أجهزة iPad متصلة عبر Sidecar" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads über Sidecar verbunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads connected through Sidecar" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d iPad conectados mediante Sidecar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d iPad connectés via Sidecar" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecarで接続中のiPad：%d台" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar로 연결된 iPad %d대" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads ligados através do Sidecar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "iPad, подключённых через Sidecar: %d" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台 iPad 已通过 Sidecar 连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台 iPad 已透過 Sidecar 連接" } }
+      }
+    },
+    "panel.subtitle.noDevices" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لم يتم العثور على أجهزة iPad قابلة للاتصال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Keine verbindbaren iPads gefunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No connectable iPads found" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se encontraron iPad conectables" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun iPad connectable trouvé" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続できるiPadが見つかりません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 가능한 iPad를 찾을 수 없음" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Nenhum iPad disponível para ligar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет iPad, доступных для подключения" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未发现可连接的 iPad" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "未發現可連接的 iPad" } }
+      }
+    },
+    "panel.subtitle.unsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "عناصر تحكم Sidecar غير متاحة على هذا النظام" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar-Steuerung ist auf diesem System nicht verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar controls are unavailable on this system" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Los controles de Sidecar no están disponibles en este sistema" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Les commandes Sidecar ne sont pas disponibles sur ce système" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このシステムではSidecarの操作を利用できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 시스템에서는 Sidecar 제어를 사용할 수 없음" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Os controlos Sidecar não estão disponíveis neste sistema" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Управление Sidecar недоступно на этой системе" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此系统不支持 Sidecar 控制" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此系統不支援 Sidecar 控制" } }
+      }
+    },
+    "panel.wired.warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "سلكي فقط: لا يوجد رجوع تلقائي إلى Wi-Fi" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nur Kabel: kein Rückfall auf WLAN" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wired only: never falls back to Wi-Fi" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solo con cable: no cambia a Wi-Fi" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Câble uniquement : pas de repli Wi-Fi" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "有線のみ：Wi-Fiには切り替えません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "유선 전용: Wi-Fi로 전환하지 않음" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Só por cabo: sem recurso a Wi-Fi" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Только кабель: без перехода на Wi-Fi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅有线：不会回退到 Wi-Fi" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅有線：不會回退至 Wi‑Fi" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

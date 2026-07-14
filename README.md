@@ -22,6 +22,7 @@
 | Feature | Description |
 | ------- | ----------- |
 | Display Resolution | View connected displays and switch each display to an available resolution, with an adaptive list that remains usable near screen edges. |
+| Sidecar | View nearby Sidecar displays and request connect or disconnect actions, including a per-device wired-only connection policy. |
 | Display Brightness | Quickly adjust built-in and DDC/CI external display brightness, with shortcuts that can follow the mouse or control all displays together, plus Gamma/Shade fallbacks. |
 | True Tone | Automatically adapt display colors to ambient light on MacBooks and compatible displays. |
 | Display Sleep | Put all displays to sleep immediately, then wake them with mouse movement or keyboard input. |

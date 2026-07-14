@@ -23,6 +23,8 @@ enum MenuBarPanelLayout {
     static let detailControlSpacing: CGFloat = 8
     static let emptyContentHeight: CGFloat = 150
     static let actionRowVerticalPadding: CGFloat = 8
+    static let actionRowSectionTitleHeight: CGFloat = 30
+    static let actionRowSectionTitleSpacing: CGFloat = 4
     static let selectRowVerticalPadding: CGFloat = 5
     static let sliderVerticalPadding: CGFloat = 9
     static let navigationRowHeight: CGFloat = 52
@@ -222,7 +224,9 @@ enum MenuBarPanelLayout {
         case .switchRow:
             return 20 + actionRowVerticalPadding * 2
         case .actionRow:
-            return 16 + actionRowVerticalPadding * 2
+            let titleHeight = control.sectionTitle == nil ? CGFloat(0) : actionRowSectionTitleHeight
+            let titleSpacing = titleHeight > 0 ? actionRowSectionTitleSpacing : CGFloat(0)
+            return titleHeight + titleSpacing + 16 + actionRowVerticalPadding * 2
         }
     }
 
@@ -316,6 +320,7 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
     private var activationTask: Task<Void, Never>?
     private var pendingActivation: Activation?
     private var dismissTask: Task<Void, Never>?
+    private var pinnedActivation: Activation?
     private var isPanelHovered = false
     private var rowFrames: [Activation: CGRect] = [:]
 
@@ -341,6 +346,10 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
         cancelDismissal()
         isPanelHovered = false
 
+        guard pinnedActivation == nil || pinnedActivation == activation else {
+            return
+        }
+
         guard activeActivation != activation else {
             selectedRowFrame = rowFrames[activation]
             return
@@ -362,6 +371,25 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 
             self?.activate(activation)
         }
+    }
+
+    func pin(
+        pluginID: String,
+        controlID: String,
+        optionID: String
+    ) {
+        let activation = Activation(
+            pluginID: pluginID,
+            controlID: controlID,
+            optionID: optionID
+        )
+
+        cancelPendingActivation()
+        cancelDismissal()
+        pinnedActivation = activation
+        isPanelHovered = false
+        activeActivation = activation
+        selectedRowFrame = rowFrames[activation]
     }
 
     private func activate(_ activation: Activation) {
@@ -424,7 +452,8 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 
         guard
             let expectedActivation,
-            activeActivation == expectedActivation
+            activeActivation == expectedActivation,
+            pinnedActivation != expectedActivation
         else {
             return
         }
@@ -461,6 +490,7 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 
         activeActivation = nil
         selectedRowFrame = nil
+        pinnedActivation = nil
         isPanelHovered = false
 
         if notify {
@@ -800,6 +830,18 @@ struct MenuBarContent: View {
         pluginID == Self.batteryChargeLimitPluginID && controlID == Self.batteryChargeLimitManageSettingsActionID
     }
 
+    private func isNavigationOptionSelected(
+        in controls: [PluginPanelControl],
+        controlID: String,
+        optionID: String
+    ) -> Bool {
+        controls.contains { control in
+            control.id == controlID
+                && control.kind == .navigationList
+                && control.selectedOptionID == optionID
+        }
+    }
+
     private func presentDiskCleanDetails() {
         onPresentDiskCleanConfiguration()
     }
@@ -825,6 +867,28 @@ struct MenuBarContent: View {
                 )
             },
             onNavigationSelectionChange: { controlID, optionID in
+                let controls = activeSecondaryPanel.panel.controls
+                if isNavigationOptionSelected(in: controls, controlID: controlID, optionID: optionID) {
+                    pluginHost.clearPanelNavigationSelection(
+                        controlID: controlID,
+                        for: activeSecondaryPanel.item.id
+                    )
+                    hoverCoordinator.dismissImmediately()
+                    return
+                }
+
+                if activeSecondaryPanel.item.detail?.secondaryPanel(
+                    controlID: controlID,
+                    optionID: optionID
+                ) != nil {
+                    hoverCoordinator.pin(
+                        pluginID: activeSecondaryPanel.item.id,
+                        controlID: controlID,
+                        optionID: optionID
+                    )
+                } else {
+                    hoverCoordinator.dismissImmediately()
+                }
                 pluginHost.setPanelNavigationSelectionValue(
                     optionID,
                     controlID: controlID,
@@ -943,6 +1007,25 @@ struct MenuBarContent: View {
                             pluginHost.setPanelSelectionValue(optionID, controlID: controlID, for: item.id)
                         },
                         onNavigationSelectionChange: { controlID, optionID in
+                            if isNavigationOptionSelected(
+                                in: item.detail?.primaryControls ?? [],
+                                controlID: controlID,
+                                optionID: optionID
+                            ) {
+                                pluginHost.clearPanelNavigationSelection(controlID: controlID, for: item.id)
+                                hoverCoordinator.dismissImmediately()
+                                return
+                            }
+
+                            if item.detail?.secondaryPanel(controlID: controlID, optionID: optionID) != nil {
+                                hoverCoordinator.pin(
+                                    pluginID: item.id,
+                                    controlID: controlID,
+                                    optionID: optionID
+                                )
+                            } else {
+                                hoverCoordinator.dismissImmediately()
+                            }
                             pluginHost.setPanelNavigationSelectionValue(optionID, controlID: controlID, for: item.id)
                         },
                         onNavigationHoverChange: { controlID, optionID, isHovering in
@@ -1473,36 +1556,47 @@ private struct ActionRowControl: View {
     @State private var isHovered = false
 
     var body: some View {
-        Button {
-            guard control.isEnabled else { return }
-            onInvoke()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: control.actionIconSystemName ?? "arrow.up.right.square")
-                    .font(.system(size: 12, weight: .medium))
+        VStack(alignment: .leading, spacing: 4) {
+            if let sectionTitle = control.sectionTitle, !sectionTitle.isEmpty {
+                Text(sectionTitle)
+                    .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 14, height: 14)
-
-                Text(control.actionTitle ?? "")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer()
+                    .lineLimit(2)
+                    .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
             }
-            .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
-            .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .background(alignment: .center) {
-                RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
-                    .inset(by: MenuBarHoverStyle.inset)
-                    .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+
+            Button {
+                guard control.isEnabled else { return }
+                onInvoke()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: control.actionIconSystemName ?? "arrow.up.right.square")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
+
+                    Text(control.actionTitle ?? "")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Spacer()
+                }
+                .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
+                .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .background(alignment: .center) {
+                    RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
+                        .inset(by: MenuBarHoverStyle.inset)
+                        .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+                }
             }
+            .buttonStyle(.plain)
+            .disabled(!control.isEnabled)
+            .onHover { isHovered = $0 }
         }
-        .buttonStyle(.plain)
-        .disabled(!control.isEnabled)
-        .onHover { isHovered = $0 }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
