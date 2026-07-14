@@ -30,7 +30,6 @@ final class SidecarCoreService: NSObject, SidecarServicing {
     // action so a failed private enum assumption cannot silently fall back to Wi-Fi.
     private static let wiredTransportRawValue: Int64 = 2
 
-    private typealias ObjectGetter = @convention(c) (AnyObject, Selector) -> Unmanaged<AnyObject>?
     private typealias IntegerSetter = @convention(c) (AnyObject, Selector, Int64) -> Void
     private typealias OperationCompletion = @convention(block) (NSError?) -> Void
     private typealias WiredDeviceOperation = @convention(c) (
@@ -150,17 +149,17 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         let connectedObjects = canReadConnectedDevices
             ? (objectValue(from: manager, selectorName: "connectedDevices") as? [NSObject] ?? [])
             : []
-        let connectedIDs = Set(connectedObjects.compactMap { stringValue(from: $0, selectorName: "identifier") })
+        let connectedIDs = Set(connectedObjects.compactMap(identifierValue(from:)))
         var references: [String: NSObject] = [:]
         var devicesByID: [String: SidecarDevice] = [:]
 
         for device in reachableObjects + connectedObjects {
-            guard let identifier = stringValue(from: device, selectorName: "identifier"), !identifier.isEmpty else {
+            guard let identifier = identifierValue(from: device) else {
                 continue
             }
 
             let name = stringValue(from: device, selectorName: "name")
-            let displayName = name?.isEmpty == false ? name! : "iPad"
+            let displayName = name?.isEmpty == false ? name! : "Sidecar Display"
             references[identifier] = device
             devicesByID[identifier] = SidecarDevice(
                 id: identifier,
@@ -303,14 +302,30 @@ final class SidecarCoreService: NSObject, SidecarServicing {
 
     private func objectValue(from object: NSObject, selectorName: String) -> AnyObject? {
         let selector = NSSelectorFromString(selectorName)
-        guard object.responds(to: selector), let imp = object.method(for: selector) else {
-            return nil
-        }
-        let getter = unsafeBitCast(imp, to: ObjectGetter.self)
-        return getter(object, selector)?.takeUnretainedValue()
+        return object.responds(to: selector)
+            ? object.perform(selector)?.takeUnretainedValue()
+            : nil
     }
 
     private func stringValue(from object: NSObject, selectorName: String) -> String? {
         objectValue(from: object, selectorName: selectorName) as? String
     }
+
+    private func identifierValue(from object: NSObject) -> String? {
+        Self.identifierString(from: objectValue(from: object, selectorName: "identifier"))
+    }
+
+    /// SidecarCore currently exposes `identifier` as an NSUUID, while some macOS releases may
+    /// bridge it as an NSString. Do not stringify arbitrary Objective-C objects: an unstable
+    /// description would break reference lookup for connect and disconnect actions.
+    static func identifierString(from value: AnyObject?) -> String? {
+        if let uuid = value as? UUID {
+            return uuid.uuidString
+        }
+        if let string = value as? String, !string.isEmpty {
+            return string
+        }
+        return nil
+    }
+
 }

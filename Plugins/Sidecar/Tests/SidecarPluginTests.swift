@@ -3,17 +3,52 @@ import XCTest
 
 @MainActor
 final class SidecarPluginTests: XCTestCase {
+    func testSidecarDeviceIdentifierAcceptsUUIDAndStringValues() {
+        let uuid = UUID(uuidString: "9DFBEA6D-4DCF-431D-B7A0-A74F26231DAF")!
+
+        XCTAssertEqual(
+            SidecarCoreService.identifierString(from: uuid as NSUUID),
+            "9DFBEA6D-4DCF-431D-B7A0-A74F26231DAF"
+        )
+        XCTAssertEqual(SidecarCoreService.identifierString(from: "sidecar-display" as NSString), "sidecar-display")
+    }
+
+    func testSidecarDeviceIdentifierRejectsUnstableObjectDescriptions() {
+        XCTAssertNil(SidecarCoreService.identifierString(from: NSObject()))
+    }
+
     func testMetadataUsesStableSidecarID() {
         let plugin = SidecarPlugin(service: FakeSidecarService())
 
         XCTAssertEqual(plugin.metadata.id, "sidecar")
     }
 
-    func testCollapsedRowSaysWhenNoIPadIsAvailable() {
+    func testCollapsedRowSaysWhenNoSidecarDisplayIsAvailable() {
         let plugin = SidecarPlugin(service: FakeSidecarService())
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "未发现可连接的 iPad")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "未发现可连接的 Sidecar 显示器")
         XCTAssertTrue(plugin.primaryPanelState.isEnabled)
+    }
+
+    func testBackgroundRefreshFindsDisplaysThatAppearAfterPluginStartup() async {
+        let service = FakeSidecarService()
+        let plugin = SidecarPlugin(
+            service: service,
+            initialDeviceRefreshDelayNanoseconds: 10_000_000,
+            deviceRefreshIntervalNanoseconds: 10_000_000
+        )
+        let refreshed = expectation(description: "displays refreshed")
+        plugin.onStateChange = {
+            if plugin.primaryPanelState.subtitle == "1 台可连接的 Sidecar 显示器" {
+                refreshed.fulfill()
+            }
+        }
+
+        service.updateDevices([
+            SidecarDevice(id: "vision-pro", name: "Apple Vision Pro")
+        ])
+
+        await fulfillment(of: [refreshed], timeout: 1)
     }
 
     func testExpandedDevicePanelShowsInlineActionsAndSeparatesWiredOnlyAction() {
@@ -85,7 +120,15 @@ final class SidecarPluginTests: XCTestCase {
         plugin.handleAction(.setDisclosureExpanded(true))
         plugin.handleAction(.setNavigationSelection(controlID: "sidecar-device-navigation.ipad-1", optionID: "ipad-1"))
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 台 iPad 已通过 Sidecar 连接")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 台显示器已通过 Sidecar 连接")
+        XCTAssertEqual(
+            plugin.primaryPanelState.detail?.primaryControls.first?.sectionTitle,
+            "已连接"
+        )
+        XCTAssertEqual(
+            plugin.primaryPanelState.detail?.primaryControls.first?.actionIconSystemName,
+            "checkmark.circle.fill"
+        )
         XCTAssertEqual(
             plugin.primaryPanelState.detail?.primaryControls.map(\.id),
             [
@@ -93,6 +136,33 @@ final class SidecarPluginTests: XCTestCase {
                 "sidecar-disconnect.ipad-1"
             ]
         )
+    }
+
+    func testConnectedDevicesAppearBeforeAvailableDevicesWithSeparateSections() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-available", name: "Available iPad"),
+            SidecarDevice(id: "ipad-connected", name: "Connected iPad", connectionState: .connected),
+            SidecarDevice(id: "ipad-other", name: "Other iPad")
+        ])
+        let plugin = SidecarPlugin(service: service)
+
+        plugin.handleAction(.setDisclosureExpanded(true))
+
+        let controls = plugin.primaryPanelState.detail?.primaryControls ?? []
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 台已连接 · 2 台可连接")
+        XCTAssertEqual(
+            controls.map(\.id),
+            [
+                "sidecar-device-navigation.ipad-connected",
+                "sidecar-device-navigation.ipad-available",
+                "sidecar-device-navigation.ipad-other"
+            ]
+        )
+        XCTAssertEqual(controls[0].sectionTitle, "已连接")
+        XCTAssertEqual(controls[1].sectionTitle, "可用的 Sidecar 显示器")
+        XCTAssertNil(controls[2].sectionTitle)
+        XCTAssertEqual(controls[0].actionIconSystemName, "checkmark.circle.fill")
+        XCTAssertEqual(controls[1].actionIconSystemName, "circle")
     }
 
     func testDisconnectedDeviceShowsConnectActionsOnly() {
@@ -114,7 +184,7 @@ final class SidecarPluginTests: XCTestCase {
         )
     }
 
-    func testPendingThenSuccessDoesNotClaimCurrentConnectionState() {
+    func testPendingThenSuccessReturnsCollapsedRowToLiveStateSummary() {
         let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
         let plugin = SidecarPlugin(service: service)
         plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-1"))
@@ -123,8 +193,39 @@ final class SidecarPluginTests: XCTestCase {
 
         service.complete(.success(()))
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已提交连接 My iPad 的请求")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 台可连接的 Sidecar 显示器")
         XCTAssertFalse(plugin.primaryPanelState.subtitle.contains("已连接"))
+    }
+
+    func testCompletedOperationFeedbackAppearsOnItsDeviceRow() {
+        let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
+        let plugin = SidecarPlugin(service: service)
+        plugin.handleAction(.setDisclosureExpanded(true))
+
+        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-1"))
+        service.complete(.success(()))
+
+        let deviceControl = plugin.primaryPanelState.detail?.primaryControls.first
+        XCTAssertEqual(deviceControl?.options.first?.subtitle, "已提交连接 My iPad 的请求")
+        XCTAssertEqual(deviceControl?.actionIconSystemName, "checkmark.circle")
+    }
+
+    func testConfirmedConnectionReplacesTransientFeedbackWithConnectedState() {
+        let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
+        let plugin = SidecarPlugin(service: service)
+        plugin.handleAction(.setDisclosureExpanded(true))
+
+        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-1"))
+        service.complete(.success(()))
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected)
+        ])
+        plugin.refresh()
+
+        let deviceControl = plugin.primaryPanelState.detail?.primaryControls.first
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 台显示器已通过 Sidecar 连接")
+        XCTAssertEqual(deviceControl?.options.first?.subtitle, "已通过 Sidecar 连接")
+        XCTAssertEqual(deviceControl?.actionIconSystemName, "checkmark.circle.fill")
     }
 
     func testFailureAndTimeoutAreShown() async {
@@ -140,10 +241,17 @@ final class SidecarPluginTests: XCTestCase {
             service: timeoutService,
             operationTimeoutNanoseconds: 0
         )
+        let timedOut = expectation(description: "operation timed out")
+        timeoutPlugin.onStateChange = {
+            if timeoutPlugin.primaryPanelState.errorMessage == "操作超时，请检查目标设备、线缆和网络后重试" {
+                timedOut.fulfill()
+            }
+        }
         timeoutPlugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-2"))
-        try? await Task.sleep(nanoseconds: 50_000_000)
 
-        XCTAssertEqual(timeoutPlugin.primaryPanelState.errorMessage, "操作超时，请检查 iPad、线缆和网络后重试")
+        await fulfillment(of: [timedOut], timeout: 1)
+
+        XCTAssertEqual(timeoutPlugin.primaryPanelState.errorMessage, "操作超时，请检查目标设备、线缆和网络后重试")
     }
 
     func testServiceErrorsAreLocalizedInPanel() {
@@ -153,7 +261,7 @@ final class SidecarPluginTests: XCTestCase {
         plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-1"))
         service.complete(.failure(.deviceUnavailable))
 
-        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "iPad 已不在可用设备列表中")
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "Sidecar 显示器已不在可用设备列表中")
     }
 
     func testUnsupportedReasonIsLocalizedInPanel() {
@@ -170,7 +278,7 @@ private final class FakeSidecarService: SidecarServicing {
     var onDevicesChanged: (() -> Void)?
     private var pendingCompletion: ((Result<Void, SidecarServiceError>) -> Void)?
     private(set) var receivedWiredOnly = false
-    private let devices: [SidecarDevice]
+    private var devices: [SidecarDevice]
 
     init(
         devices: [SidecarDevice] = [],
@@ -182,6 +290,10 @@ private final class FakeSidecarService: SidecarServicing {
 
     func reachableDevices() -> [SidecarDevice] {
         devices
+    }
+
+    func updateDevices(_ devices: [SidecarDevice]) {
+        self.devices = devices
     }
 
     func connect(

@@ -25,6 +25,8 @@ enum MenuBarPanelLayout {
     static let actionRowVerticalPadding: CGFloat = 8
     static let actionRowSectionTitleHeight: CGFloat = 30
     static let actionRowSectionTitleSpacing: CGFloat = 4
+    static let navigationSectionTitleHeight: CGFloat = 15
+    static let navigationSectionTitleSpacing: CGFloat = 3
     static let selectRowVerticalPadding: CGFloat = 5
     static let sliderVerticalPadding: CGFloat = 9
     static let navigationRowHeight: CGFloat = 52
@@ -216,7 +218,9 @@ enum MenuBarPanelLayout {
             let titleHeight = control.sectionTitle == nil ? CGFloat(0) : CGFloat(15)
             return titleHeight + CGFloat(control.options.count) * 26
         case .navigationList:
-            return CGFloat(control.options.count) * navigationRowHeight
+            let titleHeight = control.sectionTitle == nil ? CGFloat(0) : navigationSectionTitleHeight
+            let titleSpacing = titleHeight > 0 ? navigationSectionTitleSpacing : CGFloat(0)
+            return titleHeight + titleSpacing + CGFloat(control.options.count) * navigationRowHeight
         case .slider:
             let titleHeight = control.sectionTitle == nil && control.valueLabel == nil ? CGFloat(0) : CGFloat(15)
             let titleSpacing = titleHeight > 0 ? CGFloat(6) : CGFloat(0)
@@ -1683,22 +1687,46 @@ private struct NavigationListControl: View {
     let onRowFrameChange: (String, CGRect?) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(control.options) { option in
-                NavigationListRow(
-                    title: option.title,
-                    subtitle: option.subtitle,
-                    isSelected: option.id == control.selectedOptionID,
-                    isEnabled: control.isEnabled,
-                    action: { onSelect(option.id) },
-                    onHoverChange: { isHovering in
-                        onHoverChange(option.id, isHovering)
-                    },
-                    onRowFrameChange: { frame in
-                        onRowFrameChange(option.id, frame)
-                    }
-                )
+        VStack(alignment: .leading, spacing: MenuBarPanelLayout.navigationSectionTitleSpacing) {
+            if let sectionTitle = control.sectionTitle {
+                Text(sectionTitle)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, FeatureRowLayout.detailControlHorizontalPadding + 5)
             }
+
+            VStack(spacing: 0) {
+                ForEach(control.options) { option in
+                    NavigationListRow(
+                        title: option.title,
+                        subtitle: option.subtitle,
+                        leadingIconSystemName: control.actionIconSystemName,
+                        leadingIconTint: navigationIconTint,
+                        isSelected: option.id == control.selectedOptionID,
+                        isEnabled: control.isEnabled,
+                        action: { onSelect(option.id) },
+                        onHoverChange: { isHovering in
+                            onHoverChange(option.id, isHovering)
+                        },
+                        onRowFrameChange: { frame in
+                            onRowFrameChange(option.id, frame)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private var navigationIconTint: Color {
+        switch control.actionIconSystemName {
+        case "checkmark.circle.fill":
+            .green
+        case "arrow.triangle.2.circlepath.circle.fill", "checkmark.circle":
+            .blue
+        case "exclamationmark.circle.fill":
+            .red
+        default:
+            .secondary
         }
     }
 }
@@ -1706,6 +1734,8 @@ private struct NavigationListControl: View {
 private struct NavigationListRow: View {
     let title: String
     let subtitle: String?
+    let leadingIconSystemName: String?
+    let leadingIconTint: Color
     let isSelected: Bool
     let isEnabled: Bool
     let action: () -> Void
@@ -1723,6 +1753,14 @@ private struct NavigationListRow: View {
             action()
         } label: {
             HStack(spacing: 8) {
+                if let leadingIconSystemName {
+                    Image(systemName: leadingIconSystemName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(leadingIconTint)
+                        .frame(width: 16)
+                        .accessibilityHidden(true)
+                }
+
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.system(size: 12, weight: .semibold))

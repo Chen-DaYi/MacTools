@@ -1,51 +1,51 @@
 {
   "id": "sidecar",
   "displayName": "Sidecar",
-  "summary": "连接附近可用的 iPad 作为扩展显示器",
+  "summary": "连接附近可用的 Sidecar 显示器作为扩展显示器",
   "localizedMetadata": {
     "ar": {
       "displayName": "Sidecar",
-      "summary": "وصّل iPad قريبًا كشاشة ممتدة."
+      "summary": "وصّل شاشة متوافقة مع Sidecar قريبة كشاشة ممتدة."
     },
     "de": {
       "displayName": "Sidecar",
-      "summary": "Ein iPad in der Nähe als erweiterten Bildschirm verbinden."
+      "summary": "Ein Sidecar-kompatibles Display in der Nähe als erweiterten Bildschirm verbinden."
     },
     "en": {
       "displayName": "Sidecar",
-      "summary": "Connect a nearby iPad as an extended display."
+      "summary": "Connect a nearby Sidecar-compatible display as an extended display."
     },
     "es": {
       "displayName": "Sidecar",
-      "summary": "Conecta un iPad cercano como pantalla ampliada."
+      "summary": "Conecta una pantalla compatible con Sidecar cercana como pantalla ampliada."
     },
     "fr": {
       "displayName": "Sidecar",
-      "summary": "Connecter un iPad à proximité comme écran étendu."
+      "summary": "Connecter un écran compatible avec Sidecar à proximité comme écran étendu."
     },
     "ja": {
       "displayName": "Sidecar",
-      "summary": "近くのiPadを拡張ディスプレイとして接続します。"
+      "summary": "近くのSidecar対応ディスプレイを拡張ディスプレイとして接続します。"
     },
     "ko": {
       "displayName": "Sidecar",
-      "summary": "근처의 iPad를 확장 디스플레이로 연결합니다."
+      "summary": "근처의 Sidecar 호환 디스플레이를 확장 디스플레이로 연결합니다."
     },
     "pt": {
       "displayName": "Sidecar",
-      "summary": "Ligue um iPad por perto como ecrã adicional."
+      "summary": "Ligue um ecrã compatível com Sidecar por perto como ecrã adicional."
     },
     "ru": {
       "displayName": "Sidecar",
-      "summary": "Подключите ближайший iPad как дополнительный дисплей."
+      "summary": "Подключите ближайший совместимый с Sidecar дисплей как дополнительный экран."
     },
     "zh-Hans": {
       "displayName": "Sidecar",
-      "summary": "连接附近可用的 iPad 作为扩展显示器"
+      "summary": "连接附近可用的 Sidecar 显示器作为扩展显示器"
     },
     "zh-Hant": {
       "displayName": "Sidecar",
-      "summary": "連接附近可用的 iPad 作為延伸顯示器"
+      "summary": "連接附近可用的 Sidecar 顯示器作為延伸顯示器"
     }
   },
   "version": "1.0.0",

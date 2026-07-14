@@ -87,3 +87,12 @@ enum SidecarOperationState {
     case failed(SidecarOperationKind, deviceName: String, message: String)
     case timedOut(SidecarOperationKind, deviceName: String)
 }
+
+extension SidecarOperationState {
+    var isPending: Bool {
+        if case .pending = self {
+            return true
+        }
+        return false
+    }
+}

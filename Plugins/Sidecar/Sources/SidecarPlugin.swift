@@ -52,37 +52,52 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var isExpanded = false
     private var selectedDeviceID: String?
     private var operation: SidecarOperationState?
+    private var operationDeviceID: String?
     private var operationToken: UUID?
     private var timeoutTask: Task<Void, Never>?
+    private var operationFeedbackTask: Task<Void, Never>?
+    private var deviceRefreshTask: Task<Void, Never>?
     private let operationTimeoutNanoseconds: UInt64
+    private let operationFeedbackNanoseconds: UInt64
+    private let initialDeviceRefreshDelayNanoseconds: UInt64
+    private let deviceRefreshIntervalNanoseconds: UInt64
 
     init(
         service: any SidecarServicing = SidecarCoreService(),
         localization: PluginLocalization = PluginLocalization(bundle: .main),
-        operationTimeoutNanoseconds: UInt64 = 15_000_000_000
+        operationTimeoutNanoseconds: UInt64 = 15_000_000_000,
+        operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
+        initialDeviceRefreshDelayNanoseconds: UInt64 = 750_000_000,
+        deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000
     ) {
         self.service = service
         self.localization = localization
         self.operationTimeoutNanoseconds = operationTimeoutNanoseconds
+        self.operationFeedbackNanoseconds = operationFeedbackNanoseconds
+        self.initialDeviceRefreshDelayNanoseconds = initialDeviceRefreshDelayNanoseconds
+        self.deviceRefreshIntervalNanoseconds = deviceRefreshIntervalNanoseconds
         metadata = PluginMetadata(
             id: "sidecar",
             title: localization.string("metadata.title", defaultValue: "Sidecar"),
-            iconName: "ipad.landscape",
+            iconName: "display",
             iconTint: Color(nsColor: .systemIndigo),
             order: 31,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "连接附近可用的 iPad 作为扩展显示器"
+                defaultValue: "连接附近可用的 Sidecar 显示器作为扩展显示器"
             )
         )
         service.onDevicesChanged = { [weak self] in
             self?.refreshDevices(notify: true)
         }
         refreshDevices(notify: false)
+        scheduleDeviceRefresh()
     }
 
     deinit {
         timeoutTask?.cancel()
+        operationFeedbackTask?.cancel()
+        deviceRefreshTask?.cancel()
     }
 
     var primaryPanelState: PluginPanelState {
@@ -122,6 +137,9 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         switch action {
         case let .setDisclosureExpanded(expanded):
             isExpanded = expanded
+            if expanded {
+                refreshDevices(notify: false)
+            }
             if !expanded {
                 selectedDeviceID = nil
             }
@@ -130,17 +148,14 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
             guard controlID.hasPrefix(ControlID.deviceNavigationPrefix) else { return }
             if selectedDeviceID == optionID {
                 selectedDeviceID = nil
-                operation = nil
                 onStateChange?()
                 return
             }
             selectedDeviceID = optionID
-            operation = nil
             onStateChange?()
         case let .clearNavigationSelection(controlID):
             guard controlID.hasPrefix(ControlID.deviceNavigationPrefix) else { return }
             selectedDeviceID = nil
-            operation = nil
             onStateChange?()
         case let .invokeAction(controlID):
             handleOperationAction(controlID)
@@ -158,21 +173,30 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleShortcutAction(id: String) {}
 
     private var subtitle: String {
-        if let operation {
+        if let operation, operation.isPending {
             return operationSubtitle(operation)
         }
         if devices.isEmpty {
-            return localization.string("panel.subtitle.noDevices", defaultValue: "未发现可连接的 iPad")
+            return localization.string("panel.subtitle.noDevices", defaultValue: "未发现可连接的 Sidecar 显示器")
         }
         let connectedCount = devices.filter { $0.connectionState == .connected }.count
+        let availableCount = devices.count - connectedCount
+        if connectedCount > 0, availableCount > 0 {
+            return localization.format(
+                "panel.subtitle.connectedAndAvailableCount",
+                defaultValue: "%d 台已连接 · %d 台可连接",
+                connectedCount,
+                availableCount
+            )
+        }
         if connectedCount > 0 {
             return localization.format(
                 "panel.subtitle.connectedCount",
-                defaultValue: "%d 台 iPad 已通过 Sidecar 连接",
+                defaultValue: "%d 台显示器已通过 Sidecar 连接",
                 connectedCount
             )
         }
-        return localization.format("panel.subtitle.deviceCount", defaultValue: "%d 台可连接的 iPad", devices.count)
+        return localization.format("panel.subtitle.deviceCount", defaultValue: "%d 台可连接的 Sidecar 显示器", devices.count)
     }
 
     private var operationErrorMessage: String? {
@@ -181,7 +205,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case let .failed(_, _, message):
             return message
         case .timedOut:
-            return localization.string("panel.error.timeout", defaultValue: "操作超时，请检查 iPad、线缆和网络后重试")
+            return localization.string("panel.error.timeout", defaultValue: "操作超时，请检查目标设备、线缆和网络后重试")
         case .pending, .succeeded:
             return nil
         }
@@ -199,9 +223,59 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         if let selectedDeviceID, !devices.contains(where: { $0.id == selectedDeviceID }) {
             self.selectedDeviceID = nil
         }
+        if let operationDeviceID, !devices.contains(where: { $0.id == operationDeviceID }) {
+            operation = nil
+            self.operationDeviceID = nil
+            operationFeedbackTask?.cancel()
+            operationFeedbackTask = nil
+        }
+        clearCompletedOperationIfSnapshotConfirmsIt()
         if notify && changed {
             onStateChange?()
         }
+    }
+
+    private func scheduleDeviceRefresh() {
+        deviceRefreshTask = Task { @MainActor [weak self] in
+            guard let initialRefreshDelayNanoseconds = self?.initialDeviceRefreshDelayNanoseconds else {
+                return
+            }
+            var refreshDelayNanoseconds = initialRefreshDelayNanoseconds
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: refreshDelayNanoseconds)
+                } catch {
+                    return
+                }
+                guard let self else { return }
+                self.refreshDevices(notify: true)
+                refreshDelayNanoseconds = self.deviceRefreshIntervalNanoseconds
+            }
+        }
+    }
+
+    private func clearCompletedOperationIfSnapshotConfirmsIt() {
+        guard let operation, let operationDeviceID else { return }
+        guard let device = devices.first(where: { $0.id == operationDeviceID }) else { return }
+
+        let isConfirmed: Bool
+        switch operation {
+        case let .succeeded(action, _):
+            switch action {
+            case .connect, .wiredConnect:
+                isConfirmed = device.connectionState == .connected
+            case .disconnect:
+                isConfirmed = device.connectionState == .disconnected
+            }
+        case .pending, .failed, .timedOut:
+            isConfirmed = false
+        }
+
+        guard isConfirmed else { return }
+        self.operation = nil
+        self.operationDeviceID = nil
+        operationFeedbackTask?.cancel()
+        operationFeedbackTask = nil
     }
 
     private func buildDetail() -> PluginPanelDetail {
@@ -210,8 +284,14 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
 
         var controls: [PluginPanelControl] = []
-        for device in devices {
-            controls.append(deviceNavigationControl(for: device))
+        for (index, device) in orderedDevices.enumerated() {
+            let previousDevice = index > 0 ? orderedDevices[index - 1] : nil
+            controls.append(
+                deviceNavigationControl(
+                    for: device,
+                    sectionTitle: sectionTitle(for: device, after: previousDevice)
+                )
+            )
             if selectedDeviceID == device.id {
                 controls.append(contentsOf: actionControls(for: device))
             }
@@ -223,7 +303,42 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         )
     }
 
-    private func deviceNavigationControl(for device: SidecarDevice) -> PluginPanelControl {
+    private var orderedDevices: [SidecarDevice] {
+        devices.sorted { lhs, rhs in
+            let lhsRank = deviceSortRank(lhs)
+            let rhsRank = deviceSortRank(rhs)
+            if lhsRank != rhsRank {
+                return lhsRank < rhsRank
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private func deviceSortRank(_ device: SidecarDevice) -> Int {
+        if device.connectionState == .connected {
+            return 0
+        }
+        if device.id == operationDeviceID {
+            return 1
+        }
+        return 2
+    }
+
+    private func sectionTitle(for device: SidecarDevice, after previousDevice: SidecarDevice?) -> String? {
+        let isConnected = device.connectionState == .connected
+        let previousWasConnected = previousDevice?.connectionState == .connected
+        guard previousDevice == nil || isConnected != previousWasConnected else { return nil }
+
+        if isConnected {
+            return localization.string("panel.section.connected", defaultValue: "已连接")
+        }
+        return localization.string("panel.section.available", defaultValue: "可用的 Sidecar 显示器")
+    }
+
+    private func deviceNavigationControl(
+        for device: SidecarDevice,
+        sectionTitle: String?
+    ) -> PluginPanelControl {
         PluginPanelControl(
             id: ControlID.deviceNavigation(for: device.id),
             kind: .navigationList,
@@ -239,7 +354,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
             minimumDate: nil,
             displayedComponents: nil,
             datePickerStyle: nil,
-            sectionTitle: nil,
+            sectionTitle: sectionTitle,
+            actionIconSystemName: deviceStatusIcon(for: device),
             isEnabled: !isOperationPending
         )
     }
@@ -318,12 +434,35 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private func deviceSubtitle(for device: SidecarDevice) -> String {
+        if let operation = operation(for: device) {
+            return operationSubtitle(operation)
+        }
+
         switch device.connectionState {
         case .connected:
-            localization.string("panel.device.subtitle.connected", defaultValue: "已通过 Sidecar 连接")
+            return localization.string("panel.device.subtitle.connected", defaultValue: "已通过 Sidecar 连接")
         case .disconnected, .unknown:
-            localization.string("panel.device.subtitle", defaultValue: "可请求 Sidecar 连接")
+            return localization.string("panel.device.subtitle", defaultValue: "可请求 Sidecar 连接")
         }
+    }
+
+    private func deviceStatusIcon(for device: SidecarDevice) -> String {
+        if let operation = operation(for: device) {
+            switch operation {
+            case .pending:
+                return "arrow.triangle.2.circlepath.circle.fill"
+            case .succeeded:
+                return "checkmark.circle"
+            case .failed, .timedOut:
+                return "exclamationmark.circle.fill"
+            }
+        }
+
+        return device.connectionState == .connected ? "checkmark.circle.fill" : "circle"
+    }
+
+    private func operation(for device: SidecarDevice) -> SidecarOperationState? {
+        operationDeviceID == device.id ? operation : nil
     }
 
     private func actionControl(
@@ -377,7 +516,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let token = UUID()
         operationToken = token
         operation = .pending(action, deviceName: device.name)
+        operationDeviceID = device.id
         timeoutTask?.cancel()
+        operationFeedbackTask?.cancel()
+        operationFeedbackTask = nil
         let timeoutNanoseconds = operationTimeoutNanoseconds
         timeoutTask = Task { @MainActor [weak self] in
             do {
@@ -423,6 +565,9 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
         refreshDevices(notify: false)
         scheduleFollowUpRefresh()
+        if operation != nil {
+            scheduleOperationFeedbackDismissal()
+        }
         onStateChange?()
     }
 
@@ -432,7 +577,24 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         timeoutTask = nil
         operation = .timedOut(action, deviceName: device.name)
         logger.error("Sidecar operation timed out action=\(String(describing: action), privacy: .public) device=\(device.name, privacy: .public)")
+        scheduleOperationFeedbackDismissal()
         onStateChange?()
+    }
+
+    private func scheduleOperationFeedbackDismissal() {
+        operationFeedbackTask?.cancel()
+        let feedbackNanoseconds = operationFeedbackNanoseconds
+        operationFeedbackTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: feedbackNanoseconds)
+            } catch {
+                return
+            }
+            self?.operation = nil
+            self?.operationDeviceID = nil
+            self?.operationFeedbackTask = nil
+            self?.onStateChange?()
+        }
     }
 
     private func operationSubtitle(_ operation: SidecarOperationState) -> String {
@@ -513,7 +675,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case .deviceUnavailable:
             localization.string(
                 "service.error.deviceUnavailable",
-                defaultValue: "iPad 已不在可用设备列表中"
+                defaultValue: "Sidecar 显示器已不在可用设备列表中"
             )
         case .operationUnavailable:
             localization.string(

@@ -4,17 +4,17 @@
     "metadata.description" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "وصّل iPad قريبًا كشاشة ممتدة." } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ein iPad in der Nähe als erweiterten Bildschirm verbinden." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect a nearby iPad as an extended display." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conecta un iPad cercano como pantalla ampliada." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connecter un iPad à proximité comme écran étendu." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "近くのiPadを拡張ディスプレイとして接続します。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "근처의 iPad를 확장 디스플레이로 연결합니다." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ligue um iPad por perto como ecrã adicional." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключите ближайший iPad как дополнительный дисплей." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接附近可用的 iPad 作为扩展显示器" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連接附近可用的 iPad 作為延伸顯示器" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "وصّل شاشة متوافقة مع Sidecar قريبة كشاشة ممتدة." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ein Sidecar-kompatibles Display in der Nähe als erweiterten Bildschirm verbinden." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect a nearby Sidecar-compatible display as an extended display." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conecta una pantalla compatible con Sidecar cercana como pantalla ampliada." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connecter un écran compatible avec Sidecar à proximité comme écran étendu." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "近くのSidecar対応ディスプレイを拡張ディスプレイとして接続します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "근처의 Sidecar 호환 디스플레이를 확장 디스플레이로 연결합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ligue um ecrã compatível com Sidecar por perto como ecrã adicional." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключите ближайший совместимый с Sidecar дисплей как дополнительный экран." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接附近可用的 Sidecar 显示器作为扩展显示器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連接附近可用的 Sidecar 顯示器作為延伸顯示器" } }
       }
     },
     "metadata.title" : {
@@ -116,17 +116,17 @@
     "panel.error.timeout" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "انتهت مهلة العملية. تحقق من iPad والكابل والشبكة، ثم حاول مجددًا." } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zeitüberschreitung. Prüfe iPad, Kabel und Netzwerk und versuche es erneut." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation timed out. Check the iPad, cable, and network, then try again." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "La operación agotó el tiempo. Comprueba el iPad, el cable y la red, e inténtalo de nuevo." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’opération a expiré. Vérifiez l’iPad, le câble et le réseau, puis réessayez." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "操作がタイムアウトしました。iPad、ケーブル、ネットワークを確認してからやり直してください。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 시간이 초과되었습니다. iPad, 케이블, 네트워크를 확인한 다음 다시 시도하십시오." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A operação excedeu o tempo limite. Verifique o iPad, o cabo e a rede e tente novamente." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время ожидания истекло. Проверьте iPad, кабель и сеть, затем повторите попытку." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作超时，请检查 iPad、线缆和网络后重试" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "操作逾時，請檢查 iPad、連接線和網路後重試" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "انتهت مهلة العملية. تحقق من الجهاز الهدف والكابل والشبكة، ثم حاول مجددًا." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zeitüberschreitung. Prüfe das Zielgerät, Kabel und Netzwerk und versuche es erneut." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation timed out. Check the target display, cable, and network, then try again." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La operación agotó el tiempo. Comprueba la pantalla de destino, el cable y la red, e inténtalo de nuevo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’opération a expiré. Vérifiez l’écran cible, le câble et le réseau, puis réessayez." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "操作がタイムアウトしました。接続先のディスプレイ、ケーブル、ネットワークを確認してからやり直してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 시간이 초과되었습니다. 대상 디스플레이, 케이블, 네트워크를 확인한 다음 다시 시도하십시오." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A operação excedeu o tempo limite. Verifique o ecrã de destino, o cabo e a rede e tente novamente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время ожидания истекло. Проверьте целевой дисплей, кабель и сеть, затем повторите попытку." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作超时，请检查目标显示器、线缆和网络后重试" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "操作逾時，請檢查目標顯示器、連接線和網路後重試" } }
       }
     },
     "panel.operation.connect" : {
@@ -372,17 +372,17 @@
     "service.error.deviceUnavailable" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لم يعد iPad ضمن الأجهزة المتاحة" } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Das iPad ist nicht mehr verfügbar" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "The iPad is no longer available" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "El iPad ya no está disponible" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’iPad n’est plus disponible" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "iPadが利用可能なデバイスにありません" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "iPad가 더 이상 사용 가능한 기기에 없습니다" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "O iPad já não está disponível" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "iPad больше недоступен" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "iPad 已不在可用设备列表中" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "iPad 已不在可用裝置列表中" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لم تعد شاشة Sidecar متاحة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Das Sidecar-Display ist nicht mehr verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Sidecar display is no longer available" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La pantalla de Sidecar ya no está disponible" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’écran Sidecar n’est plus disponible" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecarディスプレイは利用できなくなりました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 디스플레이를 더 이상 사용할 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "O ecrã Sidecar já não está disponível" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дисплей Sidecar больше недоступен" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 显示器已不在可用设备列表中" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 顯示器已不在可用裝置列表中" } }
       }
     },
     "service.error.operationUnavailable" : {
@@ -497,52 +497,100 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此系統的 SidecarCore 缺少所需型別" } }
       }
     },
+    "panel.section.available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "شاشات Sidecar المتاحة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verfügbare Sidecar-Displays" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Available Sidecar Displays" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Pantallas Sidecar disponibles" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Écrans Sidecar disponibles" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "利用可能なSidecarディスプレイ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용 가능한 Sidecar 디스플레이" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ecrãs Sidecar disponíveis" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Доступные дисплеи Sidecar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可用的 Sidecar 显示器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "可用的 Sidecar 顯示器" } }
+      }
+    },
+    "panel.section.connected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "متصل" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Conectado" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Connecté" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결됨" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ligado" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключено" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已連接" } }
+      }
+    },
+    "panel.subtitle.connectedAndAvailableCount" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%d متصل · %d شاشة Sidecar متاحة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d verbunden · %d Sidecar-Displays verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d connected · %d available Sidecar displays" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d conectadas · %d pantallas Sidecar disponibles" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d connectés · %d écrans Sidecar disponibles" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続中：%d台 · 利用可能：%d台" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결됨 %d대 · 사용 가능 %d대" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%d ligados · %d ecrãs Sidecar disponíveis" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключено: %d · доступно дисплеев Sidecar: %d" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台已连接 · %d 台可连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台已連接 · %d 台可連接" } }
+      }
+    },
     "panel.subtitle.deviceCount" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%d من أجهزة iPad متاحة" } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads verfügbar" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d available iPads" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d iPad disponibles" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d iPad disponibles" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "利用可能なiPad：%d台" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용 가능한 iPad %d대" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads disponíveis" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Доступно iPad: %d" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台可连接的 iPad" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台可連接的 iPad" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%d شاشة Sidecar متاحة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d Sidecar-Displays verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d reachable Sidecar displays" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d pantallas Sidecar disponibles" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d écrans Sidecar disponibles" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "利用可能なSidecarディスプレイ：%d台" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용 가능한 Sidecar 디스플레이 %d대" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%d ecrãs Sidecar disponíveis" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Доступно дисплеев Sidecar: %d" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台可连接的 Sidecar 显示器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台可連接的 Sidecar 顯示器" } }
       }
     },
     "panel.subtitle.connectedCount" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%d من أجهزة iPad متصلة عبر Sidecar" } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads über Sidecar verbunden" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads connected through Sidecar" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d iPad conectados mediante Sidecar" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d iPad connectés via Sidecar" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecarで接続中のiPad：%d台" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar로 연결된 iPad %d대" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%d iPads ligados através do Sidecar" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "iPad, подключённых через Sidecar: %d" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台 iPad 已通过 Sidecar 连接" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台 iPad 已透過 Sidecar 連接" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%d شاشة متصلة عبر Sidecar" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d Displays über Sidecar verbunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d displays connected through Sidecar" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d pantallas conectadas mediante Sidecar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d écrans connectés via Sidecar" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecarで接続中のディスプレイ：%d台" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar로 연결된 디스플레이 %d대" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%d ecrãs ligados através do Sidecar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дисплеев, подключённых через Sidecar: %d" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台显示器已通过 Sidecar 连接" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台顯示器已透過 Sidecar 連接" } }
       }
     },
     "panel.subtitle.noDevices" : {
       "extractionState" : "manual",
       "localizations" : {
-        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لم يتم العثور على أجهزة iPad قابلة للاتصال" } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Keine verbindbaren iPads gefunden" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No connectable iPads found" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se encontraron iPad conectables" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun iPad connectable trouvé" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続できるiPadが見つかりません" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 가능한 iPad를 찾을 수 없음" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Nenhum iPad disponível para ligar" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет iPad, доступных для подключения" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未发现可连接的 iPad" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "未發現可連接的 iPad" } }
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لم يتم العثور على شاشات Sidecar قابلة للاتصال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Keine erreichbaren Sidecar-Displays gefunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No reachable Sidecar displays found" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se encontraron pantallas Sidecar disponibles" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun écran Sidecar accessible trouvé" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続可能なSidecarディスプレイが見つかりません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 가능한 Sidecar 디스플레이를 찾을 수 없음" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Nenhum ecrã Sidecar disponível encontrado" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет доступных дисплеев Sidecar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未发现可连接的 Sidecar 显示器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "未發現可連接的 Sidecar 顯示器" } }
       }
     },
     "panel.subtitle.unsupported" : {

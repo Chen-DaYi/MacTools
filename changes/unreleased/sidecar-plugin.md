@@ -4,4 +4,4 @@ type: added
 area: Sidecar
 ----
 
-Connect nearby available iPads to Sidecar, including a separate wired-only connection request and localized plugin copy.
+Connect nearby Sidecar-compatible displays, with connected displays prioritized, live status, and a separate wired-only request that never falls back to Wi-Fi.
