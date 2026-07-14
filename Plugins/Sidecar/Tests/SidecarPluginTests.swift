@@ -43,7 +43,9 @@ final class SidecarPluginTests: XCTestCase {
             }
         }
 
-        service.updateDevices([SidecarDevice(id: "vision-pro", name: "Apple Vision Pro")])
+        service.updateDevices([
+            SidecarDevice(id: "vision-pro", name: "Apple Vision Pro", connectionState: .disconnected)
+        ])
 
         await fulfillment(of: [refreshed], timeout: 1)
     }
@@ -158,6 +160,7 @@ final class SidecarPluginTests: XCTestCase {
         ]))
 
         let control = plugin.primaryPanelState.detail?.primaryControls.first
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 台 Sidecar 显示器的连接状态不可用")
         XCTAssertEqual(control?.actionIconSystemName, "questionmark.circle")
         XCTAssertFalse(control?.isEnabled ?? true)
     }
@@ -291,6 +294,19 @@ final class SidecarPluginTests: XCTestCase {
         shortcuts.trigger("device.ipad-1")
         XCTAssertTrue(service.didConnect)
         XCTAssertTrue(service.receivedWiredOnly)
+    }
+
+    func testShortcutRegistrationUsesStableSidecarShortcutIDs() {
+        let shortcuts = FakeSidecarShortcutManager()
+        let plugin = makePlugin(service: FakeSidecarService(), shortcutManager: shortcuts)
+        let binding = ShortcutBinding(keyCode: 0, modifiers: [.command, .option])
+
+        XCTAssertTrue(plugin.canRegisterShortcut(binding, for: "ipad-1"))
+        XCTAssertTrue(plugin.canRegisterShortcut(binding, for: "connect-first-available"))
+        XCTAssertEqual(shortcuts.registrationChecks.map { $0.id }, [
+            "device.ipad-1",
+            "connect-first-available"
+        ])
     }
 
     func testConnectFirstAvailableShortcutUsesSavedPriorityAndConnectionMode() {
@@ -439,8 +455,13 @@ private final class FakeSidecarService: SidecarServicing {
 private final class FakeSidecarShortcutManager: SidecarShortcutManaging {
     var onTrigger: ((String) -> Void)?
     private(set) var bindings: [String: ShortcutBinding] = [:]
+    private(set) var registrationChecks: [(binding: ShortcutBinding, id: String)] = []
 
     func sync(bindings: [String: ShortcutBinding]) { self.bindings = bindings }
+    func canRegister(binding: ShortcutBinding, replacing id: String) -> Bool {
+        registrationChecks.append((binding, id))
+        return true
+    }
     func temporarilyDisable(id: String) { bindings.removeValue(forKey: id) }
     func unregisterAll() { bindings = [:] }
     func trigger(_ id: String) { onTrigger?(id) }

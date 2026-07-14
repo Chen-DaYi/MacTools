@@ -87,6 +87,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
 
         let sharedManager = NSSelectorFromString("sharedManager")
         guard
+            managerType.responds(to: sharedManager),
             let shared = managerType.perform(sharedManager)?.takeUnretainedValue() as? NSObject
         else {
             manager = nil

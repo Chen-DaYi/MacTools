@@ -7,6 +7,7 @@ protocol SidecarShortcutManaging: AnyObject {
     var onTrigger: ((String) -> Void)? { get set }
 
     func sync(bindings: [String: ShortcutBinding])
+    func canRegister(binding: ShortcutBinding, replacing id: String) -> Bool
     func temporarilyDisable(id: String)
     func unregisterAll()
 }
@@ -15,11 +16,64 @@ protocol SidecarShortcutManaging: AnyObject {
 /// binding, even while it is temporarily unavailable and absent from the host shortcut catalog.
 @MainActor
 final class SidecarShortcutManager: SidecarShortcutManaging {
-    private struct RegisteredHotKey {
-        let id: String
+    private final class RegisteredHotKey {
         let binding: ShortcutBinding
         let reference: EventHotKeyRef
         let carbonID: UInt32
+
+        init(binding: ShortcutBinding, reference: EventHotKeyRef, carbonID: UInt32) {
+            self.binding = binding
+            self.reference = reference
+            self.carbonID = carbonID
+        }
+
+        deinit {
+            UnregisterEventHotKey(reference)
+        }
+    }
+
+    private final class HandlerContext {
+        weak var manager: SidecarShortcutManager?
+
+        init(manager: SidecarShortcutManager) {
+            self.manager = manager
+        }
+    }
+
+    private final class HandlerRegistration {
+        private let context: HandlerContext
+        private let handlerRef: EventHandlerRef?
+
+        init(manager: SidecarShortcutManager) {
+            context = HandlerContext(manager: manager)
+
+            var eventType = EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: UInt32(kEventHotKeyPressed)
+            )
+            var installedHandler: EventHandlerRef?
+            let status = InstallEventHandler(
+                GetEventDispatcherTarget(),
+                Self.managerHandler,
+                1,
+                &eventType,
+                UnsafeMutableRawPointer(Unmanaged.passUnretained(context).toOpaque()),
+                &installedHandler
+            )
+            handlerRef = status == noErr ? installedHandler : nil
+        }
+
+        deinit {
+            if let handlerRef {
+                RemoveEventHandler(handlerRef)
+            }
+        }
+
+        var isInstalled: Bool {
+            handlerRef != nil
+        }
+
+        private nonisolated static let managerHandler: EventHandlerUPP = SidecarShortcutManager.hotKeyHandler
     }
 
     // "SCKR" keeps this plugin's Carbon IDs distinct from the host and other plugins.
@@ -27,13 +81,13 @@ final class SidecarShortcutManager: SidecarShortcutManaging {
 
     var onTrigger: ((String) -> Void)?
 
-    private var handlerRef: EventHandlerRef?
+    private lazy var handlerRegistration = HandlerRegistration(manager: self)
     private var registeredHotKeys: [String: RegisteredHotKey] = [:]
     private var idsByCarbon: [UInt32: String] = [:]
     private var nextCarbonID: UInt32 = 1
 
     init() {
-        installHandler()
+        _ = handlerRegistration
     }
 
     func sync(bindings: [String: ShortcutBinding]) {
@@ -52,28 +106,35 @@ final class SidecarShortcutManager: SidecarShortcutManaging {
         unregister(id: id)
     }
 
+    func canRegister(binding: ShortcutBinding, replacing id: String) -> Bool {
+        guard binding.isValid, handlerRegistration.isInstalled else { return false }
+        if registeredHotKeys[id]?.binding == binding {
+            return true
+        }
+
+        var reference: EventHotKeyRef?
+        let hotKeyID = EventHotKeyID(signature: Self.signature, id: nextCarbonID)
+        let status = RegisterEventHotKey(
+            UInt32(binding.keyCode),
+            binding.modifiers.carbonFlags,
+            hotKeyID,
+            GetEventDispatcherTarget(),
+            0,
+            &reference
+        )
+        guard status == noErr, let reference else { return false }
+        UnregisterEventHotKey(reference)
+        return true
+    }
+
     func unregisterAll() {
         for id in Array(registeredHotKeys.keys) {
             unregister(id: id)
         }
     }
 
-    private func installHandler() {
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-        InstallEventHandler(
-            GetEventDispatcherTarget(),
-            Self.hotKeyHandler,
-            1,
-            &eventType,
-            UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()),
-            &handlerRef
-        )
-    }
-
     private func register(id: String, binding: ShortcutBinding) {
+        guard binding.isValid, handlerRegistration.isInstalled else { return }
         var reference: EventHotKeyRef?
         let carbonID = nextCarbonID
         nextCarbonID += 1
@@ -89,7 +150,6 @@ final class SidecarShortcutManager: SidecarShortcutManaging {
         guard status == noErr, let reference else { return }
 
         registeredHotKeys[id] = RegisteredHotKey(
-            id: id,
             binding: binding,
             reference: reference,
             carbonID: carbonID
@@ -100,7 +160,6 @@ final class SidecarShortcutManager: SidecarShortcutManaging {
     private func unregister(id: String) {
         guard let registered = registeredHotKeys.removeValue(forKey: id) else { return }
         idsByCarbon.removeValue(forKey: registered.carbonID)
-        UnregisterEventHotKey(registered.reference)
     }
 
     private func dispatch(carbonID: UInt32) {
@@ -122,7 +181,8 @@ final class SidecarShortcutManager: SidecarShortcutManaging {
         )
         guard status == noErr, hotKeyID.signature == 0x5343_4B52 else { return status }
 
-        let manager = Unmanaged<SidecarShortcutManager>.fromOpaque(userData).takeUnretainedValue()
+        let context = Unmanaged<HandlerContext>.fromOpaque(userData).takeUnretainedValue()
+        guard let manager = context.manager else { return OSStatus(eventNotHandledErr) }
         Task { @MainActor in
             manager.dispatch(carbonID: hotKeyID.id)
         }

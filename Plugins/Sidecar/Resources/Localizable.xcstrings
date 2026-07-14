@@ -619,6 +619,12 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台顯示器已透過 Sidecar 連接" } }
       }
     },
+    "panel.subtitle.unknownCount" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "حالة اتصال %d من شاشات Sidecar غير متاحة" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Der Verbindungsstatus von %d Sidecar-Displays ist nicht verfügbar" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection state unavailable for %d Sidecar displays" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El estado de conexión no está disponible para %d pantallas Sidecar" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’état de connexion est indisponible pour %d écrans Sidecar" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%d台のSidecarディスプレイで接続状態を確認できません" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%d대 Sidecar 디스플레이의 연결 상태를 확인할 수 없습니다" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "O estado de ligação não está disponível para %d ecrãs Sidecar" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Состояние подключения недоступно для %d дисплеев Sidecar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 台 Sidecar 显示器的连接状态不可用" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 台 Sidecar 顯示器的連線狀態不可用" } }
+      }
+    },
     "panel.subtitle.noDevices" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -787,6 +793,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "هذا الاختصار مستخدم لعملية Sidecar أخرى." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Kurzbefehl wird bereits für eine andere Sidecar-Aktion verwendet." } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "This shortcut is already used by another Sidecar action." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Este atajo ya se usa para otra acción de Sidecar." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ce raccourci est déjà utilisé par une autre action Sidecar." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このショートカットは別のSidecarアクションで使用されています。" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 단축키는 다른 Sidecar 동작에 이미 사용 중입니다." } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Este atalho já é utilizado por outra ação do Sidecar." } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это сочетание клавиш уже используется другим действием Sidecar." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此快捷键已用于其他 Sidecar 操作。" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此快速鍵已用於其他 Sidecar 操作。" } }
+      }
+    },
+    "settings.shortcut.unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "هذا الاختصار مستخدم من النظام أو تطبيق آخر." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Kurzbefehl wird bereits vom System oder einer anderen App verwendet." } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "This shortcut is already used by the system or another app." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El sistema u otra app ya usa este atajo." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ce raccourci est déjà utilisé par le système ou une autre app." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このショートカットはシステムまたはほかのアプリで使用されています。" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 단축키는 시스템 또는 다른 앱에서 이미 사용 중입니다." } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Este atalho já é usado pelo sistema ou por outra aplicação." } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это сочетание уже используется системой или другим приложением." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此快捷键已被系统或其他应用占用。" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此快速鍵已被系統或其他 App 使用。" } }
       }
     },
     "settings.shortcut.unset" : {

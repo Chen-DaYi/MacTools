@@ -178,7 +178,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
                             : SidecarShortcutID.device(id)
                         self?.shortcutManager.temporarilyDisable(id: shortcutID)
                     },
-                    onEndRecording: { [weak self] in self?.syncShortcuts() }
+                    onEndRecording: { [weak self] in self?.syncShortcuts() },
+                    canRegisterShortcut: { [weak self] settingID, binding in
+                        self?.canRegisterShortcut(binding, for: settingID) ?? false
+                    }
                 )
             } else {
                 EmptyView()
@@ -243,7 +246,15 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             return localization.string("panel.subtitle.noDevices", defaultValue: "未发现可连接的 Sidecar 显示器")
         }
         let connectedCount = devices.filter { $0.connectionState == .connected }.count
-        let availableCount = devices.count - connectedCount
+        let availableCount = devices.filter { $0.connectionState == .disconnected }.count
+        let unknownCount = devices.filter { $0.connectionState == .unknown }.count
+        if unknownCount > 0 {
+            return localization.format(
+                "panel.subtitle.unknownCount",
+                defaultValue: "%d 台 Sidecar 显示器的连接状态不可用",
+                unknownCount
+            )
+        }
         if connectedCount > 0, availableCount > 0 {
             return localization.format(
                 "panel.subtitle.connectedAndAvailableCount",
@@ -572,6 +583,13 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             bindings[SidecarShortcutID.connectFirstAvailable] = connectFirstAvailableShortcut
         }
         shortcutManager.sync(bindings: bindings)
+    }
+
+    func canRegisterShortcut(_ binding: ShortcutBinding, for settingID: String) -> Bool {
+        let shortcutID = SidecarShortcutID.isGlobal(settingID)
+            ? settingID
+            : SidecarShortcutID.device(settingID)
+        return shortcutManager.canRegister(binding: binding, replacing: shortcutID)
     }
 
     private func handleConfiguredShortcut(id: String) {
