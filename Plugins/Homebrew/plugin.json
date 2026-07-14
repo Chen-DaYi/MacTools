@@ -7,6 +7,10 @@
       "displayName": "Homebrew",
       "summary": "إدارة حزم Homebrew والمستودعات وتشغيل تشخيصات النظام."
     },
+    "de": {
+      "displayName": "Homebrew",
+      "summary": "Homebrew-Pakete und Repositories verwalten sowie Systemdiagnosen ausführen."
+    },
     "en": {
       "displayName": "Homebrew Manager",
       "summary": "Manage Homebrew packages, repositories, and perform system diagnostics"
@@ -23,9 +27,17 @@
       "displayName": "Homebrew",
       "summary": "Homebrew パッケージ、リポジトリの管理、およびシステム診断の実行。"
     },
+    "ko": {
+      "displayName": "Homebrew",
+      "summary": "Homebrew 패키지와 저장소를 관리하고 시스템 진단을 실행합니다."
+    },
     "pt": {
       "displayName": "Homebrew",
       "summary": "Gerenciar pacotes do Homebrew, repositórios e executar diagnósticos do sistema."
+    },
+    "ru": {
+      "displayName": "Homebrew",
+      "summary": "Управляйте пакетами и репозиториями Homebrew и запускайте диагностику системы."
     },
     "zh-Hans": {
       "displayName": "Homebrew 管理",
@@ -36,7 +48,7 @@
       "summary": "管理 Homebrew 包、軟體倉庫並執行系統診斷"
     }
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 3,
   "bundleRelativePath": "Homebrew.bundle",
