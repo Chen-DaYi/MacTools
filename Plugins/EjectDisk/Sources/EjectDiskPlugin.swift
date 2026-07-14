@@ -19,7 +19,7 @@ private struct EjectDiskPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling {
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -29,14 +29,23 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let localization: PluginLocalization
+    private let discoverVolumes: @Sendable () async throws -> [EjectableVolume]
+    private let ejectVolume: @Sendable (EjectableVolume) async throws -> Void
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EjectDiskPlugin")
     private var isEjecting = false
-    private var ejectableDiskCount: Int = 0
+    private var isDetecting = false
+    private var ejectableVolumes: [EjectableVolume] = []
     private var lastErrorMessage: String?
-    private var volumeMountObservers: [NSObjectProtocol] = []
+    private var discoveryTask: Task<Void, Never>?
 
-    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+    init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        discoverVolumes: @escaping @Sendable () async throws -> [EjectableVolume] = EjectDiskService.discoverMountedEjectableVolumes,
+        ejectVolume: @escaping @Sendable (EjectableVolume) async throws -> Void = EjectDiskService.eject
+    ) {
         self.localization = localization
+        self.discoverVolumes = discoverVolumes
+        self.ejectVolume = ejectVolume
         self.metadata = PluginMetadata(
             id: "eject-disk",
             title: localization.string("metadata.title", defaultValue: "推出磁盘"),
@@ -57,7 +66,7 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
             subtitle: subtitle,
             isOn: false,
             isExpanded: false,
-            isEnabled: !isEjecting && ejectableDiskCount > 0,
+            isEnabled: !isDetecting && !isEjecting && !ejectableVolumes.isEmpty,
             isVisible: true,
             detail: nil,
             errorMessage: lastErrorMessage
@@ -68,52 +77,30 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    func refresh() {
-        let count = Self.ejectableDiskCountSync()
-        if self.ejectableDiskCount != count {
-            self.ejectableDiskCount = count
-            self.onStateChange?()
-        }
-        
-        setupVolumeMountObserver()
+    func refresh() {}
+
+    func deactivate(reason _: PluginDeactivationReason) {
+        discoveryTask?.cancel()
+        discoveryTask = nil
+        isDetecting = false
     }
-    
-    private func setupVolumeMountObserver() {
-        guard volumeMountObservers.isEmpty else { return }
-        
-        let workspace = NSWorkspace.shared
-        let notificationCenter = NSWorkspace.shared.notificationCenter
-        
-        let mountObserver = notificationCenter.addObserver(
-            forName: NSWorkspace.didMountNotification,
-            object: workspace,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.checkForEjectableDiskAndUpdate()
-            }
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .primary else {
+            return
         }
-        
-        let unmountObserver = notificationCenter.addObserver(
-            forName: NSWorkspace.didUnmountNotification,
-            object: workspace,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.checkForEjectableDiskAndUpdate()
-            }
-        }
-        
-        volumeMountObservers.append(mountObserver)
-        volumeMountObservers.append(unmountObserver)
+
+        discoverEjectableVolumes()
     }
-    
-    private func checkForEjectableDiskAndUpdate() {
-        let count = Self.ejectableDiskCountSync()
-        if self.ejectableDiskCount != count {
-            self.ejectableDiskCount = count
-            self.onStateChange?()
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .primary else {
+            return
         }
+
+        discoveryTask?.cancel()
+        discoveryTask = nil
+        isDetecting = false
     }
 
     func handleAction(_ action: PluginPanelAction) {
@@ -141,180 +128,104 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
         if isEjecting {
             return localization.string("panel.subtitle.ejecting", defaultValue: "推出中...")
         }
-        if ejectableDiskCount == 0 {
+        if isDetecting {
+            return localization.string("panel.subtitle.detecting", defaultValue: "正在检测...")
+        }
+        if ejectableVolumes.isEmpty {
             return localization.string("panel.subtitle.none", defaultValue: "无可推出的磁盘")
         }
         return localization.format(
             "panel.subtitle.countFormat",
             defaultValue: "%d 个可推出的磁盘",
-            ejectableDiskCount
+            ejectableVolumes.count
         )
     }
 
-    nonisolated private static func ejectableDiskCountSync() -> Int {
-        let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EjectDiskPlugin")
+    private func discoverEjectableVolumes() {
+        discoveryTask?.cancel()
+        isDetecting = true
+        lastErrorMessage = nil
+        onStateChange?()
 
-        let ejectableVolumes = getEjectableVolumes()
-        logger.debug("Found \(ejectableVolumes.count) ejectable volumes")
-        return ejectableVolumes.count
-    }
+        discoveryTask = Task { @MainActor [weak self] in
+            guard let self else { return }
 
-    nonisolated private static let volumeResourceKeys: Set<URLResourceKey> = [
-        .volumeIsEjectableKey,
-        .volumeIsInternalKey,
-        .volumeIsLocalKey
-    ]
+            do {
+                let volumes = try await self.discoverVolumes()
+                guard !Task.isCancelled else { return }
 
-    nonisolated static func isEjectableVolume(
-        isEjectable: Bool?,
-        isInternal: Bool?,
-        isLocal: Bool?
-    ) -> Bool {
-        isEjectable == true && isInternal == false && isLocal == true
-    }
+                self.ejectableVolumes = volumes
+                self.isDetecting = false
+                self.discoveryTask = nil
+                self.logger.debug("Found \(volumes.count) ejectable mounted volumes")
+                self.onStateChange?()
+            } catch {
+                guard !Task.isCancelled else { return }
 
-    nonisolated private static func getEjectableVolumes() -> [URL] {
-        let fileManager = FileManager.default
-        let volumes = fileManager.mountedVolumeURLs(
-            includingResourceValuesForKeys: Array(volumeResourceKeys),
-            options: []
-        ) ?? []
-
-        return volumes.filter { volumeURL in
-            isEjectableVolume(at: volumeURL)
+                self.ejectableVolumes = []
+                self.isDetecting = false
+                self.discoveryTask = nil
+                self.lastErrorMessage = error.localizedDescription
+                self.logger.error("Failed to discover ejectable disks: \(error.localizedDescription)")
+                self.onStateChange?()
+            }
         }
-    }
-
-    nonisolated private static func isEjectableVolume(at volumeURL: URL) -> Bool {
-        guard let values = try? volumeURL.resourceValues(forKeys: volumeResourceKeys) else {
-            return false
-        }
-
-        return isEjectableVolume(
-            isEjectable: values.volumeIsEjectable,
-            isInternal: values.volumeIsInternal,
-            isLocal: values.volumeIsLocal
-        )
     }
 
     private func ejectAllDisks() {
-        guard !isEjecting else { return }
+        guard !isDetecting, !isEjecting, !ejectableVolumes.isEmpty else { return }
 
         isEjecting = true
         lastErrorMessage = nil
         onStateChange?()
 
-        Task {
-            do {
-                try await executeEjectAll()
+        let volumes = ejectableVolumes
 
-                await MainActor.run {
-                    isEjecting = false
-                    lastErrorMessage = nil
-                    ejectableDiskCount = Self.ejectableDiskCountSync()
-                    onStateChange?()
-                }
-            } catch {
-                let errorMessage = error.localizedDescription
-                logger.error("Failed to eject disks: \(errorMessage)")
+        Task { @MainActor [weak self] in
+            guard let self else { return }
 
-                await MainActor.run {
-                    isEjecting = false
-                    lastErrorMessage = errorMessage
-                    ejectableDiskCount = Self.ejectableDiskCountSync()
-                    onStateChange?()
-                }
+            let outcome = await self.executeEjectAll(volumes)
+            self.ejectableVolumes = outcome.failedVolumes
+            self.isEjecting = false
+            self.lastErrorMessage = outcome.errorMessage
+            if let errorMessage = outcome.errorMessage {
+                self.logger.error("Failed to eject some disks: \(errorMessage)")
             }
+            self.onStateChange?()
         }
     }
 
-    private func executeEjectAll() async throws {
-        let ejectableVolumes = Self.getEjectableVolumes()
-        
-        guard !ejectableVolumes.isEmpty else {
-            throw NSError(
-                domain: "EjectDiskPlugin",
-                code: 2,
-                userInfo: [
-                    NSLocalizedDescriptionKey: localization.string(
-                        "error.noEjectableDisks",
-                        defaultValue: "未找到可推出的磁盘"
-                    )
-                ]
-            )
-        }
-        
+    private func executeEjectAll(_ volumes: [EjectableVolume]) async -> EjectOutcome {
         var successCount = 0
+        var failedVolumes: [EjectableVolume] = []
         var errorMessages: [String] = []
-        
-        for volumeURL in ejectableVolumes {
-            // Ejecting one volume can remove sibling volumes on the same physical disk.
-            guard Self.isEjectableVolume(at: volumeURL) else { continue }
 
-            let volumeName = volumeURL.lastPathComponent
+        for volume in volumes {
             do {
-                try await ejectVolume(at: volumeURL)
+                try await ejectVolume(volume)
                 successCount += 1
-                logger.info("Successfully ejected volume: \(volumeName)")
+                logger.info("Successfully ejected volume: \(volume.id)")
             } catch {
-                errorMessages.append("- \(volumeName): \(error.localizedDescription)")
-                logger.error("Failed to eject volume '\(volumeName)': \(error.localizedDescription)")
+                failedVolumes.append(volume)
+                errorMessages.append("- \(volume.name): \(error.localizedDescription)")
+                logger.error("Failed to eject volume '\(volume.id)': \(error.localizedDescription)")
             }
         }
-        
-        if !errorMessages.isEmpty {
-            let message = localization.format(
+
+        let errorMessage = errorMessages.isEmpty
+            ? nil
+            : localization.format(
                 "error.partialFailureFormat",
                 defaultValue: "已推出 %d 个磁盘，%d 个失败:\n%@",
                 successCount,
                 errorMessages.count,
                 errorMessages.joined(separator: "\n")
             )
-            throw NSError(domain: "EjectDiskPlugin", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
-        }
-    }
-
-    private func ejectVolume(at volumeURL: URL) async throws {
-        let result = try await Self.runEjectCommand(at: volumeURL)
-
-        if result.terminationStatus != 0 {
-            let output = result.output
-            let errorMessage = output.isEmpty
-                ? localization.string("error.ejectFailed", defaultValue: "推出失败")
-                : output
-            throw NSError(
-                domain: "EjectDiskPlugin",
-                code: Int(result.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey: errorMessage]
-            )
-        }
-    }
-
-    nonisolated private static func runEjectCommand(at volumeURL: URL) async throws -> EjectCommandResult {
-        try await Task.detached(priority: .userInitiated) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
-            process.arguments = ["eject", volumeURL.path]
-
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-
-            let output = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return EjectCommandResult(
-                terminationStatus: process.terminationStatus,
-                output: output
-            )
-        }.value
+        return EjectOutcome(failedVolumes: failedVolumes, errorMessage: errorMessage)
     }
 }
 
-private struct EjectCommandResult: Sendable {
-    let terminationStatus: Int32
-    let output: String
+private struct EjectOutcome {
+    let failedVolumes: [EjectableVolume]
+    let errorMessage: String?
 }
