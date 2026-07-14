@@ -351,7 +351,8 @@ final class PluginHost: ObservableObject {
             ),
             shortcutCustomizations: shortcutStore.customizations(
                 for: [AppShortcut.openSettingsID] + shortcutDescriptors.map(\.itemID)
-            )
+            ),
+            pluginPreferences: portablePluginPreferences()
         )
     }
 
@@ -415,6 +416,7 @@ final class PluginHost: ObservableObject {
         )
 
         let shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)
+        restorePortablePluginPreferences(backup.pluginPreferences)
 
         rebuildDerivedState()
         syncGlobalShortcuts()
@@ -1131,6 +1133,35 @@ final class PluginHost: ObservableObject {
 
     private var activePlugins: [any MacToolsPlugin] {
         plugins.filter { isolatedPluginFailures[$0.metadata.id] == nil }
+    }
+
+    private func portablePluginPreferences() -> [String: Data] {
+        activePlugins.reduce(into: [String: Data]()) { result, plugin in
+            guard let portablePreferences = plugin as? any PluginPortablePreferencesProviding,
+                  let data = guardedOptionalValue(
+                    for: plugin,
+                    operation: "export portable preferences",
+                    portablePreferences.makePortablePreferencesBackup()
+                  )
+            else {
+                return
+            }
+            result[plugin.metadata.id] = data
+        }
+    }
+
+    private func restorePortablePluginPreferences(_ pluginPreferences: [String: Data]) {
+        for (pluginID, data) in pluginPreferences {
+            guard let plugin = corePlugin(for: pluginID),
+                  let portablePreferences = plugin as? any PluginPortablePreferencesProviding
+            else {
+                continue
+            }
+
+            guardPluginCall(plugin, operation: "restore portable preferences") {
+                portablePreferences.restorePortablePreferences(from: data)
+            }
+        }
     }
 
     private func corePlugin(for pluginID: String) -> (any MacToolsPlugin)? {

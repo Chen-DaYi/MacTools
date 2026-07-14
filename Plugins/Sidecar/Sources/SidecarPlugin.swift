@@ -29,15 +29,20 @@ private enum ControlID {
 
 private enum SidecarShortcutID {
     static let devicePrefix = "device."
+    static let connectFirstAvailable = "connect-first-available"
     static let disconnectAll = "disconnect-all"
 
     static func device(_ deviceID: String) -> String {
         devicePrefix + deviceID
     }
+
+    static func isGlobal(_ id: String) -> Bool {
+        id == connectFirstAvailable || id == disconnectAll
+    }
 }
 
 @MainActor
-final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePreferencesProviding {
     let metadata: PluginMetadata
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -161,7 +166,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
                         self?.onStateChange?()
                     },
                     onBeginRecording: { [weak self] id in
-                        let shortcutID = id == SidecarShortcutID.disconnectAll
+                        let shortcutID = SidecarShortcutID.isGlobal(id)
                             ? id
                             : SidecarShortcutID.device(id)
                         self?.shortcutManager.temporarilyDisable(id: shortcutID)
@@ -211,6 +216,17 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+
+    func makePortablePreferencesBackup() -> Data? {
+        preferences.portablePreferencesData()
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        preferences.restorePortablePreferences(from: data)
+        refreshDevices(notify: false)
+        syncShortcuts()
+        onStateChange?()
+    }
 
     private var subtitle: String {
         if let operation, operation.isPending {
@@ -345,6 +361,11 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
             let rhsRank = deviceSortRank(rhs)
             if lhsRank != rhsRank {
                 return lhsRank < rhsRank
+            }
+            let lhsPriority = preferences.priorityIndex(for: lhs.id)
+            let rhsPriority = preferences.priorityIndex(for: rhs.id)
+            if lhsPriority != rhsPriority {
+                return lhsPriority < rhsPriority
             }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
@@ -526,12 +547,20 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         if let disconnectAllShortcut = preferences.disconnectAllShortcut {
             bindings[SidecarShortcutID.disconnectAll] = disconnectAllShortcut
         }
+        if let connectFirstAvailableShortcut = preferences.connectFirstAvailableShortcut {
+            bindings[SidecarShortcutID.connectFirstAvailable] = connectFirstAvailableShortcut
+        }
         shortcutManager.sync(bindings: bindings)
     }
 
     private func handleConfiguredShortcut(id: String) {
         guard !isOperationPending else { return }
         refreshDevices(notify: false)
+
+        if id == SidecarShortcutID.connectFirstAvailable {
+            connectFirstAvailableDevice()
+            return
+        }
 
         if id == SidecarShortcutID.disconnectAll {
             disconnectAllConnectedDevices()
@@ -646,6 +675,25 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 }
             }
         }
+    }
+
+    private func connectFirstAvailableDevice() {
+        guard let device = orderedDevices.first(where: { $0.connectionState == .disconnected }) else {
+            presentShortcutFailure(
+                action: .connect,
+                deviceName: localization.string(
+                    "shortcut.connectFirstAvailable.target",
+                    defaultValue: "第一个可连接的 Sidecar 显示器"
+                ),
+                deviceID: nil,
+                message: localization.string(
+                    "shortcut.error.noAvailableDevices",
+                    defaultValue: "没有可连接的 Sidecar 显示器"
+                )
+            )
+            return
+        }
+        start(action: connectAction(for: device), for: device)
     }
 
     private func finishDisconnectAll(result: Result<Void, SidecarServiceError>, for token: UUID) {

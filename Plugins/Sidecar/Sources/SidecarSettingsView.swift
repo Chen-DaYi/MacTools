@@ -1,4 +1,6 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import MacToolsPluginKit
 
 private enum SidecarSettingsColumnWidth {
@@ -16,7 +18,7 @@ struct SidecarSettingsView: View {
     let onUpdate: () -> Void
     let onBeginRecording: (String) -> Void
     let onEndRecording: () -> Void
-
+    private static let connectFirstAvailableID = "connect-first-available"
     private static let disconnectAllID = "disconnect-all"
 
     private var displayedDevices: [SidecarDevicePreference] {
@@ -30,6 +32,11 @@ struct SidecarSettingsView: View {
             if lhsRank != rhsRank {
                 return lhsRank < rhsRank
             }
+            let lhsPriority = store.priorityIndex(for: lhs.id)
+            let rhsPriority = store.priorityIndex(for: rhs.id)
+            if lhsPriority != rhsPriority {
+                return lhsPriority < rhsPriority
+            }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
     }
@@ -37,7 +44,7 @@ struct SidecarSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             savedDevicesSection
-            disconnectAllSection
+            globalShortcutsSection
         }
     }
 
@@ -81,8 +88,8 @@ struct SidecarSettingsView: View {
             .foregroundStyle(.secondary)
 
             Text(localization.string(
-                "settings.connectionMode.description",
-                defaultValue: "Connection mode is used for the next menu or shortcut connection request."
+                "settings.priority.description",
+                defaultValue: "Drag available displays to choose the priority used by Connect First Available."
             ))
             .font(PluginSettingsTheme.Typography.rowDescription)
             .foregroundStyle(.secondary)
@@ -104,98 +111,84 @@ struct SidecarSettingsView: View {
                     SidecarDeviceSettingsColumnHeader(localization: localization)
                     PluginSettingsListDivider()
 
-                    ForEach(displayedDevices) { preference in
-                        SidecarDeviceSettingsRow(
-                            preference: preference,
-                            state: state(for: preference),
-                            localization: localization,
-                            onTransportChange: { transport in
-                                store.updateTransport(transport, for: preference.id)
-                                onUpdate()
-                            },
-                            onShortcutActionChange: { action in
-                                store.updateShortcutAction(action, for: preference.id)
-                                onUpdate()
-                            },
-                            onRecord: { binding in
-                                guard !hasShortcutConflict(binding, excluding: preference.id) else {
-                                    return .rejected(localization.string(
-                                        "settings.shortcut.conflict",
-                                        defaultValue: "此快捷键已用于其他 Sidecar 操作。"
-                                    ))
-                                }
-                                store.updateShortcut(binding, for: preference.id)
-                                onUpdate()
-                                return .accepted
-                            },
-                            onClear: {
-                                store.updateShortcut(nil, for: preference.id)
-                                onUpdate()
-                            },
-                            onBeginRecording: {
-                                onBeginRecording(preference.id)
-                            },
-                            onEndRecording: onEndRecording
-                        )
-
-                        if preference.id != displayedDevices.last?.id {
-                            PluginSettingsListDivider()
+                    SidecarDeviceSettingsTable(
+                        items: displayedDeviceRows,
+                        makeRow: { item, isLast in
+                            AnyView(deviceSettingsRow(for: item, isLast: isLast))
+                        },
+                        onMoveBefore: { draggedDeviceID, targetDeviceID in
+                            store.move(deviceID: draggedDeviceID, before: targetDeviceID)
+                            onUpdate()
                         }
-                    }
+                    )
+                    .frame(height: SidecarDeviceSettingsTable.preferredHeight(for: displayedDeviceRows.count))
                 }
                 .pluginSettingsCardBackground(.host)
             }
         }
     }
 
-    private var disconnectAllSection: some View {
+    private var globalShortcutsSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             Label(
-                localization.string("settings.disconnectAll.title", defaultValue: "断开所有已连接设备"),
-                systemImage: "rectangle.portrait.and.arrow.right"
+                localization.string("settings.globalShortcuts.title", defaultValue: "Sidecar 快捷键"),
+                systemImage: "keyboard"
             )
             .font(PluginSettingsTheme.Typography.sectionTitle)
             .foregroundStyle(.secondary)
 
-            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Text(localization.string(
-                    "settings.disconnectAll.description",
-                    defaultValue: "只会断开 Sidecar 明确报告为已连接的显示器。"
-                ))
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                PluginShortcutRecorder(
+            VStack(spacing: 0) {
+                SidecarGlobalShortcutRow(
+                    title: localization.string(
+                        "settings.connectFirstAvailable.title",
+                        defaultValue: "连接第一个可用显示器"
+                    ),
+                    description: localization.string(
+                        "settings.connectFirstAvailable.description",
+                        defaultValue: "按上方的可用显示器优先级连接第一个设备。"
+                    ),
+                    shortcut: store.connectFirstAvailableShortcut,
+                    localization: localization,
+                    onRecord: { binding in
+                        guard !hasShortcutConflict(binding, excluding: Self.connectFirstAvailableID) else {
+                            return shortcutConflictResult()
+                        }
+                        store.updateConnectFirstAvailableShortcut(binding)
+                        onUpdate()
+                        return .accepted
+                    },
+                    onClear: {
+                        store.updateConnectFirstAvailableShortcut(nil)
+                        onUpdate()
+                    },
+                    onBeginRecording: { onBeginRecording(Self.connectFirstAvailableID) },
+                    onEndRecording: onEndRecording
+                )
+                PluginSettingsListDivider()
+                SidecarGlobalShortcutRow(
                     title: localization.string("settings.disconnectAll.title", defaultValue: "断开所有已连接设备"),
-                    displayText: shortcutText(store.disconnectAllShortcut),
+                    description: localization.string(
+                        "settings.disconnectAll.description",
+                        defaultValue: "只会断开 Sidecar 明确报告为已连接的显示器。"
+                    ),
+                    shortcut: store.disconnectAllShortcut,
+                    localization: localization,
                     onRecord: { binding in
                         guard !hasShortcutConflict(binding, excluding: Self.disconnectAllID) else {
-                            return .rejected(localization.string(
-                                "settings.shortcut.conflict",
-                                defaultValue: "此快捷键已用于其他 Sidecar 操作。"
-                            ))
+                            return shortcutConflictResult()
                         }
                         store.updateDisconnectAllShortcut(binding)
                         onUpdate()
                         return .accepted
                     },
+                    onClear: {
+                        store.updateDisconnectAllShortcut(nil)
+                        onUpdate()
+                    },
                     onBeginRecording: { onBeginRecording(Self.disconnectAllID) },
                     onEndRecording: onEndRecording
                 )
-
-                if store.disconnectAllShortcut != nil {
-                    Button(action: {
-                        store.updateDisconnectAllShortcut(nil)
-                        onUpdate()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .pluginSettingsRowIconStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
-            .pluginSettingsListRowPadding(interactive: true)
             .pluginSettingsCardBackground(.host)
         }
     }
@@ -211,8 +204,63 @@ struct SidecarSettingsView: View {
         }
     }
 
+    private var displayedDeviceRows: [SidecarDeviceSettingsTable.Item] {
+        displayedDevices.map { preference in
+            SidecarDeviceSettingsTable.Item(preference: preference, state: state(for: preference))
+        }
+    }
+
+    private func deviceSettingsRow(
+        for item: SidecarDeviceSettingsTable.Item,
+        isLast: Bool
+    ) -> some View {
+        VStack(spacing: 0) {
+            SidecarDeviceSettingsRow(
+                preference: item.preference,
+                state: item.state,
+                localization: localization,
+                onTransportChange: { transport in
+                    store.updateTransport(transport, for: item.preference.id)
+                    onUpdate()
+                },
+                onShortcutActionChange: { action in
+                    store.updateShortcutAction(action, for: item.preference.id)
+                    onUpdate()
+                },
+                onRecord: { binding in
+                    guard !hasShortcutConflict(binding, excluding: item.preference.id) else {
+                        return .rejected(localization.string(
+                            "settings.shortcut.conflict",
+                            defaultValue: "此快捷键已用于其他 Sidecar 操作。"
+                        ))
+                    }
+                    store.updateShortcut(binding, for: item.preference.id)
+                    onUpdate()
+                    return .accepted
+                },
+                onClear: {
+                    store.updateShortcut(nil, for: item.preference.id)
+                    onUpdate()
+                },
+                onBeginRecording: {
+                    onBeginRecording(item.preference.id)
+                },
+                onEndRecording: onEndRecording,
+                isReorderable: item.state == .available
+            )
+
+            if !isLast {
+                PluginSettingsListDivider()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private func hasShortcutConflict(_ binding: ShortcutBinding, excluding id: String) -> Bool {
         if id != Self.disconnectAllID, store.disconnectAllShortcut == binding {
+            return true
+        }
+        if id != Self.connectFirstAvailableID, store.connectFirstAvailableShortcut == binding {
             return true
         }
         return store.devices.contains { preference in
@@ -220,19 +268,278 @@ struct SidecarSettingsView: View {
         }
     }
 
-    private func shortcutText(_ binding: ShortcutBinding?) -> String {
-        ShortcutFormatter.displayString(for: binding).replacingOccurrences(
-            of: "None",
-            with: localization.string("settings.shortcut.unset", defaultValue: "未设置")
-        )
+    private func shortcutConflictResult() -> PluginShortcutRecordingResult {
+        .rejected(localization.string(
+            "settings.shortcut.conflict",
+            defaultValue: "此快捷键已用于其他 Sidecar 操作。"
+        ))
     }
 }
 
-private enum SidecarDeviceSettingsState {
+private enum SidecarDeviceSettingsState: Equatable {
     case connected
     case available
     case unknown
     case unavailable
+}
+
+private struct SidecarDeviceSettingsTable: NSViewRepresentable {
+    struct Item: Identifiable, Equatable {
+        let preference: SidecarDevicePreference
+        let state: SidecarDeviceSettingsState
+
+        var id: String { preference.id }
+    }
+
+    static let rowHeight: CGFloat = 66
+    private static let dragType = NSPasteboard.PasteboardType("com.ggbond.mactools.sidecar-device")
+
+    let items: [Item]
+    let makeRow: (Item, Bool) -> AnyView
+    let onMoveBefore: (String, String?) -> Void
+
+    static func preferredHeight(for itemCount: Int) -> CGFloat {
+        CGFloat(itemCount) * rowHeight
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = SidecarNonScrollingTableScrollView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.verticalScrollElasticity = .none
+        scrollView.horizontalScrollElasticity = .none
+
+        let tableView = PluginSettingsReorderTableView(dragType: Self.dragType)
+        tableView.rowHeight = Self.rowHeight
+        tableView.intercellSpacing = .zero
+
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("sidecar-device"))
+        column.isEditable = false
+        column.resizingMask = .autoresizingMask
+        tableView.addTableColumn(column)
+
+        tableView.delegate = context.coordinator
+        tableView.dataSource = context.coordinator
+        tableView.canBeginDrag = { [weak coordinator = context.coordinator] rowIndexes in
+            coordinator?.canBeginDrag(rows: rowIndexes) ?? false
+        }
+        scrollView.documentView = tableView
+        context.coordinator.tableView = tableView
+        syncLayout(in: scrollView, coordinator: context.coordinator)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        syncLayout(in: scrollView, coordinator: context.coordinator)
+    }
+
+    private func syncLayout(in scrollView: NSScrollView, coordinator: Coordinator) {
+        guard let tableView = coordinator.tableView, !coordinator.isDragging else { return }
+
+        let contentWidth = max(scrollView.contentSize.width, 1)
+        let signature = Signature(items: items, contentWidth: contentWidth)
+        guard coordinator.lastSignature != signature else { return }
+
+        coordinator.lastSignature = signature
+        tableView.reloadData()
+        tableView.noteNumberOfRowsChanged()
+        tableView.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: contentWidth,
+            height: Self.preferredHeight(for: items.count)
+        )
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+        var parent: SidecarDeviceSettingsTable
+        weak var tableView: NSTableView?
+        fileprivate var lastSignature: Signature?
+        private(set) var isDragging = false
+
+        init(parent: SidecarDeviceSettingsTable) {
+            self.parent = parent
+        }
+
+        func numberOfRows(in tableView: NSTableView) -> Int {
+            parent.items.count
+        }
+
+        func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+            SidecarDeviceSettingsTable.rowHeight
+        }
+
+        func tableView(
+            _ tableView: NSTableView,
+            viewFor tableColumn: NSTableColumn?,
+            row: Int
+        ) -> NSView? {
+            let identifier = NSUserInterfaceItemIdentifier("SidecarDeviceSettingsCell")
+            let view = (tableView.makeView(withIdentifier: identifier, owner: nil) as? SidecarDeviceSettingsCellView)
+                ?? SidecarDeviceSettingsCellView(frame: .zero)
+            view.identifier = identifier
+            view.configure(rootView: parent.makeRow(parent.items[row], row == parent.items.indices.last))
+            return view
+        }
+
+        func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+            guard parent.items[row].state == .available else { return nil }
+            let item = NSPasteboardItem()
+            item.setString(parent.items[row].id, forType: SidecarDeviceSettingsTable.dragType)
+            return item
+        }
+
+        func canBeginDrag(rows: IndexSet) -> Bool {
+            !rows.isEmpty && rows.allSatisfy { row in
+                parent.items.indices.contains(row) && parent.items[row].state == .available
+            }
+        }
+
+        func tableView(
+            _ tableView: NSTableView,
+            draggingSession session: NSDraggingSession,
+            willBeginAt screenPoint: NSPoint,
+            forRowIndexes rowIndexes: IndexSet
+        ) {
+            isDragging = true
+            session.animatesToStartingPositionsOnCancelOrFail = true
+            session.draggingFormation = .none
+        }
+
+        func tableView(_ tableView: NSTableView, updateDraggingItemsForDrag draggingInfo: NSDraggingInfo) {
+            draggingInfo.enumerateDraggingItems(
+                options: [],
+                for: tableView,
+                classes: [NSPasteboardItem.self],
+                searchOptions: [:]
+            ) { draggingItem, _, _ in
+                guard
+                    let pasteboardItem = draggingItem.item as? NSPasteboardItem,
+                    let deviceID = pasteboardItem.string(forType: SidecarDeviceSettingsTable.dragType),
+                    let row = self.parent.items.firstIndex(where: { $0.id == deviceID }),
+                    let cellView = tableView.view(atColumn: 0, row: row, makeIfNecessary: false),
+                    let preview = cellView.dragPreviewImage()
+                else {
+                    return
+                }
+
+                let frame = NSRect(origin: draggingItem.draggingFrame.origin, size: preview.size)
+                draggingItem.setDraggingFrame(frame, contents: preview)
+            }
+        }
+
+        func tableView(
+            _ tableView: NSTableView,
+            draggingSession session: NSDraggingSession,
+            endedAt screenPoint: NSPoint,
+            operation: NSDragOperation
+        ) {
+            isDragging = false
+            lastSignature = nil
+            tableView.reloadData()
+        }
+
+        func tableView(
+            _ tableView: NSTableView,
+            validateDrop info: NSDraggingInfo,
+            proposedRow row: Int,
+            proposedDropOperation dropOperation: NSTableView.DropOperation
+        ) -> NSDragOperation {
+            guard
+                info.draggingPasteboard.availableType(from: [SidecarDeviceSettingsTable.dragType]) != nil,
+                let firstAvailableRow = parent.items.firstIndex(where: { $0.state == .available }),
+                let lastAvailableRow = parent.items.lastIndex(where: { $0.state == .available })
+            else {
+                return []
+            }
+
+            let targetRow = min(max(row, firstAvailableRow), lastAvailableRow + 1)
+            tableView.setDropRow(targetRow, dropOperation: .above)
+            return .move
+        }
+
+        func tableView(
+            _ tableView: NSTableView,
+            acceptDrop info: NSDraggingInfo,
+            row: Int,
+            dropOperation: NSTableView.DropOperation
+        ) -> Bool {
+            guard let draggedDeviceID = info.draggingPasteboard.string(forType: SidecarDeviceSettingsTable.dragType) else {
+                return false
+            }
+
+            let targetRow = min(max(row, 0), parent.items.count)
+            let targetDeviceID = targetRow < parent.items.count ? parent.items[targetRow].id : nil
+            parent.onMoveBefore(draggedDeviceID, targetDeviceID)
+            return true
+        }
+    }
+
+    fileprivate struct Signature: Equatable {
+        let items: [Item]
+        let contentWidth: CGFloat
+
+        init(items: [Item], contentWidth: CGFloat) {
+            self.items = items
+            self.contentWidth = contentWidth.rounded(.toNearestOrAwayFromZero)
+        }
+    }
+}
+
+private final class SidecarDeviceSettingsCellView: NSTableCellView {
+    private let hostedView = NSHostingView(rootView: AnyView(EmptyView()))
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        addSubview(hostedView)
+        hostedView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            hostedView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            hostedView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            hostedView.topAnchor.constraint(equalTo: topAnchor),
+            hostedView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(rootView: AnyView) {
+        hostedView.rootView = rootView
+    }
+}
+
+private final class SidecarNonScrollingTableScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        nextResponder?.scrollWheel(with: event)
+    }
+}
+
+private extension NSView {
+    func dragPreviewImage() -> NSImage? {
+        let bounds = bounds.integral
+        guard !bounds.isEmpty,
+              let representation = bitmapImageRepForCachingDisplay(in: bounds)
+        else {
+            return nil
+        }
+
+        cacheDisplay(in: bounds, to: representation)
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(representation)
+        return image
+    }
 }
 
 private struct SidecarDeviceSettingsRow: View {
@@ -245,9 +552,20 @@ private struct SidecarDeviceSettingsRow: View {
     let onClear: () -> Void
     let onBeginRecording: () -> Void
     let onEndRecording: () -> Void
+    let isReorderable: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Group {
+                if isReorderable {
+                    Image(systemName: "line.3.horizontal")
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: 14)
+
             Image(systemName: statusIcon)
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(statusColor)
@@ -281,6 +599,9 @@ private struct SidecarDeviceSettingsRow: View {
             .frame(width: SidecarSettingsColumnWidth.connection)
             .accessibilityLabel(localization.string("settings.column.connection", defaultValue: "连接方式"))
             .help(localization.string("settings.transport.help", defaultValue: "连接时使用的传输方式"))
+
+            Divider()
+                .frame(height: 28)
 
             Picker(String(), selection: Binding(
                 get: { preference.shortcutAction },
@@ -367,19 +688,83 @@ private struct SidecarDeviceSettingsColumnHeader: View {
 
     var body: some View {
         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Color.clear.frame(width: 14)
             Color.clear.frame(width: PluginSettingsTheme.Size.rowIcon)
             Color.clear.frame(minWidth: 130, maxWidth: .infinity)
 
-            Text(localization.string("settings.column.connection", defaultValue: "连接方式"))
+            Label(
+                localization.string("settings.group.connectionPolicy", defaultValue: "连接策略"),
+                systemImage: "cable.connector"
+            )
                 .frame(width: SidecarSettingsColumnWidth.connection, alignment: .leading)
-            Text(localization.string("settings.column.shortcutAction", defaultValue: "快捷键操作"))
-                .frame(width: SidecarSettingsColumnWidth.shortcutAction, alignment: .leading)
-            Text(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
-                .frame(width: SidecarSettingsColumnWidth.shortcut, alignment: .center)
-            Color.clear.frame(width: SidecarSettingsColumnWidth.clearShortcut)
+            Divider()
+                .frame(height: 16)
+            Label(
+                localization.string("settings.group.shortcutAutomation", defaultValue: "快捷键自动化"),
+                systemImage: "keyboard"
+            )
+            .frame(
+                width: SidecarSettingsColumnWidth.shortcutAction
+                    + SidecarSettingsColumnWidth.shortcut
+                    + SidecarSettingsColumnWidth.clearShortcut
+                    + (PluginSettingsTheme.Spacing.rowContentControl * 2),
+                alignment: .leading
+            )
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
         .foregroundStyle(.secondary)
         .pluginSettingsListRowPadding(interactive: true)
+    }
+}
+
+private struct SidecarGlobalShortcutRow: View {
+    let title: String
+    let description: String
+    let shortcut: ShortcutBinding?
+    let localization: PluginLocalization
+    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
+    let onClear: () -> Void
+    let onBeginRecording: () -> Void
+    let onEndRecording: () -> Void
+
+    var body: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+                Text(description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            PluginShortcutRecorder(
+                title: title,
+                displayText: shortcutText,
+                minWidth: SidecarSettingsColumnWidth.shortcut,
+                onRecord: onRecord,
+                onBeginRecording: onBeginRecording,
+                onEndRecording: onEndRecording
+            )
+            .frame(width: SidecarSettingsColumnWidth.shortcut)
+
+            Button(action: onClear) {
+                Image(systemName: "xmark.circle.fill")
+                    .pluginSettingsRowIconStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .opacity(shortcut == nil ? 0 : 1)
+            .allowsHitTesting(shortcut != nil)
+            .frame(width: SidecarSettingsColumnWidth.clearShortcut)
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private var shortcutText: String {
+        ShortcutFormatter.displayString(for: shortcut).replacingOccurrences(
+            of: "None",
+            with: localization.string("settings.shortcut.unset", defaultValue: "未设置")
+        )
     }
 }

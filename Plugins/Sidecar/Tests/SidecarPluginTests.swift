@@ -152,6 +152,36 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertEqual(reloaded.devices.count, 1)
     }
 
+    func testPortablePreferencesPreservePriorityAndGlobalShortcuts() {
+        let source = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        source.reconcile(with: [
+            SidecarDevice(id: "ipad-1", name: "First"),
+            SidecarDevice(id: "ipad-2", name: "Second")
+        ])
+        source.move(deviceID: "ipad-2", before: "ipad-1")
+        source.updateTransport(.wiredOnly, for: "ipad-2")
+        source.updateConnectFirstAvailableShortcut(
+            ShortcutBinding(keyCode: 0, modifiers: [.command, .option])
+        )
+        source.updateDisconnectAllShortcut(
+            ShortcutBinding(keyCode: 1, modifiers: [.command, .shift])
+        )
+
+        let restored = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        restored.restorePortablePreferences(from: try! XCTUnwrap(source.portablePreferencesData()))
+
+        XCTAssertEqual(restored.devices.map(\.id), ["ipad-2", "ipad-1"])
+        XCTAssertEqual(restored.preference(for: "ipad-2")?.transport, .wiredOnly)
+        XCTAssertEqual(
+            restored.connectFirstAvailableShortcut,
+            ShortcutBinding(keyCode: 0, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(
+            restored.disconnectAllShortcut,
+            ShortcutBinding(keyCode: 1, modifiers: [.command, .shift])
+        )
+    }
+
     func testOnlyCustomizedOfflineDevicePreferencesNeedToRemainVisible() {
         let defaultPreference = SidecarDevicePreference(id: "ipad-1", name: "My iPad")
         let wiredPreference = SidecarDevicePreference(
@@ -201,6 +231,29 @@ final class SidecarPluginTests: XCTestCase {
 
         shortcuts.trigger("device.ipad-1")
         XCTAssertTrue(service.didConnect)
+        XCTAssertTrue(service.receivedWiredOnly)
+    }
+
+    func testConnectFirstAvailableShortcutUsesSavedPriorityAndConnectionMode() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "First", connectionState: .disconnected),
+            SidecarDevice(id: "ipad-2", name: "Second", connectionState: .disconnected)
+        ])
+        let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        store.reconcile(with: service.reachableDevices())
+        store.move(deviceID: "ipad-2", before: "ipad-1")
+        store.updateTransport(.wiredOnly, for: "ipad-2")
+        let binding = ShortcutBinding(keyCode: 0, modifiers: [.command, .option])
+        store.updateConnectFirstAvailableShortcut(binding)
+        let shortcuts = FakeSidecarShortcutManager()
+        let plugin = makePlugin(service: service, preferences: store, shortcutManager: shortcuts)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "sidecar", storage: InMemoryPluginStorage()))
+        XCTAssertEqual(shortcuts.bindings["connect-first-available"], binding)
+
+        shortcuts.trigger("connect-first-available")
+
+        XCTAssertEqual(service.connectedDeviceID, "ipad-2")
         XCTAssertTrue(service.receivedWiredOnly)
     }
 
@@ -255,6 +308,7 @@ private final class FakeSidecarService: SidecarServicing {
     private(set) var didConnect = false
     private(set) var didDisconnect = false
     private(set) var receivedWiredOnly = false
+    private(set) var connectedDeviceID: String?
     private var devices: [SidecarDevice]
 
     init(devices: [SidecarDevice] = [], availability: SidecarServiceAvailability = .available) {
@@ -268,6 +322,7 @@ private final class FakeSidecarService: SidecarServicing {
     func connect(to device: SidecarDevice, wiredOnly: Bool, completion: @escaping (Result<Void, SidecarServiceError>) -> Void) {
         didConnect = true
         receivedWiredOnly = wiredOnly
+        connectedDeviceID = device.id
         pendingCompletion = completion
     }
 

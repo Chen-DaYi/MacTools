@@ -22,7 +22,7 @@
 | Feature | Description |
 | ------- | ----------- |
 | Display Resolution | View connected displays and switch each display to an available resolution, with an adaptive list that remains usable near screen edges. |
-| Sidecar | View connected and nearby Sidecar-compatible displays, use direct connect or disconnect actions, and keep per-display connection policies and shortcuts. |
+| Sidecar | View connected and nearby Sidecar-compatible displays, use direct connect or disconnect actions, prioritize devices for a first-available shortcut, and keep per-display connection policies and shortcuts. |
 | Display Brightness | Quickly adjust built-in and DDC/CI external display brightness, with shortcuts that can follow the mouse or control all displays together, plus Gamma/Shade fallbacks. |
 | True Tone | Automatically adapt display colors to ambient light on MacBooks and compatible displays. |
 | Display Sleep | Put all displays to sleep immediately, then wake them with mouse movement or keyboard input. |
@@ -64,7 +64,7 @@
 | Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, restore the default icon, and preview every source with the same standard icon height and content inset as the default. |
 | Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance; the picker shows each language in the system language and its native spelling. |
 
-> **Preferences backup:** Import restores only portable host preferences, plugin display settings, and shortcut customizations. Missing plugins are never installed automatically: the preview lets you explicitly select catalog-verified plugins to install, while unavailable or unselected plugins and their shortcuts are skipped.
+> **Preferences backup:** Import restores portable host preferences, plugin display settings, shortcut customizations, and supported plugin settings (including Sidecar device priority and shortcut configuration). Permissions, caches, credentials, and other non-portable data are excluded. Missing plugins are never installed automatically: the preview lets you explicitly select catalog-verified plugins to install, while unavailable or unselected plugins and their settings are skipped.
 
 > **Right-click action:** You can use Option + left-click on the MacTools icon to trigger the right-click action.
 

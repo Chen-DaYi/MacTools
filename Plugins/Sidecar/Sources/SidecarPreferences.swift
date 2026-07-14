@@ -43,10 +43,18 @@ final class SidecarPreferencesStore: ObservableObject {
     private enum StorageKey {
         static let devices = "savedDevices"
         static let disconnectAllShortcut = "disconnectAllShortcut"
+        static let connectFirstAvailableShortcut = "connectFirstAvailableShortcut"
+    }
+
+    private struct PortablePreferences: Codable {
+        let devices: [SidecarDevicePreference]
+        let disconnectAllShortcut: ShortcutBinding?
+        let connectFirstAvailableShortcut: ShortcutBinding?
     }
 
     @Published private(set) var devices: [SidecarDevicePreference]
     @Published private(set) var disconnectAllShortcut: ShortcutBinding?
+    @Published private(set) var connectFirstAvailableShortcut: ShortcutBinding?
 
     private let storage: PluginStorage
     private let encoder = JSONEncoder()
@@ -67,6 +75,13 @@ final class SidecarPreferencesStore: ObservableObject {
         } else {
             disconnectAllShortcut = nil
         }
+
+        if let data = storage.data(forKey: StorageKey.connectFirstAvailableShortcut),
+           let binding = try? decoder.decode(ShortcutBinding.self, from: data) {
+            connectFirstAvailableShortcut = binding
+        } else {
+            connectFirstAvailableShortcut = nil
+        }
     }
 
     func reconcile(with reachableDevices: [SidecarDevice]) {
@@ -85,7 +100,7 @@ final class SidecarPreferencesStore: ObservableObject {
         }
 
         guard didChange else { return }
-        devices = updated.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        devices = updated
         persistDevices()
     }
 
@@ -115,6 +130,49 @@ final class SidecarPreferencesStore: ObservableObject {
         }
     }
 
+    func updateConnectFirstAvailableShortcut(_ shortcut: ShortcutBinding?) {
+        guard connectFirstAvailableShortcut != shortcut else { return }
+        connectFirstAvailableShortcut = shortcut
+        persistShortcut(shortcut, forKey: StorageKey.connectFirstAvailableShortcut)
+    }
+
+    func move(deviceID: String, before beforeDeviceID: String?) {
+        guard let sourceIndex = devices.firstIndex(where: { $0.id == deviceID }) else { return }
+        var updated = devices
+        let device = updated.remove(at: sourceIndex)
+        let destinationIndex = beforeDeviceID.flatMap { targetID in
+            updated.firstIndex(where: { $0.id == targetID })
+        } ?? updated.endIndex
+        updated.insert(device, at: destinationIndex)
+        guard updated != devices else { return }
+        devices = updated
+        persistDevices()
+    }
+
+    func priorityIndex(for deviceID: String) -> Int {
+        devices.firstIndex(where: { $0.id == deviceID }) ?? .max
+    }
+
+    func portablePreferencesData() -> Data? {
+        try? encoder.encode(PortablePreferences(
+            devices: devices,
+            disconnectAllShortcut: disconnectAllShortcut,
+            connectFirstAvailableShortcut: connectFirstAvailableShortcut
+        ))
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        guard let portablePreferences = try? decoder.decode(PortablePreferences.self, from: data) else {
+            return
+        }
+        devices = uniqueDevices(portablePreferences.devices)
+        disconnectAllShortcut = portablePreferences.disconnectAllShortcut
+        connectFirstAvailableShortcut = portablePreferences.connectFirstAvailableShortcut
+        persistDevices()
+        persistShortcut(disconnectAllShortcut, forKey: StorageKey.disconnectAllShortcut)
+        persistShortcut(connectFirstAvailableShortcut, forKey: StorageKey.connectFirstAvailableShortcut)
+    }
+
     private func update(deviceID: String, _ change: (inout SidecarDevicePreference) -> Void) {
         guard let index = devices.firstIndex(where: { $0.id == deviceID }) else { return }
         var updated = devices[index]
@@ -127,5 +185,18 @@ final class SidecarPreferencesStore: ObservableObject {
     private func persistDevices() {
         guard let data = try? encoder.encode(devices) else { return }
         storage.set(data, forKey: StorageKey.devices)
+    }
+
+    private func persistShortcut(_ shortcut: ShortcutBinding?, forKey key: String) {
+        if let shortcut, let data = try? encoder.encode(shortcut) {
+            storage.set(data, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
+    }
+
+    private func uniqueDevices(_ candidates: [SidecarDevicePreference]) -> [SidecarDevicePreference] {
+        var seenIDs = Set<String>()
+        return candidates.filter { seenIDs.insert($0.id).inserted }
     }
 }

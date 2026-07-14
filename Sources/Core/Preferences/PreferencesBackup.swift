@@ -2,7 +2,7 @@ import Foundation
 import MacToolsPluginKit
 
 struct PreferencesBackup: Codable, Equatable, Sendable {
-    static let currentFormatVersion = 1
+    static let currentFormatVersion = 2
     static let maximumFileSize = 1 * 1024 * 1024
 
     struct ApplicationPreferences: Codable, Equatable, Sendable {
@@ -16,11 +16,13 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
     let application: ApplicationPreferences
     let pluginDisplay: PluginDisplayPreferencesBackup
     let shortcutCustomizations: [String: ShortcutCustomization]
+    let pluginPreferences: [String: Data]
 
     init(
         application: ApplicationPreferences,
         pluginDisplay: PluginDisplayPreferencesBackup,
         shortcutCustomizations: [String: ShortcutCustomization],
+        pluginPreferences: [String: Data] = [:],
         exportedAt: Date = .now
     ) {
         self.formatVersion = Self.currentFormatVersion
@@ -28,10 +30,36 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
         self.application = application
         self.pluginDisplay = pluginDisplay
         self.shortcutCustomizations = shortcutCustomizations
+        self.pluginPreferences = pluginPreferences
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case formatVersion
+        case exportedAt
+        case application
+        case pluginDisplay
+        case shortcutCustomizations
+        case pluginPreferences
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try container.decode(Int.self, forKey: .formatVersion)
+        exportedAt = try container.decode(Date.self, forKey: .exportedAt)
+        application = try container.decode(ApplicationPreferences.self, forKey: .application)
+        pluginDisplay = try container.decode(PluginDisplayPreferencesBackup.self, forKey: .pluginDisplay)
+        shortcutCustomizations = try container.decode(
+            [String: ShortcutCustomization].self,
+            forKey: .shortcutCustomizations
+        )
+        pluginPreferences = try container.decodeIfPresent(
+            [String: Data].self,
+            forKey: .pluginPreferences
+        ) ?? [:]
     }
 
     func validate() throws {
-        guard formatVersion == Self.currentFormatVersion else {
+        guard (1 ... Self.currentFormatVersion).contains(formatVersion) else {
             throw PreferencesBackupError.unsupportedFormatVersion(formatVersion)
         }
     }
@@ -121,6 +149,7 @@ struct PreferencesImportPreview: Equatable {
 
         let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs)
             .union(backup.pluginDisplay.hiddenPluginIDs)
+            .union(backup.pluginPreferences.keys)
         let missingPluginIDs = backedUpPluginIDs.subtracting(availablePluginIDs)
         let managementItemsByID = Dictionary(
             pluginManagementItems.map { ($0.id, $0) },
