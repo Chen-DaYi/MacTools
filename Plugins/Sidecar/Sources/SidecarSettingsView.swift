@@ -89,7 +89,7 @@ struct SidecarSettingsView: View {
 
             Text(localization.string(
                 "settings.priority.description",
-                defaultValue: "Drag available displays to choose the priority used by Connect First Available."
+                defaultValue: "拖动可用显示器，设置“连接第一个可用显示器”使用的优先级。"
             ))
             .font(PluginSettingsTheme.Typography.rowDescription)
             .foregroundStyle(.secondary)

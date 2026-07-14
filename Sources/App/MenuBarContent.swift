@@ -1825,7 +1825,9 @@ private struct NavigationListRow: View {
     }
 
     private var isInteractive: Bool {
-        isEnabled && !isSelected
+        // A second click on a selected row clears its selection and closes the pinned
+        // secondary panel. The parent handles that toggle-off action explicitly.
+        isEnabled
     }
 
     private var backgroundFill: Color {
