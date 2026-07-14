@@ -49,6 +49,12 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連接" } }
       }
     },
+    "panel.action.switch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تبديل" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Wechseln" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Cambiar" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Basculer" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "切り替え" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "전환" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Alternar" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переключить" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切換" } }
+      }
+    },
     "panel.action.disconnect" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -111,6 +117,18 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключено через Sidecar" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已通过 Sidecar 连接" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已透過 Sidecar 連接" } }
+      }
+    },
+    "panel.error.switchConnectFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تم قطع اتصال %@، لكن تعذر الاتصال بـ %@: %@" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ wurde getrennt, aber %@ konnte nicht verbunden werden: %@" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ was disconnected, but %@ could not be connected: %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "%@ se desconectó, pero no se pudo conectar %@: %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%@ a été déconnecté, mais %@ n’a pas pu être connecté : %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@との接続は解除されましたが、%@に接続できませんでした: %@" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결은 해제되었지만 %@에 연결할 수 없습니다: %@" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "%@ foi desligado, mas não foi possível ligar %@: %@" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ отключён, но не удалось подключить %@: %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已断开 %@，但无法连接 %@：%@" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已中斷 %@，但無法連線 %@：%@" } }
+      }
+    },
+    "panel.error.switchDisconnectFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذر قطع اتصال %@، لذا لا يمكن التبديل إلى %@" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ konnte nicht getrennt werden; Wechsel zu %@ nicht möglich" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not disconnect %@, so %@ could not be selected" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo desconectar %@, por lo que no se puede cambiar a %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de déconnecter %@, donc le passage à %@ est impossible" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@との接続を解除できないため、%@に切り替えられません" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결을 해제할 수 없어 %@로 전환할 수 없습니다" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível desligar %@, pelo que não é possível mudar para %@" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось отключить %@, поэтому переключение на %@ невозможно" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法断开 %@，因此无法切换到 %@" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法中斷 %@，因此無法切換到 %@" } }
       }
     },
     "panel.error.timeout" : {
@@ -177,6 +195,12 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在透過有線連接" } }
       }
     },
+    "panel.operation.pending.switch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جارٍ قطع الاتصال بـ %@ ثم الاتصال بـ %@…" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ wird getrennt, anschließend wird %@ verbunden …" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnecting %@, then connecting %@…" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Desconectando %@ y conectando %@…" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Déconnexion de %@, puis connexion à %@…" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@との接続を解除してから%@に接続中…" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결을 해제한 뒤 %@ 연결 중…" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "A desligar %@ e depois a ligar %@…" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отключение %@, затем подключение %@…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在断开 %@，然后连接 %@…" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在中斷 %@，然後連線 %@…" } }
+      }
+    },
     "panel.operation.pending.connect" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -223,6 +247,12 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подключение к %@ по кабелю…" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在通过有线连接 %@…" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在透過有線連接 %@…" } }
+      }
+    },
+    "panel.operation.succeeded.switch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تم قطع اتصال %@ وإرسال طلب اتصال إلى %@" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ wurde getrennt; Verbindungsanfrage für %@ gesendet" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnected %@ and sent a connection request for %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "%@ se desconectó y se envió una solicitud de conexión a %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%@ a été déconnecté et une demande de connexion a été envoyée pour %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@との接続を解除し、%@への接続リクエストを送信しました" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 연결을 해제하고 %@ 연결 요청을 보냈습니다" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "%@ foi desligado e foi enviado um pedido de ligação para %@" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ отключён, запрос на подключение %@ отправлен" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已断开 %@，并已提交连接 %@ 的请求" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已中斷 %@，並已提交連線 %@ 的請求" } }
       }
     },
     "panel.operation.succeeded.connect" : {
@@ -273,6 +303,12 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已提交有線連接 %@ 的請求" } }
       }
     },
+    "panel.operation.failed.switch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذر التبديل من %@ إلى %@" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Wechsel von %@ zu %@ nicht möglich" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not switch from %@ to %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo cambiar de %@ a %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de passer de %@ à %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@から%@に切り替えられませんでした" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@에서 %@로 전환할 수 없습니다" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível alternar de %@ para %@" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось переключиться с %@ на %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法从 %@ 切换到 %@" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法從 %@ 切換到 %@" } }
+      }
+    },
     "panel.operation.failed.connect" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -319,6 +355,12 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось подключить %@ по кабелю" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法通过有线连接 %@" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法透過有線連接 %@" } }
+      }
+    },
+    "panel.operation.timedOut.switch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "انتهت مهلة التبديل من %@ إلى %@" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Zeitüberschreitung beim Wechsel von %@ zu %@" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Switching from %@ to %@ timed out" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Se agotó el tiempo al cambiar de %@ a %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le passage de %@ à %@ a expiré" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@から%@への切り替えがタイムアウトしました" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@에서 %@로 전환하는 시간이 초과되었습니다" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "A mudança de %@ para %@ expirou" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время переключения с %@ на %@ истекло" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从 %@ 切换到 %@ 超时" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "從 %@ 切換到 %@ 逾時" } }
       }
     },
     "panel.operation.timedOut.connect" : {
@@ -865,6 +907,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "أول شاشة Sidecar متاحة" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Erstes verfügbares Sidecar-Display" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "First Available Sidecar Display" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Primera pantalla Sidecar disponible" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Premier écran Sidecar disponible" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "最初の利用可能なSidecarディスプレイ" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "첫 번째 사용 가능한 Sidecar 디스플레이" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Primeiro ecrã Sidecar disponível" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Первый доступный дисплей Sidecar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第一个可用的 Sidecar 显示器" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "第一個可用的 Sidecar 顯示器" } }
+      }
+    },
+    "shortcut.error.displayAlreadyConnected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "شاشة Sidecar متصلة بالفعل؛ استخدم إجراء التبديل للجهاز" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Es ist bereits ein Sidecar-Display verbunden. Verwende die Wechselaktion des Geräts." } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "A Sidecar display is already connected; use the device’s Switch action" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Ya hay una pantalla Sidecar conectada; usa la acción Cambiar del dispositivo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Un écran Sidecar est déjà connecté ; utilisez l’action Basculer de l’appareil" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "すでにSidecarディスプレイが接続されています。デバイスの切り替え操作を使用してください" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "이미 Sidecar 디스플레이가 연결되어 있습니다. 기기의 전환 동작을 사용하십시오" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Já existe um ecrã Sidecar ligado; use a ação Alternar do dispositivo" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дисплей Sidecar уже подключён; используйте действие «Переключить» для устройства" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已有 Sidecar 显示器连接；请使用设备的“切换”操作" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已有 Sidecar 顯示器連線；請使用裝置的「切換」操作" } }
       }
     },
     "shortcut.error.noAvailableDevices" : {

@@ -41,6 +41,12 @@ private enum SidecarShortcutID {
     }
 }
 
+private struct SidecarSwitchRequest {
+    let source: SidecarDevice
+    let target: SidecarDevice
+    let targetAction: SidecarOperationKind
+}
+
 @MainActor
 final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePreferencesProviding {
     let metadata: PluginMetadata
@@ -69,6 +75,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
     private var timeoutTask: Task<Void, Never>?
     private var operationFeedbackTask: Task<Void, Never>?
     private var deviceRefreshTask: Task<Void, Never>?
+    private var switchRequest: SidecarSwitchRequest?
     private var disconnectAllRemainingCount = 0
     private var disconnectAllErrorMessage: String?
     private let operationTimeoutNanoseconds: UInt64
@@ -280,8 +287,12 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
         if let operationDeviceID, !devices.contains(where: { $0.id == operationDeviceID }) {
             operation = nil
             self.operationDeviceID = nil
+            operationToken = nil
+            timeoutTask?.cancel()
+            timeoutTask = nil
             operationFeedbackTask?.cancel()
             operationFeedbackTask = nil
+            switchRequest = nil
         }
         clearCompletedOperationIfSnapshotConfirmsIt()
         syncShortcuts()
@@ -329,6 +340,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
         guard isConfirmed else { return }
         self.operation = nil
         self.operationDeviceID = nil
+        switchRequest = nil
         operationFeedbackTask?.cancel()
         operationFeedbackTask = nil
     }
@@ -441,13 +453,22 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
         let actionTitle: String
         switch action {
         case .connect:
-            actionTitle = localization.string("panel.action.connect", defaultValue: "连接")
+            actionTitle = shouldSwitch(to: device)
+                ? localization.string("panel.action.switch", defaultValue: "切换")
+                : localization.string("panel.action.connect", defaultValue: "连接")
         case .disconnect:
             actionTitle = localization.string("panel.action.disconnect", defaultValue: "断开连接")
         case .wiredConnect:
-            actionTitle = localization.string("panel.action.wiredConnect", defaultValue: "仅通过有线连接")
+            actionTitle = shouldSwitch(to: device)
+                ? localization.string("panel.action.switch", defaultValue: "切换")
+                : localization.string("panel.action.wiredConnect", defaultValue: "仅通过有线连接")
         }
         return "\(device.name) · \(actionTitle)"
+    }
+
+    private func shouldSwitch(to device: SidecarDevice) -> Bool {
+        guard device.connectionState == .disconnected else { return false }
+        return devices.filter { $0.connectionState == .connected }.count == 1
     }
 
     private func actionIcon(for device: SidecarDevice, defaultIcon: String) -> String {
@@ -520,7 +541,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             guard let device = devices.first(where: { $0.id == String(controlID.dropFirst(ControlID.connectPrefix.count)) }) else {
                 return
             }
-            start(action: connectAction(for: device), for: device)
+            connectOrSwitch(to: device)
             return
         } else if controlID.hasPrefix(ControlID.disconnectPrefix) {
             action = .disconnect
@@ -581,7 +602,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
 
         switch preference.shortcutAction {
         case .connect:
-            start(action: connectAction(for: device), for: device)
+            connectOrSwitch(to: device)
         case .disconnect:
             guard device.connectionState == .connected else {
                 presentShortcutFailure(
@@ -678,6 +699,21 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
     }
 
     private func connectFirstAvailableDevice() {
+        guard !devices.contains(where: { $0.connectionState == .connected }) else {
+            presentShortcutFailure(
+                action: .connect,
+                deviceName: localization.string(
+                    "shortcut.connectFirstAvailable.target",
+                    defaultValue: "第一个可用的 Sidecar 显示器"
+                ),
+                deviceID: nil,
+                message: localization.string(
+                    "shortcut.error.displayAlreadyConnected",
+                    defaultValue: "已有 Sidecar 显示器连接；请使用设备的“切换”操作"
+                )
+            )
+            return
+        }
         guard let device = orderedDevices.first(where: { $0.connectionState == .disconnected }) else {
             presentShortcutFailure(
                 action: .connect,
@@ -694,6 +730,75 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             return
         }
         start(action: connectAction(for: device), for: device)
+    }
+
+    private func connectOrSwitch(to target: SidecarDevice) {
+        let connectedDevices = devices.filter { $0.connectionState == .connected }
+        guard let source = connectedDevices.first else {
+            start(action: connectAction(for: target), for: target)
+            return
+        }
+        guard connectedDevices.count == 1, source.id != target.id else {
+            return
+        }
+        switchRequest = SidecarSwitchRequest(
+            source: source,
+            target: target,
+            targetAction: connectAction(for: target)
+        )
+        startSwitchDisconnect(from: source)
+    }
+
+    private func startSwitchDisconnect(from source: SidecarDevice) {
+        let token = beginOperation(action: .disconnect, for: source)
+        service.disconnect(from: source) { [weak self] result in
+            self?.finishSwitchDisconnect(result: result, for: token)
+        }
+    }
+
+    private func finishSwitchDisconnect(
+        result: Result<Void, SidecarServiceError>,
+        for token: UUID
+    ) {
+        guard operationToken == token, let switchRequest else { return }
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        operationToken = nil
+
+        switch result {
+        case .success:
+            logger.info("Sidecar switch disconnected source=\(switchRequest.source.name, privacy: .public)")
+            startSwitchConnect(switchRequest)
+        case .failure:
+            operation = .failed(
+                .connect,
+                deviceName: switchRequest.target.name,
+                message: localization.format(
+                    "panel.error.switchDisconnectFailed",
+                    defaultValue: "无法断开 %@，因此无法切换到 %@",
+                    switchRequest.source.name,
+                    switchRequest.target.name
+                )
+            )
+            operationDeviceID = switchRequest.target.id
+            scheduleOperationFeedbackDismissal()
+            onStateChange?()
+        }
+    }
+
+    private func startSwitchConnect(_ request: SidecarSwitchRequest) {
+        let token = beginOperation(action: request.targetAction, for: request.target)
+        let completion: (Result<Void, SidecarServiceError>) -> Void = { [weak self] result in
+            self?.finish(result: result, for: token, action: request.targetAction, device: request.target)
+        }
+        switch request.targetAction {
+        case .connect:
+            service.connect(to: request.target, wiredOnly: false, completion: completion)
+        case .wiredConnect:
+            service.connect(to: request.target, wiredOnly: true, completion: completion)
+        case .disconnect:
+            return
+        }
     }
 
     private func finishDisconnectAll(result: Result<Void, SidecarServiceError>, for token: UUID) {
@@ -721,6 +826,21 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
     }
 
     private func start(action: SidecarOperationKind, for device: SidecarDevice) {
+        let token = beginOperation(action: action, for: device)
+        let completion: (Result<Void, SidecarServiceError>) -> Void = { [weak self] result in
+            self?.finish(result: result, for: token, action: action, device: device)
+        }
+        switch action {
+        case .connect:
+            service.connect(to: device, wiredOnly: false, completion: completion)
+        case .wiredConnect:
+            service.connect(to: device, wiredOnly: true, completion: completion)
+        case .disconnect:
+            service.disconnect(from: device, completion: completion)
+        }
+    }
+
+    private func beginOperation(action: SidecarOperationKind, for device: SidecarDevice) -> UUID {
         let token = UUID()
         operationToken = token
         operation = .pending(action, deviceName: device.name)
@@ -738,18 +858,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             self?.finishTimeout(for: token, action: action, device: device)
         }
         onStateChange?()
-
-        let completion: (Result<Void, SidecarServiceError>) -> Void = { [weak self] result in
-            self?.finish(result: result, for: token, action: action, device: device)
-        }
-        switch action {
-        case .connect:
-            service.connect(to: device, wiredOnly: false, completion: completion)
-        case .wiredConnect:
-            service.connect(to: device, wiredOnly: true, completion: completion)
-        case .disconnect:
-            service.disconnect(from: device, completion: completion)
-        }
+        return token
     }
 
     private func finish(
@@ -767,7 +876,19 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             operation = .succeeded(action, deviceName: device.name)
             logger.info("Sidecar operation completed action=\(String(describing: action), privacy: .public) device=\(device.name, privacy: .public)")
         case let .failure(error):
-            let message = localizedErrorMessage(for: error)
+            let underlyingMessage = localizedErrorMessage(for: error)
+            let message: String
+            if let switchRequest {
+                message = localization.format(
+                    "panel.error.switchConnectFailed",
+                    defaultValue: "已断开 %@，但无法连接 %@：%@",
+                    switchRequest.source.name,
+                    switchRequest.target.name,
+                    underlyingMessage
+                )
+            } else {
+                message = underlyingMessage
+            }
             operation = .failed(action, deviceName: device.name, message: message)
             logger.error("Sidecar operation failed action=\(String(describing: action), privacy: .public) reason=\(message, privacy: .public)")
         }
@@ -800,12 +921,16 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
             }
             self?.operation = nil
             self?.operationDeviceID = nil
+            self?.switchRequest = nil
             self?.operationFeedbackTask = nil
             self?.onStateChange?()
         }
     }
 
     private func operationSubtitle(_ operation: SidecarOperationState) -> String {
+        if let switchRequest {
+            return switchOperationSubtitle(operation, request: switchRequest)
+        }
         switch operation {
         case let .pending(action, deviceName):
             return localization.format(
@@ -832,6 +957,29 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPortablePre
                 deviceName
             )
         }
+    }
+
+    private func switchOperationSubtitle(
+        _ operation: SidecarOperationState,
+        request: SidecarSwitchRequest
+    ) -> String {
+        let key: String
+        let defaultValue: String
+        switch operation {
+        case .pending:
+            key = "panel.operation.pending.switch"
+            defaultValue = "正在断开 %@，然后连接 %@…"
+        case .succeeded:
+            key = "panel.operation.succeeded.switch"
+            defaultValue = "已断开 %@，并已提交连接 %@ 的请求"
+        case .failed:
+            key = "panel.operation.failed.switch"
+            defaultValue = "无法从 %@ 切换到 %@"
+        case .timedOut:
+            key = "panel.operation.timedOut.switch"
+            defaultValue = "从 %@ 切换到 %@ 超时"
+        }
+        return localization.format(key, defaultValue: defaultValue, request.source.name, request.target.name)
     }
 
     private func operationKey(prefix: String, action: SidecarOperationKind) -> String {

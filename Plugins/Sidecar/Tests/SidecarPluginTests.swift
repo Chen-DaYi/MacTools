@@ -77,6 +77,65 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertFalse(controls.contains(where: \.showsLeadingDivider))
     }
 
+    func testConnectingAnotherDisplaySwitchesAfterTheCurrentDisplayDisconnects() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-current", name: "Current iPad", connectionState: .connected),
+            SidecarDevice(id: "ipad-target", name: "Target iPad", connectionState: .disconnected)
+        ])
+        let plugin = makePlugin(service: service)
+
+        XCTAssertEqual(
+            plugin.primaryPanelState.detail?.primaryControls.last?.actionTitle,
+            "Target iPad · 切换"
+        )
+        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-target"))
+
+        XCTAssertEqual(service.operations, ["disconnect:ipad-current"])
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "正在断开 Current iPad，然后连接 Target iPad…")
+
+        service.complete(.success(()))
+
+        XCTAssertEqual(service.operations, ["disconnect:ipad-current", "connect:ipad-target"])
+        service.complete(.success(()))
+        XCTAssertEqual(
+            plugin.primaryPanelState.detail?.primaryControls.last?.actionTitle,
+            "已断开 Current iPad，并已提交连接 Target iPad 的请求"
+        )
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testSwitchDoesNotConnectTheTargetWhenDisconnectingTheCurrentDisplayFails() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-current", name: "Current iPad", connectionState: .connected),
+            SidecarDevice(id: "ipad-target", name: "Target iPad", connectionState: .disconnected)
+        ])
+        let plugin = makePlugin(service: service)
+
+        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-target"))
+        service.complete(.failure(.system("Disconnect failed")))
+
+        XCTAssertEqual(service.operations, ["disconnect:ipad-current"])
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法断开 Current iPad，因此无法切换到 Target iPad")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 台已连接 · 1 台可连接")
+    }
+
+    func testSwitchExplainsThatThePreviousDisplayWasDisconnectedWhenTargetConnectionFails() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-current", name: "Current iPad", connectionState: .connected),
+            SidecarDevice(id: "ipad-target", name: "Target iPad", connectionState: .disconnected)
+        ])
+        let plugin = makePlugin(service: service)
+
+        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-target"))
+        service.complete(.success(()))
+        service.complete(.failure(.system("Target unavailable")))
+
+        XCTAssertEqual(
+            plugin.primaryPanelState.errorMessage,
+            "已断开 Current iPad，但无法连接 Target iPad：Target unavailable"
+        )
+    }
+
     func testWiredOnlyPreferenceChangesDirectConnectActionAndRequest() {
         let service = FakeSidecarService(devices: [
             SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected)
@@ -257,6 +316,41 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertTrue(service.receivedWiredOnly)
     }
 
+    func testConnectFirstAvailableDoesNotDisconnectAnExistingDisplay() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-current", name: "Current iPad", connectionState: .connected),
+            SidecarDevice(id: "ipad-target", name: "Target iPad", connectionState: .disconnected)
+        ])
+        let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        store.reconcile(with: service.reachableDevices())
+        store.updateConnectFirstAvailableShortcut(ShortcutBinding(keyCode: 0, modifiers: [.command]))
+        let shortcuts = FakeSidecarShortcutManager()
+        let plugin = makePlugin(service: service, preferences: store, shortcutManager: shortcuts)
+
+        shortcuts.trigger("connect-first-available")
+
+        withExtendedLifetime(plugin) {}
+        XCTAssertTrue(service.operations.isEmpty)
+    }
+
+    func testExplicitConnectShortcutSwitchesFromTheKnownConnectedDisplay() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-current", name: "Current iPad", connectionState: .connected),
+            SidecarDevice(id: "ipad-target", name: "Target iPad", connectionState: .disconnected)
+        ])
+        let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        store.reconcile(with: service.reachableDevices())
+        store.updateShortcutAction(.connect, for: "ipad-target")
+        store.updateShortcut(ShortcutBinding(keyCode: 0, modifiers: [.command]), for: "ipad-target")
+        let shortcuts = FakeSidecarShortcutManager()
+        let plugin = makePlugin(service: service, preferences: store, shortcutManager: shortcuts)
+
+        shortcuts.trigger("device.ipad-target")
+
+        withExtendedLifetime(plugin) {}
+        XCTAssertEqual(service.operations, ["disconnect:ipad-current"])
+    }
+
     func testDisconnectShortcutDoesNotGuessUnknownOrDisconnectedState() {
         let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
         let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
@@ -309,6 +403,7 @@ private final class FakeSidecarService: SidecarServicing {
     private(set) var didDisconnect = false
     private(set) var receivedWiredOnly = false
     private(set) var connectedDeviceID: String?
+    private(set) var operations: [String] = []
     private var devices: [SidecarDevice]
 
     init(devices: [SidecarDevice] = [], availability: SidecarServiceAvailability = .available) {
@@ -323,17 +418,20 @@ private final class FakeSidecarService: SidecarServicing {
         didConnect = true
         receivedWiredOnly = wiredOnly
         connectedDeviceID = device.id
+        operations.append("connect:\(device.id)")
         pendingCompletion = completion
     }
 
     func disconnect(from device: SidecarDevice, completion: @escaping (Result<Void, SidecarServiceError>) -> Void) {
         didDisconnect = true
+        operations.append("disconnect:\(device.id)")
         pendingCompletion = completion
     }
 
     func complete(_ result: Result<Void, SidecarServiceError>) {
-        pendingCompletion?(result)
+        let completion = pendingCompletion
         pendingCompletion = nil
+        completion?(result)
     }
 }
 
