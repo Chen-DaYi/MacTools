@@ -157,17 +157,9 @@ final class FeatureManagementTableViewTests: XCTestCase {
         XCTAssertEqual(PluginSurfaceLayoutDisplayPolicy.disabledItemCount(in: items), 1)
     }
 
-    func testControlHelpMatchesInstalledAndSurfaceModes() {
+    func testControlHelpDescribesGlobalEnablementToggle() {
         XCTAssertEqual(
-            featureManagementControlHelp(for: .installed),
-            AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
-        )
-        XCTAssertEqual(
-            featureManagementControlHelp(for: .surface(.dashboard)),
-            AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
-        )
-        XCTAssertEqual(
-            featureManagementControlHelp(for: .surface(.featurePanel)),
+            featureManagementControlHelp(),
             AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
         )
     }

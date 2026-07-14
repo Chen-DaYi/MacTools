@@ -1348,7 +1348,8 @@ private struct PluginConfigurationHeader: View {
 
     private var enabledBinding: Binding<Bool> {
         Binding {
-            pluginHost.installedPluginItems.first { $0.id == item.pluginID }?.isGloballyEnabled ?? true
+            pluginHost.installedPluginItems.first { $0.id == item.pluginID }?.isGloballyEnabled
+                ?? item.isGloballyEnabled
         } set: { isEnabled in
             pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: item.pluginID)
         }

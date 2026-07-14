@@ -31,6 +31,11 @@ final class PluginDisplayPreferencesStore {
     private let userDefaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var cachedPreferences: StoredPreferences?
+    // True when a fallback read came from data this version cannot safely
+    // decode. Read-time lazy migrations should update only the cache so
+    // downgrades do not erase newer schemas.
+    private var shouldPreserveStoredPayload = false
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
@@ -98,6 +103,10 @@ final class PluginDisplayPreferencesStore {
 
     // MARK: - Surface preferences
 
+    /// Returns the saved order for a surface. The first non-empty read lazily
+    /// seeds the surface order from the legacy/global order so upgrades
+    /// preserve the user's existing layout intent without doing launch-time
+    /// migration work before plugin capabilities are available.
     func orderedPluginIDs(
         for surface: PluginDisplaySurface,
         defaultPluginIDs: [String]
@@ -188,12 +197,21 @@ final class PluginDisplayPreferencesStore {
     // MARK: - Persistence and migration
 
     private func loadPreferences() -> StoredPreferences {
+        if let cachedPreferences {
+            return cachedPreferences
+        }
+
         guard let data = userDefaults.data(forKey: DefaultsKey.storage) else {
-            return StoredPreferences()
+            let preferences = StoredPreferences()
+            cachedPreferences = preferences
+            shouldPreserveStoredPayload = false
+            return preferences
         }
 
         if let preferences = try? decoder.decode(StoredPreferences.self, from: data),
            preferences.version == StoredPreferences.currentVersion {
+            cachedPreferences = preferences
+            shouldPreserveStoredPayload = false
             return preferences
         }
 
@@ -206,8 +224,14 @@ final class PluginDisplayPreferencesStore {
             return migratedPreferences
         }
 
-        userDefaults.removeObject(forKey: DefaultsKey.storage)
-        return StoredPreferences()
+        // Preserve unknown or unreadable payloads instead of deleting them.
+        // This keeps downgrade paths non-destructive: an older app version can
+        // fall back to defaults without erasing preferences written by a newer
+        // schema.
+        let preferences = StoredPreferences()
+        cachedPreferences = preferences
+        shouldPreserveStoredPayload = true
+        return preferences
     }
 
     private func persist(_ preferences: StoredPreferences) {
@@ -216,6 +240,8 @@ final class PluginDisplayPreferencesStore {
         }
 
         userDefaults.set(data, forKey: DefaultsKey.storage)
+        cachedPreferences = preferences
+        shouldPreserveStoredPayload = false
     }
 
     private func initializeSurfaceOrderIfNeeded(
@@ -252,7 +278,9 @@ final class PluginDisplayPreferencesStore {
             preferences.isFeaturePanelOrderInitialized = true
         }
 
-        if persistChanges {
+        if persistChanges, shouldPreserveStoredPayload {
+            cachedPreferences = preferences
+        } else if persistChanges {
             persist(preferences)
         }
     }

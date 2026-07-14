@@ -9,6 +9,12 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         let hiddenPluginIDs: Set<String>
     }
 
+    private struct FuturePreferences: Codable {
+        let version: Int
+        let generalPluginOrder: [String]
+        let futureOnlyValue: String
+    }
+
     private var suiteName: String!
     private var defaults: UserDefaults!
     private var store: PluginDisplayPreferencesStore!
@@ -150,13 +156,32 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
     }
 
     func testCorruptDataFallsBackToCapabilityFilteredDefaults() {
-        defaults.set(Data("not-json".utf8), forKey: "plugin.display.preferences")
+        let invalidData = Data("not-json".utf8)
+        defaults.set(invalidData, forKey: "plugin.display.preferences")
 
         XCTAssertEqual(
             store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "status"]),
             ["calendar", "status"]
         )
         XCTAssertTrue(store.isPluginGloballyEnabled("calendar"))
+        XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), invalidData)
+    }
+
+    func testUnknownFutureVersionFallsBackWithoutDeletingStoredPayload() throws {
+        let futureData = try JSONEncoder().encode(
+            FuturePreferences(
+                version: 99,
+                generalPluginOrder: ["future"],
+                futureOnlyValue: "preserve-me"
+            )
+        )
+        defaults.set(futureData, forKey: "plugin.display.preferences")
+
+        XCTAssertEqual(
+            store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "status"]),
+            ["calendar", "status"]
+        )
+        XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
     }
 
     func testResettingOneSurfaceDoesNotAffectTheOther() {

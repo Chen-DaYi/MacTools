@@ -542,13 +542,10 @@ private enum FeatureManagementDragPreview {
             .fill()
         }
 
-        switch mode {
-        case .installed, .surface:
-            drawEnablementCheckbox(
-                isOn: item.isGloballyEnabled,
-                in: NSRect(x: imageSize.width - 50, y: 24, width: 14, height: 14)
-            )
-        }
+        drawEnablementCheckbox(
+            isOn: item.isGloballyEnabled,
+            in: NSRect(x: imageSize.width - 50, y: 24, width: 14, height: 14)
+        )
         drawSymbol(
             "line.3.horizontal",
             in: NSRect(x: imageSize.width - 20, y: 23, width: 13, height: 13),
@@ -723,14 +720,14 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         iconImageView.contentTintColor = iconTintColor
         setIconActionHovered(false)
         activeDotView.isHidden = !item.isActive || !item.isGloballyEnabled
-        configureTrailingControl(item: item, mode: mode)
+        configureTrailingControl(item: item)
         handleImageView.isHidden = !showsHandle
         containerView.alphaValue = 1
         toolTip = item.title
-        let controlHelp = featureManagementControlHelp(for: mode)
+        let controlHelp = featureManagementControlHelp()
         enablementButton.toolTip = controlHelp
-        enablementButton.setAccessibilityLabel(controlHelp)
-        enablementButton.setAccessibilityHelp(item.title)
+        enablementButton.setAccessibilityLabel(item.title)
+        enablementButton.setAccessibilityHelp(controlHelp)
         iconActionButton.toolTip = hasSettings
             ? AppL10n.pluginsFormat(
                 "plugin.management.openSettingsForPlugin",
@@ -877,19 +874,11 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     }
 
     private func configureTrailingControl(
-        item: FeatureManagementTableItem,
-        mode: FeatureManagementTableMode
+        item: FeatureManagementTableItem
     ) {
-        switch mode {
-        case .installed:
-            enablementButton.isHidden = false
-            enablementButton.state = item.isGloballyEnabled ? .on : .off
-            iconActionButton.isHidden = !hasSettings
-        case .surface:
-            enablementButton.isHidden = false
-            enablementButton.state = item.isGloballyEnabled ? .on : .off
-            iconActionButton.isHidden = !hasSettings
-        }
+        enablementButton.isHidden = false
+        enablementButton.state = item.isGloballyEnabled ? .on : .off
+        iconActionButton.isHidden = !hasSettings
         window?.invalidateCursorRects(for: iconActionButton)
     }
 
@@ -1052,13 +1041,8 @@ func pluginCapabilitySummary(_ capabilities: PluginHostCapabilities) -> String {
     }
 }
 
-func featureManagementControlHelp(for mode: FeatureManagementTableMode) -> String {
-    switch mode {
-    case .installed:
-        return AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
-    case .surface:
-        return AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
-    }
+func featureManagementControlHelp() -> String {
+    AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
 }
 
 private extension NSImage {

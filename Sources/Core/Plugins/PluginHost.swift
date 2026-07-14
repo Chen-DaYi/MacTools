@@ -50,6 +50,9 @@ struct PluginSurfaceLayoutItem: Identifiable {
     let capabilities: PluginHostCapabilities
     let isGloballyEnabled: Bool
     let isActive: Bool
+    /// Dashboard tile sizing metadata. Feature Panel rows ignore this, but
+    /// Dashboard layout editors keep it available for rendering or future
+    /// grid-specific affordances without re-querying plugin descriptors.
     let dashboardSpan: PluginComponentSpan?
     let category: String?
     let releaseChannel: String?
@@ -215,6 +218,9 @@ final class PluginHost: ObservableObject {
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var primaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
     @Published private(set) var componentItems: [PluginComponentItem] = []
+    // Legacy management projection retained for existing host/tests and backup
+    // flows. New settings UI should prefer `installedPluginItems` plus the
+    // per-surface `dashboardLayoutItems` / `featurePanelLayoutItems`.
     @Published private(set) var featureManagementItems: [PluginFeatureManagementItem] = []
     @Published private(set) var installedPluginItems: [InstalledPluginItem] = []
     @Published private(set) var dashboardLayoutItems: [PluginSurfaceLayoutItem] = []
@@ -781,6 +787,9 @@ final class PluginHost: ObservableObject {
         setPluginGloballyEnabled(isVisible, pluginID: pluginID)
     }
 
+    /// Moves a plugin within the complete saved order for a surface, including
+    /// disabled plugins. The Dashboard/Feature Panel UI uses
+    /// `moveEnabledPlugin` because users drag only the enabled section.
     func movePlugin(id pluginID: String, toOffset targetOffset: Int, on surface: PluginDisplaySurface) {
         let defaultPluginIDs = defaultPluginIDs(for: surface)
         var orderedPluginIDs = orderedPluginIDs(for: surface)
@@ -2168,10 +2177,6 @@ final class PluginHost: ObservableObject {
         )
         dynamicResolvedCapabilitiesByID[plugin.metadata.id] = capabilities
         return capabilities
-    }
-
-    private func capabilities(for pluginID: String) -> PluginHostCapabilities? {
-        descriptorsByID()[pluginID]?.capabilities
     }
 
     private func presentation(for descriptor: PluginDescriptor) -> PluginFeaturePresentation {
