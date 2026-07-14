@@ -383,7 +383,9 @@ final class PluginHost: ObservableObject {
         return PreferencesBackup(
             application: preferencesBackupStore.applicationPreferences(),
             pluginDisplay: pluginDisplayPreferencesStore.backupSnapshot(
-                defaultPluginIDs: defaultPluginIDs
+                defaultPluginIDs: defaultPluginIDs,
+                dashboardDefaultPluginIDs: defaultPluginIDs(for: .dashboard),
+                featurePanelDefaultPluginIDs: defaultPluginIDs(for: .featurePanel)
             ),
             shortcutCustomizations: shortcutStore.customizations(
                 for: shortcutDescriptors.map(\.itemID)
@@ -452,6 +454,16 @@ final class PluginHost: ObservableObject {
         pluginDisplayPreferencesStore.setOrderedPluginIDs(
             backup.pluginDisplay.orderedPluginIDs,
             defaultPluginIDs: defaultPluginIDs
+        )
+        pluginDisplayPreferencesStore.setOrderedPluginIDs(
+            backup.pluginDisplay.dashboardOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
+            for: .dashboard,
+            defaultPluginIDs: defaultPluginIDs(for: .dashboard)
+        )
+        pluginDisplayPreferencesStore.setOrderedPluginIDs(
+            backup.pluginDisplay.featurePanelOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
+            for: .featurePanel,
+            defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
         )
 
         let shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)

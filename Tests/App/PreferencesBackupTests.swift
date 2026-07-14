@@ -41,6 +41,8 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(backup.application.menuBarClickBehavior, MenuBarClickBehaviorPreference.swapped.rawValue)
         XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["second", "first"])
         XCTAssertEqual(backup.pluginDisplay.hiddenPluginIDs, ["first"])
+        XCTAssertEqual(backup.pluginDisplay.dashboardOrderedPluginIDs, [])
+        XCTAssertEqual(backup.pluginDisplay.featurePanelOrderedPluginIDs, ["first", "second"])
         XCTAssertEqual(
             backup.shortcutCustomizations["first.shortcut.toggle"],
             .custom(ShortcutBinding(keyCode: 12, modifiers: [.command, .shift]))
@@ -156,6 +158,67 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertFalse(host.featureManagementItems.first(where: { $0.id == "first" })?.isVisible ?? true)
         XCTAssertFalse(host.shortcutItems.first(where: { $0.id == "second.shortcut.open" })?.canClear ?? true)
         XCTAssertTrue(host.shortcutItems.first(where: { $0.id == "first.shortcut.toggle" })?.usesDefaultValue ?? false)
+    }
+
+    func testExportAndImportPreserveSurfaceDisplayOrders() throws {
+        let sourceDefaults = makeDefaults()
+        let sourceHost = makeHost(
+            plugins: [
+                BackupCombinedPlugin(id: "first", order: 1, shortcutID: "toggle"),
+                BackupCombinedPlugin(id: "second", order: 2, shortcutID: "open"),
+                BackupCombinedPlugin(id: "third", order: 3, shortcutID: "show")
+            ],
+            defaults: sourceDefaults
+        )
+        sourceHost.movePlugin(id: "third", toOffset: 0, on: .dashboard)
+        sourceHost.movePlugin(id: "second", toOffset: 0, on: .featurePanel)
+
+        let backup = sourceHost.makePreferencesBackup()
+
+        XCTAssertEqual(backup.pluginDisplay.dashboardOrderedPluginIDs, ["third", "first", "second"])
+        XCTAssertEqual(backup.pluginDisplay.featurePanelOrderedPluginIDs, ["second", "first", "third"])
+
+        let targetDefaults = makeDefaults()
+        let targetHost = makeHost(
+            plugins: [
+                BackupCombinedPlugin(id: "first", order: 1, shortcutID: "toggle"),
+                BackupCombinedPlugin(id: "second", order: 2, shortcutID: "open"),
+                BackupCombinedPlugin(id: "third", order: 3, shortcutID: "show")
+            ],
+            defaults: targetDefaults
+        )
+
+        _ = try targetHost.importPreferences(backup)
+
+        XCTAssertEqual(targetHost.dashboardLayoutItems.map(\.id), ["third", "first", "second"])
+        XCTAssertEqual(targetHost.componentItems.map(\.id), ["third", "first", "second"])
+        XCTAssertEqual(targetHost.featurePanelLayoutItems.map(\.id), ["second", "first", "third"])
+        XCTAssertEqual(targetHost.panelItems.map(\.id), ["second", "first", "third"])
+    }
+
+    func testImportLegacyDisplayBackupSeedsSurfaceOrdersFromGeneralOrder() throws {
+        let defaults = makeDefaults()
+        let host = makeHost(
+            plugins: [
+                BackupCombinedPlugin(id: "first", order: 1, shortcutID: "toggle"),
+                BackupCombinedPlugin(id: "second", order: 2, shortcutID: "open"),
+                BackupCombinedPlugin(id: "third", order: 3, shortcutID: "show")
+            ],
+            defaults: defaults
+        )
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: ["third", "second", "first"],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [:]
+        )
+
+        _ = try host.importPreferences(backup)
+
+        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["third", "second", "first"])
+        XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["third", "second", "first"])
     }
 
     func testImportRestoresSwappedShortcutBindingsAtomically() throws {
@@ -568,6 +631,71 @@ private final class BackupTestPlugin: MacToolsPlugin, PluginPrimaryPanel {
             detail: nil,
             errorMessage: nil
         )
+    }
+
+    func handleAction(_ action: PluginPanelAction) {}
+}
+
+@MainActor
+private final class BackupCombinedPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    let descriptor = PluginComponentDescriptor(span: .oneByOne)
+    let shortcutDefinitions: [PluginShortcutDefinition]
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    init(id: String, order: Int, shortcutID: String) {
+        metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "gearshape",
+            iconTint: .blue,
+            order: order,
+            defaultDescription: id
+        )
+        primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .switch,
+            menuActionBehavior: .keepPresented
+        )
+        shortcutDefinitions = [
+            PluginShortcutDefinition(
+                id: shortcutID,
+                title: shortcutID,
+                description: shortcutID,
+                actionID: shortcutID,
+                scope: .global,
+                defaultBinding: nil,
+                isRequired: false
+            )
+        ]
+    }
+
+    var primaryPanelState: PluginPanelState {
+        PluginPanelState(
+            subtitle: metadata.defaultDescription,
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    var componentPanelState: PluginComponentState {
+        PluginComponentState(
+            subtitle: metadata.defaultDescription,
+            isActive: false,
+            isEnabled: true,
+            isVisible: true,
+            errorMessage: nil
+        )
+    }
+
+    func makeView(context: PluginComponentContext) -> AnyView {
+        AnyView(Text(context.pluginID))
     }
 
     func handleAction(_ action: PluginPanelAction) {}

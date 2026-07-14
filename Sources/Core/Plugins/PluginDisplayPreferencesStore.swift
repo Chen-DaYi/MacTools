@@ -147,8 +147,24 @@ final class PluginDisplayPreferencesStore {
         )
     }
 
-    func backupSnapshot(defaultPluginIDs: [String]) -> PluginDisplayPreferencesBackup {
-        let preferences = loadPreferences()
+    func backupSnapshot(
+        defaultPluginIDs: [String],
+        dashboardDefaultPluginIDs: [String] = [],
+        featurePanelDefaultPluginIDs: [String] = []
+    ) -> PluginDisplayPreferencesBackup {
+        var preferences = loadPreferences()
+        initializeSurfaceOrderIfNeeded(
+            .dashboard,
+            defaultPluginIDs: dashboardDefaultPluginIDs,
+            preferences: &preferences,
+            persistChanges: false
+        )
+        initializeSurfaceOrderIfNeeded(
+            .featurePanel,
+            defaultPluginIDs: featurePanelDefaultPluginIDs,
+            preferences: &preferences,
+            persistChanges: false
+        )
 
         return PluginDisplayPreferencesBackup(
             orderedPluginIDs: normalizedVisibleOrder(
@@ -157,7 +173,15 @@ final class PluginDisplayPreferencesStore {
             ),
             hiddenPluginIDs: preferences.globallyHiddenPluginIDs
                 .filter { defaultPluginIDs.contains($0) }
-                .sorted()
+                .sorted(),
+            dashboardOrderedPluginIDs: normalizedVisibleOrder(
+                storedOrder(for: .dashboard, preferences: preferences),
+                defaultPluginIDs: dashboardDefaultPluginIDs
+            ),
+            featurePanelOrderedPluginIDs: normalizedVisibleOrder(
+                storedOrder(for: .featurePanel, preferences: preferences),
+                defaultPluginIDs: featurePanelDefaultPluginIDs
+            )
         )
     }
 

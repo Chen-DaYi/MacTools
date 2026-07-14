@@ -100,6 +100,20 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
 struct PluginDisplayPreferencesBackup: Codable, Equatable, Sendable {
     let orderedPluginIDs: [String]
     let hiddenPluginIDs: [String]
+    let dashboardOrderedPluginIDs: [String]?
+    let featurePanelOrderedPluginIDs: [String]?
+
+    init(
+        orderedPluginIDs: [String],
+        hiddenPluginIDs: [String],
+        dashboardOrderedPluginIDs: [String]? = nil,
+        featurePanelOrderedPluginIDs: [String]? = nil
+    ) {
+        self.orderedPluginIDs = orderedPluginIDs
+        self.hiddenPluginIDs = hiddenPluginIDs
+        self.dashboardOrderedPluginIDs = dashboardOrderedPluginIDs
+        self.featurePanelOrderedPluginIDs = featurePanelOrderedPluginIDs
+    }
 }
 
 struct PreferencesImportPreview: Equatable {
@@ -121,6 +135,8 @@ struct PreferencesImportPreview: Equatable {
 
         let backedUpPluginIDs = Set(backup.pluginDisplay.orderedPluginIDs)
             .union(backup.pluginDisplay.hiddenPluginIDs)
+            .union(backup.pluginDisplay.dashboardOrderedPluginIDs ?? [])
+            .union(backup.pluginDisplay.featurePanelOrderedPluginIDs ?? [])
         let missingPluginIDs = backedUpPluginIDs.subtracting(availablePluginIDs)
         let managementItemsByID = Dictionary(
             pluginManagementItems.map { ($0.id, $0) },
