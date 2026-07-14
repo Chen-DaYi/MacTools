@@ -48,7 +48,7 @@
       "summary": "連接附近可用的 Sidecar 顯示器作為延伸顯示器"
     }
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 3,
   "bundleRelativePath": "Sidecar.bundle",
@@ -60,7 +60,7 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": false
+    "configuration": true
   },
   "permissions": [],
   "category": "display"

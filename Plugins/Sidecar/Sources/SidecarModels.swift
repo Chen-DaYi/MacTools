@@ -22,6 +22,21 @@ enum SidecarConnectionState: Equatable {
     case connected
 }
 
+enum SidecarDeviceOrdering {
+    static func rank(for state: SidecarConnectionState?) -> Int {
+        switch state {
+        case .connected:
+            0
+        case .disconnected:
+            1
+        case .unknown:
+            2
+        case nil:
+            3
+        }
+    }
+}
+
 enum SidecarServiceAvailability: Equatable {
     case available
     case unsupported(SidecarUnavailableReason)
@@ -75,7 +90,7 @@ extension SidecarUnavailableReason {
     }
 }
 
-enum SidecarOperationKind {
+enum SidecarOperationKind: Equatable {
     case connect
     case disconnect
     case wiredConnect

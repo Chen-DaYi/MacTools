@@ -15,18 +15,24 @@ private struct SidecarPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [SidecarPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
+        [SidecarPlugin(
+            localization: PluginLocalization(bundle: context.resourceBundle),
+            preferences: SidecarPreferencesStore(storage: context.storage)
+        )]
     }
 }
 
 private enum ControlID {
-    static let deviceNavigationPrefix = "sidecar-device-navigation."
     static let connectPrefix = "sidecar-connect."
     static let disconnectPrefix = "sidecar-disconnect."
-    static let wiredConnectPrefix = "sidecar-wired-connect."
+}
 
-    static func deviceNavigation(for deviceID: String) -> String {
-        deviceNavigationPrefix + deviceID
+private enum SidecarShortcutID {
+    static let devicePrefix = "device."
+    static let disconnectAll = "disconnect-all"
+
+    static func device(_ deviceID: String) -> String {
+        devicePrefix + deviceID
     }
 }
 
@@ -44,19 +50,22 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private let service: any SidecarServicing
     private let localization: PluginLocalization
+    private let preferences: SidecarPreferencesStore
+    private let shortcutManager: any SidecarShortcutManaging
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "SidecarPlugin"
     )
     private var devices: [SidecarDevice] = []
     private var isExpanded = false
-    private var selectedDeviceID: String?
     private var operation: SidecarOperationState?
     private var operationDeviceID: String?
     private var operationToken: UUID?
     private var timeoutTask: Task<Void, Never>?
     private var operationFeedbackTask: Task<Void, Never>?
     private var deviceRefreshTask: Task<Void, Never>?
+    private var disconnectAllRemainingCount = 0
+    private var disconnectAllErrorMessage: String?
     private let operationTimeoutNanoseconds: UInt64
     private let operationFeedbackNanoseconds: UInt64
     private let initialDeviceRefreshDelayNanoseconds: UInt64
@@ -65,6 +74,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     init(
         service: any SidecarServicing = SidecarCoreService(),
         localization: PluginLocalization = PluginLocalization(bundle: .main),
+        preferences: SidecarPreferencesStore? = nil,
+        shortcutManager: (any SidecarShortcutManaging)? = nil,
         operationTimeoutNanoseconds: UInt64 = 15_000_000_000,
         operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
         initialDeviceRefreshDelayNanoseconds: UInt64 = 750_000_000,
@@ -72,6 +83,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     ) {
         self.service = service
         self.localization = localization
+        self.preferences = preferences ?? SidecarPreferencesStore(
+            storage: UserDefaultsPluginStorage(pluginID: "sidecar")
+        )
+        self.shortcutManager = shortcutManager ?? SidecarShortcutManager()
         self.operationTimeoutNanoseconds = operationTimeoutNanoseconds
         self.operationFeedbackNanoseconds = operationFeedbackNanoseconds
         self.initialDeviceRefreshDelayNanoseconds = initialDeviceRefreshDelayNanoseconds
@@ -90,7 +105,11 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         service.onDevicesChanged = { [weak self] in
             self?.refreshDevices(notify: true)
         }
+        self.shortcutManager.onTrigger = { [weak self] id in
+            self?.handleConfiguredShortcut(id: id)
+        }
         refreshDevices(notify: false)
+        isExpanded = !devices.isEmpty
         scheduleDeviceRefresh()
     }
 
@@ -129,6 +148,41 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(description: metadata.defaultDescription) { [weak self] _ in
+            if let self {
+                SidecarSettingsView(
+                    store: self.preferences,
+                    liveDevices: self.devices,
+                    localization: self.localization,
+                    onRefresh: { [weak self] in self?.refresh() },
+                    onUpdate: { [weak self] in
+                        self?.syncShortcuts()
+                        self?.onStateChange?()
+                    },
+                    onBeginRecording: { [weak self] id in
+                        let shortcutID = id == SidecarShortcutID.disconnectAll
+                            ? id
+                            : SidecarShortcutID.device(id)
+                        self?.shortcutManager.temporarilyDisable(id: shortcutID)
+                    },
+                    onEndRecording: { [weak self] in self?.syncShortcuts() }
+                )
+            } else {
+                EmptyView()
+            }
+        }
+    }
+
+    func activate(context: PluginRuntimeContext) {
+        syncShortcuts()
+    }
+
+    func deactivate(reason: PluginDeactivationReason) {
+        guard reason.requiresStateCleanup else { return }
+        shortcutManager.unregisterAll()
+    }
+
     func refresh() {
         refreshDevices(notify: true)
     }
@@ -140,23 +194,9 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
             if expanded {
                 refreshDevices(notify: false)
             }
-            if !expanded {
-                selectedDeviceID = nil
-            }
             onStateChange?()
-        case let .setNavigationSelection(controlID, optionID):
-            guard controlID.hasPrefix(ControlID.deviceNavigationPrefix) else { return }
-            if selectedDeviceID == optionID {
-                selectedDeviceID = nil
-                onStateChange?()
-                return
-            }
-            selectedDeviceID = optionID
-            onStateChange?()
-        case let .clearNavigationSelection(controlID):
-            guard controlID.hasPrefix(ControlID.deviceNavigationPrefix) else { return }
-            selectedDeviceID = nil
-            onStateChange?()
+        case .setNavigationSelection, .clearNavigationSelection:
+            return
         case let .invokeAction(controlID):
             handleOperationAction(controlID)
         case .setSwitch, .setSelection, .setDate, .setSlider:
@@ -220,9 +260,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let updatedDevices = service.reachableDevices()
         let changed = updatedDevices != devices
         devices = updatedDevices
-        if let selectedDeviceID, !devices.contains(where: { $0.id == selectedDeviceID }) {
-            self.selectedDeviceID = nil
-        }
+        preferences.reconcile(with: updatedDevices)
         if let operationDeviceID, !devices.contains(where: { $0.id == operationDeviceID }) {
             operation = nil
             self.operationDeviceID = nil
@@ -230,6 +268,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
             operationFeedbackTask = nil
         }
         clearCompletedOperationIfSnapshotConfirmsIt()
+        syncShortcuts()
         if notify && changed {
             onStateChange?()
         }
@@ -286,15 +325,12 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         var controls: [PluginPanelControl] = []
         for (index, device) in orderedDevices.enumerated() {
             let previousDevice = index > 0 ? orderedDevices[index - 1] : nil
-            controls.append(
-                deviceNavigationControl(
-                    for: device,
-                    sectionTitle: sectionTitle(for: device, after: previousDevice)
-                )
-            )
-            if selectedDeviceID == device.id {
-                controls.append(contentsOf: actionControls(for: device))
-            }
+            let sectionTitle = sectionTitle(for: device, after: previousDevice)
+            controls.append(contentsOf: actionControls(
+                for: device,
+                sectionTitle: sectionTitle,
+                showsLeadingDivider: false
+            ))
         }
 
         return PluginPanelDetail(
@@ -315,13 +351,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private func deviceSortRank(_ device: SidecarDevice) -> Int {
-        if device.connectionState == .connected {
-            return 0
-        }
-        if device.id == operationDeviceID {
-            return 1
-        }
-        return 2
+        SidecarDeviceOrdering.rank(for: device.connectionState)
     }
 
     private func sectionTitle(for device: SidecarDevice, after previousDevice: SidecarDevice?) -> String? {
@@ -335,102 +365,72 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         return localization.string("panel.section.available", defaultValue: "可用的 Sidecar 显示器")
     }
 
-    private func deviceNavigationControl(
+    private func actionControls(
         for device: SidecarDevice,
-        sectionTitle: String?
-    ) -> PluginPanelControl {
-        PluginPanelControl(
-            id: ControlID.deviceNavigation(for: device.id),
-            kind: .navigationList,
-            options: [
-                PluginPanelControlOption(
-                    id: device.id,
-                    title: device.name,
-                    subtitle: deviceSubtitle(for: device)
-                )
-            ],
-            selectedOptionID: nil,
-            dateValue: nil,
-            minimumDate: nil,
-            displayedComponents: nil,
-            datePickerStyle: nil,
-            sectionTitle: sectionTitle,
-            actionIconSystemName: deviceStatusIcon(for: device),
-            isEnabled: !isOperationPending
-        )
-    }
-
-    private func actionControls(for device: SidecarDevice) -> [PluginPanelControl] {
+        sectionTitle: String?,
+        showsLeadingDivider: Bool
+    ) -> [PluginPanelControl] {
         let isEnabled = !isOperationPending
         switch device.connectionState {
         case .connected:
             return [
                 actionControl(
                     id: ControlID.disconnectPrefix + device.id,
-                    title: localization.string("panel.action.disconnect", defaultValue: "断开连接"),
-                    icon: "rectangle.portrait.and.arrow.right",
-                    sectionTitle: nil,
-                    showsLeadingDivider: true,
+                    title: deviceActionTitle(for: device, action: .disconnect),
+                    icon: actionIcon(for: device, defaultIcon: "checkmark.circle.fill"),
+                    sectionTitle: sectionTitle,
+                    showsLeadingDivider: showsLeadingDivider,
                     isEnabled: isEnabled
                 )
             ]
         case .disconnected:
-            return connectControls(for: device, isEnabled: isEnabled)
-        case .unknown:
             return [
                 actionControl(
                     id: ControlID.connectPrefix + device.id,
-                    title: localization.string("panel.action.connect", defaultValue: "连接"),
-                    icon: "rectangle.on.rectangle",
-                    sectionTitle: nil,
-                    showsLeadingDivider: true,
+                    title: deviceActionTitle(for: device, action: connectAction(for: device)),
+                    icon: actionIcon(for: device, defaultIcon: "circle"),
+                    sectionTitle: sectionTitle,
+                    showsLeadingDivider: showsLeadingDivider,
                     isEnabled: isEnabled
-                ),
+                )
+            ]
+        case .unknown:
+            return [
                 actionControl(
-                    id: ControlID.disconnectPrefix + device.id,
-                    title: localization.string("panel.action.disconnect", defaultValue: "断开连接"),
-                    icon: "rectangle.portrait.and.arrow.right",
-                    sectionTitle: nil,
-                    showsLeadingDivider: false,
-                    isEnabled: isEnabled
-                ),
-                actionControl(
-                    id: ControlID.wiredConnectPrefix + device.id,
-                    title: localization.string("panel.action.wiredConnect", defaultValue: "仅通过有线连接"),
-                    icon: "cable.connector",
-                    sectionTitle: localization.string(
-                        "panel.wired.warning",
-                        defaultValue: "仅有线：不会回退到 Wi-Fi"
+                    id: "sidecar-state-unknown." + device.id,
+                    title: localization.format(
+                        "panel.action.stateUnknown",
+                        defaultValue: "%@ · Connection state unavailable",
+                        device.name
                     ),
-                    showsLeadingDivider: false,
-                    isEnabled: isEnabled
+                    icon: "questionmark.circle",
+                    sectionTitle: sectionTitle,
+                    showsLeadingDivider: showsLeadingDivider,
+                    isEnabled: false
                 )
             ]
         }
     }
 
-    private func connectControls(for device: SidecarDevice, isEnabled: Bool) -> [PluginPanelControl] {
-        [
-            actionControl(
-                id: ControlID.connectPrefix + device.id,
-                title: localization.string("panel.action.connect", defaultValue: "连接"),
-                icon: "rectangle.on.rectangle",
-                sectionTitle: nil,
-                showsLeadingDivider: true,
-                isEnabled: isEnabled
-            ),
-            actionControl(
-                id: ControlID.wiredConnectPrefix + device.id,
-                title: localization.string("panel.action.wiredConnect", defaultValue: "仅通过有线连接"),
-                icon: "cable.connector",
-                sectionTitle: localization.string(
-                    "panel.wired.warning",
-                    defaultValue: "仅有线：不会回退到 Wi-Fi"
-                ),
-                showsLeadingDivider: false,
-                isEnabled: isEnabled
-            )
-        ]
+    private func deviceActionTitle(for device: SidecarDevice, action: SidecarOperationKind) -> String {
+        if let operation = operation(for: device) {
+            return operationSubtitle(operation)
+        }
+
+        let actionTitle: String
+        switch action {
+        case .connect:
+            actionTitle = localization.string("panel.action.connect", defaultValue: "连接")
+        case .disconnect:
+            actionTitle = localization.string("panel.action.disconnect", defaultValue: "断开连接")
+        case .wiredConnect:
+            actionTitle = localization.string("panel.action.wiredConnect", defaultValue: "仅通过有线连接")
+        }
+        return "\(device.name) · \(actionTitle)"
+    }
+
+    private func actionIcon(for device: SidecarDevice, defaultIcon: String) -> String {
+        operation(for: device) == nil ? defaultIcon : deviceStatusIcon(for: device)
     }
 
     private func deviceSubtitle(for device: SidecarDevice) -> String {
@@ -496,20 +496,180 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let action: SidecarOperationKind
         let deviceID: String
         if controlID.hasPrefix(ControlID.connectPrefix) {
-            action = .connect
-            deviceID = String(controlID.dropFirst(ControlID.connectPrefix.count))
+            guard let device = devices.first(where: { $0.id == String(controlID.dropFirst(ControlID.connectPrefix.count)) }) else {
+                return
+            }
+            start(action: connectAction(for: device), for: device)
+            return
         } else if controlID.hasPrefix(ControlID.disconnectPrefix) {
             action = .disconnect
             deviceID = String(controlID.dropFirst(ControlID.disconnectPrefix.count))
-        } else if controlID.hasPrefix(ControlID.wiredConnectPrefix) {
-            action = .wiredConnect
-            deviceID = String(controlID.dropFirst(ControlID.wiredConnectPrefix.count))
         } else {
             return
         }
 
         guard let device = devices.first(where: { $0.id == deviceID }) else { return }
         start(action: action, for: device)
+    }
+
+    private func connectAction(for device: SidecarDevice) -> SidecarOperationKind {
+        preferences.preference(for: device.id)?.transport == .wiredOnly ? .wiredConnect : .connect
+    }
+
+    private func syncShortcuts() {
+        var bindings = Dictionary(
+            uniqueKeysWithValues: preferences.devices.compactMap { preference -> (String, ShortcutBinding)? in
+                guard let shortcut = preference.shortcut else { return nil }
+                return (SidecarShortcutID.device(preference.id), shortcut)
+            }
+        )
+        if let disconnectAllShortcut = preferences.disconnectAllShortcut {
+            bindings[SidecarShortcutID.disconnectAll] = disconnectAllShortcut
+        }
+        shortcutManager.sync(bindings: bindings)
+    }
+
+    private func handleConfiguredShortcut(id: String) {
+        guard !isOperationPending else { return }
+        refreshDevices(notify: false)
+
+        if id == SidecarShortcutID.disconnectAll {
+            disconnectAllConnectedDevices()
+            return
+        }
+        guard id.hasPrefix(SidecarShortcutID.devicePrefix) else { return }
+        let deviceID = String(id.dropFirst(SidecarShortcutID.devicePrefix.count))
+        guard let preference = preferences.preference(for: deviceID) else { return }
+        guard let device = devices.first(where: { $0.id == deviceID }) else {
+            presentShortcutFailure(
+                action: preference.shortcutAction == .disconnect ? .disconnect : .connect,
+                deviceName: preference.name,
+                deviceID: nil,
+                message: localizedErrorMessage(for: .deviceUnavailable)
+            )
+            return
+        }
+
+        switch preference.shortcutAction {
+        case .connect:
+            start(action: connectAction(for: device), for: device)
+        case .disconnect:
+            guard device.connectionState == .connected else {
+                presentShortcutFailure(
+                    action: .disconnect,
+                    deviceName: device.name,
+                    deviceID: device.id,
+                    message: localization.string(
+                        "shortcut.error.notConnected",
+                        defaultValue: "该 Sidecar 显示器当前未连接"
+                    )
+                )
+                return
+            }
+            start(action: .disconnect, for: device)
+        case .toggle:
+            switch device.connectionState {
+            case .connected:
+                start(action: .disconnect, for: device)
+            case .disconnected:
+                start(action: connectAction(for: device), for: device)
+            case .unknown:
+                presentShortcutFailure(
+                    action: .connect,
+                    deviceName: device.name,
+                    deviceID: device.id,
+                    message: localization.string(
+                        "shortcut.error.stateUnknown",
+                        defaultValue: "无法确定此 Sidecar 显示器的连接状态"
+                    )
+                )
+            }
+        }
+    }
+
+    private func presentShortcutFailure(
+        action: SidecarOperationKind,
+        deviceName: String,
+        deviceID: String?,
+        message: String
+    ) {
+        operation = .failed(action, deviceName: deviceName, message: message)
+        operationDeviceID = deviceID
+        scheduleOperationFeedbackDismissal()
+        onStateChange?()
+    }
+
+    private func disconnectAllConnectedDevices() {
+        let connectedDevices = devices.filter { $0.connectionState == .connected }
+        guard !connectedDevices.isEmpty else {
+            presentShortcutFailure(
+                action: .disconnect,
+                deviceName: localization.string("shortcut.disconnectAll.target", defaultValue: "所有已连接的 Sidecar 显示器"),
+                deviceID: nil,
+                message: localization.string("shortcut.error.noConnectedDevices", defaultValue: "没有已连接的 Sidecar 显示器可断开")
+            )
+            return
+        }
+
+        let token = UUID()
+        operationToken = token
+        operation = .pending(
+            .disconnect,
+            deviceName: localization.string("shortcut.disconnectAll.target", defaultValue: "所有已连接的 Sidecar 显示器")
+        )
+        operationDeviceID = nil
+        disconnectAllRemainingCount = connectedDevices.count
+        disconnectAllErrorMessage = nil
+        timeoutTask?.cancel()
+        timeoutTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: self?.operationTimeoutNanoseconds ?? 0)
+            } catch {
+                return
+            }
+            guard self?.operationToken == token else { return }
+            self?.operationToken = nil
+            self?.timeoutTask = nil
+            self?.operation = .timedOut(
+                .disconnect,
+                deviceName: self?.localization.string("shortcut.disconnectAll.target", defaultValue: "所有已连接的 Sidecar 显示器") ?? ""
+            )
+            self?.scheduleOperationFeedbackDismissal()
+            self?.onStateChange?()
+        }
+        onStateChange?()
+
+        for device in connectedDevices {
+            service.disconnect(from: device) { [weak self] result in
+                Task { @MainActor [weak self] in
+                    self?.finishDisconnectAll(result: result, for: token)
+                }
+            }
+        }
+    }
+
+    private func finishDisconnectAll(result: Result<Void, SidecarServiceError>, for token: UUID) {
+        guard operationToken == token else { return }
+        disconnectAllRemainingCount -= 1
+        if case let .failure(error) = result, disconnectAllErrorMessage == nil {
+            disconnectAllErrorMessage = localizedErrorMessage(for: error)
+        }
+        guard disconnectAllRemainingCount == 0 else { return }
+
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        operationToken = nil
+        let target = localization.string("shortcut.disconnectAll.target", defaultValue: "所有已连接的 Sidecar 显示器")
+        if let disconnectAllErrorMessage {
+            operation = .failed(.disconnect, deviceName: target, message: disconnectAllErrorMessage)
+            self.disconnectAllErrorMessage = nil
+        } else {
+            operation = .succeeded(.disconnect, deviceName: target)
+        }
+        refreshDevices(notify: false)
+        scheduleFollowUpRefresh()
+        scheduleOperationFeedbackDismissal()
+        onStateChange?()
     }
 
     private func start(action: SidecarOperationKind, for device: SidecarDevice) {

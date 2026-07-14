@@ -1576,7 +1576,7 @@ private struct ActionRowControl: View {
                 HStack(spacing: 8) {
                     Image(systemName: control.actionIconSystemName ?? "arrow.up.right.square")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(actionIconTint)
                         .frame(width: 14, height: 14)
 
                     Text(control.actionTitle ?? "")
@@ -1601,6 +1601,21 @@ private struct ActionRowControl: View {
             .onHover { isHovered = $0 }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var actionIconTint: Color {
+        switch control.actionIconSystemName {
+        case "checkmark.circle.fill":
+            .green
+        case "arrow.triangle.2.circlepath.circle.fill", "checkmark.circle":
+            .blue
+        case "exclamationmark.circle.fill":
+            .red
+        case "questionmark.circle":
+            .orange
+        default:
+            .secondary
+        }
     }
 }
 
