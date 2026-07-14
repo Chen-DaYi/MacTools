@@ -474,6 +474,44 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.errorMessage, "Unavailable")
     }
 
+    func testClosingThePanelClearsTerminalFeedbackThatWasAlreadyVisible() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected)
+        ])
+        let plugin = makePlugin(service: service)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "sidecar", storage: InMemoryPluginStorage()))
+        plugin.panelSurfaceDidBecomeVisible(.primary)
+        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-1"))
+        service.complete(.failure(.system("Unavailable")))
+
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "Unavailable")
+        plugin.panelSurfaceDidBecomeHidden(.primary)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testExpiredShortcutFailureDoesNotAppearWhenThePanelOpens() {
+        let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
+        let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        store.reconcile(with: service.reachableDevices())
+        store.updateShortcutAction(.disconnect, for: "ipad-1")
+        store.updateShortcut(ShortcutBinding(keyCode: 0, modifiers: [.command]), for: "ipad-1")
+        let shortcuts = FakeSidecarShortcutManager()
+        let plugin = makePlugin(
+            service: service,
+            preferences: store,
+            shortcutManager: shortcuts,
+            terminalFeedbackExpiration: 0
+        )
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "sidecar", storage: InMemoryPluginStorage()))
+        shortcuts.trigger("device.ipad-1")
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "该 Sidecar 显示器当前未连接")
+
+        plugin.panelSurfaceDidBecomeVisible(.primary)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
     func testServiceErrorsAndUnsupportedStateAreShown() {
         let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
         let plugin = makePlugin(service: service)
@@ -490,6 +528,7 @@ final class SidecarPluginTests: XCTestCase {
         preferences: SidecarPreferencesStore? = nil,
         shortcutManager: (any SidecarShortcutManaging)? = nil,
         operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
+        terminalFeedbackExpiration: TimeInterval = 30,
         initialDeviceRefreshDelayNanoseconds: UInt64 = 750_000_000,
         deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000
     ) -> SidecarPlugin {
@@ -498,6 +537,7 @@ final class SidecarPluginTests: XCTestCase {
             preferences: preferences ?? SidecarPreferencesStore(storage: InMemoryPluginStorage()),
             shortcutManager: shortcutManager ?? FakeSidecarShortcutManager(),
             operationFeedbackNanoseconds: operationFeedbackNanoseconds,
+            terminalFeedbackExpiration: terminalFeedbackExpiration,
             initialDeviceRefreshDelayNanoseconds: initialDeviceRefreshDelayNanoseconds,
             deviceRefreshIntervalNanoseconds: deviceRefreshIntervalNanoseconds
         )

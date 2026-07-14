@@ -137,26 +137,22 @@ final class SidecarPreferencesStore: ObservableObject {
     }
 
     func updateShortcut(_ shortcut: ShortcutBinding?, for deviceID: String) {
-        update(deviceID: deviceID) { $0.shortcut = shortcut }
-        normalizeAndPersistShortcuts()
+        guard let index = devices.firstIndex(where: { $0.id == deviceID }) else { return }
+        guard devices[index].shortcut != shortcut else { return }
+        devices[index].shortcut = shortcut
+        normalizeAndPersistShortcuts(persistWhenUnchanged: true)
     }
 
     func updateDisconnectAllShortcut(_ shortcut: ShortcutBinding?) {
         guard disconnectAllShortcut != shortcut else { return }
         disconnectAllShortcut = shortcut
-        if let shortcut, let data = try? encoder.encode(shortcut) {
-            storage.set(data, forKey: StorageKey.disconnectAllShortcut)
-        } else {
-            storage.removeObject(forKey: StorageKey.disconnectAllShortcut)
-        }
-        normalizeAndPersistShortcuts()
+        normalizeAndPersistShortcuts(persistWhenUnchanged: true)
     }
 
     func updateConnectFirstAvailableShortcut(_ shortcut: ShortcutBinding?) {
         guard connectFirstAvailableShortcut != shortcut else { return }
         connectFirstAvailableShortcut = shortcut
-        persistShortcut(shortcut, forKey: StorageKey.connectFirstAvailableShortcut)
-        normalizeAndPersistShortcuts()
+        normalizeAndPersistShortcuts(persistWhenUnchanged: true)
     }
 
     func move(deviceID: String, before beforeDeviceID: String?) {
@@ -223,16 +219,16 @@ final class SidecarPreferencesStore: ObservableObject {
         }
     }
 
-    private func normalizeAndPersistShortcuts() {
+    private func normalizeAndPersistShortcuts(persistWhenUnchanged: Bool = false) {
         let normalized = Self.normalizedShortcuts(
             devices: devices,
             disconnectAllShortcut: disconnectAllShortcut,
             connectFirstAvailableShortcut: connectFirstAvailableShortcut
         )
-        guard normalized.devices != devices
+        let didChange = normalized.devices != devices
             || normalized.disconnectAllShortcut != disconnectAllShortcut
             || normalized.connectFirstAvailableShortcut != connectFirstAvailableShortcut
-        else {
+        guard didChange || persistWhenUnchanged else {
             return
         }
         devices = normalized.devices

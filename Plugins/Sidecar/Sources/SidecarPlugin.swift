@@ -72,6 +72,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     private var operation: SidecarOperationState?
     private var operationDeviceID: String?
     private var operationToken: UUID?
+    private var terminalFeedbackDate: Date?
     private var timeoutTask: Task<Void, Never>?
     private var operationFeedbackTask: Task<Void, Never>?
     private var deviceRefreshTask: Task<Void, Never>?
@@ -83,6 +84,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     private var isPrimaryPanelVisible = false
     private let operationTimeoutNanoseconds: UInt64
     private let operationFeedbackNanoseconds: UInt64
+    private let terminalFeedbackExpiration: TimeInterval
     private let initialDeviceRefreshDelayNanoseconds: UInt64
     private let deviceRefreshIntervalNanoseconds: UInt64
 
@@ -93,6 +95,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         shortcutManager: (any SidecarShortcutManaging)? = nil,
         operationTimeoutNanoseconds: UInt64 = 15_000_000_000,
         operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
+        terminalFeedbackExpiration: TimeInterval = 30,
         initialDeviceRefreshDelayNanoseconds: UInt64 = 750_000_000,
         deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000
     ) {
@@ -104,6 +107,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         self.shortcutManager = shortcutManager ?? SidecarShortcutManager()
         self.operationTimeoutNanoseconds = operationTimeoutNanoseconds
         self.operationFeedbackNanoseconds = operationFeedbackNanoseconds
+        self.terminalFeedbackExpiration = max(0, terminalFeedbackExpiration)
         self.initialDeviceRefreshDelayNanoseconds = initialDeviceRefreshDelayNanoseconds
         self.deviceRefreshIntervalNanoseconds = deviceRefreshIntervalNanoseconds
         metadata = PluginMetadata(
@@ -211,6 +215,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operation = nil
         operationDeviceID = nil
         operationToken = nil
+        terminalFeedbackDate = nil
         switchRequest = nil
     }
 
@@ -238,6 +243,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
         guard surface == .primary else { return }
         isPrimaryPanelVisible = true
+        clearExpiredTerminalFeedbackIfNeeded()
         guard isActive else { return }
         refreshDevices(notify: true)
         scheduleDeviceRefreshIfNeeded()
@@ -247,6 +253,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         guard surface == .primary else { return }
         isPrimaryPanelVisible = false
         cancelDeviceRefresh()
+        clearTerminalFeedback()
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
@@ -342,6 +349,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             operation = nil
             self.operationDeviceID = nil
             operationToken = nil
+            terminalFeedbackDate = nil
             timeoutTask?.cancel()
             timeoutTask = nil
             operationFeedbackTask?.cancel()
@@ -403,6 +411,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         guard isConfirmed else { return }
         self.operation = nil
         self.operationDeviceID = nil
+        terminalFeedbackDate = nil
         switchRequest = nil
         operationFeedbackTask?.cancel()
         operationFeedbackTask = nil
@@ -716,6 +725,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operationFeedbackTask = nil
         operation = .failed(action, deviceName: deviceName, message: message)
         operationDeviceID = deviceID
+        markTerminalFeedback()
         scheduleOperationFeedbackDismissal()
         onStateChange?()
     }
@@ -755,6 +765,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 .disconnect,
                 deviceName: self?.localization.string("shortcut.disconnectAll.target", defaultValue: "所有已连接的 Sidecar 显示器") ?? ""
             )
+            self?.markTerminalFeedback()
             self?.scheduleOperationFeedbackDismissal()
             self?.onStateChange?()
         }
@@ -852,6 +863,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 )
             )
             operationDeviceID = switchRequest.target.id
+            markTerminalFeedback()
             scheduleOperationFeedbackDismissal()
             onStateChange?()
         }
@@ -890,6 +902,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         } else {
             operation = .succeeded(.disconnect, deviceName: target)
         }
+        markTerminalFeedback()
         refreshDevices(notify: false)
         scheduleFollowUpRefresh()
         scheduleOperationFeedbackDismissal()
@@ -916,6 +929,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operationToken = token
         operation = .pending(action, deviceName: device.name)
         operationDeviceID = device.id
+        terminalFeedbackDate = nil
         timeoutTask?.cancel()
         operationFeedbackTask?.cancel()
         operationFeedbackTask = nil
@@ -963,6 +977,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             operation = .failed(action, deviceName: device.name, message: message)
             logger.error("Sidecar operation failed action=\(String(describing: action), privacy: .public) reason=\(message, privacy: .public)")
         }
+        markTerminalFeedback()
         refreshDevices(notify: false)
         scheduleFollowUpRefresh()
         if operation != nil {
@@ -976,6 +991,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operationToken = nil
         timeoutTask = nil
         operation = .timedOut(action, deviceName: device.name)
+        markTerminalFeedback()
         logger.error("Sidecar operation timed out action=\(String(describing: action), privacy: .public) device=\(device.name, privacy: .public)")
         scheduleOperationFeedbackDismissal()
         onStateChange?()
@@ -993,10 +1009,36 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             }
             self?.operation = nil
             self?.operationDeviceID = nil
+            self?.terminalFeedbackDate = nil
             self?.switchRequest = nil
             self?.operationFeedbackTask = nil
             self?.onStateChange?()
         }
+    }
+
+    private func markTerminalFeedback() {
+        terminalFeedbackDate = Date()
+    }
+
+    private func clearExpiredTerminalFeedbackIfNeeded() {
+        guard let terminalFeedbackDate,
+              Date().timeIntervalSince(terminalFeedbackDate) >= terminalFeedbackExpiration
+        else {
+            return
+        }
+        clearTerminalFeedback()
+    }
+
+    private func clearTerminalFeedback() {
+        guard let operation, !operation.isPending else { return }
+        operationFeedbackTask?.cancel()
+        operationFeedbackTask = nil
+        self.operation = nil
+        operationDeviceID = nil
+        operationToken = nil
+        terminalFeedbackDate = nil
+        switchRequest = nil
+        onStateChange?()
     }
 
     private func operationSubtitle(_ operation: SidecarOperationState) -> String {
