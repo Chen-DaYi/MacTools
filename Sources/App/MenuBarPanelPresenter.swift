@@ -220,8 +220,20 @@ final class MenuBarPanelPresenter: NSObject {
                 return
             }
 
-            popover.contentViewController?.view.window?.makeKey()
+            guard let window = popover.contentViewController?.view.window else {
+                return
+            }
+
+            window.makeKey()
+            Self.clearAutomaticInitialFocus(in: window)
         }
+    }
+
+    /// Prevent SwiftUI from leaving the first toolbar button focused when the
+    /// popover becomes key. Keyboard navigation can still focus controls
+    /// normally after the popover opens.
+    static func clearAutomaticInitialFocus(in window: NSWindow) {
+        window.makeFirstResponder(nil)
     }
 
     private func observeAppearancePreference() {

@@ -292,6 +292,44 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertNotNil(host.shortcutItems.first { $0.id == "component.shortcut.second" }?.errorMessage)
     }
 
+    func testOpenSettingsShortcutCanBeConfiguredAndCleared() {
+        let host = makeHost(plugins: [])
+        let binding = ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+
+        XCTAssertNil(host.setOpenSettingsShortcutBindingAndReturnError(binding))
+        XCTAssertEqual(host.openSettingsShortcut.bindingText, ShortcutFormatter.displayString(for: binding))
+        XCTAssertTrue(host.openSettingsShortcut.canClear)
+        XCTAssertNil(host.openSettingsShortcut.errorMessage)
+
+        host.clearOpenSettingsShortcut()
+
+        XCTAssertEqual(host.openSettingsShortcut.bindingText, ShortcutFormatter.displayString(for: nil))
+        XCTAssertFalse(host.openSettingsShortcut.canClear)
+    }
+
+    func testOpenSettingsShortcutRejectsPluginShortcutBinding() {
+        let binding = ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        let plugin = MockComponentPanelPlugin(
+            id: "component",
+            shortcutDefinitions: [
+                PluginShortcutDefinition(
+                    id: "shortcut",
+                    title: "组件快捷键",
+                    description: "触发组件动作。",
+                    actionID: "shortcut-action",
+                    scope: .global,
+                    defaultBinding: binding,
+                    isRequired: false
+                )
+            ]
+        )
+        let host = makeHost(plugins: [plugin])
+
+        XCTAssertNotNil(host.setOpenSettingsShortcutBindingAndReturnError(binding))
+        XCTAssertNotNil(host.openSettingsShortcut.errorMessage)
+        XCTAssertFalse(host.openSettingsShortcut.canClear)
+    }
+
     func testPluginsWithoutConfigurationSurfaceAreHiddenFromConfigurationList() {
         let primaryPanelPlugin = MockPrimaryPanelPlugin(id: "feature")
         let componentPanelPlugin = MockComponentPanelPlugin(id: "component")

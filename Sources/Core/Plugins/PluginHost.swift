@@ -9,6 +9,12 @@ enum FeatureSettingsPane: Hashable {
     case configuration(String)
 }
 
+struct AppShortcutSettingsItem: Equatable {
+    let bindingText: String
+    let canClear: Bool
+    let errorMessage: String?
+}
+
 struct PluginAutomaticUpdateStatus: Equatable {
     enum Phase: Equatable {
         case idle
@@ -103,6 +109,10 @@ struct PluginAutomaticUpdateVersionStore {
 
 @MainActor
 final class PluginHost: ObservableObject {
+    private enum AppShortcut {
+        static let openSettingsID = "app.open-settings"
+    }
+
     private struct PluginDescriptor {
         let metadata: PluginMetadata
         let plugin: any MacToolsPlugin
@@ -147,6 +157,7 @@ final class PluginHost: ObservableObject {
     private var dynamicPluginReleaseChannelsByID: [String: String?] = [:]
     private var dynamicPluginManifestsByID: [String: PluginPackageManifest] = [:]
     private var shortcutErrors: [String: String] = [:]
+    private var openSettingsShortcutError: String?
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
     private var visiblePanelSurfaces: Set<PluginPanelSurface> = []
@@ -171,6 +182,11 @@ final class PluginHost: ObservableObject {
     @Published private(set) var permissionCards: [PluginPermissionCard] = []
     @Published private(set) var settingsCards: [PluginSettingsCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
+    @Published private(set) var openSettingsShortcut = AppShortcutSettingsItem(
+        bindingText: ShortcutFormatter.displayString(for: nil),
+        canClear: false,
+        errorMessage: nil
+    )
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
@@ -334,7 +350,7 @@ final class PluginHost: ObservableObject {
                 defaultPluginIDs: defaultPluginIDs
             ),
             shortcutCustomizations: shortcutStore.customizations(
-                for: shortcutDescriptors.map(\.itemID)
+                for: [AppShortcut.openSettingsID] + shortcutDescriptors.map(\.itemID)
             )
         )
     }
@@ -343,7 +359,7 @@ final class PluginHost: ObservableObject {
         try PreferencesImportPreview.make(
             backup: backup,
             availablePluginIDs: Set(defaultPluginIDs),
-            availableShortcutIDs: Set(shortcutDescriptors().map(\.itemID)),
+            availableShortcutIDs: Set([AppShortcut.openSettingsID] + shortcutDescriptors().map(\.itemID)),
             pluginManagementItems: pluginManagementItems,
             applicationPreferencesAreValid: preferencesBackupStore.validates
         )
@@ -616,6 +632,41 @@ final class PluginHost: ObservableObject {
         }
 
         return applyShortcutCustomization(.custom(binding), for: descriptor)
+    }
+
+    func setOpenSettingsShortcutBindingAndReturnError(_ binding: ShortcutBinding) -> String? {
+        do {
+            try validateOpenSettingsShortcut(binding)
+            shortcutStore.setCustomization(.custom(binding), for: AppShortcut.openSettingsID)
+            openSettingsShortcutError = nil
+            rebuildDerivedState()
+            syncGlobalShortcuts()
+            return nil
+        } catch let error as ShortcutValidationError {
+            openSettingsShortcutError = error.localizedDescription
+            rebuildDerivedState()
+            return error.localizedDescription
+        } catch {
+            openSettingsShortcutError = error.localizedDescription
+            rebuildDerivedState()
+            return error.localizedDescription
+        }
+    }
+
+    func clearOpenSettingsShortcut() {
+        shortcutStore.setCustomization(.cleared, for: AppShortcut.openSettingsID)
+        openSettingsShortcutError = nil
+        rebuildDerivedState()
+        syncGlobalShortcuts()
+    }
+
+    func clearOpenSettingsShortcutError() {
+        guard openSettingsShortcutError != nil else {
+            return
+        }
+
+        openSettingsShortcutError = nil
+        rebuildDerivedState()
     }
 
     func clearShortcut(for shortcutID: String) {
@@ -1471,6 +1522,13 @@ final class PluginHost: ObservableObject {
             )
         }
 
+        let openSettingsBinding = resolvedOpenSettingsShortcutBinding
+        openSettingsShortcut = AppShortcutSettingsItem(
+            bindingText: ShortcutFormatter.displayString(for: openSettingsBinding),
+            canClear: openSettingsBinding != nil,
+            errorMessage: openSettingsShortcutError
+        )
+
         pluginConfigurationItems = buildPluginConfigurationItems(
             settingsCards: settingsCards,
             permissionCards: permissionCards,
@@ -2049,6 +2107,10 @@ final class PluginHost: ObservableObject {
         )
     }
 
+    private var resolvedOpenSettingsShortcutBinding: ShortcutBinding? {
+        shortcutStore.resolvedBinding(for: AppShortcut.openSettingsID, default: nil)
+    }
+
     private func resolvedBinding(forPluginID pluginID: String, shortcutDefinitionID: String) -> ShortcutBinding? {
         guard let descriptor = shortcutDescriptors().first(where: {
             $0.pluginID == pluginID && $0.definition.id == shortcutDefinitionID
@@ -2063,6 +2125,7 @@ final class PluginHost: ObservableObject {
         _ importedCustomizations: [String: ShortcutCustomization]
     ) -> [String: String] {
         let descriptors = shortcutDescriptors()
+        let openSettingsCustomization = importedCustomizations[AppShortcut.openSettingsID] ?? .inheritDefault
         let targetCustomizations = Dictionary(
             descriptors.map { descriptor in
                 (descriptor.itemID, importedCustomizations[descriptor.itemID] ?? .inheritDefault)
@@ -2071,7 +2134,8 @@ final class PluginHost: ObservableObject {
         )
         let errors = validateImportedShortcutCustomizations(
             targetCustomizations,
-            descriptors: descriptors
+            descriptors: descriptors,
+            openSettingsCustomization: openSettingsCustomization
         )
 
         guard errors.isEmpty else {
@@ -2086,6 +2150,8 @@ final class PluginHost: ObservableObject {
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
             shortcutErrors.removeValue(forKey: descriptor.itemID)
         }
+        shortcutStore.setCustomization(openSettingsCustomization, for: AppShortcut.openSettingsID)
+        openSettingsShortcutError = nil
 
         return [:]
     }
@@ -2101,7 +2167,9 @@ final class PluginHost: ObservableObject {
 
         return Dictionary(
             errors.map { shortcutID, message in
-                let title = descriptorsByID[shortcutID].map {
+                let title = shortcutID == AppShortcut.openSettingsID
+                    ? AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
+                    : descriptorsByID[shortcutID].map {
                     "\($0.pluginTitle) · \($0.definition.title)"
                 } ?? shortcutID
                 return (shortcutID, "\(title): \(message)")
@@ -2112,10 +2180,24 @@ final class PluginHost: ObservableObject {
 
     private func validateImportedShortcutCustomizations(
         _ customizations: [String: ShortcutCustomization],
-        descriptors: [ShortcutDescriptor]
+        descriptors: [ShortcutDescriptor],
+        openSettingsCustomization: ShortcutCustomization
     ) -> [String: String] {
         var bindingsByID: [String: ShortcutBinding?] = [:]
         var errors: [String: String] = [:]
+
+        let openSettingsBinding = ShortcutStore.resolve(
+            customization: openSettingsCustomization,
+            defaultBinding: nil
+        )
+
+        if let openSettingsBinding {
+            if openSettingsBinding.modifiers.isEmpty {
+                errors[AppShortcut.openSettingsID] = ShortcutValidationError.missingModifier.localizedDescription
+            } else if ShortcutKeyCode.isModifier(openSettingsBinding.keyCode) {
+                errors[AppShortcut.openSettingsID] = ShortcutValidationError.modifierOnly.localizedDescription
+            }
+        }
 
         for descriptor in descriptors {
             let customization = customizations[descriptor.itemID] ?? .inheritDefault
@@ -2162,6 +2244,23 @@ final class PluginHost: ObservableObject {
                 ).localizedDescription
                 errors[otherDescriptor.itemID] = ShortcutValidationError.duplicate(
                     ownerDescription: "\(descriptor.pluginTitle) · \(descriptor.definition.title)"
+                ).localizedDescription
+            }
+        }
+
+        if let openSettingsBinding {
+            for descriptor in descriptors {
+                guard let binding = bindingsByID[descriptor.itemID] ?? nil,
+                      binding == openSettingsBinding
+                else {
+                    continue
+                }
+
+                errors[AppShortcut.openSettingsID] = ShortcutValidationError.duplicate(
+                    ownerDescription: "\(descriptor.pluginTitle) · \(descriptor.definition.title)"
+                ).localizedDescription
+                errors[descriptor.itemID] = ShortcutValidationError.duplicate(
+                    ownerDescription: AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
                 ).localizedDescription
             }
         }
@@ -2223,6 +2322,30 @@ final class PluginHost: ObservableObject {
                     ownerDescription: "\(conflict.pluginTitle) · \(conflict.definition.title)"
                 )
             }
+
+            if candidate == resolvedOpenSettingsShortcutBinding {
+                throw ShortcutValidationError.duplicate(
+                    ownerDescription: AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
+                )
+            }
+        }
+    }
+
+    private func validateOpenSettingsShortcut(_ binding: ShortcutBinding) throws {
+        guard !binding.modifiers.isEmpty else {
+            throw ShortcutValidationError.missingModifier
+        }
+
+        guard !ShortcutKeyCode.isModifier(binding.keyCode) else {
+            throw ShortcutValidationError.modifierOnly
+        }
+
+        if let conflict = shortcutDescriptors().first(where: {
+            resolvedBinding(for: $0) == binding
+        }) {
+            throw ShortcutValidationError.duplicate(
+                ownerDescription: "\(conflict.pluginTitle) · \(conflict.definition.title)"
+            )
         }
     }
 
@@ -2235,7 +2358,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func syncGlobalShortcuts() {
-        let registrations = shortcutDescriptors().compactMap { descriptor -> GlobalShortcutManager.Registration? in
+        var registrations = shortcutDescriptors().compactMap { descriptor -> GlobalShortcutManager.Registration? in
             guard descriptor.definition.scope == .global else {
                 return nil
             }
@@ -2250,10 +2373,25 @@ final class PluginHost: ObservableObject {
             )
         }
 
+        if let openSettingsBinding = resolvedOpenSettingsShortcutBinding,
+           !shortcutDescriptors().contains(where: { resolvedBinding(for: $0) == openSettingsBinding }) {
+            registrations.append(
+                GlobalShortcutManager.Registration(
+                    shortcutID: AppShortcut.openSettingsID,
+                    binding: openSettingsBinding
+                )
+            )
+        }
+
         globalShortcutManager.updateBindings(registrations)
     }
 
     private func handleShortcutTrigger(shortcutID: String) {
+        if shortcutID == AppShortcut.openSettingsID {
+            settingsPresentationRequestCount += 1
+            return
+        }
+
         guard let descriptor = shortcutDescriptor(for: shortcutID) else {
             return
         }
