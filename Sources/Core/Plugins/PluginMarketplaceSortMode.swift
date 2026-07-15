@@ -36,9 +36,9 @@ enum PluginMarketplaceSortMode: String, CaseIterable, Identifiable {
             return 0
         case .updateAvailable:
             return 1
-        case .restartRequired, .failed, .incompatible, .revoked:
+        case .legacyDisabled, .restartRequired, .failed, .incompatible, .revoked:
             return 2
-        case .enabled, .disabled:
+        case .installed:
             return 3
         }
     }
@@ -50,9 +50,9 @@ enum PluginMarketplaceSortMode: String, CaseIterable, Identifiable {
         switch item.state {
         case .updateAvailable:
             return 0
-        case .restartRequired, .failed, .incompatible, .revoked:
+        case .legacyDisabled, .restartRequired, .failed, .incompatible, .revoked:
             return 1
-        case .enabled, .disabled:
+        case .installed:
             return 2
         case .available, .localDevelopment:
             return 3

@@ -3,8 +3,11 @@ import MacToolsPluginKit
 
 struct PluginPackageRecord: Identifiable, Equatable {
     enum State: Equatable {
-        case enabled
-        case disabled
+        case installed
+        /// A package disabled by an older MacTools version. This exists only
+        /// long enough for the user to activate or uninstall it during the
+        /// one-time migration review.
+        case legacyDisabled
         case incompatible(String)
         case failed(String)
     }
@@ -43,7 +46,9 @@ enum PluginPackageStoreError: LocalizedError {
 @MainActor
 final class PluginPackageStore {
     private enum DefaultsKey {
-        static let disabledPluginIDs = "plugins.dynamic.disabledPluginIDs"
+        // Keep the previous key so upgrades can safely discover packages that
+        // were disabled before the installed/uninstalled-only model.
+        static let legacyDisabledPluginIDs = "plugins.dynamic.disabledPluginIDs"
     }
 
     let rootDirectory: URL
@@ -116,7 +121,7 @@ final class PluginPackageStore {
                             )
                         )
                     } else if fileManager.fileExists(atPath: bundleURL.path) {
-                        state = disabledPluginIDs.contains(manifest.id) ? .disabled : .enabled
+                        state = legacyDisabledPluginIDs.contains(manifest.id) ? .legacyDisabled : .installed
                     } else {
                         state = .failed(AppL10n.pluginsFormat(
                             "plugin.error.store.bundleMissingFormat",
@@ -172,7 +177,7 @@ final class PluginPackageStore {
             .appendingPathComponent("\(manifest.id)-backup-\(UUID().uuidString)", isDirectory: true)
             .appendingPathExtension("mactoolsplugin")
         let hadExistingPackage = fileManager.fileExists(atPath: destinationURL.path)
-        let wasDisabled = disabledPluginIDs.contains(manifest.id)
+        let wasLegacyDisabled = legacyDisabledPluginIDs.contains(manifest.id)
 
         if hadExistingPackage {
             guard replaceExisting else {
@@ -214,8 +219,10 @@ final class PluginPackageStore {
             throw PluginPackageStoreError.installFailed(error.localizedDescription)
         }
 
-        if !hadExistingPackage || !wasDisabled {
-            setEnabled(true, for: manifest.id)
+        // Updating a package awaiting migration review must not turn it back
+        // on. New installs and normal updates remain immediately active.
+        if !wasLegacyDisabled {
+            activateLegacyPlugin(manifest.id)
         }
         clearPendingRestart(pluginID: manifest.id)
 
@@ -233,18 +240,28 @@ final class PluginPackageStore {
         try installPackage(from: sourceURL, replaceExisting: true)
     }
 
-    func setEnabled(_ isEnabled: Bool, for pluginID: String) {
-        var ids = disabledPluginIDs
+    func legacyDisabledPackageIDs() -> Set<String> {
+        legacyDisabledPluginIDs
+    }
 
-        if isEnabled {
-            ids.remove(pluginID)
-            clearPendingRestart(pluginID: pluginID)
-        } else {
-            ids.insert(pluginID)
-            markPendingRestart(pluginID: pluginID)
+    /// Converts previously global-disabled packages into the temporary
+    /// migration state before the dynamic loader has a chance to activate
+    /// their code.
+    func markLegacyDisabledPlugins(_ pluginIDs: Set<String>) {
+        guard !pluginIDs.isEmpty else {
+            return
         }
 
-        disabledPluginIDs = ids
+        var legacyIDs = legacyDisabledPluginIDs
+        legacyIDs.formUnion(pluginIDs)
+        legacyDisabledPluginIDs = legacyIDs
+    }
+
+    func activateLegacyPlugin(_ pluginID: String) {
+        var ids = legacyDisabledPluginIDs
+        ids.remove(pluginID)
+        legacyDisabledPluginIDs = ids
+        clearPendingRestart(pluginID: pluginID)
     }
 
     func markRequiresRestartToFullyUnload(pluginID: String) {
@@ -252,8 +269,8 @@ final class PluginPackageStore {
     }
 
     func uninstall(pluginID: String, removeData: Bool) throws {
-        setEnabled(false, for: pluginID)
         try removePackageFiles(pluginID: pluginID)
+        activateLegacyPlugin(pluginID)
         markPendingRestart(pluginID: pluginID)
 
         if removeData {
@@ -314,12 +331,12 @@ final class PluginPackageStore {
         }
     }
 
-    private var disabledPluginIDs: Set<String> {
+    private var legacyDisabledPluginIDs: Set<String> {
         get {
-            Set(userDefaults.stringArray(forKey: DefaultsKey.disabledPluginIDs) ?? [])
+            Set(userDefaults.stringArray(forKey: DefaultsKey.legacyDisabledPluginIDs) ?? [])
         }
         set {
-            userDefaults.set(Array(newValue).sorted(), forKey: DefaultsKey.disabledPluginIDs)
+            userDefaults.set(Array(newValue).sorted(), forKey: DefaultsKey.legacyDisabledPluginIDs)
         }
     }
 

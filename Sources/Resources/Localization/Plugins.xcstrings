@@ -9,6 +9,86 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛操作" } }
       }
     },
+    "plugin.management.moreActions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "More Actions" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "更多操作" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "更多操作" } }
+      }
+    },
+    "plugin.management.moreActionsForPlugin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "More actions for %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@的更多操作" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@的更多操作" } }
+      }
+    },
+    "plugin.management.uninstall.confirmationMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "It will be removed from %@. Its shortcuts and settings entry will be removed, and its background work will stop. Plugin data will be kept." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "它将从%@移除，快捷键和设置入口也会移除，后台工作将停止。插件数据会保留。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "它將從%@移除，快捷鍵和設定入口也會移除，背景工作將停止。外掛資料會保留。" } }
+      }
+    },
+    "plugin.management.uninstall.confirmationTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Uninstall “%@”?" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "卸载“%@”？" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "解除安裝「%@」？" } }
+      }
+    },
+    "plugin.management.viewMarketplace": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "View in Marketplace" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在市场中查看" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在市集中檢視" } }
+      }
+    },
+    "plugin.detail.requiresReview": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This plugin was previously disabled. Choose Keep and Activate or Uninstall." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此插件此前被停用，请选择保留并激活或卸载。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此插件先前已被停用，請選擇保留並啟用或解除安裝。" } }
+      }
+    },
+    "plugin.migration.legacyDisabled.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "MacTools no longer keeps installed plugins disabled. Keep and activate each plugin, or uninstall it." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "MacTools 不再保留已安装但停用的插件。请选择保留并激活，或直接卸载。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "MacTools 不再保留已安裝但停用的外掛，請選擇保留並啟用或直接解除安裝。" } }
+      }
+    },
+    "plugin.migration.legacyDisabled.keepInstalled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Keep and Activate" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "保留并激活" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "保留並啟用" } }
+      }
+    },
+    "plugin.migration.legacyDisabled.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Review Previously Disabled Plugins" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "处理此前停用的插件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "處理先前停用的外掛" } }
+      }
+    },
+    "plugin.status.requiresReview": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Needs Review" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "需要处理" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "需要處理" } }
+      }
+    },
     "plugin.management.active": {
       "extractionState": "manual",
       "localizations": {

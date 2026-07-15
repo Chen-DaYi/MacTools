@@ -184,6 +184,6 @@ func activate(context: PluginRuntimeContext)
 func deactivate(reason: PluginDeactivationReason)
 ```
 
-`deactivate` is called before disabling, updating, uninstalling, and host shutdown. Plugins should cancel tasks, timers, observers, event taps, windows, and other retained system resources there.
+`deactivate` is called before updating, uninstalling, and host shutdown. It can also be called once when an upgrade holds a previously disabled plugin for migration review. Plugins should cancel tasks, timers, observers, event taps, windows, and other retained system resources there.
 
-Native bundle code is treated as loaded for the lifetime of the current app process. If a loaded plugin is disabled, updated, or uninstalled, its contributions are removed from MacTools immediately and `deactivate` is called, but the executable code is considered fully released only after the app restarts. Updating a loaded plugin replaces the package files on disk and activates the new code on the next launch.
+Native bundle code is treated as loaded for the lifetime of the current app process. If a loaded plugin is updated or uninstalled, its contributions are removed from MacTools immediately and `deactivate` is called, but the executable code is considered fully released only after the app restarts. Updating a loaded plugin replaces the package files on disk and activates the new code on the next launch.

@@ -5,10 +5,17 @@ enum PluginDisplaySurface: CaseIterable, Hashable, Sendable {
     case featurePanel
 }
 
+enum PluginSettingsLandingPage: String, Sendable {
+    case dashboard
+    case featurePanel
+    case marketplace
+}
+
 @MainActor
 final class PluginDisplayPreferencesStore {
     private enum DefaultsKey {
         static let storage = "plugin.display.preferences"
+        static let lastPluginSettingsLandingPage = "plugin.settings.lastLandingPage"
     }
 
     private struct LegacyStoredPreferences: Codable, Equatable {
@@ -16,16 +23,35 @@ final class PluginDisplayPreferencesStore {
         var hiddenPluginIDs: Set<String> = []
     }
 
-    private struct StoredPreferences: Codable, Equatable {
-        static let currentVersion = 2
+    /// Preferences written by the previous layout implementation. Its global
+    /// disabled state is intentionally migrated into a one-time review queue;
+    /// it must never silently reactivate background work after an upgrade.
+    private struct VersionTwoStoredPreferences: Codable, Equatable {
+        static let version = 2
 
-        var version = currentVersion
+        var version: Int = Self.version
         var generalPluginOrder: [String] = []
         var globallyHiddenPluginIDs: Set<String> = []
         var dashboardOrderedPluginIDs: [String] = []
         var featurePanelOrderedPluginIDs: [String] = []
         var isDashboardOrderInitialized = false
         var isFeaturePanelOrderInitialized = false
+    }
+
+    private struct StoredPreferences: Codable, Equatable {
+        static let currentVersion = 3
+
+        var version = currentVersion
+        // Retained only to seed separate surface orders for users upgrading
+        // from the original shared-order model.
+        var generalPluginOrder: [String] = []
+        var dashboardOrderedPluginIDs: [String] = []
+        var featurePanelOrderedPluginIDs: [String] = []
+        var isDashboardOrderInitialized = false
+        var isFeaturePanelOrderInitialized = false
+        // This is a migration safeguard, not a user-facing disabled state.
+        // Entries are resolved once by activating or uninstalling the plugin.
+        var pendingLegacyDisabledPluginIDs: Set<String> = []
     }
 
     private let userDefaults: UserDefaults
@@ -41,7 +67,23 @@ final class PluginDisplayPreferencesStore {
         self.userDefaults = userDefaults
     }
 
-    // MARK: - General/global preferences
+    // MARK: - Plugin settings navigation
+
+    /// This is deliberately kept outside the exportable layout payload. It is
+    /// local navigation state, not part of a user's portable configuration.
+    func lastPluginSettingsLandingPage() -> PluginSettingsLandingPage? {
+        guard let rawValue = userDefaults.string(forKey: DefaultsKey.lastPluginSettingsLandingPage) else {
+            return nil
+        }
+
+        return PluginSettingsLandingPage(rawValue: rawValue)
+    }
+
+    func setLastPluginSettingsLandingPage(_ page: PluginSettingsLandingPage) {
+        userDefaults.set(page.rawValue, forKey: DefaultsKey.lastPluginSettingsLandingPage)
+    }
+
+    // MARK: - Legacy shared-order compatibility
 
     func orderedPluginIDs(defaultPluginIDs: [String]) -> [String] {
         normalizedVisibleOrder(
@@ -61,44 +103,6 @@ final class PluginDisplayPreferencesStore {
             defaultPluginIDs: defaultPluginIDs
         )
         persist(preferences)
-    }
-
-    func isPluginGloballyEnabled(_ pluginID: String) -> Bool {
-        !loadPreferences().globallyHiddenPluginIDs.contains(pluginID)
-    }
-
-    func setPluginGloballyEnabled(_ isEnabled: Bool, pluginID: String) {
-        var preferences = loadPreferences()
-
-        if isEnabled {
-            preferences.globallyHiddenPluginIDs.remove(pluginID)
-        } else {
-            preferences.globallyHiddenPluginIDs.insert(pluginID)
-        }
-
-        persist(preferences)
-    }
-
-    // Compatibility entry points for callers that still use the original
-    // general visibility terminology.
-    func isVisible(_ pluginID: String, defaultPluginIDs: [String]) -> Bool {
-        guard defaultPluginIDs.contains(pluginID) else {
-            return true
-        }
-
-        return isPluginGloballyEnabled(pluginID)
-    }
-
-    func setVisibility(
-        _ isVisible: Bool,
-        for pluginID: String,
-        defaultPluginIDs: [String]
-    ) {
-        guard defaultPluginIDs.contains(pluginID) else {
-            return
-        }
-
-        setPluginGloballyEnabled(isVisible, pluginID: pluginID)
     }
 
     // MARK: - Surface preferences
@@ -156,6 +160,52 @@ final class PluginDisplayPreferencesStore {
         )
     }
 
+    func removePlugin(_ pluginID: String) {
+        var preferences = loadPreferences()
+        preferences.generalPluginOrder.removeAll { $0 == pluginID }
+        preferences.dashboardOrderedPluginIDs.removeAll { $0 == pluginID }
+        preferences.featurePanelOrderedPluginIDs.removeAll { $0 == pluginID }
+        preferences.pendingLegacyDisabledPluginIDs.remove(pluginID)
+        persist(preferences)
+    }
+
+    // MARK: - One-time legacy disabled migration
+
+    /// Returns every unresolved legacy entry. Callers that can identify a
+    /// package before loading it use this to prevent an old global-disable
+    /// preference from briefly reactivating background work during launch.
+    func pendingLegacyDisabledPluginIDs() -> Set<String> {
+        loadPreferences().pendingLegacyDisabledPluginIDs
+    }
+
+    func pendingLegacyDisabledPluginIDs(availablePluginIDs: Set<String>) -> Set<String> {
+        pendingLegacyDisabledPluginIDs().intersection(availablePluginIDs)
+    }
+
+    func addPendingLegacyDisabledPluginIDs(_ pluginIDs: Set<String>) {
+        guard !pluginIDs.isEmpty else {
+            return
+        }
+
+        var preferences = loadPreferences()
+        let originalIDs = preferences.pendingLegacyDisabledPluginIDs
+        preferences.pendingLegacyDisabledPluginIDs.formUnion(pluginIDs)
+        guard preferences.pendingLegacyDisabledPluginIDs != originalIDs else {
+            return
+        }
+
+        persist(preferences)
+    }
+
+    func resolvePendingLegacyDisabledPlugin(_ pluginID: String) {
+        var preferences = loadPreferences()
+        guard preferences.pendingLegacyDisabledPluginIDs.remove(pluginID) != nil else {
+            return
+        }
+
+        persist(preferences)
+    }
+
     func backupSnapshot(
         defaultPluginIDs: [String],
         dashboardDefaultPluginIDs: [String] = [],
@@ -180,9 +230,9 @@ final class PluginDisplayPreferencesStore {
                 preferences.generalPluginOrder,
                 defaultPluginIDs: defaultPluginIDs
             ),
-            hiddenPluginIDs: preferences.globallyHiddenPluginIDs
-                .filter { defaultPluginIDs.contains($0) }
-                .sorted(),
+            // Keep the deprecated key in newly exported backups so older app
+            // versions can decode them. The current model has no hidden state.
+            hiddenPluginIDs: [],
             dashboardOrderedPluginIDs: normalizedVisibleOrder(
                 storedOrder(for: .dashboard, preferences: preferences),
                 defaultPluginIDs: dashboardDefaultPluginIDs
@@ -215,10 +265,24 @@ final class PluginDisplayPreferencesStore {
             return preferences
         }
 
+        if let versionTwoPreferences = try? decoder.decode(VersionTwoStoredPreferences.self, from: data),
+           versionTwoPreferences.version == VersionTwoStoredPreferences.version {
+            let migratedPreferences = StoredPreferences(
+                generalPluginOrder: deduplicated(versionTwoPreferences.generalPluginOrder),
+                dashboardOrderedPluginIDs: deduplicated(versionTwoPreferences.dashboardOrderedPluginIDs),
+                featurePanelOrderedPluginIDs: deduplicated(versionTwoPreferences.featurePanelOrderedPluginIDs),
+                isDashboardOrderInitialized: versionTwoPreferences.isDashboardOrderInitialized,
+                isFeaturePanelOrderInitialized: versionTwoPreferences.isFeaturePanelOrderInitialized,
+                pendingLegacyDisabledPluginIDs: versionTwoPreferences.globallyHiddenPluginIDs
+            )
+            persist(migratedPreferences)
+            return migratedPreferences
+        }
+
         if let legacyPreferences = try? decoder.decode(LegacyStoredPreferences.self, from: data) {
             let migratedPreferences = StoredPreferences(
                 generalPluginOrder: deduplicated(legacyPreferences.orderedPluginIDs),
-                globallyHiddenPluginIDs: legacyPreferences.hiddenPluginIDs
+                pendingLegacyDisabledPluginIDs: legacyPreferences.hiddenPluginIDs
             )
             persist(migratedPreferences)
             return migratedPreferences

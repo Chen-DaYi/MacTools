@@ -180,7 +180,7 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertEqual(stateChangeCount, 2)
     }
 
-    func testFeatureVisibilityAndDisclosureControlActiveMonitoring() async throws {
+    func testDisclosureControlsActiveMonitoring() async throws {
         let snapshot = FanSnapshot(
             fanCount: 1,
             fanSpeeds: [3600],
@@ -199,12 +199,11 @@ final class FanControlPluginTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(40))
         let idleReadCount = reader.readCount
 
-        plugin.featureVisibilityDidChange(true)
         plugin.handleAction(.setDisclosureExpanded(true))
         try await Task.sleep(for: .milliseconds(45))
         let activeReadCount = reader.readCount
 
-        plugin.featureVisibilityDidChange(false)
+        plugin.handleAction(.setDisclosureExpanded(false))
         try await Task.sleep(for: .milliseconds(45))
         let closedReadCount = reader.readCount
 

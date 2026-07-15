@@ -15,6 +15,16 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         let futureOnlyValue: String
     }
 
+    private struct VersionTwoPreferences: Codable {
+        let version: Int
+        let generalPluginOrder: [String]
+        let globallyHiddenPluginIDs: Set<String>
+        let dashboardOrderedPluginIDs: [String]
+        let featurePanelOrderedPluginIDs: [String]
+        let isDashboardOrderInitialized: Bool
+        let isFeaturePanelOrderInitialized: Bool
+    }
+
     private var suiteName: String!
     private var defaults: UserDefaults!
     private var store: PluginDisplayPreferencesStore!
@@ -35,7 +45,7 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         super.tearDown()
     }
 
-    func testVersionOneMigrationPreservesGeneralOrderAndGlobalDisablement() throws {
+    func testVersionOneMigrationPreservesGeneralOrderAndQueuesLegacyDisabledPlugins() throws {
         try storeLegacyPreferences(
             order: ["display", "activity", "calendar"],
             hidden: ["activity"]
@@ -45,8 +55,38 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             store.orderedPluginIDs(defaultPluginIDs: ["calendar", "display", "activity"]),
             ["display", "activity", "calendar"]
         )
-        XCTAssertFalse(store.isPluginGloballyEnabled("activity"))
-        XCTAssertTrue(store.isPluginGloballyEnabled("calendar"))
+        XCTAssertEqual(
+            store.pendingLegacyDisabledPluginIDs(availablePluginIDs: ["activity", "calendar"]),
+            Set(["activity"])
+        )
+    }
+
+    func testVersionTwoMigrationPreservesIndependentOrdersAndQueuesLegacyDisabledPlugins() throws {
+        let data = try JSONEncoder().encode(
+            VersionTwoPreferences(
+                version: 2,
+                generalPluginOrder: ["calendar", "activity"],
+                globallyHiddenPluginIDs: ["activity"],
+                dashboardOrderedPluginIDs: ["activity", "calendar"],
+                featurePanelOrderedPluginIDs: ["calendar", "activity"],
+                isDashboardOrderInitialized: true,
+                isFeaturePanelOrderInitialized: true
+            )
+        )
+        defaults.set(data, forKey: "plugin.display.preferences")
+
+        XCTAssertEqual(
+            store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "activity"]),
+            ["activity", "calendar"]
+        )
+        XCTAssertEqual(
+            store.orderedPluginIDs(for: .featurePanel, defaultPluginIDs: ["calendar", "activity"]),
+            ["calendar", "activity"]
+        )
+        XCTAssertEqual(
+            store.pendingLegacyDisabledPluginIDs(availablePluginIDs: ["activity", "calendar"]),
+            Set(["activity"])
+        )
     }
 
     func testLegacyOrderSeedsEachSurfaceByCapabilityFilteredDefaults() throws {
@@ -163,7 +203,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "status"]),
             ["calendar", "status"]
         )
-        XCTAssertTrue(store.isPluginGloballyEnabled("calendar"))
         XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), invalidData)
     }
 
@@ -220,6 +259,23 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(
             store.orderedPluginIDs(for: .featurePanel, defaultPluginIDs: ["activity"]),
             ["activity"]
+        )
+    }
+
+    func testResolvingLegacyDisabledPluginKeepsIndependentOrders() {
+        store.setOrderedPluginIDs(
+            ["calendar", "activity"],
+            for: .dashboard,
+            defaultPluginIDs: ["calendar", "activity"]
+        )
+        store.addPendingLegacyDisabledPluginIDs(["activity"])
+
+        store.resolvePendingLegacyDisabledPlugin("activity")
+
+        XCTAssertTrue(store.pendingLegacyDisabledPluginIDs(availablePluginIDs: ["activity"]).isEmpty)
+        XCTAssertEqual(
+            store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "activity"]),
+            ["calendar", "activity"]
         )
     }
 

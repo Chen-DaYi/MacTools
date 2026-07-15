@@ -27,7 +27,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
             makeItem(id: "activity-bar", isActive: false)
         ]
         let currentItems = [
-            makeItem(id: "activity-bar", isActive: false, isGloballyEnabled: false)
+            makeItem(id: "activity-bar", isActive: false, canUninstall: true)
         ]
 
         XCTAssertTrue(FeatureManagementTableUpdatePolicy.needsUpdate(
@@ -79,16 +79,16 @@ final class FeatureManagementTableViewTests: XCTestCase {
         ))
     }
 
-    func testUpdatePolicyRefreshesWhenModeOrReorderAvailabilityChanges() {
+    func testUpdatePolicyRefreshesWhenSurfaceOrReorderAvailabilityChanges() {
         let items = [makeItem(id: "activity-bar", isActive: false)]
 
         XCTAssertTrue(FeatureManagementTableUpdatePolicy.needsUpdate(
             previousItems: items,
             currentItems: items,
-            previousMode: .installed,
+            previousMode: .surface(.featurePanel),
             currentMode: .surface(.dashboard),
-            previousIsReorderEnabled: false,
-            currentIsReorderEnabled: false,
+            previousIsReorderEnabled: true,
+            currentIsReorderEnabled: true,
             previousContentWidth: 480,
             currentContentWidth: 480
         ))
@@ -139,44 +139,12 @@ final class FeatureManagementTableViewTests: XCTestCase {
         )
     }
 
-    func testSurfaceLayoutSeparatesGloballyDisabledPlugins() {
-        let items = [
-            makeSurfaceItem(id: "enabled", isGloballyEnabled: true),
-            makeSurfaceItem(id: "disabled", isGloballyEnabled: false),
-            makeSurfaceItem(id: "enabled-second", isGloballyEnabled: true)
-        ]
-
-        XCTAssertEqual(
-            PluginSurfaceLayoutDisplayPolicy.enabledItems(from: items).map(\.id),
-            ["enabled", "enabled-second"]
-        )
-        XCTAssertEqual(
-            PluginSurfaceLayoutDisplayPolicy.disabledItems(from: items).map(\.id),
-            ["disabled"]
-        )
-        XCTAssertEqual(PluginSurfaceLayoutDisplayPolicy.disabledItemCount(in: items), 1)
-    }
-
-    func testControlHelpDescribesGlobalEnablementToggle() {
-        XCTAssertEqual(
-            featureManagementControlHelp(),
-            AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
-        )
-    }
-
-    func testReorderPolicyRejectsInstalledAndFilteredModes() {
+    func testReorderPolicyRejectsDisabledReordering() {
         let items = [
             makeItem(id: "first", isActive: false),
             makeItem(id: "second", isActive: false)
         ]
 
-        XCTAssertNil(FeatureManagementReorderPolicy.targetOffset(
-            for: "first",
-            proposedRow: 1,
-            items: items,
-            mode: .installed,
-            isReorderEnabled: true
-        ))
         XCTAssertNil(FeatureManagementReorderPolicy.targetOffset(
             for: "first",
             proposedRow: 1,
@@ -234,7 +202,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
     private func makeItem(
         id: String,
         isActive: Bool,
-        isGloballyEnabled: Bool = true,
+        canUninstall: Bool = false,
         hasSettings: Bool = false,
         capabilities: PluginHostCapabilities? = nil,
         releaseChannel: String? = nil
@@ -242,7 +210,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
         FeatureManagementTableItem(surfaceItem: makeSurfaceItem(
             id: id,
             isActive: isActive,
-            isGloballyEnabled: isGloballyEnabled,
+            canUninstall: canUninstall,
             capabilities: capabilities,
             releaseChannel: releaseChannel
         ), hasSettings: hasSettings)
@@ -251,7 +219,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
     private func makeSurfaceItem(
         id: String,
         isActive: Bool = false,
-        isGloballyEnabled: Bool,
+        canUninstall: Bool = false,
         capabilities: PluginHostCapabilities? = nil,
         releaseChannel: String? = nil
     ) -> PluginSurfaceLayoutItem {
@@ -262,8 +230,8 @@ final class FeatureManagementTableViewTests: XCTestCase {
             iconName: "chart.bar.xaxis",
             iconTint: Color(nsColor: .systemGreen),
             capabilities: capabilities ?? self.capabilities(dashboard: true, featurePanel: true),
-            isGloballyEnabled: isGloballyEnabled,
             isActive: isActive,
+            canUninstall: canUninstall,
             dashboardSpan: .oneByOne,
             category: nil,
             releaseChannel: releaseChannel
@@ -281,8 +249,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
         )
     }
 
-    func testEveryModeUsesGlobalEnablementAndOnlySurfaceRowsCanReorder() {
-        XCTAssertFalse(FeatureManagementTableMode.installed.supportsReordering)
+    func testEveryLayoutSurfaceCanReorder() {
         XCTAssertTrue(FeatureManagementTableMode.surface(.dashboard).supportsReordering)
         XCTAssertTrue(FeatureManagementTableMode.surface(.featurePanel).supportsReordering)
         XCTAssertFalse(FeatureManagementReorderPolicy.canReorder(

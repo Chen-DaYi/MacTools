@@ -249,11 +249,10 @@ The catalog private key, Developer ID identity, and GitHub token must come from 
 
 ## Runtime Lifecycle
 
-Install, update, enable, disable, and uninstall are immediate at the UI contribution level:
+Install, update, and uninstall are immediate at the UI contribution level:
 
-- Installed and enabled plugins contribute panels, components, settings, permissions, and shortcuts.
-- Disabled plugins are removed from UI and function lists immediately.
-- Uninstalled plugins are removed from UI immediately and package files are deleted.
+- Installed plugins contribute every panel, component, settings, permission, and shortcut surface they support.
+- Uninstalled plugins are removed from UI immediately and package files are deleted. Scoped plugin data is retained so a later reinstall can recover it; a separate destructive data-removal flow may be added in the future.
 - Batch updates resolve the currently updateable catalog entries and rebuild plugin management state once after successful package replacements.
 - Already-loaded native code is not force-unloaded in-process. The executable code is fully released after the app restarts.
 

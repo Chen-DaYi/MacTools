@@ -58,47 +58,12 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertTrue(host.componentItems.first?.isActive == true)
     }
 
-    func testComponentVisibilityUsesSharedDisplayPreferences() {
+    func testInstalledComponentRemainsOnItsSupportedSurface() {
         let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
         let host = makeHost(plugins: [componentPanelPlugin])
 
-        host.setFeatureVisibility(false, for: "component")
-
-        XCTAssertTrue(host.componentItems.isEmpty)
-        XCTAssertEqual(host.featureManagementItems.first?.isVisible, false)
-    }
-
-    func testBuiltInVisibilityLifecycleReceivesHideShowChanges() {
-        let plugin = MockVisibilityLifecyclePlugin(id: "visibility-lifecycle")
-        let host = makeHost(plugins: [plugin])
-
-        host.setFeatureVisibility(false, for: "visibility-lifecycle")
-        host.setFeatureVisibility(true, for: "visibility-lifecycle")
-
-        XCTAssertEqual(plugin.visibilityChanges, [false, true])
-    }
-
-    func testHiddenBuiltInVisibilityLifecycleIsPausedOnLaunch() {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let displayPreferencesStore = PluginDisplayPreferencesStore(userDefaults: defaults)
-        displayPreferencesStore.setVisibility(
-            false,
-            for: "visibility-lifecycle",
-            defaultPluginIDs: ["visibility-lifecycle"]
-        )
-        let plugin = MockVisibilityLifecyclePlugin(id: "visibility-lifecycle")
-
-        let host = PluginHost(
-            plugins: [plugin],
-            shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: displayPreferencesStore,
-            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
-            globalShortcutManager: GlobalShortcutManager()
-        )
-
-        XCTAssertEqual(plugin.visibilityChanges, [false])
-        XCTAssertEqual(host.featureManagementItems.first?.isVisible, false)
+        XCTAssertEqual(host.componentItems.map(\.id), ["component"])
+        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["component"])
     }
 
     func testComponentOrderUsesDashboardDisplayPreferences() {
@@ -137,12 +102,12 @@ final class PluginHostComponentSupportTests: XCTestCase {
         )
     }
 
-    func testDisplayPreferencesHiddenPluginSurvivesTemporaryMissingPlugin() {
+    func testDisplayPreferencesRemovingPluginClearsLegacyMigrationState() {
         let store = makeDisplayPreferencesStore()
-        store.setVisibility(false, for: "dynamic", defaultPluginIDs: ["dynamic"])
+        store.addPendingLegacyDisabledPluginIDs(["dynamic"])
+        store.removePlugin("dynamic")
 
-        XCTAssertTrue(store.isVisible("dynamic", defaultPluginIDs: []))
-        XCTAssertFalse(store.isVisible("dynamic", defaultPluginIDs: ["dynamic"]))
+        XCTAssertTrue(store.pendingLegacyDisabledPluginIDs(availablePluginIDs: ["dynamic"]).isEmpty)
     }
 
     func testComponentOnlyPluginContributesSettingsPermissionsAndShortcuts() {
@@ -390,7 +355,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         )
 
         XCTAssertTrue(host.pluginConfigurationItems.isEmpty)
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
     }
 
     func testConfigurationListUsesSharedPluginOrderAndSelectsFirstItem() {
@@ -424,12 +389,12 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let host = makeHost(plugins: [first, second])
 
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["first", "second"])
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
 
         host.moveFeatureManagementItem(id: "second", toOffset: 0)
 
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["second", "first"])
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
     }
 
     func testFeatureSettingsSelectionIgnoresMissingConfigurationItem() {
@@ -448,7 +413,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         host.selectFeatureSettingsPane(.configuration("missing"))
 
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .installed)
+        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
 
         host.selectFeatureSettingsPane(.configuration("component"))
 
@@ -608,28 +573,6 @@ final class PluginHostComponentSupportTests: XCTestCase {
         ])
     }
 
-    func testComponentSurfaceLifecycleHidesPluginWhenFeatureIsHidden() {
-        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let host = PluginHost(
-            plugins: [componentPanelPlugin],
-            shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
-            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
-            globalShortcutManager: GlobalShortcutManager()
-        )
-
-        host.setPanelSurface(.component, visible: true)
-        host.setFeatureVisibility(false, for: "component")
-
-        XCTAssertEqual(componentPanelPlugin.surfaceEvents, [
-            .visible(.component),
-            .hidden(.component)
-        ])
-        XCTAssertTrue(host.componentItems.isEmpty)
-    }
-
     func testPrimaryPanelPluginAppearsOnlyInPanelItems() {
         let primaryPanelPlugin = MockPrimaryPanelPlugin(id: "feature")
         let host = makeHost(plugins: [primaryPanelPlugin])
@@ -657,13 +600,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["dashboard", "dual"])
         XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["feature", "dual"])
-        XCTAssertEqual(host.installedPluginItems.map(\.id), ["dashboard", "feature", "dual", "settings"])
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["settings"])
         XCTAssertFalse(host.featureManagementItems.contains { $0.id == "settings" })
-        XCTAssertEqual(
-            host.installedPluginItems.first { $0.id == "settings" }?.capabilities.supportedSurfaces,
-            []
-        )
     }
 
     func testSurfaceOrdersAreIndependentInDerivedPanelItems() {
@@ -682,75 +620,33 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["second", "first"])
     }
 
-    func testSurfaceOrderKeepsGloballyDisabledPluginsInLayout() {
+    func testSurfaceOrderReordersEveryInstalledPlugin() {
         let first = MockCombinedPlugin(id: "first", order: 1)
         let second = MockCombinedPlugin(id: "second", order: 2)
         let third = MockCombinedPlugin(id: "third", order: 3)
         let host = makeHost(plugins: [first, second, third])
 
-        host.setPluginGloballyEnabled(false, pluginID: "third")
         host.movePlugin(id: "third", toOffset: 0, on: .dashboard)
 
         XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["third", "first", "second"])
-        XCTAssertEqual(host.componentItems.map(\.id), ["first", "second"])
-        XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["first", "second", "third"])
-        XCTAssertEqual(host.panelItems.map(\.id), ["first", "second"])
-
-        host.setPluginGloballyEnabled(true, pluginID: "third")
-
         XCTAssertEqual(host.componentItems.map(\.id), ["third", "first", "second"])
+        XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["first", "second", "third"])
         XCTAssertEqual(host.panelItems.map(\.id), ["first", "second", "third"])
     }
 
-    func testEnabledSurfaceReorderUsesEnabledPluginOffsets() {
+    func testSurfaceReorderUsesSurfaceLocalOffsets() {
         let first = MockCombinedPlugin(id: "first", order: 1)
         let second = MockCombinedPlugin(id: "second", order: 2)
         let third = MockCombinedPlugin(id: "third", order: 3)
         let fourth = MockCombinedPlugin(id: "fourth", order: 4)
         let host = makeHost(plugins: [first, second, third, fourth])
 
-        host.setPluginGloballyEnabled(false, pluginID: "second")
-        host.moveEnabledPlugin(id: "fourth", toOffset: 1, on: .dashboard)
+        host.movePlugin(id: "fourth", toOffset: 1, on: .dashboard)
 
-        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["first", "second", "fourth", "third"])
-        XCTAssertEqual(host.componentItems.map(\.id), ["first", "fourth", "third"])
-        XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["first", "second", "third", "fourth"])
-        XCTAssertEqual(host.panelItems.map(\.id), ["first", "third", "fourth"])
-
-        host.setPluginGloballyEnabled(true, pluginID: "second")
-
-        XCTAssertEqual(host.componentItems.map(\.id), ["first", "second", "fourth", "third"])
-        XCTAssertEqual(host.panelItems.map(\.id), ["first", "second", "third", "fourth"])
-    }
-
-    func testEnabledSurfaceReorderPreservesDisabledPluginPosition() {
-        let first = MockCombinedPlugin(id: "first", order: 1)
-        let second = MockCombinedPlugin(id: "second", order: 2)
-        let third = MockCombinedPlugin(id: "third", order: 3)
-        let fourth = MockCombinedPlugin(id: "fourth", order: 4)
-        let host = makeHost(plugins: [first, second, third, fourth])
-
-        host.setPluginGloballyEnabled(false, pluginID: "second")
-        host.moveEnabledPlugin(id: "third", toOffset: 0, on: .dashboard)
-        host.setPluginGloballyEnabled(true, pluginID: "second")
-
-        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["third", "second", "first", "fourth"])
-        XCTAssertEqual(host.componentItems.map(\.id), ["third", "second", "first", "fourth"])
+        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["first", "fourth", "second", "third"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["first", "fourth", "second", "third"])
         XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["first", "second", "third", "fourth"])
         XCTAssertEqual(host.panelItems.map(\.id), ["first", "second", "third", "fourth"])
-    }
-
-    func testEnabledSurfaceReorderIgnoresDisabledPluginMoves() {
-        let first = MockCombinedPlugin(id: "first", order: 1)
-        let second = MockCombinedPlugin(id: "second", order: 2)
-        let third = MockCombinedPlugin(id: "third", order: 3)
-        let host = makeHost(plugins: [first, second, third])
-
-        host.setPluginGloballyEnabled(false, pluginID: "second")
-        host.moveEnabledPlugin(id: "second", toOffset: 0, on: .dashboard)
-
-        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["first", "second", "third"])
-        XCTAssertEqual(host.componentItems.map(\.id), ["first", "third"])
     }
 
     func testResettingDashboardOrderPreservesFeaturePanelOrder() {
@@ -778,7 +674,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertTrue(host.featurePanelLayoutItems.isEmpty)
     }
 
-    func testEnabledDualPluginAppearsOnBothSupportedSurfaces() {
+    func testInstalledDualPluginAppearsOnBothSupportedSurfaces() {
         let plugin = MockCombinedPlugin(id: "dual")
         let host = makeHost(plugins: [plugin])
 
@@ -786,34 +682,14 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["dual"])
     }
 
-    func testGlobalDisableRemovesBothSurfacesAndReenableRestoresPlugin() {
-        let plugin = MockCombinedPlugin(id: "dual")
-        let host = makeHost(plugins: [plugin])
-
-        host.setPluginGloballyEnabled(false, pluginID: "dual")
-
-        XCTAssertTrue(host.componentItems.isEmpty)
-        XCTAssertTrue(host.panelItems.isEmpty)
-        XCTAssertFalse(host.installedPluginItems[0].isGloballyEnabled)
-
-        host.setPluginGloballyEnabled(true, pluginID: "dual")
-
-        XCTAssertEqual(host.componentItems.map(\.id), ["dual"])
-        XCTAssertEqual(host.panelItems.map(\.id), ["dual"])
-    }
-
-    func testGlobalDisableRemovesPluginFromHostActiveState() {
+    func testInstalledPluginContributesToHostActiveState() {
         let plugin = MockComponentPanelPlugin(id: "active", isActive: true)
         let host = makeHost(plugins: [plugin])
+
         XCTAssertTrue(host.hasActivePlugin)
-
-        host.setPluginGloballyEnabled(false, pluginID: "active")
-
-        XCTAssertFalse(host.hasActivePlugin)
-        XCTAssertFalse(host.installedPluginItems[0].isActive)
     }
 
-    func testDynamicPluginManagerCanRemoveEnabledPluginFromDerivedState() {
+    func testDynamicPluginManagerCanRemoveInstalledPluginFromDerivedState() {
         let firstPlugin = MockPrimaryPanelPlugin(id: "dynamic")
         let secondPlugin = MockPrimaryPanelPlugin(id: "second")
         let rootDirectory = FileManager.default.temporaryDirectory
@@ -856,6 +732,71 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["second"])
         XCTAssertEqual(host.featureManagementItems.map(\.id), ["second"])
         try? FileManager.default.removeItem(at: rootDirectory)
+    }
+
+    func testUninstallingDynamicPluginRemovesLayoutAndShortcutReferences() throws {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        let packageStore = PluginPackageStore(
+            rootDirectory: rootDirectory,
+            userDefaults: defaults,
+            hostVersion: "1.0.0"
+        )
+        _ = installTestPluginPackage(
+            id: "dynamic",
+            bundleName: "Dynamic.bundle",
+            capabilities: .init(primaryPanel: true),
+            store: packageStore
+        )
+        let shortcutDefinition = PluginShortcutDefinition(
+            id: "open",
+            title: "Open",
+            description: "Open the dynamic plugin.",
+            actionID: "open",
+            scope: .global,
+            defaultBinding: nil,
+            isRequired: false
+        )
+        let plugin = MockPrimaryPanelPlugin(
+            id: "dynamic",
+            shortcutDefinitions: [shortcutDefinition]
+        )
+        let manager = DynamicPluginManager(
+            packageStore: packageStore,
+            pluginLoader: StubDynamicPluginLoader { records in
+                records.map { record in
+                    DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
+                }
+            }
+        )
+        let shortcutStore = ShortcutStore(userDefaults: defaults)
+        let host = PluginHost(
+            plugins: [],
+            dynamicPluginManager: manager,
+            shortcutStore: shortcutStore,
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        let shortcutID = "dynamic.shortcut.open"
+        host.setShortcutBinding(
+            ShortcutBinding(keyCode: 12, modifiers: [.command]),
+            for: shortcutID
+        )
+
+        XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["dynamic"])
+        XCTAssertNotNil(shortcutStore.customizations(for: [shortcutID])[shortcutID])
+
+        try host.uninstallDynamicPlugin(pluginID: "dynamic")
+
+        XCTAssertTrue(host.featurePanelLayoutItems.isEmpty)
+        XCTAssertTrue(host.panelItems.isEmpty)
+        XCTAssertTrue(host.shortcutItems.isEmpty)
+        XCTAssertTrue(shortcutStore.customizations(for: [shortcutID]).isEmpty)
+        XCTAssertTrue(packageStore.installedRecords().isEmpty)
     }
 
     func testReinstalledDynamicPluginRestoresDashboardPositionAndVisibility() {
@@ -943,7 +884,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         try? FileManager.default.removeItem(at: rootDirectory)
     }
 
-    func testDynamicSettingsOnlyPluginAppearsOnlyInInstalledAndConfigurationLists() {
+    func testDynamicSettingsOnlyPluginAppearsOnlyInConfigurationList() {
         let plugin = MockSettingsOnlyPlugin(id: "settings-only", order: 1)
         let rootDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
@@ -967,7 +908,6 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
         let host = makeHost(plugins: [], dynamicPluginManager: manager)
 
-        XCTAssertEqual(host.installedPluginItems.map(\.id), ["settings-only"])
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["settings-only"])
         XCTAssertTrue(host.dashboardLayoutItems.isEmpty)
         XCTAssertTrue(host.featurePanelLayoutItems.isEmpty)
@@ -1039,6 +979,75 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["second", "first"])
     }
 
+    func testLegacyGlobalDisabledPreferenceDoesNotLoadDynamicPluginBeforeMigrationReview() throws {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        let store = PluginPackageStore(
+            rootDirectory: rootDirectory,
+            userDefaults: defaults,
+            hostVersion: "1.0.0"
+        )
+        _ = installTestPluginPackage(
+            id: "dynamic",
+            bundleName: "Dynamic.bundle",
+            capabilities: .init(primaryPanel: true),
+            store: store
+        )
+        let plugin = MockPrimaryPanelPlugin(id: "dynamic")
+        let loader = StubDynamicPluginLoader { records in
+            records.map { record in
+                DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
+            }
+        }
+        let legacyData = try JSONEncoder().encode(
+            LegacyDisplayPreferencesFixture(
+                orderedPluginIDs: ["dynamic"],
+                hiddenPluginIDs: ["dynamic"]
+            )
+        )
+        defaults.set(legacyData, forKey: "plugin.display.preferences")
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
+        let host = PluginHost(
+            plugins: [],
+            dynamicPluginManager: manager,
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+
+        XCTAssertTrue(host.panelItems.isEmpty)
+        XCTAssertEqual(manager.pluginManagementItems.first?.state, .legacyDisabled)
+        XCTAssertEqual(host.pendingLegacyDisabledPluginIDs, Set(["dynamic"]))
+
+        try host.resolveLegacyDisabledPlugin("dynamic", keepInstalled: true)
+
+        XCTAssertEqual(host.panelItems.map(\.id), ["dynamic"])
+        XCTAssertTrue(host.pendingLegacyDisabledPluginIDs.isEmpty)
+
+        let importedLegacyBackup = PreferencesBackup(
+            application: PreferencesBackup.ApplicationPreferences(
+                appearancePreference: AppAppearancePreference.system.rawValue,
+                languagePreference: AppLanguagePreference.system.rawValue,
+                menuBarClickBehavior: MenuBarClickBehaviorPreference.standard.rawValue
+            ),
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: ["dynamic"],
+                hiddenPluginIDs: ["dynamic"]
+            ),
+            shortcutCustomizations: [:]
+        )
+
+        _ = try host.importPreferences(importedLegacyBackup)
+
+        XCTAssertTrue(host.panelItems.isEmpty)
+        XCTAssertEqual(manager.pluginManagementItems.first?.state, .legacyDisabled)
+        XCTAssertEqual(host.pendingLegacyDisabledPluginIDs, Set(["dynamic"]))
+    }
+
     func testDynamicPanelCapabilityMismatchExposesOnlyManifestAndRuntimeIntersection() {
         let plugin = MockCombinedPlugin(id: "dynamic")
         let rootDirectory = FileManager.default.temporaryDirectory
@@ -1067,47 +1076,13 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.componentItems.map(\.id), ["dynamic"])
         XCTAssertTrue(host.panelItems.isEmpty)
         XCTAssertEqual(
-            host.installedPluginItems.first?.capabilities,
+            host.dashboardLayoutItems.first?.capabilities,
             PluginHostCapabilities(
                 supportsDashboard: true,
                 supportsFeaturePanel: false,
                 hasCustomConfiguration: false
             )
         )
-        try? FileManager.default.removeItem(at: rootDirectory)
-    }
-
-    func testGlobalDisablePausesDynamicPluginOnlyOnce() {
-        let plugin = MockCombinedPlugin(id: "dynamic")
-        let rootDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
-        let store = PluginPackageStore(
-            rootDirectory: rootDirectory,
-            userDefaults: UserDefaults(suiteName: suiteName)!,
-            hostVersion: "1.0.0"
-        )
-        _ = installTestPluginPackage(
-            id: "dynamic",
-            bundleName: "Dynamic.bundle",
-            capabilities: .init(primaryPanel: true, componentPanel: true),
-            store: store
-        )
-        let loader = StubDynamicPluginLoader { records in
-            records.map { record in
-                DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
-            }
-        }
-        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
-        let host = makeHost(plugins: [], dynamicPluginManager: manager)
-
-        host.setPluginGloballyEnabled(false, pluginID: "dynamic")
-        host.setPluginGloballyEnabled(false, pluginID: "dynamic")
-        XCTAssertEqual(plugin.deactivateCallCount, 1)
-
-        host.setPluginGloballyEnabled(true, pluginID: "dynamic")
-        host.setPluginGloballyEnabled(true, pluginID: "dynamic")
-        XCTAssertEqual(plugin.activateCallCount, 1)
-
         try? FileManager.default.removeItem(at: rootDirectory)
     }
 
@@ -1198,55 +1173,12 @@ private final class MockDisplayConfigurationObserver: DisplayConfigurationObserv
 }
 
 @MainActor
-private final class MockVisibilityLifecyclePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureVisibilityLifecycleHandling {
-    let metadata: PluginMetadata
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .switch,
-        menuActionBehavior: .keepPresented
-    )
-    var onStateChange: (() -> Void)?
-    var requestPermissionGuidance: ((String) -> Void)?
-    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    private(set) var visibilityChanges: [Bool] = []
-
-    init(id: String) {
-        self.metadata = PluginMetadata(
-            id: id,
-            title: id,
-            iconName: "sparkles",
-            iconTint: Color(nsColor: .systemPurple),
-            order: 1,
-            defaultDescription: "Visibility lifecycle \(id)"
-        )
-    }
-
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
-            subtitle: "Visible",
-            isOn: false,
-            isExpanded: false,
-            isEnabled: true,
-            isVisible: true,
-            detail: nil,
-            errorMessage: nil
-        )
-    }
-
-    func handleAction(_ action: PluginPanelAction) {}
-
-    func featureVisibilityDidChange(_ isVisible: Bool) {
-        visibilityChanges.append(isVisible)
-    }
-}
-
-@MainActor
 private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel,
     PluginPanelSurfaceLifecycleHandling, PluginRuntimeLocalizationRefreshing, PluginShortcutBindingChangeHandling {
     struct ShortcutBindingChange: Equatable {
         let id: String
         let binding: ShortcutBinding?
     }
-
     enum SurfaceEvent: Equatable {
         case visible(PluginPanelSurface)
         case hidden(PluginPanelSurface)
@@ -1402,8 +1334,13 @@ private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var refreshCallCount = 0
+    private let definedShortcuts: [PluginShortcutDefinition]
 
-    init(id: String, order: Int = 1) {
+    init(
+        id: String,
+        order: Int = 1,
+        shortcutDefinitions: [PluginShortcutDefinition] = []
+    ) {
         self.metadata = PluginMetadata(
             id: id,
             title: id,
@@ -1416,6 +1353,7 @@ private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
             controlStyle: .switch,
             menuActionBehavior: .keepPresented
         )
+        self.definedShortcuts = shortcutDefinitions
     }
 
     var primaryPanelState: PluginPanelState {
@@ -1432,7 +1370,7 @@ private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
-    var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+    var shortcutDefinitions: [PluginShortcutDefinition] { definedShortcuts }
 
     func refresh() {
         refreshCallCount += 1

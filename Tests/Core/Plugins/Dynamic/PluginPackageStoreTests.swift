@@ -25,7 +25,7 @@ final class PluginPackageStoreTests: XCTestCase {
         temporaryRoot = nil
     }
 
-    func testInstallCopiesPackageIntoInstalledDirectoryAndEnablesPlugin() throws {
+    func testInstallCopiesPackageIntoInstalledDirectory() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
 
@@ -34,33 +34,32 @@ final class PluginPackageStoreTests: XCTestCase {
         XCTAssertEqual(record.id, "com.example.demo")
         XCTAssertTrue(FileManager.default.fileExists(atPath: record.packageURL.path))
         XCTAssertEqual(store.installedRecords().map(\.id), ["com.example.demo"])
-        XCTAssertEqual(store.installedRecords().first?.state, .enabled)
+        XCTAssertEqual(store.installedRecords().first?.state, .installed)
     }
 
-    func testDisableRemovesPluginFromEnabledRecordsButKeepsFiles() throws {
+    func testLegacyDisabledPackageIsRetainedForMigrationReview() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
         _ = try store.installPackage(from: sourceURL)
 
-        store.setEnabled(false, for: "com.example.demo")
+        markLegacyDisabled("com.example.demo")
 
         let record = try XCTUnwrap(store.installedRecords().first)
-        XCTAssertEqual(record.state, .disabled)
+        XCTAssertEqual(record.state, .legacyDisabled)
         XCTAssertTrue(FileManager.default.fileExists(atPath: record.packageURL.path))
-        XCTAssertTrue(record.requiresRestartToFullyUnload)
     }
 
-    func testReenableClearsPendingRestartWarning() throws {
+    func testActivatingLegacyDisabledPackageRestoresInstalledState() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
         _ = try store.installPackage(from: sourceURL)
 
-        store.setEnabled(false, for: "com.example.demo")
-        store.setEnabled(true, for: "com.example.demo")
+        markLegacyDisabled("com.example.demo")
+        _ = store.installedRecords()
+        store.activateLegacyPlugin("com.example.demo")
 
         let record = try XCTUnwrap(store.installedRecords().first)
-        XCTAssertEqual(record.state, .enabled)
-        XCTAssertFalse(record.requiresRestartToFullyUnload)
+        XCTAssertEqual(record.state, .installed)
     }
 
     func testInstallRejectsPreviousPluginKitPackage() throws {
@@ -129,21 +128,21 @@ final class PluginPackageStoreTests: XCTestCase {
 
         let record = try XCTUnwrap(store.installedRecords().first)
         XCTAssertEqual(record.manifest.version, "1.0.0")
-        XCTAssertEqual(record.state, .enabled)
+        XCTAssertEqual(record.state, .installed)
     }
 
-    func testUpdateKeepsDisabledPluginDisabled() throws {
+    func testUpdateKeepsLegacyDisabledPluginHeldForMigrationReview() throws {
         let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
         let updateURL = try makePackage(id: "com.example.demo", version: "2.0.0")
         let store = makeStore()
         _ = try store.installPackage(from: sourceURL)
-        store.setEnabled(false, for: "com.example.demo")
+        markLegacyDisabled("com.example.demo")
 
         _ = try store.updatePackage(from: updateURL)
 
         let record = try XCTUnwrap(store.installedRecords().first)
         XCTAssertEqual(record.manifest.version, "2.0.0")
-        XCTAssertEqual(record.state, .disabled)
+        XCTAssertEqual(record.state, .legacyDisabled)
     }
 
     func testDefaultRootDirectoryUsesCurrentApplicationSupportScope() {
@@ -162,6 +161,10 @@ final class PluginPackageStoreTests: XCTestCase {
             userDefaults: defaults,
             hostVersion: "1.0.0"
         )
+    }
+
+    private func markLegacyDisabled(_ pluginID: String) {
+        defaults.set([pluginID], forKey: "plugins.dynamic.disabledPluginIDs")
     }
 
     private func makePackage(

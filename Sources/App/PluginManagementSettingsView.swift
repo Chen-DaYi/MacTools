@@ -6,6 +6,7 @@ struct PluginManagementSettingsView: View {
     var appRelauncher: any AppRelaunching = AppRelauncher()
 
     @State private var alertMessage: String?
+    @State private var pendingUninstallItem: PluginManagementItem?
     @State private var activeOperationID: String?
     @State private var searchText: String = ""
     @State private var selectedFilter: PluginCategoryFilter = .all
@@ -39,32 +40,42 @@ struct PluginManagementSettingsView: View {
                     marketplaceSortPicker
                 }
 
-                if filteredItems.isEmpty {
-                    ContentUnavailableView(
-                        AppL10n.plugins("plugin.filter.empty.title", defaultValue: "未找到匹配的插件"),
-                        systemImage: "magnifyingglass",
-                        description: Text(AppL10n.plugins("plugin.filter.empty.description", defaultValue: "尝试调整关键字或切换分类。"))
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 10) {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        if !legacyMigrationItems.isEmpty {
+                            LegacyDisabledPluginMigrationSection(
+                                items: legacyMigrationItems,
+                                onKeepInstalled: { resolveLegacyPlugin($0, keepInstalled: true) },
+                                onUninstall: { requestUninstall($0) }
+                            )
+                        }
+
+                        if filteredItems.isEmpty && legacyMigrationItems.isEmpty {
+                            ContentUnavailableView(
+                                AppL10n.plugins("plugin.filter.empty.title", defaultValue: "未找到匹配的插件"),
+                                systemImage: "magnifyingglass",
+                                description: Text(AppL10n.plugins("plugin.filter.empty.description", defaultValue: "尝试调整关键字或切换分类。"))
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 180)
+                        } else {
                             ForEach(filteredItems) { item in
                                 PluginManagementRow(
                                     item: item,
+                                    hasSettings: configurationPluginIDs.contains(item.id),
                                     isBusy: activeOperationID == item.id
                                         || pluginHost.automaticPluginUpdateStatus.isUpdatingPlugin(id: item.id),
                                     isInteractionDisabled: activeOperationID != nil
                                         || pluginHost.automaticPluginUpdateStatus.isActive,
                                     onInstall: { runOperation(id: item.id) { try await pluginHost.installPluginFromCatalog(pluginID: item.id) } },
                                     onUpdate: { runOperation(id: item.id) { try await pluginHost.updatePluginFromCatalog(pluginID: item.id) } },
-                                    onUninstall: { uninstall(item) },
+                                    onUninstall: { requestUninstall(item) },
+                                    onOpenSettings: { pluginHost.presentPluginConfiguration(pluginID: item.id) },
                                     onRelaunch: { appRelauncher.relaunch() }
                                 )
                             }
                         }
-                        .padding(.vertical, 2)
                     }
+                    .padding(.vertical, 2)
                 }
             }
         }
@@ -93,6 +104,24 @@ struct PluginManagementSettingsView: View {
         } message: {
             Text(alertMessage ?? "")
         }
+        .alert(item: $pendingUninstallItem) { item in
+            Alert(
+                title: Text(AppL10n.pluginsFormat(
+                    "plugin.management.uninstall.confirmationTitle",
+                    defaultValue: "卸载“%@”？",
+                    item.title
+                )),
+                message: Text(AppL10n.pluginsFormat(
+                    "plugin.management.uninstall.confirmationMessage",
+                    defaultValue: "它将从%@移除，快捷键和设置入口也会移除，后台工作将停止。插件数据会保留。",
+                    item.surfaceCapabilitySummary
+                )),
+                primaryButton: .destructive(Text(AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"))) {
+                    uninstall(item)
+                },
+                secondaryButton: .cancel()
+            )
+        }
         .onAppear {
             syncAutomaticBulkUpdateProgress(pluginHost.automaticPluginUpdateStatus)
         }
@@ -103,7 +132,8 @@ struct PluginManagementSettingsView: View {
 
     private var filteredItems: [PluginManagementItem] {
         let filtered = pluginHost.pluginManagementItems.filter {
-            PluginListFilter.matches(managementItem: $0, query: searchText, filter: selectedFilter)
+            !pluginHost.pendingLegacyDisabledPluginIDs.contains($0.id)
+                && PluginListFilter.matches(managementItem: $0, query: searchText, filter: selectedFilter)
         }
         return PluginMarketplaceSortMode.sorted(filtered, by: sortMode)
     }
@@ -113,6 +143,16 @@ struct PluginManagementSettingsView: View {
             managementItems: pluginHost.pluginManagementItems,
             query: searchText
         )
+    }
+
+    private var legacyMigrationItems: [PluginManagementItem] {
+        pluginHost.pluginManagementItems.filter {
+            pluginHost.pendingLegacyDisabledPluginIDs.contains($0.id)
+        }
+    }
+
+    private var configurationPluginIDs: Set<String> {
+        Set(pluginHost.pluginConfigurationItems.map(\.pluginID))
     }
 
     private var marketplaceSortPicker: some View {
@@ -381,6 +421,26 @@ struct PluginManagementSettingsView: View {
         }
     }
 
+    private func requestUninstall(_ item: PluginManagementItem) {
+        guard item.canUninstall, activeOperationID == nil else {
+            return
+        }
+
+        pendingUninstallItem = item
+    }
+
+    private func resolveLegacyPlugin(_ item: PluginManagementItem, keepInstalled: Bool) {
+        guard activeOperationID == nil else {
+            return
+        }
+
+        do {
+            try pluginHost.resolveLegacyDisabledPlugin(item.id, keepInstalled: keepInstalled)
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
     private var availablePluginUpdateCount: Int {
         pluginHost.pluginManagementItems.filter(\.canUpdate).count
     }
@@ -388,24 +448,18 @@ struct PluginManagementSettingsView: View {
 
 private struct PluginManagementRow: View {
     let item: PluginManagementItem
+    let hasSettings: Bool
     let isBusy: Bool
     let isInteractionDisabled: Bool
     let onInstall: () -> Void
     let onUpdate: () -> Void
     let onUninstall: () -> Void
+    let onOpenSettings: () -> Void
     let onRelaunch: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(statusColor.opacity(0.14))
-
-                Image(systemName: statusImageName)
-                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
-                    .foregroundStyle(statusColor)
-            }
-            .frame(width: PluginSettingsTheme.Size.metricIcon, height: PluginSettingsTheme.Size.metricIcon)
+            pluginIcon
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -437,9 +491,37 @@ private struct PluginManagementRow: View {
         .pluginSettingsCardBackground(.host)
     }
 
+    @ViewBuilder
+    private var pluginIcon: some View {
+        let icon = ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(statusColor.opacity(0.14))
+
+            Image(systemName: statusImageName)
+                .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                .foregroundStyle(statusColor)
+        }
+        .frame(width: PluginSettingsTheme.Size.metricIcon, height: PluginSettingsTheme.Size.metricIcon)
+
+        if hasSettings {
+            Button(action: onOpenSettings) {
+                icon
+            }
+            .buttonStyle(.plain)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .help(AppL10n.pluginsFormat(
+                "plugin.management.openSettingsForPlugin",
+                defaultValue: "打开%@设置",
+                item.title
+            ))
+        } else {
+            icon
+        }
+    }
+
     private var detail: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(item.detailText)
+            Text(item.managementDetailText)
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -494,9 +576,9 @@ private struct PluginManagementRow: View {
 
     private var visibleStatusText: String? {
         switch item.state {
-        case .available, .enabled, .disabled:
+        case .available, .installed:
             return nil
-        case .localDevelopment, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
+        case .legacyDisabled, .localDevelopment, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
             return item.statusText
         }
     }
@@ -509,10 +591,10 @@ private struct PluginManagementRow: View {
         switch item.state {
         case .available, .localDevelopment:
             return .blue
-        case .enabled:
+        case .installed:
             return .green
-        case .disabled:
-            return .secondary
+        case .legacyDisabled:
+            return .orange
         case .updateAvailable, .restartRequired:
             return .accentColor
         case .failed, .incompatible, .revoked:
@@ -526,10 +608,10 @@ private struct PluginManagementRow: View {
             return "arrow.down.circle.fill"
         case .localDevelopment:
             return "hammer.circle.fill"
-        case .enabled:
+        case .installed:
             return "checkmark.seal.fill"
-        case .disabled:
-            return "pause.circle"
+        case .legacyDisabled:
+            return "exclamationmark.triangle.fill"
         case .updateAvailable:
             return "arrow.triangle.2.circlepath.circle.fill"
         case .restartRequired:
@@ -540,6 +622,66 @@ private struct PluginManagementRow: View {
     }
 }
 
+private struct LegacyDisabledPluginMigrationSection: View {
+    let items: [PluginManagementItem]
+    let onKeepInstalled: (PluginManagementItem) -> Void
+    let onUninstall: (PluginManagementItem) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            Label(
+                AppL10n.plugins(
+                    "plugin.migration.legacyDisabled.title",
+                    defaultValue: "处理此前停用的插件"
+                ),
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(PluginSettingsTheme.Typography.sectionTitle)
+            .foregroundStyle(.orange)
+
+            Text(AppL10n.plugins(
+                "plugin.migration.legacyDisabled.description",
+                defaultValue: "MacTools 不再保留已安装但停用的插件。请选择保留并激活，或直接卸载。"
+            ))
+            .font(PluginSettingsTheme.Typography.rowDescription)
+            .foregroundStyle(.secondary)
+
+            ForEach(items) { item in
+                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                        Text(item.surfaceCapabilitySummary)
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button(AppL10n.plugins(
+                        "plugin.migration.legacyDisabled.keepInstalled",
+                        defaultValue: "保留并激活"
+                    )) {
+                        onKeepInstalled(item)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button(role: .destructive) {
+                        onUninstall(item)
+                    } label: {
+                        Text(AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .pluginSettingsCardBackground(.host)
+    }
+}
+
 private extension PluginManagementItem {
     var requiresRelaunchAction: Bool {
         if case .restartRequired = state {
@@ -547,6 +689,31 @@ private extension PluginManagementItem {
         }
 
         return false
+    }
+}
+
+private extension PluginManagementItem {
+    var surfaceCapabilitySummary: String {
+        guard let capabilities else {
+            return AppL10n.plugins("plugin.capability.unknown", defaultValue: "插件功能")
+        }
+
+        switch (capabilities.componentPanel, capabilities.primaryPanel) {
+        case (true, true):
+            return AppL10n.plugins("plugin.capability.both", defaultValue: "仪表盘与功能面板")
+        case (true, false):
+            return AppL10n.plugins("plugin.capability.dashboard", defaultValue: "仪表盘")
+        case (false, true):
+            return AppL10n.plugins("plugin.capability.featurePanel", defaultValue: "功能面板")
+        case (false, false):
+            return AppL10n.plugins("plugin.capability.settingsOnly", defaultValue: "仅设置")
+        }
+    }
+
+    var managementDetailText: String {
+        [detailText, surfaceCapabilitySummary]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
     }
 }
 

@@ -32,7 +32,7 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureVisibilityLifecycleHandling {
+final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: Metadata
 
@@ -59,7 +59,6 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureV
     private let monitoringIdleInterval: Duration
 
     private var isExpanded = false
-    private var isFeaturePanelVisible = false
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
     private var requiresAutoRestore = false
@@ -192,15 +191,6 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureV
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
 
-    func featureVisibilityDidChange(_ isVisible: Bool) {
-        guard isFeaturePanelVisible != isVisible else {
-            return
-        }
-
-        isFeaturePanelVisible = isVisible
-        restartMonitoringIfRunning()
-    }
-
     // MARK: - Actions
 
     private func handleInvokeAction(_ controlID: String) {
@@ -264,7 +254,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureV
     }
 
     private var currentMonitoringInterval: Duration {
-        if isFeaturePanelVisible && isExpanded {
+        if isExpanded {
             return monitoringActiveInterval
         }
         return monitoringIdleInterval

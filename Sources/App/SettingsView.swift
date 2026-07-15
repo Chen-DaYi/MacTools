@@ -26,7 +26,7 @@ struct SettingsView: View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
 
-        return TabView(selection: $pluginHost.selectedSettingsDestination) {
+        return TabView(selection: settingsDestinationBinding) {
             GeneralSettingsView(
                 pluginHost: pluginHost,
                 menuBarIconSettings: menuBarIconSettings,
@@ -64,6 +64,22 @@ struct SettingsView: View {
         PluginRuntimeLocalization.locale.language.characterDirection == .rightToLeft
             ? .rightToLeft
             : .leftToRight
+    }
+
+    private var settingsDestinationBinding: Binding<SettingsDestination> {
+        Binding(
+            get: { pluginHost.selectedSettingsDestination },
+            set: { destination in
+                // A direct route has already selected the Plugins tab and a
+                // specific pane. Only a normal tab selection chooses the
+                // capability-aware landing page.
+                if destination == .pluginConfiguration,
+                   pluginHost.selectedSettingsDestination != .pluginConfiguration {
+                    pluginHost.selectPluginSettingsLandingPage()
+                }
+                pluginHost.selectedSettingsDestination = destination
+            }
+        )
     }
 }
 
@@ -875,8 +891,8 @@ private struct FeatureSettingsSidebar: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
                 FeatureSettingsSidebarSectionTitle(AppL10n.settings(
-                    "plugins.sidebar.layoutSection",
-                    defaultValue: "菜单栏布局"
+                    "plugins.sidebar.pluginsSection",
+                    defaultValue: "插件"
                 ))
                     .padding(.top, 14)
 
@@ -896,21 +912,6 @@ private struct FeatureSettingsSidebar: View {
                     isSelected: selection == .featurePanelLayout
                 ) {
                     selection = .featurePanelLayout
-                }
-
-                FeatureSettingsSidebarSectionTitle(AppL10n.settings(
-                    "plugins.sidebar.pluginsSection",
-                    defaultValue: "插件"
-                ))
-                    .padding(.top, 16)
-
-                FeatureSettingsSidebarRow(
-                    title: AppL10n.settings("plugins.sidebar.installed", defaultValue: "已安装"),
-                    systemImage: "checkmark.circle",
-                    iconTint: .green,
-                    isSelected: selection == .installed
-                ) {
-                    selection = .installed
                 }
 
                 FeatureSettingsSidebarRow(
@@ -937,8 +938,7 @@ private struct FeatureSettingsSidebar: View {
                             title: item.title,
                             systemImage: item.iconName,
                             iconTint: item.iconTint,
-                            isSelected: selection == .configuration(item.id),
-                            isEnabled: item.isGloballyEnabled
+                            isSelected: selection == .configuration(item.id)
                         ) {
                             selection = .configuration(item.id)
                         }
@@ -975,7 +975,6 @@ private struct FeatureSettingsSidebarRow: View {
     let systemImage: String
     let iconTint: Color
     let isSelected: Bool
-    var isEnabled = true
     let action: () -> Void
     @State private var isHovered = false
 
@@ -994,23 +993,8 @@ private struct FeatureSettingsSidebarRow: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                .opacity(isEnabled ? 1 : 0.6)
 
                 Spacer(minLength: 0)
-
-                if !isEnabled {
-                    Image(systemName: "pause.circle")
-                        .font(PluginSettingsTheme.Typography.statusBadge)
-                        .foregroundStyle(.tertiary)
-                        .help(AppL10n.plugins(
-                            "plugin.management.disabled",
-                            defaultValue: "插件已停用"
-                        ))
-                        .accessibilityLabel(AppL10n.plugins(
-                            "plugin.management.disabled",
-                            defaultValue: "插件已停用"
-                        ))
-                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -1048,7 +1032,7 @@ private struct FeatureSettingsDetailPane: View {
                 title: AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘"),
                 description: AppL10n.settings(
                     "plugins.dashboard.description",
-                    defaultValue: "拖拽调整已启用仪表盘组件的排列顺序。"
+                    defaultValue: "拖拽调整仪表盘组件的排列顺序。"
                 ),
                 systemImage: "square.grid.2x2",
                 iconTint: .blue,
@@ -1057,17 +1041,18 @@ private struct FeatureSettingsDetailPane: View {
                 emptyTitle: AppL10n.settings("plugins.dashboard.empty.title", defaultValue: "暂无仪表盘组件"),
                 emptyDescription: AppL10n.settings(
                     "plugins.dashboard.empty.description",
-                    defaultValue: "已启用且支持仪表盘的插件会显示在这里。"
+                    defaultValue: "已安装且支持仪表盘的插件会显示在这里。"
                 ),
                 onMove: { pluginID, targetOffset in
-                    pluginHost.moveEnabledPlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
+                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
                 },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .dashboard) },
                 onOpenPanel: showDashboard,
                 configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
                 onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
-                onEnablementChange: { pluginID, isEnabled in
-                    pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: pluginID)
+                onOpenMarketplace: pluginHost.presentPluginMarketplace,
+                onUninstall: { pluginID in
+                    try pluginHost.uninstallDynamicPlugin(pluginID: pluginID)
                 }
             )
         case .featurePanelLayout:
@@ -1076,7 +1061,7 @@ private struct FeatureSettingsDetailPane: View {
                 title: AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板"),
                 description: AppL10n.settings(
                     "plugins.featurePanel.description",
-                    defaultValue: "拖拽调整已启用功能面板操作的排列顺序。"
+                    defaultValue: "拖拽调整功能面板操作的排列顺序。"
                 ),
                 systemImage: "switch.2",
                 iconTint: .purple,
@@ -1085,21 +1070,20 @@ private struct FeatureSettingsDetailPane: View {
                 emptyTitle: AppL10n.settings("plugins.featurePanel.empty.title", defaultValue: "暂无功能面板操作"),
                 emptyDescription: AppL10n.settings(
                     "plugins.featurePanel.empty.description",
-                    defaultValue: "已启用且支持功能面板的插件会显示在这里。"
+                    defaultValue: "已安装且支持功能面板的插件会显示在这里。"
                 ),
                 onMove: { pluginID, targetOffset in
-                    pluginHost.moveEnabledPlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
+                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
                 },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .featurePanel) },
                 onOpenPanel: showFeaturePanel,
                 configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
                 onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
-                onEnablementChange: { pluginID, isEnabled in
-                    pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: pluginID)
+                onOpenMarketplace: pluginHost.presentPluginMarketplace,
+                onUninstall: { pluginID in
+                    try pluginHost.uninstallDynamicPlugin(pluginID: pluginID)
                 }
             )
-        case .installed:
-            InstalledFeaturesSettingsView(pluginHost: pluginHost)
         case .marketplace:
             PluginManagementSettingsView(pluginHost: pluginHost)
         case let .configuration(pluginID):
@@ -1112,95 +1096,6 @@ private struct FeatureSettingsDetailPane: View {
 
     private func configurationItem(for pluginID: String) -> PluginConfigurationItem? {
         pluginHost.pluginConfigurationItems.first { $0.id == pluginID }
-    }
-}
-
-private struct InstalledFeaturesSettingsView: View {
-    @ObservedObject var pluginHost: PluginHost
-    @State private var searchText: String = ""
-    @State private var selectedFilter: PluginCategoryFilter = .all
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                SettingsPageHeader(
-                    title: AppL10n.settings("plugins.installed.title", defaultValue: "已安装"),
-                    description: AppL10n.settings(
-                        "plugins.installed.globalDescription",
-                        defaultValue: "可在此处或仪表盘、功能面板中启用或停用插件。"
-                    ),
-                    systemImage: "checkmark.circle",
-                    iconTint: .green
-                )
-
-                if !pluginHost.installedPluginItems.isEmpty {
-                    PluginFilterBarView(
-                        searchText: $searchText,
-                        selectedFilter: $selectedFilter,
-                        countsByFilter: countsByFilter,
-                        searchPrompt: AppL10n.settings("plugins.installed.searchPrompt", defaultValue: "搜索已安装插件")
-                    )
-                }
-
-                SettingsCardContainer {
-                    if pluginHost.installedPluginItems.isEmpty {
-                        ContentUnavailableView(
-                            AppL10n.settings("plugins.installed.empty.title", defaultValue: "暂无已安装插件"),
-                            systemImage: "checkmark.circle",
-                            description: Text(AppL10n.settings("plugins.installed.empty.description", defaultValue: "安装插件后，会显示在这里。"))
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                    } else if filteredItems.isEmpty {
-                        ContentUnavailableView(
-                            AppL10n.settings("plugins.filter.empty.title", defaultValue: "未找到匹配的插件"),
-                            systemImage: "magnifyingglass",
-                            description: Text(AppL10n.settings("plugins.filter.empty.description", defaultValue: "尝试调整关键字或切换分类。"))
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                    } else {
-                        FeatureManagementTableView(
-                            items: filteredItems.map {
-                                FeatureManagementTableItem(
-                                    installedItem: $0,
-                                    hasSettings: configurationPluginIDs.contains($0.id)
-                                )
-                            },
-                            mode: .installed,
-                            isReorderEnabled: false,
-                            onToggleChange: { pluginID, isEnabled in
-                                pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: pluginID)
-                            },
-                            onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:)
-                        )
-                        .frame(height: featureManagementListHeight)
-                    }
-                }
-            }
-            .padding(PluginSettingsTheme.Spacing.pagePadding)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .background(SettingsStyle.contentBackground)
-    }
-
-    private var configurationPluginIDs: Set<String> {
-        Set(pluginHost.pluginConfigurationItems.map(\.pluginID))
-    }
-
-    private var filteredItems: [InstalledPluginItem] {
-        pluginHost.installedPluginItems.filter {
-            PluginListFilter.matches(installedItem: $0, query: searchText, filter: selectedFilter)
-        }
-    }
-
-    private var countsByFilter: [PluginCategoryFilter: Int] {
-        PluginListFilter.countsByFilter(
-            installedItems: pluginHost.installedPluginItems,
-            query: searchText
-        )
-    }
-
-    private var featureManagementListHeight: CGFloat {
-        FeatureManagementTableView.preferredHeight(for: filteredItems.count)
     }
 }
 
@@ -1219,7 +1114,10 @@ private struct SurfaceLayoutSettingsView: View {
     let onOpenPanel: () -> Void
     let configurationPluginIDs: Set<String>
     let onOpenSettings: (String) -> Void
-    let onEnablementChange: (String, Bool) -> Void
+    let onOpenMarketplace: () -> Void
+    let onUninstall: (String) throws -> Void
+    @State private var pendingUninstallItem: PluginSurfaceLayoutItem?
+    @State private var uninstallErrorMessage: String?
 
     var body: some View {
         ScrollView {
@@ -1238,7 +1136,7 @@ private struct SurfaceLayoutSettingsView: View {
                     ), action: onResetOrder)
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .disabled(enabledItems.count < 2)
+                        .disabled(items.count < 2)
 
                     Button(action: onOpenPanel) {
                         Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
@@ -1248,7 +1146,7 @@ private struct SurfaceLayoutSettingsView: View {
                 }
 
                 SettingsCardContainer {
-                    if enabledItems.isEmpty {
+                    if items.isEmpty {
                         ContentUnavailableView(
                             emptyTitle,
                             systemImage: systemImage,
@@ -1257,49 +1155,19 @@ private struct SurfaceLayoutSettingsView: View {
                         .frame(maxWidth: .infinity, minHeight: 180)
                     } else {
                         FeatureManagementTableView(
-                            items: enabledItems.map {
+                            items: items.map {
                                 FeatureManagementTableItem(
                                     surfaceItem: $0,
                                     hasSettings: configurationPluginIDs.contains($0.id)
                                 )
                             },
                             mode: .surface(surface),
-                            onToggleChange: onEnablementChange,
                             onMove: onMove,
-                            onOpenSettings: onOpenSettings
+                            onOpenSettings: onOpenSettings,
+                            onOpenMarketplace: onOpenMarketplace,
+                            onRequestUninstall: requestUninstall
                         )
-                        .frame(height: FeatureManagementTableView.preferredHeight(for: enabledItems.count))
-                    }
-                }
-
-                if !disabledItems.isEmpty {
-                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                        Label(
-                            AppL10n.settingsFormat(
-                                "plugins.layout.disabledSectionFormat",
-                                defaultValue: "已停用插件（%d）",
-                                disabledItems.count
-                            ),
-                            systemImage: "pause.circle"
-                        )
-                        .font(PluginSettingsTheme.Typography.sectionTitle)
-                        .foregroundStyle(.secondary)
-
-                        SettingsCardContainer {
-                            FeatureManagementTableView(
-                                items: disabledItems.map {
-                                    FeatureManagementTableItem(
-                                        surfaceItem: $0,
-                                        hasSettings: configurationPluginIDs.contains($0.id)
-                                    )
-                                },
-                                mode: .surface(surface),
-                                isReorderEnabled: false,
-                                onToggleChange: onEnablementChange,
-                                onOpenSettings: onOpenSettings
-                            )
-                            .frame(height: FeatureManagementTableView.preferredHeight(for: disabledItems.count))
-                        }
+                        .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
                     }
                 }
             }
@@ -1307,14 +1175,51 @@ private struct SurfaceLayoutSettingsView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(SettingsStyle.contentBackground)
+        .alert(item: $pendingUninstallItem) { item in
+            Alert(
+                title: Text(AppL10n.pluginsFormat(
+                    "plugin.management.uninstall.confirmationTitle",
+                    defaultValue: "卸载“%@”？",
+                    item.title
+                )),
+                message: Text(AppL10n.pluginsFormat(
+                    "plugin.management.uninstall.confirmationMessage",
+                    defaultValue: "它将从%@移除，快捷键和设置入口也会移除，后台工作将停止。插件数据会保留。",
+                    pluginCapabilitySummary(item.capabilities)
+                )),
+                primaryButton: .destructive(Text(AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"))) {
+                    uninstall(item)
+                },
+                secondaryButton: .cancel()
+            )
+        }
+        .alert(
+            AppL10n.plugins("plugin.marketplace.operationFailed.title", defaultValue: "插件操作失败"),
+            isPresented: Binding(
+                get: { uninstallErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        uninstallErrorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
+        } message: {
+            Text(uninstallErrorMessage ?? "")
+        }
     }
 
-    private var enabledItems: [PluginSurfaceLayoutItem] {
-        PluginSurfaceLayoutDisplayPolicy.enabledItems(from: items)
+    private func requestUninstall(_ pluginID: String) {
+        pendingUninstallItem = items.first { $0.id == pluginID && $0.canUninstall }
     }
 
-    private var disabledItems: [PluginSurfaceLayoutItem] {
-        PluginSurfaceLayoutDisplayPolicy.disabledItems(from: items)
+    private func uninstall(_ item: PluginSurfaceLayoutItem) {
+        do {
+            try onUninstall(item.id)
+        } catch {
+            uninstallErrorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -1341,7 +1246,7 @@ private struct PluginConfigurationDetailPane: View {
             if let item {
                 if item.prefersFullHeight {
                     VStack(alignment: .leading, spacing: 0) {
-                        PluginConfigurationHeader(pluginHost: pluginHost, item: item)
+                        PluginConfigurationHeader(item: item)
                             .padding(PluginSettingsTheme.Spacing.pagePadding)
 
                         if item.hasCustomConfiguration {
@@ -1355,7 +1260,7 @@ private struct PluginConfigurationDetailPane: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
-                            PluginConfigurationHeader(pluginHost: pluginHost, item: item)
+                            PluginConfigurationHeader(item: item)
 
                             if !item.settingsCards.isEmpty {
                                 PluginSettingsCardSection(
@@ -1401,39 +1306,16 @@ private struct PluginConfigurationDetailPane: View {
 }
 
 private struct PluginConfigurationHeader: View {
-    @ObservedObject var pluginHost: PluginHost
     let item: PluginConfigurationItem
 
     var body: some View {
-        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            SettingsPageHeader(
-                title: item.title,
-                description: item.description,
-                systemImage: item.iconName,
-                iconTint: item.iconTint
-            )
-
-            Toggle(
-                AppL10n.settings("plugins.configuration.enabled", defaultValue: "已启用"),
-                isOn: enabledBinding
-            )
-            .toggleStyle(.switch)
-            .labelsHidden()
-            .help(AppL10n.settings(
-                "plugins.configuration.enabled",
-                defaultValue: "已启用"
-            ))
-        }
+        SettingsPageHeader(
+            title: item.title,
+            description: item.description,
+            systemImage: item.iconName,
+            iconTint: item.iconTint
+        )
         .padding(.bottom, 2)
-    }
-
-    private var enabledBinding: Binding<Bool> {
-        Binding {
-            pluginHost.installedPluginItems.first { $0.id == item.pluginID }?.isGloballyEnabled
-                ?? item.isGloballyEnabled
-        } set: { isEnabled in
-            pluginHost.setPluginGloballyEnabled(isEnabled, pluginID: item.pluginID)
-        }
     }
 }
 

@@ -5,8 +5,10 @@ struct PluginManagementItem: Identifiable, Equatable {
     enum State: Equatable {
         case available
         case localDevelopment
-        case enabled
-        case disabled
+        case installed
+        /// An installed package that must be explicitly reviewed after
+        /// migrating from the retired disabled state.
+        case legacyDisabled
         case updateAvailable(installedVersion: String, catalogVersion: String)
         case restartRequired
         case failed(String)
@@ -24,6 +26,7 @@ struct PluginManagementItem: Identifiable, Equatable {
     let releaseNotesURL: URL?
     let category: String?
     let releaseChannel: String?
+    let capabilities: PluginPackageManifest.Capabilities?
 
     init(
         id: String,
@@ -35,7 +38,8 @@ struct PluginManagementItem: Identifiable, Equatable {
         requiresRestartToFullyUnload: Bool,
         releaseNotesURL: URL?,
         category: String? = nil,
-        releaseChannel: String? = nil
+        releaseChannel: String? = nil,
+        capabilities: PluginPackageManifest.Capabilities? = nil
     ) {
         self.id = id
         self.title = title
@@ -47,6 +51,7 @@ struct PluginManagementItem: Identifiable, Equatable {
         self.releaseNotesURL = releaseNotesURL
         self.category = category
         self.releaseChannel = releaseChannel
+        self.capabilities = capabilities
     }
 
     var statusText: String {
@@ -55,8 +60,10 @@ struct PluginManagementItem: Identifiable, Equatable {
             return AppL10n.plugins("plugin.status.available", defaultValue: "可安装")
         case .localDevelopment:
             return AppL10n.plugins("plugin.status.localDevelopment", defaultValue: "本地开发")
-        case .enabled, .disabled:
+        case .installed:
             return AppL10n.plugins("plugin.status.installed", defaultValue: "已安装")
+        case .legacyDisabled:
+            return AppL10n.plugins("plugin.status.requiresReview", defaultValue: "需要处理")
         case .updateAvailable:
             return AppL10n.plugins("plugin.status.updateAvailable", defaultValue: "可更新")
         case .restartRequired:
@@ -76,18 +83,14 @@ struct PluginManagementItem: Identifiable, Equatable {
             return summary ?? AppL10n.plugins("plugin.detail.available", defaultValue: "可以安装此插件。")
         case .localDevelopment:
             return summary ?? AppL10n.plugins("plugin.detail.localDevelopment", defaultValue: "来自本地开发插件列表。")
-        case .enabled:
+        case .installed:
             if requiresRestartToFullyUnload {
                 return AppL10n.plugins("plugin.detail.restartRequiredAfterUpdate", defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。")
             }
 
             return summary ?? ""
-        case .disabled:
-            if requiresRestartToFullyUnload {
-                return AppL10n.plugins("plugin.detail.restartRequiredAfterRemoval", defaultValue: "已移出界面，重启后彻底释放已加载代码。")
-            }
-
-            return summary ?? ""
+        case .legacyDisabled:
+            return AppL10n.plugins("plugin.detail.requiresReview", defaultValue: "此插件此前被停用，请选择保留并激活或卸载。")
         case let .updateAvailable(installedVersion, catalogVersion):
             return AppL10n.pluginsFormat(
                 "plugin.detail.updateAvailableFormat",
@@ -123,7 +126,7 @@ struct PluginManagementItem: Identifiable, Equatable {
 
     var canUninstall: Bool {
         switch state {
-        case .enabled, .disabled, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
+        case .installed, .legacyDisabled, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
             return packageURL != nil
         case .available, .localDevelopment:
             return false
@@ -163,10 +166,10 @@ final class DynamicPluginManager: ObservableObject {
 
     func loadInstalledPlugins() -> [any MacToolsPlugin] {
         let records = packageStore.installedRecords()
-        deactivateMissingOrDisabledPlugins(records: records)
+        deactivateMissingOrLegacyDisabledPlugins(records: records)
 
         let recordsToLoad = records.filter { record in
-            guard case .enabled = record.state else {
+            guard case .installed = record.state else {
                 return false
             }
 
@@ -215,7 +218,7 @@ final class DynamicPluginManager: ObservableObject {
 
     func prepareInstalledPluginsWithoutLoading() {
         let records = packageStore.installedRecords()
-        deactivateMissingOrDisabledPlugins(records: records)
+        deactivateMissingOrLegacyDisabledPlugins(records: records)
         latestLoadErrorsByID = [:]
         let results = records.map { record in
             DynamicPluginLoadResult(
@@ -228,12 +231,25 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     func reloadInstalledPlugins() {
-        onPluginsChanged?(loadInstalledPlugins())
+        let plugins = loadInstalledPlugins()
+        onPluginsChanged?(plugins)
     }
 
-    func installPluginPackage(from sourceURL: URL, catalogEntry: PluginCatalogEntry? = nil) throws {
+    func installPluginPackage(
+        from sourceURL: URL,
+        catalogEntry: PluginCatalogEntry? = nil,
+        holdingForLegacyMigration: Bool = false
+    ) throws {
         try validatePackage(sourceURL, matches: catalogEntry)
         let record = try packageStore.installPackage(from: sourceURL)
+
+        // An older backup can request installation of a plugin that it also
+        // records as globally disabled. Set the migration hold before this
+        // method reloads packages, so the plugin's code never activates as an
+        // intermediate side effect of the restore.
+        if holdingForLegacyMigration {
+            packageStore.markLegacyDisabledPlugins([record.id])
+        }
 
         if loadedPluginIDs.contains(record.id) {
             deferredPluginIDs.insert(record.id)
@@ -317,6 +333,14 @@ final class DynamicPluginManager: ObservableObject {
         packageStore.installedRecords().contains { $0.id == pluginID }
     }
 
+    func legacyDisabledPluginIDs() -> Set<String> {
+        packageStore.legacyDisabledPackageIDs()
+    }
+
+    func isLegacyDisabledPackage(_ pluginID: String) -> Bool {
+        packageStore.legacyDisabledPackageIDs().contains(pluginID)
+    }
+
     func installedCapabilitiesByID() -> [String: PluginPackageManifest.Capabilities] {
         Dictionary(
             uniqueKeysWithValues: packageStore.installedRecords().compactMap { record in
@@ -360,17 +384,17 @@ final class DynamicPluginManager: ObservableObject {
         )
     }
 
-    /// Deactivate a loaded plugin without unloading it.
-    /// Used when the user globally disables the plugin — it stays in the list but its side effects stop.
-    func pausePlugin(_ pluginID: String) {
+    /// Holds a plugin that was disabled by an older app version until the user
+    /// completes the one-time migration review.
+    func holdLegacyDisabledPlugin(_ pluginID: String) {
         guard let plugins = loadedPluginsByID[pluginID] else { return }
         for plugin in plugins {
             plugin.deactivate(reason: .disabled)
         }
     }
 
-    /// Re-activate a previously paused plugin without reloading it.
-    func resumePlugin(_ pluginID: String) {
+    /// Activates a legacy-held plugin after the user explicitly keeps it.
+    func activateLegacyDisabledPlugin(_ pluginID: String) {
         guard let plugins = loadedPluginsByID[pluginID] else { return }
         // Re-activate with the SAME context the plugin was first loaded with
         // (support/cache/temp directories, resource bundle, scoped storage). A bare
@@ -385,20 +409,28 @@ final class DynamicPluginManager: ObservableObject {
         }
     }
 
-    func setPluginEnabled(_ isEnabled: Bool, pluginID: String) {
-        if !isEnabled {
-            deactivateLoadedPlugins(pluginID: pluginID, reason: .disabled)
-        }
-
-        packageStore.setEnabled(isEnabled, for: pluginID)
+    func activateLegacyDisabledPackage(_ pluginID: String) {
+        packageStore.activateLegacyPlugin(pluginID)
         reloadInstalledPlugins()
+    }
+
+    func holdLegacyDisabledPackages(_ pluginIDs: Set<String>) {
+        packageStore.markLegacyDisabledPlugins(pluginIDs)
     }
 
     func uninstallPlugin(pluginID: String, removeData: Bool = false) throws {
         let wasLoaded = loadedPluginIDs.contains(pluginID)
 
         deactivateLoadedPlugins(pluginID: pluginID, reason: .uninstalling)
-        try packageStore.uninstall(pluginID: pluginID, removeData: removeData)
+        do {
+            try packageStore.uninstall(pluginID: pluginID, removeData: removeData)
+        } catch {
+            // Package removal failed after its side effects were stopped. Reload
+            // the still-installed package so the host returns to its previous
+            // functional state instead of leaving a half-uninstalled plugin.
+            reloadInstalledPlugins()
+            throw error
+        }
         loadedPluginsByID.removeValue(forKey: pluginID)
 
         if wasLoaded {
@@ -427,7 +459,7 @@ final class DynamicPluginManager: ObservableObject {
         rebuildManagementItems(results: results, catalogSnapshot: catalogSnapshot)
     }
 
-    private func deactivateMissingOrDisabledPlugins(records: [PluginPackageRecord]) {
+    private func deactivateMissingOrLegacyDisabledPlugins(records: [PluginPackageRecord]) {
         let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
 
         for pluginID in Array(loadedPluginsByID.keys) {
@@ -436,7 +468,7 @@ final class DynamicPluginManager: ObservableObject {
                 continue
             }
 
-            if record.state != .enabled {
+            if record.state != .installed {
                 deactivateLoadedPlugins(pluginID: pluginID, reason: .disabled)
             }
         }
@@ -527,7 +559,8 @@ final class DynamicPluginManager: ObservableObject {
                         requiresRestartToFullyUnload: false,
                         releaseNotesURL: entry.releaseNotesURL,
                         category: entry.category,
-                        releaseChannel: entry.releaseChannel
+                        releaseChannel: entry.releaseChannel,
+                        capabilities: entry.capabilities
                     )
                 )
             }
@@ -559,7 +592,7 @@ final class DynamicPluginManager: ObservableObject {
 
         if let revocation {
             state = .revoked(revocation.reason)
-        } else if record.requiresRestartToFullyUnload && record.state == .enabled {
+        } else if record.requiresRestartToFullyUnload && record.state == .installed {
             state = .restartRequired
         } else if let errorMessage = result.errorMessage {
             state = .failed(errorMessage)
@@ -571,10 +604,10 @@ final class DynamicPluginManager: ObservableObject {
             )
         } else {
             switch record.state {
-            case .enabled:
-                state = .enabled
-            case .disabled:
-                state = .disabled
+            case .installed:
+                state = .installed
+            case .legacyDisabled:
+                state = .legacyDisabled
             case let .incompatible(reason):
                 state = .incompatible(reason)
             case let .failed(reason):
@@ -592,7 +625,8 @@ final class DynamicPluginManager: ObservableObject {
             requiresRestartToFullyUnload: record.requiresRestartToFullyUnload,
             releaseNotesURL: catalogEntry?.releaseNotesURL,
             category: catalogEntry?.category ?? record.manifest.category,
-            releaseChannel: catalogEntry?.releaseChannel ?? record.manifest.releaseChannel
+            releaseChannel: catalogEntry?.releaseChannel ?? record.manifest.releaseChannel,
+            capabilities: catalogEntry?.capabilities ?? record.manifest.capabilities
         )
     }
 
@@ -608,7 +642,7 @@ final class DynamicPluginManager: ObservableObject {
 private extension PluginPackageRecord.State {
     var isLoadable: Bool {
         switch self {
-        case .enabled, .disabled:
+        case .installed, .legacyDisabled:
             return true
         case .incompatible, .failed:
             return false

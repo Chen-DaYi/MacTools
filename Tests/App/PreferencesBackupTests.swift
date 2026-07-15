@@ -23,7 +23,6 @@ final class PreferencesBackupTests: XCTestCase {
         let firstPlugin = BackupTestPlugin(id: "first", order: 1, shortcutID: "toggle")
         let secondPlugin = BackupTestPlugin(id: "second", order: 2, shortcutID: "open")
         let host = makeHost(plugins: [firstPlugin, secondPlugin], defaults: defaults)
-        host.setFeatureVisibility(false, for: firstPlugin.metadata.id)
         host.moveFeatureManagementItem(id: secondPlugin.metadata.id, by: -1)
         host.setShortcutBinding(
             ShortcutBinding(keyCode: 12, modifiers: [.command, .shift]),
@@ -43,7 +42,7 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(backup.application.languagePreference, AppLanguagePreference.en.rawValue)
         XCTAssertEqual(backup.application.menuBarClickBehavior, MenuBarClickBehaviorPreference.swapped.rawValue)
         XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["second", "first"])
-        XCTAssertEqual(backup.pluginDisplay.hiddenPluginIDs, ["first"])
+        XCTAssertTrue(backup.pluginDisplay.hiddenPluginIDs.isEmpty)
         XCTAssertEqual(backup.pluginDisplay.dashboardOrderedPluginIDs, [])
         XCTAssertEqual(backup.pluginDisplay.featurePanelOrderedPluginIDs, ["first", "second"])
         XCTAssertEqual(
@@ -224,7 +223,7 @@ final class PreferencesBackupTests: XCTestCase {
         _ = try host.importPreferences(backup)
 
         XCTAssertEqual(host.featureManagementItems.map(\.id), ["second", "first"])
-        XCTAssertFalse(host.featureManagementItems.first(where: { $0.id == "first" })?.isVisible ?? true)
+        XCTAssertTrue(host.featureManagementItems.first(where: { $0.id == "first" })?.isVisible ?? false)
         XCTAssertFalse(host.shortcutItems.first(where: { $0.id == "second.shortcut.open" })?.canClear ?? true)
         XCTAssertTrue(host.shortcutItems.first(where: { $0.id == "first.shortcut.toggle" })?.usesDefaultValue ?? false)
         XCTAssertEqual(
@@ -390,7 +389,7 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(host.makePreferencesBackup().shortcutCustomizations, existingCustomizations)
     }
 
-    func testImportInstallsSelectedCatalogPluginThenAppliesItsDisplaySettings() async throws {
+    func testImportHoldsSelectedCatalogPluginForLegacyDisabledMigrationReview() async throws {
         let temporaryRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("PreferencesBackupInstallTests-\(UUID().uuidString)", isDirectory: true)
         let suiteName = "PreferencesBackupInstallTests-\(UUID().uuidString)"
@@ -410,9 +409,10 @@ final class PreferencesBackupTests: XCTestCase {
             userDefaults: defaults,
             hostVersion: "1.0.0"
         )
+        let loader = BackupDynamicPluginLoader()
         let dynamicManager = DynamicPluginManager(
             packageStore: packageStore,
-            pluginLoader: BackupDynamicPluginLoader()
+            pluginLoader: loader
         )
         let entry = makeCatalogEntry(id: "installable", version: "1.0.0")
         let catalogManager = PluginCatalogManager(
@@ -448,7 +448,10 @@ final class PreferencesBackupTests: XCTestCase {
 
         XCTAssertEqual(result.installedPluginIDs, ["installable"])
         XCTAssertTrue(result.pluginInstallationFailures.isEmpty)
-        XCTAssertFalse(host.featureManagementItems.first(where: { $0.id == "installable" })?.isVisible ?? true)
+        XCTAssertFalse(host.featureManagementItems.contains(where: { $0.id == "installable" }))
+        XCTAssertEqual(host.pendingLegacyDisabledPluginIDs, Set(["installable"]))
+        XCTAssertEqual(dynamicManager.pluginManagementItems.first(where: { $0.id == "installable" })?.state, .legacyDisabled)
+        XCTAssertTrue(loader.receivedRecordIDBatches.isEmpty)
     }
 
     func testDecodeRejectsUnsupportedFormatVersion() throws {
@@ -729,8 +732,11 @@ private struct BackupPackageResolver: PluginPackageResolving {
 
 @MainActor
 private final class BackupDynamicPluginLoader: DynamicPluginLoading {
+    private(set) var receivedRecordIDBatches: [[String]] = []
+
     func loadInstalledPlugins(from records: [PluginPackageRecord]) -> [DynamicPluginLoadResult] {
-        records.map { record in
+        receivedRecordIDBatches.append(records.map(\.id))
+        return records.map { record in
             DynamicPluginLoadResult(
                 record: record,
                 plugins: [BackupTestPlugin(id: record.id, order: 10, shortcutID: "toggle")],
@@ -785,6 +791,20 @@ private final class BackupTestPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
     func restorePortablePreferences(from data: Data) {
         restoredPortablePreferences = data
     }
+
+    var primaryPanelState: PluginPanelState {
+        PluginPanelState(
+            subtitle: metadata.defaultDescription,
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    func handleAction(_ action: PluginPanelAction) {}
 }
 
 @MainActor

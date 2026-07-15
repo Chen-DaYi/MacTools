@@ -166,14 +166,6 @@ public protocol PluginConfigurationPresenting: AnyObject {
     var requestConfigurationPresentation: (() -> Void)? { get set }
 }
 
-/// Optional protocol for built-in plugins whose feature visibility should
-/// pause/resume heavyweight observers or external side effects.
-/// Dynamic plugins are paused by `DynamicPluginManager` instead.
-@MainActor
-public protocol PluginFeatureVisibilityLifecycleHandling: AnyObject {
-    func featureVisibilityDidChange(_ isVisible: Bool)
-}
-
 /// Optional hook for built-in plugins that cache localized descriptors or
 /// other language-dependent presentation data. The host invokes it when the
 /// app language changes; implementations must not activate, deactivate, or

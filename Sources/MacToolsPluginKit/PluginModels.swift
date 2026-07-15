@@ -85,7 +85,7 @@ public enum PluginDeactivationReason: Equatable {
     case hostShutdown
 
     /// `true` when the plugin should revert any external side-effects it owns
-    /// (user disabled, plugin uninstalled, or app is quitting).
+    /// (legacy migration hold, plugin uninstalled, or app is quitting).
     /// `false` during hot-reload updates — the new version will re-activate.
     public var requiresStateCleanup: Bool {
         switch self {
@@ -904,7 +904,6 @@ public struct PluginConfigurationItem: Identifiable {
     public let shortcutItems: [ShortcutSettingsItem]
     public let hasCustomConfiguration: Bool
     public let prefersFullHeight: Bool
-    public let isGloballyEnabled: Bool
 
     public init(
         id: String,
@@ -917,8 +916,7 @@ public struct PluginConfigurationItem: Identifiable {
         permissionCards: [PluginPermissionCard],
         shortcutItems: [ShortcutSettingsItem],
         hasCustomConfiguration: Bool,
-        prefersFullHeight: Bool = false,
-        isGloballyEnabled: Bool = true
+        prefersFullHeight: Bool = false
     ) {
         self.id = id
         self.pluginID = pluginID
@@ -931,7 +929,6 @@ public struct PluginConfigurationItem: Identifiable {
         self.shortcutItems = shortcutItems
         self.hasCustomConfiguration = hasCustomConfiguration
         self.prefersFullHeight = prefersFullHeight
-        self.isGloballyEnabled = isGloballyEnabled
     }
 }
 

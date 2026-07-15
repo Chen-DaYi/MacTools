@@ -25,11 +25,12 @@ final class DynamicPluginManagerTests: XCTestCase {
         temporaryRoot = nil
     }
 
-    func testDisablingLoadedPluginRemovesItAndDefersReloadUntilRestart() throws {
+    func testLegacyDisabledPackageIsNotLoadedUntilUserActivatesIt() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
         _ = try store.installPackage(from: sourceURL)
         let plugin = MockDynamicPlugin(id: "com.example.demo")
+        defaults.set(["com.example.demo"], forKey: "plugins.dynamic.disabledPluginIDs")
         let loader = StubDynamicPluginLoader { records in
             records.map { record in
                 DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
@@ -37,20 +38,45 @@ final class DynamicPluginManagerTests: XCTestCase {
         }
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
 
-        XCTAssertEqual(manager.loadInstalledPlugins().map(\.metadata.id), ["com.example.demo"])
-
-        manager.setPluginEnabled(false, pluginID: "com.example.demo")
-
-        XCTAssertEqual(plugin.deactivationReasons, [.disabled])
         XCTAssertTrue(manager.loadInstalledPlugins().isEmpty)
-        XCTAssertEqual(manager.pluginManagementItems.first?.state, .disabled)
+        XCTAssertTrue(loader.receivedRecordIDBatches.isEmpty)
+        XCTAssertEqual(manager.pluginManagementItems.first?.state, .legacyDisabled)
         XCTAssertEqual(
             manager.pluginManagementItems.first?.detailText,
             AppL10n.plugins(
-                "plugin.detail.restartRequiredAfterRemoval",
-                defaultValue: "已移出界面，重启后彻底释放已加载代码。"
+                "plugin.detail.requiresReview",
+                defaultValue: "此插件此前被停用，请选择保留并激活或卸载。"
             )
         )
+
+        manager.activateLegacyDisabledPackage("com.example.demo")
+
+        XCTAssertEqual(loader.receivedRecordIDBatches, [["com.example.demo"]])
+        XCTAssertEqual(manager.pluginManagementItems.first?.state, .installed)
+    }
+
+    func testUpdatingLegacyDisabledPackageDoesNotReactivateIt() throws {
+        let firstPackageURL = try makePackage(id: "com.example.demo", version: "1.0.0")
+        let updatePackageURL = try makePackage(id: "com.example.demo", version: "2.0.0")
+        let store = makeStore()
+        _ = try store.installPackage(from: firstPackageURL)
+        defaults.set(["com.example.demo"], forKey: "plugins.dynamic.disabledPluginIDs")
+        let loader = StubDynamicPluginLoader { records in
+            records.map { record in
+                DynamicPluginLoadResult(
+                    record: record,
+                    plugins: [MockDynamicPlugin(id: record.id)],
+                    errorMessage: nil
+                )
+            }
+        }
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
+
+        try manager.updatePluginPackage(from: updatePackageURL)
+
+        XCTAssertTrue(loader.receivedRecordIDBatches.isEmpty)
+        XCTAssertEqual(store.installedRecords().first?.manifest.version, "2.0.0")
+        XCTAssertEqual(manager.pluginManagementItems.first?.state, .legacyDisabled)
     }
 
     func testReloadKeepsExistingLoadedPluginInstances() throws {
@@ -244,17 +270,17 @@ final class DynamicPluginManagerTests: XCTestCase {
         manager.rebuildManagementItems(catalogSnapshot: snapshot)
 
         let item = try XCTUnwrap(manager.pluginManagementItems.first)
-        XCTAssertEqual(item.state, .enabled)
+        XCTAssertEqual(item.state, .installed)
         XCTAssertEqual(item.detailText, "示例插件")
         XCTAssertNotEqual(item.detailText, installedRecord.packageURL.path)
     }
 
     func testInstalledItemDetailKeepsStatusSpecificMessages() {
         let packageURL = URL(fileURLWithPath: "/tmp/Demo.mactoolsplugin", isDirectory: true)
-        let enabledItem = makeManagementItem(state: .enabled, packageURL: packageURL)
-        let disabledItem = makeManagementItem(state: .disabled, packageURL: packageURL)
+        let installedItem = makeManagementItem(state: .installed, packageURL: packageURL)
+        let legacyDisabledItem = makeManagementItem(state: .legacyDisabled, packageURL: packageURL)
         let restartingItem = makeManagementItem(
-            state: .enabled,
+            state: .installed,
             packageURL: packageURL,
             requiresRestartToFullyUnload: true
         )
@@ -263,10 +289,16 @@ final class DynamicPluginManagerTests: XCTestCase {
             packageURL: packageURL
         )
 
-        XCTAssertEqual(enabledItem.detailText, "示例插件")
-        XCTAssertEqual(disabledItem.detailText, "示例插件")
-        XCTAssertNotEqual(enabledItem.detailText, packageURL.path)
-        XCTAssertNotEqual(disabledItem.detailText, packageURL.path)
+        XCTAssertEqual(installedItem.detailText, "示例插件")
+        XCTAssertEqual(
+            legacyDisabledItem.detailText,
+            AppL10n.plugins(
+                "plugin.detail.requiresReview",
+                defaultValue: "此插件此前被停用，请选择保留并激活或卸载。"
+            )
+        )
+        XCTAssertNotEqual(installedItem.detailText, packageURL.path)
+        XCTAssertNotEqual(legacyDisabledItem.detailText, packageURL.path)
         XCTAssertEqual(
             restartingItem.detailText,
             AppL10n.plugins(
@@ -364,7 +396,7 @@ final class DynamicPluginManagerTests: XCTestCase {
         )
     }
 
-    func testResumePluginReactivatesWithPackageScopedContext() throws {
+    func testActivatingLegacyHeldPluginUsesPackageScopedContext() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
         _ = try store.installPackage(from: sourceURL)
@@ -375,8 +407,8 @@ final class DynamicPluginManagerTests: XCTestCase {
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
         _ = manager.loadInstalledPlugins()
 
-        manager.pausePlugin("com.example.demo")
-        manager.resumePlugin("com.example.demo")
+        manager.holdLegacyDisabledPlugin("com.example.demo")
+        manager.activateLegacyDisabledPlugin("com.example.demo")
 
         // Resume must re-activate with the package-scoped context (support
         // directory etc.), not a bare nil-directory PluginRuntimeContext(pluginID:).

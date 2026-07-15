@@ -159,10 +159,17 @@ final class PluginCatalogManager {
         dynamicPluginManager.rebuildManagementItems(catalogSnapshot: snapshot)
     }
 
-    func installPlugin(id: String) async throws {
+    func installPlugin(
+        id: String,
+        holdingForLegacyMigration: Bool = false
+    ) async throws {
         let entry = try catalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
-        try dynamicPluginManager.installPluginPackage(from: packageURL, catalogEntry: entry)
+        try dynamicPluginManager.installPluginPackage(
+            from: packageURL,
+            catalogEntry: entry,
+            holdingForLegacyMigration: holdingForLegacyMigration
+        )
     }
 
     func updatePlugin(id: String) async throws {

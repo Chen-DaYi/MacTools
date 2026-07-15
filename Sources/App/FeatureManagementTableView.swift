@@ -3,34 +3,10 @@ import SwiftUI
 import MacToolsPluginKit
 
 enum FeatureManagementTableMode: Equatable {
-    case installed
     case surface(PluginDisplaySurface)
 
     var supportsReordering: Bool {
-        if case .surface = self {
-            return true
-        }
-        return false
-    }
-}
-
-enum PluginSurfaceLayoutDisplayPolicy {
-    static func enabledItems(
-        from items: [PluginSurfaceLayoutItem]
-    ) -> [PluginSurfaceLayoutItem] {
-        items.filter(\.isGloballyEnabled)
-    }
-
-    static func disabledItemCount(
-        in items: [PluginSurfaceLayoutItem]
-    ) -> Int {
-        disabledItems(from: items).count
-    }
-
-    static func disabledItems(
-        from items: [PluginSurfaceLayoutItem]
-    ) -> [PluginSurfaceLayoutItem] {
-        items.filter { !$0.isGloballyEnabled }
+        true
     }
 }
 
@@ -67,25 +43,11 @@ struct FeatureManagementTableItem: Identifiable {
     let iconName: String
     let iconTint: Color
     let capabilities: PluginHostCapabilities
-    let isGloballyEnabled: Bool
     let isActive: Bool
+    let canUninstall: Bool
     let hasSettings: Bool
     let category: String?
     let releaseChannel: String?
-
-    init(installedItem item: InstalledPluginItem, hasSettings: Bool = false) {
-        id = item.id
-        title = item.title
-        description = item.description
-        iconName = item.iconName
-        iconTint = item.iconTint
-        capabilities = item.capabilities
-        isGloballyEnabled = item.isGloballyEnabled
-        isActive = item.isActive
-        self.hasSettings = hasSettings
-        category = item.category
-        releaseChannel = item.releaseChannel
-    }
 
     init(surfaceItem item: PluginSurfaceLayoutItem, hasSettings: Bool = false) {
         id = item.id
@@ -94,8 +56,8 @@ struct FeatureManagementTableItem: Identifiable {
         iconName = item.iconName
         iconTint = item.iconTint
         capabilities = item.capabilities
-        isGloballyEnabled = item.isGloballyEnabled
         isActive = item.isActive
+        canUninstall = item.canUninstall
         self.hasSettings = hasSettings
         category = item.category
         releaseChannel = item.releaseChannel
@@ -111,9 +73,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
     let items: [FeatureManagementTableItem]
     let mode: FeatureManagementTableMode
     var isReorderEnabled: Bool = true
-    let onToggleChange: (String, Bool) -> Void
     var onMove: (String, Int) -> Void = { _, _ in }
     var onOpenSettings: (String) -> Void = { _ in }
+    var onOpenMarketplace: () -> Void = {}
+    var onRequestUninstall: (String) -> Void = { _ in }
 
     static func preferredHeight(for itemCount: Int) -> CGFloat {
         let visibleItemCount = max(itemCount, 1)
@@ -234,11 +197,14 @@ struct FeatureManagementTableView: NSViewRepresentable {
                 item: item,
                 mode: parent.mode,
                 showsHandle: parent.mode.supportsReordering && parent.isReorderEnabled,
-                onStateChange: { [weak self] value in
-                    self?.parent.onToggleChange(item.id, value)
-                },
                 onOpenSettings: { [weak self] in
                     self?.parent.onOpenSettings(item.id)
+                },
+                onOpenMarketplace: { [weak self] in
+                    self?.parent.onOpenMarketplace()
+                },
+                onRequestUninstall: { [weak self] in
+                    self?.parent.onRequestUninstall(item.id)
                 }
             )
             return view
@@ -373,8 +339,8 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
         let description: String
         let iconName: String
         let hasSettings: Bool
-        let isGloballyEnabled: Bool
         let isActive: Bool
+        let canUninstall: Bool
         let capabilities: PluginHostCapabilities
         let category: String?
         let releaseChannel: String?
@@ -398,8 +364,8 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
                 description: $0.description,
                 iconName: $0.iconName,
                 hasSettings: $0.hasSettings,
-                isGloballyEnabled: $0.isGloballyEnabled,
                 isActive: $0.isActive,
+                canUninstall: $0.canUninstall,
                 capabilities: $0.capabilities,
                 category: $0.category,
                 releaseChannel: $0.releaseChannel
@@ -495,7 +461,7 @@ private enum FeatureManagementDragPreview {
             pointSize: 16
         )
 
-        let trailingWidth: CGFloat = 74
+        let trailingWidth: CGFloat = 54
         let textX = iconBackgroundRect.maxX + 12
         let textWidth = max(imageSize.width - textX - trailingWidth - 12, 80)
         let titleRect = NSRect(x: textX, y: 34, width: textWidth, height: 18)
@@ -528,10 +494,14 @@ private enum FeatureManagementDragPreview {
             .fill()
         }
 
-        drawEnablementCheckbox(
-            isOn: item.isGloballyEnabled,
-            in: NSRect(x: imageSize.width - 50, y: 24, width: 14, height: 14)
-        )
+        if item.canUninstall {
+            drawSymbol(
+                "ellipsis.circle",
+                in: NSRect(x: imageSize.width - 47, y: 22, width: 16, height: 16),
+                color: .secondaryLabelColor,
+                pointSize: 14
+            )
+        }
         drawSymbol(
             "line.3.horizontal",
             in: NSRect(x: imageSize.width - 20, y: 23, width: 13, height: 13),
@@ -580,39 +550,6 @@ private enum FeatureManagementDragPreview {
         tintedSymbol.draw(in: rect)
     }
 
-    private static func drawEnablementCheckbox(isOn: Bool, in rect: NSRect) {
-        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
-
-        if isOn {
-            NSColor.controlAccentColor.setFill()
-            path.fill()
-
-            let checkPath = NSBezierPath()
-            checkPath.lineWidth = 1.5
-            checkPath.lineCapStyle = .round
-            checkPath.lineJoinStyle = .round
-            checkPath.move(to: NSPoint(
-                x: rect.minX + rect.width * 0.2,
-                y: rect.midY
-            ))
-            checkPath.line(to: NSPoint(
-                x: rect.minX + rect.width * 0.42,
-                y: rect.minY + rect.height * 0.28
-            ))
-            checkPath.line(to: NSPoint(
-                x: rect.maxX - rect.width * 0.18,
-                y: rect.maxY - rect.height * 0.22
-            ))
-            NSColor.white.setStroke()
-            checkPath.stroke()
-        } else {
-            NSColor.windowBackgroundColor.setFill()
-            path.fill()
-            NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
-            path.lineWidth = 1
-            path.stroke()
-        }
-    }
 }
 
 private final class FeatureManagementIconActionButton: NSButton {
@@ -664,13 +601,16 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private let descriptionLabel = NSTextField(labelWithString: "")
     private let activeDotView = NSView()
     private let iconActionButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
-    private let trailingControlView = NSView()
-    private let enablementButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let moreActionButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
     private let handleImageView = NSImageView()
-    private var stateChangeHandler: ((Bool) -> Void)?
     private var openSettingsHandler: (() -> Void)?
+    private var openMarketplaceHandler: (() -> Void)?
+    private var requestUninstallHandler: (() -> Void)?
     private var hasSettings = false
+    private var canUninstall = false
     private var iconTintColor = NSColor.controlAccentColor
+    private var cellTrackingArea: NSTrackingArea?
+    private var isPointerInside = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -688,12 +628,15 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         item: FeatureManagementTableItem,
         mode: FeatureManagementTableMode,
         showsHandle: Bool,
-        onStateChange: @escaping (Bool) -> Void,
-        onOpenSettings: @escaping () -> Void
+        onOpenSettings: @escaping () -> Void,
+        onOpenMarketplace: @escaping () -> Void,
+        onRequestUninstall: @escaping () -> Void
     ) {
-        stateChangeHandler = onStateChange
         openSettingsHandler = onOpenSettings
+        openMarketplaceHandler = onOpenMarketplace
+        requestUninstallHandler = onRequestUninstall
         hasSettings = item.hasSettings
+        canUninstall = item.canUninstall
 
         titleLabel.stringValue = item.title
         configureReleaseChannelBadge(item.releaseChannel)
@@ -705,15 +648,11 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         iconTintColor = NSColor(item.iconTint)
         iconImageView.contentTintColor = iconTintColor
         setIconActionHovered(false)
-        activeDotView.isHidden = !item.isActive || !item.isGloballyEnabled
-        configureTrailingControl(item: item)
+        activeDotView.isHidden = !item.isActive
+        configureMoreAction()
         handleImageView.isHidden = !showsHandle
         containerView.alphaValue = 1
         toolTip = item.title
-        let controlHelp = featureManagementControlHelp()
-        enablementButton.toolTip = controlHelp
-        enablementButton.setAccessibilityLabel(item.title)
-        enablementButton.setAccessibilityHelp(controlHelp)
         iconActionButton.toolTip = hasSettings
             ? AppL10n.pluginsFormat(
                 "plugin.management.openSettingsForPlugin",
@@ -723,6 +662,15 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             : nil
         iconActionButton.setAccessibilityLabel(iconActionButton.toolTip ?? item.title)
         iconActionButton.setAccessibilityHelp(iconActionButton.toolTip ?? "")
+        let moreActionsTitle = AppL10n.pluginsFormat(
+            "plugin.management.moreActionsForPlugin",
+            defaultValue: "%@的更多操作",
+            item.title
+        )
+        moreActionButton.toolTip = moreActionsTitle
+        moreActionButton.setAccessibilityLabel(moreActionsTitle)
+        moreActionButton.setAccessibilityHelp(moreActionsTitle)
+        setMoreActionVisible(isPointerInside)
     }
 
     private func buildViewHierarchy() {
@@ -740,8 +688,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         titleRowStackView.addArrangedSubview(releaseChannelBadgeView)
         containerView.addSubview(descriptionLabel)
         containerView.addSubview(activeDotView)
-        containerView.addSubview(trailingControlView)
-        trailingControlView.addSubview(enablementButton)
+        containerView.addSubview(moreActionButton)
         containerView.addSubview(handleImageView)
     }
 
@@ -773,17 +720,25 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         activeDotView.layer?.cornerRadius = 4
         activeDotView.layer?.backgroundColor = NSColor.systemGreen.cgColor
 
-        enablementButton.setButtonType(.switch)
-        enablementButton.title = ""
-        enablementButton.target = self
-        enablementButton.action = #selector(handleEnablementToggle(_:))
-
         iconActionButton.isBordered = false
         iconActionButton.target = self
         iconActionButton.action = #selector(handleOpenSettings(_:))
         iconActionButton.onHoverChanged = { [weak self] isHovered in
             self?.setIconActionHovered(isHovered)
         }
+
+        moreActionButton.isBordered = false
+        moreActionButton.image = NSImage(
+            systemSymbolName: "ellipsis.circle",
+            accessibilityDescription: AppL10n.plugins(
+                "plugin.management.moreActions",
+                defaultValue: "更多操作"
+            )
+        )
+        moreActionButton.contentTintColor = .secondaryLabelColor
+        moreActionButton.symbolConfiguration = .init(pointSize: 14, weight: .medium)
+        moreActionButton.target = self
+        moreActionButton.action = #selector(handleMoreActions(_:))
 
         handleImageView.image = NSImage(
             systemSymbolName: "line.3.horizontal",
@@ -805,8 +760,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             titleRowStackView,
             descriptionLabel,
             activeDotView,
-            trailingControlView,
-            enablementButton,
+            moreActionButton,
             handleImageView
         ].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -836,21 +790,18 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             titleRowStackView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
 
             descriptionLabel.leadingAnchor.constraint(equalTo: titleRowStackView.leadingAnchor),
-            descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingControlView.leadingAnchor, constant: -12),
+            descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: moreActionButton.leadingAnchor, constant: -12),
             descriptionLabel.topAnchor.constraint(equalTo: titleRowStackView.bottomAnchor, constant: 4),
 
             activeDotView.widthAnchor.constraint(equalToConstant: 8),
             activeDotView.heightAnchor.constraint(equalToConstant: 8),
             activeDotView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            activeDotView.trailingAnchor.constraint(equalTo: trailingControlView.leadingAnchor, constant: -14),
+            activeDotView.trailingAnchor.constraint(equalTo: moreActionButton.leadingAnchor, constant: -12),
 
-            trailingControlView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            trailingControlView.trailingAnchor.constraint(equalTo: handleImageView.leadingAnchor, constant: -12),
-            trailingControlView.widthAnchor.constraint(equalToConstant: 22),
-            trailingControlView.heightAnchor.constraint(equalToConstant: 22),
-
-            enablementButton.centerXAnchor.constraint(equalTo: trailingControlView.centerXAnchor),
-            enablementButton.centerYAnchor.constraint(equalTo: trailingControlView.centerYAnchor),
+            moreActionButton.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+            moreActionButton.trailingAnchor.constraint(equalTo: handleImageView.leadingAnchor, constant: -8),
+            moreActionButton.widthAnchor.constraint(equalToConstant: 22),
+            moreActionButton.heightAnchor.constraint(equalToConstant: 22),
 
             handleImageView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
             handleImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
@@ -859,23 +810,126 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         ])
     }
 
-    private func configureTrailingControl(
-        item: FeatureManagementTableItem
-    ) {
-        enablementButton.isHidden = false
-        enablementButton.state = item.isGloballyEnabled ? .on : .off
+    private func configureMoreAction() {
         iconActionButton.isHidden = !hasSettings
+        moreActionButton.isHidden = !canUninstall
+        if !canUninstall {
+            setMoreActionVisible(false)
+        }
         window?.invalidateCursorRects(for: iconActionButton)
-    }
-
-    @objc
-    private func handleEnablementToggle(_ sender: NSButton) {
-        stateChangeHandler?(sender.state == .on)
+        window?.invalidateCursorRects(for: moreActionButton)
     }
 
     @objc
     private func handleOpenSettings(_ sender: NSButton) {
         openSettingsHandler?()
+    }
+
+    @objc
+    private func handleMoreActions(_ sender: NSButton) {
+        guard let menu = actionsMenu() else {
+            return
+        }
+
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+    }
+
+    @objc
+    private func handleOpenMarketplace(_ sender: NSMenuItem) {
+        openMarketplaceHandler?()
+    }
+
+    @objc
+    private func handleRequestUninstall(_ sender: NSMenuItem) {
+        requestUninstallHandler?()
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        actionsMenu()
+    }
+
+    override func updateTrackingAreas() {
+        if let cellTrackingArea {
+            removeTrackingArea(cellTrackingArea)
+        }
+
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        cellTrackingArea = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        isPointerInside = true
+        setMoreActionVisible(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        isPointerInside = false
+        setMoreActionVisible(false)
+    }
+
+    private func actionsMenu() -> NSMenu? {
+        guard canUninstall else {
+            return nil
+        }
+
+        let menu = NSMenu()
+        if hasSettings {
+            let openSettings = NSMenuItem(
+                title: AppL10n.plugins("plugin.management.openSettings", defaultValue: "打开插件设置"),
+                action: #selector(handleOpenSettingsMenuItem(_:)),
+                keyEquivalent: ""
+            )
+            openSettings.target = self
+            menu.addItem(openSettings)
+        }
+
+        let marketplace = NSMenuItem(
+            title: AppL10n.plugins("plugin.management.viewMarketplace", defaultValue: "在市场中查看"),
+            action: #selector(handleOpenMarketplace(_:)),
+            keyEquivalent: ""
+        )
+        marketplace.target = self
+        menu.addItem(marketplace)
+
+        if canUninstall {
+            menu.addItem(.separator())
+            let uninstall = NSMenuItem(
+                title: AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"),
+                action: #selector(handleRequestUninstall(_:)),
+                keyEquivalent: ""
+            )
+            uninstall.target = self
+            menu.addItem(uninstall)
+        }
+
+        return menu
+    }
+
+    @objc
+    private func handleOpenSettingsMenuItem(_ sender: NSMenuItem) {
+        openSettingsHandler?()
+    }
+
+    private func setMoreActionVisible(_ isVisible: Bool) {
+        let alpha: CGFloat = isVisible ? 1 : 0
+        guard moreActionButton.alphaValue != alpha else {
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.allowsImplicitAnimation = true
+            moreActionButton.alphaValue = alpha
+        }
     }
 
     private func setIconActionHovered(_ isHovered: Bool) {
@@ -977,8 +1031,9 @@ enum FeatureManagementTableCellInspection {
             item: item,
             mode: mode,
             showsHandle: showsHandle,
-            onStateChange: { _ in },
-            onOpenSettings: {}
+            onOpenSettings: {},
+            onOpenMarketplace: {},
+            onRequestUninstall: {}
         )
         return containsSwiftUIHostingView(in: cell)
     }
@@ -1000,14 +1055,7 @@ func featureManagementDescription(
 ) -> String {
     var details = [item.description]
 
-    switch mode {
-    case .installed:
-        details.append(pluginCapabilitySummary(item.capabilities))
-    case .surface:
-        break
-    }
-
-    if item.isGloballyEnabled, item.isActive {
+    if item.isActive {
         details.append(AppL10n.plugins("plugin.management.active", defaultValue: "使用中"))
     }
 
@@ -1025,10 +1073,6 @@ func pluginCapabilitySummary(_ capabilities: PluginHostCapabilities) -> String {
     case (false, false):
         return AppL10n.plugins("plugin.capability.settingsOnly", defaultValue: "仅设置")
     }
-}
-
-func featureManagementControlHelp() -> String {
-    AppL10n.plugins("plugin.management.globalToggle", defaultValue: "启用或停用插件")
 }
 
 private extension NSImage {

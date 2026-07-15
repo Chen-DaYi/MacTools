@@ -179,21 +179,6 @@ enum PluginListFilter {
     }
 
     static func matches(
-        installedItem item: InstalledPluginItem,
-        query: String,
-        filter: PluginCategoryFilter
-    ) -> Bool {
-        matches(
-            id: item.id,
-            title: item.title,
-            description: item.description,
-            category: item.category,
-            query: query,
-            filter: filter
-        )
-    }
-
-    static func matches(
         surfaceItem item: PluginSurfaceLayoutItem,
         query: String,
         filter: PluginCategoryFilter
@@ -232,15 +217,6 @@ enum PluginListFilter {
         }
 
         return counts
-    }
-
-    static func countsByFilter(installedItems items: [InstalledPluginItem], query: String) -> [PluginCategoryFilter: Int] {
-        countsByFilter(
-            categories: items.map(\.category),
-            matchingIndices: items.indices.filter {
-                matches(installedItem: items[$0], query: query, filter: .all)
-            }
-        )
     }
 
     static func countsByFilter(surfaceItems items: [PluginSurfaceLayoutItem], query: String) -> [PluginCategoryFilter: Int] {
