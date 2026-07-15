@@ -48,8 +48,8 @@
       "summary": "連接附近可用的 Sidecar 顯示器作為延伸顯示器"
     }
   },
-  "version": "1.0.2",
-  "minHostVersion": "1.0.2",
+  "version": "1.0.3",
+  "minHostVersion": "1.1.1",
   "pluginKitVersion": 3,
   "bundleRelativePath": "Sidecar.bundle",
   "factoryClass": "SidecarPlugin.SidecarPluginFactory",

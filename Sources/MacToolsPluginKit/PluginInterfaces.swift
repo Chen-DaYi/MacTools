@@ -184,6 +184,14 @@ public protocol PluginRuntimeLocalizationRefreshing: AnyObject {
     func refreshLocalization()
 }
 
+/// Optional hook for plugins whose dynamic shortcut definitions need to retain a shortcut after
+/// the host accepts, clears, or restores its binding. Registration and conflict validation remain
+/// owned by the host's shared shortcut manager.
+@MainActor
+public protocol PluginShortcutBindingChangeHandling: AnyObject {
+    func shortcutBindingDidChange(id: String, binding: ShortcutBinding?)
+}
+
 /// Optional protocol for plugins that explicitly opt a small, non-sensitive settings payload
 /// into MacTools preferences backup and restore. This preserves the `MacToolsPlugin` ABI for
 /// existing dynamic plugins while keeping cache, credentials, and other private data excluded.

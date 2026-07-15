@@ -17,24 +17,50 @@ struct SidecarDevicePreference: Codable, Identifiable, Equatable {
     var name: String
     var transport: SidecarConnectionTransport
     var shortcutAction: SidecarShortcutAction
+    /// A legacy default binding. New bindings are stored and validated by the host shortcut store.
     var shortcut: ShortcutBinding?
+    var hasShortcutConfiguration: Bool
 
     init(
         id: String,
         name: String,
         transport: SidecarConnectionTransport = .automatic,
         shortcutAction: SidecarShortcutAction = .toggle,
-        shortcut: ShortcutBinding? = nil
+        shortcut: ShortcutBinding? = nil,
+        hasShortcutConfiguration: Bool? = nil
     ) {
         self.id = id
         self.name = name
         self.transport = transport
         self.shortcutAction = shortcutAction
         self.shortcut = shortcut
+        self.hasShortcutConfiguration = hasShortcutConfiguration ?? (shortcut != nil)
     }
 
     var hasCustomConfiguration: Bool {
-        transport != .automatic || shortcutAction != .toggle || shortcut != nil
+        transport != .automatic || shortcutAction != .toggle || shortcut != nil || hasShortcutConfiguration
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case transport
+        case shortcutAction
+        case shortcut
+        case hasShortcutConfiguration
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        transport = try container.decode(SidecarConnectionTransport.self, forKey: .transport)
+        shortcutAction = try container.decode(SidecarShortcutAction.self, forKey: .shortcutAction)
+        shortcut = try container.decodeIfPresent(ShortcutBinding.self, forKey: .shortcut)
+        hasShortcutConfiguration = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .hasShortcutConfiguration
+        ) ?? (shortcut != nil)
     }
 }
 
@@ -138,9 +164,18 @@ final class SidecarPreferencesStore: ObservableObject {
 
     func updateShortcut(_ shortcut: ShortcutBinding?, for deviceID: String) {
         guard let index = devices.firstIndex(where: { $0.id == deviceID }) else { return }
-        guard devices[index].shortcut != shortcut else { return }
+        guard devices[index].shortcut != shortcut
+            || devices[index].hasShortcutConfiguration != (shortcut != nil)
+        else {
+            return
+        }
         devices[index].shortcut = shortcut
+        devices[index].hasShortcutConfiguration = shortcut != nil
         normalizeAndPersistShortcuts(persistWhenUnchanged: true)
+    }
+
+    func updateShortcutConfiguration(_ hasConfiguration: Bool, for deviceID: String) {
+        update(deviceID: deviceID) { $0.hasShortcutConfiguration = hasConfiguration }
     }
 
     func updateDisconnectAllShortcut(_ shortcut: ShortcutBinding?) {

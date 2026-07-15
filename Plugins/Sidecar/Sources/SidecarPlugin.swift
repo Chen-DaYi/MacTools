@@ -36,9 +36,6 @@ private enum SidecarShortcutID {
         devicePrefix + deviceID
     }
 
-    static func isGlobal(_ id: String) -> Bool {
-        id == connectFirstAvailable || id == disconnectAll
-    }
 }
 
 private struct SidecarSwitchRequest {
@@ -48,7 +45,8 @@ private struct SidecarSwitchRequest {
 }
 
 @MainActor
-final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling, PluginPortablePreferencesProviding {
+final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
+    PluginPortablePreferencesProviding, PluginShortcutBindingChangeHandling {
     let metadata: PluginMetadata
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -62,7 +60,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     private let service: any SidecarServicing
     private let localization: PluginLocalization
     private let preferences: SidecarPreferencesStore
-    private let shortcutManager: any SidecarShortcutManaging
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "SidecarPlugin"
@@ -92,7 +89,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         service: any SidecarServicing = SidecarCoreService(),
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         preferences: SidecarPreferencesStore? = nil,
-        shortcutManager: (any SidecarShortcutManaging)? = nil,
         operationTimeoutNanoseconds: UInt64 = 15_000_000_000,
         operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
         terminalFeedbackExpiration: TimeInterval = 30,
@@ -104,7 +100,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         self.preferences = preferences ?? SidecarPreferencesStore(
             storage: UserDefaultsPluginStorage(pluginID: "sidecar")
         )
-        self.shortcutManager = shortcutManager ?? SidecarShortcutManager()
         self.operationTimeoutNanoseconds = operationTimeoutNanoseconds
         self.operationFeedbackNanoseconds = operationFeedbackNanoseconds
         self.terminalFeedbackExpiration = max(0, terminalFeedbackExpiration)
@@ -124,9 +119,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         service.onDevicesChanged = { [weak self] in
             guard self?.isActive == true else { return }
             self?.refreshDevices(notify: true)
-        }
-        self.shortcutManager.onTrigger = { [weak self] id in
-            self?.handleConfiguredShortcut(id: id)
         }
         refreshDevices(notify: false)
         isExpanded = !devices.isEmpty
@@ -166,7 +158,55 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
-    var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+    var shortcutDefinitions: [PluginShortcutDefinition] {
+        let globalDefinitions = [
+            shortcutDefinition(
+                id: SidecarShortcutID.connectFirstAvailable,
+                title: localization.string(
+                    "settings.connectFirstAvailable.title",
+                    defaultValue: "连接第一个可用显示器"
+                ),
+                description: localization.string(
+                    "settings.connectFirstAvailable.description",
+                    defaultValue: "按上方的可用显示器优先级连接第一个设备。"
+                ),
+                defaultBinding: preferences.connectFirstAvailableShortcut,
+                groupID: "global",
+                groupTitle: localization.string("settings.globalShortcuts.title", defaultValue: "Sidecar 快捷键")
+            ),
+            shortcutDefinition(
+                id: SidecarShortcutID.disconnectAll,
+                title: localization.string("settings.disconnectAll.title", defaultValue: "断开所有已连接设备"),
+                description: localization.string(
+                    "settings.disconnectAll.description",
+                    defaultValue: "只会断开 Sidecar 明确报告为已连接的显示器。"
+                ),
+                defaultBinding: preferences.disconnectAllShortcut,
+                groupID: "global",
+                groupTitle: localization.string("settings.globalShortcuts.title", defaultValue: "Sidecar 快捷键")
+            )
+        ]
+
+        let deviceDefinitions = preferences.devices
+            .filter { preference in
+                devices.contains(where: { $0.id == preference.id }) || preference.hasCustomConfiguration
+            }
+            .map { preference in
+                shortcutDefinition(
+                    id: SidecarShortcutID.device(preference.id),
+                    title: preference.name,
+                    description: localization.string(
+                        "settings.shortcutAction.help",
+                        defaultValue: "此设备快捷键执行的操作"
+                    ),
+                    defaultBinding: preference.shortcut,
+                    groupID: "devices",
+                    groupTitle: localization.string("settings.devices.title", defaultValue: "Sidecar 设备")
+                )
+            }
+
+        return globalDefinitions + deviceDefinitions
+    }
 
     var configuration: PluginConfiguration? {
         PluginConfiguration(description: metadata.defaultDescription) { [weak self] _ in
@@ -177,16 +217,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                     localization: self.localization,
                     onRefresh: { [weak self] in self?.refresh() },
                     onUpdate: { [weak self] in
-                        self?.syncShortcuts()
                         self?.onStateChange?()
-                    },
-                    onBeginRecording: { [weak self] id in
-                        let shortcutID = SidecarShortcutID.isGlobal(id)
-                            ? id
-                            : SidecarShortcutID.device(id)
-                        self?.shortcutManager.temporarilyDisable(id: shortcutID)
-                    },
-                    onEndRecording: { [weak self] in self?.syncShortcuts() }
+                    }
                 )
             } else {
                 EmptyView()
@@ -197,14 +229,12 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     func activate(context: PluginRuntimeContext) {
         isActive = true
         refreshDevices(notify: false)
-        syncShortcuts()
         scheduleDeviceRefreshIfNeeded()
     }
 
     func deactivate(reason _: PluginDeactivationReason) {
         isActive = false
         isPrimaryPanelVisible = false
-        shortcutManager.unregisterAll()
         cancelDeviceRefresh()
         followUpRefreshTask?.cancel()
         followUpRefreshTask = nil
@@ -262,7 +292,19 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
 
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
-    func handleShortcutAction(id: String) {}
+    func handleShortcutAction(id: String) {
+        handleConfiguredShortcut(id: id)
+    }
+
+    func shortcutBindingDidChange(id: String, binding: ShortcutBinding?) {
+        if id.hasPrefix(SidecarShortcutID.devicePrefix) {
+            preferences.updateShortcutConfiguration(
+                binding != nil,
+                for: String(id.dropFirst(SidecarShortcutID.devicePrefix.count))
+            )
+        }
+        onStateChange?()
+    }
 
     func makePortablePreferencesBackup() -> Data? {
         preferences.portablePreferencesData()
@@ -271,7 +313,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     func restorePortablePreferences(from data: Data) {
         preferences.restorePortablePreferences(from: data)
         refreshDevices(notify: false)
-        syncShortcuts()
         onStateChange?()
     }
 
@@ -357,9 +398,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             switchRequest = nil
         }
         clearCompletedOperationIfSnapshotConfirmsIt()
-        if isActive {
-            syncShortcuts()
-        }
         if notify && changed {
             onStateChange?()
         }
@@ -641,28 +679,6 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             deviceID: device.id,
             message: localizedErrorMessage(for: .operationUnavailable)
         )
-    }
-
-    private func syncShortcuts() {
-        guard isActive else { return }
-
-        var bindings: [String: ShortcutBinding] = [:]
-        var usedBindings = Set<ShortcutBinding>()
-        if let connectFirstAvailableShortcut = preferences.connectFirstAvailableShortcut {
-            bindings[SidecarShortcutID.connectFirstAvailable] = connectFirstAvailableShortcut
-            usedBindings.insert(connectFirstAvailableShortcut)
-        }
-        if let disconnectAllShortcut = preferences.disconnectAllShortcut,
-           usedBindings.insert(disconnectAllShortcut).inserted {
-            bindings[SidecarShortcutID.disconnectAll] = disconnectAllShortcut
-        }
-        for preference in preferences.devices {
-            guard let shortcut = preference.shortcut, usedBindings.insert(shortcut).inserted else {
-                continue
-            }
-            bindings[SidecarShortcutID.device(preference.id)] = shortcut
-        }
-        shortcutManager.sync(bindings: bindings)
     }
 
     private func handleConfiguredShortcut(id: String) {
@@ -1246,5 +1262,29 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         }
 
         return device
+    }
+
+    private func shortcutDefinition(
+        id: String,
+        title: String,
+        description: String,
+        defaultBinding: ShortcutBinding?,
+        groupID: String,
+        groupTitle: String
+    ) -> PluginShortcutDefinition {
+        PluginShortcutDefinition(
+            id: id,
+            title: title,
+            description: description,
+            actionID: id,
+            scope: .global,
+            defaultBinding: defaultBinding,
+            isRequired: false,
+            settingsGroupID: groupID,
+            settingsGroupTitle: groupTitle,
+            settingsGroupDescription: nil,
+            settingsControlTitle: nil,
+            settingsControlSystemImage: nil
+        )
     }
 }

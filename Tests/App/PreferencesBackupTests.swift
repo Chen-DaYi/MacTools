@@ -72,6 +72,30 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(restoredPlugin.restoredPortablePreferences, portableData)
     }
 
+    func testImportRestoresPortablePreferencesBeforeDynamicShortcutCustomizations() throws {
+        let binding = ShortcutBinding(keyCode: 12, modifiers: [.command, .shift])
+        let plugin = DynamicBackupShortcutPlugin()
+        let host = makeHost(plugins: [plugin], defaults: makeDefaults())
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: ["sidecar"], hiddenPluginIDs: []),
+            shortcutCustomizations: [
+                "sidecar.shortcut.device": .custom(binding)
+            ],
+            pluginPreferences: ["sidecar": Data("device-settings".utf8)]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(plugin.restoredPortablePreferences, Data("device-settings".utf8))
+        XCTAssertEqual(plugin.receivedShortcutBinding, binding)
+        XCTAssertEqual(
+            host.makePreferencesBackup().shortcutCustomizations["sidecar.shortcut.device"],
+            .custom(binding)
+        )
+    }
+
     func testPreviewReportsUnavailablePluginAndShortcutSettings() throws {
         let defaults = makeDefaults()
         let host = makeHost(
@@ -626,5 +650,52 @@ private final class BackupTestPlugin: MacToolsPlugin, PluginPortablePreferencesP
 
     func restorePortablePreferences(from data: Data) {
         restoredPortablePreferences = data
+    }
+}
+
+@MainActor
+private final class DynamicBackupShortcutPlugin: MacToolsPlugin, PluginPortablePreferencesProviding,
+    PluginShortcutBindingChangeHandling {
+    let metadata = PluginMetadata(
+        id: "sidecar",
+        title: "Sidecar",
+        iconName: "display",
+        iconTint: .blue,
+        order: 1,
+        defaultDescription: "Sidecar"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var restoredPortablePreferences: Data?
+    private(set) var receivedShortcutBinding: ShortcutBinding?
+
+    var shortcutDefinitions: [PluginShortcutDefinition] {
+        guard restoredPortablePreferences != nil else { return [] }
+
+        return [
+            PluginShortcutDefinition(
+                id: "device",
+                title: "Device",
+                description: "Device",
+                actionID: "device",
+                scope: .global,
+                defaultBinding: nil,
+                isRequired: false
+            )
+        ]
+    }
+
+    func makePortablePreferencesBackup() -> Data? {
+        restoredPortablePreferences
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        restoredPortablePreferences = data
+    }
+
+    func shortcutBindingDidChange(id: String, binding: ShortcutBinding?) {
+        guard id == "device" else { return }
+        receivedShortcutBinding = binding
     }
 }

@@ -6,8 +6,6 @@ import MacToolsPluginKit
 private enum SidecarSettingsColumnWidth {
     static let connection: CGFloat = 144
     static let shortcutAction: CGFloat = 112
-    static let shortcut: CGFloat = 132
-    static let clearShortcut: CGFloat = 20
 }
 
 struct SidecarSettingsView: View {
@@ -16,10 +14,6 @@ struct SidecarSettingsView: View {
     let localization: PluginLocalization
     let onRefresh: () -> Void
     let onUpdate: () -> Void
-    let onBeginRecording: (String) -> Void
-    let onEndRecording: () -> Void
-    private static let connectFirstAvailableID = "connect-first-available"
-    private static let disconnectAllID = "disconnect-all"
 
     private var displayedDevices: [SidecarDevicePreference] {
         let liveDevicesByID = Dictionary(uniqueKeysWithValues: liveDevices.map { ($0.id, $0) })
@@ -44,7 +38,6 @@ struct SidecarSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             savedDevicesSection
-            globalShortcutsSection
         }
     }
 
@@ -128,71 +121,6 @@ struct SidecarSettingsView: View {
         }
     }
 
-    private var globalShortcutsSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(
-                localization.string("settings.globalShortcuts.title", defaultValue: "Sidecar 快捷键"),
-                systemImage: "keyboard"
-            )
-            .font(PluginSettingsTheme.Typography.sectionTitle)
-            .foregroundStyle(.secondary)
-
-            VStack(spacing: 0) {
-                SidecarGlobalShortcutRow(
-                    title: localization.string(
-                        "settings.connectFirstAvailable.title",
-                        defaultValue: "连接第一个可用显示器"
-                    ),
-                    description: localization.string(
-                        "settings.connectFirstAvailable.description",
-                        defaultValue: "按上方的可用显示器优先级连接第一个设备。"
-                    ),
-                    shortcut: store.connectFirstAvailableShortcut,
-                    localization: localization,
-                    onRecord: { binding in
-                        guard !hasShortcutConflict(binding, excluding: Self.connectFirstAvailableID) else {
-                            return shortcutConflictResult()
-                        }
-                        store.updateConnectFirstAvailableShortcut(binding)
-                        onUpdate()
-                        return .accepted
-                    },
-                    onClear: {
-                        store.updateConnectFirstAvailableShortcut(nil)
-                        onUpdate()
-                    },
-                    onBeginRecording: { onBeginRecording(Self.connectFirstAvailableID) },
-                    onEndRecording: onEndRecording
-                )
-                PluginSettingsListDivider()
-                SidecarGlobalShortcutRow(
-                    title: localization.string("settings.disconnectAll.title", defaultValue: "断开所有已连接设备"),
-                    description: localization.string(
-                        "settings.disconnectAll.description",
-                        defaultValue: "只会断开 Sidecar 明确报告为已连接的显示器。"
-                    ),
-                    shortcut: store.disconnectAllShortcut,
-                    localization: localization,
-                    onRecord: { binding in
-                        guard !hasShortcutConflict(binding, excluding: Self.disconnectAllID) else {
-                            return shortcutConflictResult()
-                        }
-                        store.updateDisconnectAllShortcut(binding)
-                        onUpdate()
-                        return .accepted
-                    },
-                    onClear: {
-                        store.updateDisconnectAllShortcut(nil)
-                        onUpdate()
-                    },
-                    onBeginRecording: { onBeginRecording(Self.disconnectAllID) },
-                    onEndRecording: onEndRecording
-                )
-            }
-            .pluginSettingsCardBackground(.host)
-        }
-    }
-
     private func state(for preference: SidecarDevicePreference) -> SidecarDeviceSettingsState {
         guard let device = liveDevices.first(where: { $0.id == preference.id }) else {
             return .unavailable
@@ -227,25 +155,6 @@ struct SidecarSettingsView: View {
                     store.updateShortcutAction(action, for: item.preference.id)
                     onUpdate()
                 },
-                onRecord: { binding in
-                    guard !hasShortcutConflict(binding, excluding: item.preference.id) else {
-                        return .rejected(localization.string(
-                            "settings.shortcut.conflict",
-                            defaultValue: "此快捷键已用于其他 Sidecar 操作。"
-                        ))
-                    }
-                    store.updateShortcut(binding, for: item.preference.id)
-                    onUpdate()
-                    return .accepted
-                },
-                onClear: {
-                    store.updateShortcut(nil, for: item.preference.id)
-                    onUpdate()
-                },
-                onBeginRecording: {
-                    onBeginRecording(item.preference.id)
-                },
-                onEndRecording: onEndRecording,
                 isReorderable: item.state == .available
             )
 
@@ -254,25 +163,6 @@ struct SidecarSettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func hasShortcutConflict(_ binding: ShortcutBinding, excluding id: String) -> Bool {
-        if id != Self.disconnectAllID, store.disconnectAllShortcut == binding {
-            return true
-        }
-        if id != Self.connectFirstAvailableID, store.connectFirstAvailableShortcut == binding {
-            return true
-        }
-        return store.devices.contains { preference in
-            preference.id != id && preference.shortcut == binding
-        }
-    }
-
-    private func shortcutConflictResult() -> PluginShortcutRecordingResult {
-        .rejected(localization.string(
-            "settings.shortcut.conflict",
-            defaultValue: "此快捷键已用于其他 Sidecar 操作。"
-        ))
     }
 
 }
@@ -549,10 +439,6 @@ private struct SidecarDeviceSettingsRow: View {
     let localization: PluginLocalization
     let onTransportChange: (SidecarConnectionTransport) -> Void
     let onShortcutActionChange: (SidecarShortcutAction) -> Void
-    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
-    let onClear: () -> Void
-    let onBeginRecording: () -> Void
-    let onEndRecording: () -> Void
     let isReorderable: Bool
 
     var body: some View {
@@ -601,9 +487,6 @@ private struct SidecarDeviceSettingsRow: View {
             .accessibilityLabel(localization.string("settings.column.connection", defaultValue: "连接方式"))
             .help(localization.string("settings.transport.help", defaultValue: "连接时使用的传输方式"))
 
-            Divider()
-                .frame(height: 28)
-
             Picker(String(), selection: Binding(
                 get: { preference.shortcutAction },
                 set: { action in
@@ -622,34 +505,8 @@ private struct SidecarDeviceSettingsRow: View {
             .frame(width: SidecarSettingsColumnWidth.shortcutAction)
             .accessibilityLabel(localization.string("settings.column.shortcutAction", defaultValue: "快捷键操作"))
             .help(localization.string("settings.shortcutAction.help", defaultValue: "此设备快捷键执行的操作"))
-
-            PluginShortcutRecorder(
-                title: preference.name,
-                displayText: shortcutText,
-                minWidth: SidecarSettingsColumnWidth.shortcut,
-                onRecord: onRecord,
-                onBeginRecording: onBeginRecording,
-                onEndRecording: onEndRecording
-            )
-            .frame(width: SidecarSettingsColumnWidth.shortcut)
-
-            Button(action: onClear) {
-                Image(systemName: "xmark.circle.fill")
-                    .pluginSettingsRowIconStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .opacity(preference.shortcut == nil ? 0 : 1)
-            .allowsHitTesting(preference.shortcut != nil)
-            .frame(width: SidecarSettingsColumnWidth.clearShortcut)
         }
         .pluginSettingsListRowPadding(interactive: true)
-    }
-
-    private var shortcutText: String {
-        ShortcutFormatter.displayString(for: preference.shortcut).replacingOccurrences(
-            of: "None",
-            with: localization.string("settings.shortcut.unset", defaultValue: "未设置")
-        )
     }
 
     private var statusIcon: String {
@@ -698,74 +555,17 @@ private struct SidecarDeviceSettingsColumnHeader: View {
                 systemImage: "cable.connector"
             )
                 .frame(width: SidecarSettingsColumnWidth.connection, alignment: .leading)
-            Divider()
-                .frame(height: 16)
             Label(
-                localization.string("settings.group.shortcutAutomation", defaultValue: "快捷键自动化"),
+                localization.string("settings.column.shortcutAction", defaultValue: "快捷键操作"),
                 systemImage: "keyboard"
             )
             .frame(
-                width: SidecarSettingsColumnWidth.shortcutAction
-                    + SidecarSettingsColumnWidth.shortcut
-                    + SidecarSettingsColumnWidth.clearShortcut
-                    + (PluginSettingsTheme.Spacing.rowContentControl * 2),
+                width: SidecarSettingsColumnWidth.shortcutAction,
                 alignment: .leading
             )
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
         .foregroundStyle(.secondary)
         .pluginSettingsListRowPadding(interactive: true)
-    }
-}
-
-private struct SidecarGlobalShortcutRow: View {
-    let title: String
-    let description: String
-    let shortcut: ShortcutBinding?
-    let localization: PluginLocalization
-    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
-    let onClear: () -> Void
-    let onBeginRecording: () -> Void
-    let onEndRecording: () -> Void
-
-    var body: some View {
-        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                Text(title)
-                    .font(PluginSettingsTheme.Typography.rowTitle)
-                Text(description)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            PluginShortcutRecorder(
-                title: title,
-                displayText: shortcutText,
-                minWidth: SidecarSettingsColumnWidth.shortcut,
-                onRecord: onRecord,
-                onBeginRecording: onBeginRecording,
-                onEndRecording: onEndRecording
-            )
-            .frame(width: SidecarSettingsColumnWidth.shortcut)
-
-            Button(action: onClear) {
-                Image(systemName: "xmark.circle.fill")
-                    .pluginSettingsRowIconStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .opacity(shortcut == nil ? 0 : 1)
-            .allowsHitTesting(shortcut != nil)
-            .frame(width: SidecarSettingsColumnWidth.clearShortcut)
-        }
-        .pluginSettingsListRowPadding(interactive: true)
-    }
-
-    private var shortcutText: String {
-        ShortcutFormatter.displayString(for: shortcut).replacingOccurrences(
-            of: "None",
-            with: localization.string("settings.shortcut.unset", defaultValue: "未设置")
-        )
     }
 }
