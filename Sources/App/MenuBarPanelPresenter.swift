@@ -220,8 +220,20 @@ final class MenuBarPanelPresenter: NSObject {
                 return
             }
 
-            popover.contentViewController?.view.window?.makeKey()
+            guard let window = popover.contentViewController?.view.window else {
+                return
+            }
+
+            window.makeKey()
+            Self.clearAutomaticInitialFocus(in: window)
         }
+    }
+
+    /// Prevent SwiftUI from leaving the first toolbar button focused when the
+    /// popover becomes key. Keyboard navigation can still focus controls
+    /// normally after the popover opens.
+    static func clearAutomaticInitialFocus(in window: NSWindow) {
+        window.makeFirstResponder(nil)
     }
 
     private func observeAppearancePreference() {
@@ -664,11 +676,6 @@ private struct MenuBarPanelTabSwitcher: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                // The popover becomes key when it opens, and SwiftUI otherwise
-                // gives its first toolbar button a persistent blue focus ring.
-                // That ring looks like a selected dashboard tab even when the
-                // feature tab is the visible surface.
-                .focusEffectDisabled()
                 .help(tab.accessibilityTitle)
                 .accessibilityLabel(tab.accessibilityTitle)
                 .background {
