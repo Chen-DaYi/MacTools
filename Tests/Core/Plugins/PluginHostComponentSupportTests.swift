@@ -307,6 +307,32 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertFalse(host.openSettingsShortcut.canClear)
     }
 
+    func testHostNotifiesDynamicShortcutPluginAfterAcceptingBinding() {
+        let plugin = MockComponentPanelPlugin(
+            id: "component",
+            shortcutDefinitions: [
+                PluginShortcutDefinition(
+                    id: "dynamic-device",
+                    title: "iPad",
+                    description: "Connect the iPad.",
+                    actionID: "dynamic-device",
+                    scope: .global,
+                    defaultBinding: nil,
+                    isRequired: false
+                )
+            ]
+        )
+        let host = makeHost(plugins: [plugin])
+        let binding = ShortcutBinding(keyCode: 18, modifiers: [.command, .option])
+
+        host.setShortcutBinding(binding, for: "component.shortcut.dynamic-device")
+
+        XCTAssertEqual(
+            plugin.shortcutBindingChanges,
+            [.init(id: "dynamic-device", binding: binding)]
+        )
+    }
+
     func testOpenSettingsShortcutRejectsPluginShortcutBinding() {
         let binding = ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
         let plugin = MockComponentPanelPlugin(
@@ -797,7 +823,13 @@ private final class MockVisibilityLifecyclePlugin: MacToolsPlugin, PluginPrimary
 }
 
 @MainActor
-private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling, PluginRuntimeLocalizationRefreshing {
+private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel,
+    PluginPanelSurfaceLifecycleHandling, PluginRuntimeLocalizationRefreshing, PluginShortcutBindingChangeHandling {
+    struct ShortcutBindingChange: Equatable {
+        let id: String
+        let binding: ShortcutBinding?
+    }
+
     enum SurfaceEvent: Equatable {
         case visible(PluginPanelSurface)
         case hidden(PluginPanelSurface)
@@ -818,6 +850,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     private(set) var localizationRefreshCount = 0
     private(set) var receivedPanelVisibilityValues: [Bool] = []
     private(set) var surfaceEvents: [SurfaceEvent] = []
+    private(set) var shortcutBindingChanges: [ShortcutBindingChange] = []
 
     init(
         id: String,
@@ -884,6 +917,9 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+    func shortcutBindingDidChange(id: String, binding: ShortcutBinding?) {
+        shortcutBindingChanges.append(.init(id: id, binding: binding))
+    }
 }
 
 @MainActor

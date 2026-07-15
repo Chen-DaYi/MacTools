@@ -294,7 +294,7 @@ private struct PreferencesBackupSettingsRow: View {
 
                 Text(AppL10n.preferencesBackup(
                     "preferencesBackup.description",
-                    defaultValue: "包含应用偏好、插件显示顺序与快捷键；不会包含权限、缓存或私有插件数据。"
+                    defaultValue: "包含应用偏好、插件显示顺序、快捷键和支持导出的插件设置；不会包含权限、缓存、凭证或其他私有数据。"
                 ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
@@ -495,7 +495,7 @@ private struct PreferencesImportPreviewSheet: View {
                     ))
                 }
                 GridRow {
-                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.plugins", defaultValue: "插件显示设置"))
+                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.plugins", defaultValue: "插件设置"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     Text(AppL10n.preferencesBackupFormat(
                         "preferencesBackup.preview.pluginsCount",

@@ -351,7 +351,8 @@ final class PluginHost: ObservableObject {
             ),
             shortcutCustomizations: shortcutStore.customizations(
                 for: [AppShortcut.openSettingsID] + shortcutDescriptors.map(\.itemID)
-            )
+            ),
+            pluginPreferences: portablePluginPreferences()
         )
     }
 
@@ -414,6 +415,7 @@ final class PluginHost: ObservableObject {
             defaultPluginIDs: defaultPluginIDs
         )
 
+        restorePortablePluginPreferences(backup.pluginPreferences)
         let shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)
 
         rebuildDerivedState()
@@ -1131,6 +1133,35 @@ final class PluginHost: ObservableObject {
 
     private var activePlugins: [any MacToolsPlugin] {
         plugins.filter { isolatedPluginFailures[$0.metadata.id] == nil }
+    }
+
+    private func portablePluginPreferences() -> [String: Data] {
+        activePlugins.reduce(into: [String: Data]()) { result, plugin in
+            guard let portablePreferences = plugin as? any PluginPortablePreferencesProviding,
+                  let data = guardedOptionalValue(
+                    for: plugin,
+                    operation: "export portable preferences",
+                    portablePreferences.makePortablePreferencesBackup()
+                  )
+            else {
+                return
+            }
+            result[plugin.metadata.id] = data
+        }
+    }
+
+    private func restorePortablePluginPreferences(_ pluginPreferences: [String: Data]) {
+        for (pluginID, data) in pluginPreferences {
+            guard let plugin = corePlugin(for: pluginID),
+                  let portablePreferences = plugin as? any PluginPortablePreferencesProviding
+            else {
+                continue
+            }
+
+            guardPluginCall(plugin, operation: "restore portable preferences") {
+                portablePreferences.restorePortablePreferences(from: data)
+            }
+        }
     }
 
     private func corePlugin(for pluginID: String) -> (any MacToolsPlugin)? {
@@ -2149,6 +2180,13 @@ final class PluginHost: ObservableObject {
 
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
             shortcutErrors.removeValue(forKey: descriptor.itemID)
+            notifyShortcutBindingChange(
+                for: descriptor,
+                binding: ShortcutStore.resolve(
+                    customization: customization,
+                    defaultBinding: descriptor.definition.defaultBinding
+                )
+            )
         }
         shortcutStore.setCustomization(openSettingsCustomization, for: AppShortcut.openSettingsID)
         openSettingsShortcutError = nil
@@ -2276,6 +2314,13 @@ final class PluginHost: ObservableObject {
         do {
             try validateShortcutCustomization(customization, for: descriptor)
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
+            notifyShortcutBindingChange(
+                for: descriptor,
+                binding: ShortcutStore.resolve(
+                    customization: customization,
+                    defaultBinding: descriptor.definition.defaultBinding
+                )
+            )
             shortcutErrors.removeValue(forKey: descriptor.itemID)
             rebuildDerivedState()
             syncGlobalShortcuts()
@@ -2355,6 +2400,19 @@ final class PluginHost: ObservableObject {
         }
 
         return groupID == rhs.definition.sharedBindingGroupID
+    }
+
+    private func notifyShortcutBindingChange(
+        for descriptor: ShortcutDescriptor,
+        binding: ShortcutBinding?
+    ) {
+        guard let handling = descriptor.plugin as? any PluginShortcutBindingChangeHandling else {
+            return
+        }
+
+        guardPluginCall(descriptor.plugin, operation: "update shortcut binding") {
+            handling.shortcutBindingDidChange(id: descriptor.definition.id, binding: binding)
+        }
     }
 
     private func syncGlobalShortcuts() {

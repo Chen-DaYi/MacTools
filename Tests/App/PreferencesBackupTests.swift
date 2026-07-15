@@ -52,6 +52,50 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(String(data: backup.encodedJSON(), encoding: .utf8)).contains("api-key-value"))
     }
 
+    func testPortablePluginPreferencesRoundTripThroughBackup() throws {
+        let portableData = Data("sidecar-portable-settings".utf8)
+        let sourcePlugin = BackupTestPlugin(
+            id: "sidecar",
+            order: 1,
+            shortcutID: "toggle",
+            portablePreferences: portableData
+        )
+        let sourceHost = makeHost(plugins: [sourcePlugin], defaults: makeDefaults())
+
+        let backup = sourceHost.makePreferencesBackup()
+        XCTAssertEqual(backup.pluginPreferences["sidecar"], portableData)
+
+        let restoredPlugin = BackupTestPlugin(id: "sidecar", order: 1, shortcutID: "toggle")
+        let restoredHost = makeHost(plugins: [restoredPlugin], defaults: makeDefaults())
+        _ = try restoredHost.importPreferences(backup)
+
+        XCTAssertEqual(restoredPlugin.restoredPortablePreferences, portableData)
+    }
+
+    func testImportRestoresPortablePreferencesBeforeDynamicShortcutCustomizations() throws {
+        let binding = ShortcutBinding(keyCode: 12, modifiers: [.command, .shift])
+        let plugin = DynamicBackupShortcutPlugin()
+        let host = makeHost(plugins: [plugin], defaults: makeDefaults())
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: ["sidecar"], hiddenPluginIDs: []),
+            shortcutCustomizations: [
+                "sidecar.shortcut.device": .custom(binding)
+            ],
+            pluginPreferences: ["sidecar": Data("device-settings".utf8)]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(plugin.restoredPortablePreferences, Data("device-settings".utf8))
+        XCTAssertEqual(plugin.receivedShortcutBinding, binding)
+        XCTAssertEqual(
+            host.makePreferencesBackup().shortcutCustomizations["sidecar.shortcut.device"],
+            .custom(binding)
+        )
+    }
+
     func testPreviewReportsUnavailablePluginAndShortcutSettings() throws {
         let defaults = makeDefaults()
         let host = makeHost(
@@ -80,6 +124,26 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(preview.unavailablePluginIDs, ["unavailable"])
         XCTAssertEqual(preview.shortcutCount, 1)
         XCTAssertEqual(preview.unavailableShortcutIDs, ["unavailable.shortcut.toggle"])
+    }
+
+    func testPreviewIncludesPluginsReferencedOnlyByPortablePreferences() throws {
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:],
+            pluginPreferences: ["sidecar": Data("preferences".utf8)]
+        )
+
+        let preview = try PreferencesImportPreview.make(
+            backup: backup,
+            availablePluginIDs: [],
+            availableShortcutIDs: [],
+            pluginManagementItems: [],
+            applicationPreferencesAreValid: { _ in true }
+        )
+
+        XCTAssertEqual(preview.pluginCount, 0)
+        XCTAssertEqual(preview.unavailablePluginIDs, ["sidecar"])
     }
 
     func testPreviewOffersOnlyCatalogInstallableMissingPlugins() throws {
@@ -297,10 +361,10 @@ final class PreferencesBackupTests: XCTestCase {
             shortcutCustomizations: [:]
         )
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
-        json["formatVersion"] = 2
+        json["formatVersion"] = 3
 
         XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
-            guard case PreferencesBackupError.unsupportedFormatVersion(2) = error else {
+            guard case PreferencesBackupError.unsupportedFormatVersion(3) = error else {
                 return XCTFail("Expected unsupported format version error, got \(error)")
             }
         }
@@ -325,6 +389,23 @@ final class PreferencesBackupTests: XCTestCase {
                 return XCTFail("Expected invalid application preferences error, got \(error)")
             }
         }
+    }
+
+    func testDecodeAcceptsVersionOneBackupWithoutPortablePluginPreferences() throws {
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:],
+            pluginPreferences: ["sidecar": Data("portable".utf8)]
+        )
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
+        json["formatVersion"] = 1
+        json.removeValue(forKey: "pluginPreferences")
+
+        let decoded = try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))
+
+        XCTAssertEqual(decoded.formatVersion, 1)
+        XCTAssertTrue(decoded.pluginPreferences.isEmpty)
     }
 
     func testDecodeRejectsUnsupportedShortcutModifierBits() throws {
@@ -531,14 +612,16 @@ private final class BackupDynamicPluginLoader: DynamicPluginLoading {
 }
 
 @MainActor
-private final class BackupTestPlugin: MacToolsPlugin {
+private final class BackupTestPlugin: MacToolsPlugin, PluginPortablePreferencesProviding {
     let metadata: PluginMetadata
     let shortcutDefinitions: [PluginShortcutDefinition]
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private let portablePreferences: Data?
+    private(set) var restoredPortablePreferences: Data?
 
-    init(id: String, order: Int, shortcutID: String) {
+    init(id: String, order: Int, shortcutID: String, portablePreferences: Data? = nil) {
         metadata = PluginMetadata(
             id: id,
             title: id,
@@ -558,5 +641,61 @@ private final class BackupTestPlugin: MacToolsPlugin {
                 isRequired: false
             )
         ]
+        self.portablePreferences = portablePreferences
+    }
+
+    func makePortablePreferencesBackup() -> Data? {
+        portablePreferences
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        restoredPortablePreferences = data
+    }
+}
+
+@MainActor
+private final class DynamicBackupShortcutPlugin: MacToolsPlugin, PluginPortablePreferencesProviding,
+    PluginShortcutBindingChangeHandling {
+    let metadata = PluginMetadata(
+        id: "sidecar",
+        title: "Sidecar",
+        iconName: "display",
+        iconTint: .blue,
+        order: 1,
+        defaultDescription: "Sidecar"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var restoredPortablePreferences: Data?
+    private(set) var receivedShortcutBinding: ShortcutBinding?
+
+    var shortcutDefinitions: [PluginShortcutDefinition] {
+        guard restoredPortablePreferences != nil else { return [] }
+
+        return [
+            PluginShortcutDefinition(
+                id: "device",
+                title: "Device",
+                description: "Device",
+                actionID: "device",
+                scope: .global,
+                defaultBinding: nil,
+                isRequired: false
+            )
+        ]
+    }
+
+    func makePortablePreferencesBackup() -> Data? {
+        restoredPortablePreferences
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        restoredPortablePreferences = data
+    }
+
+    func shortcutBindingDidChange(id: String, binding: ShortcutBinding?) {
+        guard id == "device" else { return }
+        receivedShortcutBinding = binding
     }
 }
