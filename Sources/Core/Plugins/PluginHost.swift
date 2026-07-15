@@ -2230,7 +2230,7 @@ final class PluginHost: ObservableObject {
         )
 
         if let openSettingsBinding {
-            if openSettingsBinding.modifiers.isEmpty {
+            if !openSettingsBinding.hasRequiredModifiers {
                 errors[AppShortcut.openSettingsID] = ShortcutValidationError.missingModifier.localizedDescription
             } else if ShortcutKeyCode.isModifier(openSettingsBinding.keyCode) {
                 errors[AppShortcut.openSettingsID] = ShortcutValidationError.modifierOnly.localizedDescription
@@ -2251,7 +2251,7 @@ final class PluginHost: ObservableObject {
                 }
 
                 if let binding {
-                    guard !binding.modifiers.isEmpty else {
+                    guard binding.hasRequiredModifiers else {
                         throw ShortcutValidationError.missingModifier
                     }
 
@@ -2350,7 +2350,7 @@ final class PluginHost: ObservableObject {
         }
 
         if let candidate {
-            guard !candidate.modifiers.isEmpty else {
+            guard candidate.hasRequiredModifiers else {
                 throw ShortcutValidationError.missingModifier
             }
 
@@ -2377,7 +2377,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func validateOpenSettingsShortcut(_ binding: ShortcutBinding) throws {
-        guard !binding.modifiers.isEmpty else {
+        guard binding.hasRequiredModifiers else {
             throw ShortcutValidationError.missingModifier
         }
 

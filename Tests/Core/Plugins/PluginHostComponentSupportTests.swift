@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
 import XCTest
 import MacToolsPluginKit
 @testable import MacTools
@@ -331,6 +332,31 @@ final class PluginHostComponentSupportTests: XCTestCase {
             plugin.shortcutBindingChanges,
             [.init(id: "dynamic-device", binding: binding)]
         )
+    }
+
+    func testOpenSettingsShortcutAcceptsFunctionKeyWithoutModifier() {
+        let host = makeHost(plugins: [])
+        let binding = ShortcutBinding(keyCode: UInt16(kVK_F1), modifiers: [])
+
+        XCTAssertNil(host.setOpenSettingsShortcutBindingAndReturnError(binding))
+        XCTAssertEqual(host.openSettingsShortcut.bindingText, ShortcutFormatter.displayString(for: binding))
+        XCTAssertTrue(host.openSettingsShortcut.canClear)
+        XCTAssertNil(host.openSettingsShortcut.errorMessage)
+    }
+
+    func testOpenSettingsShortcutRejectsRegularKeyWithoutModifier() {
+        let host = makeHost(plugins: [])
+        let binding = ShortcutBinding(keyCode: UInt16(kVK_ANSI_A), modifiers: [])
+
+        XCTAssertEqual(
+            host.setOpenSettingsShortcutBindingAndReturnError(binding),
+            ShortcutValidationError.missingModifier.localizedDescription
+        )
+        XCTAssertEqual(
+            host.openSettingsShortcut.errorMessage,
+            ShortcutValidationError.missingModifier.localizedDescription
+        )
+        XCTAssertFalse(host.openSettingsShortcut.canClear)
     }
 
     func testOpenSettingsShortcutRejectsPluginShortcutBinding() {

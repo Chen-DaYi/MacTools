@@ -14,6 +14,16 @@ public enum PluginShortcutRecordingResult: Equatable {
     }
 }
 
+enum PluginShortcutRecorderValidation {
+    static func missingModifierMessage(for binding: ShortcutBinding) -> String? {
+        guard !binding.hasRequiredModifiers else {
+            return nil
+        }
+
+        return ShortcutValidationError.missingModifier.localizedDescription
+    }
+}
+
 @MainActor
 private final class PluginShortcutRecorderDisplayState: ObservableObject {
     @Published var previewText = PluginKitLocalization.shortcutRecorderPreviewPlaceholder
@@ -401,6 +411,11 @@ private struct PluginShortcutRecorderPopoverAnchor: NSViewRepresentable {
             }
 
             let binding = ShortcutBinding(keyCode: event.keyCode, modifiers: modifiers)
+            if let message = PluginShortcutRecorderValidation.missingModifierMessage(for: binding) {
+                displayState?.triggerShake(conflict: message)
+                return nil
+            }
+
             guard binding.isValid else { return nil }
 
             switch onRecord?(binding) ?? .accepted {

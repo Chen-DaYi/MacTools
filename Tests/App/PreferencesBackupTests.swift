@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import SwiftUI
 import XCTest
 import MacToolsPluginKit
@@ -261,6 +262,39 @@ final class PreferencesBackupTests: XCTestCase {
         )
     }
 
+    func testImportAcceptsFunctionKeyShortcutWithoutModifier() throws {
+        let defaults = makeDefaults()
+        let host = makeHost(
+            plugins: [BackupTestPlugin(id: "plugin", order: 1, shortcutID: "action")],
+            defaults: defaults
+        )
+        let binding = ShortcutBinding(keyCode: UInt16(kVK_F12), modifiers: [])
+        let openSettingsBinding = ShortcutBinding(keyCode: UInt16(kVK_F11), modifiers: [])
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: ["plugin"],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [
+                "plugin.shortcut.action": .custom(binding),
+                "app.open-settings": .custom(openSettingsBinding),
+            ]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(
+            host.makePreferencesBackup().shortcutCustomizations["plugin.shortcut.action"],
+            .custom(binding)
+        )
+        XCTAssertEqual(
+            host.makePreferencesBackup().shortcutCustomizations["app.open-settings"],
+            .custom(openSettingsBinding)
+        )
+    }
+
     func testInvalidShortcutImportLeavesAllShortcutCustomizationsUntouched() throws {
         let defaults = makeDefaults()
         let host = makeHost(
@@ -425,6 +459,37 @@ final class PreferencesBackupTests: XCTestCase {
                 return XCTFail("Expected invalid shortcut modifiers, got \(error)")
             }
         }
+    }
+
+    func testFunctionKeyShortcutWithoutModifierCanBeSaved() {
+        let defaults = makeDefaults()
+        let host = makeHost(
+            plugins: [BackupTestPlugin(id: "plugin", order: 1, shortcutID: "action")],
+            defaults: defaults
+        )
+        let binding = ShortcutBinding(keyCode: UInt16(kVK_F1), modifiers: [])
+
+        let error = host.setShortcutBindingAndReturnError(binding, for: "plugin.shortcut.action")
+
+        XCTAssertNil(error)
+        XCTAssertEqual(
+            host.makePreferencesBackup().shortcutCustomizations["plugin.shortcut.action"],
+            .custom(binding)
+        )
+    }
+
+    func testRegularKeyShortcutWithoutModifierIsStillRejected() {
+        let defaults = makeDefaults()
+        let host = makeHost(
+            plugins: [BackupTestPlugin(id: "plugin", order: 1, shortcutID: "action")],
+            defaults: defaults
+        )
+        let binding = ShortcutBinding(keyCode: UInt16(kVK_ANSI_A), modifiers: [])
+
+        let error = host.setShortcutBindingAndReturnError(binding, for: "plugin.shortcut.action")
+
+        XCTAssertNotNil(error)
+        XCTAssertNil(host.makePreferencesBackup().shortcutCustomizations["plugin.shortcut.action"])
     }
 
     func testDecodeFileReadsValidBackupWithinSizeLimit() async throws {
