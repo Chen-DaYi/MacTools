@@ -184,6 +184,35 @@ struct RightClickPathFormatter {
     }
 }
 
+struct RightClickCopyTargets {
+    let urls: [URL]
+    let relativeBaseURL: URL?
+}
+
+enum RightClickCopyTargetResolver {
+    static func selectedItems(_ selectedURLs: [URL], targetedURL: URL?) -> RightClickCopyTargets? {
+        guard !selectedURLs.isEmpty else {
+            return nil
+        }
+
+        return RightClickCopyTargets(urls: selectedURLs, relativeBaseURL: targetedURL)
+    }
+
+    static func currentDirectory(targetedURL: URL?) -> RightClickCopyTargets? {
+        guard let directory = RightClickTargetResolver.targetDirectory(
+            selectedURLs: [],
+            targetedURL: targetedURL
+        ) else {
+            return nil
+        }
+
+        return RightClickCopyTargets(
+            urls: [directory],
+            relativeBaseURL: directory.deletingLastPathComponent()
+        )
+    }
+}
+
 struct RightClickTargetResolver {
     static func targetDirectory(selectedURLs: [URL], targetedURL: URL?) -> URL? {
         if let first = selectedURLs.first {
