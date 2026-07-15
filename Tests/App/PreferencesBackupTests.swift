@@ -28,6 +28,8 @@ final class PreferencesBackupTests: XCTestCase {
             ShortcutBinding(keyCode: 12, modifiers: [.command, .shift]),
             for: "first.shortcut.toggle"
         )
+        let openSettingsBinding = ShortcutBinding(keyCode: 13, modifiers: [.command, .option])
+        XCTAssertNil(host.setOpenSettingsShortcutBindingAndReturnError(openSettingsBinding))
 
         let backup = host.makePreferencesBackup()
         let decodedBackup = try PreferencesBackup.decodeJSON(backup.encodedJSON())
@@ -45,6 +47,7 @@ final class PreferencesBackupTests: XCTestCase {
             backup.shortcutCustomizations["first.shortcut.toggle"],
             .custom(ShortcutBinding(keyCode: 12, modifiers: [.command, .shift]))
         )
+        XCTAssertEqual(backup.shortcutCustomizations["app.open-settings"], .custom(openSettingsBinding))
         XCTAssertNil(backup.shortcutCustomizations["second.shortcut.open"])
         XCTAssertFalse(try XCTUnwrap(String(data: backup.encodedJSON(), encoding: .utf8)).contains("api-key-value"))
     }
@@ -146,6 +149,7 @@ final class PreferencesBackupTests: XCTestCase {
             ),
             shortcutCustomizations: [
                 "second.shortcut.open": .cleared,
+                "app.open-settings": .custom(ShortcutBinding(keyCode: 13, modifiers: [.command, .option])),
                 "unavailable.shortcut.toggle": .cleared
             ]
         )
@@ -156,6 +160,10 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertFalse(host.featureManagementItems.first(where: { $0.id == "first" })?.isVisible ?? true)
         XCTAssertFalse(host.shortcutItems.first(where: { $0.id == "second.shortcut.open" })?.canClear ?? true)
         XCTAssertTrue(host.shortcutItems.first(where: { $0.id == "first.shortcut.toggle" })?.usesDefaultValue ?? false)
+        XCTAssertEqual(
+            host.openSettingsShortcut.bindingText,
+            ShortcutFormatter.displayString(for: ShortcutBinding(keyCode: 13, modifiers: [.command, .option]))
+        )
     }
 
     func testImportRestoresSwappedShortcutBindingsAtomically() throws {

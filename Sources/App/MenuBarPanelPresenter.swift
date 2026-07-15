@@ -664,6 +664,11 @@ private struct MenuBarPanelTabSwitcher: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // The popover becomes key when it opens, and SwiftUI otherwise
+                // gives its first toolbar button a persistent blue focus ring.
+                // That ring looks like a selected dashboard tab even when the
+                // feature tab is the visible surface.
+                .focusEffectDisabled()
                 .help(tab.accessibilityTitle)
                 .accessibilityLabel(tab.accessibilityTitle)
                 .background {
