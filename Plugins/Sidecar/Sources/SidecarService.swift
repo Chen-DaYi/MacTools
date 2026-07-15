@@ -7,6 +7,7 @@ import OSLog
 protocol SidecarServicing: AnyObject {
     var availability: SidecarServiceAvailability { get }
     var isMinimumTestedSystem: Bool { get }
+    var supportsWiredOnlyConnections: Bool { get }
     var onDevicesChanged: (() -> Void)? { get set }
 
     func reachableDevices() -> [SidecarDevice]
@@ -50,6 +51,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
     private let manager: NSObject?
     let availability: SidecarServiceAvailability
     let isMinimumTestedSystem: Bool
+    let supportsWiredOnlyConnections: Bool
     var onDevicesChanged: (() -> Void)?
 
     private let canReadConnectedDevices: Bool
@@ -63,6 +65,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         guard dlopen(Self.frameworkPath, RTLD_LAZY) != nil else {
             manager = nil
             canReadConnectedDevices = false
+            supportsWiredOnlyConnections = false
             availability = .unsupported(.frameworkLoadFailed)
             super.init()
             return
@@ -71,17 +74,16 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         guard let managerType = NSClassFromString("SidecarDisplayManager") as? NSObject.Type else {
             manager = nil
             canReadConnectedDevices = false
+            supportsWiredOnlyConnections = false
             availability = .unsupported(.missingManager)
             super.init()
             return
         }
 
-        guard
-            let deviceType = NSClassFromString("SidecarDevice") as? NSObject.Type,
-            let configType = NSClassFromString("SidecarDisplayConfig") as? NSObject.Type
-        else {
+        guard let deviceType = NSClassFromString("SidecarDevice") as? NSObject.Type else {
             manager = nil
             canReadConnectedDevices = false
+            supportsWiredOnlyConnections = false
             availability = .unsupported(.missingTypes)
             super.init()
             return
@@ -94,6 +96,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         else {
             manager = nil
             canReadConnectedDevices = false
+            supportsWiredOnlyConnections = false
             availability = .unsupported(.managerInitializationFailed)
             super.init()
             return
@@ -102,7 +105,6 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         let requiredSelectors = [
             NSSelectorFromString("devices"),
             NSSelectorFromString("connectToDevice:completion:"),
-            NSSelectorFromString("connectToDevice:withConfig:completion:"),
             NSSelectorFromString("disconnectFromDevice:completion:")
         ]
         let requiredDeviceSelectors = [
@@ -111,11 +113,11 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         ]
         guard
             requiredSelectors.allSatisfy(shared.responds(to:)),
-            requiredDeviceSelectors.allSatisfy(deviceType.instancesRespond(to:)),
-            configType.instancesRespond(to: NSSelectorFromString("setTransport:"))
+            requiredDeviceSelectors.allSatisfy(deviceType.instancesRespond(to:))
         else {
             manager = nil
             canReadConnectedDevices = false
+            supportsWiredOnlyConnections = false
             availability = .unsupported(.missingInterfaces)
             super.init()
             return
@@ -123,6 +125,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
 
         manager = shared
         canReadConnectedDevices = shared.responds(to: NSSelectorFromString("connectedDevices"))
+        supportsWiredOnlyConnections = Self.supportsWiredOnlyConnections(manager: shared)
         availability = .available
         super.init()
 
@@ -165,8 +168,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
                 continue
             }
 
-            let name = stringValue(from: device, selectorName: "name")
-            let displayName = name?.isEmpty == false ? name! : "Sidecar Display"
+            let displayName = stringValue(from: device, selectorName: "name") ?? ""
             references[identifier] = device
             devicesByID[identifier] = SidecarDevice(
                 id: identifier,
@@ -251,7 +253,7 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         device: NSObject,
         completion: @escaping (Result<Void, SidecarServiceError>) -> Void
     ) {
-        guard
+        guard supportsWiredOnlyConnections,
             let configType = NSClassFromString("SidecarDisplayConfig") as? NSObject.Type,
             let config = Optional(configType.init()),
             config.responds(to: NSSelectorFromString("setTransport:"))
@@ -289,6 +291,15 @@ final class SidecarCoreService: NSObject, SidecarServicing {
         }
         let operation = unsafeBitCast(operationIMP, to: WiredDeviceOperation.self)
         operation(manager, selector, device, config, completionBlock(completion))
+    }
+
+    private static func supportsWiredOnlyConnections(manager: NSObject) -> Bool {
+        guard let configType = NSClassFromString("SidecarDisplayConfig") as? NSObject.Type else {
+            return false
+        }
+
+        return manager.responds(to: NSSelectorFromString("connectToDevice:withConfig:completion:"))
+            && configType.instancesRespond(to: NSSelectorFromString("setTransport:"))
     }
 
     private func invoke(

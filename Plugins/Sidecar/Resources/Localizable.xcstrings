@@ -1,6 +1,22 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "device.unnamed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "شاشة Sidecar" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar-Display" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar Display" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Pantalla Sidecar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Écran Sidecar" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Sidecarディスプレイ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 디스플레이" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ecrã Sidecar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дисплей Sidecar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 显示器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "Sidecar 顯示器" } }
+      }
+    },
     "metadata.description" : {
       "extractionState" : "manual",
       "localizations" : {

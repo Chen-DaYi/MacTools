@@ -221,6 +221,48 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.detail?.primaryControls.first?.actionIconSystemName, "checkmark.circle")
     }
 
+    func testUnnamedDeviceUsesLocalizedFallbackName() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "", connectionState: .disconnected)
+        ])
+        let plugin = makePlugin(service: service)
+
+        XCTAssertEqual(
+            plugin.primaryPanelState.detail?.primaryControls.first?.actionTitle,
+            "Sidecar 显示器 · 连接"
+        )
+    }
+
+    func testMissingWiredCapabilityKeepsAutomaticConnectionAvailable() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected)
+        ])
+        service.supportsWiredOnlyConnections = false
+        let plugin = makePlugin(service: service)
+
+        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-1"))
+
+        XCTAssertTrue(service.didConnect)
+        XCTAssertFalse(service.receivedWiredOnly)
+    }
+
+    func testMissingWiredCapabilityDoesNotDisconnectCurrentDisplayBeforeFailing() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-current", name: "Current iPad", connectionState: .connected),
+            SidecarDevice(id: "ipad-target", name: "Target iPad", connectionState: .disconnected)
+        ])
+        service.supportsWiredOnlyConnections = false
+        let preferences = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        preferences.reconcile(with: service.reachableDevices())
+        preferences.updateTransport(.wiredOnly, for: "ipad-target")
+        let plugin = makePlugin(service: service, preferences: preferences)
+
+        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-target"))
+
+        XCTAssertTrue(service.operations.isEmpty)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "当前系统不支持此 Sidecar 操作")
+    }
+
     func testConfirmedConnectionReplacesTransientFeedbackWithConnectedState() {
         let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
         let plugin = makePlugin(service: service)
@@ -548,6 +590,7 @@ final class SidecarPluginTests: XCTestCase {
 private final class FakeSidecarService: SidecarServicing {
     var availability: SidecarServiceAvailability = .available
     var isMinimumTestedSystem = true
+    var supportsWiredOnlyConnections = true
     var onDevicesChanged: (() -> Void)?
     private var pendingCompletion: ((Result<Void, SidecarServiceError>) -> Void)?
     private(set) var didConnect = false

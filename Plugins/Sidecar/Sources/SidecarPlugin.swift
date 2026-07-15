@@ -339,7 +339,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     private func refreshDevices(notify: Bool) {
-        let updatedDevices = service.reachableDevices()
+        let updatedDevices = service.reachableDevices().map(localizedDevice)
         let previousDevices = devices
         let previousPreferences = preferences.devices
         devices = updatedDevices
@@ -630,6 +630,19 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         preferences.preference(for: device.id)?.transport == .wiredOnly ? .wiredConnect : .connect
     }
 
+    private func supports(_ action: SidecarOperationKind) -> Bool {
+        action != .wiredConnect || service.supportsWiredOnlyConnections
+    }
+
+    private func presentUnsupportedAction(_ action: SidecarOperationKind, for device: SidecarDevice) {
+        presentShortcutFailure(
+            action: action,
+            deviceName: device.name,
+            deviceID: device.id,
+            message: localizedErrorMessage(for: .operationUnavailable)
+        )
+    }
+
     private func syncShortcuts() {
         guard isActive else { return }
 
@@ -811,13 +824,23 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             )
             return
         }
-        start(action: connectAction(for: device), for: device)
+        let action = connectAction(for: device)
+        guard supports(action) else {
+            presentUnsupportedAction(action, for: device)
+            return
+        }
+        start(action: action, for: device)
     }
 
     private func connectOrSwitch(to target: SidecarDevice) {
+        let targetAction = connectAction(for: target)
+        guard supports(targetAction) else {
+            presentUnsupportedAction(targetAction, for: target)
+            return
+        }
         let connectedDevices = devices.filter { $0.connectionState == .connected }
         guard let source = connectedDevices.first else {
-            start(action: connectAction(for: target), for: target)
+            start(action: targetAction, for: target)
             return
         }
         guard connectedDevices.count == 1, source.id != target.id else {
@@ -826,7 +849,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         switchRequest = SidecarSwitchRequest(
             source: source,
             target: target,
-            targetAction: connectAction(for: target)
+            targetAction: targetAction
         )
         startSwitchDisconnect(from: source)
     }
@@ -910,6 +933,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     private func start(action: SidecarOperationKind, for device: SidecarDevice) {
+        guard supports(action) else {
+            presentUnsupportedAction(action, for: device)
+            return
+        }
         let token = beginOperation(action: action, for: device)
         let completion: (Result<Void, SidecarServiceError>) -> Void = { [weak self] result in
             self?.finish(result: result, for: token, action: action, device: device)
@@ -1207,5 +1234,17 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             self.refreshDevices(notify: true)
             self.followUpRefreshTask = nil
         }
+    }
+
+    private func localizedDevice(_ device: SidecarDevice) -> SidecarDevice {
+        guard !device.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return SidecarDevice(
+                id: device.id,
+                name: localization.string("device.unnamed", defaultValue: "Sidecar 显示器"),
+                connectionState: device.connectionState
+            )
+        }
+
+        return device
     }
 }
