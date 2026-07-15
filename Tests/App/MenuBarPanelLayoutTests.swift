@@ -5,6 +5,60 @@ import MacToolsPluginKit
 @testable import MacTools
 
 final class MenuBarPanelLayoutTests: XCTestCase {
+    func testSecondaryPanelPlacementPrefersRightWhenItFits() {
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: CGRect(x: 100, y: 500, width: 280, height: 52),
+            panelSize: CGSize(width: 216, height: 300),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        guard case let .right(frame) = placement else {
+            return XCTFail("Expected a right-side secondary panel")
+        }
+
+        XCTAssertEqual(frame.origin.x, 390)
+        XCTAssertEqual(frame.origin.y, 252)
+    }
+
+    func testSecondaryPanelPlacementFallsBackToLeftWhenRightDoesNotFit() {
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: CGRect(x: 1_150, y: 500, width: 200, height: 52),
+            panelSize: CGSize(width: 216, height: 300),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        guard case let .left(frame) = placement else {
+            return XCTFail("Expected a left-side secondary panel")
+        }
+
+        XCTAssertEqual(frame.origin.x, 924)
+        XCTAssertEqual(frame.origin.y, 252)
+    }
+
+    func testSecondaryPanelPlacementUsesInlineFallbackWhenNeitherSideFits() {
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: CGRect(x: 82, y: 500, width: 316, height: 52),
+            panelSize: CGSize(width: 216, height: 300),
+            visibleFrame: CGRect(x: 0, y: 0, width: 470, height: 900)
+        )
+
+        XCTAssertEqual(placement, .inline)
+    }
+
+    func testSecondaryPanelPlacementKeepsPanelWithinVerticalScreenBounds() {
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: CGRect(x: 100, y: 100, width: 200, height: 52),
+            panelSize: CGSize(width: 216, height: 500),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        guard case let .right(frame) = placement else {
+            return XCTFail("Expected a right-side secondary panel")
+        }
+
+        XCTAssertEqual(frame.minY, MenuBarPanelLayout.secondaryPanelScreenMargin)
+    }
+
     func testBaseLayoutMetricsStayStable() {
         XCTAssertEqual(MenuBarPanelLayout.baseWidth, 316)
         XCTAssertEqual(
