@@ -4,13 +4,19 @@ import MacToolsPluginKit
 
 // MARK: - App Entry Model
 
-struct QuitAppEntry: Identifiable, Equatable {
+struct QuitAppEntry: Identifiable {
     let id: String
-    let app: NSRunningApplication
+    let displayName: String
+    let icon: NSImage?
+    let applications: [any QuitAppRunningApplication]
     var isSelected: Bool
 
-    static func == (lhs: QuitAppEntry, rhs: QuitAppEntry) -> Bool {
-        lhs.id == rhs.id && lhs.isSelected == rhs.isSelected
+    init(group: QuitAppGroup, isSelected: Bool) {
+        self.id = group.id
+        self.displayName = group.displayName
+        self.icon = group.icon
+        self.applications = group.applications
+        self.isSelected = isSelected
     }
 }
 
@@ -36,18 +42,24 @@ final class QuitAppsViewModel: ObservableObject {
     }
 
     func load() {
+        apply(groups: QuitAppsApplicationCatalog.currentGroups())
+    }
+
+    func load(applications: [any QuitAppRunningApplication]) {
+        apply(groups: QuitAppsApplicationCatalog.groups(
+            from: applications,
+            excludingBundleIdentifier: Bundle.main.bundleIdentifier
+        ))
+    }
+
+    private func apply(groups: [QuitAppGroup]) {
         let currentSelectionIDs = Set(entries.filter(\.isSelected).map(\.id))
-        let all = NSWorkspace.shared.runningApplications
-        let fresh: [QuitAppEntry] = all.compactMap { app in
-            guard
-                app.activationPolicy == .regular,
-                let bid = app.bundleIdentifier,
-                bid != Bundle.main.bundleIdentifier
-            else { return nil }
-            let wasSelected = currentSelectionIDs.contains(bid)
-            return QuitAppEntry(id: bid, app: app, isSelected: wasSelected)
-        }.sorted { ($0.app.localizedName ?? "") < ($1.app.localizedName ?? "") }
-        entries = fresh
+        entries = groups.map { group in
+            QuitAppEntry(
+                group: group,
+                isSelected: currentSelectionIDs.contains(group.id)
+            )
+        }
     }
 
     func invertSelection() {
@@ -62,7 +74,9 @@ final class QuitAppsViewModel: ObservableObject {
     func confirmQuit(onDone: () -> Void) {
         let targets = selectedEntries.isEmpty ? entries : selectedEntries
         for entry in targets {
-            entry.app.terminate()
+            for application in entry.applications where !application.isTerminated {
+                application.terminate()
+            }
         }
         onDone()
     }
@@ -307,7 +321,7 @@ private struct AppIconCell: View {
             VStack(spacing: 5) {
                 ZStack(alignment: .topTrailing) {
                     Group {
-                        if let icon = entry.app.icon {
+                        if let icon = entry.icon {
                             Image(nsImage: icon)
                                 .resizable()
                                 .frame(width: 46, height: 46)
@@ -335,13 +349,13 @@ private struct AppIconCell: View {
                     }
                 }
 
-                Text(entry.app.localizedName ?? "App")
+                Text(entry.displayName)
                     .font(.system(size: 11))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundStyle(entry.isSelected ? Color.red : Color.primary)
                     .frame(width: 68)
-                    .help(entry.app.localizedName ?? "App")
+                    .help(entry.displayName)
             }
         }
         .buttonStyle(.plain)
