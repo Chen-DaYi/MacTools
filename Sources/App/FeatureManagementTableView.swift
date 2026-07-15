@@ -142,23 +142,9 @@ struct FeatureManagementTableView: NSViewRepresentable {
             right: 0
         )
 
-        let tableView = NSTableView()
-        tableView.headerView = nil
+        let tableView = PluginSettingsReorderTableView(dragType: Self.dragType)
         tableView.rowHeight = Self.rowHeight
         tableView.intercellSpacing = NSSize(width: 0, height: Self.rowSpacing)
-        tableView.backgroundColor = .clear
-        tableView.selectionHighlightStyle = .none
-        tableView.focusRingType = .none
-        tableView.usesAlternatingRowBackgroundColors = false
-        tableView.allowsColumnReordering = false
-        tableView.allowsColumnResizing = false
-        tableView.allowsEmptySelection = true
-        tableView.allowsTypeSelect = false
-        tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-        tableView.draggingDestinationFeedbackStyle = .gap
-        tableView.verticalMotionCanBeginDrag = true
-        tableView.setDraggingSourceOperationMask(.move, forLocal: true)
-        tableView.registerForDraggedTypes([Self.dragType])
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("feature"))
         column.isEditable = false

@@ -97,8 +97,12 @@ public struct ShortcutBinding: Hashable, Codable, Sendable {
         self.modifiers = modifiers
     }
 
+    public var hasRequiredModifiers: Bool {
+        !modifiers.isEmpty || ShortcutKeyCode.allowsModifierlessShortcut(keyCode)
+    }
+
     public var isValid: Bool {
-        !modifiers.isEmpty
+        hasRequiredModifiers
             && modifiers.containsOnlySupportedValues
             && !ShortcutKeyCode.isModifier(keyCode)
     }
@@ -392,6 +396,21 @@ public enum ShortcutFormatter {
 public enum ShortcutKeyCode {
     public static let escape = UInt16(kVK_Escape)
 
+    private static let modifierlessShortcutKeyCodes: Set<UInt16> = [
+        UInt16(kVK_F1),
+        UInt16(kVK_F2),
+        UInt16(kVK_F3),
+        UInt16(kVK_F4),
+        UInt16(kVK_F5),
+        UInt16(kVK_F6),
+        UInt16(kVK_F7),
+        UInt16(kVK_F8),
+        UInt16(kVK_F9),
+        UInt16(kVK_F10),
+        UInt16(kVK_F11),
+        UInt16(kVK_F12),
+    ]
+
     private static let modifierKeyCodes: Set<UInt16> = [
         UInt16(kVK_Command),
         UInt16(kVK_RightCommand),
@@ -407,6 +426,10 @@ public enum ShortcutKeyCode {
 
     public static func isModifier(_ keyCode: UInt16) -> Bool {
         modifierKeyCodes.contains(keyCode)
+    }
+
+    public static func allowsModifierlessShortcut(_ keyCode: UInt16) -> Bool {
+        modifierlessShortcutKeyCodes.contains(keyCode)
     }
 }
 

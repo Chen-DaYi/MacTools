@@ -149,67 +149,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يتضمن تفضيلات التطبيق وترتيب عرض الإضافات واختصارات لوحة المفاتيح؛ ولا يتضمن الأذونات أو ذاكرة التخزين المؤقت أو بيانات الإضافات الخاصة."
+            "value": "يتضمن تفضيلات التطبيق وترتيب عرض الإضافات واختصارات لوحة المفاتيح وإعدادات الإضافات القابلة للتصدير؛ ولا يتضمن الأذونات أو ذاكرة التخزين المؤقت أو بيانات الاعتماد أو غيرها من البيانات الخاصة."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enthält App-Einstellungen, Plugin-Anzeigereihenfolge und Tastaturkurzbefehle; Berechtigungen, Caches und private Plug-in-Daten sind ausgeschlossen."
+            "value": "Enthält App-Einstellungen, Plugin-Anzeigereihenfolge, Tastaturkurzbefehle und exportierbare Plug-in-Einstellungen; Berechtigungen, Caches, Zugangsdaten und andere private Daten sind ausgeschlossen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Includes app preferences, plugin display order, and keyboard shortcuts; permissions, caches, and plugin-private data are excluded."
+            "value": "Includes app preferences, plugin display order, keyboard shortcuts, and supported exportable plugin settings; permissions, caches, credentials, and other private data are excluded."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Incluye preferencias de la app, orden de visualización de plugins y atajos de teclado; no incluye permisos, cachés ni datos privados de plugins."
+            "value": "Incluye preferencias de la app, orden de visualización de plugins, atajos de teclado y ajustes de plugins compatibles con la exportación; no incluye permisos, cachés, credenciales ni otros datos privados."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inclut les préférences de l’app, l’ordre d’affichage des extensions et les raccourcis clavier ; les autorisations, caches et données privées d’extension sont exclus."
+            "value": "Inclut les préférences de l’app, l’ordre d’affichage des extensions, les raccourcis clavier et les réglages d’extension exportables pris en charge ; les autorisations, caches, identifiants et autres données privées sont exclus."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "アプリの環境設定、プラグインの表示順、キーボードショートカットを含みます。権限、キャッシュ、プラグイン固有のデータは含まれません。"
+            "value": "アプリの環境設定、プラグインの表示順、キーボードショートカット、対応するエクスポート可能なプラグイン設定を含みます。権限、キャッシュ、認証情報、その他の非公開データは含まれません。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "앱 환경설정, 플러그인 표시 순서, 키보드 단축키를 포함합니다. 권한, 캐시, 플러그인 전용 데이터는 제외됩니다."
+            "value": "앱 환경설정, 플러그인 표시 순서, 키보드 단축키 및 내보내기를 지원하는 플러그인 설정을 포함합니다. 권한, 캐시, 자격 증명 및 기타 비공개 데이터는 제외됩니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inclui preferências do app, ordem de exibição dos plugins e atalhos de teclado; permissões, caches e dados privados de plugins são excluídos."
+            "value": "Inclui preferências do app, ordem de exibição dos plugins, atalhos de teclado e definições de plugins compatíveis com exportação; permissões, caches, credenciais e outros dados privados são excluídos."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Включает настройки приложения, порядок отображения плагинов и сочетания клавиш; разрешения, кэш и приватные данные плагинов исключены."
+            "value": "Включает настройки приложения, порядок отображения плагинов, сочетания клавиш и поддерживаемые экспортируемые настройки плагинов; разрешения, кэш, учётные данные и другие приватные данные исключены."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "包含应用偏好、插件显示顺序与快捷键；不会包含权限、缓存或插件私有数据。"
+            "value": "包含应用偏好、插件显示顺序、快捷键和支持导出的插件设置；不会包含权限、缓存、凭证或其他私有数据。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "包含應用程式偏好、插件顯示順序與快速鍵；不會包含權限、快取或插件私有資料。"
+            "value": "包含應用程式偏好、插件顯示順序、快速鍵和支援匯出的插件設定；不會包含權限、快取、憑證或其他私有資料。"
           }
         }
       }
@@ -1001,67 +1001,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "إعدادات عرض الإضافات"
+            "value": "إعدادات الإضافات"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Plugin-Anzeigeeinstellungen"
+            "value": "Plugin-Einstellungen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Plugin Display Settings"
+            "value": "Plugin Settings"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Configuración de visualización de plugins"
+            "value": "Configuración de plugins"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Réglages d’affichage des extensions"
+            "value": "Réglages des extensions"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "プラグインの表示設定"
+            "value": "プラグイン設定"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "플러그인 표시 설정"
+            "value": "플러그인 설정"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Configurações de exibição dos plugins"
+            "value": "Configurações dos plugins"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Настройки отображения плагинов"
+            "value": "Настройки плагинов"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "插件显示设置"
+            "value": "插件设置"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "插件顯示設定"
+            "value": "插件設定"
           }
         }
       }

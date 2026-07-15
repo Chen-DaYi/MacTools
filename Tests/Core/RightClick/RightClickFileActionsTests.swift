@@ -63,6 +63,50 @@ final class RightClickPathFormatterTests: XCTestCase {
     }
 }
 
+final class RightClickCopyTargetResolverTests: XCTestCase {
+    func testSelectedItemsPreserveSelectionAndTargetedDirectoryAsRelativeBase() {
+        let selectedURLs = [
+            URL(fileURLWithPath: "/Users/test/Projects/one.txt"),
+            URL(fileURLWithPath: "/Users/test/Projects/two.txt")
+        ]
+        let targetedURL = URL(fileURLWithPath: "/Users/test/Projects", isDirectory: true)
+
+        let result = RightClickCopyTargetResolver.selectedItems(
+            selectedURLs,
+            targetedURL: targetedURL
+        )
+
+        XCTAssertEqual(result?.urls, selectedURLs)
+        XCTAssertEqual(result?.relativeBaseURL, targetedURL)
+    }
+
+    func testSelectedItemsDoesNotFallBackToTargetedDirectory() {
+        let targetedURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+
+        XCTAssertNil(RightClickCopyTargetResolver.selectedItems([], targetedURL: targetedURL))
+    }
+
+    func testCurrentDirectoryUsesTargetedDirectoryAsCopyTarget() {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+
+        let result = RightClickCopyTargetResolver.currentDirectory(targetedURL: directory)
+
+        XCTAssertEqual(result?.urls, [directory])
+        XCTAssertEqual(result?.relativeBaseURL, directory.deletingLastPathComponent())
+        XCTAssertEqual(
+            RightClickPathFormatter.joinedRelativePaths(
+                result?.urls ?? [],
+                base: result?.relativeBaseURL
+            ),
+            directory.lastPathComponent
+        )
+    }
+
+    func testCurrentDirectoryWithoutTargetReturnsNil() {
+        XCTAssertNil(RightClickCopyTargetResolver.currentDirectory(targetedURL: nil))
+    }
+}
+
 final class RightClickLocalizationTests: XCTestCase {
     func testExplicitEnglishPreferenceUsesEnglishFinderMenuStrings() {
         XCTAssertEqual(

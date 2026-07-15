@@ -384,7 +384,7 @@ final class WindowSwitcherPluginTests: XCTestCase {
             makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
         ])
 
-        for invalidToken in ["ff", "s1", "cmd+ff", "cmd+-", "⌘a", "窗口"] {
+        for invalidToken in ["ff", "f1", "s1", "cmd+ff", "cmd+-", "⌘a", "窗口"] {
             guard case .unavailable = store.setManualShortcut(
                 invalidToken,
                 for: entries[0].id,

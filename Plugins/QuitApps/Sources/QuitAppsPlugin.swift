@@ -140,11 +140,8 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
         }
     }
 
-    nonisolated private static func countUserFacingApps() -> Int {
-        NSWorkspace.shared.runningApplications.filter { app in
-            app.activationPolicy == .regular
-            && app.bundleIdentifier != Bundle.main.bundleIdentifier
-        }.count
+    private static func countUserFacingApps() -> Int {
+        QuitAppsApplicationCatalog.currentApplicationCount()
     }
 
     private func setupAppObservers() {

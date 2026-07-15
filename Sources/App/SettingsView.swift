@@ -148,6 +148,12 @@ struct GeneralSettingsView: View {
             }
 
             Section {
+                OpenSettingsShortcutSettingsRow(pluginHost: pluginHost)
+            } header: {
+                Text(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"))
+            }
+
+            Section {
                 PreferencesBackupSettingsRow(pluginHost: pluginHost)
             } header: {
                 Text(AppL10n.preferencesBackup("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
@@ -188,6 +194,81 @@ struct GeneralSettingsView: View {
     }
 }
 
+private struct OpenSettingsShortcutSettingsRow: View {
+    @ObservedObject var pluginHost: PluginHost
+
+    private var item: AppShortcutSettingsItem {
+        pluginHost.openSettingsShortcut
+    }
+
+    private var title: String {
+        AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
+    }
+
+    var body: some View {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: "command")
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text(item.errorMessage ?? AppL10n.settings(
+                    "shortcuts.description",
+                    defaultValue: "为常用动作配置全局快捷键。编辑后立即生效，必要项不可删除。"
+                ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(item.errorMessage == nil ? Color.secondary : Color.red)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                PluginShortcutRecorder(
+                    title: title,
+                    displayText: item.bindingText,
+                    minWidth: 126,
+                    onRecord: { binding in
+                        PluginShortcutRecordingResult.from(
+                            errorMessage: pluginHost.setOpenSettingsShortcutBindingAndReturnError(binding)
+                        )
+                    },
+                    onBeginRecording: {
+                        pluginHost.clearOpenSettingsShortcutError()
+                    }
+                )
+                .frame(width: 126)
+
+                if item.canClear {
+                    Button {
+                        pluginHost.clearOpenSettingsShortcut()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(PluginSettingsTheme.Typography.rowIcon)
+                            .symbolRenderingMode(.monochrome)
+                            .frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.secondary)
+                    .help(AppL10n.settings("shortcuts.clearHelp", defaultValue: "清除快捷键"))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+    }
+}
+
 private struct PendingPreferencesImport: Identifiable {
     let id = UUID()
     let backup: PreferencesBackup
@@ -219,7 +300,7 @@ private struct PreferencesBackupSettingsRow: View {
 
                 Text(AppL10n.preferencesBackup(
                     "preferencesBackup.description",
-                    defaultValue: "包含应用偏好、插件显示顺序与快捷键；不会包含权限、缓存或私有插件数据。"
+                    defaultValue: "包含应用偏好、插件显示顺序、快捷键和支持导出的插件设置；不会包含权限、缓存、凭证或其他私有数据。"
                 ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
@@ -420,7 +501,7 @@ private struct PreferencesImportPreviewSheet: View {
                     ))
                 }
                 GridRow {
-                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.plugins", defaultValue: "插件显示设置"))
+                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.plugins", defaultValue: "插件设置"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     Text(AppL10n.preferencesBackupFormat(
                         "preferencesBackup.preview.pluginsCount",

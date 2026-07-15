@@ -21,12 +21,20 @@ final class RightClickFinderSync: FIFinderSync {
         let directory: URL?
         let fileExtension: String?
         let appPath: String?
+        let copyTargets: RightClickCopyTargets?
 
-        init(actionID: String, directory: URL? = nil, fileExtension: String? = nil, appPath: String? = nil) {
+        init(
+            actionID: String,
+            directory: URL? = nil,
+            fileExtension: String? = nil,
+            appPath: String? = nil,
+            copyTargets: RightClickCopyTargets? = nil
+        ) {
             self.actionID = actionID
             self.directory = directory
             self.fileExtension = fileExtension
             self.appPath = appPath
+            self.copyTargets = copyTargets
         }
     }
 
@@ -84,11 +92,10 @@ final class RightClickFinderSync: FIFinderSync {
 
         switch menuKind {
         case .contextualMenuForContainer:
-            if let directory = RightClickTargetResolver.targetDirectory(
-                selectedURLs: [],
-                targetedURL: targetedURL
-            ) {
+            if let copyTargets = RightClickCopyTargetResolver.currentDirectory(targetedURL: targetedURL),
+               let directory = copyTargets.urls.first {
                 addDirectoryItems(to: menu, directory: directory, configuration: configuration)
+                addPathCopyItems(to: menu, configuration: configuration, targets: copyTargets)
                 addOpenWithMenu(to: menu, configuration: configuration, targets: [directory])
             }
         case .contextualMenuForItems, .contextualMenuForSidebar, .toolbarItemMenu:
@@ -121,47 +128,74 @@ final class RightClickFinderSync: FIFinderSync {
             addDirectoryItems(to: menu, directory: directory, configuration: configuration)
         }
 
+        if let copyTargets = RightClickCopyTargetResolver.selectedItems(
+            selectedURLs,
+            targetedURL: targetedURL
+        ) {
+            addCopyItemsForSelection(to: menu, configuration: configuration, targets: copyTargets)
+        }
+
         guard !selectedURLs.isEmpty else {
             return
         }
 
+        addOpenWithMenu(to: menu, configuration: configuration, targets: selectedURLs)
+    }
+
+    private func addCopyItemsForSelection(
+        to menu: NSMenu,
+        configuration: RightClickConfiguration,
+        targets: RightClickCopyTargets
+    ) {
         if configuration.copyFileName {
             addCopyItem(
                 title: localized("finder.copyFileName", defaultValue: "复制文件名", configuration: configuration),
                 actionID: ActionID.copyFileName,
-                to: menu
+                to: menu,
+                targets: targets
             )
         }
+
+        addPathCopyItems(to: menu, configuration: configuration, targets: targets)
+    }
+
+    private func addPathCopyItems(
+        to menu: NSMenu,
+        configuration: RightClickConfiguration,
+        targets: RightClickCopyTargets
+    ) {
         if configuration.copyAbsolutePath {
             addCopyItem(
                 title: localized("finder.copyAbsolutePath", defaultValue: "复制绝对路径", configuration: configuration),
                 actionID: ActionID.copyAbsolutePath,
-                to: menu
+                to: menu,
+                targets: targets
             )
         }
         if configuration.copyRelativePath {
             addCopyItem(
                 title: localized("finder.copyRelativePath", defaultValue: "复制相对路径", configuration: configuration),
                 actionID: ActionID.copyRelativePath,
-                to: menu
+                to: menu,
+                targets: targets
             )
         }
         if configuration.copyShellEscapedPath {
             addCopyItem(
                 title: localized("finder.copyShellEscapedPath", defaultValue: "复制转义路径", configuration: configuration),
                 actionID: ActionID.copyShellEscapedPath,
-                to: menu
+                to: menu,
+                targets: targets
             )
         }
         if configuration.copyFileURL {
             addCopyItem(
                 title: localized("finder.copyFileURL", defaultValue: "复制 file:// 链接", configuration: configuration),
                 actionID: ActionID.copyFileURL,
-                to: menu
+                to: menu,
+                targets: targets
             )
         }
-
-        addOpenWithMenu(to: menu, configuration: configuration, targets: selectedURLs)
     }
 
     /// Directory-level items shared by container and item right-clicks.
@@ -275,13 +309,13 @@ final class RightClickFinderSync: FIFinderSync {
     private func addCopyItem(
         title: String,
         actionID: String,
-        to menu: NSMenu
+        to menu: NSMenu,
+        targets: RightClickCopyTargets
     ) {
-        menu.addItem(actionItem(title: title, actionID: actionID))
-    }
-
-    private func actionItem(title: String, actionID: String) -> NSMenuItem {
-        actionItem(title: title, context: MenuActionContext(actionID: actionID))
+        menu.addItem(actionItem(
+            title: title,
+            context: MenuActionContext(actionID: actionID, copyTargets: targets)
+        ))
     }
 
     private func actionItem(title: String, context: MenuActionContext) -> NSMenuItem {
@@ -322,20 +356,20 @@ final class RightClickFinderSync: FIFinderSync {
         case ActionID.openWith:
             handleOpenWith(appPath: context.appPath)
         case ActionID.copyFileName:
-            copyToPasteboard(RightClickPathFormatter.joinedFileNames(currentSelectedURLs()))
+            copyToPasteboard(RightClickPathFormatter.joinedFileNames(context.copyTargets?.urls ?? []))
         case ActionID.copyAbsolutePath:
-            copyToPasteboard(RightClickPathFormatter.joinedPaths(currentSelectedURLs()))
+            copyToPasteboard(RightClickPathFormatter.joinedPaths(context.copyTargets?.urls ?? []))
         case ActionID.copyRelativePath:
             copyToPasteboard(
                 RightClickPathFormatter.joinedRelativePaths(
-                    currentSelectedURLs(),
-                    base: currentTargetedURL()
+                    context.copyTargets?.urls ?? [],
+                    base: context.copyTargets?.relativeBaseURL
                 )
             )
         case ActionID.copyShellEscapedPath:
-            copyToPasteboard(RightClickPathFormatter.joinedShellEscapedPaths(currentSelectedURLs()))
+            copyToPasteboard(RightClickPathFormatter.joinedShellEscapedPaths(context.copyTargets?.urls ?? []))
         case ActionID.copyFileURL:
-            copyToPasteboard(RightClickPathFormatter.joinedFileURLs(currentSelectedURLs()))
+            copyToPasteboard(RightClickPathFormatter.joinedFileURLs(context.copyTargets?.urls ?? []))
         default:
             logger.error("Unknown action: \(context.actionID, privacy: .public)")
         }
@@ -386,7 +420,7 @@ final class RightClickFinderSync: FIFinderSync {
 
     private func copyToPasteboard(_ value: String) {
         guard !value.isEmpty else {
-            logger.error("Copy action skipped because selected URLs are empty")
+            logger.error("Copy action skipped because copy targets are empty")
             return
         }
 

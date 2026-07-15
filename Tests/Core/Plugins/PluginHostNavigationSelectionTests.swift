@@ -33,6 +33,21 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         )
     }
 
+    func testClearPanelNavigationSelectionForwardsClearAction() {
+        let plugin = MockNavigationPlugin()
+        let host = makeHost(plugin: plugin)
+
+        host.clearPanelNavigationSelection(
+            controlID: "display-navigation",
+            for: plugin.metadata.id
+        )
+
+        XCTAssertEqual(
+            plugin.receivedActions,
+            [.clearNavigationSelection(controlID: "display-navigation")]
+        )
+    }
+
     func testNavigationListControlKindIsDistinctFromSelectList() {
         let kind = PluginPanelControlKind.navigationList
 
