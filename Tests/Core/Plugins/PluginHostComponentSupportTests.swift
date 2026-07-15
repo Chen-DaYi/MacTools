@@ -1048,6 +1048,69 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.pendingLegacyDisabledPluginIDs, Set(["dynamic"]))
     }
 
+    func testLegacyDisabledBuiltInPluginIsRestoredAndAcknowledgmentClearsItsMarker() throws {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let legacyData = try JSONEncoder().encode(
+            LegacyDisplayPreferencesFixture(
+                orderedPluginIDs: ["built-in"],
+                hiddenPluginIDs: ["built-in"]
+            )
+        )
+        defaults.set(legacyData, forKey: "plugin.display.preferences")
+
+        let host = PluginHost(
+            plugins: [MockComponentPanelPlugin(id: "built-in")],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+
+        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["built-in"])
+        XCTAssertEqual(host.restoredLegacyBuiltInPluginIDs, Set(["built-in"]))
+        XCTAssertTrue(host.pendingLegacyDisabledPluginIDs.isEmpty)
+
+        host.dismissRestoredLegacyBuiltInPluginsNotice()
+
+        XCTAssertTrue(host.restoredLegacyBuiltInPluginIDs.isEmpty)
+        XCTAssertTrue(
+            PluginDisplayPreferencesStore(userDefaults: defaults)
+                .pendingLegacyDisabledPluginIDs()
+                .isEmpty
+        )
+    }
+
+    func testImportingLegacyDisabledBuiltInPluginRestoresItAndShowsMigrationNotice() throws {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let host = PluginHost(
+            plugins: [MockComponentPanelPlugin(id: "built-in")],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        let legacyBackup = PreferencesBackup(
+            application: PreferencesBackup.ApplicationPreferences(
+                appearancePreference: AppAppearancePreference.system.rawValue,
+                languagePreference: AppLanguagePreference.system.rawValue,
+                menuBarClickBehavior: MenuBarClickBehaviorPreference.standard.rawValue
+            ),
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: ["built-in"],
+                hiddenPluginIDs: ["built-in"]
+            ),
+            shortcutCustomizations: [:]
+        )
+
+        _ = try host.importPreferences(legacyBackup)
+
+        XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["built-in"])
+        XCTAssertEqual(host.restoredLegacyBuiltInPluginIDs, Set(["built-in"]))
+        XCTAssertTrue(host.pendingLegacyDisabledPluginIDs.isEmpty)
+    }
+
     func testDynamicPanelCapabilityMismatchExposesOnlyManifestAndRuntimeIntersection() {
         let plugin = MockCombinedPlugin(id: "dynamic")
         let rootDirectory = FileManager.default.temporaryDirectory

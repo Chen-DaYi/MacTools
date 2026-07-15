@@ -1025,6 +1025,22 @@ private struct FeatureSettingsDetailPane: View {
     let showFeaturePanel: () -> Void
 
     var body: some View {
+        VStack(spacing: 0) {
+            if !pluginHost.restoredLegacyBuiltInPluginIDs.isEmpty {
+                RestoredLegacyBuiltInPluginsNotice(
+                    onDismiss: pluginHost.dismissRestoredLegacyBuiltInPluginsNotice
+                )
+                .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
+                .padding(.top, PluginSettingsTheme.Spacing.section)
+                .padding(.bottom, PluginSettingsTheme.Spacing.sectionHeaderContent)
+            }
+
+            detail
+        }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
         switch pluginHost.selectedFeatureSettingsPane {
         case .dashboardLayout:
             SurfaceLayoutSettingsView(
@@ -1096,6 +1112,40 @@ private struct FeatureSettingsDetailPane: View {
 
     private func configurationItem(for pluginID: String) -> PluginConfigurationItem? {
         pluginHost.pluginConfigurationItems.first { $0.id == pluginID }
+    }
+}
+
+private struct RestoredLegacyBuiltInPluginsNotice: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(AppL10n.plugins(
+                    "plugin.migration.builtInRestored.title",
+                    defaultValue: "内置工具已恢复"
+                ))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text(AppL10n.plugins(
+                    "plugin.migration.builtInRestored.description",
+                    defaultValue: "此前停用的内置工具已恢复。内置工具现在始终可用。"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(AppL10n.settings("common.ok", defaultValue: "好"), action: onDismiss)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .pluginSettingsCardBackground(.host)
     }
 }
 

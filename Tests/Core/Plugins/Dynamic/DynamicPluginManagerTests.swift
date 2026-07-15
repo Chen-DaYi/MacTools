@@ -55,6 +55,18 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.state, .installed)
     }
 
+    func testLegacyPackageHoldIgnoresIDsThatDoNotBelongToInstalledPackages() throws {
+        let sourceURL = try makePackage(id: "com.example.demo")
+        let store = makeStore()
+        _ = try store.installPackage(from: sourceURL)
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
+
+        manager.holdLegacyDisabledPackages(["com.example.demo", "built-in"])
+
+        XCTAssertEqual(store.legacyDisabledPackageIDs(), Set(["com.example.demo"]))
+        XCTAssertEqual(manager.legacyDisabledPluginIDs(), Set(["com.example.demo"]))
+    }
+
     func testUpdatingLegacyDisabledPackageDoesNotReactivateIt() throws {
         let firstPackageURL = try makePackage(id: "com.example.demo", version: "1.0.0")
         let updatePackageURL = try makePackage(id: "com.example.demo", version: "2.0.0")

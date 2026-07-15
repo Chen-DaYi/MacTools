@@ -16,6 +16,29 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         ],
     ]
 
+    private let pluginManagementLocalizationKeys = [
+        "plugin.management.active",
+        "plugin.management.moreActions",
+        "plugin.management.moreActionsForPlugin",
+        "plugin.management.uninstall.confirmationMessage",
+        "plugin.management.uninstall.confirmationTitle",
+        "plugin.management.viewMarketplace",
+        "plugin.management.openSettings",
+        "plugin.management.openSettingsForPlugin",
+        "plugin.capability.both",
+        "plugin.capability.dashboard",
+        "plugin.capability.featurePanel",
+        "plugin.capability.settingsOnly",
+        "plugin.capability.unknown",
+        "plugin.detail.requiresReview",
+        "plugin.migration.legacyDisabled.description",
+        "plugin.migration.legacyDisabled.keepInstalled",
+        "plugin.migration.legacyDisabled.title",
+        "plugin.migration.builtInRestored.description",
+        "plugin.migration.builtInRestored.title",
+        "plugin.status.requiresReview",
+    ]
+
     func testPluginStaticLocalizationKeysCoverAllSupportedLanguages() throws {
         var failures: [String] = []
 
@@ -68,6 +91,25 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
                     }
                 }
             }
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testPluginManagementLocalizationKeysCoverAllSupportedLanguages() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+            .appending(path: "Plugins.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        guard let strings = catalog["strings"] as? [String: [String: Any]] else {
+            throw AuditError.invalidCatalog(catalogURL.path)
+        }
+
+        var failures: [String] = []
+        for key in pluginManagementLocalizationKeys {
+            validate(key: key, in: strings, pluginName: "Plugin Management", failures: &failures)
         }
 
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))

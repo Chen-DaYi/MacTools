@@ -149,6 +149,10 @@ final class DynamicPluginManager: ObservableObject {
     private var catalogSnapshot: PluginCatalogSnapshot?
     private var latestLoadErrorsByID: [String: String] = [:]
 
+    private var installedPluginIDs: Set<String> {
+        Set(packageStore.installedRecords().map(\.id))
+    }
+
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     var onPluginsChanged: (([any MacToolsPlugin]) -> Void)?
 
@@ -334,7 +338,7 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     func legacyDisabledPluginIDs() -> Set<String> {
-        packageStore.legacyDisabledPackageIDs()
+        packageStore.legacyDisabledPackageIDs().intersection(installedPluginIDs)
     }
 
     func isLegacyDisabledPackage(_ pluginID: String) -> Bool {
@@ -415,7 +419,7 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     func holdLegacyDisabledPackages(_ pluginIDs: Set<String>) {
-        packageStore.markLegacyDisabledPlugins(pluginIDs)
+        packageStore.markLegacyDisabledPlugins(pluginIDs.intersection(installedPluginIDs))
     }
 
     func uninstallPlugin(pluginID: String, removeData: Bool = false) throws {

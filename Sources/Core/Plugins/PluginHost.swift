@@ -263,6 +263,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var localizationRevision = 0
     @Published var selectedSettingsDestination: SettingsDestination = .general
     @Published private(set) var pendingLegacyDisabledPluginIDs: Set<String> = []
+    @Published private(set) var restoredLegacyBuiltInPluginIDs: Set<String> = []
     @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .dashboardLayout
 
     /// Injected by `MenuBarStatusItemController`; returns the status-item button frame in screen coordinates.
@@ -351,12 +352,13 @@ final class PluginHost: ObservableObject {
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
-            registerLegacyDisabledPluginsForMigration()
-            holdPendingLegacyDisabledDynamicPlugins()
             dynamicPluginManager.onPluginsChanged = { [weak self] plugins in
                 self?.replaceDynamicPlugins(plugins)
             }
         }
+
+        registerLegacyDisabledPluginsForMigration()
+        holdPendingLegacyDisabledDynamicPlugins()
 
         self.globalShortcutManager.onShortcutTriggered = { [weak self] shortcutID in
             self?.handleShortcutTrigger(shortcutID: shortcutID)
@@ -1272,6 +1274,16 @@ final class PluginHost: ObservableObject {
         rebuildDerivedState()
     }
 
+    /// Built-in plugins are restored to the current always-available model.
+    /// Dismissing the notice acknowledges that one-time migration and removes
+    /// the legacy marker so it cannot resurface later.
+    func dismissRestoredLegacyBuiltInPluginsNotice() {
+        for pluginID in restoredLegacyBuiltInPluginIDs {
+            pluginDisplayPreferencesStore.resolvePendingLegacyDisabledPlugin(pluginID)
+        }
+        registerLegacyDisabledPluginsForMigration()
+    }
+
     private var plugins: [any MacToolsPlugin] {
         builtInPlugins + dynamicPlugins
     }
@@ -1380,9 +1392,12 @@ final class PluginHost: ObservableObject {
             dynamicPluginManager?.legacyDisabledPluginIDs() ?? []
         )
 
-        pendingLegacyDisabledPluginIDs = pluginDisplayPreferencesStore.pendingLegacyDisabledPluginIDs(
-            availablePluginIDs: Set(pluginManagementItems.map(\.id))
-        )
+        let pendingPluginIDs = pluginDisplayPreferencesStore.pendingLegacyDisabledPluginIDs()
+        let builtInPluginIDs = Set(builtInPlugins.map(\.metadata.id))
+        restoredLegacyBuiltInPluginIDs = pendingPluginIDs.intersection(builtInPluginIDs)
+        pendingLegacyDisabledPluginIDs = pendingPluginIDs
+            .subtracting(restoredLegacyBuiltInPluginIDs)
+            .intersection(Set(pluginManagementItems.map(\.id)))
     }
 
     private func holdPendingLegacyDisabledDynamicPlugins() {
