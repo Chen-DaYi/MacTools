@@ -1823,8 +1823,12 @@ private struct SecondarySlidingPanel: View {
                             .frame(width: 18, height: 18)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("返回")
-                    .help("返回")
+                    .accessibilityLabel(
+                        AppL10n.settings("secondaryPanel.back", defaultValue: "返回")
+                    )
+                    .help(
+                        AppL10n.settings("secondaryPanel.back", defaultValue: "返回")
+                    )
                 }
 
                 Text(title)
