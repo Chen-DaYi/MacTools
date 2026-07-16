@@ -295,6 +295,12 @@ private enum FeatureRowLayout {
     static let rowHorizontalPadding: CGFloat = 10
     static let rowVerticalPadding: CGFloat = MenuBarPanelLayout.rowVerticalPadding / 2
     static let chevronSize: CGFloat = 14
+    static let actionButtonWidth: CGFloat = 45
+    static let actionButtonHeight: CGFloat = 21
+    static let actionButtonHorizontalPadding: CGFloat = 5
+    static let actionButtonChineseFontSize: CGFloat = 11
+    static let actionButtonLocalizedFontSize: CGFloat = 9
+    static let actionButtonLocalizedMinimumScale: CGFloat = 0.7
 }
 
 private enum MenuBarHoverStyle {
@@ -1194,15 +1200,25 @@ struct FeatureRowView: View {
                             onActionInvoke(actionID, item.menuActionBehavior)
                         }
                     } label: {
-                        Text(item.buttonTitle ?? AppL10n.plugins("plugin.panel.actionFallback", defaultValue: "操作"))
-                            .font(.system(size: 11))
+                        Text(actionButtonTitle)
+                            .font(.system(size: actionButtonFontSize))
+                            .lineLimit(1)
+                            .minimumScaleFactor(actionButtonMinimumScale)
+                            .allowsTightening(true)
                             .foregroundStyle(.white)
-                            .frame(minWidth: 45, minHeight: 21)
-                            .background(item.isEnabled ? Color.accentColor : Color(NSColor.secondaryLabelColor))
-                            .cornerRadius(15)
+                            .padding(.horizontal, FeatureRowLayout.actionButtonHorizontalPadding)
+                            .frame(
+                                width: FeatureRowLayout.actionButtonWidth,
+                                height: FeatureRowLayout.actionButtonHeight
+                            )
+                            .background(
+                                item.isEnabled ? Color.accentColor : Color(NSColor.secondaryLabelColor),
+                                in: Capsule()
+                            )
                     }
                     .buttonStyle(.plain)
                     .disabled(!item.isEnabled)
+                    .help(actionButtonTitle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -1297,6 +1313,26 @@ struct FeatureRowView: View {
         }
 
         return detail
+    }
+
+    private var actionButtonTitle: String {
+        item.buttonTitle ?? AppL10n.plugins("plugin.panel.actionFallback", defaultValue: "操作")
+    }
+
+    private var actionButtonUsesChineseTypography: Bool {
+        PluginRuntimeLocalization.locale.language.languageCode?.identifier == "zh"
+    }
+
+    private var actionButtonFontSize: CGFloat {
+        actionButtonUsesChineseTypography
+            ? FeatureRowLayout.actionButtonChineseFontSize
+            : FeatureRowLayout.actionButtonLocalizedFontSize
+    }
+
+    private var actionButtonMinimumScale: CGFloat {
+        actionButtonUsesChineseTypography
+            ? 1
+            : FeatureRowLayout.actionButtonLocalizedMinimumScale
     }
 
     private var rowText: some View {
