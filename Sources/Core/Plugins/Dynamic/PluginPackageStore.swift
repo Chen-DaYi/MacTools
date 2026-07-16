@@ -227,7 +227,15 @@ final class PluginPackageStore {
     }
 
     func updatePackage(from sourceURL: URL) throws -> PluginPackageRecord {
-        try installPackage(from: sourceURL, replaceExisting: true)
+        let manifest = try PluginPackageManifestLoader.load(
+            from: sourceURL,
+            hostVersion: hostVersion
+        )
+        guard installedRecords().contains(where: { $0.id == manifest.id }) else {
+            throw PluginPackageStoreError.packageNotFound(manifest.id)
+        }
+
+        return try installPackage(from: sourceURL, replaceExisting: true)
     }
 
     /// Reads the old global hidden marker so the host can migrate it into

@@ -269,6 +269,12 @@ final class DynamicPluginManager: ObservableObject {
         }
 
         for update in updates {
+            guard isInstalledPlugin(update.catalogEntry.id) else {
+                onPackageProcessed?()
+                await Task.yield()
+                continue
+            }
+
             do {
                 try updatePluginPackageWithoutReload(
                     from: update.sourceURL,

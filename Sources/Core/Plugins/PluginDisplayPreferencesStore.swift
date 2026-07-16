@@ -453,7 +453,8 @@ final class PluginDisplayPreferencesStore {
             return migratedPreferences
         }
 
-        if let legacyPreferences = try? decoder.decode(LegacyStoredPreferences.self, from: data) {
+        if !payloadContainsSchemaVersion(data),
+           let legacyPreferences = try? decoder.decode(LegacyStoredPreferences.self, from: data) {
             let migratedPreferences = StoredPreferences(
                 generalPluginOrder: deduplicated(legacyPreferences.orderedPluginIDs),
                 legacyHiddenPluginIDs: legacyPreferences.hiddenPluginIDs
@@ -470,6 +471,15 @@ final class PluginDisplayPreferencesStore {
         cachedPreferences = preferences
         shouldPreserveStoredPayload = true
         return preferences
+    }
+
+    private func payloadContainsSchemaVersion(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any] else {
+            return false
+        }
+
+        return dictionary.keys.contains("version")
     }
 
     @discardableResult

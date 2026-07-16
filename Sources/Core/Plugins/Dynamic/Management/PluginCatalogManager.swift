@@ -171,6 +171,10 @@ final class PluginCatalogManager {
     func updatePlugin(id: String) async throws {
         let entry = try catalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
+        guard dynamicPluginManager.isInstalledPlugin(id) else {
+            return
+        }
+
         try dynamicPluginManager.updatePluginPackage(from: packageURL, catalogEntry: entry)
     }
 

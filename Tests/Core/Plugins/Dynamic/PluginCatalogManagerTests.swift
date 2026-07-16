@@ -167,6 +167,74 @@ final class PluginCatalogManagerTests: XCTestCase {
         XCTAssertEqual(store.installedRecords().map(\.id), ["com.example.restore"])
     }
 
+    func testUninstallWinsWhenUpdateResolutionFinishesLater() async throws {
+        let store = makeStore()
+        _ = try store.installPackage(from: makePackage(id: "com.example.demo", version: "1.0.0"))
+        let updatePackageURL = try makePackage(id: "com.example.demo", version: "2.0.0")
+        let dynamicManager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        dynamicManager.prepareInstalledPluginsWithoutLoading()
+        let snapshot = makeCatalogSnapshot(entries: [
+            makeCatalogEntry(id: "com.example.demo", version: "2.0.0"),
+        ])
+        let resolver = SuspendedPluginPackageResolver()
+        let manager = PluginCatalogManager(
+            catalogProvider: StubPluginCatalogProvider(snapshot: snapshot),
+            packageResolver: resolver,
+            dynamicPluginManager: dynamicManager,
+            source: .production(snapshot.sourceURL)
+        )
+
+        await manager.refreshCatalog()
+        let updateTask = Task {
+            try await manager.updatePlugin(id: "com.example.demo")
+        }
+        await resolver.waitUntilRequested()
+
+        try dynamicManager.uninstallPlugin(pluginID: "com.example.demo")
+        resolver.resume(returning: updatePackageURL)
+        try await updateTask.value
+
+        XCTAssertFalse(dynamicManager.isInstalledPlugin("com.example.demo"))
+        XCTAssertTrue(store.installedRecords().isEmpty)
+    }
+
+    func testUninstallWinsWhenBulkUpdateResolutionFinishesLater() async throws {
+        let store = makeStore()
+        _ = try store.installPackage(from: makePackage(id: "com.example.demo", version: "1.0.0"))
+        let updatePackageURL = try makePackage(id: "com.example.demo", version: "2.0.0")
+        let dynamicManager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        dynamicManager.prepareInstalledPluginsWithoutLoading()
+        let snapshot = makeCatalogSnapshot(entries: [
+            makeCatalogEntry(id: "com.example.demo", version: "2.0.0"),
+        ])
+        let resolver = SuspendedPluginPackageResolver()
+        let manager = PluginCatalogManager(
+            catalogProvider: StubPluginCatalogProvider(snapshot: snapshot),
+            packageResolver: resolver,
+            dynamicPluginManager: dynamicManager,
+            source: .production(snapshot.sourceURL)
+        )
+
+        await manager.refreshCatalog()
+        let updateTask = Task {
+            try await manager.updateAvailablePlugins()
+        }
+        await resolver.waitUntilRequested()
+
+        try dynamicManager.uninstallPlugin(pluginID: "com.example.demo")
+        resolver.resume(returning: updatePackageURL)
+        try await updateTask.value
+
+        XCTAssertFalse(dynamicManager.isInstalledPlugin("com.example.demo"))
+        XCTAssertTrue(store.installedRecords().isEmpty)
+    }
+
     private func makeStore() -> PluginPackageStore {
         PluginPackageStore(
             rootDirectory: temporaryRoot,
@@ -251,6 +319,38 @@ private struct StubPluginPackageResolver: PluginPackageResolving {
         }
 
         return url
+    }
+}
+
+@MainActor
+private final class SuspendedPluginPackageResolver: PluginPackageResolving {
+    private var resolutionContinuation: CheckedContinuation<URL, Error>?
+    private var requestContinuation: CheckedContinuation<Void, Never>?
+    private var wasRequested = false
+
+    func resolvePackage(for entry: PluginCatalogEntry) async throws -> URL {
+        wasRequested = true
+        requestContinuation?.resume()
+        requestContinuation = nil
+
+        return try await withCheckedThrowingContinuation { continuation in
+            resolutionContinuation = continuation
+        }
+    }
+
+    func waitUntilRequested() async {
+        guard !wasRequested else {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            requestContinuation = continuation
+        }
+    }
+
+    func resume(returning url: URL) {
+        resolutionContinuation?.resume(returning: url)
+        resolutionContinuation = nil
     }
 }
 

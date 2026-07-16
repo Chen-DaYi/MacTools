@@ -166,6 +166,17 @@ public protocol PluginConfigurationPresenting: AnyObject {
     var requestConfigurationPresentation: (() -> Void)? { get set }
 }
 
+/// Legacy PluginKit v3 compatibility surface.
+///
+/// The host no longer ties plugin lifecycle to Dashboard or Feature Panel
+/// visibility, but previously released plugin binaries still reference this
+/// protocol descriptor. Keep the declaration until the next PluginKit ABI
+/// version so those installed packages continue to load.
+@MainActor
+public protocol PluginFeatureVisibilityLifecycleHandling: AnyObject {
+    func featureVisibilityDidChange(_ isVisible: Bool)
+}
+
 /// Optional hook for built-in plugins that cache localized descriptors or
 /// other language-dependent presentation data. The host invokes it when the
 /// app language changes; implementations must not activate, deactivate, or

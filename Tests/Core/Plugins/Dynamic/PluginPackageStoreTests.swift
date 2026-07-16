@@ -135,6 +135,21 @@ final class PluginPackageStoreTests: XCTestCase {
         XCTAssertEqual(record.state, .installed)
     }
 
+    func testUpdateDoesNotInstallPackageThatIsNoLongerInstalled() throws {
+        let updateURL = try makePackage(id: "com.example.demo", version: "2.0.0")
+        let store = makeStore()
+
+        XCTAssertThrowsError(try store.updatePackage(from: updateURL)) { error in
+            guard let storeError = error as? PluginPackageStoreError,
+                  case let .packageNotFound(pluginID) = storeError else {
+                return XCTFail("Expected packageNotFound, got \(error)")
+            }
+
+            XCTAssertEqual(pluginID, "com.example.demo")
+        }
+        XCTAssertTrue(store.installedRecords().isEmpty)
+    }
+
     func testDefaultRootDirectoryUsesCurrentApplicationSupportScope() {
         let rootDirectory = PluginPackageStore.defaultRootDirectory(fileManager: .default)
 

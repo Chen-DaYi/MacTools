@@ -15,6 +15,13 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         let futureOnlyValue: String
     }
 
+    private struct FuturePreferencesWithLegacyKeys: Codable {
+        let version: Int
+        let orderedPluginIDs: [String]
+        let hiddenPluginIDs: Set<String>
+        let futureOnlyValue: String
+    }
+
     private struct VersionTwoPreferences: Codable {
         let version: Int
         let generalPluginOrder: [String]
@@ -295,6 +302,24 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             FuturePreferences(
                 version: 99,
                 generalPluginOrder: ["future"],
+                futureOnlyValue: "preserve-me"
+            )
+        )
+        defaults.set(futureData, forKey: "plugin.display.preferences")
+
+        XCTAssertEqual(
+            store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "status"]),
+            ["calendar", "status"]
+        )
+        XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
+    }
+
+    func testUnknownFutureVersionWithLegacyKeysIsNotMigratedOrRewritten() throws {
+        let futureData = try JSONEncoder().encode(
+            FuturePreferencesWithLegacyKeys(
+                version: 99,
+                orderedPluginIDs: ["future"],
+                hiddenPluginIDs: ["hidden"],
                 futureOnlyValue: "preserve-me"
             )
         )
