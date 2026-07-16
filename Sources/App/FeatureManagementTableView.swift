@@ -601,6 +601,13 @@ enum FeatureManagementVisibilityPresentation {
     }
 }
 
+enum FeatureManagementVisibilityToggleState {
+    static func nextValue(currentValue: inout Bool) -> Bool {
+        currentValue.toggle()
+        return currentValue
+    }
+}
+
 private final class FeatureManagementTableCellView: NSTableCellView {
     private let containerView = NSView()
     private let iconBackgroundView = NSView()
@@ -836,7 +843,15 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
     @objc
     private func handleVisibilityAction(_ sender: NSButton) {
-        setVisibleHandler?(!isVisible)
+        let nextValue = FeatureManagementVisibilityToggleState.nextValue(currentValue: &isVisible)
+        visibilityButton.image = NSImage(
+            systemSymbolName: FeatureManagementVisibilityPresentation.symbolName(isVisible: nextValue),
+            accessibilityDescription: nil
+        )
+        visibilityButton.contentTintColor = FeatureManagementVisibilityPresentation.tintColor(
+            isVisible: nextValue
+        )
+        setVisibleHandler?(nextValue)
     }
 
     @objc

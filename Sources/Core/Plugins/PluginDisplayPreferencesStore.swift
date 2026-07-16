@@ -54,6 +54,11 @@ final class PluginDisplayPreferencesStore {
         static let currentVersion = 4
 
         var version = currentVersion
+        // Compatibility projection for public releases that only understand
+        // the original unversioned layout payload. These fields are refreshed
+        // on every write and ignored by current readers.
+        var orderedPluginIDs: [String]? = nil
+        var hiddenPluginIDs: Set<String>? = nil
         // Retained only to seed separate surface orders for users upgrading
         // from the original shared-order model.
         var generalPluginOrder: [String] = []
@@ -74,9 +79,10 @@ final class PluginDisplayPreferencesStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var cachedPreferences: StoredPreferences?
-    // True when a fallback read came from data this version cannot safely
-    // decode. Read-time lazy migrations should update only the cache so
-    // downgrades do not erase newer schemas.
+    // True when a passive read came from data this version cannot safely
+    // decode. Read-time lazy migrations update only the cache so they do not
+    // erase newer schemas. An explicit setter is user intent and deliberately
+    // replaces the unreadable payload with this version's schema.
     private var shouldPreserveStoredPayload = false
 
     init(userDefaults: UserDefaults = .standard) {
@@ -303,8 +309,8 @@ final class PluginDisplayPreferencesStore {
 
     func backupSnapshot(
         defaultPluginIDs: [String],
-        dashboardDefaultPluginIDs: [String] = [],
-        featurePanelDefaultPluginIDs: [String] = []
+        dashboardDefaultPluginIDs: [String],
+        featurePanelDefaultPluginIDs: [String]
     ) -> PluginDisplayPreferencesBackup {
         migrateLegacyHiddenPluginIDs(
             dashboardDefaultPluginIDs: dashboardDefaultPluginIDs,
@@ -320,12 +326,13 @@ final class PluginDisplayPreferencesStore {
             storedOrder(for: .featurePanel, preferences: preferences),
             defaultPluginIDs: featurePanelDefaultPluginIDs
         )
+        let legacyOrderedPluginIDs = normalizedVisibleOrder(
+            legacyOrderedPluginIDsProjection(preferences),
+            defaultPluginIDs: defaultPluginIDs
+        )
 
         return PluginDisplayPreferencesBackup(
-            orderedPluginIDs: normalizedVisibleOrder(
-                preferences.generalPluginOrder,
-                defaultPluginIDs: defaultPluginIDs
-            ),
+            orderedPluginIDs: legacyOrderedPluginIDs,
             // Older app versions only understand global visibility. A union
             // is a conservative compatibility projection of the independent
             // surface preferences.
@@ -484,6 +491,12 @@ final class PluginDisplayPreferencesStore {
 
     @discardableResult
     private func persist(_ preferences: StoredPreferences) -> Bool {
+        var preferences = preferences
+        preferences.orderedPluginIDs = legacyOrderedPluginIDsProjection(preferences)
+        preferences.hiddenPluginIDs = preferences.dashboardHiddenPluginIDs
+            .union(preferences.featurePanelHiddenPluginIDs)
+            .union(preferences.legacyHiddenPluginIDs)
+
         guard let data = try? encoder.encode(preferences) else {
             return false
         }
@@ -492,6 +505,14 @@ final class PluginDisplayPreferencesStore {
         cachedPreferences = preferences
         shouldPreserveStoredPayload = false
         return true
+    }
+
+    private func legacyOrderedPluginIDsProjection(_ preferences: StoredPreferences) -> [String] {
+        deduplicated(
+            preferences.dashboardOrderedPluginIDs
+                + preferences.featurePanelOrderedPluginIDs
+                + preferences.generalPluginOrder
+        )
     }
 
     private func initializeSurfacePreferencesIfNeeded(

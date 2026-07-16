@@ -332,6 +332,31 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
     }
 
+    func testExplicitLayoutEditReplacesUnknownFuturePayload() throws {
+        let futureData = try JSONEncoder().encode(
+            FuturePreferences(
+                version: 99,
+                generalPluginOrder: ["future"],
+                futureOnlyValue: "preserve-me-until-an-edit"
+            )
+        )
+        defaults.set(futureData, forKey: "plugin.display.preferences")
+
+        store.setPluginVisible(
+            false,
+            pluginID: "calendar",
+            on: .dashboard,
+            defaultPluginIDs: ["calendar", "status"]
+        )
+
+        let storedData = try XCTUnwrap(defaults.data(forKey: "plugin.display.preferences"))
+        XCTAssertNotEqual(storedData, futureData)
+        let storedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: storedData) as? [String: Any]
+        )
+        XCTAssertEqual(storedObject["version"] as? Int, 4)
+    }
+
     func testLegacyHiddenIDsAreNotAcknowledgedWhenFuturePayloadMustBePreserved() throws {
         let futureData = try JSONEncoder().encode(
             FuturePreferences(
@@ -424,6 +449,64 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             store.visiblePluginIDs(for: .dashboard, defaultPluginIDs: pluginIDs),
             ["second", "hidden", "first"]
         )
+    }
+
+    func testCurrentPayloadRetainsPublicReleaseCompatibilityProjection() throws {
+        let dashboardPluginIDs = ["calendar", "activity"]
+        let featurePanelPluginIDs = ["calendar", "activity", "fan"]
+        store.setOrderedPluginIDs(
+            ["activity", "calendar"],
+            for: .dashboard,
+            defaultPluginIDs: dashboardPluginIDs
+        )
+        store.setOrderedPluginIDs(
+            ["calendar", "fan", "activity"],
+            for: .featurePanel,
+            defaultPluginIDs: featurePanelPluginIDs
+        )
+        store.setPluginVisible(
+            false,
+            pluginID: "activity",
+            on: .dashboard,
+            defaultPluginIDs: dashboardPluginIDs
+        )
+        store.setPluginVisible(
+            false,
+            pluginID: "calendar",
+            on: .featurePanel,
+            defaultPluginIDs: featurePanelPluginIDs
+        )
+
+        let data = try XCTUnwrap(defaults.data(forKey: "plugin.display.preferences"))
+        let publicReleasePreferences = try JSONDecoder().decode(LegacyPreferences.self, from: data)
+
+        XCTAssertEqual(publicReleasePreferences.orderedPluginIDs, ["activity", "calendar", "fan"])
+        XCTAssertEqual(publicReleasePreferences.hiddenPluginIDs, ["calendar", "activity"])
+    }
+
+    func testBackupRetainsLegacyProjectionAlongsideIndependentSurfaceLayouts() {
+        let dashboardPluginIDs = ["calendar", "activity"]
+        let featurePanelPluginIDs = ["calendar", "activity", "fan"]
+        store.setOrderedPluginIDs(
+            ["activity", "calendar"],
+            for: .dashboard,
+            defaultPluginIDs: dashboardPluginIDs
+        )
+        store.setOrderedPluginIDs(
+            ["calendar", "fan", "activity"],
+            for: .featurePanel,
+            defaultPluginIDs: featurePanelPluginIDs
+        )
+
+        let backup = store.backupSnapshot(
+            defaultPluginIDs: featurePanelPluginIDs,
+            dashboardDefaultPluginIDs: dashboardPluginIDs,
+            featurePanelDefaultPluginIDs: featurePanelPluginIDs
+        )
+
+        XCTAssertEqual(backup.orderedPluginIDs, ["activity", "calendar", "fan"])
+        XCTAssertEqual(backup.dashboardOrderedPluginIDs, ["activity", "calendar"])
+        XCTAssertEqual(backup.featurePanelOrderedPluginIDs, ["calendar", "fan", "activity"])
     }
 
     private func storeLegacyPreferences(order: [String], hidden: Set<String>) throws {

@@ -42,10 +42,18 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         "plugins.dashboard.empty.description",
         "plugins.dashboard.empty.title",
         "plugins.dashboard.hiddenSectionFormat",
+        "plugins.dashboard.open",
+        "plugins.dashboard.title",
         "plugins.featurePanel.description",
         "plugins.featurePanel.empty.description",
         "plugins.featurePanel.empty.title",
         "plugins.featurePanel.hiddenSectionFormat",
+        "plugins.featurePanel.open",
+        "plugins.featurePanel.title",
+        "plugins.layout.restoreDefaultOrder",
+        "plugins.sidebar.dashboard",
+        "plugins.sidebar.featurePanel",
+        "plugins.sidebar.pluginsSection",
     ]
 
     func testPluginStaticLocalizationKeysCoverAllSupportedLanguages() throws {

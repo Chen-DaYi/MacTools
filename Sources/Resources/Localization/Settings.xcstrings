@@ -33,14 +33,6 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "已在功能面板隱藏（%d）" } }
       }
     },
-    "plugins.configuration.enabled": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Enabled" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已启用" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已啟用" } }
-      }
-    },
     "plugins.dashboard.description": {
       "extractionState": "manual",
       "localizations": {
@@ -92,7 +84,15 @@
     "plugins.dashboard.open": {
       "extractionState": "manual",
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard öffnen" } },
         "en": { "stringUnit": { "state": "translated", "value": "Open Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir le tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードを開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть панель управления" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开仪表盘" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開儀表板" } }
       }
@@ -100,7 +100,15 @@
     "plugins.dashboard.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
         "en": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボード" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель управления" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板" } }
       }
@@ -156,7 +164,15 @@
     "plugins.featurePanel.open": {
       "extractionState": "manual",
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsbereich öffnen" } },
         "en": { "stringUnit": { "state": "translated", "value": "Open Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir le panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルを開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть панель функций" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开功能面板" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開功能面板" } }
       }
@@ -164,71 +180,47 @@
     "plugins.featurePanel.title": {
       "extractionState": "manual",
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsbereich" } },
         "en": { "stringUnit": { "state": "translated", "value": "Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネル" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель функций" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能面板" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
-      }
-    },
-    "plugins.installed.globalDescription": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Enable or disable plugins here or from Dashboard and Feature Panel." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "可在此处或仪表盘、功能面板中启用或停用插件。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "可在此處或儀表板、功能面板中啟用或停用外掛。" } }
-      }
-    },
-    "plugins.layout.disabledSummaryFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "%d disabled plugin(s) are excluded from this layout." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%d 个已停用插件未显示在此布局中。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%d 個已停用外掛未顯示在此佈局中。" } }
-      }
-    },
-    "plugins.layout.disabledSectionFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Disabled Plugins (%d)" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已停用插件（%d）" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已停用外掛（%d）" } }
-      }
-    },
-    "plugins.layout.filteringReorderHint": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Reordering is unavailable while filtering. Clear the filters to reorder again." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "筛选中暂时不能拖拽排序，清除筛选条件后即可重新排序。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "篩選中暫時不能拖曳排序，清除篩選條件後即可重新排序。" } }
-      }
-    },
-    "plugins.layout.manageInstalled": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Manage Installed" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "管理已安装插件" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "管理已安裝外掛" } }
       }
     },
     "plugins.layout.restoreDefaultOrder": {
       "extractionState": "manual",
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "استعادة الترتيب الافتراضي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Standardreihenfolge wiederherstellen" } },
         "en": { "stringUnit": { "state": "translated", "value": "Restore Default Order" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Restaurar orden predeterminado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Rétablir l’ordre par défaut" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "デフォルトの順序に戻す" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기본 순서 복원" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Restaurar ordem padrão" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Восстановить порядок по умолчанию" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复默认排列" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "恢復預設排列" } }
-      }
-    },
-    "plugins.layout.searchPrompt": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Search plugins" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "搜索插件" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "搜尋外掛" } }
       }
     },
     "plugins.sidebar.dashboard": {
       "extractionState": "manual",
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
         "en": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボード" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель управления" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板" } }
       }
@@ -236,23 +228,31 @@
     "plugins.sidebar.featurePanel": {
       "extractionState": "manual",
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsbereich" } },
         "en": { "stringUnit": { "state": "translated", "value": "Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネル" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель функций" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能面板" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
-      }
-    },
-    "plugins.sidebar.layoutSection": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Menu Bar Layout" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "菜单栏布局" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選單列佈局" } }
       }
     },
     "plugins.sidebar.pluginsSection": {
       "extractionState": "manual",
       "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الإضافات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Plug-ins" } },
         "en": { "stringUnit": { "state": "translated", "value": "Plugins" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Complementos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Modules" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "プラグイン" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "플러그인" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Plug-ins" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Плагины" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛" } }
       }

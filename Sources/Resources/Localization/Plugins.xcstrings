@@ -409,62 +409,6 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛功能" } }
       }
     },
-    "plugin.management.alsoInFeaturePanel": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Also shown in Feature Panel" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "同时显示在功能面板" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "同時顯示在功能面板" } }
-      }
-    },
-    "plugin.management.alsoOnDashboard": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Also shown on Dashboard" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "同时显示在仪表盘" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "同時顯示在儀表板" } }
-      }
-    },
-    "plugin.management.dashboardToggle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Show on Dashboard" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在仪表盘中显示" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在儀表板中顯示" } }
-      }
-    },
-    "plugin.management.disable": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Disable Plugin" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "停用插件" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "停用外掛" } }
-      }
-    },
-    "plugin.management.disabled": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Plugin Disabled" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件已停用" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛已停用" } }
-      }
-    },
-    "plugin.management.featurePanelToggle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Show in Feature Panel" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在功能面板中显示" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在功能面板中顯示" } }
-      }
-    },
-    "plugin.management.globalToggle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Enable or disable plugin" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用或停用插件" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "啟用或停用外掛" } }
-      }
-    },
     "plugin.management.openSettings": {
       "extractionState": "manual",
       "localizations": {

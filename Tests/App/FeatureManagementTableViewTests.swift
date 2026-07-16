@@ -174,6 +174,20 @@ final class FeatureManagementTableViewTests: XCTestCase {
         )
     }
 
+    func testRapidVisibilityActionsAlternateTheCellCachedValue() {
+        var isVisible = true
+
+        XCTAssertFalse(
+            FeatureManagementVisibilityToggleState.nextValue(currentValue: &isVisible)
+        )
+        XCTAssertTrue(
+            FeatureManagementVisibilityToggleState.nextValue(currentValue: &isVisible)
+        )
+        XCTAssertFalse(
+            FeatureManagementVisibilityToggleState.nextValue(currentValue: &isVisible)
+        )
+    }
+
     func testReorderPolicyRejectsDisabledReordering() {
         let items = [
             makeItem(id: "first", isActive: false),
