@@ -4,10 +4,10 @@
 
 - `Build`：在 `main` push、Pull Request 和手动触发时运行。执行 XcodeGen、Debug 测试，并在非 PR 场景额外编译 unsigned Release app 做配置校验；不上传不可分发的未签名产物。
 - `Prepare Release`：在 GitHub Actions 页面手动触发。输入发布类型、目标版本和是否继续发布；它会检查、bump、提交版本变更、创建 tag，并在需要时显式触发 `Release` 或 `Plugin Release`。
-- `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release，并提交最新 `docs/appcast.xml`。
-- `Homebrew Cask Update`：在 `Release` 成功完成后，或手动输入版本时运行。读取稳定版 Release 里的 `MacTools.dmg` 与 `MacTools.sha256`，通过 `brew bump-cask-pr` 向官方 `Homebrew/homebrew-cask` 提交 cask bump PR。
-- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。它按 PluginKit 版本选择 catalog：v2 保留使用 `docs/plugins/catalog.json`，v3 及以后使用 `docs/plugins/vN/catalog.json`；首次 ABI 升级默认全量构建、签名并提交新版本 catalog。
-- `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它先构建 `site/` 下的 Astro 官网，再合并 `docs/` 中的 appcast、插件 catalog、图标库等静态发布资源并发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
+- `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release；稳定版会明确标记为 GitHub Latest，并更新官网使用的 `docs/app-release.json`，预发布不会覆盖稳定版下载元数据。
+- `Homebrew Cask Update`：手动输入版本时运行；未输入版本则从稳定 `v*` App Release 中查找同时包含 `MacTools.dmg` 与 `MacTools.sha256` 的最新版，通过 `brew bump-cask-pr` 向官方 `Homebrew/homebrew-cask` 提交 cask bump PR。
+- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。它按 PluginKit 版本选择 catalog：v2 保留使用 `docs/plugins/catalog.json`，v3 及以后使用 `docs/plugins/vN/catalog.json`；首次 ABI 升级默认全量构建、签名并提交新版本 catalog。插件批次明确使用 `--latest=false`，不会覆盖 App 的 GitHub Latest。
+- `Deploy Pages`：在 `site/**` 或 `docs/app-release.json` 合入 `main`、`Release` / `Plugin Release` 成功完成，或手动触发时运行。它先构建 `site/` 下的 Astro 官网，再合并 `docs/` 中的 App 发布元数据、appcast、插件 catalog、图标库等静态发布资源并发布到 GitHub Pages；PR 不会触发这条流水线。
 
 ## 需要配置的 Secrets
 
@@ -256,7 +256,7 @@ Finder right-click menu items now stay hidden when the plugin is disabled.
 
 文件内容会被原样置顶到 `CHANGELOG.md` 中提取的 release notes 前。没有对应文件时，Release 工作流只使用 `CHANGELOG.md` 当前版本段落。该文件也会同步进入 Sparkle 更新弹窗。
 
-稳定版发布成功创建 GitHub Release 后，`Homebrew Cask Update` 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时确认 `MacTools.dmg` 存在、读取 `MacTools.sha256`，并通过 `brew bump-cask-pr mactools --version ... --sha256 ...` 向官方 `Homebrew/homebrew-cask` 打开版本更新 PR。不要传入 GitHub release asset 的展开下载 URL；官方 cask 应保留 `v#{version}` URL 模板，否则 Homebrew audit 会把它当成未版本化 URL。预发布版本不会成为默认稳定版；未配置该 secret 时可以手动运行 workflow 或手动提交 Homebrew PR。Homebrew PR 合并后，用户本地运行 `brew update` 后即可通过 `brew upgrade --cask --greedy mactools` 检测到新版本。
+运行 `Homebrew Cask Update` 时，工作流会从稳定 `v*` App Release 中筛选同时包含 `MacTools.dmg` 和 `MacTools.sha256` 的版本，再通过 `brew bump-cask-pr mactools --version ... --sha256 ...` 向官方 `Homebrew/homebrew-cask` 打开版本更新 PR。不要传入 GitHub release asset 的展开下载 URL；官方 cask 应保留 `v#{version}` URL 模板，否则 Homebrew audit 会把它当成未版本化 URL。预发布和 `plugins-*` 批次不会被选中；未配置 secret 时可手动提交 Homebrew PR。Homebrew PR 合并后，用户本地运行 `brew update` 后即可通过 `brew upgrade --cask --greedy mactools` 检测到新版本。
 
 仓库设置中需要允许 workflow 写入：`Settings` → `Actions` → `General` → `Workflow permissions` 选择 `Read and write permissions`。
 
@@ -273,9 +273,9 @@ Finder right-click menu items now stay hidden when the plugin is disabled.
 ## 安全策略
 
 - PR 构建不读取发布 Secrets，只执行未签名构建和测试。
-- Release 工作流只使用 `contents: write` 创建或更新 GitHub Release，并把 `docs/appcast.xml` 提交回 `main`；普通 Build 工作流只有 `contents: read`。
+- Release 工作流只使用 `contents: write` 创建或更新 GitHub Release，并把 `docs/appcast.xml` 与 `docs/app-release.json` 提交回 `main`；普通 Build 工作流只有 `contents: read`。
 - Plugin Release 工作流只使用 `contents: write` 创建或更新插件批次 Release，并把当前 PluginKit 版本的签名 catalog 提交回 `main`；v2 仍写入旧 `docs/plugins/catalog.json`，v3+ 写入版本化路径。
-- Deploy Pages 工作流只在 Release 或 Plugin Release 成功后发布 `docs/`，使用 `contents: read`、`pages: write` 和 `id-token: write`。
+- Deploy Pages 工作流在官网源码或 App 下载元数据合入 `main`、Release / Plugin Release 成功后发布站点，使用 `contents: read`、`pages: write` 和 `id-token: write`。
 - 签名证书导入临时 keychain，任务结束后清理。
 - App Store Connect `.p8`、Sparkle 私钥和插件 catalog 私钥只写入 runner 临时目录或进程环境，使用后删除。
 - 日志不主动输出 Team ID、Bundle 前缀、证书名称、私钥或证书内容。

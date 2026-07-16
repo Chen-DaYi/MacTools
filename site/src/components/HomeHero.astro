@@ -1,10 +1,14 @@
 ---
+interface Props {
+  downloadURL: string;
+}
+
+const { downloadURL } = Astro.props;
 const base = import.meta.env.BASE_URL.endsWith("/")
   ? import.meta.env.BASE_URL
   : `${import.meta.env.BASE_URL}/`;
 const withBase = (path: string) => `${base}${path.replace(/^\//, "")}`;
 
-const downloadURL = "https://github.com/ggbond268/MacTools/releases/latest/download/MacTools.dmg";
 const installCommand = "brew install --cask mactools";
 
 const heroShots = [

@@ -399,6 +399,7 @@ jobs:
           export ED_SIGNATURE FILE_SIZE DOWNLOAD_URL RELEASE_NOTES_URL FULL_RELEASE_NOTES_URL PUB_DATE MINIMUM_SYSTEM_VERSION
 
           python3 <<'PY_APPCAST'
+          import json
           import os
           import xml.sax.saxutils as xml
           from pathlib import Path
@@ -442,9 +443,20 @@ jobs:
           </rss>
           '''
           Path("docs/appcast.xml").write_text(content, encoding="utf-8")
+          if os.environ["PRERELEASE"] == "false":
+              release_metadata = {
+                  "version": values["VERSION"],
+                  "downloadURL": values["DOWNLOAD_URL"],
+                  "releaseNotesURL": values["RELEASE_NOTES_URL"],
+              }
+              Path("docs/app-release.json").write_text(
+                  json.dumps(release_metadata, indent=2) + "\n",
+                  encoding="utf-8",
+              )
           PY_APPCAST
 
           python3 -c 'import xml.etree.ElementTree as ET; ET.parse("docs/appcast.xml")'
+          python3 -m json.tool docs/app-release.json >/dev/null
 
       - name: Upload notarized DMG artifact
         uses: actions/upload-artifact@v4
@@ -462,7 +474,9 @@ jobs:
         run: |
           RELEASE_ARGS=(--title "${PROJECT_NAME} ${VERSION}" --notes-file "$RELEASE_NOTES_PATH")
           if [[ "$PRERELEASE" == "true" ]]; then
-            RELEASE_ARGS+=(--prerelease)
+            RELEASE_ARGS+=(--prerelease --latest=false)
+          else
+            RELEASE_ARGS+=(--latest)
           fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -562,19 +576,26 @@ jobs:
             --delete-branch \
             --subject "Update mactools to ${VERSION}"
 
-      - name: Commit appcast to main
+      - name: Commit app release metadata to main
         run: |
           cp docs/appcast.xml "$RUNNER_TEMP/appcast.xml"
+          if [[ "$PRERELEASE" == "false" ]]; then
+            cp docs/app-release.json "$RUNNER_TEMP/app-release.json"
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git checkout -B main origin/main
           cp "$RUNNER_TEMP/appcast.xml" docs/appcast.xml
           git add docs/appcast.xml
+          if [[ "$PRERELEASE" == "false" ]]; then
+            cp "$RUNNER_TEMP/app-release.json" docs/app-release.json
+            git add docs/app-release.json
+          fi
           if git diff --cached --quiet; then
-            echo "No appcast changes to commit."
+            echo "No app release metadata changes to commit."
           else
-            git commit -m "ci: update appcast for ${TAG}"
+            git commit -m "ci: update app release metadata for ${TAG}"
             git push origin main
           fi
 

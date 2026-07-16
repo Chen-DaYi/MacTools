@@ -5,6 +5,7 @@ import HomeHero from "@/components/HomeHero.astro";
 import FeatureShowcase from "@/components/FeatureShowcase.astro";
 import SearchIntent from "@/components/SearchIntent.astro";
 import SiteFooter from "@/components/SiteFooter.astro";
+import appRelease from "../../../docs/app-release.json";
 
 const pageTitle = "MacTools | 免费开源的原生 macOS 菜单栏工具集";
 const pageDescription = "MacTools 是免费开源的原生 macOS 菜单栏工具集，集中管理显示器、清理、休眠、菜单栏图标、启动台、系统状态、电池、风扇和插件市场。";
@@ -39,6 +40,7 @@ const homeKeywords = [
   "Battery Charge Limit",
 ];
 const siteURL = Astro.site?.href ?? "https://mactools.ggbond.app/";
+const downloadURL = appRelease.downloadURL;
 const structuredData = [
   {
     "@context": "https://schema.org",
@@ -47,7 +49,7 @@ const structuredData = [
     applicationCategory: "UtilitiesApplication",
     operatingSystem: "macOS 14.0 or later",
     url: siteURL,
-    downloadUrl: "https://github.com/ggbond268/MacTools/releases/latest/download/MacTools.dmg",
+    downloadUrl: downloadURL,
     installUrl: "https://github.com/ggbond268/MacTools/releases",
     codeRepository: "https://github.com/ggbond268/MacTools",
     license: "https://www.apache.org/licenses/LICENSE-2.0",
@@ -85,7 +87,7 @@ const structuredData = [
 >
   <SiteNav active="home" />
   <main>
-    <HomeHero />
+    <HomeHero downloadURL={downloadURL} />
     <FeatureShowcase />
     <SearchIntent />
   </main>

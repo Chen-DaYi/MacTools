@@ -12,6 +12,13 @@
   --hairline: #e5e5ea;
   --chrome: color-mix(in srgb, var(--surface) 82%, transparent);
   --button-subtle: #ffffff;
+  --command-background: #ffffff;
+  --command-border: #e1e1e6;
+  --command-ink: #1d1d1f;
+  --command-prompt: #86868b;
+  --command-button: #ededf0;
+  --command-button-hover: #e2e2e7;
+  --command-shadow: 0 1px 2px color-mix(in srgb, #1d1d1f 8%, transparent);
   --shadow-product: 0 42px 84px color-mix(in srgb, #1d1d1f 22%, transparent);
   --max-page: 1180px;
   --nav-height: 44px;
@@ -38,6 +45,13 @@
   --hairline: #2f2f33;
   --chrome: color-mix(in srgb, var(--canvas) 76%, transparent);
   --button-subtle: #1d1d20;
+  --command-background: #151517;
+  --command-border: #2f2f33;
+  --command-ink: #f5f5f7;
+  --command-prompt: #86868b;
+  --command-button: #2a2a2d;
+  --command-button-hover: #36363a;
+  --command-shadow: 0 1px 2px color-mix(in srgb, #000000 32%, transparent);
   --shadow-product: 0 42px 92px color-mix(in srgb, #000000 48%, transparent);
 }
 
@@ -340,16 +354,19 @@ h1 {
   align-items: center;
   gap: 12px;
   padding: 10px 12px 10px 16px;
+  border: 1px solid var(--command-border);
   border-radius: var(--radius-md);
-  background: #101012;
-  color: #f5f5f7;
+  background: var(--command-background);
+  color: var(--command-ink);
+  box-shadow: var(--command-shadow);
 }
 
 .command-line > span {
-  color: color-mix(in srgb, white 42%, transparent);
+  color: var(--command-prompt);
 }
 
 .command-line code {
+  min-width: 0;
   overflow: hidden;
   font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
   font-size: 14px;
@@ -359,17 +376,21 @@ h1 {
 }
 
 .command-line button {
+  min-width: 64px;
+  min-height: 34px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, white 12%, transparent);
-  color: white;
+  background: var(--command-button);
+  color: var(--command-ink);
   padding: 8px 12px;
   cursor: pointer;
   font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .command-line button:hover {
-  background: color-mix(in srgb, white 18%, transparent);
+  background: var(--command-button-hover);
 }
 
 .hero-product {
@@ -1506,13 +1527,9 @@ h1 {
   }
 
   .command-line {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .command-line button {
-    grid-column: 2;
-    justify-self: start;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding-left: 12px;
   }
 
 }

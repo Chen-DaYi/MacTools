@@ -162,6 +162,7 @@ Recommended production flow is an incremental batch plugin release:
 11. `Deploy Pages` publishes the signed catalog to GitHub Pages.
 
 The batch tag is stored per plugin entry through `package.url` and `releaseNotesURL`, so one catalog can point different plugins to different release tags without changing host code.
+Plugin batch releases are published with `--latest=false`; only stable `v*` App releases may become the repository's GitHub Latest release.
 
 The GitHub Release body for each plugin batch is extracted from the matching `CHANGELOG.md` entry, such as `## [plugins-1.0.1]`.
 
