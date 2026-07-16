@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-07-12T15:52:19Z",
-  "minimumHostVersion": "1.0.31",
+  "generatedAt": "2026-07-16T16:15:17Z",
+  "minimumHostVersion": "1.1.1",
   "pluginKitVersion": 3,
   "plugins": [
     {
@@ -61,16 +61,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "f728a16622253f7281a7d55a34ae5ea02263a7f86621725a726466a2e400ef42",
-        "size": 822707,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/activity-bar.mactoolsplugin.zip"
+        "sha256": "5d49013d47757a2ddff6fd31e18eff91c6a3fccf79355658d98bdc79edf12d89",
+        "size": 824043,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.15"
+      "version": "1.0.16"
     },
     {
       "capabilities": {
@@ -1016,16 +1016,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "91920aa5b42657658a03c34b14879867332ef54fd38cba14a8d6f3026206cccd",
-        "size": 106973,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/eject-disk.mactoolsplugin.zip"
+        "sha256": "d53e59374a72d6182568b63ac9c09589781c8a4e86957b7ace678d3cf9ebced4",
+        "size": 134639,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/eject-disk.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
       "summary": "推出所有可移动磁盘",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -1313,6 +1313,10 @@
           "displayName": "Homebrew",
           "summary": "إدارة حزم Homebrew والمستودعات وتشغيل تشخيصات النظام."
         },
+        "de": {
+          "displayName": "Homebrew",
+          "summary": "Homebrew-Pakete und Repositories verwalten sowie Systemdiagnosen ausführen."
+        },
         "en": {
           "displayName": "Homebrew Manager",
           "summary": "Manage Homebrew packages, repositories, and perform system diagnostics"
@@ -1329,9 +1333,17 @@
           "displayName": "Homebrew",
           "summary": "Homebrew パッケージ、リポジトリの管理、およびシステム診断の実行。"
         },
+        "ko": {
+          "displayName": "Homebrew",
+          "summary": "Homebrew 패키지와 저장소를 관리하고 시스템 진단을 실행합니다."
+        },
         "pt": {
           "displayName": "Homebrew",
           "summary": "Gerenciar pacotes do Homebrew, repositórios e executar diagnósticos do sistema."
+        },
+        "ru": {
+          "displayName": "Homebrew",
+          "summary": "Управляйте пакетами и репозиториями Homebrew и запускайте диагностику системы."
         },
         "zh-Hans": {
           "displayName": "Homebrew 管理",
@@ -1344,16 +1356,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "abbeca09ac12f0df9e5e068a7fcd64176cf4da097fdef163a078987838de8c36",
-        "size": 863309,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/homebrew.mactoolsplugin.zip"
+        "sha256": "cf65843695da87c196542921bb3f9cdec7dca53e80e8dbc6b9d54bf789ed9942",
+        "size": 874141,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/homebrew.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
       "summary": "管理 Homebrew 包、库仓库并执行系统诊断",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "capabilities": {
@@ -1616,16 +1628,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "a6774373471021dea21fe7947dbecb7666b8d7a4e42ffcb624f3bd0ebcc1c338",
-        "size": 987358,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/launchpad.mactoolsplugin.zip"
+        "sha256": "b5b16b8460b1a12982715c18e3b9d313f02258b19c9c109e44c196522bbb63f3",
+        "size": 987361,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/launchpad.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
       "summary": "用全局热键或菜单栏打开应用网格，搜索并启动。",
-      "version": "1.1.3"
+      "version": "1.1.4"
     },
     {
       "capabilities": {
@@ -1844,9 +1856,41 @@
       "displayName": "鼠标增强",
       "id": "mouse-enhancer",
       "localizedMetadata": {
+        "ar": {
+          "displayName": "محسّن الماوس",
+          "summary": "تحسين عناصر التحكم بالماوس ولوحة التتبع."
+        },
+        "de": {
+          "displayName": "Maus-Erweiterung",
+          "summary": "Maus- und Trackpad-Steuerung erweitern."
+        },
         "en": {
           "displayName": "Mouse Enhancer",
           "summary": "Enhance mouse and trackpad controls."
+        },
+        "es": {
+          "displayName": "Mejoras para el ratón",
+          "summary": "Mejora los controles del ratón y del trackpad."
+        },
+        "fr": {
+          "displayName": "Amélioration de la souris",
+          "summary": "Améliore les commandes de la souris et du trackpad."
+        },
+        "ja": {
+          "displayName": "マウス機能拡張",
+          "summary": "マウスとトラックパッドの操作を拡張します。"
+        },
+        "ko": {
+          "displayName": "마우스 기능 향상",
+          "summary": "마우스와 트랙패드 제어 기능을 확장합니다."
+        },
+        "pt": {
+          "displayName": "Aprimoramento do mouse",
+          "summary": "Aprimora os controles do mouse e do trackpad."
+        },
+        "ru": {
+          "displayName": "Расширение мыши",
+          "summary": "Расширяет возможности управления мышью и трекпадом."
         },
         "zh-Hans": {
           "displayName": "鼠标增强",
@@ -1859,9 +1903,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "fe064898f178b11eff7984f552267be323c832a6ecb8da41a3f994d607b4ebbc",
-        "size": 210039,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/mouse-enhancer.mactoolsplugin.zip"
+        "sha256": "782ef5ea0d6a884366aa5e9ac77070b38aa31b90dd4208227c7139de5aadb687",
+        "size": 226705,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/mouse-enhancer.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1869,9 +1913,9 @@
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
       "summary": "增强鼠标与触控板控制",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -2068,16 +2112,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "7339891d2fb56ae20f654f029d2ae00dd6607c797a36232bfe85903ed31bcbe3",
-        "size": 186516,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/quit-apps.mactoolsplugin.zip"
+        "sha256": "74cf8fb37b071f79692028f9051def702f1dab8721241d3d295fb0dc14cfe942",
+        "size": 201135,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/quit-apps.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
       "summary": "选择并退出正在运行的应用，或一键退出全部",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -2146,6 +2190,74 @@
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
       "summary": "为 Finder 右键菜单添加新建文件夹和路径复制",
       "version": "1.0.5"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
+      "category": "display",
+      "displayName": "Sidecar",
+      "id": "sidecar",
+      "localizedMetadata": {
+        "ar": {
+          "displayName": "Sidecar",
+          "summary": "وصّل شاشة متوافقة مع Sidecar قريبة كشاشة ممتدة."
+        },
+        "de": {
+          "displayName": "Sidecar",
+          "summary": "Ein Sidecar-kompatibles Display in der Nähe als erweiterten Bildschirm verbinden."
+        },
+        "en": {
+          "displayName": "Sidecar",
+          "summary": "Connect a nearby Sidecar-compatible display as an extended display."
+        },
+        "es": {
+          "displayName": "Sidecar",
+          "summary": "Conecta una pantalla compatible con Sidecar cercana como pantalla ampliada."
+        },
+        "fr": {
+          "displayName": "Sidecar",
+          "summary": "Connecter un écran compatible avec Sidecar à proximité comme écran étendu."
+        },
+        "ja": {
+          "displayName": "Sidecar",
+          "summary": "近くのSidecar対応ディスプレイを拡張ディスプレイとして接続します。"
+        },
+        "ko": {
+          "displayName": "Sidecar",
+          "summary": "근처의 Sidecar 호환 디스플레이를 확장 디스플레이로 연결합니다."
+        },
+        "pt": {
+          "displayName": "Sidecar",
+          "summary": "Ligue um ecrã compatível com Sidecar por perto como ecrã adicional."
+        },
+        "ru": {
+          "displayName": "Sidecar",
+          "summary": "Подключите ближайший совместимый с Sidecar дисплей как дополнительный экран."
+        },
+        "zh-Hans": {
+          "displayName": "Sidecar",
+          "summary": "连接附近可用的 Sidecar 显示器作为扩展显示器"
+        },
+        "zh-Hant": {
+          "displayName": "Sidecar",
+          "summary": "連接附近可用的 Sidecar 顯示器作為延伸顯示器"
+        }
+      },
+      "minimumHostVersion": "1.1.1",
+      "package": {
+        "sha256": "c03a7d436ab6466794da20fa7236e009e9af865e43c882aa78cd9d7fb5d1b70d",
+        "size": 435627,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/sidecar.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 3,
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "summary": "连接附近可用的 Sidecar 显示器作为扩展显示器",
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -2340,16 +2452,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "b8a55062a55b6a5757d00e3be72f8341add7a1ad9b46c4acecd86c2521e7fb08",
-        "size": 693348,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/system-status.mactoolsplugin.zip"
+        "sha256": "a12e7c7a93beb1bb58ab1362fda233d703bdfaf092c985d296a9eeae39523795",
+        "size": 698294,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
       "summary": "实时查看系统状态",
-      "version": "1.0.13"
+      "version": "1.0.15"
     },
     {
       "capabilities": {
@@ -2433,9 +2545,41 @@
       "displayName": "窗口切换",
       "id": "window-switcher",
       "localizedMetadata": {
+        "ar": {
+          "displayName": "مبدّل النوافذ",
+          "summary": "يمكنك التبديل سريعًا بين النوافذ المفتوحة باستخدام اختصار قابل للتخصيص."
+        },
+        "de": {
+          "displayName": "Fensterwechsel",
+          "summary": "Schnell zwischen geöffneten Fenstern mit einem anpassbaren Kurzbefehl wechseln."
+        },
         "en": {
           "displayName": "Window Switcher",
           "summary": "Quickly switch between running windows with a configurable shortcut."
+        },
+        "es": {
+          "displayName": "Cambiador de ventanas",
+          "summary": "Cambia rápidamente entre ventanas abiertas con un atajo configurable."
+        },
+        "fr": {
+          "displayName": "Sélecteur de fenêtres",
+          "summary": "Basculez rapidement entre les fenêtres ouvertes avec un raccourci configurable."
+        },
+        "ja": {
+          "displayName": "ウインドウ切り替え",
+          "summary": "設定可能なショートカットで実行中のウインドウをすばやく切り替えます。"
+        },
+        "ko": {
+          "displayName": "윈도우 전환기",
+          "summary": "사용자 설정 단축키로 실행 중인 윈도우를 빠르게 전환합니다."
+        },
+        "pt": {
+          "displayName": "Alternador de janelas",
+          "summary": "Alterne rapidamente entre janelas abertas com um atalho configurável."
+        },
+        "ru": {
+          "displayName": "Переключатель окон",
+          "summary": "Быстро переключайтесь между открытыми окнами с помощью настраиваемого сочетания клавиш."
         },
         "zh-Hans": {
           "displayName": "窗口切换",
@@ -2448,18 +2592,18 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "0798639b377db6185888b30164a67f423346b2e44b11bfec2c4b3d92d071f8fa",
-        "size": 450322,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/window-switcher.mactoolsplugin.zip"
+        "sha256": "e96b202a134435d961a3ed32c1b40a4df305785309939953ff6a06658fd8a21d",
+        "size": 471184,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/window-switcher.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility"
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
       "summary": "用可配置快捷键快速切换正在运行的窗口",
-      "version": "1.0.1"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -2602,6 +2746,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "1cla7Ed6CZqAw64TMx5bdd891bSfXEwTC6zP5EIR4qekpK9EmnEJbSzat+FThKHkisojycZifUP9YikOm4OPCA=="
+    "value": "DqAMwH0xXA2FZyOcuPZDzmb2ajZlGIeqwNYJlUQF0PTScb4150+uI5JgBt1FQ0XReMzX557IzZKwlwPNYLVMDg=="
   }
 }
