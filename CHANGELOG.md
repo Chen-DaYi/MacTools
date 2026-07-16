@@ -7,6 +7,22 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [plugins-1.1.1] - 2026-07-17
+
+### Added
+
+- Connect nearby Sidecar-compatible displays with direct actions and status indicators. Switching disconnects the current display before connecting another.
+- Save per-display connection priorities and shortcuts, with a priority-aware shortcut that connects the first available display.
+- Request wired-only transport without falling back to Wi-Fi. Automatic Sidecar controls remain available when wired-only transport is unsupported.
+- Sidecar shortcuts now use MacTools-wide conflict validation, imported settings are normalized, and unavailable states stay distinct from connectable displays. Panel feedback clears on close or before it becomes stale.
+
+### Fixed
+
+- Eject Disks now detects all visible ejectable mounts when the panel opens, including disk images, fixed external drives, and network volumes.
+- Homebrew, Mouse Enhancer, Activity Bar, System Status, and Window Switcher controls now use the selected app language.
+- Quit Apps now groups multiple running instances of the same app into one entry, preventing blank or misplaced cells while still quitting every instance selected.
+- Finder Right Click now offers path-copy actions on window backgrounds and copies the current folder instead of requiring a selected item.
+
 ## [v1.1.1] - 2026-07-16
 
 ### Added
