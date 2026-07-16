@@ -21,19 +21,26 @@ if (storedLang === "zh" || storedLang === "en") {
 }
 
 document.querySelectorAll<HTMLElement>("[data-copy]").forEach((button) => {
-  const initialText = button.textContent ?? "复制";
+  const initialMarkup = button.innerHTML;
+  let resetTimer: number | undefined;
+
+  const showCopyStatus = (message: string) => {
+    window.clearTimeout(resetTimer);
+    button.textContent = message;
+    resetTimer = window.setTimeout(() => {
+      button.innerHTML = initialMarkup;
+    }, 1600);
+  };
+
   button.addEventListener("click", async () => {
     const value = button.dataset.copy;
     if (!value) return;
 
     try {
       await navigator.clipboard.writeText(value);
-      button.textContent = root.dataset.lang === "en" ? "Copied" : "已复制";
-      window.setTimeout(() => {
-        button.textContent = initialText;
-      }, 1600);
+      showCopyStatus(root.dataset.lang === "en" ? "Copied" : "已复制");
     } catch {
-      button.textContent = value;
+      showCopyStatus(root.dataset.lang === "en" ? "Failed" : "失败");
     }
   });
 });

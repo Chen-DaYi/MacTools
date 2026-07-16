@@ -12,6 +12,13 @@
   --hairline: #e5e5ea;
   --chrome: color-mix(in srgb, var(--surface) 82%, transparent);
   --button-subtle: #ffffff;
+  --command-background: #ffffff;
+  --command-border: #e1e1e6;
+  --command-ink: #1d1d1f;
+  --command-prompt: #86868b;
+  --command-button: #ededf0;
+  --command-button-hover: #e2e2e7;
+  --command-shadow: 0 1px 2px color-mix(in srgb, #1d1d1f 8%, transparent);
   --shadow-product: 0 42px 84px color-mix(in srgb, #1d1d1f 22%, transparent);
   --max-page: 1180px;
   --nav-height: 44px;
@@ -38,6 +45,13 @@
   --hairline: #2f2f33;
   --chrome: color-mix(in srgb, var(--canvas) 76%, transparent);
   --button-subtle: #1d1d20;
+  --command-background: #151517;
+  --command-border: #2f2f33;
+  --command-ink: #f5f5f7;
+  --command-prompt: #86868b;
+  --command-button: #2a2a2d;
+  --command-button-hover: #36363a;
+  --command-shadow: 0 1px 2px color-mix(in srgb, #000000 32%, transparent);
   --shadow-product: 0 42px 92px color-mix(in srgb, #000000 48%, transparent);
 }
 
@@ -204,6 +218,7 @@ main {
 .page-hero,
 .plugin-directory,
 .source-story,
+.privacy-policy,
 .site-footer {
   width: 100%;
   margin-inline: auto;
@@ -339,16 +354,19 @@ h1 {
   align-items: center;
   gap: 12px;
   padding: 10px 12px 10px 16px;
+  border: 1px solid var(--command-border);
   border-radius: var(--radius-md);
-  background: #101012;
-  color: #f5f5f7;
+  background: var(--command-background);
+  color: var(--command-ink);
+  box-shadow: var(--command-shadow);
 }
 
 .command-line > span {
-  color: color-mix(in srgb, white 42%, transparent);
+  color: var(--command-prompt);
 }
 
 .command-line code {
+  min-width: 0;
   overflow: hidden;
   font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
   font-size: 14px;
@@ -358,17 +376,21 @@ h1 {
 }
 
 .command-line button {
+  min-width: 64px;
+  min-height: 34px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, white 12%, transparent);
-  color: white;
+  background: var(--command-button);
+  color: var(--command-ink);
   padding: 8px 12px;
   cursor: pointer;
   font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .command-line button:hover {
-  background: color-mix(in srgb, white 18%, transparent);
+  background: var(--command-button-hover);
 }
 
 .hero-product {
@@ -922,6 +944,141 @@ h1 {
   color: var(--blue);
 }
 
+.privacy-policy {
+  max-width: 920px;
+  padding-block: clamp(70px, 10vw, 120px) clamp(72px, 10vw, 128px);
+}
+
+.privacy-header {
+  max-width: 820px;
+  animation: rise-in 760ms var(--ease-out) 80ms both;
+}
+
+.privacy-header h1 {
+  max-width: 780px;
+  margin: 0;
+  font-family: "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  font-size: clamp(48px, 7vw, 76px);
+  line-height: 1.03;
+  letter-spacing: 0;
+}
+
+.privacy-lead {
+  max-width: 760px;
+  margin: 30px 0 0;
+  color: var(--ink-soft);
+  font-size: 21px;
+  line-height: 1.62;
+  letter-spacing: 0;
+}
+
+.privacy-updated {
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.privacy-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: clamp(54px, 8vw, 84px);
+  border-block: 1px solid var(--hairline);
+}
+
+.privacy-summary > div {
+  min-width: 0;
+  padding: 24px 24px 24px 0;
+}
+
+.privacy-summary > div + div {
+  border-left: 1px solid var(--hairline);
+  padding-left: 24px;
+}
+
+.privacy-summary strong,
+.privacy-summary > div > span {
+  display: block;
+}
+
+.privacy-summary strong {
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.privacy-summary > div > span {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.privacy-content {
+  margin-top: clamp(44px, 7vw, 72px);
+}
+
+.privacy-content section {
+  padding-block: clamp(36px, 5vw, 50px);
+  border-top: 1px solid var(--hairline);
+}
+
+.privacy-content section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.privacy-content h2 {
+  margin: 0 0 18px;
+  color: var(--ink);
+  font-family: "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.privacy-content p,
+.privacy-content li {
+  color: var(--ink-soft);
+  font-size: 17px;
+  line-height: 1.7;
+  letter-spacing: 0;
+}
+
+.privacy-content p {
+  margin: 0;
+}
+
+.privacy-content p + p,
+.privacy-content ul + p {
+  margin-top: 18px;
+}
+
+.privacy-content ul {
+  margin: 16px 0 0;
+  padding-left: 1.35em;
+}
+
+.privacy-content li {
+  padding-left: 0.3em;
+}
+
+.privacy-content li + li {
+  margin-top: 9px;
+}
+
+.privacy-content a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.privacy-content a:hover {
+  color: var(--blue-pressed);
+}
+
 .source-story {
   display: grid;
   grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
@@ -1146,6 +1303,7 @@ h1 {
   .page-hero,
   .plugin-directory,
   .source-story,
+  .privacy-policy,
   .site-footer {
     padding-inline: 12px;
   }
@@ -1326,14 +1484,52 @@ h1 {
     min-height: auto;
   }
 
-  .command-line {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
+  .privacy-policy {
+    padding-block: 54px 76px;
   }
 
-  .command-line button {
-    grid-column: 2;
-    justify-self: start;
+  .privacy-header h1 {
+    font-size: 42px;
+    line-height: 1.08;
+  }
+
+  .privacy-lead {
+    margin-top: 24px;
+    font-size: 19px;
+    line-height: 1.55;
+  }
+
+  .privacy-summary {
+    grid-template-columns: 1fr;
+    margin-top: 46px;
+  }
+
+  .privacy-summary > div {
+    padding: 20px 0;
+  }
+
+  .privacy-summary > div + div {
+    border-top: 1px solid var(--hairline);
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .privacy-content {
+    margin-top: 36px;
+  }
+
+  .privacy-content section {
+    padding-block: 34px;
+  }
+
+  .privacy-content h2 {
+    font-size: 24px;
+  }
+
+  .command-line {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding-left: 12px;
   }
 
 }

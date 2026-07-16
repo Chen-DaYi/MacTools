@@ -6,7 +6,7 @@
   <p>
     <a href="https://github.com/ggbond268/MacTools/stargazers"><img src="https://img.shields.io/github/stars/ggbond268/MacTools?style=social" alt="GitHub stars"></a>
     <a href="https://github.com/ggbond268/MacTools/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ggbond268/MacTools" alt="License"></a>
-    <a href="https://github.com/ggbond268/MacTools/releases"><img src="https://img.shields.io/github/v/release/ggbond268/MacTools" alt="Latest release"></a>
+    <a href="https://github.com/ggbond268/MacTools/releases"><img src="https://img.shields.io/github/v/release/ggbond268/MacTools?filter=v*" alt="Latest app release"></a>
     <a href="https://hellogithub.com/repository/ggbond268/MacTools" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=6cddbd75f09848fb8848b58510394a5c&claim_uid=g4n28zqFcD0Vhw3&theme=small" alt="Featured｜HelloGitHub" /></a>
   </p>
 
@@ -60,9 +60,9 @@
 | Fix Damaged Apps | Remove quarantine attributes to resolve "damaged and can't be opened" prompts by selecting a .app in a file panel and running the fix with administrator privileges. |
 | Quit Apps | Select and quit running apps, or quit all at once; multiple instances of the same app are grouped into one stable entry, and reverse selection helps quickly choose the target set. |
 | zsh Config | View and edit zsh configuration files such as .zshrc and .zshenv inside the app, with syntax highlighting, common snippets, and automatic backup before saving. |
-| Plugins & Settings | Install, update, batch-update, and uninstall plugins in the Marketplace (filter by category/search; sort by not-installed first, installed first, or name using the selected app language). Dashboard and Feature Panel independently control which supported plugins appear there and their order. Use a row’s icon to open settings, its eye control to show or hide it on that surface, and its contextual menu to view the Marketplace entry or uninstall without leaving the layout; manage permissions, plugin-specific settings, and global shortcuts—including standalone F1-F12 keys and an optional shortcut to open Settings—and export/import portable app preferences, plugin layout orders and visibility, and shortcut customizations as JSON. |
+| Plugins & Settings | Switch between feature and component panels from the centered menu-bar toolbar; install, update, batch-update, and uninstall plugins in the Marketplace (filter by category/search; sort by not-installed first, installed first, or name using the selected app language). Dashboard and Feature Panel independently control which supported plugins appear there and their order. Use a row’s icon to open settings, its eye control to show or hide it on that surface, and its contextual menu to view the Marketplace entry or uninstall without leaving the layout; manage permissions, plugin-specific settings, and global shortcuts—including standalone F1-F12 keys and an optional shortcut to open Settings—and export/import portable app preferences, plugin layout orders and visibility, and shortcut customizations as JSON. |
 | Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, restore the default icon, and preview every source with the same standard icon height and content inset as the default. |
-| Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance; the picker shows each language in the system language and its native spelling. |
+| Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance; the picker shows each language in the system language and its native spelling, while menu-bar action buttons adapt to localized label lengths. |
 
 > **Preferences backup:** Import restores portable host preferences, plugin display settings, shortcut customizations, and supported plugin settings (including Sidecar device priority and shortcut configuration). Permissions, caches, credentials, and other non-portable data are excluded. Missing plugins are never installed automatically: the preview lets you explicitly select catalog-verified plugins to install, while unavailable or unselected plugins and their settings are skipped.
 
@@ -100,6 +100,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, plugin de
 ## License
 
 MacTools is open source under the [Apache License 2.0](LICENSE).
+
+## Privacy
+
+MacTools is local-first and includes no maintainer-operated analytics or advertising. See the bilingual [Privacy Policy](https://mactools.ggbond.app/privacy-policy) for details about local data, permissions, and network-dependent features.
 
 ## Acknowledgements
 

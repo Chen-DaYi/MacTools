@@ -668,13 +668,11 @@ private struct MenuBarPanelToolbar: View {
     let onQuit: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
+        ZStack {
             MenuBarPanelTabSwitcher(
                 selectedTab: selectedTab,
                 onTabSelection: onTabSelection
             )
-
-            Spacer(minLength: 8)
 
             HStack(spacing: 4) {
                 MenuBarPanelIconButton(
@@ -689,6 +687,7 @@ private struct MenuBarPanelToolbar: View {
                     action: onQuit
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 }
@@ -717,14 +716,14 @@ private struct MenuBarPanelTabSwitcher: View {
                 .help(tab.accessibilityTitle)
                 .accessibilityLabel(tab.accessibilityTitle)
                 .background {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    Capsule()
                         .fill(selectedTab == tab ? Color.primary.opacity(0.10) : Color.clear)
                 }
             }
         }
         .padding(3)
         .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            Capsule()
                 .fill(Color.primary.opacity(0.06))
         }
     }
@@ -741,16 +740,17 @@ private struct MenuBarPanelIconButton: View {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .frame(width: 28, height: 24)
+                .background {
+                    Capsule()
+                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+                }
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(accessibilityTitle)
         .accessibilityLabel(accessibilityTitle)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
-        }
         .onHover { isHovered = $0 }
     }
 }

@@ -250,7 +250,9 @@ function write_appcast() {
   MINIMUM_SYSTEM_VERSION="$minimum_system_version" \
   SPARKLE_NOTES_FILE="$SPARKLE_NOTES_FILE" \
   APPCAST_PATH="$APPCAST_PATH" \
+  APP_RELEASE_METADATA_PATH="$APP_RELEASE_METADATA_PATH" \
   python3 <<'PY_APPCAST'
+import json
 import os
 import xml.sax.saxutils as xml
 from pathlib import Path
@@ -293,11 +295,28 @@ content = f'''<?xml version="1.0" encoding="utf-8"?>
 </rss>
 '''
 Path(os.environ["APPCAST_PATH"]).write_text(content, encoding="utf-8")
+is_prerelease = "-" in values["VERSION"] or any(
+    marker in values["VERSION"] for marker in ("beta", "alpha", "rc")
+)
+if not is_prerelease:
+    release_metadata = {
+        "version": values["VERSION"],
+        "downloadURL": values["DOWNLOAD_URL"],
+        "releaseNotesURL": values["RELEASE_NOTES_URL"],
+    }
+    Path(os.environ["APP_RELEASE_METADATA_PATH"]).write_text(
+        json.dumps(release_metadata, indent=2) + "\n",
+        encoding="utf-8",
+    )
 PY_APPCAST
 
   python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$APPCAST_PATH"
+  python3 -m json.tool "$APP_RELEASE_METADATA_PATH" >/dev/null
 
   info "Appcast updated: $APPCAST_PATH"
+  if [[ "$VERSION" != *-* && "$VERSION" != *"beta"* && "$VERSION" != *"alpha"* && "$VERSION" != *"rc"* ]]; then
+    info "App release metadata updated: $APP_RELEASE_METADATA_PATH"
+  fi
 }
 
 function ensure_clean_git() {
@@ -594,11 +613,19 @@ function publish_release() {
 
   info "Syncing asset to GitHub Release $TAG ($repository)"
 
+  local release_args
+  release_args=(--repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE")
+  if [[ "$VERSION" == *-* || "$VERSION" == *"beta"* || "$VERSION" == *"alpha"* || "$VERSION" == *"rc"* ]]; then
+    release_args+=(--prerelease --latest=false)
+  else
+    release_args+=(--latest)
+  fi
+
   if gh release view "$TAG" --repo "$repository" >/dev/null 2>&1; then
     gh release upload "$TAG" "$dmg_path" --repo "$repository" --clobber
-    gh release edit "$TAG" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
+    gh release edit "$TAG" "${release_args[@]}"
   else
-    gh release create "$TAG" "$dmg_path" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
+    gh release create "$TAG" "$dmg_path" "${release_args[@]}"
   fi
 }
 
@@ -630,6 +657,7 @@ DMG_PATH="$ARTIFACT_DIR/$APP_NAME.dmg"
 DMG_IDENTIFIER=""
 DOCS_DIR="$ROOT_DIR/docs"
 APPCAST_PATH="$DOCS_DIR/appcast.xml"
+APP_RELEASE_METADATA_PATH="$DOCS_DIR/app-release.json"
 
 mkdir -p "$ARTIFACT_DIR"
 

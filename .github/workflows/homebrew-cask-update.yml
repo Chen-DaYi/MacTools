@@ -29,7 +29,16 @@ jobs:
             TAG="v${INPUT_VERSION#v}"
             release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
           else
-            release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest")"
+            release="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '
+              [
+                .[]
+                | select(.draft == false and .prerelease == false)
+                | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+                | select(any(.assets[]?; .name == "MacTools.dmg"))
+                | select(any(.assets[]?; .name == "MacTools.sha256"))
+              ]
+              | first
+            ')"
           fi
 
           if [[ -z "$release" || "$release" == "null" ]]; then

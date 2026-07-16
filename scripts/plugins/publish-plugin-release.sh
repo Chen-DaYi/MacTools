@@ -80,7 +80,7 @@ done
 
 TITLE="${TITLE:-$TAG}"
 
-release_args=(--repo "$REPO" --title "$TITLE")
+release_args=(--repo "$REPO" --title "$TITLE" --latest=false)
 if [[ -n "$NOTES_FILE" ]]; then
     [[ -f "$NOTES_FILE" ]] || { echo "Release notes file not found: $NOTES_FILE" >&2; exit 1; }
     release_args+=(--notes-file "$NOTES_FILE")

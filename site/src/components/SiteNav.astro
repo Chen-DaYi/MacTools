@@ -4,7 +4,7 @@ const base = import.meta.env.BASE_URL.endsWith("/")
   : `${import.meta.env.BASE_URL}/`;
 const withBase = (path: string) => `${base}${path.replace(/^\//, "")}`;
 
-const { active = "home" } = Astro.props as { active?: "home" | "plugins" | "about" };
+const { active = "home" } = Astro.props as { active?: "home" | "plugins" | "about" | "privacy" };
 
 const items = [
   { key: "home", href: withBase("/"), label: "首页", en: "Home" },
