@@ -7,6 +7,30 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.1.1] - 2026-07-16
+
+### Added
+
+- MacTools preferences can be exported and imported as a versioned JSON backup, including app preferences, plugin display settings, and shortcuts. During import, missing plugins can be installed from the verified catalog.
+- The website now provides a bilingual privacy policy explaining MacTools' local-first data handling, system permissions, and network-dependent features.
+
+### Changed
+
+- The feature and component panel switcher is now centered in a capsule-shaped toolbar control, with matching hover shapes for toolbar actions.
+- Plugin Marketplace name sorting now follows the language selected in MacTools, with localized ascending and descending labels.
+- MacTools can now assign a global shortcut to open its Settings window, and the menu-bar panel no longer shows a misleading dashboard focus outline while viewing features.
+- Portable plugin settings can now opt in to preference backup and restore, including Sidecar display priority and shortcut configuration.
+
+### Fixed
+
+- Secondary menu-bar lists now open on the available side of the panel and switch to an in-panel view when screen space is limited.
+- Feature-panel action buttons now match switch widths, preserve label spacing, and expose full long labels in tooltips.
+- Plugin update progress now advances after each plugin finishes during automatic and manual bulk updates.
+- Language names in Settings now remain readable instead of being truncated.
+- Right-clicking the menu bar icon now opens the intended panel reliably on macOS 27 without briefly showing the primary panel or closing immediately.
+- Shortcut recording now accepts F1-F12 as standalone shortcuts, including the shortcut for opening Settings, and explains when other keys require a modifier.
+- The website download now points to the latest stable MacTools DMG instead of a plugin batch release. The Homebrew install command adapts to light and dark appearance and keeps its copy action compact on phones.
+
 ## [v1.1.0] - 2026-07-12
 
 ### Added
