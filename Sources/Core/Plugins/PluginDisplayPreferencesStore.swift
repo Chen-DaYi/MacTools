@@ -509,9 +509,9 @@ final class PluginDisplayPreferencesStore {
 
     private func legacyOrderedPluginIDsProjection(_ preferences: StoredPreferences) -> [String] {
         deduplicated(
-            preferences.dashboardOrderedPluginIDs
+            preferences.generalPluginOrder
+                + preferences.dashboardOrderedPluginIDs
                 + preferences.featurePanelOrderedPluginIDs
-                + preferences.generalPluginOrder
         )
     }
 

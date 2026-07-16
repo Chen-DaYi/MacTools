@@ -488,6 +488,10 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         let dashboardPluginIDs = ["calendar", "activity"]
         let featurePanelPluginIDs = ["calendar", "activity", "fan"]
         store.setOrderedPluginIDs(
+            ["calendar", "activity", "fan"],
+            defaultPluginIDs: featurePanelPluginIDs
+        )
+        store.setOrderedPluginIDs(
             ["activity", "calendar"],
             for: .dashboard,
             defaultPluginIDs: dashboardPluginIDs
@@ -504,7 +508,7 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             featurePanelDefaultPluginIDs: featurePanelPluginIDs
         )
 
-        XCTAssertEqual(backup.orderedPluginIDs, ["activity", "calendar", "fan"])
+        XCTAssertEqual(backup.orderedPluginIDs, ["calendar", "activity", "fan"])
         XCTAssertEqual(backup.dashboardOrderedPluginIDs, ["activity", "calendar"])
         XCTAssertEqual(backup.featurePanelOrderedPluginIDs, ["calendar", "fan", "activity"])
     }
