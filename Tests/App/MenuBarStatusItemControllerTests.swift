@@ -149,35 +149,28 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
     }
 
-    func testExpandedSessionUsesOptionAsRightClickAction() {
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: []
-            ),
-            .componentPanel
+    func testGlobalMousePolicyRecognizesStatusItemLocation() {
+        let buttonFrame = NSRect(x: 100, y: 900, width: 24, height: 24)
+
+        XCTAssertTrue(
+            MenuBarGlobalMouseEventPolicy.isStatusItemClick(
+                for: globalMouseEvent(x: 110, y: 910),
+                buttonFrame: buttonFrame
+            )
         )
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: [.control]
-            ),
-            .componentPanel
+        XCTAssertFalse(
+            MenuBarGlobalMouseEventPolicy.isStatusItemClick(
+                for: globalMouseEvent(x: 400, y: 400),
+                buttonFrame: buttonFrame
+            )
         )
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: [.option]
-            ),
-            .featurePanel
-        )
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: true,
-                liveModifierFlags: [.option]
-            ),
-            .componentPanel
-        )
+    }
+
+    private func globalMouseEvent(
+        x: Double,
+        y: Double
+    ) -> MenuBarGlobalMouseEvent {
+        MenuBarGlobalMouseEvent(screenX: x, screenY: y)
     }
 
 }
