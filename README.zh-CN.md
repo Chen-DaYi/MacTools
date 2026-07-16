@@ -96,6 +96,10 @@ brew info --cask mactools
 
 MacTools 基于 [Apache License 2.0](LICENSE) 开源。
 
+## 隐私
+
+MacTools 以本地处理为优先，不包含由项目维护者运营的分析或广告服务。关于本地数据、系统权限和需要联网的功能，请查看中英双语[隐私政策](https://mactools.ggbond.app/privacy-policy)。
+
 ## 致谢
 
 - 第三方素材、依赖与实现参考见 [Sources/Resources/ThirdPartyNotices](Sources/Resources/ThirdPartyNotices)。

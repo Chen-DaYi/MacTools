@@ -101,6 +101,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, plugin de
 
 MacTools is open source under the [Apache License 2.0](LICENSE).
 
+## Privacy
+
+MacTools is local-first and includes no maintainer-operated analytics or advertising. See the bilingual [Privacy Policy](https://mactools.ggbond.app/privacy-policy) for details about local data, permissions, and network-dependent features.
+
 ## Acknowledgements
 
 - Third-party assets, dependencies, and implementation references are listed in [Sources/Resources/ThirdPartyNotices](Sources/Resources/ThirdPartyNotices).

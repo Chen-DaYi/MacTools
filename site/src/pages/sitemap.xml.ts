@@ -2,6 +2,7 @@ const pages = [
   { path: "/", priority: "1.0", changefreq: "weekly" },
   { path: "/plugins", priority: "0.9", changefreq: "weekly" },
   { path: "/about", priority: "0.6", changefreq: "monthly" },
+  { path: "/privacy-policy", priority: "0.5", changefreq: "yearly" },
 ] as const;
 
 const lastmod = new Date().toISOString();
