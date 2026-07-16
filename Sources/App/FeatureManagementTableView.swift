@@ -43,6 +43,7 @@ struct FeatureManagementTableItem: Identifiable {
     let iconName: String
     let iconTint: Color
     let capabilities: PluginHostCapabilities
+    let isVisible: Bool
     let isActive: Bool
     let canUninstall: Bool
     let hasSettings: Bool
@@ -56,6 +57,7 @@ struct FeatureManagementTableItem: Identifiable {
         iconName = item.iconName
         iconTint = item.iconTint
         capabilities = item.capabilities
+        isVisible = item.isVisible
         isActive = item.isActive
         canUninstall = item.canUninstall
         self.hasSettings = hasSettings
@@ -74,6 +76,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
     let mode: FeatureManagementTableMode
     var isReorderEnabled: Bool = true
     var onMove: (String, Int) -> Void = { _, _ in }
+    var onSetVisible: (String, Bool) -> Void = { _, _ in }
     var onOpenSettings: (String) -> Void = { _ in }
     var onOpenMarketplace: () -> Void = {}
     var onRequestUninstall: (String) -> Void = { _ in }
@@ -197,6 +200,9 @@ struct FeatureManagementTableView: NSViewRepresentable {
                 item: item,
                 mode: parent.mode,
                 showsHandle: parent.mode.supportsReordering && parent.isReorderEnabled,
+                onSetVisible: { [weak self] isVisible in
+                    self?.parent.onSetVisible(item.id, isVisible)
+                },
                 onOpenSettings: { [weak self] in
                     self?.parent.onOpenSettings(item.id)
                 },
@@ -339,6 +345,7 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
         let description: String
         let iconName: String
         let hasSettings: Bool
+        let isVisible: Bool
         let isActive: Bool
         let canUninstall: Bool
         let capabilities: PluginHostCapabilities
@@ -364,6 +371,7 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
                 description: $0.description,
                 iconName: $0.iconName,
                 hasSettings: $0.hasSettings,
+                isVisible: $0.isVisible,
                 isActive: $0.isActive,
                 canUninstall: $0.canUninstall,
                 capabilities: $0.capabilities,
@@ -461,7 +469,7 @@ private enum FeatureManagementDragPreview {
             pointSize: 16
         )
 
-        let trailingWidth: CGFloat = 54
+        let trailingWidth: CGFloat = 30
         let textX = iconBackgroundRect.maxX + 12
         let textWidth = max(imageSize.width - textX - trailingWidth - 12, 80)
         let titleRect = NSRect(x: textX, y: 34, width: textWidth, height: 18)
@@ -485,7 +493,7 @@ private enum FeatureManagementDragPreview {
             NSColor.systemGreen.setFill()
             NSBezierPath(
                 ovalIn: NSRect(
-                    x: imageSize.width - 72,
+                    x: imageSize.width - 48,
                     y: (imageSize.height - 8) / 2,
                     width: 8,
                     height: 8
@@ -494,14 +502,6 @@ private enum FeatureManagementDragPreview {
             .fill()
         }
 
-        if item.canUninstall {
-            drawSymbol(
-                "ellipsis.circle",
-                in: NSRect(x: imageSize.width - 47, y: 22, width: 16, height: 16),
-                color: .secondaryLabelColor,
-                pointSize: 14
-            )
-        }
         drawSymbol(
             "line.3.horizontal",
             in: NSRect(x: imageSize.width - 20, y: 23, width: 13, height: 13),
@@ -591,6 +591,16 @@ private final class FeatureManagementIconActionButton: NSButton {
     }
 }
 
+enum FeatureManagementVisibilityPresentation {
+    static func symbolName(isVisible: Bool) -> String {
+        isVisible ? "eye" : "eye.slash"
+    }
+
+    static func tintColor(isVisible: Bool) -> NSColor {
+        isVisible ? .systemBlue : .tertiaryLabelColor
+    }
+}
+
 private final class FeatureManagementTableCellView: NSTableCellView {
     private let containerView = NSView()
     private let iconBackgroundView = NSView()
@@ -601,16 +611,16 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private let descriptionLabel = NSTextField(labelWithString: "")
     private let activeDotView = NSView()
     private let iconActionButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
-    private let moreActionButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
+    private let visibilityButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
     private let handleImageView = NSImageView()
     private var openSettingsHandler: (() -> Void)?
+    private var setVisibleHandler: ((Bool) -> Void)?
     private var openMarketplaceHandler: (() -> Void)?
     private var requestUninstallHandler: (() -> Void)?
     private var hasSettings = false
     private var canUninstall = false
+    private var isVisible = true
     private var iconTintColor = NSColor.controlAccentColor
-    private var cellTrackingArea: NSTrackingArea?
-    private var isPointerInside = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -628,15 +638,18 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         item: FeatureManagementTableItem,
         mode: FeatureManagementTableMode,
         showsHandle: Bool,
+        onSetVisible: @escaping (Bool) -> Void,
         onOpenSettings: @escaping () -> Void,
         onOpenMarketplace: @escaping () -> Void,
         onRequestUninstall: @escaping () -> Void
     ) {
         openSettingsHandler = onOpenSettings
+        setVisibleHandler = onSetVisible
         openMarketplaceHandler = onOpenMarketplace
         requestUninstallHandler = onRequestUninstall
         hasSettings = item.hasSettings
         canUninstall = item.canUninstall
+        isVisible = item.isVisible
 
         titleLabel.stringValue = item.title
         configureReleaseChannelBadge(item.releaseChannel)
@@ -649,7 +662,8 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         iconImageView.contentTintColor = iconTintColor
         setIconActionHovered(false)
         activeDotView.isHidden = !item.isActive
-        configureMoreAction()
+        configureVisibilityAction(item: item, mode: mode)
+        configureActions()
         handleImageView.isHidden = !showsHandle
         containerView.alphaValue = 1
         toolTip = item.title
@@ -662,15 +676,6 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             : nil
         iconActionButton.setAccessibilityLabel(iconActionButton.toolTip ?? item.title)
         iconActionButton.setAccessibilityHelp(iconActionButton.toolTip ?? "")
-        let moreActionsTitle = AppL10n.pluginsFormat(
-            "plugin.management.moreActionsForPlugin",
-            defaultValue: "%@的更多操作",
-            item.title
-        )
-        moreActionButton.toolTip = moreActionsTitle
-        moreActionButton.setAccessibilityLabel(moreActionsTitle)
-        moreActionButton.setAccessibilityHelp(moreActionsTitle)
-        setMoreActionVisible(isPointerInside)
     }
 
     private func buildViewHierarchy() {
@@ -688,7 +693,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         titleRowStackView.addArrangedSubview(releaseChannelBadgeView)
         containerView.addSubview(descriptionLabel)
         containerView.addSubview(activeDotView)
-        containerView.addSubview(moreActionButton)
+        containerView.addSubview(visibilityButton)
         containerView.addSubview(handleImageView)
     }
 
@@ -727,18 +732,11 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             self?.setIconActionHovered(isHovered)
         }
 
-        moreActionButton.isBordered = false
-        moreActionButton.image = NSImage(
-            systemSymbolName: "ellipsis.circle",
-            accessibilityDescription: AppL10n.plugins(
-                "plugin.management.moreActions",
-                defaultValue: "更多操作"
-            )
-        )
-        moreActionButton.contentTintColor = .secondaryLabelColor
-        moreActionButton.symbolConfiguration = .init(pointSize: 14, weight: .medium)
-        moreActionButton.target = self
-        moreActionButton.action = #selector(handleMoreActions(_:))
+        visibilityButton.isBordered = false
+        visibilityButton.target = self
+        visibilityButton.action = #selector(handleVisibilityAction(_:))
+        visibilityButton.contentTintColor = .secondaryLabelColor
+        visibilityButton.symbolConfiguration = .init(pointSize: 14, weight: .medium)
 
         handleImageView.image = NSImage(
             systemSymbolName: "line.3.horizontal",
@@ -760,7 +758,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             titleRowStackView,
             descriptionLabel,
             activeDotView,
-            moreActionButton,
+            visibilityButton,
             handleImageView
         ].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -790,18 +788,18 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             titleRowStackView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
 
             descriptionLabel.leadingAnchor.constraint(equalTo: titleRowStackView.leadingAnchor),
-            descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: moreActionButton.leadingAnchor, constant: -12),
+            descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: visibilityButton.leadingAnchor, constant: -12),
             descriptionLabel.topAnchor.constraint(equalTo: titleRowStackView.bottomAnchor, constant: 4),
 
             activeDotView.widthAnchor.constraint(equalToConstant: 8),
             activeDotView.heightAnchor.constraint(equalToConstant: 8),
             activeDotView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            activeDotView.trailingAnchor.constraint(equalTo: moreActionButton.leadingAnchor, constant: -12),
+            activeDotView.trailingAnchor.constraint(equalTo: visibilityButton.leadingAnchor, constant: -12),
 
-            moreActionButton.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            moreActionButton.trailingAnchor.constraint(equalTo: handleImageView.leadingAnchor, constant: -8),
-            moreActionButton.widthAnchor.constraint(equalToConstant: 22),
-            moreActionButton.heightAnchor.constraint(equalToConstant: 22),
+            visibilityButton.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+            visibilityButton.trailingAnchor.constraint(equalTo: handleImageView.leadingAnchor, constant: -12),
+            visibilityButton.widthAnchor.constraint(equalToConstant: 22),
+            visibilityButton.heightAnchor.constraint(equalToConstant: 22),
 
             handleImageView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
             handleImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
@@ -810,14 +808,25 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         ])
     }
 
-    private func configureMoreAction() {
+    private func configureActions() {
         iconActionButton.isHidden = !hasSettings
-        moreActionButton.isHidden = !canUninstall
-        if !canUninstall {
-            setMoreActionVisible(false)
-        }
         window?.invalidateCursorRects(for: iconActionButton)
-        window?.invalidateCursorRects(for: moreActionButton)
+        window?.invalidateCursorRects(for: visibilityButton)
+    }
+
+    private func configureVisibilityAction(
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode
+    ) {
+        let title = visibilityActionTitle(for: item, mode: mode)
+        visibilityButton.image = NSImage(
+            systemSymbolName: FeatureManagementVisibilityPresentation.symbolName(isVisible: item.isVisible),
+            accessibilityDescription: title
+        )
+        visibilityButton.contentTintColor = FeatureManagementVisibilityPresentation.tintColor(isVisible: item.isVisible)
+        visibilityButton.toolTip = title
+        visibilityButton.setAccessibilityLabel(title)
+        visibilityButton.setAccessibilityHelp(title)
     }
 
     @objc
@@ -826,12 +835,8 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     }
 
     @objc
-    private func handleMoreActions(_ sender: NSButton) {
-        guard let menu = actionsMenu() else {
-            return
-        }
-
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+    private func handleVisibilityAction(_ sender: NSButton) {
+        setVisibleHandler?(!isVisible)
     }
 
     @objc
@@ -846,34 +851,6 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         actionsMenu()
-    }
-
-    override func updateTrackingAreas() {
-        if let cellTrackingArea {
-            removeTrackingArea(cellTrackingArea)
-        }
-
-        let trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        cellTrackingArea = trackingArea
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        isPointerInside = true
-        setMoreActionVisible(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        isPointerInside = false
-        setMoreActionVisible(false)
     }
 
     private func actionsMenu() -> NSMenu? {
@@ -919,19 +896,6 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         openSettingsHandler?()
     }
 
-    private func setMoreActionVisible(_ isVisible: Bool) {
-        let alpha: CGFloat = isVisible ? 1 : 0
-        guard moreActionButton.alphaValue != alpha else {
-            return
-        }
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            context.allowsImplicitAnimation = true
-            moreActionButton.alphaValue = alpha
-        }
-    }
-
     private func setIconActionHovered(_ isHovered: Bool) {
         guard hasSettings else {
             iconBackgroundView.layer?.setAffineTransform(.identity)
@@ -953,6 +917,38 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
     private func configureReleaseChannelBadge(_ rawValue: String?) {
         releaseChannelBadgeView.configure(releaseChannel: PluginReleaseChannel(rawString: rawValue))
+    }
+
+    private func visibilityActionTitle(
+        for item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode
+    ) -> String {
+        switch (mode, item.isVisible) {
+        case (.surface(.dashboard), true):
+            return AppL10n.pluginsFormat(
+                "plugin.management.hideFromDashboardFormat",
+                defaultValue: "从仪表盘隐藏%@",
+                item.title
+            )
+        case (.surface(.dashboard), false):
+            return AppL10n.pluginsFormat(
+                "plugin.management.showOnDashboardFormat",
+                defaultValue: "在仪表盘显示%@",
+                item.title
+            )
+        case (.surface(.featurePanel), true):
+            return AppL10n.pluginsFormat(
+                "plugin.management.hideFromFeaturePanelFormat",
+                defaultValue: "从功能面板隐藏%@",
+                item.title
+            )
+        case (.surface(.featurePanel), false):
+            return AppL10n.pluginsFormat(
+                "plugin.management.showInFeaturePanelFormat",
+                defaultValue: "在功能面板显示%@",
+                item.title
+            )
+        }
     }
 }
 
@@ -1019,6 +1015,34 @@ enum FeatureManagementTableCellInspection {
         mode: FeatureManagementTableMode,
         showsHandle: Bool
     ) -> Bool {
+        let cell = configuredCell(
+            item: item,
+            mode: mode,
+            showsHandle: showsHandle
+        )
+        return containsSwiftUIHostingView(in: cell)
+    }
+
+    @MainActor
+    static func inlineActionButtonCountAfterConfiguring(
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        showsHandle: Bool
+    ) -> Int {
+        let cell = configuredCell(
+            item: item,
+            mode: mode,
+            showsHandle: showsHandle
+        )
+        return actionButtons(in: cell).count
+    }
+
+    @MainActor
+    private static func configuredCell(
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        showsHandle: Bool
+    ) -> FeatureManagementTableCellView {
         let cell = FeatureManagementTableCellView(
             frame: NSRect(
                 x: 0,
@@ -1031,11 +1055,12 @@ enum FeatureManagementTableCellInspection {
             item: item,
             mode: mode,
             showsHandle: showsHandle,
+            onSetVisible: { _ in },
             onOpenSettings: {},
             onOpenMarketplace: {},
             onRequestUninstall: {}
         )
-        return containsSwiftUIHostingView(in: cell)
+        return cell
     }
 
     @MainActor
@@ -1045,6 +1070,12 @@ enum FeatureManagementTableCellInspection {
         }
 
         return view.subviews.contains { containsSwiftUIHostingView(in: $0) }
+    }
+
+    @MainActor
+    private static func actionButtons(in view: NSView) -> [FeatureManagementIconActionButton] {
+        let ownButton = (view as? FeatureManagementIconActionButton).map { [$0] } ?? []
+        return ownButton + view.subviews.flatMap { actionButtons(in: $0) }
     }
 }
 #endif

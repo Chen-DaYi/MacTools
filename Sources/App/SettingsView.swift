@@ -19,6 +19,7 @@ struct SettingsView: View {
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
+    @StateObject private var uninstallConfirmationSession = PluginUninstallConfirmationSession()
     var showDashboard: () -> Void = {}
     var showFeaturePanel: () -> Void = {}
 
@@ -40,6 +41,7 @@ struct SettingsView: View {
 
             FeatureSettingsView(
                 pluginHost: pluginHost,
+                uninstallConfirmationSession: uninstallConfirmationSession,
                 showDashboard: showDashboard,
                 showFeaturePanel: showFeaturePanel
             )
@@ -853,6 +855,7 @@ private struct LaunchAtLoginSettingsRow: View {
 
 private struct FeatureSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     let showDashboard: () -> Void
     let showFeaturePanel: () -> Void
 
@@ -866,6 +869,7 @@ private struct FeatureSettingsView: View {
 
             FeatureSettingsDetailPane(
                 pluginHost: pluginHost,
+                uninstallConfirmationSession: uninstallConfirmationSession,
                 showDashboard: showDashboard,
                 showFeaturePanel: showFeaturePanel
             )
@@ -1021,22 +1025,12 @@ private struct FeatureSettingsSidebarRow: View {
 
 private struct FeatureSettingsDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     let showDashboard: () -> Void
     let showFeaturePanel: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            if !pluginHost.restoredLegacyBuiltInPluginIDs.isEmpty {
-                RestoredLegacyBuiltInPluginsNotice(
-                    onDismiss: pluginHost.dismissRestoredLegacyBuiltInPluginsNotice
-                )
-                .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
-                .padding(.top, PluginSettingsTheme.Spacing.section)
-                .padding(.bottom, PluginSettingsTheme.Spacing.sectionHeaderContent)
-            }
-
-            detail
-        }
+        detail
     }
 
     @ViewBuilder
@@ -1053,6 +1047,7 @@ private struct FeatureSettingsDetailPane: View {
                 systemImage: "square.grid.2x2",
                 iconTint: .blue,
                 items: pluginHost.dashboardLayoutItems,
+                hiddenItems: pluginHost.dashboardHiddenLayoutItems,
                 openButtonTitle: AppL10n.settings("plugins.dashboard.open", defaultValue: "打开仪表盘"),
                 emptyTitle: AppL10n.settings("plugins.dashboard.empty.title", defaultValue: "暂无仪表盘组件"),
                 emptyDescription: AppL10n.settings(
@@ -1062,9 +1057,13 @@ private struct FeatureSettingsDetailPane: View {
                 onMove: { pluginID, targetOffset in
                     pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
                 },
+                onSetVisible: { pluginID, isVisible in
+                    pluginHost.setPluginVisible(isVisible, id: pluginID, on: .dashboard)
+                },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .dashboard) },
                 onOpenPanel: showDashboard,
                 configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
+                uninstallConfirmationSession: uninstallConfirmationSession,
                 onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
                 onOpenMarketplace: pluginHost.presentPluginMarketplace,
                 onUninstall: { pluginID in
@@ -1082,6 +1081,7 @@ private struct FeatureSettingsDetailPane: View {
                 systemImage: "switch.2",
                 iconTint: .purple,
                 items: pluginHost.featurePanelLayoutItems,
+                hiddenItems: pluginHost.featurePanelHiddenLayoutItems,
                 openButtonTitle: AppL10n.settings("plugins.featurePanel.open", defaultValue: "打开功能面板"),
                 emptyTitle: AppL10n.settings("plugins.featurePanel.empty.title", defaultValue: "暂无功能面板操作"),
                 emptyDescription: AppL10n.settings(
@@ -1091,9 +1091,13 @@ private struct FeatureSettingsDetailPane: View {
                 onMove: { pluginID, targetOffset in
                     pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
                 },
+                onSetVisible: { pluginID, isVisible in
+                    pluginHost.setPluginVisible(isVisible, id: pluginID, on: .featurePanel)
+                },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .featurePanel) },
                 onOpenPanel: showFeaturePanel,
                 configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
+                uninstallConfirmationSession: uninstallConfirmationSession,
                 onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
                 onOpenMarketplace: pluginHost.presentPluginMarketplace,
                 onUninstall: { pluginID in
@@ -1101,7 +1105,10 @@ private struct FeatureSettingsDetailPane: View {
                 }
             )
         case .marketplace:
-            PluginManagementSettingsView(pluginHost: pluginHost)
+            PluginManagementSettingsView(
+                pluginHost: pluginHost,
+                uninstallConfirmationSession: uninstallConfirmationSession
+            )
         case let .configuration(pluginID):
             PluginConfigurationDetailPane(
                 pluginHost: pluginHost,
@@ -1115,40 +1122,6 @@ private struct FeatureSettingsDetailPane: View {
     }
 }
 
-private struct RestoredLegacyBuiltInPluginsNotice: View {
-    let onDismiss: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                Text(AppL10n.plugins(
-                    "plugin.migration.builtInRestored.title",
-                    defaultValue: "内置工具已恢复"
-                ))
-                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-
-                Text(AppL10n.plugins(
-                    "plugin.migration.builtInRestored.description",
-                    defaultValue: "此前停用的内置工具已恢复。内置工具现在始终可用。"
-                ))
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button(AppL10n.settings("common.ok", defaultValue: "好"), action: onDismiss)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-        }
-        .padding(PluginSettingsTheme.Spacing.cardContent)
-        .pluginSettingsCardBackground(.host)
-    }
-}
-
 private struct SurfaceLayoutSettingsView: View {
     let surface: PluginDisplaySurface
     let title: String
@@ -1156,17 +1129,20 @@ private struct SurfaceLayoutSettingsView: View {
     let systemImage: String
     let iconTint: Color
     let items: [PluginSurfaceLayoutItem]
+    let hiddenItems: [PluginSurfaceLayoutItem]
     let openButtonTitle: String
     let emptyTitle: String
     let emptyDescription: String
     let onMove: (String, Int) -> Void
+    let onSetVisible: (String, Bool) -> Void
     let onResetOrder: () -> Void
     let onOpenPanel: () -> Void
     let configurationPluginIDs: Set<String>
+    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     let onOpenSettings: (String) -> Void
     let onOpenMarketplace: () -> Void
     let onUninstall: (String) throws -> Void
-    @State private var pendingUninstallItem: PluginSurfaceLayoutItem?
+    @State private var pendingUninstallItem: PluginUninstallConfirmation?
     @State private var uninstallErrorMessage: String?
 
     var body: some View {
@@ -1195,6 +1171,10 @@ private struct SurfaceLayoutSettingsView: View {
                     .controlSize(.small)
                 }
 
+                if uninstallConfirmationSession.isConfirmationPaused {
+                    PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
+                }
+
                 SettingsCardContainer {
                     if items.isEmpty {
                         ContentUnavailableView(
@@ -1213,6 +1193,7 @@ private struct SurfaceLayoutSettingsView: View {
                             },
                             mode: .surface(surface),
                             onMove: onMove,
+                            onSetVisible: onSetVisible,
                             onOpenSettings: onOpenSettings,
                             onOpenMarketplace: onOpenMarketplace,
                             onRequestUninstall: requestUninstall
@@ -1220,27 +1201,42 @@ private struct SurfaceLayoutSettingsView: View {
                         .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
                     }
                 }
+
+                if !hiddenItems.isEmpty {
+                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                        Label(hiddenSectionTitle, systemImage: "eye.slash")
+                            .font(PluginSettingsTheme.Typography.sectionTitle)
+                            .foregroundStyle(.secondary)
+
+                        SettingsCardContainer {
+                            FeatureManagementTableView(
+                                items: hiddenItems.map {
+                                    FeatureManagementTableItem(
+                                        surfaceItem: $0,
+                                        hasSettings: configurationPluginIDs.contains($0.id)
+                                    )
+                                },
+                                mode: .surface(surface),
+                                isReorderEnabled: false,
+                                onSetVisible: onSetVisible,
+                                onOpenSettings: onOpenSettings,
+                                onOpenMarketplace: onOpenMarketplace,
+                                onRequestUninstall: requestUninstall
+                            )
+                            .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
+                        }
+                    }
+                }
             }
             .padding(PluginSettingsTheme.Spacing.pagePadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(SettingsStyle.contentBackground)
-        .alert(item: $pendingUninstallItem) { item in
-            Alert(
-                title: Text(AppL10n.pluginsFormat(
-                    "plugin.management.uninstall.confirmationTitle",
-                    defaultValue: "卸载“%@”？",
-                    item.title
-                )),
-                message: Text(AppL10n.pluginsFormat(
-                    "plugin.management.uninstall.confirmationMessage",
-                    defaultValue: "它将从%@移除，快捷键和设置入口也会移除，后台工作将停止。插件数据会保留。",
-                    pluginCapabilitySummary(item.capabilities)
-                )),
-                primaryButton: .destructive(Text(AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"))) {
-                    uninstall(item)
-                },
-                secondaryButton: .cancel()
+        .sheet(item: $pendingUninstallItem) { item in
+            PluginUninstallConfirmationSheet(
+                confirmation: item,
+                session: uninstallConfirmationSession,
+                onConfirm: uninstall
             )
         }
         .alert(
@@ -1261,12 +1257,42 @@ private struct SurfaceLayoutSettingsView: View {
     }
 
     private func requestUninstall(_ pluginID: String) {
-        pendingUninstallItem = items.first { $0.id == pluginID && $0.canUninstall }
+        guard let item = (items + hiddenItems).first(where: { $0.id == pluginID && $0.canUninstall }) else {
+            return
+        }
+
+        let confirmation = PluginUninstallConfirmation(
+            pluginID: item.id,
+            pluginTitle: item.title,
+            surfaceCapabilitySummary: pluginCapabilitySummary(item.capabilities)
+        )
+        if uninstallConfirmationSession.shouldConfirmUninstall {
+            pendingUninstallItem = confirmation
+        } else {
+            uninstall(confirmation)
+        }
     }
 
-    private func uninstall(_ item: PluginSurfaceLayoutItem) {
+    private var hiddenSectionTitle: String {
+        switch surface {
+        case .dashboard:
+            return AppL10n.settingsFormat(
+                "plugins.dashboard.hiddenSectionFormat",
+                defaultValue: "已在仪表盘隐藏（%d）",
+                hiddenItems.count
+            )
+        case .featurePanel:
+            return AppL10n.settingsFormat(
+                "plugins.featurePanel.hiddenSectionFormat",
+                defaultValue: "已在功能面板隐藏（%d）",
+                hiddenItems.count
+            )
+        }
+    }
+
+    private func uninstall(_ confirmation: PluginUninstallConfirmation) {
         do {
-            try onUninstall(item.id)
+            try onUninstall(confirmation.pluginID)
         } catch {
             uninstallErrorMessage = error.localizedDescription
         }

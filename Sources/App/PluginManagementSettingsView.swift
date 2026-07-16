@@ -3,10 +3,11 @@ import MacToolsPluginKit
 
 struct PluginManagementSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     var appRelauncher: any AppRelaunching = AppRelauncher()
 
     @State private var alertMessage: String?
-    @State private var pendingUninstallItem: PluginManagementItem?
+    @State private var pendingUninstallItem: PluginUninstallConfirmation?
     @State private var activeOperationID: String?
     @State private var searchText: String = ""
     @State private var selectedFilter: PluginCategoryFilter = .all
@@ -18,6 +19,10 @@ struct PluginManagementSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             header
+
+            if uninstallConfirmationSession.isConfirmationPaused {
+                PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
+            }
 
             if pluginHost.pluginManagementItems.isEmpty {
                 ContentUnavailableView(
@@ -42,15 +47,7 @@ struct PluginManagementSettingsView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
-                        if !legacyMigrationItems.isEmpty {
-                            LegacyDisabledPluginMigrationSection(
-                                items: legacyMigrationItems,
-                                onKeepInstalled: { resolveLegacyPlugin($0, keepInstalled: true) },
-                                onUninstall: { requestUninstall($0) }
-                            )
-                        }
-
-                        if filteredItems.isEmpty && legacyMigrationItems.isEmpty {
+                        if filteredItems.isEmpty {
                             ContentUnavailableView(
                                 AppL10n.plugins("plugin.filter.empty.title", defaultValue: "未找到匹配的插件"),
                                 systemImage: "magnifyingglass",
@@ -104,22 +101,11 @@ struct PluginManagementSettingsView: View {
         } message: {
             Text(alertMessage ?? "")
         }
-        .alert(item: $pendingUninstallItem) { item in
-            Alert(
-                title: Text(AppL10n.pluginsFormat(
-                    "plugin.management.uninstall.confirmationTitle",
-                    defaultValue: "卸载“%@”？",
-                    item.title
-                )),
-                message: Text(AppL10n.pluginsFormat(
-                    "plugin.management.uninstall.confirmationMessage",
-                    defaultValue: "它将从%@移除，快捷键和设置入口也会移除，后台工作将停止。插件数据会保留。",
-                    item.surfaceCapabilitySummary
-                )),
-                primaryButton: .destructive(Text(AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"))) {
-                    uninstall(item)
-                },
-                secondaryButton: .cancel()
+        .sheet(item: $pendingUninstallItem) { item in
+            PluginUninstallConfirmationSheet(
+                confirmation: item,
+                session: uninstallConfirmationSession,
+                onConfirm: uninstall
             )
         }
         .onAppear {
@@ -132,8 +118,7 @@ struct PluginManagementSettingsView: View {
 
     private var filteredItems: [PluginManagementItem] {
         let filtered = pluginHost.pluginManagementItems.filter {
-            !pluginHost.pendingLegacyDisabledPluginIDs.contains($0.id)
-                && PluginListFilter.matches(managementItem: $0, query: searchText, filter: selectedFilter)
+            PluginListFilter.matches(managementItem: $0, query: searchText, filter: selectedFilter)
         }
         return PluginMarketplaceSortMode.sorted(filtered, by: sortMode)
     }
@@ -143,12 +128,6 @@ struct PluginManagementSettingsView: View {
             managementItems: pluginHost.pluginManagementItems,
             query: searchText
         )
-    }
-
-    private var legacyMigrationItems: [PluginManagementItem] {
-        pluginHost.pluginManagementItems.filter {
-            pluginHost.pendingLegacyDisabledPluginIDs.contains($0.id)
-        }
     }
 
     private var configurationPluginIDs: Set<String> {
@@ -409,13 +388,13 @@ struct PluginManagementSettingsView: View {
         bulkUpdateProgressText = nil
     }
 
-    private func uninstall(_ item: PluginManagementItem) {
+    private func uninstall(_ confirmation: PluginUninstallConfirmation) {
         guard activeOperationID == nil else {
             return
         }
 
         do {
-            try pluginHost.uninstallDynamicPlugin(pluginID: item.id)
+            try pluginHost.uninstallDynamicPlugin(pluginID: confirmation.pluginID)
         } catch {
             alertMessage = error.localizedDescription
         }
@@ -426,18 +405,15 @@ struct PluginManagementSettingsView: View {
             return
         }
 
-        pendingUninstallItem = item
-    }
-
-    private func resolveLegacyPlugin(_ item: PluginManagementItem, keepInstalled: Bool) {
-        guard activeOperationID == nil else {
-            return
-        }
-
-        do {
-            try pluginHost.resolveLegacyDisabledPlugin(item.id, keepInstalled: keepInstalled)
-        } catch {
-            alertMessage = error.localizedDescription
+        let confirmation = PluginUninstallConfirmation(
+            pluginID: item.id,
+            pluginTitle: item.title,
+            surfaceCapabilitySummary: item.surfaceCapabilitySummary
+        )
+        if uninstallConfirmationSession.shouldConfirmUninstall {
+            pendingUninstallItem = confirmation
+        } else {
+            uninstall(confirmation)
         }
     }
 
@@ -578,7 +554,7 @@ private struct PluginManagementRow: View {
         switch item.state {
         case .available, .installed:
             return nil
-        case .legacyDisabled, .localDevelopment, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
+        case .localDevelopment, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
             return item.statusText
         }
     }
@@ -593,8 +569,6 @@ private struct PluginManagementRow: View {
             return .blue
         case .installed:
             return .green
-        case .legacyDisabled:
-            return .orange
         case .updateAvailable, .restartRequired:
             return .accentColor
         case .failed, .incompatible, .revoked:
@@ -610,8 +584,6 @@ private struct PluginManagementRow: View {
             return "hammer.circle.fill"
         case .installed:
             return "checkmark.seal.fill"
-        case .legacyDisabled:
-            return "exclamationmark.triangle.fill"
         case .updateAvailable:
             return "arrow.triangle.2.circlepath.circle.fill"
         case .restartRequired:
@@ -619,66 +591,6 @@ private struct PluginManagementRow: View {
         case .failed, .incompatible, .revoked:
             return "exclamationmark.triangle.fill"
         }
-    }
-}
-
-private struct LegacyDisabledPluginMigrationSection: View {
-    let items: [PluginManagementItem]
-    let onKeepInstalled: (PluginManagementItem) -> Void
-    let onUninstall: (PluginManagementItem) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(
-                AppL10n.plugins(
-                    "plugin.migration.legacyDisabled.title",
-                    defaultValue: "处理此前停用的插件"
-                ),
-                systemImage: "exclamationmark.triangle"
-            )
-            .font(PluginSettingsTheme.Typography.sectionTitle)
-            .foregroundStyle(.orange)
-
-            Text(AppL10n.plugins(
-                "plugin.migration.legacyDisabled.description",
-                defaultValue: "MacTools 不再保留已安装但停用的插件。请选择保留并激活，或直接卸载。"
-            ))
-            .font(PluginSettingsTheme.Typography.rowDescription)
-            .foregroundStyle(.secondary)
-
-            ForEach(items) { item in
-                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
-                            .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                        Text(item.surfaceCapabilitySummary)
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Button(AppL10n.plugins(
-                        "plugin.migration.legacyDisabled.keepInstalled",
-                        defaultValue: "保留并激活"
-                    )) {
-                        onKeepInstalled(item)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                    Button(role: .destructive) {
-                        onUninstall(item)
-                    } label: {
-                        Text(AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                .padding(.top, 2)
-            }
-        }
-        .padding(PluginSettingsTheme.Spacing.cardContent)
-        .pluginSettingsCardBackground(.host)
     }
 }
 

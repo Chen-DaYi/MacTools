@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "plugins.dashboard.hiddenSectionFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "مخفي في لوحة المعلومات (%d)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Im Dashboard ausgeblendet (%d)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Hidden on Dashboard (%d)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Oculto en el panel (%d)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Masqués du tableau de bord (%d)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードで非表示（%d）" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드에서 가림 (%d)" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ocultos no painel (%d)" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Скрыто на панели управления (%d)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已在仪表盘隐藏（%d）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已在儀表板隱藏（%d）" } }
+      }
+    },
+    "plugins.featurePanel.hiddenSectionFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "مخفي في لوحة الميزات (%d)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Im Funktionsbereich ausgeblendet (%d)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Hidden in Feature Panel (%d)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Oculto en el panel de funciones (%d)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Masqués du panneau de fonctionnalités (%d)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルで非表示（%d）" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널에서 가림 (%d)" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ocultos no painel de recursos (%d)" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Скрыто на панели функций (%d)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已在功能面板隐藏（%d）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已在功能面板隱藏（%d）" } }
+      }
+    },
     "plugins.configuration.enabled": {
       "extractionState": "manual",
       "localizations": {
@@ -12,17 +44,17 @@
     "plugins.dashboard.description": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "اسحب لإعادة ترتيب مكوّنات لوحة المعلومات." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Dashboard-Komponenten zum Neuordnen ziehen." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Drag to reorder Dashboard components." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Arrastra para reordenar los componentes del panel." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Faites glisser pour réorganiser les composants du tableau de bord." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ドラッグしてダッシュボードコンポーネントを並べ替えます。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "드래그하여 대시보드 구성 요소의 순서를 변경하세요." } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Arraste para reordenar os componentes do painel." } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Перетаскивайте для изменения порядка компонентов панели управления." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "拖拽以调整仪表盘组件的顺序。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "拖曳以調整儀表板組件的順序。" } }
+        "ar": { "stringUnit": { "state": "translated", "value": "اختر ما يظهر على لوحة المعلومات واسحب لإعادة الترتيب." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Wählen Sie, was im Dashboard angezeigt wird, und ziehen Sie zum Neuordnen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose what appears on Dashboard, then drag to reorder." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Elige qué aparece en el panel y arrastra para reordenar." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Choisissez ce qui apparaît dans le tableau de bord, puis faites glisser pour réorganiser." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードに表示する項目を選び、ドラッグして並べ替えます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드에 표시할 항목을 선택하고 드래그하여 순서를 변경하세요." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Escolha o que aparece no painel e arraste para reordenar." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Выберите элементы на панели управления и перетащите их для изменения порядка." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择在仪表盘显示的插件，再拖拽调整顺序。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇在儀表板顯示的外掛，再拖曳調整順序。" } }
       }
     },
     "plugins.dashboard.empty.description": {
@@ -76,17 +108,17 @@
     "plugins.featurePanel.description": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "اسحب لإعادة ترتيب إجراءات لوحة الميزات." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Aktionen des Funktionsbereichs zum Neuordnen ziehen." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Drag to reorder Feature Panel actions." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Arrastra para reordenar las acciones del panel de funciones." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Faites glisser pour réorganiser les actions du panneau de fonctionnalités." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ドラッグして機能パネルのアクションを並べ替えます。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "드래그하여 기능 패널 작업의 순서를 변경하세요." } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Arraste para reordenar as ações do painel de recursos." } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Перетаскивайте для изменения порядка действий панели функций." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "拖拽以调整功能面板操作的顺序。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "拖曳以調整功能面板操作的順序。" } }
+        "ar": { "stringUnit": { "state": "translated", "value": "اختر ما يظهر في لوحة الميزات واسحب لإعادة الترتيب." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Wählen Sie, was im Funktionsbereich angezeigt wird, und ziehen Sie zum Neuordnen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose what appears in Feature Panel, then drag to reorder." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Elige qué aparece en el panel de funciones y arrastra para reordenar." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Choisissez ce qui apparaît dans le panneau de fonctionnalités, puis faites glisser pour réorganiser." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルに表示する項目を選び、ドラッグして並べ替えます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널에 표시할 항목을 선택하고 드래그하여 순서를 변경하세요." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Escolha o que aparece no painel de recursos e arraste para reordenar." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Выберите элементы на панели функций и перетащите их для изменения порядка." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择在功能面板显示的插件，再拖拽调整顺序。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇在功能面板顯示的外掛，再拖曳調整順序。" } }
       }
     },
     "plugins.featurePanel.empty.description": {

@@ -25,6 +25,16 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         let isFeaturePanelOrderInitialized: Bool
     }
 
+    private struct VersionThreePreferences: Codable {
+        let version: Int
+        let generalPluginOrder: [String]
+        let dashboardOrderedPluginIDs: [String]
+        let featurePanelOrderedPluginIDs: [String]
+        let isDashboardOrderInitialized: Bool
+        let isFeaturePanelOrderInitialized: Bool
+        let pendingLegacyDisabledPluginIDs: Set<String>
+    }
+
     private var suiteName: String!
     private var defaults: UserDefaults!
     private var store: PluginDisplayPreferencesStore!
@@ -45,7 +55,7 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         super.tearDown()
     }
 
-    func testVersionOneMigrationPreservesGeneralOrderAndQueuesLegacyDisabledPlugins() throws {
+    func testVersionOneMigrationPreservesOrderAndMapsHiddenPluginsToEachSurface() throws {
         try storeLegacyPreferences(
             order: ["display", "activity", "calendar"],
             hidden: ["activity"]
@@ -56,12 +66,16 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             ["display", "activity", "calendar"]
         )
         XCTAssertEqual(
-            store.pendingLegacyDisabledPluginIDs(availablePluginIDs: ["activity", "calendar"]),
-            Set(["activity"])
+            store.visiblePluginIDs(for: .dashboard, defaultPluginIDs: ["activity", "calendar"]),
+            ["calendar"]
+        )
+        XCTAssertEqual(
+            store.hiddenPluginIDs(for: .featurePanel, defaultPluginIDs: ["activity", "calendar"]),
+            ["activity"]
         )
     }
 
-    func testVersionTwoMigrationPreservesIndependentOrdersAndQueuesLegacyDisabledPlugins() throws {
+    func testVersionTwoMigrationPreservesIndependentOrdersAndMapsGlobalHiddenPlugins() throws {
         let data = try JSONEncoder().encode(
             VersionTwoPreferences(
                 version: 2,
@@ -84,8 +98,36 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             ["calendar", "activity"]
         )
         XCTAssertEqual(
-            store.pendingLegacyDisabledPluginIDs(availablePluginIDs: ["activity", "calendar"]),
-            Set(["activity"])
+            store.hiddenPluginIDs(for: .dashboard, defaultPluginIDs: ["activity", "calendar"]),
+            ["activity"]
+        )
+        XCTAssertEqual(
+            store.hiddenPluginIDs(for: .featurePanel, defaultPluginIDs: ["activity", "calendar"]),
+            ["activity"]
+        )
+    }
+
+    func testVersionThreeMigrationMapsMigrationQueueToBothSurfaces() throws {
+        let data = try JSONEncoder().encode(
+            VersionThreePreferences(
+                version: 3,
+                generalPluginOrder: ["calendar", "activity"],
+                dashboardOrderedPluginIDs: ["activity", "calendar"],
+                featurePanelOrderedPluginIDs: ["calendar", "activity"],
+                isDashboardOrderInitialized: true,
+                isFeaturePanelOrderInitialized: true,
+                pendingLegacyDisabledPluginIDs: ["activity"]
+            )
+        )
+        defaults.set(data, forKey: "plugin.display.preferences")
+
+        XCTAssertEqual(
+            store.hiddenPluginIDs(for: .dashboard, defaultPluginIDs: ["activity", "calendar"]),
+            ["activity"]
+        )
+        XCTAssertEqual(
+            store.hiddenPluginIDs(for: .featurePanel, defaultPluginIDs: ["activity", "calendar"]),
+            ["activity"]
         )
     }
 
@@ -127,6 +169,48 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
                 defaultPluginIDs: ["activity", "calendar"]
             ),
             ["activity", "calendar"]
+        )
+    }
+
+    func testLegacyHiddenIDsRemainStagedUntilTheirPluginBecomesAvailable() {
+        XCTAssertTrue(store.addLegacyHiddenPluginIDs(["available", "temporarily-unavailable"]))
+
+        store.migrateLegacyHiddenPluginIDs(
+            dashboardDefaultPluginIDs: ["available"],
+            featurePanelDefaultPluginIDs: ["available"]
+        )
+
+        XCTAssertEqual(
+            store.hiddenPluginIDs(for: .dashboard, defaultPluginIDs: ["available"]),
+            ["available"]
+        )
+        XCTAssertEqual(
+            store.hiddenPluginIDs(for: .featurePanel, defaultPluginIDs: ["available"]),
+            ["available"]
+        )
+
+        // A temporarily unavailable package commonly becomes loadable only
+        // after a later launch or update, so verify the staging survives a
+        // fresh preferences-store instance.
+        store = PluginDisplayPreferencesStore(userDefaults: defaults)
+        store.migrateLegacyHiddenPluginIDs(
+            dashboardDefaultPluginIDs: ["available", "temporarily-unavailable"],
+            featurePanelDefaultPluginIDs: ["available", "temporarily-unavailable"]
+        )
+
+        XCTAssertEqual(
+            store.hiddenPluginIDs(
+                for: .dashboard,
+                defaultPluginIDs: ["available", "temporarily-unavailable"]
+            ),
+            ["available", "temporarily-unavailable"]
+        )
+        XCTAssertEqual(
+            store.hiddenPluginIDs(
+                for: .featurePanel,
+                defaultPluginIDs: ["available", "temporarily-unavailable"]
+            ),
+            ["available", "temporarily-unavailable"]
         )
     }
 
@@ -223,6 +307,20 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
     }
 
+    func testLegacyHiddenIDsAreNotAcknowledgedWhenFuturePayloadMustBePreserved() throws {
+        let futureData = try JSONEncoder().encode(
+            FuturePreferences(
+                version: 99,
+                generalPluginOrder: ["future"],
+                futureOnlyValue: "preserve-me"
+            )
+        )
+        defaults.set(futureData, forKey: "plugin.display.preferences")
+
+        XCTAssertFalse(store.addLegacyHiddenPluginIDs(["legacy-hidden"]))
+        XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
+    }
+
     func testResettingOneSurfaceDoesNotAffectTheOther() {
         store.setOrderedPluginIDs(
             ["calendar", "activity"],
@@ -262,20 +360,44 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         )
     }
 
-    func testResolvingLegacyDisabledPluginKeepsIndependentOrders() {
+    func testVisibilityIsIndependentForEachSurface() {
         store.setOrderedPluginIDs(
             ["calendar", "activity"],
             for: .dashboard,
             defaultPluginIDs: ["calendar", "activity"]
         )
-        store.addPendingLegacyDisabledPluginIDs(["activity"])
+        store.setPluginVisible(
+            false,
+            pluginID: "activity",
+            on: .dashboard,
+            defaultPluginIDs: ["calendar", "activity"]
+        )
 
-        store.resolvePendingLegacyDisabledPlugin("activity")
-
-        XCTAssertTrue(store.pendingLegacyDisabledPluginIDs(availablePluginIDs: ["activity"]).isEmpty)
         XCTAssertEqual(
-            store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "activity"]),
+            store.visiblePluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "activity"]),
+            ["calendar"]
+        )
+        XCTAssertEqual(
+            store.visiblePluginIDs(for: .featurePanel, defaultPluginIDs: ["calendar", "activity"]),
             ["calendar", "activity"]
+        )
+    }
+
+    func testReorderingVisiblePluginsPreservesHiddenPluginSlot() {
+        let pluginIDs = ["first", "hidden", "second"]
+        store.setOrderedPluginIDs(pluginIDs, for: .dashboard, defaultPluginIDs: pluginIDs)
+        store.setPluginVisible(false, pluginID: "hidden", on: .dashboard, defaultPluginIDs: pluginIDs)
+
+        store.setVisiblePluginIDs(["second", "first"], for: .dashboard, defaultPluginIDs: pluginIDs)
+
+        XCTAssertEqual(
+            store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: pluginIDs),
+            ["second", "hidden", "first"]
+        )
+        store.setPluginVisible(true, pluginID: "hidden", on: .dashboard, defaultPluginIDs: pluginIDs)
+        XCTAssertEqual(
+            store.visiblePluginIDs(for: .dashboard, defaultPluginIDs: pluginIDs),
+            ["second", "hidden", "first"]
         )
     }
 

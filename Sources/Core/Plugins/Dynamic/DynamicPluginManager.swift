@@ -6,9 +6,6 @@ struct PluginManagementItem: Identifiable, Equatable {
         case available
         case localDevelopment
         case installed
-        /// An installed package that must be explicitly reviewed after
-        /// migrating from the retired disabled state.
-        case legacyDisabled
         case updateAvailable(installedVersion: String, catalogVersion: String)
         case restartRequired
         case failed(String)
@@ -62,8 +59,6 @@ struct PluginManagementItem: Identifiable, Equatable {
             return AppL10n.plugins("plugin.status.localDevelopment", defaultValue: "本地开发")
         case .installed:
             return AppL10n.plugins("plugin.status.installed", defaultValue: "已安装")
-        case .legacyDisabled:
-            return AppL10n.plugins("plugin.status.requiresReview", defaultValue: "需要处理")
         case .updateAvailable:
             return AppL10n.plugins("plugin.status.updateAvailable", defaultValue: "可更新")
         case .restartRequired:
@@ -89,8 +84,6 @@ struct PluginManagementItem: Identifiable, Equatable {
             }
 
             return summary ?? ""
-        case .legacyDisabled:
-            return AppL10n.plugins("plugin.detail.requiresReview", defaultValue: "此插件此前被停用，请选择保留并激活或卸载。")
         case let .updateAvailable(installedVersion, catalogVersion):
             return AppL10n.pluginsFormat(
                 "plugin.detail.updateAvailableFormat",
@@ -126,7 +119,7 @@ struct PluginManagementItem: Identifiable, Equatable {
 
     var canUninstall: Bool {
         switch state {
-        case .installed, .legacyDisabled, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
+        case .installed, .updateAvailable, .restartRequired, .failed, .incompatible, .revoked:
             return packageURL != nil
         case .available, .localDevelopment:
             return false
@@ -149,10 +142,6 @@ final class DynamicPluginManager: ObservableObject {
     private var catalogSnapshot: PluginCatalogSnapshot?
     private var latestLoadErrorsByID: [String: String] = [:]
 
-    private var installedPluginIDs: Set<String> {
-        Set(packageStore.installedRecords().map(\.id))
-    }
-
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     var onPluginsChanged: (([any MacToolsPlugin]) -> Void)?
 
@@ -170,7 +159,7 @@ final class DynamicPluginManager: ObservableObject {
 
     func loadInstalledPlugins() -> [any MacToolsPlugin] {
         let records = packageStore.installedRecords()
-        deactivateMissingOrLegacyDisabledPlugins(records: records)
+        deactivateMissingPlugins(records: records)
 
         let recordsToLoad = records.filter { record in
             guard case .installed = record.state else {
@@ -222,7 +211,7 @@ final class DynamicPluginManager: ObservableObject {
 
     func prepareInstalledPluginsWithoutLoading() {
         let records = packageStore.installedRecords()
-        deactivateMissingOrLegacyDisabledPlugins(records: records)
+        deactivateMissingPlugins(records: records)
         latestLoadErrorsByID = [:]
         let results = records.map { record in
             DynamicPluginLoadResult(
@@ -241,19 +230,10 @@ final class DynamicPluginManager: ObservableObject {
 
     func installPluginPackage(
         from sourceURL: URL,
-        catalogEntry: PluginCatalogEntry? = nil,
-        holdingForLegacyMigration: Bool = false
+        catalogEntry: PluginCatalogEntry? = nil
     ) throws {
         try validatePackage(sourceURL, matches: catalogEntry)
         let record = try packageStore.installPackage(from: sourceURL)
-
-        // An older backup can request installation of a plugin that it also
-        // records as globally disabled. Set the migration hold before this
-        // method reloads packages, so the plugin's code never activates as an
-        // intermediate side effect of the restore.
-        if holdingForLegacyMigration {
-            packageStore.markLegacyDisabledPlugins([record.id])
-        }
 
         if loadedPluginIDs.contains(record.id) {
             deferredPluginIDs.insert(record.id)
@@ -337,12 +317,14 @@ final class DynamicPluginManager: ObservableObject {
         packageStore.installedRecords().contains { $0.id == pluginID }
     }
 
-    func legacyDisabledPluginIDs() -> Set<String> {
-        packageStore.legacyDisabledPackageIDs().intersection(installedPluginIDs)
+    /// Reads the retired global-disabled marker before the host loads
+    /// packages. The host clears it only after the layout migration persists.
+    func legacyHiddenPluginIDs() -> Set<String> {
+        packageStore.legacyHiddenPluginIDs()
     }
 
-    func isLegacyDisabledPackage(_ pluginID: String) -> Bool {
-        packageStore.legacyDisabledPackageIDs().contains(pluginID)
+    func clearLegacyHiddenPluginIDs() {
+        packageStore.clearLegacyHiddenPluginIDs()
     }
 
     func installedCapabilitiesByID() -> [String: PluginPackageManifest.Capabilities] {
@@ -388,40 +370,6 @@ final class DynamicPluginManager: ObservableObject {
         )
     }
 
-    /// Holds a plugin that was disabled by an older app version until the user
-    /// completes the one-time migration review.
-    func holdLegacyDisabledPlugin(_ pluginID: String) {
-        guard let plugins = loadedPluginsByID[pluginID] else { return }
-        for plugin in plugins {
-            plugin.deactivate(reason: .disabled)
-        }
-    }
-
-    /// Activates a legacy-held plugin after the user explicitly keeps it.
-    func activateLegacyDisabledPlugin(_ pluginID: String) {
-        guard let plugins = loadedPluginsByID[pluginID] else { return }
-        // Re-activate with the SAME context the plugin was first loaded with
-        // (support/cache/temp directories, resource bundle, scoped storage). A bare
-        // `PluginRuntimeContext(pluginID:)` has nil directories and the .main bundle,
-        // so plugins that recompute paths in activate() — e.g. ActivityBar's hook
-        // script location — would silently switch on-disk locations after hide/show.
-        let context = packageStore.installedRecords().first { $0.id == pluginID }
-            .map { packageStore.runtimeContext(for: $0) }
-            ?? PluginRuntimeContext(pluginID: pluginID)
-        for plugin in plugins {
-            plugin.activate(context: context)
-        }
-    }
-
-    func activateLegacyDisabledPackage(_ pluginID: String) {
-        packageStore.activateLegacyPlugin(pluginID)
-        reloadInstalledPlugins()
-    }
-
-    func holdLegacyDisabledPackages(_ pluginIDs: Set<String>) {
-        packageStore.markLegacyDisabledPlugins(pluginIDs.intersection(installedPluginIDs))
-    }
-
     func uninstallPlugin(pluginID: String, removeData: Bool = false) throws {
         let wasLoaded = loadedPluginIDs.contains(pluginID)
 
@@ -463,7 +411,7 @@ final class DynamicPluginManager: ObservableObject {
         rebuildManagementItems(results: results, catalogSnapshot: catalogSnapshot)
     }
 
-    private func deactivateMissingOrLegacyDisabledPlugins(records: [PluginPackageRecord]) {
+    private func deactivateMissingPlugins(records: [PluginPackageRecord]) {
         let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
 
         for pluginID in Array(loadedPluginsByID.keys) {
@@ -610,8 +558,6 @@ final class DynamicPluginManager: ObservableObject {
             switch record.state {
             case .installed:
                 state = .installed
-            case .legacyDisabled:
-                state = .legacyDisabled
             case let .incompatible(reason):
                 state = .incompatible(reason)
             case let .failed(reason):
@@ -646,7 +592,7 @@ final class DynamicPluginManager: ObservableObject {
 private extension PluginPackageRecord.State {
     var isLoadable: Bool {
         switch self {
-        case .installed, .legacyDisabled:
+        case .installed:
             return true
         case .incompatible, .failed:
             return false

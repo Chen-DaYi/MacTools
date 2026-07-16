@@ -62,6 +62,22 @@ final class FeatureManagementTableViewTests: XCTestCase {
         ))
     }
 
+    func testUpdatePolicyRefreshesWhenVisibilityChanges() {
+        let previousItems = [makeItem(id: "activity-bar", isActive: false, isVisible: true)]
+        let currentItems = [makeItem(id: "activity-bar", isActive: false, isVisible: false)]
+
+        XCTAssertTrue(FeatureManagementTableUpdatePolicy.needsUpdate(
+            previousItems: previousItems,
+            currentItems: currentItems,
+            previousMode: .surface(.dashboard),
+            currentMode: .surface(.dashboard),
+            previousIsReorderEnabled: true,
+            currentIsReorderEnabled: true,
+            previousContentWidth: 480,
+            currentContentWidth: 480
+        ))
+    }
+
     func testUpdatePolicyRefreshesWhenWidthChangesByPoint() {
         let items = [
             makeItem(id: "activity-bar", isActive: false)
@@ -139,6 +155,25 @@ final class FeatureManagementTableViewTests: XCTestCase {
         )
     }
 
+    func testVisibilityPresentationMatchesTheMetricRowConvention() {
+        XCTAssertEqual(
+            FeatureManagementVisibilityPresentation.symbolName(isVisible: true),
+            "eye"
+        )
+        XCTAssertEqual(
+            FeatureManagementVisibilityPresentation.tintColor(isVisible: true),
+            .systemBlue
+        )
+        XCTAssertEqual(
+            FeatureManagementVisibilityPresentation.symbolName(isVisible: false),
+            "eye.slash"
+        )
+        XCTAssertEqual(
+            FeatureManagementVisibilityPresentation.tintColor(isVisible: false),
+            .tertiaryLabelColor
+        )
+    }
+
     func testReorderPolicyRejectsDisabledReordering() {
         let items = [
             makeItem(id: "first", isActive: false),
@@ -199,9 +234,29 @@ final class FeatureManagementTableViewTests: XCTestCase {
         ))
     }
 
+    @MainActor
+    func testConfiguredLayoutCellHasOnlySettingsAndVisibilityActionButtons() {
+        let item = makeItem(
+            id: "beta-plugin",
+            isActive: false,
+            canUninstall: true,
+            hasSettings: true
+        )
+
+        XCTAssertEqual(
+            FeatureManagementTableCellInspection.inlineActionButtonCountAfterConfiguring(
+                item: item,
+                mode: .surface(.featurePanel),
+                showsHandle: true
+            ),
+            2
+        )
+    }
+
     private func makeItem(
         id: String,
         isActive: Bool,
+        isVisible: Bool = true,
         canUninstall: Bool = false,
         hasSettings: Bool = false,
         capabilities: PluginHostCapabilities? = nil,
@@ -210,6 +265,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
         FeatureManagementTableItem(surfaceItem: makeSurfaceItem(
             id: id,
             isActive: isActive,
+            isVisible: isVisible,
             canUninstall: canUninstall,
             capabilities: capabilities,
             releaseChannel: releaseChannel
@@ -219,6 +275,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
     private func makeSurfaceItem(
         id: String,
         isActive: Bool = false,
+        isVisible: Bool = true,
         canUninstall: Bool = false,
         capabilities: PluginHostCapabilities? = nil,
         releaseChannel: String? = nil
@@ -230,6 +287,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
             iconName: "chart.bar.xaxis",
             iconTint: Color(nsColor: .systemGreen),
             capabilities: capabilities ?? self.capabilities(dashboard: true, featurePanel: true),
+            isVisible: isVisible,
             isActive: isActive,
             canUninstall: canUninstall,
             dashboardSpan: .oneByOne,

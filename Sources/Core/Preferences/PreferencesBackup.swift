@@ -127,20 +127,28 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
 
 struct PluginDisplayPreferencesBackup: Codable, Equatable, Sendable {
     let orderedPluginIDs: [String]
+    /// Compatibility projection for app versions that only understood global
+    /// visibility. New imports prefer the two per-surface collections below.
     let hiddenPluginIDs: [String]
     let dashboardOrderedPluginIDs: [String]?
     let featurePanelOrderedPluginIDs: [String]?
+    let dashboardHiddenPluginIDs: [String]?
+    let featurePanelHiddenPluginIDs: [String]?
 
     init(
         orderedPluginIDs: [String],
         hiddenPluginIDs: [String],
         dashboardOrderedPluginIDs: [String]? = nil,
-        featurePanelOrderedPluginIDs: [String]? = nil
+        featurePanelOrderedPluginIDs: [String]? = nil,
+        dashboardHiddenPluginIDs: [String]? = nil,
+        featurePanelHiddenPluginIDs: [String]? = nil
     ) {
         self.orderedPluginIDs = orderedPluginIDs
         self.hiddenPluginIDs = hiddenPluginIDs
         self.dashboardOrderedPluginIDs = dashboardOrderedPluginIDs
         self.featurePanelOrderedPluginIDs = featurePanelOrderedPluginIDs
+        self.dashboardHiddenPluginIDs = dashboardHiddenPluginIDs
+        self.featurePanelHiddenPluginIDs = featurePanelHiddenPluginIDs
     }
 }
 
@@ -165,6 +173,8 @@ struct PreferencesImportPreview: Equatable {
             .union(backup.pluginDisplay.hiddenPluginIDs)
             .union(backup.pluginDisplay.dashboardOrderedPluginIDs ?? [])
             .union(backup.pluginDisplay.featurePanelOrderedPluginIDs ?? [])
+            .union(backup.pluginDisplay.dashboardHiddenPluginIDs ?? [])
+            .union(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? [])
             .union(backup.pluginPreferences.keys)
         let missingPluginIDs = backedUpPluginIDs.subtracting(availablePluginIDs)
         let managementItemsByID = Dictionary(

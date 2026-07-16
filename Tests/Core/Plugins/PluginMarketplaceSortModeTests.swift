@@ -68,10 +68,6 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
             PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "h", title: "H", state: .installed)),
             3
         )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "i", title: "I", state: .legacyDisabled)),
-            2
-        )
     }
 
     func testInstalledFirstSortRankPrioritizesUpdatesAndIssues() {
@@ -108,8 +104,8 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
                 "available-a",
                 "available-b",
                 "update-a",
-                "installed-a",
                 "failed",
+                "installed-a",
                 "installed-z"
             ]
         )
@@ -122,8 +118,8 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
             sortedIDs,
             [
                 "update-a",
-                "installed-a",
                 "failed",
+                "installed-a",
                 "installed-z",
                 "available-a",
                 "available-b"
@@ -295,7 +291,7 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
             ),
             makeItem(id: "available-a", title: "Alpha", state: .available),
             makeItem(id: "failed", title: "Failed", state: .failed("boom")),
-            makeItem(id: "installed-a", title: "Alpha Installed", state: .legacyDisabled)
+            makeItem(id: "installed-a", title: "Alpha Installed", state: .installed)
         ]
     }
 

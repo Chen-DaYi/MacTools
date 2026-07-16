@@ -4,10 +4,6 @@ import MacToolsPluginKit
 struct PluginPackageRecord: Identifiable, Equatable {
     enum State: Equatable {
         case installed
-        /// A package disabled by an older MacTools version. This exists only
-        /// long enough for the user to activate or uninstall it during the
-        /// one-time migration review.
-        case legacyDisabled
         case incompatible(String)
         case failed(String)
     }
@@ -121,7 +117,7 @@ final class PluginPackageStore {
                             )
                         )
                     } else if fileManager.fileExists(atPath: bundleURL.path) {
-                        state = legacyDisabledPluginIDs.contains(manifest.id) ? .legacyDisabled : .installed
+                        state = .installed
                     } else {
                         state = .failed(AppL10n.pluginsFormat(
                             "plugin.error.store.bundleMissingFormat",
@@ -177,7 +173,6 @@ final class PluginPackageStore {
             .appendingPathComponent("\(manifest.id)-backup-\(UUID().uuidString)", isDirectory: true)
             .appendingPathExtension("mactoolsplugin")
         let hadExistingPackage = fileManager.fileExists(atPath: destinationURL.path)
-        let wasLegacyDisabled = legacyDisabledPluginIDs.contains(manifest.id)
 
         if hadExistingPackage {
             guard replaceExisting else {
@@ -219,11 +214,6 @@ final class PluginPackageStore {
             throw PluginPackageStoreError.installFailed(error.localizedDescription)
         }
 
-        // Updating a package awaiting migration review must not turn it back
-        // on. New installs and normal updates remain immediately active.
-        if !wasLegacyDisabled {
-            activateLegacyPlugin(manifest.id)
-        }
         clearPendingRestart(pluginID: manifest.id)
 
         guard let record = installedRecords().first(where: { $0.id == manifest.id }) else {
@@ -240,28 +230,18 @@ final class PluginPackageStore {
         try installPackage(from: sourceURL, replaceExisting: true)
     }
 
-    func legacyDisabledPackageIDs() -> Set<String> {
-        legacyDisabledPluginIDs
+    /// Reads the old global hidden marker so the host can migrate it into
+    /// Dashboard and Feature Panel visibility before packages load.
+    ///
+    /// The host clears this marker only after the display-preferences store has
+    /// durably accepted it. That preserves the migration across a temporary
+    /// downgrade or a future preferences payload this version cannot decode.
+    func legacyHiddenPluginIDs() -> Set<String> {
+        Set(userDefaults.stringArray(forKey: DefaultsKey.legacyDisabledPluginIDs) ?? [])
     }
 
-    /// Converts previously global-disabled packages into the temporary
-    /// migration state before the dynamic loader has a chance to activate
-    /// their code.
-    func markLegacyDisabledPlugins(_ pluginIDs: Set<String>) {
-        guard !pluginIDs.isEmpty else {
-            return
-        }
-
-        var legacyIDs = legacyDisabledPluginIDs
-        legacyIDs.formUnion(pluginIDs)
-        legacyDisabledPluginIDs = legacyIDs
-    }
-
-    func activateLegacyPlugin(_ pluginID: String) {
-        var ids = legacyDisabledPluginIDs
-        ids.remove(pluginID)
-        legacyDisabledPluginIDs = ids
-        clearPendingRestart(pluginID: pluginID)
+    func clearLegacyHiddenPluginIDs() {
+        userDefaults.removeObject(forKey: DefaultsKey.legacyDisabledPluginIDs)
     }
 
     func markRequiresRestartToFullyUnload(pluginID: String) {
@@ -270,7 +250,6 @@ final class PluginPackageStore {
 
     func uninstall(pluginID: String, removeData: Bool) throws {
         try removePackageFiles(pluginID: pluginID)
-        activateLegacyPlugin(pluginID)
         markPendingRestart(pluginID: pluginID)
 
         if removeData {
@@ -328,15 +307,6 @@ final class PluginPackageStore {
             temporaryDirectory
         ].forEach { url in
             try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
-        }
-    }
-
-    private var legacyDisabledPluginIDs: Set<String> {
-        get {
-            Set(userDefaults.stringArray(forKey: DefaultsKey.legacyDisabledPluginIDs) ?? [])
-        }
-        set {
-            userDefaults.set(Array(newValue).sorted(), forKey: DefaultsKey.legacyDisabledPluginIDs)
         }
     }
 

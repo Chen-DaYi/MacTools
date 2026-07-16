@@ -23,9 +23,6 @@ final class PluginDisplayPreferencesStore {
         var hiddenPluginIDs: Set<String> = []
     }
 
-    /// Preferences written by the previous layout implementation. Its global
-    /// disabled state is intentionally migrated into a one-time review queue;
-    /// it must never silently reactivate background work after an upgrade.
     private struct VersionTwoStoredPreferences: Codable, Equatable {
         static let version = 2
 
@@ -38,8 +35,23 @@ final class PluginDisplayPreferencesStore {
         var isFeaturePanelOrderInitialized = false
     }
 
+    /// The first independent-layout format temporarily held legacy-hidden
+    /// plugins for a user-facing review. Version four maps those IDs to the
+    /// two surface visibility preferences instead.
+    private struct VersionThreeStoredPreferences: Codable, Equatable {
+        static let version = 3
+
+        var version: Int = Self.version
+        var generalPluginOrder: [String] = []
+        var dashboardOrderedPluginIDs: [String] = []
+        var featurePanelOrderedPluginIDs: [String] = []
+        var isDashboardOrderInitialized = false
+        var isFeaturePanelOrderInitialized = false
+        var pendingLegacyDisabledPluginIDs: Set<String> = []
+    }
+
     private struct StoredPreferences: Codable, Equatable {
-        static let currentVersion = 3
+        static let currentVersion = 4
 
         var version = currentVersion
         // Retained only to seed separate surface orders for users upgrading
@@ -49,9 +61,13 @@ final class PluginDisplayPreferencesStore {
         var featurePanelOrderedPluginIDs: [String] = []
         var isDashboardOrderInitialized = false
         var isFeaturePanelOrderInitialized = false
-        // This is a migration safeguard, not a user-facing disabled state.
-        // Entries are resolved once by activating or uninstalling the plugin.
-        var pendingLegacyDisabledPluginIDs: Set<String> = []
+        var dashboardHiddenPluginIDs: Set<String> = []
+        var featurePanelHiddenPluginIDs: Set<String> = []
+        var isDashboardVisibilityInitialized = false
+        var isFeaturePanelVisibilityInitialized = false
+        // Retained only until each supported surface has migrated the legacy
+        // global checkbox into its own show/hide preference.
+        var legacyHiddenPluginIDs: Set<String> = []
     }
 
     private let userDefaults: UserDefaults
@@ -81,6 +97,31 @@ final class PluginDisplayPreferencesStore {
 
     func setLastPluginSettingsLandingPage(_ page: PluginSettingsLandingPage) {
         userDefaults.set(page.rawValue, forKey: DefaultsKey.lastPluginSettingsLandingPage)
+    }
+
+    /// Adds IDs that were hidden by the pre-layout-editor global checkbox.
+    ///
+    /// The host calls this before loading legacy dynamic packages, then each
+    /// surface consumes the IDs the first time it has enough capability data
+    /// to initialize its own visibility preference. Keeping this small
+    /// staging set avoids treating visibility as a plugin lifecycle state.
+    /// Returns `true` only when the staged IDs are durably persisted. Callers
+    /// must retain their source migration marker when this version deliberately
+    /// preserves a newer, unreadable preferences payload.
+    @discardableResult
+    func addLegacyHiddenPluginIDs(_ pluginIDs: Set<String>) -> Bool {
+        guard !pluginIDs.isEmpty else {
+            return true
+        }
+
+        var preferences = loadPreferences()
+        preferences.legacyHiddenPluginIDs.formUnion(pluginIDs)
+        if shouldPreserveStoredPayload {
+            cachedPreferences = preferences
+            return false
+        } else {
+            return persist(preferences)
+        }
     }
 
     // MARK: - Legacy shared-order compatibility
@@ -116,7 +157,7 @@ final class PluginDisplayPreferencesStore {
         defaultPluginIDs: [String]
     ) -> [String] {
         var preferences = loadPreferences()
-        initializeSurfaceOrderIfNeeded(
+        initializeSurfacePreferencesIfNeeded(
             surface,
             defaultPluginIDs: defaultPluginIDs,
             preferences: &preferences
@@ -128,13 +169,31 @@ final class PluginDisplayPreferencesStore {
         )
     }
 
+    func visiblePluginIDs(
+        for surface: PluginDisplaySurface,
+        defaultPluginIDs: [String]
+    ) -> [String] {
+        let orderedPluginIDs = orderedPluginIDs(for: surface, defaultPluginIDs: defaultPluginIDs)
+        let hiddenPluginIDs = hiddenPluginIDSet(for: surface, defaultPluginIDs: defaultPluginIDs)
+        return orderedPluginIDs.filter { !hiddenPluginIDs.contains($0) }
+    }
+
+    func hiddenPluginIDs(
+        for surface: PluginDisplaySurface,
+        defaultPluginIDs: [String]
+    ) -> [String] {
+        let orderedPluginIDs = orderedPluginIDs(for: surface, defaultPluginIDs: defaultPluginIDs)
+        let hiddenPluginIDs = hiddenPluginIDSet(for: surface, defaultPluginIDs: defaultPluginIDs)
+        return orderedPluginIDs.filter { hiddenPluginIDs.contains($0) }
+    }
+
     func setOrderedPluginIDs(
         _ orderedPluginIDs: [String],
         for surface: PluginDisplaySurface,
         defaultPluginIDs: [String]
     ) {
         var preferences = loadPreferences()
-        initializeSurfaceOrderIfNeeded(
+        initializeSurfacePreferencesIfNeeded(
             surface,
             defaultPluginIDs: defaultPluginIDs,
             preferences: &preferences,
@@ -146,6 +205,77 @@ final class PluginDisplayPreferencesStore {
             defaultPluginIDs: defaultPluginIDs
         )
         setStoredOrder(mergedOrder, for: surface, preferences: &preferences)
+        persist(preferences)
+    }
+
+    /// Reorders only the visible projection while keeping hidden IDs in their
+    /// saved slots. Re-showing a plugin therefore restores it to that slot.
+    func setVisiblePluginIDs(
+        _ visiblePluginIDs: [String],
+        for surface: PluginDisplaySurface,
+        defaultPluginIDs: [String]
+    ) {
+        var preferences = loadPreferences()
+        initializeSurfacePreferencesIfNeeded(
+            surface,
+            defaultPluginIDs: defaultPluginIDs,
+            preferences: &preferences,
+            persistChanges: false
+        )
+
+        let hiddenPluginIDs = hiddenPluginIDSet(for: surface, preferences: preferences)
+        let visibleDefaultPluginIDs = defaultPluginIDs.filter { !hiddenPluginIDs.contains($0) }
+        let mergedOrder = mergedStoredOrder(
+            requestedOrder: visiblePluginIDs,
+            storedOrder: storedOrder(for: surface, preferences: preferences),
+            replaceablePluginIDs: Set(visibleDefaultPluginIDs),
+            defaultPluginIDs: visibleDefaultPluginIDs
+        )
+        setStoredOrder(mergedOrder, for: surface, preferences: &preferences)
+        persist(preferences)
+    }
+
+    func setPluginVisible(
+        _ isVisible: Bool,
+        pluginID: String,
+        on surface: PluginDisplaySurface,
+        defaultPluginIDs: [String]
+    ) {
+        guard defaultPluginIDs.contains(pluginID) else {
+            return
+        }
+
+        var preferences = loadPreferences()
+        initializeSurfacePreferencesIfNeeded(
+            surface,
+            defaultPluginIDs: defaultPluginIDs,
+            preferences: &preferences,
+            persistChanges: false
+        )
+
+        var hiddenPluginIDs = hiddenPluginIDSet(for: surface, preferences: preferences)
+        if isVisible {
+            hiddenPluginIDs.remove(pluginID)
+        } else {
+            hiddenPluginIDs.insert(pluginID)
+        }
+        setHiddenPluginIDSet(hiddenPluginIDs, for: surface, preferences: &preferences)
+        persist(preferences)
+    }
+
+    func setHiddenPluginIDs(
+        _ hiddenPluginIDs: Set<String>,
+        for surface: PluginDisplaySurface,
+        defaultPluginIDs: [String]
+    ) {
+        var preferences = loadPreferences()
+        initializeSurfacePreferencesIfNeeded(
+            surface,
+            defaultPluginIDs: defaultPluginIDs,
+            preferences: &preferences,
+            persistChanges: false
+        )
+        setHiddenPluginIDSet(hiddenPluginIDs, for: surface, preferences: &preferences)
         persist(preferences)
     }
 
@@ -165,44 +295,9 @@ final class PluginDisplayPreferencesStore {
         preferences.generalPluginOrder.removeAll { $0 == pluginID }
         preferences.dashboardOrderedPluginIDs.removeAll { $0 == pluginID }
         preferences.featurePanelOrderedPluginIDs.removeAll { $0 == pluginID }
-        preferences.pendingLegacyDisabledPluginIDs.remove(pluginID)
-        persist(preferences)
-    }
-
-    // MARK: - One-time legacy disabled migration
-
-    /// Returns every unresolved legacy entry. Callers that can identify a
-    /// package before loading it use this to prevent an old global-disable
-    /// preference from briefly reactivating background work during launch.
-    func pendingLegacyDisabledPluginIDs() -> Set<String> {
-        loadPreferences().pendingLegacyDisabledPluginIDs
-    }
-
-    func pendingLegacyDisabledPluginIDs(availablePluginIDs: Set<String>) -> Set<String> {
-        pendingLegacyDisabledPluginIDs().intersection(availablePluginIDs)
-    }
-
-    func addPendingLegacyDisabledPluginIDs(_ pluginIDs: Set<String>) {
-        guard !pluginIDs.isEmpty else {
-            return
-        }
-
-        var preferences = loadPreferences()
-        let originalIDs = preferences.pendingLegacyDisabledPluginIDs
-        preferences.pendingLegacyDisabledPluginIDs.formUnion(pluginIDs)
-        guard preferences.pendingLegacyDisabledPluginIDs != originalIDs else {
-            return
-        }
-
-        persist(preferences)
-    }
-
-    func resolvePendingLegacyDisabledPlugin(_ pluginID: String) {
-        var preferences = loadPreferences()
-        guard preferences.pendingLegacyDisabledPluginIDs.remove(pluginID) != nil else {
-            return
-        }
-
+        preferences.dashboardHiddenPluginIDs.remove(pluginID)
+        preferences.featurePanelHiddenPluginIDs.remove(pluginID)
+        preferences.legacyHiddenPluginIDs.remove(pluginID)
         persist(preferences)
     }
 
@@ -211,18 +306,19 @@ final class PluginDisplayPreferencesStore {
         dashboardDefaultPluginIDs: [String] = [],
         featurePanelDefaultPluginIDs: [String] = []
     ) -> PluginDisplayPreferencesBackup {
-        var preferences = loadPreferences()
-        initializeSurfaceOrderIfNeeded(
-            .dashboard,
-            defaultPluginIDs: dashboardDefaultPluginIDs,
-            preferences: &preferences,
-            persistChanges: false
+        migrateLegacyHiddenPluginIDs(
+            dashboardDefaultPluginIDs: dashboardDefaultPluginIDs,
+            featurePanelDefaultPluginIDs: featurePanelDefaultPluginIDs
         )
-        initializeSurfaceOrderIfNeeded(
-            .featurePanel,
-            defaultPluginIDs: featurePanelDefaultPluginIDs,
-            preferences: &preferences,
-            persistChanges: false
+        let preferences = loadPreferences()
+
+        let dashboardOrderedPluginIDs = normalizedVisibleOrder(
+            storedOrder(for: .dashboard, preferences: preferences),
+            defaultPluginIDs: dashboardDefaultPluginIDs
+        )
+        let featurePanelOrderedPluginIDs = normalizedVisibleOrder(
+            storedOrder(for: .featurePanel, preferences: preferences),
+            defaultPluginIDs: featurePanelDefaultPluginIDs
         )
 
         return PluginDisplayPreferencesBackup(
@@ -230,21 +326,85 @@ final class PluginDisplayPreferencesStore {
                 preferences.generalPluginOrder,
                 defaultPluginIDs: defaultPluginIDs
             ),
-            // Keep the deprecated key in newly exported backups so older app
-            // versions can decode them. The current model has no hidden state.
-            hiddenPluginIDs: [],
-            dashboardOrderedPluginIDs: normalizedVisibleOrder(
-                storedOrder(for: .dashboard, preferences: preferences),
-                defaultPluginIDs: dashboardDefaultPluginIDs
-            ),
-            featurePanelOrderedPluginIDs: normalizedVisibleOrder(
-                storedOrder(for: .featurePanel, preferences: preferences),
-                defaultPluginIDs: featurePanelDefaultPluginIDs
-            )
+            // Older app versions only understand global visibility. A union
+            // is a conservative compatibility projection of the independent
+            // surface preferences.
+            hiddenPluginIDs: Array(
+                preferences.dashboardHiddenPluginIDs
+                    .union(preferences.featurePanelHiddenPluginIDs)
+                    .union(preferences.legacyHiddenPluginIDs)
+            ).sorted(),
+            dashboardOrderedPluginIDs: dashboardOrderedPluginIDs,
+            featurePanelOrderedPluginIDs: featurePanelOrderedPluginIDs,
+            dashboardHiddenPluginIDs: Array(
+                preferences.dashboardHiddenPluginIDs.union(preferences.legacyHiddenPluginIDs)
+            ).sorted(),
+            featurePanelHiddenPluginIDs: Array(
+                preferences.featurePanelHiddenPluginIDs.union(preferences.legacyHiddenPluginIDs)
+            ).sorted()
         )
     }
 
     // MARK: - Persistence and migration
+
+    /// Maps the legacy global checkbox to every surface a currently available
+    /// plugin supports, then retains only IDs that cannot yet be resolved.
+    ///
+    /// This is intentionally coordinated by the host with both surface
+    /// capability lists. A plugin package can be temporarily incompatible or
+    /// otherwise unavailable during an upgrade; removing its legacy ID before
+    /// it appears in either list would make its former hidden state unrecoverable.
+    func migrateLegacyHiddenPluginIDs(
+        dashboardDefaultPluginIDs: [String],
+        featurePanelDefaultPluginIDs: [String]
+    ) {
+        guard !dashboardDefaultPluginIDs.isEmpty || !featurePanelDefaultPluginIDs.isEmpty else {
+            return
+        }
+
+        var preferences = loadPreferences()
+        let originalPreferences = preferences
+        initializeSurfacePreferencesIfNeeded(
+            .dashboard,
+            defaultPluginIDs: dashboardDefaultPluginIDs,
+            preferences: &preferences,
+            persistChanges: false
+        )
+        initializeSurfacePreferencesIfNeeded(
+            .featurePanel,
+            defaultPluginIDs: featurePanelDefaultPluginIDs,
+            preferences: &preferences,
+            persistChanges: false
+        )
+
+        let legacyHiddenPluginIDs = preferences.legacyHiddenPluginIDs
+        let dashboardLegacyHiddenPluginIDs = legacyHiddenPluginIDs.intersection(dashboardDefaultPluginIDs)
+        let featurePanelLegacyHiddenPluginIDs = legacyHiddenPluginIDs.intersection(featurePanelDefaultPluginIDs)
+
+        if !dashboardLegacyHiddenPluginIDs.isEmpty {
+            preferences.dashboardHiddenPluginIDs.formUnion(dashboardLegacyHiddenPluginIDs)
+        }
+        if !featurePanelLegacyHiddenPluginIDs.isEmpty {
+            preferences.featurePanelHiddenPluginIDs.formUnion(featurePanelLegacyHiddenPluginIDs)
+        }
+
+        // Remove only IDs that have actually been mapped to at least one
+        // known surface. Unresolved IDs stay staged for a future rebuild when
+        // their package becomes loadable again.
+        preferences.legacyHiddenPluginIDs.subtract(
+            dashboardLegacyHiddenPluginIDs.union(featurePanelLegacyHiddenPluginIDs)
+        )
+
+        guard preferences != originalPreferences else {
+            return
+        }
+
+        if shouldPreserveStoredPayload {
+            cachedPreferences = preferences
+        } else {
+            _ = persist(preferences)
+        }
+    }
 
     private func loadPreferences() -> StoredPreferences {
         if let cachedPreferences {
@@ -273,7 +433,21 @@ final class PluginDisplayPreferencesStore {
                 featurePanelOrderedPluginIDs: deduplicated(versionTwoPreferences.featurePanelOrderedPluginIDs),
                 isDashboardOrderInitialized: versionTwoPreferences.isDashboardOrderInitialized,
                 isFeaturePanelOrderInitialized: versionTwoPreferences.isFeaturePanelOrderInitialized,
-                pendingLegacyDisabledPluginIDs: versionTwoPreferences.globallyHiddenPluginIDs
+                legacyHiddenPluginIDs: versionTwoPreferences.globallyHiddenPluginIDs
+            )
+            persist(migratedPreferences)
+            return migratedPreferences
+        }
+
+        if let versionThreePreferences = try? decoder.decode(VersionThreeStoredPreferences.self, from: data),
+           versionThreePreferences.version == VersionThreeStoredPreferences.version {
+            let migratedPreferences = StoredPreferences(
+                generalPluginOrder: deduplicated(versionThreePreferences.generalPluginOrder),
+                dashboardOrderedPluginIDs: deduplicated(versionThreePreferences.dashboardOrderedPluginIDs),
+                featurePanelOrderedPluginIDs: deduplicated(versionThreePreferences.featurePanelOrderedPluginIDs),
+                isDashboardOrderInitialized: versionThreePreferences.isDashboardOrderInitialized,
+                isFeaturePanelOrderInitialized: versionThreePreferences.isFeaturePanelOrderInitialized,
+                legacyHiddenPluginIDs: versionThreePreferences.pendingLegacyDisabledPluginIDs
             )
             persist(migratedPreferences)
             return migratedPreferences
@@ -282,7 +456,7 @@ final class PluginDisplayPreferencesStore {
         if let legacyPreferences = try? decoder.decode(LegacyStoredPreferences.self, from: data) {
             let migratedPreferences = StoredPreferences(
                 generalPluginOrder: deduplicated(legacyPreferences.orderedPluginIDs),
-                pendingLegacyDisabledPluginIDs: legacyPreferences.hiddenPluginIDs
+                legacyHiddenPluginIDs: legacyPreferences.hiddenPluginIDs
             )
             persist(migratedPreferences)
             return migratedPreferences
@@ -298,54 +472,109 @@ final class PluginDisplayPreferencesStore {
         return preferences
     }
 
-    private func persist(_ preferences: StoredPreferences) {
+    @discardableResult
+    private func persist(_ preferences: StoredPreferences) -> Bool {
         guard let data = try? encoder.encode(preferences) else {
-            return
+            return false
         }
 
         userDefaults.set(data, forKey: DefaultsKey.storage)
         cachedPreferences = preferences
         shouldPreserveStoredPayload = false
+        return true
     }
 
-    private func initializeSurfaceOrderIfNeeded(
+    private func initializeSurfacePreferencesIfNeeded(
         _ surface: PluginDisplaySurface,
         defaultPluginIDs: [String],
         preferences: inout StoredPreferences,
         persistChanges: Bool = true
     ) {
-        let isInitialized: Bool
+        let isOrderInitialized: Bool
+        let isVisibilityInitialized: Bool
         switch surface {
         case .dashboard:
-            isInitialized = preferences.isDashboardOrderInitialized
+            isOrderInitialized = preferences.isDashboardOrderInitialized
+            isVisibilityInitialized = preferences.isDashboardVisibilityInitialized
         case .featurePanel:
-            isInitialized = preferences.isFeaturePanelOrderInitialized
+            isOrderInitialized = preferences.isFeaturePanelOrderInitialized
+            isVisibilityInitialized = preferences.isFeaturePanelVisibilityInitialized
         }
 
         // Dynamic plugins may intentionally load after the host's first
         // rebuild. An empty list does not contain enough capability data to
         // complete a legacy migration, so defer initialization until it does.
-        guard !isInitialized, !defaultPluginIDs.isEmpty else {
+        guard (!isOrderInitialized || !isVisibilityInitialized), !defaultPluginIDs.isEmpty else {
             return
         }
 
-        let seededOrder = normalizedVisibleOrder(
-            preferences.generalPluginOrder,
-            defaultPluginIDs: defaultPluginIDs
-        )
-        setStoredOrder(seededOrder, for: surface, preferences: &preferences)
+        if !isOrderInitialized {
+            let seededOrder = normalizedVisibleOrder(
+                preferences.generalPluginOrder,
+                defaultPluginIDs: defaultPluginIDs
+            )
+            setStoredOrder(seededOrder, for: surface, preferences: &preferences)
+        }
+
+        if !isVisibilityInitialized {
+            setHiddenPluginIDSet(
+                preferences.legacyHiddenPluginIDs.intersection(defaultPluginIDs),
+                for: surface,
+                preferences: &preferences
+            )
+        }
 
         switch surface {
         case .dashboard:
             preferences.isDashboardOrderInitialized = true
+            preferences.isDashboardVisibilityInitialized = true
         case .featurePanel:
             preferences.isFeaturePanelOrderInitialized = true
+            preferences.isFeaturePanelVisibilityInitialized = true
         }
 
         if persistChanges, shouldPreserveStoredPayload {
             cachedPreferences = preferences
         } else if persistChanges {
-            persist(preferences)
+            _ = persist(preferences)
+        }
+    }
+
+    private func hiddenPluginIDSet(
+        for surface: PluginDisplaySurface,
+        defaultPluginIDs: [String]
+    ) -> Set<String> {
+        var preferences = loadPreferences()
+        initializeSurfacePreferencesIfNeeded(
+            surface,
+            defaultPluginIDs: defaultPluginIDs,
+            preferences: &preferences
+        )
+        return hiddenPluginIDSet(for: surface, preferences: preferences)
+    }
+
+    private func hiddenPluginIDSet(
+        for surface: PluginDisplaySurface,
+        preferences: StoredPreferences
+    ) -> Set<String> {
+        switch surface {
+        case .dashboard:
+            preferences.dashboardHiddenPluginIDs
+        case .featurePanel:
+            preferences.featurePanelHiddenPluginIDs
+        }
+    }
+
+    private func setHiddenPluginIDSet(
+        _ pluginIDs: Set<String>,
+        for surface: PluginDisplaySurface,
+        preferences: inout StoredPreferences
+    ) {
+        switch surface {
+        case .dashboard:
+            preferences.dashboardHiddenPluginIDs = pluginIDs
+        case .featurePanel:
+            preferences.featurePanelHiddenPluginIDs = pluginIDs
         }
     }
 
@@ -404,9 +633,10 @@ final class PluginDisplayPreferencesStore {
     private func mergedStoredOrder(
         requestedOrder: [String],
         storedOrder: [String],
+        replaceablePluginIDs: Set<String>? = nil,
         defaultPluginIDs: [String]
     ) -> [String] {
-        let availablePluginIDs = Set(defaultPluginIDs)
+        let availablePluginIDs = replaceablePluginIDs ?? Set(defaultPluginIDs)
         let normalizedRequestedOrder = normalizedVisibleOrder(
             requestedOrder,
             defaultPluginIDs: defaultPluginIDs

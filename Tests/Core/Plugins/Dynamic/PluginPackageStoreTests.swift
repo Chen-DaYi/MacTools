@@ -37,29 +37,20 @@ final class PluginPackageStoreTests: XCTestCase {
         XCTAssertEqual(store.installedRecords().first?.state, .installed)
     }
 
-    func testLegacyDisabledPackageIsRetainedForMigrationReview() throws {
+    func testReadsLegacyHiddenMarkerUntilMigrationAcknowledgesIt() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
         _ = try store.installPackage(from: sourceURL)
 
         markLegacyDisabled("com.example.demo")
 
-        let record = try XCTUnwrap(store.installedRecords().first)
-        XCTAssertEqual(record.state, .legacyDisabled)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: record.packageURL.path))
-    }
+        XCTAssertEqual(store.legacyHiddenPluginIDs(), Set(["com.example.demo"]))
+        XCTAssertEqual(store.legacyHiddenPluginIDs(), Set(["com.example.demo"]))
+        XCTAssertEqual(store.installedRecords().first?.state, .installed)
 
-    func testActivatingLegacyDisabledPackageRestoresInstalledState() throws {
-        let sourceURL = try makePackage(id: "com.example.demo")
-        let store = makeStore()
-        _ = try store.installPackage(from: sourceURL)
+        store.clearLegacyHiddenPluginIDs()
 
-        markLegacyDisabled("com.example.demo")
-        _ = store.installedRecords()
-        store.activateLegacyPlugin("com.example.demo")
-
-        let record = try XCTUnwrap(store.installedRecords().first)
-        XCTAssertEqual(record.state, .installed)
+        XCTAssertTrue(store.legacyHiddenPluginIDs().isEmpty)
     }
 
     func testInstallRejectsPreviousPluginKitPackage() throws {
@@ -131,18 +122,17 @@ final class PluginPackageStoreTests: XCTestCase {
         XCTAssertEqual(record.state, .installed)
     }
 
-    func testUpdateKeepsLegacyDisabledPluginHeldForMigrationReview() throws {
+    func testUpdateClearsNeitherPackageNorVisibilityMigrationMarker() throws {
         let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
         let updateURL = try makePackage(id: "com.example.demo", version: "2.0.0")
         let store = makeStore()
         _ = try store.installPackage(from: sourceURL)
-        markLegacyDisabled("com.example.demo")
 
         _ = try store.updatePackage(from: updateURL)
 
         let record = try XCTUnwrap(store.installedRecords().first)
         XCTAssertEqual(record.manifest.version, "2.0.0")
-        XCTAssertEqual(record.state, .legacyDisabled)
+        XCTAssertEqual(record.state, .installed)
     }
 
     func testDefaultRootDirectoryUsesCurrentApplicationSupportScope() {

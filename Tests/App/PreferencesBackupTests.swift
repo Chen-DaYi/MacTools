@@ -244,11 +244,15 @@ final class PreferencesBackupTests: XCTestCase {
         )
         sourceHost.movePlugin(id: "third", toOffset: 0, on: .dashboard)
         sourceHost.movePlugin(id: "second", toOffset: 0, on: .featurePanel)
+        sourceHost.setPluginVisible(false, id: "first", on: .dashboard)
+        sourceHost.setPluginVisible(false, id: "third", on: .featurePanel)
 
         let backup = sourceHost.makePreferencesBackup()
 
         XCTAssertEqual(backup.pluginDisplay.dashboardOrderedPluginIDs, ["third", "first", "second"])
         XCTAssertEqual(backup.pluginDisplay.featurePanelOrderedPluginIDs, ["second", "first", "third"])
+        XCTAssertEqual(backup.pluginDisplay.dashboardHiddenPluginIDs, ["first"])
+        XCTAssertEqual(backup.pluginDisplay.featurePanelHiddenPluginIDs, ["third"])
 
         let targetDefaults = makeDefaults()
         let targetHost = makeHost(
@@ -262,10 +266,12 @@ final class PreferencesBackupTests: XCTestCase {
 
         _ = try targetHost.importPreferences(backup)
 
-        XCTAssertEqual(targetHost.dashboardLayoutItems.map(\.id), ["third", "first", "second"])
-        XCTAssertEqual(targetHost.componentItems.map(\.id), ["third", "first", "second"])
-        XCTAssertEqual(targetHost.featurePanelLayoutItems.map(\.id), ["second", "first", "third"])
-        XCTAssertEqual(targetHost.panelItems.map(\.id), ["second", "first", "third"])
+        XCTAssertEqual(targetHost.dashboardLayoutItems.map(\.id), ["third", "second"])
+        XCTAssertEqual(targetHost.dashboardHiddenLayoutItems.map(\.id), ["first"])
+        XCTAssertEqual(targetHost.componentItems.map(\.id), ["third", "second"])
+        XCTAssertEqual(targetHost.featurePanelLayoutItems.map(\.id), ["second", "first"])
+        XCTAssertEqual(targetHost.featurePanelHiddenLayoutItems.map(\.id), ["third"])
+        XCTAssertEqual(targetHost.panelItems.map(\.id), ["second", "first"])
     }
 
     func testImportLegacyDisplayBackupSeedsSurfaceOrdersFromGeneralOrder() throws {
@@ -389,7 +395,7 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(host.makePreferencesBackup().shortcutCustomizations, existingCustomizations)
     }
 
-    func testImportHoldsSelectedCatalogPluginForLegacyDisabledMigrationReview() async throws {
+    func testImportMapsLegacyGlobalHiddenPreferenceToSurfaceVisibility() async throws {
         let temporaryRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("PreferencesBackupInstallTests-\(UUID().uuidString)", isDirectory: true)
         let suiteName = "PreferencesBackupInstallTests-\(UUID().uuidString)"
@@ -448,10 +454,10 @@ final class PreferencesBackupTests: XCTestCase {
 
         XCTAssertEqual(result.installedPluginIDs, ["installable"])
         XCTAssertTrue(result.pluginInstallationFailures.isEmpty)
-        XCTAssertFalse(host.featureManagementItems.contains(where: { $0.id == "installable" }))
-        XCTAssertEqual(host.pendingLegacyDisabledPluginIDs, Set(["installable"]))
-        XCTAssertEqual(dynamicManager.pluginManagementItems.first(where: { $0.id == "installable" })?.state, .legacyDisabled)
-        XCTAssertTrue(loader.receivedRecordIDBatches.isEmpty)
+        XCTAssertEqual(host.featurePanelHiddenLayoutItems.map(\.id), ["installable"])
+        XCTAssertFalse(host.panelItems.contains(where: { $0.id == "installable" }))
+        XCTAssertEqual(dynamicManager.pluginManagementItems.first(where: { $0.id == "installable" })?.state, .installed)
+        XCTAssertEqual(loader.receivedRecordIDBatches, [["installable"]])
     }
 
     func testDecodeRejectsUnsupportedFormatVersion() throws {

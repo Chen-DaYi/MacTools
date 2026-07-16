@@ -18,34 +18,34 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
 
     private let pluginManagementLocalizationKeys = [
         "plugin.management.active",
-        "plugin.management.moreActions",
-        "plugin.management.moreActionsForPlugin",
         "plugin.management.uninstall.confirmationMessage",
         "plugin.management.uninstall.confirmationTitle",
+        "plugin.management.uninstall.confirmationPausedNotice",
+        "plugin.management.uninstall.pauseConfirmation",
+        "plugin.management.uninstall.resumeConfirmation",
         "plugin.management.viewMarketplace",
         "plugin.management.openSettings",
         "plugin.management.openSettingsForPlugin",
+        "plugin.management.hideFromDashboardFormat",
+        "plugin.management.hideFromFeaturePanelFormat",
+        "plugin.management.showInFeaturePanelFormat",
+        "plugin.management.showOnDashboardFormat",
         "plugin.capability.both",
         "plugin.capability.dashboard",
         "plugin.capability.featurePanel",
         "plugin.capability.settingsOnly",
         "plugin.capability.unknown",
-        "plugin.detail.requiresReview",
-        "plugin.migration.legacyDisabled.description",
-        "plugin.migration.legacyDisabled.keepInstalled",
-        "plugin.migration.legacyDisabled.title",
-        "plugin.migration.builtInRestored.description",
-        "plugin.migration.builtInRestored.title",
-        "plugin.status.requiresReview",
     ]
 
     private let pluginLayoutSettingsLocalizationKeys = [
         "plugins.dashboard.description",
         "plugins.dashboard.empty.description",
         "plugins.dashboard.empty.title",
+        "plugins.dashboard.hiddenSectionFormat",
         "plugins.featurePanel.description",
         "plugins.featurePanel.empty.description",
         "plugins.featurePanel.empty.title",
+        "plugins.featurePanel.hiddenSectionFormat",
     ]
 
     func testPluginStaticLocalizationKeysCoverAllSupportedLanguages() throws {
