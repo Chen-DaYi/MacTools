@@ -314,12 +314,12 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
     }
 
-    func testUnknownFutureVersionWithLegacyKeysIsNotMigratedOrRewritten() throws {
+    func testUnknownFutureVersionUsesLegacyProjectionWithoutRewritingPayload() throws {
         let futureData = try JSONEncoder().encode(
             FuturePreferencesWithLegacyKeys(
                 version: 99,
-                orderedPluginIDs: ["future"],
-                hiddenPluginIDs: ["hidden"],
+                orderedPluginIDs: ["status", "calendar"],
+                hiddenPluginIDs: ["status"],
                 futureOnlyValue: "preserve-me"
             )
         )
@@ -327,7 +327,11 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
 
         XCTAssertEqual(
             store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "status"]),
-            ["calendar", "status"]
+            ["status", "calendar"]
+        )
+        XCTAssertEqual(
+            store.hiddenPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "status"]),
+            ["status"]
         )
         XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
     }

@@ -32,7 +32,7 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling {
 
     // MARK: Metadata
 
@@ -59,6 +59,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let monitoringIdleInterval: Duration
 
     private var isExpanded = false
+    private var isPrimaryPanelVisible = false
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
     private var requiresAutoRestore = false
@@ -111,6 +112,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func deactivate(reason: PluginDeactivationReason) {
         unregisterSleepWakeObservers()
         stopMonitoring()
+        isPrimaryPanelVisible = false
         if reason.requiresStateCleanup {
             restoreAutomaticControlIfNeeded(reason: String(describing: reason))
         }
@@ -191,6 +193,26 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
 
+    // MARK: - PluginPanelSurfaceLifecycleHandling
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .primary, !isPrimaryPanelVisible else {
+            return
+        }
+
+        isPrimaryPanelVisible = true
+        restartMonitoringIfRunning()
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .primary, isPrimaryPanelVisible else {
+            return
+        }
+
+        isPrimaryPanelVisible = false
+        restartMonitoringIfRunning()
+    }
+
     // MARK: - Actions
 
     private func handleInvokeAction(_ controlID: String) {
@@ -254,7 +276,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private var currentMonitoringInterval: Duration {
-        if isExpanded {
+        if isPrimaryPanelVisible && isExpanded {
             return monitoringActiveInterval
         }
         return monitoringIdleInterval

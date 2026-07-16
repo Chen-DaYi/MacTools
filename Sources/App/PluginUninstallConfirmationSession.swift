@@ -84,7 +84,6 @@ struct PluginUninstallConfirmationSheet: View {
                     onConfirm(confirmation)
                 }
                 .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
             }
         }
         .padding(PluginSettingsTheme.Spacing.pagePadding)

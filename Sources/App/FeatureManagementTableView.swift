@@ -627,6 +627,8 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private var hasSettings = false
     private var canUninstall = false
     private var isVisible = true
+    private var pluginTitle = ""
+    private var mode: FeatureManagementTableMode?
     private var iconTintColor = NSColor.controlAccentColor
 
     override init(frame frameRect: NSRect) {
@@ -657,6 +659,8 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         hasSettings = item.hasSettings
         canUninstall = item.canUninstall
         isVisible = item.isVisible
+        pluginTitle = item.title
+        self.mode = mode
 
         titleLabel.stringValue = item.title
         configureReleaseChannelBadge(item.releaseChannel)
@@ -669,7 +673,11 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         iconImageView.contentTintColor = iconTintColor
         setIconActionHovered(false)
         activeDotView.isHidden = !item.isActive
-        configureVisibilityAction(item: item, mode: mode)
+        configureVisibilityAction(
+            pluginTitle: item.title,
+            isVisible: item.isVisible,
+            mode: mode
+        )
         configureActions()
         handleImageView.isHidden = !showsHandle
         containerView.alphaValue = 1
@@ -822,17 +830,22 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     }
 
     private func configureVisibilityAction(
-        item: FeatureManagementTableItem,
+        pluginTitle: String,
+        isVisible: Bool,
         mode: FeatureManagementTableMode
     ) {
-        let title = visibilityActionTitle(for: item, mode: mode)
+        let title = visibilityActionTitle(
+            pluginTitle: pluginTitle,
+            isVisible: isVisible,
+            mode: mode
+        )
         visibilityButton.image = NSImage(
-            systemSymbolName: FeatureManagementVisibilityPresentation.symbolName(isVisible: item.isVisible),
+            systemSymbolName: FeatureManagementVisibilityPresentation.symbolName(isVisible: isVisible),
             accessibilityDescription: title
         )
-        visibilityButton.contentTintColor = FeatureManagementVisibilityPresentation.tintColor(isVisible: item.isVisible)
+        visibilityButton.contentTintColor = FeatureManagementVisibilityPresentation.tintColor(isVisible: isVisible)
         visibilityButton.toolTip = title
-        visibilityButton.setAccessibilityLabel(title)
+        visibilityButton.setAccessibilityLabel(pluginTitle)
         visibilityButton.setAccessibilityHelp(title)
     }
 
@@ -843,13 +856,15 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
     @objc
     private func handleVisibilityAction(_ sender: NSButton) {
+        guard let mode else {
+            return
+        }
+
         let nextValue = FeatureManagementVisibilityToggleState.nextValue(currentValue: &isVisible)
-        visibilityButton.image = NSImage(
-            systemSymbolName: FeatureManagementVisibilityPresentation.symbolName(isVisible: nextValue),
-            accessibilityDescription: nil
-        )
-        visibilityButton.contentTintColor = FeatureManagementVisibilityPresentation.tintColor(
-            isVisible: nextValue
+        configureVisibilityAction(
+            pluginTitle: pluginTitle,
+            isVisible: nextValue,
+            mode: mode
         )
         setVisibleHandler?(nextValue)
     }
@@ -935,33 +950,34 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     }
 
     private func visibilityActionTitle(
-        for item: FeatureManagementTableItem,
+        pluginTitle: String,
+        isVisible: Bool,
         mode: FeatureManagementTableMode
     ) -> String {
-        switch (mode, item.isVisible) {
+        switch (mode, isVisible) {
         case (.surface(.dashboard), true):
             return AppL10n.pluginsFormat(
                 "plugin.management.hideFromDashboardFormat",
                 defaultValue: "从仪表盘隐藏%@",
-                item.title
+                pluginTitle
             )
         case (.surface(.dashboard), false):
             return AppL10n.pluginsFormat(
                 "plugin.management.showOnDashboardFormat",
                 defaultValue: "在仪表盘显示%@",
-                item.title
+                pluginTitle
             )
         case (.surface(.featurePanel), true):
             return AppL10n.pluginsFormat(
                 "plugin.management.hideFromFeaturePanelFormat",
                 defaultValue: "从功能面板隐藏%@",
-                item.title
+                pluginTitle
             )
         case (.surface(.featurePanel), false):
             return AppL10n.pluginsFormat(
                 "plugin.management.showInFeaturePanelFormat",
                 defaultValue: "在功能面板显示%@",
-                item.title
+                pluginTitle
             )
         }
     }

@@ -23,6 +23,11 @@ final class PluginDisplayPreferencesStore {
         var hiddenPluginIDs: Set<String> = []
     }
 
+    private struct LegacyCompatibilityProjection: Decodable {
+        var orderedPluginIDs: [String]?
+        var hiddenPluginIDs: Set<String>?
+    }
+
     private struct VersionTwoStoredPreferences: Codable, Equatable {
         static let version = 2
 
@@ -470,11 +475,18 @@ final class PluginDisplayPreferencesStore {
             return migratedPreferences
         }
 
-        // Preserve unknown or unreadable payloads instead of deleting them.
-        // This keeps downgrade paths non-destructive: an older app version can
-        // fall back to defaults without erasing preferences written by a newer
-        // schema.
-        let preferences = StoredPreferences()
+        // Preserve unknown or unreadable versioned payloads instead of
+        // deleting them. Newer schemas retain these legacy projection fields,
+        // so use them for a better read-only fallback while keeping the
+        // original payload byte-for-byte until the user explicitly edits it.
+        let compatibilityProjection = try? decoder.decode(
+            LegacyCompatibilityProjection.self,
+            from: data
+        )
+        let preferences = StoredPreferences(
+            generalPluginOrder: deduplicated(compatibilityProjection?.orderedPluginIDs ?? []),
+            legacyHiddenPluginIDs: compatibilityProjection?.hiddenPluginIDs ?? []
+        )
         cachedPreferences = preferences
         shouldPreserveStoredPayload = true
         return preferences
