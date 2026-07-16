@@ -1035,7 +1035,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.panelItems.map(\.id), ["dynamic"])
     }
 
-    func testFutureDisplayPreferencesPayloadRetainsLegacyDynamicMarker() throws {
+    func testExplicitVisibilityEditAcknowledgesFuturePayloadLegacyMarkerAcrossRelaunch() throws {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         let rootDirectory = FileManager.default.temporaryDirectory
@@ -1057,22 +1057,25 @@ final class PluginHostComponentSupportTests: XCTestCase {
         )
         defaults.set(futurePreferences, forKey: "plugin.display.preferences")
         defaults.set(["dynamic"], forKey: "plugins.dynamic.disabledPluginIDs")
-        let manager = DynamicPluginManager(
-            packageStore: store,
-            pluginLoader: StubDynamicPluginLoader { records in
-                records.map { record in
-                    DynamicPluginLoadResult(
-                        record: record,
-                        plugins: [MockPrimaryPanelPlugin(id: record.id)],
-                        errorMessage: nil
-                    )
-                }
-            }
-        )
 
-        _ = PluginHost(
+        func makeManager() -> DynamicPluginManager {
+            DynamicPluginManager(
+                packageStore: store,
+                pluginLoader: StubDynamicPluginLoader { records in
+                    records.map { record in
+                        DynamicPluginLoadResult(
+                            record: record,
+                            plugins: [MockPrimaryPanelPlugin(id: record.id)],
+                            errorMessage: nil
+                        )
+                    }
+                }
+            )
+        }
+
+        let host = PluginHost(
             plugins: [],
-            dynamicPluginManager: manager,
+            dynamicPluginManager: makeManager(),
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
@@ -1081,6 +1084,95 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         XCTAssertEqual(defaults.stringArray(forKey: "plugins.dynamic.disabledPluginIDs"), ["dynamic"])
         XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futurePreferences)
+        XCTAssertEqual(host.featurePanelHiddenLayoutItems.map(\.id), ["dynamic"])
+
+        host.setPluginVisible(true, id: "dynamic", on: .featurePanel)
+
+        XCTAssertNil(defaults.stringArray(forKey: "plugins.dynamic.disabledPluginIDs"))
+        XCTAssertEqual(host.panelItems.map(\.id), ["dynamic"])
+
+        let relaunchedHost = PluginHost(
+            plugins: [],
+            dynamicPluginManager: makeManager(),
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+
+        XCTAssertEqual(relaunchedHost.panelItems.map(\.id), ["dynamic"])
+        XCTAssertTrue(relaunchedHost.featurePanelHiddenLayoutItems.isEmpty)
+    }
+
+    func testUninstallAcknowledgesFuturePayloadLegacyMarkerBeforeReinstall() throws {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        let store = PluginPackageStore(
+            rootDirectory: rootDirectory,
+            userDefaults: defaults,
+            hostVersion: "1.0.0"
+        )
+        _ = installTestPluginPackage(
+            id: "dynamic",
+            bundleName: "Dynamic.bundle",
+            capabilities: .init(primaryPanel: true),
+            store: store
+        )
+        let sourceURL = rootDirectory
+            .appendingPathComponent("Source", isDirectory: true)
+            .appendingPathComponent("dynamic", isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        defaults.set(
+            try JSONEncoder().encode(
+                FutureDisplayPreferencesFixture(version: 99, futureOnlyValue: "preserve-me")
+            ),
+            forKey: "plugin.display.preferences"
+        )
+        defaults.set(["dynamic"], forKey: "plugins.dynamic.disabledPluginIDs")
+
+        func makeManager() -> DynamicPluginManager {
+            DynamicPluginManager(
+                packageStore: store,
+                pluginLoader: StubDynamicPluginLoader { records in
+                    records.map { record in
+                        DynamicPluginLoadResult(
+                            record: record,
+                            plugins: [MockPrimaryPanelPlugin(id: record.id)],
+                            errorMessage: nil
+                        )
+                    }
+                }
+            )
+        }
+
+        let host = PluginHost(
+            plugins: [],
+            dynamicPluginManager: makeManager(),
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+
+        try host.uninstallDynamicPlugin(pluginID: "dynamic")
+
+        XCTAssertNil(defaults.stringArray(forKey: "plugins.dynamic.disabledPluginIDs"))
+
+        _ = try store.installPackage(from: sourceURL)
+        let relaunchedHost = PluginHost(
+            plugins: [],
+            dynamicPluginManager: makeManager(),
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+
+        XCTAssertEqual(relaunchedHost.panelItems.map(\.id), ["dynamic"])
+        XCTAssertTrue(relaunchedHost.featurePanelHiddenLayoutItems.isEmpty)
     }
 
     func testLegacyGlobalHiddenPreferenceHidesBuiltInPluginOnItsSupportedSurface() throws {

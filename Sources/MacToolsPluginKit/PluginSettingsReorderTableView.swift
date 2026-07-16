@@ -2,11 +2,11 @@ import AppKit
 
 /// Shared AppKit table configuration for settings lists that support drag-to-reorder.
 ///
-/// Both the host's Installed list and plugin settings use this so they present the same native
-/// drag preview and insertion-gap feedback.
+/// Host layout editors and plugin settings use this so they present the same
+/// native drag preview and insertion-gap feedback.
 public final class PluginSettingsReorderTableView: NSTableView {
     /// Lets a consumer restrict dragging to rows that are actually reorderable.
-    /// The Installed list keeps its default behavior; plugin lists can opt out for status rows.
+    /// Consumers can opt out for status rows or other non-reorderable sections.
     public var canBeginDrag: ((IndexSet) -> Bool)?
 
     public init(dragType: NSPasteboard.PasteboardType) {

@@ -90,6 +90,11 @@ final class PluginDisplayPreferencesStore {
     // replaces the unreadable payload with this version's schema.
     private var shouldPreserveStoredPayload = false
 
+    /// Runs once after the next complete preferences snapshot is written.
+    /// The host uses this to acknowledge an external legacy migration marker
+    /// only after the staged state has become durable in this store.
+    var onNextSuccessfulPersistence: (() -> Void)?
+
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
     }
@@ -516,6 +521,9 @@ final class PluginDisplayPreferencesStore {
         userDefaults.set(data, forKey: DefaultsKey.storage)
         cachedPreferences = preferences
         shouldPreserveStoredPayload = false
+        let completion = onNextSuccessfulPersistence
+        onNextSuccessfulPersistence = nil
+        completion?()
         return true
     }
 

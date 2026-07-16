@@ -341,6 +341,15 @@ final class PluginHost: ObservableObject {
             let legacyHiddenPluginIDs = dynamicPluginManager.legacyHiddenPluginIDs()
             if pluginDisplayPreferencesStore.addLegacyHiddenPluginIDs(legacyHiddenPluginIDs) {
                 dynamicPluginManager.clearLegacyHiddenPluginIDs()
+            } else {
+                // An unknown future display payload must remain untouched until
+                // the user makes an explicit edit. Acknowledge the package-store
+                // marker after that edit durably captures the staged state, so a
+                // later launch cannot reapply stale legacy visibility.
+                pluginDisplayPreferencesStore.onNextSuccessfulPersistence = {
+                    [weak dynamicPluginManager] in
+                    dynamicPluginManager?.clearLegacyHiddenPluginIDs()
+                }
             }
             if loadDynamicPluginsOnInit {
                 self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
