@@ -66,6 +66,9 @@ struct SettingsView: View {
     }
 }
 
+// AppWindowRouter hosts Settings in an AppKit NSWindow, so scene-level SwiftUI
+// Commands are unavailable. These nonvisual buttons register window-local key
+// equivalents while keeping the Settings layout and accessibility tree clean.
 struct SettingsDestinationShortcutButtons: View {
     @Binding var selection: SettingsDestination
 

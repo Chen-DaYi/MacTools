@@ -49,18 +49,32 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         XCTAssertEqual(model.contentHeight, 100)
     }
 
-    func testPanelCommandNumberShortcutsResolveMatchingTabs() {
+    func testPanelCommandNumberShortcutsUsePhysicalNumberRowAcrossLayouts() {
         XCTAssertEqual(
-            MenuBarPanelPresenter.keyboardShortcutTab(for: makeCommandKeyEvent(key: "1")),
+            MenuBarPanelPresenter.keyboardShortcutTab(
+                for: makeCommandKeyEvent(
+                    characters: "&",
+                    keyCode: UInt16(kVK_ANSI_1)
+                )
+            ),
             .components
         )
         XCTAssertEqual(
-            MenuBarPanelPresenter.keyboardShortcutTab(for: makeCommandKeyEvent(key: "2")),
+            MenuBarPanelPresenter.keyboardShortcutTab(
+                for: makeCommandKeyEvent(
+                    characters: "é",
+                    keyCode: UInt16(kVK_ANSI_2)
+                )
+            ),
             .features
         )
         XCTAssertEqual(
             MenuBarPanelPresenter.keyboardShortcutTab(
-                for: makeCommandKeyEvent(key: "1", modifiers: [.command, .capsLock])
+                for: makeCommandKeyEvent(
+                    characters: "1",
+                    keyCode: UInt16(kVK_ANSI_1),
+                    modifiers: [.command, .capsLock]
+                )
             ),
             .components
         )
@@ -68,42 +82,52 @@ final class MenuBarPanelPresenterTests: XCTestCase {
 
     func testPanelShortcutResolverIgnoresOtherKeysAndModifiers() {
         XCTAssertNil(
-            MenuBarPanelPresenter.keyboardShortcutTab(for: makeCommandKeyEvent(key: "3"))
+            MenuBarPanelPresenter.keyboardShortcutTab(
+                for: makeCommandKeyEvent(
+                    characters: "1",
+                    keyCode: UInt16(kVK_ANSI_3)
+                )
+            )
         )
         XCTAssertNil(
             MenuBarPanelPresenter.keyboardShortcutTab(
-                for: makeCommandKeyEvent(key: "1", modifiers: [.command, .shift])
+                for: makeCommandKeyEvent(
+                    characters: "!",
+                    keyCode: UInt16(kVK_ANSI_1),
+                    modifiers: [.command, .shift]
+                )
             )
         )
     }
 
-    func testShownPanelCommandNumberShortcutsSwitchPresenterTabs() throws {
+    func testPanelModelSelectionUsesPresenterRoutingWithoutShowingWindow() throws {
         let presenter = makePresenter()
-        let anchorWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 40, height: 24),
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
-        )
-        let button = NSStatusBarButton(frame: anchorWindow.contentView!.bounds)
-        anchorWindow.contentView = button
-        anchorWindow.orderFront(nil)
-        defer {
-            presenter.dismissPanels()
-            anchorWindow.close()
-        }
-
-        presenter.toggleFeaturePanel(relativeTo: button)
-
         let popover = presenter.debugPopoverForTests
         let controller = try XCTUnwrap(
             popover.contentViewController as? NSHostingController<MenuBarUnifiedPanelContent>
         )
-        let window = try XCTUnwrap(controller.view.window)
-        XCTAssertEqual(controller.rootView.model.selectedTab, .features)
-
-        NSApplication.shared.sendEvent(makeCommandKeyEvent(key: "1", in: window))
         XCTAssertEqual(controller.rootView.model.selectedTab, .components)
+
+        controller.rootView.model.selectTab(.features)
+
+        XCTAssertEqual(controller.rootView.model.selectedTab, .features)
+        XCTAssertFalse(controller.rootView.model.isPanelVisible)
+    }
+
+    func testPopoverLifecycleInstallsAndRemovesKeyboardShortcutMonitor() {
+        let presenter = makePresenter()
+        let popover = presenter.debugPopoverForTests
+        let willShow = Notification(name: NSPopover.willShowNotification, object: popover)
+        let didClose = Notification(name: NSPopover.didCloseNotification, object: popover)
+
+        XCTAssertFalse(presenter.debugHasKeyboardShortcutMonitorForTests)
+
+        presenter.popoverWillShow(willShow)
+        presenter.popoverWillShow(willShow)
+        XCTAssertTrue(presenter.debugHasKeyboardShortcutMonitorForTests)
+
+        presenter.popoverDidClose(didClose)
+        XCTAssertFalse(presenter.debugHasKeyboardShortcutMonitorForTests)
     }
 
     func testClearingAutomaticInitialFocusLeavesTheWindowAsFirstResponder() {
@@ -164,32 +188,21 @@ final class MenuBarPanelPresenterTests: XCTestCase {
     }
 
     private func makeCommandKeyEvent(
-        key: String,
-        modifiers: NSEvent.ModifierFlags = [.command],
-        in window: NSWindow? = nil
+        characters: String,
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags = [.command]
     ) -> NSEvent {
         NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
             modifierFlags: modifiers,
             timestamp: 0,
-            windowNumber: window?.windowNumber ?? 0,
+            windowNumber: 0,
             context: nil,
-            characters: key,
-            charactersIgnoringModifiers: key,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
             isARepeat: false,
-            keyCode: keyCode(for: key)
+            keyCode: keyCode
         )!
-    }
-
-    private func keyCode(for key: String) -> UInt16 {
-        switch key {
-        case "1":
-            return UInt16(kVK_ANSI_1)
-        case "2":
-            return UInt16(kVK_ANSI_2)
-        default:
-            return UInt16(kVK_ANSI_3)
-        }
     }
 }

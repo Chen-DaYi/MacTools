@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import SwiftUI
 import MacToolsPluginKit
@@ -101,9 +102,7 @@ final class MenuBarPanelPresenter: NSObject {
         if let appearanceObserver {
             NotificationCenter.default.removeObserver(appearanceObserver)
         }
-        if let keyboardShortcutMonitor {
-            NSEvent.removeMonitor(keyboardShortcutMonitor)
-        }
+        removeKeyboardShortcutMonitorIfNeeded()
         runtimeLocaleCancellable?.cancel()
     }
 
@@ -126,6 +125,10 @@ final class MenuBarPanelPresenter: NSObject {
     #if DEBUG
     var debugPopoverForTests: NSPopover {
         popover
+    }
+
+    var debugHasKeyboardShortcutMonitorForTests: Bool {
+        keyboardShortcutMonitor != nil
     }
     #endif
 
@@ -210,7 +213,6 @@ final class MenuBarPanelPresenter: NSObject {
     private func show(_ popover: NSPopover, relativeTo button: NSStatusBarButton) {
         applyCurrentAppearance()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        installKeyboardShortcutMonitorIfNeeded()
         applyCurrentAppearance()
         focus(popover)
     }
@@ -220,6 +222,8 @@ final class MenuBarPanelPresenter: NSObject {
             return
         }
 
+        // Host navigation wins before the responder chain so plugin content
+        // cannot shadow these two panel-level commands.
         keyboardShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
             [weak self] event in
             self?.handleKeyboardShortcut(event) ?? event
@@ -248,6 +252,7 @@ final class MenuBarPanelPresenter: NSObject {
         return nil
     }
 
+    // Internal so focused tests can validate layout-independent key matching.
     static func keyboardShortcutTab(for event: NSEvent) -> MenuBarPanelTab? {
         let shortcutModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
         let modifiers = event.modifierFlags.intersection(shortcutModifiers)
@@ -255,10 +260,10 @@ final class MenuBarPanelPresenter: NSObject {
             return nil
         }
 
-        switch event.charactersIgnoringModifiers {
-        case "1":
+        switch event.keyCode {
+        case UInt16(kVK_ANSI_1):
             return .components
-        case "2":
+        case UInt16(kVK_ANSI_2):
             return .features
         default:
             return nil
@@ -469,6 +474,14 @@ final class MenuBarPanelPresenter: NSObject {
 }
 
 extension MenuBarPanelPresenter: NSPopoverDelegate {
+    func popoverWillShow(_ notification: Notification) {
+        guard let openingPopover = notification.object as? NSPopover, openingPopover === popover else {
+            return
+        }
+
+        installKeyboardShortcutMonitorIfNeeded()
+    }
+
     func popoverDidClose(_ notification: Notification) {
         if let closedPopover = notification.object as? NSPopover, closedPopover === popover {
             removeKeyboardShortcutMonitorIfNeeded()
