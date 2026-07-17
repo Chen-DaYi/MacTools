@@ -710,10 +710,11 @@ struct MenuBarContent: View {
         onDismiss()
     }
 
-    private func handlePanelSwitchChange(_ newValue: Bool, for item: PluginPanelItem) {
+    private func handlePanelSwitchChange(_ newValue: Bool, for item: PluginPanelItem) -> Bool {
         switch item.menuActionBehavior {
         case .keepPresented:
             pluginHost.setSwitchValue(newValue, for: item.id)
+            return pluginHost.isSwitchOn(for: item.id)
         case .dismissBeforeHandling:
             deferredActionDispatcher.deferPanelSwitch(
                 pluginID: item.id,
@@ -721,6 +722,7 @@ struct MenuBarContent: View {
             )
             onDismiss()
             flushDeferredActionsAfterDismiss()
+            return newValue
         }
     }
 
@@ -1004,12 +1006,6 @@ struct MenuBarContent: View {
                     FeatureRowView(
                         item: item,
                         indicator: pluginHost.primaryPanelIndicatorsByID[item.id],
-                        isOn: Binding(
-                            get: { pluginHost.isSwitchOn(for: item.id) },
-                            set: { newValue in
-                                handlePanelSwitchChange(newValue, for: item)
-                            }
-                        ),
                         onDisclosureToggle: { isExpanded in
                             pluginHost.setDisclosureExpanded(isExpanded, for: item.id)
                         },
@@ -1149,17 +1145,78 @@ final class DeferredPanelActionDispatcher: ObservableObject {
     }
 }
 
+struct MenuBarPanelSwitchState: Equatable {
+    private(set) var value: Bool
+
+    init(value: Bool) {
+        self.value = value
+    }
+
+    mutating func synchronize(with value: Bool) {
+        self.value = value
+    }
+
+    mutating func resolve(
+        requestedValue: Bool,
+        using handler: (Bool) -> Bool
+    ) {
+        value = handler(requestedValue)
+    }
+}
+
+private struct MenuBarPanelSwitchControl: View {
+    let value: Bool
+    let isEnabled: Bool
+    let accessibilityTitle: String
+    let onChange: (Bool) -> Bool
+
+    @State private var state: MenuBarPanelSwitchState
+
+    init(
+        value: Bool,
+        isEnabled: Bool,
+        accessibilityTitle: String,
+        onChange: @escaping (Bool) -> Bool
+    ) {
+        self.value = value
+        self.isEnabled = isEnabled
+        self.accessibilityTitle = accessibilityTitle
+        self.onChange = onChange
+        _state = State(initialValue: MenuBarPanelSwitchState(value: value))
+    }
+
+    var body: some View {
+        Toggle(
+            accessibilityTitle,
+            isOn: Binding(
+                get: { state.value },
+                set: { requestedValue in
+                    guard isEnabled else { return }
+                    state.resolve(requestedValue: requestedValue, using: onChange)
+                }
+            )
+        )
+        .labelsHidden()
+        .controlSize(.small)
+        .toggleStyle(.switch)
+        .id(state.value)
+        .disabled(!isEnabled)
+        .onChange(of: value) { _, newValue in
+            state.synchronize(with: newValue)
+        }
+    }
+}
+
 struct FeatureRowView: View {
     let item: PluginPanelItem
     let indicator: PluginPrimaryPanelIndicator?
-    @Binding var isOn: Bool
     let onDisclosureToggle: (Bool) -> Void
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
     let onNavigationHoverChange: (String, String, Bool) -> Void
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
-    let onSwitchChange: (Bool) -> Void
+    let onSwitchChange: (Bool) -> Bool
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
     @State private var isHovered = false
@@ -1228,7 +1285,7 @@ struct FeatureRowView: View {
             if let detail = detailToDisplay {
                 PluginPanelDetailView(
                     detail: detail,
-                    isOn: $isOn,
+                    isOn: item.isOn,
                     showsSecondaryPanel: false,
                     onSelectionChange: onSelectionChange,
                     onNavigationSelectionChange: onNavigationSelectionChange,
@@ -1281,11 +1338,12 @@ struct FeatureRowView: View {
 
             switch item.controlStyle {
             case .switch:
-                Toggle(String(), isOn: $isOn)
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .toggleStyle(.switch)
-                    .disabled(!item.isEnabled)
+                MenuBarPanelSwitchControl(
+                    value: item.isOn,
+                    isEnabled: item.isEnabled,
+                    accessibilityTitle: item.title,
+                    onChange: onSwitchChange
+                )
             case .disclosure:
                 Image(systemName: item.isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
@@ -1422,14 +1480,14 @@ struct FeatureRowView: View {
 
 private struct PluginPanelDetailView: View {
     let detail: PluginPanelDetail
-    @Binding var isOn: Bool
+    let isOn: Bool
     let showsSecondaryPanel: Bool
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
     let onNavigationHoverChange: (String, String, Bool) -> Void
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
-    let onSwitchChange: (Bool) -> Void
+    let onSwitchChange: (Bool) -> Bool
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
 
@@ -1527,7 +1585,7 @@ private struct PluginPanelDetailView: View {
         case .switchRow:
             SwitchRowControl(
                 control: control,
-                isOn: $isOn,
+                isOn: isOn,
                 onChange: onSwitchChange
             )
         case .actionRow:
@@ -1543,8 +1601,8 @@ private struct PluginPanelDetailView: View {
 
 private struct SwitchRowControl: View {
     let control: PluginPanelControl
-    @Binding var isOn: Bool
-    let onChange: (Bool) -> Void
+    let isOn: Bool
+    let onChange: (Bool) -> Bool
 
     @State private var isHovered = false
 
@@ -1564,17 +1622,12 @@ private struct SwitchRowControl: View {
 
             Spacer()
 
-            Toggle(String(), isOn: Binding(
-                get: { isOn },
-                set: { newValue in
-                    guard control.isEnabled else { return }
-                    onChange(newValue)
-                }
-            ))
-            .labelsHidden()
-            .controlSize(.small)
-            .toggleStyle(.switch)
-            .disabled(!control.isEnabled)
+            MenuBarPanelSwitchControl(
+                value: isOn,
+                isEnabled: control.isEnabled,
+                accessibilityTitle: switchTitle,
+                onChange: onChange
+            )
         }
         .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
         .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
@@ -1586,6 +1639,12 @@ private struct SwitchRowControl: View {
                 .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
         }
         .onHover { isHovered = $0 }
+    }
+
+    private var switchTitle: String {
+        control.actionTitle
+            ?? control.sectionTitle
+            ?? AppL10n.plugins("plugin.panel.switch", defaultValue: "开关")
     }
 }
 
@@ -2027,14 +2086,14 @@ private struct SecondarySlidingPanel: View {
             ScrollView(.vertical, showsIndicators: true) {
                 PluginPanelDetailView(
                     detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: nil),
-                    isOn: .constant(false),
+                    isOn: false,
                     showsSecondaryPanel: false,
                     onSelectionChange: onSelectionChange,
                     onNavigationSelectionChange: onNavigationSelectionChange,
                     onNavigationHoverChange: { _, _, _ in },
                     onNavigationRowFrameChange: { _, _, _ in },
                     onDateChange: onDateChange,
-                    onSwitchChange: { _ in },
+                    onSwitchChange: { _ in false },
                     onSliderChange: onSliderChange,
                     onActionInvoke: { _, _ in }
                 )
