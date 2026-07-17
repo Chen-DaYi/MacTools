@@ -68,12 +68,14 @@ final class DeviceBatteryPluginTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
+        XCTAssertEqual(viewModel.bluetoothRefreshInterval, 5 * 60)
 
         plugin.panelSurfaceDidBecomeVisible(.primary)
         XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
 
         plugin.panelSurfaceDidBecomeVisible(.component)
         XCTAssertEqual(viewModel.appleMobileRefreshInterval, 90)
+        XCTAssertEqual(viewModel.bluetoothRefreshInterval, 60)
 
         viewModel.stop()
         XCTAssertEqual(viewModel.appleMobileRefreshInterval, 5 * 60)
@@ -617,11 +619,37 @@ private final class DeviceBatteryMemoryStorage: PluginStorage {
 private struct StubDeviceBatterySampler: DeviceBatterySampling {
     let items: [DeviceBatteryItem]
 
-    func collectSystemDevices(
+    func collectInternalBattery(referenceDate: Date) async -> [DeviceBatteryItem] {
+        items.filter { $0.kind == .internalBattery }
+    }
+
+    func collectBluetoothDevices(
         referenceDate: Date,
-        options: DeviceBatterySamplingOptions
+        options: DeviceBatteryBluetoothSamplingOptions
+    ) async -> [DeviceBatteryItem] {
+        items.filter {
+            switch $0.kind {
+            case .bluetooth, .magicAccessory, .airPodsPart, .other:
+                true
+            default:
+                false
+            }
+        }
+    }
+
+    func collectAppleMobileDevices(
+        referenceDate: Date,
+        minimumRefreshInterval: TimeInterval
     ) async -> [DeviceBatteryItem] {
         items
+            .filter {
+                switch $0.kind {
+                case .phone, .tablet, .mediaPlayer, .watch, .spatialComputer:
+                    true
+                default:
+                    false
+                }
+            }
     }
 }
 

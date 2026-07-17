@@ -25,7 +25,9 @@ enum DeviceBatteryInputMonitoringAuthorizationStatus {
 }
 
 @MainActor
-final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
+final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel,
+    PluginPanelSurfaceLifecycleHandling,
+    PluginApplicationActivityStateHandling {
     private enum ControlID {
         static let openInputMonitoring = "open-input-monitoring"
     }
@@ -66,6 +68,8 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel, PluginPan
             viewModel: DeviceBatteryViewModel(
                 sampler: DeviceBatterySampler(localization: localization),
                 rapooMonitor: RapooHIDBatteryMonitor(localization: localization),
+                powerSourceObserver: SystemDeviceBatteryPowerSourceObserver(),
+                bluetoothConnectionObserver: SystemDeviceBatteryBluetoothConnectionObserver(),
                 localization: localization
             ),
             localization: localization
@@ -108,6 +112,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel, PluginPan
                 defaultValue: "查看 Mac、Apple 移动设备、蓝牙外设和雷柏鼠标电量"
             )
         )
+        viewModel.setLowBatteryMonitoringEnabled(store.lowBatteryNotificationEnabled)
         viewModel.onSnapshotChange = { [weak self] in
             self?.handleSnapshotChange()
         }
@@ -168,6 +173,9 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel, PluginPan
                     )
                 },
                 onNotificationSettingsChange: {
+                    viewModel.setLowBatteryMonitoringEnabled(
+                        store.lowBatteryNotificationEnabled
+                    )
                     lowBatteryNotificationController.evaluate(
                         snapshot: viewModel.snapshot,
                         isEnabled: store.lowBatteryNotificationEnabled,
@@ -218,6 +226,10 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel, PluginPan
         }
 
         viewModel.setComponentPanelVisible(false)
+    }
+
+    func applicationActivityStateDidChange(_ state: PluginApplicationActivityState) {
+        viewModel.setApplicationActivityState(state)
     }
 
     func makeView(context: PluginComponentContext) -> AnyView {
