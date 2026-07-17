@@ -63,10 +63,6 @@ struct PluginSurfaceLayoutItem: Identifiable {
     let isVisible: Bool
     let isActive: Bool
     let canUninstall: Bool
-    /// Dashboard tile sizing metadata. Feature Panel rows ignore this, but
-    /// Dashboard layout editors keep it available for rendering or future
-    /// grid-specific affordances without re-querying plugin descriptors.
-    let dashboardSpan: PluginComponentSpan?
     let category: String?
     let releaseChannel: String?
 }
@@ -2021,9 +2017,6 @@ final class PluginHost: ObservableObject {
             isVisible: isVisible,
             isActive: isActive,
             canUninstall: dynamicPluginManifestsByID[metadata.id] != nil,
-            dashboardSpan: descriptor.capabilities.supportsDashboard
-                ? descriptor.plugin.componentPanel?.descriptor.span
-                : nil,
             category: dynamicPluginCategoriesByID[metadata.id] ?? nil,
             releaseChannel: dynamicPluginReleaseChannelsByID[metadata.id] ?? nil
         )

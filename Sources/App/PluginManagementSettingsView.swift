@@ -408,7 +408,7 @@ struct PluginManagementSettingsView: View {
         let confirmation = PluginUninstallConfirmation(
             pluginID: item.id,
             pluginTitle: item.title,
-            surfaceCapabilitySummary: item.surfaceCapabilitySummary
+            surfaceCapabilitySummary: item.uninstallScopeSummary
         )
         if uninstallConfirmationSession.shouldConfirmUninstall {
             pendingUninstallItem = confirmation
@@ -601,6 +601,12 @@ private extension PluginManagementItem {
         }
 
         return false
+    }
+}
+
+extension PluginManagementItem {
+    var uninstallScopeSummary: String {
+        capabilities == nil ? "MacTools" : surfaceCapabilitySummary
     }
 }
 

@@ -907,16 +907,14 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         marketplace.target = self
         menu.addItem(marketplace)
 
-        if canUninstall {
-            menu.addItem(.separator())
-            let uninstall = NSMenuItem(
-                title: AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"),
-                action: #selector(handleRequestUninstall(_:)),
-                keyEquivalent: ""
-            )
-            uninstall.target = self
-            menu.addItem(uninstall)
-        }
+        menu.addItem(.separator())
+        let uninstall = NSMenuItem(
+            title: AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"),
+            action: #selector(handleRequestUninstall(_:)),
+            keyEquivalent: ""
+        )
+        uninstall.target = self
+        menu.addItem(uninstall)
 
         return menu
     }

@@ -29,6 +29,12 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
         )
     }
 
+    func testUninstallScopeFallsBackToMacToolsWithoutCapabilityMetadata() {
+        let item = makeItem(id: "legacy", title: "Legacy", state: .installed)
+
+        XCTAssertEqual(item.uninstallScopeSummary, "MacTools")
+    }
+
     func testNotInstalledFirstSortRankOrdersInstallableBeforeInstalled() {
         XCTAssertEqual(
             PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "a", title: "A", state: .available)),
@@ -298,7 +304,8 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
     private func makeItem(
         id: String,
         title: String,
-        state: PluginManagementItem.State
+        state: PluginManagementItem.State,
+        capabilities: PluginPackageManifest.Capabilities? = nil
     ) -> PluginManagementItem {
         PluginManagementItem(
             id: id,
@@ -309,7 +316,8 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
             packageURL: nil,
             requiresRestartToFullyUnload: false,
             releaseNotesURL: nil,
-            category: "system"
+            category: "system",
+            capabilities: capabilities
         )
     }
 }

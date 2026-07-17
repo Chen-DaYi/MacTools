@@ -304,7 +304,6 @@ final class FeatureManagementTableViewTests: XCTestCase {
             isVisible: isVisible,
             isActive: isActive,
             canUninstall: canUninstall,
-            dashboardSpan: .oneByOne,
             category: nil,
             releaseChannel: releaseChannel
         )
