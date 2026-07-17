@@ -1,5 +1,14 @@
-#!/usr/bin/env bash
+#!/bin/zsh
 set -euo pipefail
+
+if [[ -z "${PYTHON3:-}" ]]; then
+    if [[ -x /usr/bin/python3 ]]; then
+        PYTHON3=/usr/bin/python3
+    else
+        PYTHON3=python3
+    fi
+fi
+export PYTHON3
 
 usage() {
     cat <<'USAGE'
@@ -40,8 +49,14 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --plugin)
-            IFS=',' read -r -a raw_plugin_filters <<< "${2:-}"
-            for raw_plugin_filter in "${raw_plugin_filters[@]}"; do
+            remaining_plugin_filters="${2:-}"
+            while [[ -n "$remaining_plugin_filters" ]]; do
+                raw_plugin_filter="${remaining_plugin_filters%%,*}"
+                if [[ "$remaining_plugin_filters" == *,* ]]; then
+                    remaining_plugin_filters="${remaining_plugin_filters#*,}"
+                else
+                    remaining_plugin_filters=""
+                fi
                 raw_plugin_filter="${raw_plugin_filter#"${raw_plugin_filter%%[![:space:]]*}"}"
                 raw_plugin_filter="${raw_plugin_filter%"${raw_plugin_filter##*[![:space:]]}"}"
                 [[ -n "$raw_plugin_filter" ]] && PLUGIN_FILTERS+=("$raw_plugin_filter")
@@ -111,7 +126,7 @@ discover_plugin_records() {
         plugin_filters_serialized+=$'\n'"$plugin_filter"
     done
 
-    python3 - "$SOURCE_DIR" "$PRODUCTS_DIR" "$plugin_filters_serialized" <<'PY'
+    "$PYTHON3" - "$SOURCE_DIR" "$PRODUCTS_DIR" "$plugin_filters_serialized" <<'PY'
 import hashlib
 import json
 import os
@@ -215,7 +230,6 @@ for plugin_root in discover_candidates():
         str(manifest),
         plugin_id,
         bundle_relative_path,
-        bundle_name,
         str(bundle_path),
         input_fingerprint(manifest, bundle_path),
     ))
@@ -248,7 +262,17 @@ packages=()
 synced_count=0
 installed_count=0
 skipped_count=0
-while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bundle_name bundle_path fingerprint; do
+
+echo "Discovering Debug plugin bundles..."
+if plugin_records="$(discover_plugin_records)"; then
+    :
+else
+    discovery_status=$?
+    exit "$discovery_status"
+fi
+
+echo "Synchronizing Debug plugin packages..."
+while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bundle_path fingerprint; do
     [[ -n "$plugin_root" ]] || continue
 
     package_path="$PACKAGES_DIR/$plugin_id.mactoolsplugin"
@@ -280,7 +304,7 @@ while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bund
     fi
 
     packages+=("$package_path")
-done < <(discover_plugin_records)
+done <<< "$plugin_records"
 
 plugin_filter_count=0
 for _plugin_filter in "${PLUGIN_FILTERS[@]-}"; do
@@ -302,6 +326,7 @@ for package in "${packages[@]}"; do
 done
 
 if [[ "$synced_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
+    echo "Generating local plugin catalog..."
     "$REPO_ROOT/scripts/plugins/generate-plugin-catalog.sh" \
         --mode debug \
         --output "$CATALOG_PATH" \

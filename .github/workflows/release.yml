@@ -297,8 +297,10 @@ jobs:
           hdiutil create \
             -volname "$PROJECT_NAME" \
             -srcfolder "$STAGE_DIR" \
+            -fs HFS+ \
             -ov \
             -format UDZO \
+            -imagekey zlib-level=9 \
             "$DMG_PATH" >/dev/null
 
           /bin/rm -rf "$STAGE_DIR"

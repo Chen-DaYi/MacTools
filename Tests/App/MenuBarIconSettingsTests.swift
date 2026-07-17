@@ -26,6 +26,14 @@ final class MenuBarIconSettingsTests: XCTestCase {
         try super.tearDownWithError()
     }
 
+    func testBundledDefaultIconIsAvailable() {
+        XCTAssertNotNil(NSImage(named: NSImage.Name("MenuBarIcon")))
+    }
+
+    func testBundledAppIconIsAvailable() {
+        XCTAssertNotNil(AppMetadata.appIcon)
+    }
+
     func testImportPersistsCustomIconAndRecentItem() throws {
         let sourceURL = try makeImageFile(name: "status-icon.png", color: .systemBlue)
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)

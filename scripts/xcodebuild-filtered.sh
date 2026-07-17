@@ -1,13 +1,21 @@
-#!/usr/bin/env bash
+#!/bin/zsh
 set -o pipefail
+
+if [[ -z "${PYTHON3:-}" ]]; then
+    if [[ -x /usr/bin/python3 ]]; then
+        PYTHON3=/usr/bin/python3
+    else
+        PYTHON3=python3
+    fi
+fi
 
 tmp_stderr="$(mktemp "${TMPDIR:-/tmp}/mactools-xcodebuild-stderr.XXXXXX")"
 trap 'rm -f "$tmp_stderr"' EXIT
 
 xcodebuild "$@" 2> "$tmp_stderr"
-status=$?
+xcodebuild_status=$?
 
-python3 - "$tmp_stderr" <<'PY'
+"$PYTHON3" - "$tmp_stderr" <<'PY'
 import re
 import sys
 
@@ -46,4 +54,4 @@ if filtered != text:
 PY
 
 cat "$tmp_stderr" >&2
-exit "$status"
+exit "$xcodebuild_status"
