@@ -34,7 +34,7 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertNotNil(AppMetadata.appIcon)
     }
 
-    func testImportPersistsCustomIconAndRecentItem() throws {
+    func testImportPersistsCurrentCustomIcon() throws {
         let sourceURL = try makeImageFile(name: "status-icon.png", color: .systemBlue)
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
 
@@ -43,13 +43,14 @@ final class MenuBarIconSettingsTests: XCTestCase {
 
         XCTAssertTrue(settings.hasCustomIcon)
         XCTAssertNil(settings.lastErrorMessage)
-        XCTAssertEqual(settings.recentItems.first?.displayName, "status-icon")
         XCTAssertFalse(payload.isTemplate)
         XCTAssertEqual(payload.image.size, NSSize(width: 18, height: 18))
 
         let reloadedSettings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+        let reloadedPayload = reloadedSettings.imagePayload(for: NSAppearance(named: .aqua))
         XCTAssertTrue(reloadedSettings.hasCustomIcon)
-        XCTAssertEqual(reloadedSettings.recentItems.count, 1)
+        XCTAssertFalse(reloadedPayload.isTemplate)
+        XCTAssertEqual(reloadedPayload.image.size, NSSize(width: 18, height: 18))
     }
 
     func testDarkAppearanceFallsBackToLightCustomIcon() throws {
@@ -133,7 +134,7 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertEqual(renderedFrames[0].size.height, MenuBarIconProcessing.standardIconPointSize)
     }
 
-    func testResetToDefaultClearsCustomSelectionButKeepsRecents() throws {
+    func testResetToDefaultClearsCustomSelection() throws {
         let sourceURL = try makeImageFile(name: "reset.png", color: .systemGreen)
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
 
@@ -141,42 +142,41 @@ final class MenuBarIconSettingsTests: XCTestCase {
         settings.resetToDefault()
 
         XCTAssertFalse(settings.hasCustomIcon)
-        XCTAssertEqual(settings.recentItems.count, 1)
         XCTAssertTrue(settings.imagePayload(for: NSAppearance(named: .aqua)).isTemplate)
     }
 
-    func testRecentItemsKeepOnlyLatestSix() throws {
+    func testLegacySpeedSettingsAreIgnoredWhileCurrentIconMigrates() throws {
+        let sourceURL = try makeImageFile(name: "legacy.png", color: .systemPurple)
+        let localIconsDirectory = rootDirectory
+            .appendingPathComponent("MenuBarIcons", isDirectory: true)
+            .appendingPathComponent("Recents", isDirectory: true)
+        try FileManager.default.createDirectory(at: localIconsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(
+            at: sourceURL,
+            to: localIconsDirectory.appendingPathComponent("legacy.png")
+        )
+        let legacyState: [String: Any] = [
+            "animationSpeedMode": "adaptiveSystemLoad",
+            "manualAnimationSpeedMultiplier": 5.0,
+            "lightIconFileName": "legacy.png",
+            "darkIconFileName": "legacy.png",
+            "recentItems": [[
+                "fileName": "legacy.png",
+                "frameFileNames": ["legacy.png"],
+                "frameDuration": 0.2
+            ]]
+        ]
+        userDefaults.set(
+            try JSONSerialization.data(withJSONObject: legacyState),
+            forKey: "menubar.icon.settings"
+        )
+
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+        let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
 
-        for index in 0..<7 {
-            let sourceURL = try makeImageFile(name: "recent-\(index).png", color: .systemBlue)
-            settings.importIcon(from: sourceURL)
-        }
-
-        XCTAssertEqual(settings.recentItems.count, 6)
-        XCTAssertEqual(settings.recentItems.first?.displayName, "recent-6")
-        XCTAssertFalse(settings.recentItems.contains { $0.displayName == "recent-0" })
-    }
-
-    func testAnimationSpeedPolicyClampsAndUsesSystemLoad() {
-        XCTAssertEqual(
-            MenuBarIconAnimationSpeedPolicy.normalizedManualMultiplier(9),
-            MenuBarIconAnimationSpeedPolicy.maximumMultiplier
-        )
-
-        let lowLoadMultiplier = MenuBarIconAnimationSpeedPolicy.multiplier(
-            mode: .adaptiveSystemLoad,
-            manualMultiplier: 1,
-            systemLoad: MenuBarIconAnimationSystemLoad(cpuUsage: 0.1, gpuUsage: nil, memoryUsage: 0.2)
-        )
-        let highLoadMultiplier = MenuBarIconAnimationSpeedPolicy.multiplier(
-            mode: .adaptiveSystemLoad,
-            manualMultiplier: 1,
-            systemLoad: MenuBarIconAnimationSystemLoad(cpuUsage: 0.9, gpuUsage: 0.8, memoryUsage: 0.7)
-        )
-
-        XCTAssertGreaterThan(highLoadMultiplier, lowLoadMultiplier)
-        XCTAssertLessThanOrEqual(highLoadMultiplier, MenuBarIconAnimationSpeedPolicy.maximumMultiplier)
+        XCTAssertTrue(settings.hasCustomIcon)
+        XCTAssertFalse(payload.isTemplate)
+        XCTAssertEqual(payload.frameDuration, 0.2, accuracy: 0.0001)
     }
 
     private func makeImageFile(

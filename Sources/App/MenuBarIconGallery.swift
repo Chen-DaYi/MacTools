@@ -37,28 +37,6 @@ struct MenuBarIconRemoteAssetSelection: Codable, Equatable, Hashable {
     let frameDuration: TimeInterval
 }
 
-enum MenuBarIconRemoteAssetReference {
-    static let fileNamePrefix = "remote-asset:"
-
-    static func fileName(assetID: String, version: String) -> String {
-        "\(fileNamePrefix)\(assetID)#\(version)"
-    }
-
-    static func parse(_ fileName: String) -> (assetID: String, version: String)? {
-        guard fileName.hasPrefix(fileNamePrefix) else {
-            return nil
-        }
-
-        let value = fileName.dropFirst(fileNamePrefix.count)
-        let parts = value.split(separator: "#", maxSplits: 1).map(String.init)
-        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
-            return nil
-        }
-
-        return (assetID: parts[0], version: parts[1])
-    }
-}
-
 enum MenuBarIconGalleryStatus: Equatable {
     case idle
     case loading
@@ -767,39 +745,6 @@ final class MenuBarIconGalleryLibrary: ObservableObject {
         } catch {
             previewImages[asset.id] = nil
         }
-    }
-
-    func selectRecentItem(_ item: MenuBarIconRecentItem, iconSettings: MenuBarIconSettings) async -> Bool {
-        guard let selection = iconSettings.remoteAssetSelection(forRecentItem: item) else {
-            iconSettings.useRecentIcon(item)
-            return iconSettings.lastErrorMessage == nil
-        }
-
-        if iconSettings.isRemoteAssetCached(for: item) {
-            iconSettings.useRecentIcon(item)
-            return iconSettings.lastErrorMessage == nil
-        }
-
-        await loadCatalogIfNeeded()
-        if snapshot == nil {
-            await refreshCatalog()
-        }
-
-        guard let asset = assets.first(where: { asset in
-            asset.id == selection.id && asset.version == selection.version
-        }) else {
-            iconSettings.reportError(lastErrorMessage ?? AppL10n.settings(
-                "menuBarIcon.gallery.error.recentAssetMissing",
-                defaultValue: "最近使用的在线图标已不在图库中。"
-            ))
-            return false
-        }
-
-        let didSelect = await selectAsset(asset, iconSettings: iconSettings)
-        if !didSelect, let lastErrorMessage {
-            iconSettings.reportError(lastErrorMessage)
-        }
-        return didSelect
     }
 
     func selectAsset(_ asset: MenuBarIconGalleryAsset, iconSettings: MenuBarIconSettings) async -> Bool {
