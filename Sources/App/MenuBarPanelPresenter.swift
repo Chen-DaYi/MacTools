@@ -41,6 +41,7 @@ final class MenuBarPanelPresenter: NSObject {
     private var appearanceObserver: NSObjectProtocol?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var heightRefreshCancellables: Set<AnyCancellable> = []
+    private var keyboardShortcutMonitor: Any?
     private var selectedPanel: PanelKind = .components
 
     init(
@@ -99,6 +100,9 @@ final class MenuBarPanelPresenter: NSObject {
     isolated deinit {
         if let appearanceObserver {
             NotificationCenter.default.removeObserver(appearanceObserver)
+        }
+        if let keyboardShortcutMonitor {
+            NSEvent.removeMonitor(keyboardShortcutMonitor)
         }
         runtimeLocaleCancellable?.cancel()
     }
@@ -206,8 +210,59 @@ final class MenuBarPanelPresenter: NSObject {
     private func show(_ popover: NSPopover, relativeTo button: NSStatusBarButton) {
         applyCurrentAppearance()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        installKeyboardShortcutMonitorIfNeeded()
         applyCurrentAppearance()
         focus(popover)
+    }
+
+    private func installKeyboardShortcutMonitorIfNeeded() {
+        guard keyboardShortcutMonitor == nil else {
+            return
+        }
+
+        keyboardShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+            [weak self] event in
+            self?.handleKeyboardShortcut(event) ?? event
+        }
+    }
+
+    private func removeKeyboardShortcutMonitorIfNeeded() {
+        guard let keyboardShortcutMonitor else {
+            return
+        }
+
+        NSEvent.removeMonitor(keyboardShortcutMonitor)
+        self.keyboardShortcutMonitor = nil
+    }
+
+    private func handleKeyboardShortcut(_ event: NSEvent) -> NSEvent? {
+        guard
+            popover.isShown,
+            event.window === popover.contentViewController?.view.window,
+            let tab = Self.keyboardShortcutTab(for: event)
+        else {
+            return event
+        }
+
+        select(tab)
+        return nil
+    }
+
+    static func keyboardShortcutTab(for event: NSEvent) -> MenuBarPanelTab? {
+        let shortcutModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+        let modifiers = event.modifierFlags.intersection(shortcutModifiers)
+        guard modifiers == .command else {
+            return nil
+        }
+
+        switch event.charactersIgnoringModifiers {
+        case "1":
+            return .components
+        case "2":
+            return .features
+        default:
+            return nil
+        }
     }
 
     private func focus(_ popover: NSPopover) {
@@ -416,6 +471,7 @@ final class MenuBarPanelPresenter: NSObject {
 extension MenuBarPanelPresenter: NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
         if let closedPopover = notification.object as? NSPopover, closedPopover === popover {
+            removeKeyboardShortcutMonitorIfNeeded()
             updateContent(
                 selectedTab: tab(for: selectedPanel),
                 screen: NSScreen.main,

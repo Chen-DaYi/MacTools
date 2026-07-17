@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import SwiftUI
 import XCTest
 @testable import MacTools
@@ -46,6 +47,63 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         XCTAssertEqual(selectedTab, .features)
         XCTAssertEqual(model.selectedTab, .components)
         XCTAssertEqual(model.contentHeight, 100)
+    }
+
+    func testPanelCommandNumberShortcutsResolveMatchingTabs() {
+        XCTAssertEqual(
+            MenuBarPanelPresenter.keyboardShortcutTab(for: makeCommandKeyEvent(key: "1")),
+            .components
+        )
+        XCTAssertEqual(
+            MenuBarPanelPresenter.keyboardShortcutTab(for: makeCommandKeyEvent(key: "2")),
+            .features
+        )
+        XCTAssertEqual(
+            MenuBarPanelPresenter.keyboardShortcutTab(
+                for: makeCommandKeyEvent(key: "1", modifiers: [.command, .capsLock])
+            ),
+            .components
+        )
+    }
+
+    func testPanelShortcutResolverIgnoresOtherKeysAndModifiers() {
+        XCTAssertNil(
+            MenuBarPanelPresenter.keyboardShortcutTab(for: makeCommandKeyEvent(key: "3"))
+        )
+        XCTAssertNil(
+            MenuBarPanelPresenter.keyboardShortcutTab(
+                for: makeCommandKeyEvent(key: "1", modifiers: [.command, .shift])
+            )
+        )
+    }
+
+    func testShownPanelCommandNumberShortcutsSwitchPresenterTabs() throws {
+        let presenter = makePresenter()
+        let anchorWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 40, height: 24),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        let button = NSStatusBarButton(frame: anchorWindow.contentView!.bounds)
+        anchorWindow.contentView = button
+        anchorWindow.orderFront(nil)
+        defer {
+            presenter.dismissPanels()
+            anchorWindow.close()
+        }
+
+        presenter.toggleFeaturePanel(relativeTo: button)
+
+        let popover = presenter.debugPopoverForTests
+        let controller = try XCTUnwrap(
+            popover.contentViewController as? NSHostingController<MenuBarUnifiedPanelContent>
+        )
+        let window = try XCTUnwrap(controller.view.window)
+        XCTAssertEqual(controller.rootView.model.selectedTab, .features)
+
+        NSApplication.shared.sendEvent(makeCommandKeyEvent(key: "1", in: window))
+        XCTAssertEqual(controller.rootView.model.selectedTab, .components)
     }
 
     func testClearingAutomaticInitialFocusLeavesTheWindowAsFirstResponder() {
@@ -103,5 +161,35 @@ final class MenuBarPanelPresenterTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
+    }
+
+    private func makeCommandKeyEvent(
+        key: String,
+        modifiers: NSEvent.ModifierFlags = [.command],
+        in window: NSWindow? = nil
+    ) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: window?.windowNumber ?? 0,
+            context: nil,
+            characters: key,
+            charactersIgnoringModifiers: key,
+            isARepeat: false,
+            keyCode: keyCode(for: key)
+        )!
+    }
+
+    private func keyCode(for key: String) -> UInt16 {
+        switch key {
+        case "1":
+            return UInt16(kVK_ANSI_1)
+        case "2":
+            return UInt16(kVK_ANSI_2)
+        default:
+            return UInt16(kVK_ANSI_3)
+        }
     }
 }
