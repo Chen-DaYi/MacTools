@@ -1,5 +1,13 @@
-#!/usr/bin/env bash
+#!/bin/zsh
 set -euo pipefail
+
+if [[ -z "${PYTHON3:-}" ]]; then
+    if [[ -x /usr/bin/python3 ]]; then
+        PYTHON3=/usr/bin/python3
+    else
+        PYTHON3=python3
+    fi
+fi
 
 usage() {
     cat <<'USAGE'
@@ -92,7 +100,7 @@ if [[ "$MODE" == "release" && -z "$BASE_URL" ]]; then
     exit 1
 fi
 
-python3 - "$MODE" "$OUTPUT" "$BASE_URL" "$RELEASE_NOTES_URL" "$CATALOG_ID" "$MINIMUM_HOST_VERSION" "$PLUGIN_KIT_VERSION" "${PACKAGES[@]}" <<'PY'
+"$PYTHON3" - "$MODE" "$OUTPUT" "$BASE_URL" "$RELEASE_NOTES_URL" "$CATALOG_ID" "$MINIMUM_HOST_VERSION" "$PLUGIN_KIT_VERSION" "${PACKAGES[@]}" <<'PY'
 import hashlib
 import json
 import pathlib

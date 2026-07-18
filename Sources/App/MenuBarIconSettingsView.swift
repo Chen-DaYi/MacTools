@@ -4,10 +4,6 @@ import UniformTypeIdentifiers
 import MacToolsPluginKit
 
 private enum MenuBarIconSettingsMetrics {
-    static let recentPreviewHeight: CGFloat = 44
-    static let recentTileSize = CGSize(width: 58, height: 58)
-    static let recentBadgeSize: CGFloat = 18
-
     static let galleryColumnWidth: CGFloat = 128
     static let galleryColumnSpacing: CGFloat = 10
     static let galleryColumnCount = 4
@@ -19,6 +15,46 @@ private enum MenuBarIconSettingsMetrics {
     static let galleryTileSize = CGSize(width: 128, height: 52)
     static let galleryCellSize = CGSize(width: 128, height: 82)
     static let galleryTitleWidth: CGFloat = 120
+}
+
+private enum MenuBarIconAction: CaseIterable, Hashable {
+    case upload
+    case gallery
+
+    var title: String {
+        switch self {
+        case .upload:
+            return AppL10n.settings("menuBarIcon.upload", defaultValue: "上传")
+        case .gallery:
+            return AppL10n.settings("menuBarIcon.gallery.title", defaultValue: "在线图库")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .upload:
+            return "square.and.arrow.up"
+        case .gallery:
+            return "sparkles"
+        }
+    }
+}
+
+private struct MenuBarIconActionLabel: View {
+    let action: MenuBarIconAction
+
+    var body: some View {
+        ZStack {
+            ForEach(MenuBarIconAction.allCases, id: \.self) { candidate in
+                Label(candidate.title, systemImage: candidate.systemImage)
+                    .lineLimit(1)
+                    .opacity(candidate == action ? 1 : 0)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(action.title)
+    }
 }
 
 struct MenuBarIconSettingsView: View {
@@ -79,12 +115,9 @@ struct MenuBarIconSettingsView: View {
 private struct MenuBarIconEditorControls: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
     @ObservedObject var gallery: MenuBarIconGalleryLibrary
-    @State private var sliderID = UUID()
 
     private let rowLabelWidth: CGFloat = 76
     private let contentMaxWidth: CGFloat = 520
-    private let animationModePickerWidth: CGFloat = 240
-    private let manualSpeedSliderWidth: CGFloat = 180
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -100,22 +133,6 @@ private struct MenuBarIconEditorControls: View {
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: contentMaxWidth, alignment: .leading)
-            }
-
-            animationSpeedControls
-
-            controlRow(AppL10n.settings("menuBarIcon.recent", defaultValue: "最近使用"), alignment: .top) {
-                MenuBarIconRecentGrid(iconSettings: iconSettings, gallery: gallery)
-                    .frame(maxWidth: contentMaxWidth, alignment: .leading)
-            }
-
-            if let warningText = iconSettings.contrastReport(for: .light).warningText
-                ?? iconSettings.contrastReport(for: .dark).warningText {
-                contentOnlyRow {
-                    Label(warningText, systemImage: "exclamationmark.triangle")
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.orange)
-                }
             }
 
             if let errorMessage = iconSettings.lastErrorMessage {
@@ -160,95 +177,46 @@ private struct MenuBarIconEditorControls: View {
     }
 
     private var actionButtons: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+            currentIconPreview
+
+            Divider()
+                .frame(height: PluginSettingsTheme.Size.rowIcon)
+
             Button {
                 selectMedia()
             } label: {
-                Label(AppL10n.settings("menuBarIcon.upload", defaultValue: "上传图片或动画"), systemImage: "square.and.arrow.up")
-                    .frame(maxWidth: .infinity)
+                MenuBarIconActionLabel(action: .upload)
             }
             .buttonStyle(.borderedProminent)
 
             MenuBarIconGalleryPicker(iconSettings: iconSettings, gallery: gallery)
-                .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: contentMaxWidth, alignment: .leading)
-    }
-
-    private var animationSpeedControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            controlRow(AppL10n.settings("menuBarIcon.playbackSpeed", defaultValue: "播放速度")) {
-                Picker(AppL10n.settings("menuBarIcon.playbackSpeed", defaultValue: "播放速度"), selection: Binding(
-                    get: { iconSettings.animationSpeedMode },
-                    set: { iconSettings.animationSpeedMode = $0 }
-                )) {
-                    ForEach(MenuBarIconAnimationSpeedMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: animationModePickerWidth, alignment: .leading)
-                .frame(maxWidth: contentMaxWidth, alignment: .leading)
-            }
-
-            controlRow(AppL10n.settings("menuBarIcon.multiplier", defaultValue: "倍率")) {
-                animationMultiplierControls
-            }
-        }
-    }
-
-    private var speedDescription: String {
-        switch iconSettings.animationSpeedMode {
-        case .manual:
-            return AppL10n.settings("menuBarIcon.speedDescription.manual", defaultValue: "固定倍率循环播放。")
-        case .adaptiveSystemLoad:
-            return AppL10n.settings("menuBarIcon.speedDescription.adaptiveSystemLoad", defaultValue: "CPU、GPU、内存越高越快。")
-        }
-    }
-
-    private var animationMultiplierControls: some View {
-        HStack(spacing: 12) {
-            Text(speedDescription)
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: true, vertical: false)
-
-            manualSpeedSlider
-                .opacity(isManualAnimationSpeed ? 1 : 0)
-                .disabled(!isManualAnimationSpeed)
-
-            Text(String(format: "%.1fx", iconSettings.manualAnimationSpeedMultiplier))
-                .font(PluginSettingsTheme.Typography.monospacedValue)
-                .foregroundStyle(.secondary)
-                .frame(width: 38, alignment: .trailing)
-                .opacity(isManualAnimationSpeed ? 1 : 0)
-
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: contentMaxWidth, minHeight: PluginSettingsTheme.Size.controlHeight, alignment: .leading)
-        .onAppear {
-            DispatchQueue.main.async {
-                sliderID = UUID()
-            }
-        }
-    }
-
-    private var isManualAnimationSpeed: Bool {
-        iconSettings.animationSpeedMode == .manual
-    }
-
-    private var manualSpeedSlider: some View {
-        Slider(
-            value: Binding(
-                get: { iconSettings.manualAnimationSpeedMultiplier },
-                set: { iconSettings.manualAnimationSpeedMultiplier = $0 }
-            ),
-            in: MenuBarIconAnimationSpeedPolicy.minimumMultiplier...MenuBarIconAnimationSpeedPolicy.maximumMultiplier
+        .frame(
+            maxWidth: contentMaxWidth,
+            minHeight: PluginSettingsTheme.Size.controlHeight,
+            alignment: .trailing
         )
-        .labelsHidden()
-        .frame(width: manualSpeedSliderWidth)
-        .id(sliderID)
+        .controlSize(.regular)
+    }
+
+    private var currentIconPreview: some View {
+        MenuBarIconThumbnail(
+            image: iconSettings.previewImage(for: .light),
+            height: PluginSettingsTheme.Size.rowIcon,
+            maxWidth: 26
+        )
+        .frame(width: 34, height: PluginSettingsTheme.Size.controlHeight)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+        )
+        .help(AppL10n.settings("menuBarIcon.title", defaultValue: "菜单栏图标"))
+        .accessibilityLabel(AppL10n.settings("menuBarIcon.title", defaultValue: "菜单栏图标"))
     }
 
     private func selectMedia() {
@@ -279,95 +247,6 @@ private struct MenuBarIconEditorControls: View {
     }
 }
 
-private struct MenuBarIconRecentGrid: View {
-    @ObservedObject var iconSettings: MenuBarIconSettings
-    @ObservedObject var gallery: MenuBarIconGalleryLibrary
-    @State private var activeRecentID: UUID?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if iconSettings.recentItems.isEmpty {
-                Text(AppL10n.settings("menuBarIcon.recent.empty", defaultValue: "上传或选择图标后会显示在这里。"))
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
-            } else {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(iconSettings.recentItems.prefix(6)) { item in
-                            recentItemButton(for: item)
-                        }
-                    }
-                    .frame(minHeight: MenuBarIconSettingsMetrics.recentTileSize.height, alignment: .leading)
-                }
-                .scrollIndicators(.never)
-                .frame(maxWidth: .infinity, minHeight: MenuBarIconSettingsMetrics.recentTileSize.height, alignment: .leading)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func recentItemButton(for item: MenuBarIconRecentItem) -> some View {
-        let previewImage = iconSettings.previewImage(for: item)
-
-        return Button {
-            Task {
-                activeRecentID = item.id
-                _ = await gallery.selectRecentItem(item, iconSettings: iconSettings)
-                activeRecentID = nil
-            }
-        } label: {
-            ZStack(alignment: .bottomTrailing) {
-                MenuBarIconThumbnail(
-                    image: previewImage,
-                    height: MenuBarIconSettingsMetrics.recentPreviewHeight,
-                    maxWidth: nil
-                )
-                .frame(
-                    minWidth: MenuBarIconSettingsMetrics.recentTileSize.width,
-                    minHeight: MenuBarIconSettingsMetrics.recentTileSize.height
-                )
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-                )
-
-                badge(for: item)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(activeRecentID != nil)
-        .help(item.displayName)
-    }
-
-    @ViewBuilder
-    private func badge(for item: MenuBarIconRecentItem) -> some View {
-        if activeRecentID == item.id {
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: MenuBarIconSettingsMetrics.recentBadgeSize, height: MenuBarIconSettingsMetrics.recentBadgeSize)
-                .background(.thinMaterial, in: Circle())
-        } else if iconSettings.remoteAssetSelection(forRecentItem: item) != nil,
-                  !iconSettings.isRemoteAssetCached(for: item) {
-            Image(systemName: "icloud.and.arrow.down")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: MenuBarIconSettingsMetrics.recentBadgeSize, height: MenuBarIconSettingsMetrics.recentBadgeSize)
-                .background(Color(nsColor: .windowBackgroundColor))
-                .clipShape(Circle())
-        } else if item.mediaKind == .animation {
-            Image(systemName: "play.fill")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: MenuBarIconSettingsMetrics.recentBadgeSize, height: MenuBarIconSettingsMetrics.recentBadgeSize)
-                .background(Color.accentColor)
-                .clipShape(Circle())
-        }
-    }
-}
-
 private struct MenuBarIconGalleryPicker: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
     @ObservedObject var gallery: MenuBarIconGalleryLibrary
@@ -393,8 +272,7 @@ private struct MenuBarIconGalleryPicker: View {
         Button {
             isPickerPresented.toggle()
         } label: {
-            Label(AppL10n.settings("menuBarIcon.gallery.title", defaultValue: "在线图库"), systemImage: "sparkles")
-                .frame(maxWidth: .infinity)
+            MenuBarIconActionLabel(action: .gallery)
         }
         .buttonStyle(.bordered)
         .popover(isPresented: $isPickerPresented, arrowEdge: .bottom) {
@@ -631,7 +509,8 @@ private struct MenuBarIconThumbnail: View {
             if let image {
                 Image(nsImage: image)
                     .resizable()
-                    .renderingMode(.original)
+                    .renderingMode(image.isTemplate ? .template : .original)
+                    .foregroundStyle(.primary)
                     .scaledToFit()
                     .frame(height: height)
             } else {

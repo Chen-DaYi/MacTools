@@ -146,6 +146,7 @@ final class PluginHost: ObservableObject {
     private let globalShortcutManager: GlobalShortcutManager
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
+    private let applicationActivityObserver: (any ApplicationActivityObserving)?
     private let displayTopologyRefreshDelay: Duration
     private let pluginStateChangeRebuildDelay: Duration
     let dynamicPluginManager: DynamicPluginManager?
@@ -168,6 +169,7 @@ final class PluginHost: ObservableObject {
     private var displayTopologyRefreshTask: Task<Void, Never>?
     private var pluginStateChangeRebuildTask: Task<Void, Never>?
     private var runtimeLocaleCancellable: AnyCancellable?
+    private var applicationActivityState: PluginApplicationActivityState
     private var dirtyPluginIDs: Set<String> = []
     private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
     private var cachedPrimaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
@@ -224,6 +226,7 @@ final class PluginHost: ObservableObject {
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: SystemDisplayConfigurationObserver(),
             accessibilityPermissionObserver: AccessibilityPermissionObserver(),
+            applicationActivityObserver: SystemApplicationActivityObserver(),
             loadDynamicPluginsOnInit: loadDynamicPluginsOnInit
         )
     }
@@ -238,6 +241,7 @@ final class PluginHost: ObservableObject {
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
+        applicationActivityObserver: (any ApplicationActivityObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180),
         pluginStateChangeRebuildDelay: Duration = .milliseconds(80),
         loadDynamicPluginsOnInit: Bool = true
@@ -255,6 +259,8 @@ final class PluginHost: ObservableObject {
         self.globalShortcutManager = globalShortcutManager
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
+        self.applicationActivityObserver = applicationActivityObserver
+        self.applicationActivityState = applicationActivityObserver?.state ?? .interactive
         self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
         self.pluginStateChangeRebuildDelay = pluginStateChangeRebuildDelay
         self.dynamicPluginManager = dynamicPluginManager
@@ -296,6 +302,10 @@ final class PluginHost: ObservableObject {
 
         self.accessibilityPermissionObserver?.onPermissionChange = { [weak self] in
             self?.refreshAccessibilityPermissionNow()
+        }
+
+        self.applicationActivityObserver?.onStateChange = { [weak self] state in
+            self?.handleApplicationActivityStateChange(state)
         }
 
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
@@ -1191,7 +1201,28 @@ final class PluginHost: ObservableObject {
                     self?.presentPluginConfiguration(pluginID: pluginID)
                 }
             }
+            if let activityStateHandling = plugin as? any PluginApplicationActivityStateHandling {
+                guardPluginCall(plugin, operation: "set application activity state") {
+                    activityStateHandling.applicationActivityStateDidChange(applicationActivityState)
+                }
+            }
             configureHostStatusItemCallbacks(for: [plugin])
+        }
+    }
+
+    private func handleApplicationActivityStateChange(
+        _ state: PluginApplicationActivityState
+    ) {
+        guard applicationActivityState != state else { return }
+        applicationActivityState = state
+
+        for plugin in activePlugins {
+            guard let activityStateHandling = plugin as? any PluginApplicationActivityStateHandling else {
+                continue
+            }
+            guardPluginCall(plugin, operation: "update application activity state") {
+                activityStateHandling.applicationActivityStateDidChange(state)
+            }
         }
     }
 

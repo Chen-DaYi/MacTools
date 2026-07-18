@@ -58,14 +58,9 @@ final class MenuBarStatusItemController: NSObject {
     private var appTerminationObserver: NSObjectProtocol?
     private var statusItemWindowMoveObserver: NSObjectProtocol?
     private var animationTimer: DispatchSourceTimer?
-    private var animationLoadSampleTimer: Timer?
-    private let animationLoadMonitor = MenuBarIconAnimationLoadMonitor()
     private var animationFrames: [NSImage] = []
     private var animationFrameIndex = 0
-    private var animationBaseFrameDuration: TimeInterval = 1.0 / MenuBarIconProcessing.animationFramesPerSecond
-    private var animationSpeedMode: MenuBarIconAnimationSpeedMode = .manual
-    private var manualAnimationSpeedMultiplier: Double = MenuBarIconAnimationSpeedPolicy.defaultManualMultiplier
-    private var currentAnimationSystemLoad: MenuBarIconAnimationSystemLoad?
+    private var animationFrameDuration: TimeInterval = 1.0 / MenuBarIconProcessing.animationFramesPerSecond
 
     init(
         pluginHost: PluginHost,
@@ -119,7 +114,6 @@ final class MenuBarStatusItemController: NSObject {
     deinit {
         MainActor.assumeIsolated {
             animationTimer?.cancel()
-            animationLoadSampleTimer?.invalidate()
             if let appearanceObserver {
                 DistributedNotificationCenter.default().removeObserver(appearanceObserver)
             }
@@ -271,73 +265,31 @@ final class MenuBarStatusItemController: NSObject {
     private func configureAnimationIfNeeded(_ payload: MenuBarIconImagePayload) {
         animationTimer?.cancel()
         animationTimer = nil
-        animationLoadSampleTimer?.invalidate()
-        animationLoadSampleTimer = nil
         animationFrames = []
         animationFrameIndex = 0
-        animationBaseFrameDuration = payload.frameDuration
-        animationSpeedMode = payload.speedMode
-        manualAnimationSpeedMultiplier = payload.manualSpeedMultiplier
-        currentAnimationSystemLoad = nil
+        animationFrameDuration = max(payload.frameDuration, 0.04)
 
         guard payload.isAnimated else {
             return
         }
 
         animationFrames = payload.animationFrames
-        refreshAnimationLoadIfNeeded()
         scheduleAnimationTimer()
-        scheduleAnimationLoadSamplingIfNeeded()
     }
 
     private func scheduleAnimationTimer() {
         animationTimer?.cancel()
-        let frameDuration = effectiveAnimationFrameDuration()
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(
-            deadline: .now() + frameDuration,
-            repeating: frameDuration,
-            leeway: .milliseconds(Int((frameDuration * 500).rounded()))
+            deadline: .now() + animationFrameDuration,
+            repeating: animationFrameDuration,
+            leeway: .milliseconds(Int((animationFrameDuration * 500).rounded()))
         )
         timer.setEventHandler { [weak self] in
             self?.advanceAnimationFrame()
         }
         animationTimer = timer
         timer.resume()
-    }
-
-    private func scheduleAnimationLoadSamplingIfNeeded() {
-        guard animationSpeedMode == .adaptiveSystemLoad else {
-            return
-        }
-
-        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshAnimationLoadIfNeeded()
-                self?.scheduleAnimationTimer()
-            }
-        }
-        timer.tolerance = 2
-        animationLoadSampleTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
-    }
-
-    private func refreshAnimationLoadIfNeeded() {
-        guard animationSpeedMode == .adaptiveSystemLoad else {
-            return
-        }
-
-        currentAnimationSystemLoad = animationLoadMonitor.sample()
-    }
-
-    private func effectiveAnimationFrameDuration() -> TimeInterval {
-        let multiplier = MenuBarIconAnimationSpeedPolicy.multiplier(
-            mode: animationSpeedMode,
-            manualMultiplier: manualAnimationSpeedMultiplier,
-            systemLoad: currentAnimationSystemLoad
-        )
-        let normalizedMultiplier = max(multiplier, MenuBarIconAnimationSpeedPolicy.minimumMultiplier)
-        return max(animationBaseFrameDuration / normalizedMultiplier, 0.04)
     }
 
     private func advanceAnimationFrame() {
@@ -347,8 +299,6 @@ final class MenuBarStatusItemController: NSObject {
         else {
             animationTimer?.cancel()
             animationTimer = nil
-            animationLoadSampleTimer?.invalidate()
-            animationLoadSampleTimer = nil
             return
         }
 

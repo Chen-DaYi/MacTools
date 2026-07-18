@@ -550,8 +550,10 @@ function create_dmg() {
   hdiutil create \
     -volname "$volume_name" \
     -srcfolder "$stage_dir" \
+    -fs HFS+ \
     -ov \
     -format UDZO \
+    -imagekey zlib-level=9 \
     "$dmg_path" >/dev/null
 
   /bin/rm -rf "$stage_dir"

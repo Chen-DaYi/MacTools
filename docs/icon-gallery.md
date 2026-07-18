@@ -53,7 +53,6 @@
 - 远程素材下载到 `~/Library/Application Support/MacTools/MenuBarIcons/RemoteAssets/`，Debug 为 `MacTools Dev`。
 - 当前选中的在线素材直接从 `RemoteAssets` 读帧，渲染后进入内存缓存；动画播放时不会访问网络。
 - 选择新的在线素材后，会清理旧的 `RemoteAssets`，只保留当前选中素材。
-- 最近使用会保留在线素材的本地缩略图和轻量引用；完整帧若已被清理，点击最近使用时会通过 catalog 重新下载。
 
 ## Local Debug Gallery
 
