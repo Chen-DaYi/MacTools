@@ -1,5 +1,9 @@
 SHELL := /bin/zsh
 
+# Prefer Xcode's Apple-signed Python for local tooling while allowing explicit overrides.
+PYTHON3 ?= $(if $(wildcard /usr/bin/python3),/usr/bin/python3,python3)
+export PYTHON3
+
 PROJECT_NAME := MacTools
 APP_PRODUCT_NAME ?= MacTools Dev
 REMOTE_URL ?= git@github.com:owner/MacTools.git
@@ -27,7 +31,7 @@ PLUGIN_RELEASE_BUILD_DIR ?= build/PluginRelease/Build
 PLUGIN_RELEASE_DIST_DIR ?= build/PluginRelease
 PLUGIN_RELEASE_ASSETS_DIR ?= $(PLUGIN_RELEASE_DIST_DIR)/Assets
 PLUGIN_RELEASE_CATALOG ?= $(PLUGIN_RELEASE_DIST_DIR)/catalog.json
-PLUGIN_KIT_VERSION ?= $(shell python3 -c 'import glob,json; versions={json.load(open(path, encoding="utf-8"))["pluginKitVersion"] for path in glob.glob("Plugins/*/plugin.json")}; print(next(iter(versions)) if len(versions) == 1 else "")')
+PLUGIN_KIT_VERSION ?= $(shell $(PYTHON3) -c 'import glob,json; versions={json.load(open(path, encoding="utf-8"))["pluginKitVersion"] for path in glob.glob("Plugins/*/plugin.json")}; print(next(iter(versions)) if len(versions) == 1 else "")')
 PLUGIN_RELEASE_SIGNED_CATALOG ?= $(if $(filter 2,$(PLUGIN_KIT_VERSION)),docs/plugins/catalog.json,docs/plugins/v$(PLUGIN_KIT_VERSION)/catalog.json)
 PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
 
@@ -51,6 +55,7 @@ generate: generate-plugin-config
 	@xcodegen generate
 
 build: generate
+	@echo "Building Debug app and plugins..."
 	@$(XCODEBUILD) -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -destination "$(BUILD_DESTINATION)" -derivedDataPath $(DERIVED_DATA) build -quiet
 
 sync-debug-plugins: build
@@ -82,7 +87,7 @@ build-plugin: generate
 build-plugins: build-plugin
 
 generate-icon-gallery:
-	@./scripts/icons/generate-local-icon-gallery.py \
+	@$(PYTHON3) ./scripts/icons/generate-local-icon-gallery.py \
 		--output-dir "$(LOCAL_ICON_GALLERY_DIR)"
 
 package-plugins-release: generate
