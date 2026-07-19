@@ -143,6 +143,70 @@
         }
       }
     },
+    "settings.metric.visibility.hide": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إخفاء %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@ ausblenden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Hide %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Ocultar %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Masquer %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@を非表示" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@ 가리기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ocultar %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Скрыть %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "隐藏%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "隱藏%@" } }
+      }
+    },
+    "settings.metric.visibility.hidden": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "مخفي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Ausgeblendet" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Hidden" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Oculto" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Masqué" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "非表示" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "숨김" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Oculto" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Скрыто" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已隐藏" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已隱藏" } }
+      }
+    },
+    "settings.metric.visibility.show": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إظهار %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@ anzeigen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Mostrar %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Afficher %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@を表示" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@ 표시" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostrar %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показать %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "顯示%@" } }
+      }
+    },
+    "settings.metric.visibility.visible": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "ظاهر" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Sichtbar" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Visible" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Visible" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Visible" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "表示中" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "표시됨" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Visível" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показано" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已显示" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已顯示" } }
+      }
+    },
     "metric.memory": {
       "extractionState": "manual",
       "localizations": {

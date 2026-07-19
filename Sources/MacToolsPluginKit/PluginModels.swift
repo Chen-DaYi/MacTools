@@ -85,7 +85,7 @@ public enum PluginDeactivationReason: Equatable {
     case hostShutdown
 
     /// `true` when the plugin should revert any external side-effects it owns
-    /// (user disabled, plugin uninstalled, or app is quitting).
+    /// (host isolation, plugin uninstalled, or app is quitting).
     /// `false` during hot-reload updates — the new version will re-activate.
     public var requiresStateCleanup: Bool {
         switch self {

@@ -3,6 +3,25 @@ import Combine
 import SwiftUI
 import MacToolsPluginKit
 
+enum SettingsPanelPresentationTarget {
+    case dashboard
+    case featurePanel
+}
+
+struct SettingsPanelPresentationActions {
+    var showDashboard: () -> Void = {}
+    var showFeaturePanel: () -> Void = {}
+
+    func present(_ target: SettingsPanelPresentationTarget) {
+        switch target {
+        case .dashboard:
+            showDashboard()
+        case .featurePanel:
+            showFeaturePanel()
+        }
+    }
+}
+
 @MainActor
 final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let pluginHost: PluginHost
@@ -12,6 +31,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let launchAtLoginController: LaunchAtLoginController
     private var settingsWindow: NSWindow?
     private var runtimeLocaleCancellable: AnyCancellable?
+    private var panelPresentationActions = SettingsPanelPresentationActions()
 
     static var settingsWindowTitle: String {
         AppL10n.settings("settings.window.title", defaultValue: "设置")
@@ -49,6 +69,16 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         settingsWindow = window
     }
 
+    func setPanelPresentationActions(
+        showDashboard: @escaping () -> Void,
+        showFeaturePanel: @escaping () -> Void
+    ) {
+        panelPresentationActions = SettingsPanelPresentationActions(
+            showDashboard: showDashboard,
+            showFeaturePanel: showFeaturePanel
+        )
+    }
+
     private func show(_ window: NSWindow) {
         NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -69,7 +99,13 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 appUpdater: appUpdater,
                 menuBarIconSettings: menuBarIconSettings,
                 menuBarIconGallery: menuBarIconGallery,
-                launchAtLoginController: launchAtLoginController
+                launchAtLoginController: launchAtLoginController,
+                showDashboard: { [weak self] in
+                    self?.panelPresentationActions.present(.dashboard)
+                },
+                showFeaturePanel: { [weak self] in
+                    self?.panelPresentationActions.present(.featurePanel)
+                }
             )
         )
         window.delegate = self

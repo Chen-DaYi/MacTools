@@ -27,7 +27,7 @@ final class DynamicPluginLoader: DynamicPluginLoading {
 
     func loadInstalledPlugins(from records: [PluginPackageRecord]) -> [DynamicPluginLoadResult] {
         records.map { record in
-            guard case .enabled = record.state else {
+            guard case .installed = record.state else {
                 return DynamicPluginLoadResult(record: record, plugins: [], errorMessage: nil)
             }
 

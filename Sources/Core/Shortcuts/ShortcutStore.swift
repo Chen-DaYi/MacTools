@@ -56,6 +56,13 @@ final class ShortcutStore {
         }
     }
 
+    func removeCustomizations(forPluginID pluginID: String) {
+        let prefix = DefaultsKey.prefix + pluginID + ".shortcut."
+        for key in userDefaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            userDefaults.removeObject(forKey: key)
+        }
+    }
+
     func resolvedBinding(for shortcutID: String, default defaultBinding: ShortcutBinding?) -> ShortcutBinding? {
         ShortcutStore.resolve(
             customization: customization(for: shortcutID),

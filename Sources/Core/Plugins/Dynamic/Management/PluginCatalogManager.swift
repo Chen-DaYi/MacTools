@@ -162,12 +162,19 @@ final class PluginCatalogManager {
     func installPlugin(id: String) async throws {
         let entry = try catalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
-        try dynamicPluginManager.installPluginPackage(from: packageURL, catalogEntry: entry)
+        try dynamicPluginManager.installPluginPackage(
+            from: packageURL,
+            catalogEntry: entry
+        )
     }
 
     func updatePlugin(id: String) async throws {
         let entry = try catalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
+        guard dynamicPluginManager.isInstalledPlugin(id) else {
+            return
+        }
+
         try dynamicPluginManager.updatePluginPackage(from: packageURL, catalogEntry: entry)
     }
 

@@ -24,7 +24,7 @@
 | `ASC_API_ISSUER_ID` | App Store Connect Issuer ID。 |
 | `SPARKLE_PRIVATE_KEY` | Sparkle EdDSA 私钥，必须与 `project.yml` 中的 `SPARKLE_PUBLIC_ED_KEY` 配对。 |
 | `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` | 插件 catalog Ed25519 私钥的 Base64 内容，用于签名当前 PluginKit 版本的 catalog。 |
-| `HOMEBREW_GITHUB_API_TOKEN` | 可选。GitHub Personal Access Token，至少需要 `public_repo` 权限，用于稳定版发布后通过 `brew bump-cask-pr` 自动向官方 `Homebrew/homebrew-cask` 提交 cask bump PR；未配置时 Homebrew 同步会失败，可手动运行 workflow 或手动提交 PR。 |
+| `HOMEBREW_GITHUB_API_TOKEN` | 可选。GitHub Personal Access Token，至少需要 `public_repo` 权限，仅供手动运行 `Homebrew Cask Update` workflow 时通过 `brew bump-cask-pr` 向官方 `Homebrew/homebrew-cask` 提交 cask bump PR。 |
 
 不要把 `LocalConfig.xcconfig`、`.p12`、`.p8`、Sparkle 私钥、证书密码或 Apple ID 写入仓库。
 
@@ -104,7 +104,7 @@ PY
 make release
 ```
 
-命令会交互选择发布类型、分析当前版本和最新 tag、选择 `patch`/`minor`/`major`，并先展示 bump 预览；确认后才自动 `git pull --rebase`、运行轻量检查、更新版本文件、提交版本 bump、创建并推送 tag。App 发布会推送 `v*.*.*` tag，后续构建、签名、公证、上传 GitHub Release、更新 Sparkle appcast 由 `Release` workflow 完成；官方 Homebrew cask 的版本更新 PR 由 `Homebrew Cask Update` workflow 跟进。
+命令会交互选择发布类型、分析当前版本和最新 tag、选择 `patch`/`minor`/`major`，并先展示 bump 预览；确认后才自动 `git pull --rebase`、运行轻量检查、更新版本文件、提交版本 bump、创建并推送 tag。App 发布会推送 `v*.*.*` tag，后续构建、签名、公证、上传 GitHub Release、更新 Sparkle appcast 由 `Release` workflow 完成。`Release` 不更新 Homebrew；需要更新官方 cask 时，手动运行独立的 `Homebrew Cask Update` workflow。
 
 非交互示例：
 

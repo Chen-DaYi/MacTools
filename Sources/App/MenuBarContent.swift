@@ -993,9 +993,6 @@ struct MenuBarContent: View {
                     iconTint: .blue,
                     onInstall: {
                         pluginHost.presentPluginMarketplace()
-                    },
-                    onEnable: {
-                        pluginHost.presentInstalledPlugins()
                     }
                 )
                 .frame(minHeight: MenuBarPanelLayout.emptyContentHeight)

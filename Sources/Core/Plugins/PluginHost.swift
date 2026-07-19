@@ -4,9 +4,67 @@ import SwiftUI
 import MacToolsPluginKit
 
 enum FeatureSettingsPane: Hashable {
-    case installed
+    case dashboardLayout
+    case featurePanelLayout
     case marketplace
     case configuration(String)
+}
+
+private extension FeatureSettingsPane {
+    init(landingPage: PluginSettingsLandingPage) {
+        switch landingPage {
+        case .dashboard:
+            self = .dashboardLayout
+        case .featurePanel:
+            self = .featurePanelLayout
+        case .marketplace:
+            self = .marketplace
+        }
+    }
+
+    var landingPage: PluginSettingsLandingPage? {
+        switch self {
+        case .dashboardLayout:
+            .dashboard
+        case .featurePanelLayout:
+            .featurePanel
+        case .marketplace:
+            .marketplace
+        case .configuration:
+            nil
+        }
+    }
+}
+
+struct PluginHostCapabilities: Equatable, Sendable {
+    let supportsDashboard: Bool
+    let supportsFeaturePanel: Bool
+    let hasCustomConfiguration: Bool
+
+    var supportedSurfaces: Set<PluginDisplaySurface> {
+        var surfaces: Set<PluginDisplaySurface> = []
+        if supportsDashboard {
+            surfaces.insert(.dashboard)
+        }
+        if supportsFeaturePanel {
+            surfaces.insert(.featurePanel)
+        }
+        return surfaces
+    }
+}
+
+struct PluginSurfaceLayoutItem: Identifiable {
+    let id: String
+    let title: String
+    let description: String
+    let iconName: String
+    let iconTint: Color
+    let capabilities: PluginHostCapabilities
+    let isVisible: Bool
+    let isActive: Bool
+    let canUninstall: Bool
+    let category: String?
+    let releaseChannel: String?
 }
 
 struct AppShortcutSettingsItem: Equatable {
@@ -116,18 +174,18 @@ final class PluginHost: ObservableObject {
     private struct PluginDescriptor {
         let metadata: PluginMetadata
         let plugin: any MacToolsPlugin
-        let capabilities: PluginPackageManifest.Capabilities?
+        let capabilities: PluginHostCapabilities
 
         var hasPrimaryPanel: Bool {
-            capabilities?.primaryPanel ?? true
+            capabilities.supportsFeaturePanel
         }
 
         var hasComponentPanel: Bool {
-            capabilities?.componentPanel ?? true
+            capabilities.supportsDashboard
         }
 
         var hasConfiguration: Bool {
-            capabilities?.configuration ?? true
+            capabilities.hasCustomConfiguration
         }
     }
 
@@ -175,11 +233,20 @@ final class PluginHost: ObservableObject {
     private var cachedPrimaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
     private var evaluatedPrimaryPanelIndicatorPluginIDs: Set<String> = []
     private var cachedComponentStatesByID: [String: PluginComponentState] = [:]
+    private var loggedCapabilityMismatchPluginIDs: Set<String> = []
+    private var builtInCapabilitiesByID: [String: PluginHostCapabilities] = [:]
+    private var dynamicResolvedCapabilitiesByID: [String: PluginHostCapabilities] = [:]
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var primaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
     @Published private(set) var componentItems: [PluginComponentItem] = []
+    // Legacy management projection retained for failure isolation and older
+    // tests. Layout settings use the per-surface order projections below.
     @Published private(set) var featureManagementItems: [PluginFeatureManagementItem] = []
+    @Published private(set) var dashboardLayoutItems: [PluginSurfaceLayoutItem] = []
+    @Published private(set) var dashboardHiddenLayoutItems: [PluginSurfaceLayoutItem] = []
+    @Published private(set) var featurePanelLayoutItems: [PluginSurfaceLayoutItem] = []
+    @Published private(set) var featurePanelHiddenLayoutItems: [PluginSurfaceLayoutItem] = []
     @Published private(set) var pluginConfigurationItems: [PluginConfigurationItem] = []
     @Published private(set) var permissionCards: [PluginPermissionCard] = []
     @Published private(set) var settingsCards: [PluginSettingsCard] = []
@@ -196,7 +263,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var settingsPresentationRequestCount = 0
     @Published private(set) var localizationRevision = 0
     @Published var selectedSettingsDestination: SettingsDestination = .general
-    @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .installed
+    @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .dashboardLayout
 
     /// Injected by `MenuBarStatusItemController`; returns the status-item button frame in screen coordinates.
     var statusItemButtonFrameProvider: (() -> NSRect?)? = nil {
@@ -269,6 +336,23 @@ final class PluginHost: ObservableObject {
         configureCallbacks(for: self.builtInPlugins)
 
         if let dynamicPluginManager {
+            // The retired global checkbox becomes hidden on every surface
+            // the plugin supports. Consume the package-store marker before
+            // loading dynamic code, but do not hold or deactivate packages:
+            // surface visibility is intentionally independent of lifecycle.
+            let legacyHiddenPluginIDs = dynamicPluginManager.legacyHiddenPluginIDs()
+            if pluginDisplayPreferencesStore.addLegacyHiddenPluginIDs(legacyHiddenPluginIDs) {
+                dynamicPluginManager.clearLegacyHiddenPluginIDs()
+            } else {
+                // An unknown future display payload must remain untouched until
+                // the user makes an explicit edit. Acknowledge the package-store
+                // marker after that edit durably captures the staged state, so a
+                // later launch cannot reapply stale legacy visibility.
+                pluginDisplayPreferencesStore.onNextSuccessfulPersistence = {
+                    [weak dynamicPluginManager] in
+                    dynamicPluginManager?.clearLegacyHiddenPluginIDs()
+                }
+            }
             if loadDynamicPluginsOnInit {
                 self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
                 self.didLoadDynamicPlugins = true
@@ -282,8 +366,6 @@ final class PluginHost: ObservableObject {
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
-            // Pause any dynamic plugin that was hidden before this launch.
-            pauseHiddenDynamicPlugins()
             dynamicPluginManager.onPluginsChanged = { [weak self] plugins in
                 self?.replaceDynamicPlugins(plugins)
             }
@@ -316,7 +398,6 @@ final class PluginHost: ObservableObject {
                 }
             }
 
-        pauseHiddenBuiltInVisibilityLifecyclePlugins()
         refreshAll()
     }
 
@@ -357,7 +438,9 @@ final class PluginHost: ObservableObject {
         return PreferencesBackup(
             application: preferencesBackupStore.applicationPreferences(),
             pluginDisplay: pluginDisplayPreferencesStore.backupSnapshot(
-                defaultPluginIDs: defaultPluginIDs
+                defaultPluginIDs: defaultPluginIDs,
+                dashboardDefaultPluginIDs: defaultPluginIDs(for: .dashboard),
+                featurePanelDefaultPluginIDs: defaultPluginIDs(for: .featurePanel)
             ),
             shortcutCustomizations: shortcutStore.customizations(
                 for: [AppShortcut.openSettingsID] + shortcutDescriptors.map(\.itemID)
@@ -394,6 +477,10 @@ final class PluginHost: ObservableObject {
             }
         }
 
+        if !installedPluginIDs.isEmpty {
+            loadDynamicPluginsIfNeeded()
+        }
+
         var result = try importPreferences(backup)
         result = PreferencesImportResult(
             installedPluginIDs: installedPluginIDs,
@@ -407,22 +494,31 @@ final class PluginHost: ObservableObject {
         _ = try preferencesImportPreview(for: backup)
         preferencesBackupStore.apply(backup.application)
 
-        let hiddenPluginIDs = Set(backup.pluginDisplay.hiddenPluginIDs)
-        for pluginID in defaultPluginIDs {
-            let shouldBeVisible = !hiddenPluginIDs.contains(pluginID)
-            guard pluginDisplayPreferencesStore.isVisible(
-                pluginID,
-                defaultPluginIDs: defaultPluginIDs
-            ) != shouldBeVisible else {
-                continue
-            }
-
-            setFeatureVisibility(shouldBeVisible, for: pluginID)
-        }
-
         pluginDisplayPreferencesStore.setOrderedPluginIDs(
             backup.pluginDisplay.orderedPluginIDs,
             defaultPluginIDs: defaultPluginIDs
+        )
+        pluginDisplayPreferencesStore.setOrderedPluginIDs(
+            backup.pluginDisplay.dashboardOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
+            for: .dashboard,
+            defaultPluginIDs: defaultPluginIDs(for: .dashboard)
+        )
+        pluginDisplayPreferencesStore.setOrderedPluginIDs(
+            backup.pluginDisplay.featurePanelOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
+            for: .featurePanel,
+            defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
+        )
+        // A legacy backup has one global checkbox. Map it to both supported
+        // surfaces; current backups restore the two independent values.
+        pluginDisplayPreferencesStore.setHiddenPluginIDs(
+            Set(backup.pluginDisplay.dashboardHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
+            for: .dashboard,
+            defaultPluginIDs: defaultPluginIDs(for: .dashboard)
+        )
+        pluginDisplayPreferencesStore.setHiddenPluginIDs(
+            Set(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
+            for: .featurePanel,
+            defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
         )
 
         restorePortablePluginPreferences(backup.pluginPreferences)
@@ -710,21 +806,44 @@ final class PluginHost: ObservableObject {
     }
 
     func presentPluginMarketplace() {
-        selectedFeatureSettingsPane = .marketplace
+        selectFeatureSettingsPane(.marketplace)
         selectedSettingsDestination = .pluginConfiguration
         settingsPresentationRequestCount += 1
     }
 
-    func presentInstalledPlugins() {
-        selectedFeatureSettingsPane = .installed
-        selectedSettingsDestination = .pluginConfiguration
-        settingsPresentationRequestCount += 1
+    /// Chooses the entry page for a normal Plugins-tab selection. Explicit
+    /// navigation to Marketplace or a plugin configuration bypasses this so
+    /// the requested destination is always respected.
+    func selectPluginSettingsLandingPage() {
+        let dashboardIsAvailable = !dashboardLayoutItems.isEmpty || !dashboardHiddenLayoutItems.isEmpty
+        let featurePanelIsAvailable = !featurePanelLayoutItems.isEmpty || !featurePanelHiddenLayoutItems.isEmpty
+
+        let landingPage: PluginSettingsLandingPage
+        if !dashboardIsAvailable && !featurePanelIsAvailable {
+            landingPage = .marketplace
+        } else if let savedPage = pluginDisplayPreferencesStore.lastPluginSettingsLandingPage(),
+                  isAvailable(savedPage, dashboardIsAvailable: dashboardIsAvailable, featurePanelIsAvailable: featurePanelIsAvailable) {
+            landingPage = savedPage
+        } else if dashboardIsAvailable {
+            landingPage = .dashboard
+        } else {
+            landingPage = .featurePanel
+        }
+
+        // This automatic route must not replace the user's saved choice. For
+        // example, temporarily having only settings-only plugins should not
+        // make Marketplace their permanent landing page after they install a
+        // layout-capable plugin again.
+        selectedFeatureSettingsPane = FeatureSettingsPane(landingPage: landingPage)
     }
 
     func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) {
         switch pane {
-        case .installed, .marketplace:
+        case .dashboardLayout, .featurePanelLayout, .marketplace:
             selectedFeatureSettingsPane = pane
+            if let landingPage = pane.landingPage {
+                pluginDisplayPreferencesStore.setLastPluginSettingsLandingPage(landingPage)
+            }
         case let .configuration(pluginID):
             guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
                 return
@@ -742,30 +861,48 @@ final class PluginHost: ObservableObject {
         rebuildDerivedState()
     }
 
-    func setFeatureVisibility(_ isVisible: Bool, for pluginID: String) {
-        if !isVisible {
-            removePluginFromVisiblePanelSurfaces(pluginID, notify: true)
+    /// Moves a plugin within a surface's visible order while leaving hidden
+    /// plugins in their remembered slots.
+    func movePlugin(id pluginID: String, toOffset targetOffset: Int, on surface: PluginDisplaySurface) {
+        let defaultPluginIDs = defaultPluginIDs(for: surface)
+        var orderedPluginIDs = visiblePluginIDs(for: surface)
+
+        guard let currentIndex = orderedPluginIDs.firstIndex(of: pluginID) else {
+            return
         }
 
-        pluginDisplayPreferencesStore.setVisibility(
-            isVisible,
-            for: pluginID,
+        let clampedOffset = min(max(targetOffset, 0), orderedPluginIDs.count)
+        guard currentIndex != clampedOffset, currentIndex + 1 != clampedOffset else {
+            return
+        }
+
+        orderedPluginIDs.move(
+            fromOffsets: IndexSet(integer: currentIndex),
+            toOffset: clampedOffset
+        )
+        pluginDisplayPreferencesStore.setVisiblePluginIDs(
+            orderedPluginIDs,
+            for: surface,
             defaultPluginIDs: defaultPluginIDs
         )
+        rebuildDerivedState()
+    }
 
-        // For dynamic plugins, pause/resume side effects with visibility.
-        // The plugin stays loaded so it remains visible in the installed list.
-        let isDynamicPlugin = dynamicPlugins.contains(where: { $0.metadata.id == pluginID })
-        if isDynamicPlugin {
-            if isVisible {
-                dynamicPluginManager?.resumePlugin(pluginID)
-            } else {
-                dynamicPluginManager?.pausePlugin(pluginID)
-            }
-        } else if let plugin = activePlugins.first(where: { $0.metadata.id == pluginID }) {
-            notifyFeatureVisibilityLifecycle(isVisible, for: plugin)
-        }
+    func setPluginVisible(_ isVisible: Bool, id pluginID: String, on surface: PluginDisplaySurface) {
+        pluginDisplayPreferencesStore.setPluginVisible(
+            isVisible,
+            pluginID: pluginID,
+            on: surface,
+            defaultPluginIDs: defaultPluginIDs(for: surface)
+        )
+        rebuildDerivedState()
+    }
 
+    func resetPluginOrder(on surface: PluginDisplaySurface) {
+        pluginDisplayPreferencesStore.resetOrder(
+            for: surface,
+            defaultPluginIDs: defaultPluginIDs(for: surface)
+        )
         rebuildDerivedState()
     }
 
@@ -978,9 +1115,8 @@ final class PluginHost: ObservableObject {
         dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
         didLoadDynamicPlugins = true
         configureCallbacks(for: dynamicPlugins)
-        pauseHiddenDynamicPlugins()
-        refreshAll()
         syncPluginManagementState()
+        refreshAll()
     }
 
     var hasInstalledDynamicPlugins: Bool {
@@ -1121,18 +1257,12 @@ final class PluginHost: ObservableObject {
         syncPluginManagementState()
     }
 
-    func setDynamicPluginEnabled(_ isEnabled: Bool, pluginID: String) {
-        if isEnabled {
-            isolatedPluginFailures.removeValue(forKey: pluginID)
-        }
-
-        dynamicPluginManager?.setPluginEnabled(isEnabled, pluginID: pluginID)
-        pluginCatalogManager?.rebuildManagementItems()
-        syncPluginManagementState()
-    }
-
     func uninstallDynamicPlugin(pluginID: String, removeData: Bool = false) throws {
         try dynamicPluginManager?.uninstallPlugin(pluginID: pluginID, removeData: removeData)
+        pluginDisplayPreferencesStore.removePlugin(pluginID)
+        shortcutStore.removeCustomizations(forPluginID: pluginID)
+        shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }
+        isolatedPluginFailures.removeValue(forKey: pluginID)
         pluginCatalogManager?.rebuildManagementItems()
         syncPluginManagementState()
     }
@@ -1244,6 +1374,8 @@ final class PluginHost: ObservableObject {
         visiblePanelSurfaces = previouslyVisibleSurfaces
         discardComponentViews()
         configurationViewCache.removeAll()
+        loggedCapabilityMismatchPluginIDs.removeAll()
+        dynamicResolvedCapabilitiesByID.removeAll()
         syncPluginManagementState()
         dynamicPlugins = plugins.sorted {
             if $0.metadata.order == $1.metadata.order {
@@ -1253,37 +1385,8 @@ final class PluginHost: ObservableObject {
             return $0.metadata.order < $1.metadata.order
         }
         configureCallbacks(for: dynamicPlugins)
-        // Re-apply pause for any plugin that is currently hidden.
-        pauseHiddenDynamicPlugins()
         rebuildDerivedState()
         syncGlobalShortcuts()
-    }
-
-    private func pauseHiddenDynamicPlugins() {
-        for plugin in dynamicPlugins
-            where !pluginDisplayPreferencesStore.isVisible(
-                plugin.metadata.id, defaultPluginIDs: defaultPluginIDs
-            )
-        {
-            dynamicPluginManager?.pausePlugin(plugin.metadata.id)
-        }
-    }
-
-    private func pauseHiddenBuiltInVisibilityLifecyclePlugins() {
-        for plugin in builtInPlugins
-            where !pluginDisplayPreferencesStore.isVisible(
-                plugin.metadata.id, defaultPluginIDs: defaultPluginIDs
-            )
-        {
-            notifyFeatureVisibilityLifecycle(false, for: plugin)
-        }
-    }
-
-    private func notifyFeatureVisibilityLifecycle(_ isVisible: Bool, for plugin: any MacToolsPlugin) {
-        guard let visibilityLifecycle = plugin as? any PluginFeatureVisibilityLifecycleHandling else { return }
-        guardPluginCall(plugin, operation: "feature visibility lifecycle") {
-            visibilityLifecycle.featureVisibilityDidChange(isVisible)
-        }
     }
 
     private func syncPluginManagementState() {
@@ -1299,6 +1402,16 @@ final class PluginHost: ObservableObject {
         if dirtyPluginIDs == nil {
             cancelScheduledPluginStateRebuild()
         }
+
+        let defaultDescriptors = defaultPluginDescriptors()
+        pluginDisplayPreferencesStore.migrateLegacyHiddenPluginIDs(
+            dashboardDefaultPluginIDs: defaultDescriptors
+                .filter { $0.capabilities.supportedSurfaces.contains(.dashboard) }
+                .map(\.metadata.id),
+            featurePanelDefaultPluginIDs: defaultDescriptors
+                .filter { $0.capabilities.supportedSurfaces.contains(.featurePanel) }
+                .map(\.metadata.id)
+        )
 
         let isolatedPluginCountAtStart = isolatedPluginFailures.count
         let orderedDescriptors = orderedPluginDescriptors()
@@ -1384,7 +1497,12 @@ final class PluginHost: ObservableObject {
         cachedComponentStatesByID = componentStatesByID
         self.primaryPanelIndicatorsByID = primaryPanelIndicatorsByID
 
-        panelItems = orderedDescriptors.compactMap { descriptor in
+        let featurePanelOrderedDescriptors = visiblePluginDescriptors(for: .featurePanel)
+        let dashboardOrderedDescriptors = visiblePluginDescriptors(for: .dashboard)
+        let featurePanelHiddenDescriptors = hiddenPluginDescriptors(for: .featurePanel)
+        let dashboardHiddenDescriptors = hiddenPluginDescriptors(for: .dashboard)
+
+        panelItems = featurePanelOrderedDescriptors.compactMap { descriptor in
             guard descriptor.hasPrimaryPanel else {
                 return nil
             }
@@ -1398,13 +1516,7 @@ final class PluginHost: ObservableObject {
                 return nil
             }
 
-            guard
-                state.isVisible,
-                pluginDisplayPreferencesStore.isVisible(
-                    metadata.id,
-                    defaultPluginIDs: defaultPluginIDs
-                )
-            else {
+            guard state.isVisible else {
                 return nil
             }
 
@@ -1434,7 +1546,7 @@ final class PluginHost: ObservableObject {
             )
         }
 
-        componentItems = orderedDescriptors.compactMap { descriptor in
+        componentItems = dashboardOrderedDescriptors.compactMap { descriptor in
             guard descriptor.hasComponentPanel else {
                 return nil
             }
@@ -1448,13 +1560,7 @@ final class PluginHost: ObservableObject {
                 return nil
             }
 
-            guard
-                state.isVisible,
-                pluginDisplayPreferencesStore.isVisible(
-                    metadata.id,
-                    defaultPluginIDs: defaultPluginIDs
-                )
-            else {
+            guard state.isVisible else {
                 return nil
             }
 
@@ -1480,24 +1586,62 @@ final class PluginHost: ObservableObject {
         trimComponentViewCache(keeping: Set(componentItems.map(\.id)))
         syncVisiblePanelSurfaces()
 
-        featureManagementItems = orderedDescriptors.map { descriptor in
+        featureManagementItems = orderedDescriptors.compactMap { descriptor in
             let metadata = descriptor.metadata
-
+            guard !descriptor.capabilities.supportedSurfaces.isEmpty else {
+                return nil
+            }
             return PluginFeatureManagementItem(
                 id: metadata.id,
                 title: metadata.title,
                 description: metadata.defaultDescription,
                 iconName: metadata.iconName,
                 iconTint: metadata.iconTint,
-                isVisible: pluginDisplayPreferencesStore.isVisible(
-                    metadata.id,
-                    defaultPluginIDs: defaultPluginIDs
+                isVisible: true,
+                isActive: (
+                    panelStatesByID[metadata.id]?.isOn == true
+                        || componentStatesByID[metadata.id]?.isActive == true
                 ),
-                isActive: panelStatesByID[metadata.id]?.isOn == true
-                    || componentStatesByID[metadata.id]?.isActive == true,
                 presentation: presentation(for: descriptor),
                 category: dynamicPluginCategoriesByID[metadata.id] ?? nil,
                 releaseChannel: dynamicPluginReleaseChannelsByID[metadata.id] ?? nil
+            )
+        }
+
+        dashboardLayoutItems = dashboardOrderedDescriptors.map { descriptor in
+            surfaceLayoutItem(
+                for: descriptor,
+                surface: .dashboard,
+                isVisible: true,
+                panelStatesByID: panelStatesByID,
+                componentStatesByID: componentStatesByID
+            )
+        }
+        dashboardHiddenLayoutItems = dashboardHiddenDescriptors.map { descriptor in
+            surfaceLayoutItem(
+                for: descriptor,
+                surface: .dashboard,
+                isVisible: false,
+                panelStatesByID: panelStatesByID,
+                componentStatesByID: componentStatesByID
+            )
+        }
+        featurePanelLayoutItems = featurePanelOrderedDescriptors.map { descriptor in
+            surfaceLayoutItem(
+                for: descriptor,
+                surface: .featurePanel,
+                isVisible: true,
+                panelStatesByID: panelStatesByID,
+                componentStatesByID: componentStatesByID
+            )
+        }
+        featurePanelHiddenLayoutItems = featurePanelHiddenDescriptors.map { descriptor in
+            surfaceLayoutItem(
+                for: descriptor,
+                surface: .featurePanel,
+                isVisible: false,
+                panelStatesByID: panelStatesByID,
+                componentStatesByID: componentStatesByID
             )
         }
 
@@ -1606,8 +1750,8 @@ final class PluginHost: ObservableObject {
         trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
         syncSelectedFeatureSettingsPane()
 
-        let newHasActivePlugin = panelStatesByID.values.contains(where: \.isOn)
-            || componentStatesByID.values.contains(where: \.isActive)
+        let newHasActivePlugin = panelStatesByID.contains { $0.value.isOn }
+            || componentStatesByID.contains { $0.value.isActive }
         if hasActivePlugin != newHasActivePlugin {
             hasActivePlugin = newHasActivePlugin
         }
@@ -1879,6 +2023,36 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    private func surfaceLayoutItem(
+        for descriptor: PluginDescriptor,
+        surface: PluginDisplaySurface,
+        isVisible: Bool,
+        panelStatesByID: [String: PluginPanelState],
+        componentStatesByID: [String: PluginComponentState]
+    ) -> PluginSurfaceLayoutItem {
+        let metadata = descriptor.metadata
+        let isActive: Bool
+        switch surface {
+        case .dashboard:
+            isActive = componentStatesByID[metadata.id]?.isActive == true
+        case .featurePanel:
+            isActive = panelStatesByID[metadata.id]?.isOn == true
+        }
+        return PluginSurfaceLayoutItem(
+            id: metadata.id,
+            title: metadata.title,
+            description: metadata.defaultDescription,
+            iconName: metadata.iconName,
+            iconTint: metadata.iconTint,
+            capabilities: descriptor.capabilities,
+            isVisible: isVisible,
+            isActive: isActive,
+            canUninstall: dynamicPluginManifestsByID[metadata.id] != nil,
+            category: dynamicPluginCategoriesByID[metadata.id] ?? nil,
+            releaseChannel: dynamicPluginReleaseChannelsByID[metadata.id] ?? nil
+        )
+    }
+
     private func shortcutDescriptors() -> [ShortcutDescriptor] {
         orderedCorePlugins().flatMap { plugin in
             let definitions = guardedValue(
@@ -1906,6 +2080,12 @@ final class PluginHost: ObservableObject {
         defaultPluginDescriptors().map(\.metadata.id)
     }
 
+    private func defaultPluginIDs(for surface: PluginDisplaySurface) -> [String] {
+        defaultPluginDescriptors()
+            .filter { $0.capabilities.supportedSurfaces.contains(surface) }
+            .map(\.metadata.id)
+    }
+
     private func orderedPluginIDs() -> [String] {
         pluginDisplayPreferencesStore.orderedPluginIDs(defaultPluginIDs: defaultPluginIDs)
     }
@@ -1924,6 +2104,30 @@ final class PluginHost: ObservableObject {
         let descriptorsByID = descriptorsByID()
 
         return orderedPluginIDs().compactMap { descriptorsByID[$0] }
+    }
+
+    private func visiblePluginDescriptors(for surface: PluginDisplaySurface) -> [PluginDescriptor] {
+        let descriptorsByID = descriptorsByID()
+        return visiblePluginIDs(for: surface).compactMap { descriptorsByID[$0] }
+    }
+
+    private func hiddenPluginDescriptors(for surface: PluginDisplaySurface) -> [PluginDescriptor] {
+        let descriptorsByID = descriptorsByID()
+        return hiddenPluginIDs(for: surface).compactMap { descriptorsByID[$0] }
+    }
+
+    private func visiblePluginIDs(for surface: PluginDisplaySurface) -> [String] {
+        pluginDisplayPreferencesStore.visiblePluginIDs(
+            for: surface,
+            defaultPluginIDs: defaultPluginIDs(for: surface)
+        )
+    }
+
+    private func hiddenPluginIDs(for surface: PluginDisplaySurface) -> [String] {
+        pluginDisplayPreferencesStore.hiddenPluginIDs(
+            for: surface,
+            defaultPluginIDs: defaultPluginIDs(for: surface)
+        )
     }
 
     private func pluginsByID() -> [String: any MacToolsPlugin] {
@@ -1948,12 +2152,18 @@ final class PluginHost: ObservableObject {
 
     private func defaultPluginDescriptors() -> [PluginDescriptor] {
         let descriptors = builtInPlugins
-            .map { PluginDescriptor(metadata: $0.metadata, plugin: $0, capabilities: nil) }
+            .map {
+                PluginDescriptor(
+                    metadata: $0.metadata,
+                    plugin: $0,
+                    capabilities: builtInCapabilities(for: $0)
+                )
+            }
             + dynamicPlugins.map {
                 PluginDescriptor(
                     metadata: localizedMetadata(for: $0.metadata),
                     plugin: $0,
-                    capabilities: dynamicPluginCapabilitiesByID[$0.metadata.id]
+                    capabilities: dynamicCapabilities(for: $0)
                 )
             }
 
@@ -1998,29 +2208,69 @@ final class PluginHost: ObservableObject {
             : description
     }
 
-    private func presentation(for descriptor: PluginDescriptor) -> PluginFeaturePresentation {
-        if let capabilities = descriptor.capabilities {
-            switch (capabilities.primaryPanel, capabilities.componentPanel) {
-            case (true, true):
-                return .featureAndComponentPanel
-            case (true, false):
-                return .featurePanel
-            case (false, true):
-                return .componentPanel
-            case (false, false):
-                return .featurePanel
-            }
+    private func builtInCapabilities(for plugin: any MacToolsPlugin) -> PluginHostCapabilities {
+        if let cachedCapabilities = builtInCapabilitiesByID[plugin.metadata.id] {
+            return cachedCapabilities
         }
 
-        let plugin = descriptor.plugin
-        switch (plugin.primaryPanel, plugin.componentPanel) {
-        case (.some, .some):
+        let capabilities = PluginHostCapabilities(
+            supportsDashboard: plugin.componentPanel != nil,
+            supportsFeaturePanel: plugin.primaryPanel != nil,
+            hasCustomConfiguration: plugin.configuration != nil
+        )
+        builtInCapabilitiesByID[plugin.metadata.id] = capabilities
+        return capabilities
+    }
+
+    private func dynamicCapabilities(for plugin: any MacToolsPlugin) -> PluginHostCapabilities {
+        if let cachedCapabilities = dynamicResolvedCapabilitiesByID[plugin.metadata.id] {
+            return cachedCapabilities
+        }
+
+        guard let declared = dynamicPluginCapabilitiesByID[plugin.metadata.id] else {
+            let capabilities = PluginHostCapabilities(
+                supportsDashboard: plugin.componentPanel != nil,
+                supportsFeaturePanel: plugin.primaryPanel != nil,
+                hasCustomConfiguration: plugin.configuration != nil
+            )
+            dynamicResolvedCapabilitiesByID[plugin.metadata.id] = capabilities
+            return capabilities
+        }
+
+        let runtimeSupportsFeaturePanel = plugin.primaryPanel != nil
+        let runtimeSupportsDashboard = plugin.componentPanel != nil
+        let hasPanelMismatch = declared.primaryPanel != runtimeSupportsFeaturePanel
+            || declared.componentPanel != runtimeSupportsDashboard
+
+        if hasPanelMismatch,
+           loggedCapabilityMismatchPluginIDs.insert(plugin.metadata.id).inserted {
+            AppLog.pluginHost.warning(
+                "Plugin \(plugin.metadata.id, privacy: .public) panel capability mismatch; declared primary=\(declared.primaryPanel, privacy: .public), component=\(declared.componentPanel, privacy: .public), runtime primary=\(runtimeSupportsFeaturePanel, privacy: .public), component=\(runtimeSupportsDashboard, privacy: .public)"
+            )
+        }
+
+        let capabilities = PluginHostCapabilities(
+            supportsDashboard: declared.componentPanel && runtimeSupportsDashboard,
+            supportsFeaturePanel: declared.primaryPanel && runtimeSupportsFeaturePanel,
+            hasCustomConfiguration: declared.configuration
+        )
+        dynamicResolvedCapabilitiesByID[plugin.metadata.id] = capabilities
+        return capabilities
+    }
+
+    private func presentation(for descriptor: PluginDescriptor) -> PluginFeaturePresentation {
+        switch (
+            descriptor.capabilities.supportsFeaturePanel,
+            descriptor.capabilities.supportsDashboard
+        ) {
+        case (true, true):
             return .featureAndComponentPanel
-        case (.some, .none):
+        case (true, false):
             return .featurePanel
-        case (.none, .some):
+        case (false, true):
             return .componentPanel
-        case (.none, .none):
+        case (false, false):
+            assertionFailure("Settings-only plugins do not have a panel presentation")
             return .featurePanel
         }
     }
@@ -2150,7 +2400,22 @@ final class PluginHost: ObservableObject {
 
         let availableIDs = Set(pluginConfigurationItems.map(\.id))
         if !availableIDs.contains(pluginID) {
-            selectedFeatureSettingsPane = .installed
+            selectedFeatureSettingsPane = .marketplace
+        }
+    }
+
+    private func isAvailable(
+        _ landingPage: PluginSettingsLandingPage,
+        dashboardIsAvailable: Bool,
+        featurePanelIsAvailable: Bool
+    ) -> Bool {
+        switch landingPage {
+        case .dashboard:
+            dashboardIsAvailable
+        case .featurePanel:
+            featurePanelIsAvailable
+        case .marketplace:
+            true
         }
     }
 
