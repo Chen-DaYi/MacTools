@@ -3,6 +3,24 @@ import Combine
 import SwiftUI
 import MacToolsPluginKit
 
+enum MenuBarPanelPresentationAction: Equatable {
+    case open
+    case switchPanel
+    case focus
+
+    static func resolve(
+        isPanelShown: Bool,
+        selectedTab: MenuBarPanelTab,
+        requestedTab: MenuBarPanelTab
+    ) -> MenuBarPanelPresentationAction {
+        guard isPanelShown else {
+            return .open
+        }
+
+        return selectedTab == requestedTab ? .focus : .switchPanel
+    }
+}
+
 enum MenuBarPanelWindowRegistry {
     private static let secondaryPanelIdentifier = NSUserInterfaceItemIdentifier(
         "MacTools.MenuBarSecondaryPanel"
@@ -123,6 +141,10 @@ final class MenuBarPanelPresenter: NSObject {
     var debugPopoverForTests: NSPopover {
         popover
     }
+
+    var debugSelectedTabForTests: MenuBarPanelTab {
+        tab(for: selectedPanel)
+    }
     #endif
 
     func toggleFeaturePanel(relativeTo button: NSStatusBarButton) {
@@ -131,6 +153,14 @@ final class MenuBarPanelPresenter: NSObject {
 
     func toggleComponentPanel(relativeTo button: NSStatusBarButton) {
         toggle(.components, relativeTo: button)
+    }
+
+    func showFeaturePanel(relativeTo button: NSStatusBarButton) {
+        present(.features, relativeTo: button)
+    }
+
+    func showDashboard(relativeTo button: NSStatusBarButton) {
+        present(.components, relativeTo: button)
     }
 
     func dismissPanels() {
@@ -148,7 +178,15 @@ final class MenuBarPanelPresenter: NSObject {
             return
         }
 
-        let wasShown = popover.isShown
+        present(panel, relativeTo: button)
+    }
+
+    private func present(_ panel: PanelKind, relativeTo button: NSStatusBarButton) {
+        let action = MenuBarPanelPresentationAction.resolve(
+            isPanelShown: popover.isShown,
+            selectedTab: tab(for: selectedPanel),
+            requestedTab: tab(for: panel)
+        )
         selectedPanel = panel
         updateContent(
             selectedTab: tab(for: panel),
@@ -157,7 +195,7 @@ final class MenuBarPanelPresenter: NSObject {
         )
         updatePanelSurfaceVisibility(for: tab(for: panel), isPanelVisible: true)
 
-        if wasShown {
+        if action != .open {
             focus(popover)
             scheduleHeightRefresh(for: tab(for: panel))
             return

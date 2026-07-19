@@ -271,9 +271,6 @@ struct ComponentPanelContent: View {
             iconTint: .purple,
             onInstall: {
                 pluginHost.presentPluginMarketplace()
-            },
-            onEnable: {
-                pluginHost.presentInstalledPlugins()
             }
         )
         .frame(minHeight: ComponentPanelLayout.emptyContentHeight)

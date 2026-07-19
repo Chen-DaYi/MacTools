@@ -22,7 +22,7 @@ private struct SystemStatusPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling, PluginFeatureVisibilityLifecycleHandling, PluginConfigurationPresenting {
+final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling, PluginConfigurationPresenting {
     let metadata: PluginMetadata
 
     var descriptor: PluginComponentDescriptor {
@@ -42,7 +42,7 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
     private let settingsController: SystemStatusSettingsController
     private let menuBarMetricsController: SystemStatusMenuBarMetricsController
     private let localization: PluginLocalization
-    private var isFeatureVisible = true
+    private var isActivated = true
 
     init(
         viewModel: SystemStatusViewModel? = nil,
@@ -127,7 +127,7 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
     }
 
     func refresh() {
-        guard isFeatureVisible else {
+        guard isActivated else {
             return
         }
 
@@ -136,28 +136,14 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
     }
 
     func activate(context: PluginRuntimeContext) {
-        isFeatureVisible = true
+        isActivated = true
         refresh()
     }
 
     func deactivate(reason: PluginDeactivationReason) {
-        isFeatureVisible = false
+        isActivated = false
         menuBarMetricsController.stop()
         viewModel.stop()
-    }
-
-    func featureVisibilityDidChange(_ isVisible: Bool) {
-        guard isFeatureVisible != isVisible else {
-            return
-        }
-
-        isFeatureVisible = isVisible
-        if isVisible {
-            refresh()
-        } else {
-            menuBarMetricsController.stop()
-            viewModel.stop()
-        }
     }
 
     func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {

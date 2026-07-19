@@ -74,6 +74,39 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         XCTAssertFalse(presenter.containsPresentedWindow(window))
     }
 
+    func testExplicitPresentationOpensClosedSurface() {
+        XCTAssertEqual(
+            MenuBarPanelPresentationAction.resolve(
+                isPanelShown: false,
+                selectedTab: .components,
+                requestedTab: .features
+            ),
+            .open
+        )
+    }
+
+    func testExplicitPresentationSwitchesOpenSurface() {
+        XCTAssertEqual(
+            MenuBarPanelPresentationAction.resolve(
+                isPanelShown: true,
+                selectedTab: .components,
+                requestedTab: .features
+            ),
+            .switchPanel
+        )
+    }
+
+    func testExplicitPresentationFocusesAlreadyOpenSurfaceWithoutClosing() {
+        XCTAssertEqual(
+            MenuBarPanelPresentationAction.resolve(
+                isPanelShown: true,
+                selectedTab: .features,
+                requestedTab: .features
+            ),
+            .focus
+        )
+    }
+
     private func makePresenter() -> MenuBarPanelPresenter {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)

@@ -6,6 +6,14 @@ import MacToolsPluginKit
 final class PluginRuntimeContextTests: XCTestCase {
     private let suiteName = "PluginRuntimeContextTests"
 
+    private final class LegacyVisibilityLifecyclePlugin: PluginFeatureVisibilityLifecycleHandling {
+        private(set) var isVisible = false
+
+        func featureVisibilityDidChange(_ isVisible: Bool) {
+            self.isVisible = isVisible
+        }
+    }
+
     override func tearDown() {
         UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
         super.tearDown()
@@ -52,6 +60,14 @@ final class PluginRuntimeContextTests: XCTestCase {
 
         XCTAssertEqual(storage.integer(forKey: "sample-plugin.sample-count"), 4)
         XCTAssertNil(defaults.object(forKey: "sample-plugin.sample-count"))
+    }
+
+    func testPluginKitV3VisibilityLifecycleProtocolRemainsAvailable() {
+        let plugin = LegacyVisibilityLifecyclePlugin()
+
+        plugin.featureVisibilityDidChange(true)
+
+        XCTAssertTrue(plugin.isVisible)
     }
 
     private func isolatedDefaults() -> UserDefaults {

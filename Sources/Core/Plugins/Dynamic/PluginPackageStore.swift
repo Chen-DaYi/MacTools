@@ -3,8 +3,7 @@ import MacToolsPluginKit
 
 struct PluginPackageRecord: Identifiable, Equatable {
     enum State: Equatable {
-        case enabled
-        case disabled
+        case installed
         case incompatible(String)
         case failed(String)
     }
@@ -43,7 +42,9 @@ enum PluginPackageStoreError: LocalizedError {
 @MainActor
 final class PluginPackageStore {
     private enum DefaultsKey {
-        static let disabledPluginIDs = "plugins.dynamic.disabledPluginIDs"
+        // Keep the previous key so upgrades can safely discover packages that
+        // were disabled before the installed/uninstalled-only model.
+        static let legacyDisabledPluginIDs = "plugins.dynamic.disabledPluginIDs"
     }
 
     let rootDirectory: URL
@@ -116,7 +117,7 @@ final class PluginPackageStore {
                             )
                         )
                     } else if fileManager.fileExists(atPath: bundleURL.path) {
-                        state = disabledPluginIDs.contains(manifest.id) ? .disabled : .enabled
+                        state = .installed
                     } else {
                         state = .failed(AppL10n.pluginsFormat(
                             "plugin.error.store.bundleMissingFormat",
@@ -172,7 +173,6 @@ final class PluginPackageStore {
             .appendingPathComponent("\(manifest.id)-backup-\(UUID().uuidString)", isDirectory: true)
             .appendingPathExtension("mactoolsplugin")
         let hadExistingPackage = fileManager.fileExists(atPath: destinationURL.path)
-        let wasDisabled = disabledPluginIDs.contains(manifest.id)
 
         if hadExistingPackage {
             guard replaceExisting else {
@@ -214,9 +214,6 @@ final class PluginPackageStore {
             throw PluginPackageStoreError.installFailed(error.localizedDescription)
         }
 
-        if !hadExistingPackage || !wasDisabled {
-            setEnabled(true, for: manifest.id)
-        }
         clearPendingRestart(pluginID: manifest.id)
 
         guard let record = installedRecords().first(where: { $0.id == manifest.id }) else {
@@ -230,21 +227,29 @@ final class PluginPackageStore {
     }
 
     func updatePackage(from sourceURL: URL) throws -> PluginPackageRecord {
-        try installPackage(from: sourceURL, replaceExisting: true)
-    }
-
-    func setEnabled(_ isEnabled: Bool, for pluginID: String) {
-        var ids = disabledPluginIDs
-
-        if isEnabled {
-            ids.remove(pluginID)
-            clearPendingRestart(pluginID: pluginID)
-        } else {
-            ids.insert(pluginID)
-            markPendingRestart(pluginID: pluginID)
+        let manifest = try PluginPackageManifestLoader.load(
+            from: sourceURL,
+            hostVersion: hostVersion
+        )
+        guard installedRecords().contains(where: { $0.id == manifest.id }) else {
+            throw PluginPackageStoreError.packageNotFound(manifest.id)
         }
 
-        disabledPluginIDs = ids
+        return try installPackage(from: sourceURL, replaceExisting: true)
+    }
+
+    /// Reads the old global hidden marker so the host can migrate it into
+    /// Dashboard and Feature Panel visibility before packages load.
+    ///
+    /// The host clears this marker only after the display-preferences store has
+    /// durably accepted it. That preserves the migration across a temporary
+    /// downgrade or a future preferences payload this version cannot decode.
+    func legacyHiddenPluginIDs() -> Set<String> {
+        Set(userDefaults.stringArray(forKey: DefaultsKey.legacyDisabledPluginIDs) ?? [])
+    }
+
+    func clearLegacyHiddenPluginIDs() {
+        userDefaults.removeObject(forKey: DefaultsKey.legacyDisabledPluginIDs)
     }
 
     func markRequiresRestartToFullyUnload(pluginID: String) {
@@ -252,7 +257,6 @@ final class PluginPackageStore {
     }
 
     func uninstall(pluginID: String, removeData: Bool) throws {
-        setEnabled(false, for: pluginID)
         try removePackageFiles(pluginID: pluginID)
         markPendingRestart(pluginID: pluginID)
 
@@ -311,15 +315,6 @@ final class PluginPackageStore {
             temporaryDirectory
         ].forEach { url in
             try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
-        }
-    }
-
-    private var disabledPluginIDs: Set<String> {
-        get {
-            Set(userDefaults.stringArray(forKey: DefaultsKey.disabledPluginIDs) ?? [])
-        }
-        set {
-            userDefaults.set(Array(newValue).sorted(), forKey: DefaultsKey.disabledPluginIDs)
         }
     }
 

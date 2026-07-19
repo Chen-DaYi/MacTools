@@ -16,6 +16,46 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         ],
     ]
 
+    private let pluginManagementLocalizationKeys = [
+        "plugin.management.active",
+        "plugin.management.uninstall.confirmationMessage",
+        "plugin.management.uninstall.confirmationTitle",
+        "plugin.management.uninstall.confirmationPausedNotice",
+        "plugin.management.uninstall.pauseConfirmation",
+        "plugin.management.uninstall.resumeConfirmation",
+        "plugin.management.viewMarketplace",
+        "plugin.management.openSettings",
+        "plugin.management.openSettingsForPlugin",
+        "plugin.management.hideFromDashboardFormat",
+        "plugin.management.hideFromFeaturePanelFormat",
+        "plugin.management.showInFeaturePanelFormat",
+        "plugin.management.showOnDashboardFormat",
+        "plugin.capability.both",
+        "plugin.capability.dashboard",
+        "plugin.capability.featurePanel",
+        "plugin.capability.settingsOnly",
+        "plugin.capability.unknown",
+    ]
+
+    private let pluginLayoutSettingsLocalizationKeys = [
+        "plugins.dashboard.description",
+        "plugins.dashboard.empty.description",
+        "plugins.dashboard.empty.title",
+        "plugins.dashboard.hiddenSectionFormat",
+        "plugins.dashboard.open",
+        "plugins.dashboard.title",
+        "plugins.featurePanel.description",
+        "plugins.featurePanel.empty.description",
+        "plugins.featurePanel.empty.title",
+        "plugins.featurePanel.hiddenSectionFormat",
+        "plugins.featurePanel.open",
+        "plugins.featurePanel.title",
+        "plugins.layout.restoreDefaultOrder",
+        "plugins.sidebar.dashboard",
+        "plugins.sidebar.featurePanel",
+        "plugins.sidebar.pluginsSection",
+    ]
+
     func testPluginStaticLocalizationKeysCoverAllSupportedLanguages() throws {
         var failures: [String] = []
 
@@ -68,6 +108,44 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
                     }
                 }
             }
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testPluginManagementLocalizationKeysCoverAllSupportedLanguages() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+            .appending(path: "Plugins.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        guard let strings = catalog["strings"] as? [String: [String: Any]] else {
+            throw AuditError.invalidCatalog(catalogURL.path)
+        }
+
+        var failures: [String] = []
+        for key in pluginManagementLocalizationKeys {
+            validate(key: key, in: strings, pluginName: "Plugin Management", failures: &failures)
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testPluginLayoutSettingsLocalizationKeysCoverAllSupportedLanguages() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+            .appending(path: "Settings.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        guard let strings = catalog["strings"] as? [String: [String: Any]] else {
+            throw AuditError.invalidCatalog(catalogURL.path)
+        }
+
+        var failures: [String] = []
+        for key in pluginLayoutSettingsLocalizationKeys {
+            validate(key: key, in: strings, pluginName: "Plugin Layout Settings", failures: &failures)
         }
 
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))

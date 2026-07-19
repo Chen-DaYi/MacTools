@@ -29,6 +29,12 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
         )
     }
 
+    func testUninstallScopeFallsBackToMacToolsWithoutCapabilityMetadata() {
+        let item = makeItem(id: "legacy", title: "Legacy", state: .installed)
+
+        XCTAssertEqual(item.uninstallScopeSummary, "MacTools")
+    }
+
     func testNotInstalledFirstSortRankOrdersInstallableBeforeInstalled() {
         XCTAssertEqual(
             PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "a", title: "A", state: .available)),
@@ -65,11 +71,7 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
             2
         )
         XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "h", title: "H", state: .enabled)),
-            3
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "i", title: "I", state: .disabled)),
+            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "h", title: "H", state: .installed)),
             3
         )
     }
@@ -90,7 +92,7 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
             1
         )
         XCTAssertEqual(
-            PluginMarketplaceSortMode.installedFirstSortRank(for: makeItem(id: "e", title: "E", state: .enabled)),
+            PluginMarketplaceSortMode.installedFirstSortRank(for: makeItem(id: "e", title: "E", state: .installed)),
             2
         )
         XCTAssertEqual(
@@ -133,7 +135,7 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
 
     func testNameAscendingAndDescendingIgnoreInstallStatus() {
         let items = [
-            makeItem(id: "c", title: "Charlie", state: .enabled),
+            makeItem(id: "c", title: "Charlie", state: .installed),
             makeItem(id: "a", title: "Alpha", state: .available),
             makeItem(id: "b", title: "Bravo", state: .updateAvailable(installedVersion: "1", catalogVersion: "2"))
         ]
@@ -210,7 +212,7 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
     func testNameSortUsesIDAsStableTieBreaker() {
         let items = [
             makeItem(id: "plugin-b", title: "Same", state: .available),
-            makeItem(id: "plugin-a", title: "Same", state: .enabled)
+            makeItem(id: "plugin-a", title: "Same", state: .installed)
         ]
 
         XCTAssertEqual(
@@ -225,7 +227,7 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
 
     func testStatusModesStillGroupAcrossAlphabeticalCatalogOrder() {
         let items = [
-            makeItem(id: "zebra-installed", title: "Zebra", state: .enabled),
+            makeItem(id: "zebra-installed", title: "Zebra", state: .installed),
             makeItem(id: "apple-available", title: "Apple", state: .available),
             makeItem(
                 id: "mango-update",
@@ -246,29 +248,29 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
 
     func testCompareIsSymmetricForDistinctRanks() {
         let available = makeItem(id: "a", title: "A", state: .available)
-        let enabled = makeItem(id: "e", title: "E", state: .enabled)
+        let installed = makeItem(id: "e", title: "E", state: .installed)
 
         XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(available, enabled, mode: .notInstalledFirst),
+            PluginMarketplaceSortMode.compare(available, installed, mode: .notInstalledFirst),
             .orderedAscending
         )
         XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(enabled, available, mode: .notInstalledFirst),
+            PluginMarketplaceSortMode.compare(installed, available, mode: .notInstalledFirst),
             .orderedDescending
         )
         XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(enabled, available, mode: .installedFirst),
+            PluginMarketplaceSortMode.compare(installed, available, mode: .installedFirst),
             .orderedAscending
         )
         XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(available, enabled, mode: .installedFirst),
+            PluginMarketplaceSortMode.compare(available, installed, mode: .installedFirst),
             .orderedDescending
         )
     }
 
     func testNameComparePreservesOrderedSameWhenTitleAndIDMatch() {
         let item = makeItem(id: "same-id", title: "Same", state: .available)
-        let duplicate = makeItem(id: "same-id", title: "Same", state: .enabled)
+        let duplicate = makeItem(id: "same-id", title: "Same", state: .installed)
 
         XCTAssertEqual(
             PluginMarketplaceSortMode.compare(item, duplicate, mode: .nameAscending),
@@ -286,7 +288,7 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
 
     private func sampleStatusItems() -> [PluginManagementItem] {
         [
-            makeItem(id: "installed-z", title: "Zeta", state: .enabled),
+            makeItem(id: "installed-z", title: "Zeta", state: .installed),
             makeItem(id: "available-b", title: "Beta", state: .available),
             makeItem(
                 id: "update-a",
@@ -295,14 +297,15 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
             ),
             makeItem(id: "available-a", title: "Alpha", state: .available),
             makeItem(id: "failed", title: "Failed", state: .failed("boom")),
-            makeItem(id: "installed-a", title: "Alpha Installed", state: .disabled)
+            makeItem(id: "installed-a", title: "Alpha Installed", state: .installed)
         ]
     }
 
     private func makeItem(
         id: String,
         title: String,
-        state: PluginManagementItem.State
+        state: PluginManagementItem.State,
+        capabilities: PluginPackageManifest.Capabilities? = nil
     ) -> PluginManagementItem {
         PluginManagementItem(
             id: id,
@@ -313,7 +316,8 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
             packageURL: nil,
             requiresRestartToFullyUnload: false,
             releaseNotesURL: nil,
-            category: "system"
+            category: "system",
+            capabilities: capabilities
         )
     }
 }
