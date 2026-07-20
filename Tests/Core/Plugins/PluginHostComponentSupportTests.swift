@@ -360,10 +360,10 @@ final class PluginHostComponentSupportTests: XCTestCase {
         )
 
         XCTAssertTrue(host.pluginConfigurationItems.isEmpty)
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
+        XCTAssertFalse(host.hasPluginConfiguration(pluginID: "component"))
     }
 
-    func testConfigurationListUsesSharedPluginOrderAndSelectsFirstItem() {
+    func testConfigurationListUsesSharedPluginOrder() {
         let first = MockComponentPanelPlugin(
             id: "first",
             order: 1,
@@ -394,12 +394,10 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let host = makeHost(plugins: [first, second])
 
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["first", "second"])
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
 
         host.moveFeatureManagementItem(id: "second", toOffset: 0)
 
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["second", "first"])
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
     }
 
     func testFeatureSettingsSelectionIgnoresMissingConfigurationItem() {
@@ -416,13 +414,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
         )
         let host = makeHost(plugins: [componentPanelPlugin])
 
-        host.selectFeatureSettingsPane(.configuration("missing"))
-
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
-
-        host.selectFeatureSettingsPane(.configuration("component"))
-
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .configuration("component"))
+        XCTAssertFalse(host.selectFeatureSettingsPane(.configuration("missing")))
+        XCTAssertTrue(host.selectFeatureSettingsPane(.configuration("component")))
     }
 
     func testCustomPluginConfigurationContributesConfigurationItemAndCachesView() {

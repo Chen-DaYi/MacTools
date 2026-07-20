@@ -68,54 +68,47 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         )
     }
 
-    func testPresentPluginMarketplaceSelectsMarketplaceSettings() {
+    func testPresentPluginMarketplaceRequestsMarketplaceSettings() {
         let plugin = MockNavigationPlugin()
         let host = makeHost(plugin: plugin)
+        var requests: [SettingsPresentationRequest] = []
+        host.settingsPresentationHandler = { requests.append($0) }
 
         host.presentPluginMarketplace()
 
-        XCTAssertEqual(host.selectedSettingsDestination, .pluginConfiguration)
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .marketplace)
-        XCTAssertEqual(host.settingsPresentationRequestCount, 1)
+        XCTAssertEqual(requests, [.pluginMarketplace])
     }
 
-    func testMarketplaceRemainsThePluginManagementDestination() {
+    func testPresentPluginConfigurationRequestsSpecificConfiguration() {
         let plugin = MockNavigationPlugin()
         let host = makeHost(plugin: plugin)
+        var requests: [SettingsPresentationRequest] = []
+        host.settingsPresentationHandler = { requests.append($0) }
 
-        host.presentPluginMarketplace()
+        host.presentPluginConfiguration(pluginID: plugin.metadata.id)
 
-        XCTAssertEqual(host.selectedSettingsDestination, .pluginConfiguration)
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .marketplace)
-        XCTAssertEqual(host.settingsPresentationRequestCount, 1)
+        XCTAssertEqual(requests, [.pluginConfiguration(plugin.metadata.id)])
     }
 
     func testLayoutSettingsDestinationsCanBeSelectedIndependently() {
         let host = makeHost(plugin: MockNavigationPlugin())
 
-        host.selectFeatureSettingsPane(.dashboardLayout)
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .dashboardLayout)
-
-        host.selectFeatureSettingsPane(.featurePanelLayout)
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .featurePanelLayout)
+        XCTAssertTrue(host.selectFeatureSettingsPane(.dashboardLayout))
+        XCTAssertTrue(host.selectFeatureSettingsPane(.featurePanelLayout))
     }
 
     func testPluginSettingsLandingUsesMarketplaceForSettingsOnlyPlugins() {
         let host = makeHost(plugins: [MockSettingsOnlyNavigationPlugin()])
 
-        host.selectPluginSettingsLandingPage()
-
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .marketplace)
+        XCTAssertEqual(host.pluginSettingsLandingPage(), .marketplace)
     }
 
     func testPluginSettingsLandingUsesCompatibleSurfaceWhenOnlyOneIsAvailable() {
         let dashboardHost = makeHost(plugins: [MockDashboardNavigationPlugin()])
-        dashboardHost.selectPluginSettingsLandingPage()
-        XCTAssertEqual(dashboardHost.selectedFeatureSettingsPane, .dashboardLayout)
+        XCTAssertEqual(dashboardHost.pluginSettingsLandingPage(), .dashboardLayout)
 
         let featurePanelHost = makeHost(plugins: [MockNavigationPlugin()])
-        featurePanelHost.selectPluginSettingsLandingPage()
-        XCTAssertEqual(featurePanelHost.selectedFeatureSettingsPane, .featurePanelLayout)
+        XCTAssertEqual(featurePanelHost.pluginSettingsLandingPage(), .featurePanelLayout)
     }
 
     func testPluginSettingsLandingRestoresSavedSurfaceAfterTemporaryIncompatibility() {
@@ -134,18 +127,14 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
             defaults: defaults,
             resetDefaults: false
         )
-        secondHost.selectPluginSettingsLandingPage()
-
-        XCTAssertEqual(secondHost.selectedFeatureSettingsPane, .dashboardLayout)
+        XCTAssertEqual(secondHost.pluginSettingsLandingPage(), .dashboardLayout)
 
         let thirdHost = makeHost(
             plugins: [MockDashboardNavigationPlugin(), MockNavigationPlugin()],
             defaults: defaults,
             resetDefaults: false
         )
-        thirdHost.selectPluginSettingsLandingPage()
-
-        XCTAssertEqual(thirdHost.selectedFeatureSettingsPane, .featurePanelLayout)
+        XCTAssertEqual(thirdHost.pluginSettingsLandingPage(), .featurePanelLayout)
     }
 
     private func makeHost(plugin: MockNavigationPlugin) -> PluginHost {
@@ -208,6 +197,11 @@ private final class MockNavigationPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+    var configuration: PluginConfiguration? {
+        PluginConfiguration { _ in
+            EmptyView()
+        }
+    }
 
     func refresh() {}
 

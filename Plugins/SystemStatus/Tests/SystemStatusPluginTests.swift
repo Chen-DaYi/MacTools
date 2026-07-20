@@ -42,11 +42,12 @@ final class SystemStatusPluginTests: XCTestCase {
             plugins: [SystemStatusPlugin(storage: SystemStatusMemoryPluginStorage())],
             suiteName: suiteName
         )
+        var requests: [SettingsPresentationRequest] = []
+        host.settingsPresentationHandler = { requests.append($0) }
 
         host.presentPluginConfiguration(pluginID: "system-status")
 
-        XCTAssertEqual(host.selectedSettingsDestination, .pluginConfiguration)
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .configuration("system-status"))
+        XCTAssertEqual(requests, [.pluginConfiguration("system-status")])
     }
 
     func testSystemStatusLayoutUsesTwoColumnCoreMetricGridOrder() {

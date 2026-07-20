@@ -10,6 +10,12 @@ enum FeatureSettingsPane: Hashable {
     case configuration(String)
 }
 
+enum SettingsPresentationRequest: Equatable {
+    case settings
+    case pluginMarketplace
+    case pluginConfiguration(String)
+}
+
 private extension FeatureSettingsPane {
     init(landingPage: PluginSettingsLandingPage) {
         switch landingPage {
@@ -260,10 +266,12 @@ final class PluginHost: ObservableObject {
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
     @Published private(set) var hasActivePlugin = false
-    @Published private(set) var settingsPresentationRequestCount = 0
     @Published private(set) var localizationRevision = 0
-    @Published var selectedSettingsDestination: SettingsDestination = .general
-    @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .dashboardLayout
+
+    /// AppWindowRouter installs this while the application is running. The
+    /// host emits presentation requests but never retains Settings-window
+    /// navigation state.
+    var settingsPresentationHandler: ((SettingsPresentationRequest) -> Void)?
 
     /// Injected by `MenuBarStatusItemController`; returns the status-item button frame in screen coordinates.
     var statusItemButtonFrameProvider: (() -> NSRect?)? = nil {
@@ -800,21 +808,17 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        selectFeatureSettingsPane(.configuration(pluginID))
-        selectedSettingsDestination = .pluginConfiguration
-        settingsPresentationRequestCount += 1
+        settingsPresentationHandler?(.pluginConfiguration(pluginID))
     }
 
     func presentPluginMarketplace() {
-        selectFeatureSettingsPane(.marketplace)
-        selectedSettingsDestination = .pluginConfiguration
-        settingsPresentationRequestCount += 1
+        settingsPresentationHandler?(.pluginMarketplace)
     }
 
     /// Chooses the entry page for a normal Plugins-tab selection. Explicit
     /// navigation to Marketplace or a plugin configuration bypasses this so
     /// the requested destination is always respected.
-    func selectPluginSettingsLandingPage() {
+    func pluginSettingsLandingPage() -> FeatureSettingsPane {
         let dashboardIsAvailable = !dashboardLayoutItems.isEmpty || !dashboardHiddenLayoutItems.isEmpty
         let featurePanelIsAvailable = !featurePanelLayoutItems.isEmpty || !featurePanelHiddenLayoutItems.isEmpty
 
@@ -834,23 +838,28 @@ final class PluginHost: ObservableObject {
         // example, temporarily having only settings-only plugins should not
         // make Marketplace their permanent landing page after they install a
         // layout-capable plugin again.
-        selectedFeatureSettingsPane = FeatureSettingsPane(landingPage: landingPage)
+        return FeatureSettingsPane(landingPage: landingPage)
     }
 
-    func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) {
+    @discardableResult
+    func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) -> Bool {
         switch pane {
         case .dashboardLayout, .featurePanelLayout, .marketplace:
-            selectedFeatureSettingsPane = pane
             if let landingPage = pane.landingPage {
                 pluginDisplayPreferencesStore.setLastPluginSettingsLandingPage(landingPage)
             }
+            return true
         case let .configuration(pluginID):
             guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
-                return
+                return false
             }
 
-            selectedFeatureSettingsPane = pane
+            return true
         }
+    }
+
+    func hasPluginConfiguration(pluginID: String) -> Bool {
+        pluginConfigurationItems.contains(where: { $0.id == pluginID })
     }
 
     func clearShortcutError(for shortcutID: String) {
@@ -1748,7 +1757,6 @@ final class PluginHost: ObservableObject {
             configurationViewCache.removeAll()
         }
         trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
-        syncSelectedFeatureSettingsPane()
 
         let newHasActivePlugin = panelStatesByID.contains { $0.value.isOn }
             || componentStatesByID.contains { $0.value.isActive }
@@ -2393,17 +2401,6 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func syncSelectedFeatureSettingsPane() {
-        guard case let .configuration(pluginID) = selectedFeatureSettingsPane else {
-            return
-        }
-
-        let availableIDs = Set(pluginConfigurationItems.map(\.id))
-        if !availableIDs.contains(pluginID) {
-            selectedFeatureSettingsPane = .marketplace
-        }
-    }
-
     private func isAvailable(
         _ landingPage: PluginSettingsLandingPage,
         dashboardIsAvailable: Bool,
@@ -2742,7 +2739,7 @@ final class PluginHost: ObservableObject {
 
     private func handleShortcutTrigger(shortcutID: String) {
         if shortcutID == AppShortcut.openSettingsID {
-            settingsPresentationRequestCount += 1
+            settingsPresentationHandler?(.settings)
             return
         }
 

@@ -29,9 +29,11 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let menuBarIconSettings: MenuBarIconSettings
     private let menuBarIconGallery: MenuBarIconGalleryLibrary
     private let launchAtLoginController: LaunchAtLoginController
-    private var settingsWindow: NSWindow?
+    private(set) var settingsWindow: NSWindow?
+    private(set) var settingsNavigationCoordinator: SettingsNavigationCoordinator?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var panelPresentationActions = SettingsPanelPresentationActions()
+    private var onProgrammaticSettingsPresentation: () -> Void = {}
 
     static var settingsWindowTitle: String {
         AppL10n.settings("settings.window.title", defaultValue: "设置")
@@ -50,6 +52,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
         super.init()
+        pluginHost.settingsPresentationHandler = { [weak self] request in
+            self?.presentSettings(request)
+        }
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
@@ -79,12 +84,17 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         )
     }
 
+    func setProgrammaticSettingsPresentationAction(_ action: @escaping () -> Void) {
+        onProgrammaticSettingsPresentation = action
+    }
+
     private func show(_ window: NSWindow) {
         NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
 
     private func makeSettingsWindow() -> NSWindow {
+        let navigationCoordinator = SettingsNavigationCoordinator(pluginHost: pluginHost)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1040, height: 720),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -96,6 +106,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         window.contentView = NSHostingView(
             rootView: SettingsView(
                 pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
                 appUpdater: appUpdater,
                 menuBarIconSettings: menuBarIconSettings,
                 menuBarIconGallery: menuBarIconGallery,
@@ -111,7 +122,25 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
+        settingsNavigationCoordinator = navigationCoordinator
         return window
+    }
+
+    private func presentSettings(_ request: SettingsPresentationRequest) {
+        let window = settingsWindow ?? makeSettingsWindow()
+
+        switch request {
+        case .settings:
+            break
+        case .pluginMarketplace:
+            settingsNavigationCoordinator?.navigate(to: .plugins(.marketplace))
+        case let .pluginConfiguration(pluginID):
+            settingsNavigationCoordinator?.navigate(to: .plugins(.configuration(pluginID)))
+        }
+
+        show(window)
+        settingsWindow = window
+        onProgrammaticSettingsPresentation()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -122,5 +151,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         window.delegate = nil
         window.contentView = nil
         settingsWindow = nil
+        settingsNavigationCoordinator = nil
     }
 }
