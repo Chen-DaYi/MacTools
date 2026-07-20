@@ -193,6 +193,61 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(item?.settingsControlSystemImage, "sun.min.fill")
     }
 
+    func testIntegratedShortcutGroupIsRenderedByCustomConfigurationContext() throws {
+        let configurationCounter = ConfigurationRenderCounter()
+        let inlineDefinition = PluginShortcutDefinition(
+            id: "inline",
+            title: "Inline shortcut",
+            description: "Rendered with the custom configuration.",
+            actionID: "inline",
+            scope: .global,
+            defaultBinding: nil,
+            isRequired: false,
+            settingsGroupID: "devices"
+        )
+        let globalDefinition = PluginShortcutDefinition(
+            id: "global",
+            title: "Global shortcut",
+            description: "Rendered by the host shortcut section.",
+            actionID: "global",
+            scope: .global,
+            defaultBinding: nil,
+            isRequired: false,
+            settingsGroupID: "global"
+        )
+        let plugin = MockComponentPanelPlugin(
+            id: "component",
+            shortcutDefinitions: [inlineDefinition, globalDefinition],
+            configuration: PluginConfiguration(
+                description: "Custom configuration",
+                integratedShortcutGroupIDs: ["devices"]
+            ) { context in
+                configurationCounter.makeView(context: context)
+            }
+        )
+        let host = makeHost(plugins: [plugin])
+
+        XCTAssertEqual(
+            host.pluginConfigurationItems.first?.shortcutItems.map(\.settingsGroupID),
+            ["global"]
+        )
+
+        _ = host.pluginConfigurationViewItem(for: "component")
+        let context = try XCTUnwrap(configurationCounter.lastContext)
+        XCTAssertEqual(context.shortcutItems.map(\.settingsGroupID), ["devices", "global"])
+
+        let inlineItem = try XCTUnwrap(context.shortcutItem(definitionID: "inline"))
+        let binding = ShortcutBinding(keyCode: 18, modifiers: [.command, .option])
+        XCTAssertEqual(context.recordShortcut(binding, for: inlineItem.id), .accepted)
+        XCTAssertEqual(
+            host.shortcutItems.first(where: { $0.id == inlineItem.id })?.bindingText,
+            ShortcutFormatter.displayString(for: binding)
+        )
+
+        context.clearShortcut(for: inlineItem.id)
+        XCTAssertFalse(host.shortcutItems.first(where: { $0.id == inlineItem.id })?.canClear ?? true)
+    }
+
     func testShortcutsInSameSharedBindingGroupCanUseSameBinding() {
         let binding = ShortcutBinding(keyCode: 18, modifiers: [.command, .option])
         let componentPanelPlugin = MockComponentPanelPlugin(
@@ -1506,9 +1561,11 @@ private final class MutableComponentPanelPlugin: MacToolsPlugin, PluginComponent
 @MainActor
 private final class ConfigurationRenderCounter {
     private(set) var callCount = 0
+    private(set) var lastContext: PluginConfigurationContext?
 
     func makeView(context: PluginConfigurationContext) -> AnyView {
         callCount += 1
+        lastContext = context
         return AnyView(Text(context.pluginID))
     }
 }
