@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [plugins-1.1.2] - 2026-07-20
+
+### Changed
+
+- Use clear visibility controls when choosing System Status metrics for the panel or menu bar.
+
+### Fixed
+
+- Device Battery now avoids unnecessary Bluetooth scans when its widget and low-battery alerts are inactive.
+- Keep Fan Control’s faster refresh limited to its visible, expanded panel, and keep Hide Menu Bar Icons running when it is hidden from a layout.
+
 ## [plugins-1.1.1] - 2026-07-17
 
 ### Added
