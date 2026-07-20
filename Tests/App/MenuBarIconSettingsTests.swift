@@ -53,6 +53,20 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertEqual(reloadedPayload.image.size, NSSize(width: 18, height: 18))
     }
 
+    func testImportPreservesWhiteArtworkOnTransparentBackground() throws {
+        let sourceURL = try makeTransparentImageFile(
+            name: "white-transparent.png",
+            artworkColor: .white
+        )
+        let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+
+        settings.importIcon(from: sourceURL)
+        let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
+
+        XCTAssertNil(settings.lastErrorMessage)
+        XCTAssertGreaterThan(visiblePixelCount(in: payload.image), 500)
+    }
+
     func testDarkAppearanceFallsBackToLightCustomIcon() throws {
         let sourceURL = try makeImageFile(name: "shared.png", color: .systemRed)
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
@@ -195,5 +209,48 @@ final class MenuBarIconSettingsTests: XCTestCase {
         let data = try XCTUnwrap(MenuBarIconProcessing.pngData(from: image))
         try data.write(to: url)
         return url
+    }
+
+    private func makeTransparentImageFile(name: String, artworkColor: NSColor) throws -> URL {
+        let directory = rootDirectory.appendingPathComponent("Fixtures", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(name)
+        let image = NSImage(size: NSSize(width: 32, height: 32))
+        image.lockFocus()
+        artworkColor.setFill()
+        NSRect(x: 8, y: 8, width: 16, height: 16).fill()
+        image.unlockFocus()
+        let data = try XCTUnwrap(MenuBarIconProcessing.pngData(from: image))
+        try data.write(to: url)
+        return url
+    }
+
+    private func visiblePixelCount(in image: NSImage) -> Int {
+        var proposedRect = NSRect(origin: .zero, size: image.size)
+        guard let source = image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) else {
+            return 0
+        }
+
+        let width = source.width
+        let height = source.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return 0
+        }
+
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return stride(from: 3, to: pixels.count, by: 4).reduce(into: 0) { count, alphaIndex in
+            if pixels[alphaIndex] > 8 {
+                count += 1
+            }
+        }
     }
 }
