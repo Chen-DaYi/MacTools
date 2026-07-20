@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-07-16T16:15:17Z",
+  "generatedAt": "2026-07-20T14:08:33Z",
   "minimumHostVersion": "1.1.1",
   "pluginKitVersion": 3,
   "plugins": [
@@ -608,16 +608,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "52734827acb5e97ce6ca4b29922fc2c8213ce8730fa5db4c0520a5771bd23a76",
-        "size": 776087,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/device-battery.mactoolsplugin.zip"
+        "sha256": "cf3f7f5569f7da40183999f918c424c6aad8d8e78945eb8c8d80e66f2077566e",
+        "size": 884161,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.2/device-battery.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.2",
       "summary": "查看 Mac、Apple 移动设备、蓝牙外设和雷柏鼠标电量",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -1152,16 +1152,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "5f29baf78070159ce0f7d0e1ac55edfd01c2d15cd61d58d17740031a2608a333",
-        "size": 368323,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/fan-control.mactoolsplugin.zip"
+        "sha256": "c69d535d9f324dfac655c98105bb27f4acd2bd0849970ce8cd963bf47a8978ca",
+        "size": 368432,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.2/fan-control.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.2",
       "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-      "version": "1.0.11"
+      "version": "1.0.12"
     },
     {
       "capabilities": {
@@ -1764,9 +1764,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "969b963f1e43a1a78b8c3c69dcde18a9e926fb7b5f820171115dbe6a6c8dcc44",
-        "size": 822579,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/menu-bar-hidden.mactoolsplugin.zip"
+        "sha256": "9176cee9cd235af436f58611be27a9d400a9bc3c42019f88e8548a6af12b0067",
+        "size": 822076,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.2/menu-bar-hidden.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1774,9 +1774,9 @@
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.2",
       "summary": "菜单栏图标隐藏功能的设置与弹窗界面",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -2452,16 +2452,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "a12e7c7a93beb1bb58ab1362fda233d703bdfaf092c985d296a9eeae39523795",
-        "size": 698294,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/system-status.mactoolsplugin.zip"
+        "sha256": "1640eca07ff41f59fa31cbe10bfeac3eb296e59fe63888f5373dcd044c7158af",
+        "size": 701158,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.2/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.2",
       "summary": "实时查看系统状态",
-      "version": "1.0.15"
+      "version": "1.0.16"
     },
     {
       "capabilities": {
@@ -2746,6 +2746,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "DqAMwH0xXA2FZyOcuPZDzmb2ajZlGIeqwNYJlUQF0PTScb4150+uI5JgBt1FQ0XReMzX557IzZKwlwPNYLVMDg=="
+    "value": "vXQqw5rFffk2uNIPWIAt1p3NGHR6O+aNdomttDg5tapfM1tkGQw16mKb5ebPEyAjY5VZ4cxfD5uRA4Ul1ErdBA=="
   }
 }
