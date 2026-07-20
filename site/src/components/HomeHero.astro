@@ -1,4 +1,6 @@
 ---
+import { loadPluginCatalog, localizedPluginText, type Plugin } from "@/lib/plugins";
+
 interface Props {
   downloadURL: string;
 }
@@ -10,29 +12,263 @@ const base = import.meta.env.BASE_URL.endsWith("/")
 const withBase = (path: string) => `${base}${path.replace(/^\//, "")}`;
 
 const installCommand = "brew install --cask mactools";
+const sparkBars = Array.from({ length: 14 });
+const catalog = await loadPluginCatalog();
+const pluginsByID = new Map(catalog.plugins.map((plugin) => [plugin.id, plugin]));
 
-const heroShots = [
+type InteractionType = "disclosure" | "switch" | "button";
+type LocalizedLabel = { zh: string; en: string };
+type DetailModel = {
+  kind: "slider" | "segments" | "checks";
+  label: LocalizedLabel;
+  minimum?: number;
+  maximum?: number;
+  value?: number;
+  unit?: string;
+  options?: Array<LocalizedLabel & { id: string }>;
+};
+
+const interactionGroups: Array<{ type: InteractionType; ids: string[] }> = [
   {
-    slot: "dashboard",
-    label: "系统状态面板",
-    variants: [
-      { lang: "zh", theme: "light", src: "/assets/screenshots/hero-dashboard-zh-light.png", width: 664, height: 1584 },
-      { lang: "zh", theme: "dark", src: "/assets/screenshots/hero-dashboard-zh-dark.png", width: 701, height: 1593 },
-      { lang: "en", theme: "light", src: "/assets/screenshots/hero-dashboard-en-light.png", width: 692, height: 1406 },
-      { lang: "en", theme: "dark", src: "/assets/screenshots/hero-dashboard-en-dark.png", width: 672, height: 1394 },
+    type: "disclosure",
+    ids: [
+      "display-brightness",
+      "display-resolution",
+      "sidecar",
+      "disk-clean",
+      "xcode-clean",
+      "battery-charge-limit",
+      "fan-control",
+      "activity-bar",
+      "launch-control",
     ],
   },
   {
-    slot: "actions",
-    label: "快捷控制面板",
-    variants: [
-      { lang: "zh", theme: "light", src: "/assets/screenshots/hero-actions-zh-light.png", width: 628, height: 1424 },
-      { lang: "zh", theme: "dark", src: "/assets/screenshots/hero-actions-zh-dark.png", width: 622, height: 1418 },
-      { lang: "en", theme: "light", src: "/assets/screenshots/hero-actions-en-light.png", width: 622, height: 1416 },
-      { lang: "en", theme: "dark", src: "/assets/screenshots/hero-actions-en-dark.png", width: 624, height: 1416 },
+    type: "switch",
+    ids: [
+      "menu-bar-hidden",
+      "appearance",
+      "auto-hide-menu-bar",
+      "auto-hide-dock",
+      "display-true-color",
+      "night-shift",
+      "hide-notch",
+      "stage-manager",
+      "keep-awake",
+      "system-mute",
+      "microphone-mute",
+      "app-hotkey",
+      "translator",
+      "physical-clean-mode",
     ],
   },
-] as const;
+  {
+    type: "button",
+    ids: [
+      "launchpad",
+      "window-switcher",
+      "right-click",
+      "ip-overview",
+      "display-sleep",
+      "lock-screen",
+      "eject-disk",
+      "quit-apps",
+      "empty-trash",
+      "clipboard-clear",
+      "fix-damaged-app",
+      "mouse-enhancer",
+      "homebrew",
+      "zsh-config",
+    ],
+  },
+];
+
+const pluginGlyphs: Record<string, string> = {
+  "activity-bar": "⌁",
+  "app-hotkey": "⌘",
+  "appearance": "◐",
+  "auto-hide-dock": "▔",
+  "auto-hide-menu-bar": "▁",
+  "battery-charge-limit": "▰",
+  "clipboard-clear": "▤",
+  "disk-clean": "⌫",
+  "display-brightness": "☀︎",
+  "display-resolution": "▭",
+  "display-sleep": "◒",
+  "display-true-color": "◉",
+  "eject-disk": "⏏",
+  "empty-trash": "⌫",
+  "fan-control": "✣",
+  "fix-damaged-app": "✚",
+  "hide-notch": "⌃",
+  "homebrew": "⌂",
+  "ip-overview": "◎",
+  "keep-awake": "◔",
+  "launch-control": "↗",
+  "launchpad": "▦",
+  "lock-screen": "▣",
+  "menu-bar-hidden": "▥",
+  "microphone-mute": "◍",
+  "mouse-enhancer": "◁",
+  "night-shift": "☾",
+  "physical-clean-mode": "✦",
+  "quit-apps": "×",
+  "right-click": "⌁",
+  "sidecar": "▣",
+  "stage-manager": "▥",
+  "system-mute": "◖",
+  "translator": "文",
+  "window-switcher": "⌘",
+  "xcode-clean": "⌘",
+  "zsh-config": ">_",
+};
+
+const actionLabels: Record<string, LocalizedLabel> = {
+  "clipboard-clear": { zh: "清空", en: "Clear" },
+  "display-sleep": { zh: "休眠", en: "Sleep" },
+  "eject-disk": { zh: "推出", en: "Eject" },
+  "empty-trash": { zh: "清空", en: "Empty" },
+  "fix-damaged-app": { zh: "选择", en: "Choose" },
+  "homebrew": { zh: "管理", en: "Manage" },
+  "ip-overview": { zh: "检测", en: "Check" },
+  "launchpad": { zh: "打开", en: "Open" },
+  "lock-screen": { zh: "锁定", en: "Lock" },
+  "mouse-enhancer": { zh: "设置", en: "Settings" },
+  "quit-apps": { zh: "选择", en: "Choose" },
+  "right-click": { zh: "设置", en: "Settings" },
+  "window-switcher": { zh: "设置", en: "Settings" },
+  "zsh-config": { zh: "编辑", en: "Edit" },
+};
+
+const disclosureDetails: Record<string, DetailModel> = {
+  "display-brightness": {
+    kind: "slider",
+    label: { zh: "内建显示器", en: "Built-in display" },
+    minimum: 10,
+    maximum: 100,
+    value: 78,
+    unit: "%",
+  },
+  "display-resolution": {
+    kind: "segments",
+    label: { zh: "内建显示器", en: "Built-in display" },
+    options: [
+      { id: "1920", zh: "1920×1080", en: "1920×1080" },
+      { id: "2560", zh: "2560×1440", en: "2560×1440" },
+      { id: "more", zh: "更多", en: "More" },
+    ],
+  },
+  "sidecar": {
+    kind: "segments",
+    label: { zh: "附近设备", en: "Nearby devices" },
+    options: [
+      { id: "off", zh: "未连接", en: "Off" },
+      { id: "ipad", zh: "iPad Pro", en: "iPad Pro" },
+    ],
+  },
+  "disk-clean": {
+    kind: "checks",
+    label: { zh: "清理范围", en: "Cleanup scope" },
+    options: [
+      { id: "system", zh: "系统缓存", en: "System cache" },
+      { id: "browser", zh: "浏览器缓存", en: "Browser cache" },
+      { id: "logs", zh: "应用日志", en: "App logs" },
+    ],
+  },
+  "xcode-clean": {
+    kind: "checks",
+    label: { zh: "Xcode 数据", en: "Xcode data" },
+    options: [
+      { id: "derived", zh: "DerivedData", en: "DerivedData" },
+      { id: "devices", zh: "设备支持", en: "Device Support" },
+      { id: "archives", zh: "归档", en: "Archives" },
+    ],
+  },
+  "battery-charge-limit": {
+    kind: "slider",
+    label: { zh: "充电上限", en: "Charge limit" },
+    minimum: 50,
+    maximum: 100,
+    value: 80,
+    unit: "%",
+  },
+  "fan-control": {
+    kind: "segments",
+    label: { zh: "风扇预设", en: "Fan preset" },
+    options: [
+      { id: "auto", zh: "自动", en: "Auto" },
+      { id: "quiet", zh: "静音", en: "Quiet" },
+      { id: "full", zh: "全速", en: "Full" },
+    ],
+  },
+  "activity-bar": {
+    kind: "checks",
+    label: { zh: "统计项目", en: "Tracking" },
+    options: [
+      { id: "input", zh: "输入统计", en: "Input" },
+      { id: "apps", zh: "前台应用", en: "Apps" },
+      { id: "ai", zh: "AI 编程", en: "AI coding" },
+    ],
+  },
+  "launch-control": {
+    kind: "checks",
+    label: { zh: "启动项", en: "Launch items" },
+    options: [
+      { id: "user", zh: "用户项目", en: "User agents" },
+      { id: "system", zh: "系统项目", en: "System daemons" },
+    ],
+  },
+};
+
+const defaultEnabled = new Set([
+  "menu-bar-hidden",
+  "appearance",
+  "display-true-color",
+  "keep-awake",
+  "app-hotkey",
+]);
+
+const panelEntries = interactionGroups.flatMap(({ type, ids }) =>
+  ids.flatMap((id) => {
+    const plugin = pluginsByID.get(id);
+    if (!plugin) return [];
+    return [{ plugin, text: localizedPluginText(plugin), type }];
+  })
+);
+
+const dashboardIDs = ["system-status", "device-battery", "activity-bar", "calendar"] as const;
+const dashboardPlugins = Object.fromEntries(
+  dashboardIDs.flatMap((id) => {
+    const plugin = pluginsByID.get(id);
+    return plugin ? [[id, { plugin, text: localizedPluginText(plugin) }]] : [];
+  })
+) as Record<string, { plugin: Plugin; text: ReturnType<typeof localizedPluginText> }>;
+
+const now = new Date();
+const calendarYear = now.getFullYear();
+const calendarMonth = now.getMonth();
+const mondayFirstOffset = (new Date(calendarYear, calendarMonth, 1).getDay() + 6) % 7;
+const lunarDayLabels = [
+  "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+  "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+  "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十",
+];
+const calendarCells = Array.from({ length: 42 }, (_, index) => {
+  const date = new Date(calendarYear, calendarMonth, index - mondayFirstOffset + 1);
+  const day = date.getDate();
+  const isCurrentMonth = date.getMonth() === calendarMonth;
+  const isToday = date.toDateString() === now.toDateString();
+  return {
+    date,
+    day,
+    isCurrentMonth,
+    isToday,
+    lunarLabel: lunarDayLabels[(day + 8) % lunarDayLabels.length],
+    dayCode: `D${((day + 14) % 30) + 1}`,
+  };
+});
+const calendarTitleZh = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(now);
+const calendarTitleEn = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long" }).format(now);
 ---
 
 <section class="home-hero" aria-labelledby="home-title">
@@ -81,31 +317,426 @@ const heroShots = [
     </div>
   </div>
 
-  <div class="hero-product" aria-hidden="true">
-    <div class="hero-desktop">
-      <div class="desktop-menubar">
-        <span class="window-dots"><i></i><i></i><i></i></span>
-      </div>
-      <div class="hero-panel-stage">
-        {heroShots.map((shot) => (
-          <div class={`hero-panel-shot hero-panel-shot-${shot.slot}`}>
-            {shot.variants.map((variant) => (
-              <img
-                class="hero-panel-variant"
-                src={withBase(variant.src)}
-                width={variant.width}
-                height={variant.height}
-                alt=""
-                loading="eager"
-                decoding="async"
-                data-hero-lang={variant.lang}
-                data-hero-theme={variant.theme}
-                data-hero-label={`${variant.lang}-${variant.theme}-${shot.label}`}
-              />
-            ))}
+  <div class="hero-product">
+    <div class="menu-panel-showcase" data-menubar-simulator data-preview-theme="light">
+      <section
+        class="sim-panel"
+        id="hero-mactools-panel"
+        aria-label="MacTools 模拟面板"
+        data-aria-zh="MacTools 模拟面板"
+        data-aria-en="MacTools simulated panel"
+      >
+        <div class="sim-panel-notch" aria-hidden="true"></div>
+        <div class="sim-panel-toolbar">
+          <div class="sim-panel-tabs" role="tablist">
+            <button
+              class="sim-panel-tab is-selected"
+              type="button"
+              role="tab"
+              id="sim-monitor-tab"
+              aria-controls="sim-monitor-panel"
+              aria-selected="true"
+              aria-label="组件面板"
+              data-aria-zh="组件面板"
+              data-aria-en="Components"
+              data-sim-tab="monitor"
+              title="组件面板"
+              data-title-zh="组件面板"
+              data-title-en="Components"
+            >
+              <span class="sim-grid-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+              <span class="sim-tooltip">
+                <span data-i18n-zh>组件面板</span>
+                <span data-i18n-en>Components</span>
+              </span>
+            </button>
+            <button
+              class="sim-panel-tab"
+              type="button"
+              role="tab"
+              id="sim-controls-tab"
+              aria-controls="sim-controls-panel"
+              aria-selected="false"
+              aria-label="功能面板"
+              data-aria-zh="功能面板"
+              data-aria-en="Controls"
+              data-sim-tab="controls"
+              title="功能面板"
+              data-title-zh="功能面板"
+              data-title-en="Controls"
+            >
+              <span class="sim-switch-icon" aria-hidden="true"><i></i><i></i></span>
+              <span class="sim-tooltip">
+                <span data-i18n-zh>功能面板</span>
+                <span data-i18n-en>Controls</span>
+              </span>
+            </button>
           </div>
-        ))}
-      </div>
+
+          <div class="sim-panel-actions">
+            <button
+              type="button"
+              data-sim-toolbar-action="quit"
+              aria-label="退出"
+              data-aria-zh="退出"
+              data-aria-en="Quit"
+              title="退出"
+              data-title-zh="退出"
+              data-title-en="Quit"
+            >⏻</button>
+          </div>
+        </div>
+
+        <div
+          class="sim-panel-view sim-monitor-view is-visible"
+          id="sim-monitor-panel"
+          role="tabpanel"
+          aria-labelledby="sim-monitor-tab"
+          data-sim-view="monitor"
+        >
+          <div class="sim-dashboard-stack">
+            <article
+              class="sim-dashboard-widget sim-system-widget"
+              aria-label={dashboardPlugins["system-status"]?.text.zh.displayName ?? "系统状态"}
+              data-aria-zh={dashboardPlugins["system-status"]?.text.zh.displayName ?? "系统状态"}
+              data-aria-en={dashboardPlugins["system-status"]?.text.en.displayName ?? "System Status"}
+              title={dashboardPlugins["system-status"]?.text.zh.summary}
+              data-title-zh={dashboardPlugins["system-status"]?.text.zh.summary}
+              data-title-en={dashboardPlugins["system-status"]?.text.en.summary}
+            >
+              <div class="sim-system-grid">
+                <section class="sim-hud-tile sim-hud-cpu" data-sim-metric="cpu">
+                  <header><strong>CPU</strong><span data-sim-temp>51°C</span></header>
+                  <div class="sim-hud-reading"><b data-sim-value>24</b><small>%</small></div>
+                  <div class="sim-spark-bars" aria-hidden="true">{sparkBars.map(() => <i></i>)}</div>
+                  <footer><span><span data-i18n-zh>8 核</span><span data-i18n-en>8 Core</span></span><span data-sim-footnote>2.8 W</span></footer>
+                </section>
+
+                <section class="sim-hud-tile sim-hud-gpu" data-sim-metric="gpu">
+                  <header><strong>GPU</strong><span data-sim-temp>47°C</span></header>
+                  <div class="sim-hud-reading"><b data-sim-value>18</b><small>%</small></div>
+                  <div class="sim-spark-bars" aria-hidden="true">{sparkBars.map(() => <i></i>)}</div>
+                  <footer><span>Apple M3</span><span data-sim-footnote>1.4 W</span></footer>
+                </section>
+
+                <section class="sim-hud-tile sim-hud-network" data-sim-metric="network">
+                  <header><strong><span data-i18n-zh>网络</span><span data-i18n-en>Network</span></strong><span>Wi‑Fi</span></header>
+                  <div class="sim-hud-reading"><b data-sim-value>4.8</b><small>MB/s</small></div>
+                  <div class="sim-rate-lines" aria-hidden="true"><i></i><i></i></div>
+                  <footer><span class="sim-download">↓ <b data-sim-down>3.7</b></span><span class="sim-upload">↑ <b data-sim-up>1.1</b></span></footer>
+                </section>
+
+                <section class="sim-hud-tile sim-hud-disk" data-sim-metric="disk">
+                  <header><strong><span data-i18n-zh>磁盘</span><span data-i18n-en>Disk</span></strong><span>228 GB</span></header>
+                  <div class="sim-hud-reading"><b data-sim-value>41.0</b><small>GB</small></div>
+                  <div class="sim-capacity-bar" aria-hidden="true"><i data-sim-capacity></i></div>
+                  <footer><span data-i18n-zh>可用</span><span data-i18n-en>Free</span><span data-sim-footnote>82%</span></footer>
+                </section>
+
+                <section class="sim-hud-tile sim-hud-memory" data-sim-metric="memory">
+                  <header><strong><span data-i18n-zh>内存</span><span data-i18n-en>Memory</span></strong><span>16 GB</span></header>
+                  <div class="sim-hud-reading"><b data-sim-value>72</b><small>%</small></div>
+                  <div class="sim-memory-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+                  <footer><span><span data-i18n-zh>已用</span><span data-i18n-en>Used</span> <b data-sim-used>11.5</b> GB</span><span data-sim-footnote><span data-i18n-zh>0 交换</span><span data-i18n-en>0 swap</span></span></footer>
+                </section>
+
+                <section class="sim-hud-tile sim-hud-battery" data-sim-metric="battery">
+                  <header><strong><span data-i18n-zh>电池</span><span data-i18n-en>Battery</span></strong><span data-i18n-zh>使用中</span><span data-i18n-en>In use</span></header>
+                  <div class="sim-hud-reading"><b data-sim-value>84</b><small>%</small></div>
+                  <div class="sim-battery-bar" aria-hidden="true"><i data-sim-capacity></i></div>
+                  <footer><span data-i18n-zh>约 7 小时</span><span data-i18n-en>About 7h</span><span data-sim-footnote>32°C</span></footer>
+                </section>
+              </div>
+
+              <section class="sim-process-card">
+                <header><strong><span data-i18n-zh>进程</span><span data-i18n-en>Processes</span></strong><span>CPU&nbsp;&nbsp;&nbsp;MEM</span></header>
+                <div class="sim-process-list">
+                  <div><span><i class="sim-process-dot process-blue"></i>MacTools</span><span><b data-sim-process-cpu="0">7.2%</b><b>1.1%</b></span></div>
+                  <div><span><i class="sim-process-dot process-pink"></i>WindowServer</span><span><b data-sim-process-cpu="1">5.8%</b><b>3.4%</b></span></div>
+                  <div><span><i class="sim-process-dot process-green"></i>Safari</span><span><b data-sim-process-cpu="2">3.1%</b><b>4.8%</b></span></div>
+                </div>
+              </section>
+            </article>
+
+            <article
+              class="sim-dashboard-widget sim-device-widget"
+              aria-label={dashboardPlugins["device-battery"]?.text.zh.displayName ?? "设备电量"}
+              data-aria-zh={dashboardPlugins["device-battery"]?.text.zh.displayName ?? "设备电量"}
+              data-aria-en={dashboardPlugins["device-battery"]?.text.en.displayName ?? "Device Battery"}
+              title={dashboardPlugins["device-battery"]?.text.zh.summary}
+              data-title-zh={dashboardPlugins["device-battery"]?.text.zh.summary}
+              data-title-en={dashboardPlugins["device-battery"]?.text.en.summary}
+            >
+              <div class="sim-device-row">
+                <span class="sim-device-icon sim-device-mac" aria-hidden="true"></span>
+                <strong>MacBook Pro</strong>
+                <b data-sim-device-level="mac">84%</b>
+                <span class="sim-device-battery"><i data-sim-device-bar="mac"></i></span>
+              </div>
+              <div class="sim-device-row">
+                <span class="sim-device-icon sim-device-airpods" aria-hidden="true">◖</span>
+                <strong>AirPods Pro</strong>
+                <b>72%</b>
+                <span class="sim-device-battery"><i style="width: 72%"></i></span>
+              </div>
+              <div class="sim-device-row">
+                <span class="sim-device-icon sim-device-mouse" aria-hidden="true"></span>
+                <strong>MX Master 3S</strong>
+                <b>58%</b>
+                <span class="sim-device-battery"><i style="width: 58%"></i></span>
+              </div>
+              <div class="sim-device-row">
+                <span class="sim-device-icon sim-device-keyboard" aria-hidden="true"></span>
+                <strong>ATK V75X-1</strong>
+                <b>69%</b>
+                <span class="sim-device-battery"><i style="width: 69%"></i></span>
+              </div>
+              <div class="sim-device-row">
+                <span class="sim-device-icon sim-device-trackpad" aria-hidden="true"></span>
+                <strong>Magic Trackpad</strong>
+                <b>91%</b>
+                <span class="sim-device-battery"><i style="width: 91%"></i></span>
+              </div>
+            </article>
+
+            <article
+              class="sim-dashboard-widget sim-activity-widget"
+              aria-label={dashboardPlugins["activity-bar"]?.text.zh.displayName ?? "活动统计"}
+              data-aria-zh={dashboardPlugins["activity-bar"]?.text.zh.displayName ?? "活动统计"}
+              data-aria-en={dashboardPlugins["activity-bar"]?.text.en.displayName ?? "Activity Stats"}
+              title={dashboardPlugins["activity-bar"]?.text.zh.summary}
+              data-title-zh={dashboardPlugins["activity-bar"]?.text.zh.summary}
+              data-title-en={dashboardPlugins["activity-bar"]?.text.en.summary}
+            >
+              <header class="sim-activity-header">
+                <strong>
+                  <span data-i18n-zh>{dashboardPlugins["activity-bar"]?.text.zh.displayName ?? "活动统计"}</span>
+                  <span data-i18n-en>{dashboardPlugins["activity-bar"]?.text.en.displayName ?? "Activity Stats"}</span>
+                </strong>
+                <div>
+                  <button
+                    type="button"
+                    data-sim-activity-day="-1"
+                    aria-label="前一天"
+                    data-aria-zh="前一天"
+                    data-aria-en="Previous day"
+                  >‹</button>
+                  <span data-sim-activity-date><span data-i18n-zh>今天</span><span data-i18n-en>Today</span></span>
+                  <button
+                    type="button"
+                    data-sim-activity-day="1"
+                    aria-label="后一天"
+                    data-aria-zh="后一天"
+                    data-aria-en="Next day"
+                  >›</button>
+                </div>
+              </header>
+              <div class="sim-activity-stats">
+                <div><i class="activity-blue">⌨</i><span><b data-sim-activity-keys>8,426</b><small><span data-i18n-zh>按键</span><span data-i18n-en>Keystrokes</span></small></span></div>
+                <div><i class="activity-pink">↖</i><span><b data-sim-activity-clicks>2,184</b><small><span data-i18n-zh>点击</span><span data-i18n-en>Clicks</span></small></span></div>
+                <div><i class="activity-green">↕</i><span><b data-sim-activity-scrolls>1,079</b><small><span data-i18n-zh>滚动</span><span data-i18n-en>Scrolls</span></small></span></div>
+                <div><i class="activity-orange">◫</i><span><b data-sim-activity-time>4h 36m</b><small><span data-i18n-zh>屏幕时间</span><span data-i18n-en>Screen Time</span></small></span></div>
+              </div>
+              <div class="sim-activity-chart" aria-hidden="true">
+                {sparkBars.map((_, index) => <i style={`height: ${28 + ((index * 23) % 62)}%`}></i>)}
+              </div>
+            </article>
+
+            <article
+              class="sim-dashboard-widget sim-calendar-widget"
+              aria-label={dashboardPlugins["calendar"]?.text.zh.displayName ?? "日历"}
+              data-aria-zh={dashboardPlugins["calendar"]?.text.zh.displayName ?? "日历"}
+              data-aria-en={dashboardPlugins["calendar"]?.text.en.displayName ?? "Calendar"}
+              title={dashboardPlugins["calendar"]?.text.zh.summary}
+              data-title-zh={dashboardPlugins["calendar"]?.text.zh.summary}
+              data-title-en={dashboardPlugins["calendar"]?.text.en.summary}
+            >
+              <header class="sim-calendar-header">
+                <strong>
+                  <span data-i18n-zh data-sim-calendar-title-zh>{calendarTitleZh}</span>
+                  <span data-i18n-en data-sim-calendar-title-en>{calendarTitleEn}</span>
+                </strong>
+                <div>
+                  <button
+                    type="button"
+                    data-sim-calendar-nav="previous"
+                    aria-label="上个月"
+                    data-aria-zh="上个月"
+                    data-aria-en="Previous month"
+                  >‹</button>
+                  <button type="button" data-sim-calendar-nav="today"><span data-i18n-zh>今天</span><span data-i18n-en>Today</span></button>
+                  <button
+                    type="button"
+                    data-sim-calendar-nav="next"
+                    aria-label="下个月"
+                    data-aria-zh="下个月"
+                    data-aria-en="Next month"
+                  >›</button>
+                </div>
+              </header>
+              <div class="sim-calendar-weekdays" aria-hidden="true">
+                {[
+                  { zh: "一", en: "M" },
+                  { zh: "二", en: "T" },
+                  { zh: "三", en: "W" },
+                  { zh: "四", en: "T" },
+                  { zh: "五", en: "F" },
+                  { zh: "六", en: "S" },
+                  { zh: "日", en: "S" },
+                ].map((weekday) => (
+                  <span><i data-i18n-zh>{weekday.zh}</i><i data-i18n-en>{weekday.en}</i></span>
+                ))}
+              </div>
+              <div class="sim-calendar-grid">
+                {calendarCells.map((cell) => (
+                  <button
+                    type="button"
+                    class:list={{
+                      "is-outside": !cell.isCurrentMonth,
+                      "is-today": cell.isToday,
+                      "has-events": cell.isCurrentMonth && [3, 8, 12, 18, 24].includes(cell.day),
+                    }}
+                    data-sim-calendar-cell
+                    data-sim-calendar-day={cell.day}
+                    aria-label={`${cell.date.getFullYear()}-${cell.date.getMonth() + 1}-${cell.day}`}
+                  >
+                    <b>{cell.day}</b>
+                    <small>
+                      <span data-i18n-zh>{cell.isToday ? "今天" : cell.lunarLabel}</span>
+                      <span data-i18n-en>{cell.isToday ? "Today" : cell.dayCode}</span>
+                    </small>
+                    <i></i>
+                  </button>
+                ))}
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div
+          class="sim-panel-view sim-controls-view"
+          id="sim-controls-panel"
+          role="tabpanel"
+          aria-labelledby="sim-controls-tab"
+          hidden
+          data-sim-view="controls"
+        >
+          <div class="sim-feature-list">
+            {panelEntries.map(({ plugin, text, type }) => {
+              const glyph = pluginGlyphs[plugin.id] ?? "•";
+              const detail = disclosureDetails[plugin.id];
+              const actionLabel = actionLabels[plugin.id] ?? { zh: "操作", en: "Run" };
+              const isEnabled = defaultEnabled.has(plugin.id);
+              const rowContent = (
+                <>
+                  <span class="sim-feature-icon" aria-hidden="true">{glyph}</span>
+                  <span class="sim-feature-copy">
+                    <strong><span data-i18n-zh>{text.zh.displayName}</span><span data-i18n-en>{text.en.displayName}</span></strong>
+                    <small><span data-i18n-zh>{text.zh.summary}</span><span data-i18n-en>{text.en.summary}</span></small>
+                  </span>
+                </>
+              );
+
+              return (
+                <article class={`sim-feature-item sim-feature-${type}`} data-sim-plugin={plugin.id}>
+                  {type === "disclosure" ? (
+                    <>
+                      <button
+                        class="sim-feature-row"
+                        type="button"
+                        data-sim-disclosure
+                        aria-expanded="false"
+                        aria-label={text.zh.displayName}
+                        data-aria-zh={text.zh.displayName}
+                        data-aria-en={text.en.displayName}
+                      >
+                        {rowContent}
+                        <span class="sim-disclosure-chevron" aria-hidden="true">›</span>
+                      </button>
+                      {detail ? (
+                        <div class="sim-feature-detail" data-sim-disclosure-detail hidden>
+                          <div class="sim-detail-heading">
+                            <span data-i18n-zh>{detail.label.zh}</span>
+                            <span data-i18n-en>{detail.label.en}</span>
+                            {detail.kind === "slider" ? <b data-sim-range-value>{detail.value}{detail.unit}</b> : null}
+                          </div>
+                          {detail.kind === "slider" ? (
+                            <input
+                              type="range"
+                              min={detail.minimum}
+                              max={detail.maximum}
+                              value={detail.value}
+                              data-sim-range
+                              data-sim-range-unit={detail.unit}
+                              aria-label={detail.label.zh}
+                              data-aria-zh={detail.label.zh}
+                              data-aria-en={detail.label.en}
+                            />
+                          ) : null}
+                          {detail.kind === "segments" ? (
+                            <div class="sim-detail-segments" role="group">
+                              {detail.options?.map((option, index) => (
+                                <button
+                                  class:list={{ "is-selected": index === 0 }}
+                                  type="button"
+                                  data-sim-segment
+                                  aria-pressed={index === 0 ? "true" : "false"}
+                                >
+                                  <span data-i18n-zh>{option.zh}</span><span data-i18n-en>{option.en}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                          {detail.kind === "checks" ? (
+                            <div class="sim-detail-checks">
+                              {detail.options?.map((option) => (
+                                <button type="button" role="checkbox" aria-checked="true" data-sim-check>
+                                  <i aria-hidden="true">✓</i>
+                                  <span data-i18n-zh>{option.zh}</span><span data-i18n-en>{option.en}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div class="sim-feature-row">
+                      {rowContent}
+                      {type === "switch" ? (
+                        <button
+                          class:list={["sim-toggle", { "is-on": isEnabled }]}
+                          type="button"
+                          role="switch"
+                          aria-checked={isEnabled ? "true" : "false"}
+                          aria-label={text.zh.displayName}
+                          data-aria-zh={text.zh.displayName}
+                          data-aria-en={text.en.displayName}
+                          data-sim-setting={plugin.id}
+                        ><i></i></button>
+                      ) : (
+                        <button
+                          class="sim-control-action"
+                          type="button"
+                          data-sim-action
+                          data-plugin-name-zh={text.zh.displayName}
+                          data-plugin-name-en={text.en.displayName}
+                          data-action-zh={actionLabel.zh}
+                          data-action-en={actionLabel.en}
+                        >
+                          <span data-i18n-zh>{actionLabel.zh}</span><span data-i18n-en>{actionLabel.en}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div class="sim-toast" role="status" aria-live="polite" data-sim-toast></div>
+      </section>
     </div>
   </div>
 </section>
