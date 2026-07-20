@@ -7,6 +7,29 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.1.2] - 2026-07-20
+
+### Added
+
+- Use Command-number shortcuts to switch menu-bar panels and jump among the main Settings pages.
+- Show, hide, and reorder Dashboard components and Feature Panel actions independently. Hiding affects only that surface and does not stop a plugin’s background behavior.
+- Manage installation, updates, and removal in Marketplace, or open plugin settings and uninstall directly from a layout row. Repeated uninstall confirmations can be paused for the current Settings session.
+- Existing global layouts and older backups migrate safely to both surfaces. New backups preserve independent layouts while retaining a conservative legacy projection for older app versions.
+- Plugins previously disabled from Installed load after upgrade but remain hidden on supported surfaces. Downgrading cannot restore the former disabled lifecycle state, so uninstall plugins you do not want running.
+- The online icon gallery now includes a curated set of static icons across every category and marks animated icons with a clear badge for easier browsing.
+
+### Changed
+
+- Background-aware plugins can now pause nonessential work while the session is locked or the Mac is asleep.
+- Animated items in the online icon gallery now use a compact play indicator that leaves more of each icon visible.
+- Menu bar icon settings now show the current selection in a compact preview, play animations at their default speed, and omit playback controls, contrast warnings, and the recent-icons list.
+
+### Fixed
+
+- Feature-panel switches now update reliably after being clicked on macOS 27.
+- Importing menu bar icons now preserves their original colors and transparency, preventing white artwork on transparent PNGs from disappearing.
+- Monochrome icons from the online gallery now automatically adapt to light and dark menu bar backgrounds while colorful icons keep their original appearance.
+
 ## [plugins-1.1.2] - 2026-07-20
 
 ### Changed
