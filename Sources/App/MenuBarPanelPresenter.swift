@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import SwiftUI
 import MacToolsPluginKit
@@ -59,6 +60,7 @@ final class MenuBarPanelPresenter: NSObject {
     private var appearanceObserver: NSObjectProtocol?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var heightRefreshCancellables: Set<AnyCancellable> = []
+    private var keyboardShortcutMonitor: Any?
     private var selectedPanel: PanelKind = .components
 
     init(
@@ -118,6 +120,7 @@ final class MenuBarPanelPresenter: NSObject {
         if let appearanceObserver {
             NotificationCenter.default.removeObserver(appearanceObserver)
         }
+        removeKeyboardShortcutMonitorIfNeeded()
         runtimeLocaleCancellable?.cancel()
     }
 
@@ -140,6 +143,10 @@ final class MenuBarPanelPresenter: NSObject {
     #if DEBUG
     var debugPopoverForTests: NSPopover {
         popover
+    }
+
+    var debugHasKeyboardShortcutMonitorForTests: Bool {
+        keyboardShortcutMonitor != nil
     }
 
     var debugSelectedTabForTests: MenuBarPanelTab {
@@ -246,6 +253,59 @@ final class MenuBarPanelPresenter: NSObject {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         applyCurrentAppearance()
         focus(popover)
+    }
+
+    private func installKeyboardShortcutMonitorIfNeeded() {
+        guard keyboardShortcutMonitor == nil else {
+            return
+        }
+
+        // Host navigation wins before the responder chain so plugin content
+        // cannot shadow these two panel-level commands.
+        keyboardShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+            [weak self] event in
+            self?.handleKeyboardShortcut(event) ?? event
+        }
+    }
+
+    private func removeKeyboardShortcutMonitorIfNeeded() {
+        guard let keyboardShortcutMonitor else {
+            return
+        }
+
+        NSEvent.removeMonitor(keyboardShortcutMonitor)
+        self.keyboardShortcutMonitor = nil
+    }
+
+    private func handleKeyboardShortcut(_ event: NSEvent) -> NSEvent? {
+        guard
+            popover.isShown,
+            event.window === popover.contentViewController?.view.window,
+            let tab = Self.keyboardShortcutTab(for: event)
+        else {
+            return event
+        }
+
+        select(tab)
+        return nil
+    }
+
+    // Internal so focused tests can validate layout-independent key matching.
+    static func keyboardShortcutTab(for event: NSEvent) -> MenuBarPanelTab? {
+        let shortcutModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+        let modifiers = event.modifierFlags.intersection(shortcutModifiers)
+        guard modifiers == .command else {
+            return nil
+        }
+
+        switch event.keyCode {
+        case UInt16(kVK_ANSI_1):
+            return .components
+        case UInt16(kVK_ANSI_2):
+            return .features
+        default:
+            return nil
+        }
     }
 
     private func focus(_ popover: NSPopover) {
@@ -452,8 +512,17 @@ final class MenuBarPanelPresenter: NSObject {
 }
 
 extension MenuBarPanelPresenter: NSPopoverDelegate {
+    func popoverWillShow(_ notification: Notification) {
+        guard let openingPopover = notification.object as? NSPopover, openingPopover === popover else {
+            return
+        }
+
+        installKeyboardShortcutMonitorIfNeeded()
+    }
+
     func popoverDidClose(_ notification: Notification) {
         if let closedPopover = notification.object as? NSPopover, closedPopover === popover {
+            removeKeyboardShortcutMonitorIfNeeded()
             updateContent(
                 selectedTab: tab(for: selectedPanel),
                 screen: NSScreen.main,

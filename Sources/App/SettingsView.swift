@@ -57,6 +57,11 @@ struct SettingsView: View {
                 }
         }
         .id(runtimeLocale.revision)
+        .background {
+            SettingsDestinationShortcutButtons(
+                selection: settingsDestinationBinding
+            )
+        }
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
@@ -82,6 +87,39 @@ struct SettingsView: View {
                 pluginHost.selectedSettingsDestination = destination
             }
         )
+    }
+}
+
+// AppWindowRouter hosts Settings in an AppKit NSWindow, so scene-level SwiftUI
+// Commands are unavailable. These nonvisual buttons register window-local key
+// equivalents while keeping the Settings layout and accessibility tree clean.
+struct SettingsDestinationShortcutButtons: View {
+    @Binding var selection: SettingsDestination
+
+    var body: some View {
+        HStack(spacing: 0) {
+            shortcutButton(for: .general, key: "1")
+            shortcutButton(for: .pluginConfiguration, key: "2")
+            shortcutButton(for: .about, key: "3")
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
+
+    private func shortcutButton(
+        for destination: SettingsDestination,
+        key: KeyEquivalent
+    ) -> some View {
+        Button("") {
+            guard selection != destination else {
+                return
+            }
+
+            selection = destination
+        }
+        .keyboardShortcut(key, modifiers: [.command])
+        .focusable(false)
     }
 }
 
