@@ -5,7 +5,10 @@ import MacToolsPluginKit
 
 private enum SidecarSettingsColumnWidth {
     static let connection: CGFloat = 144
+    static let connectionLabel: CGFloat = 154
     static let shortcutAction: CGFloat = 112
+    static let shortcutActionLabel: CGFloat = 104
+    static let shortcutLabel: CGFloat = 82
     static let shortcutRecorder: CGFloat = 126
     static let shortcutActionButton: CGFloat = 22
     static let shortcutActions: CGFloat = 50
@@ -111,9 +114,6 @@ struct SidecarSettingsView: View {
 
     private var deviceSettingsCard: some View {
         VStack(spacing: 0) {
-            SidecarDeviceSettingsColumnHeader(localization: localization)
-            PluginSettingsListDivider()
-
             SidecarDeviceSettingsTable(
                 items: displayedDeviceRows,
                 makeRow: { item, isLast in
@@ -462,11 +462,49 @@ private struct SidecarDeviceSettingsRow: View {
     }
 
     private var connectionLine: some View {
+        ViewThatFits(in: .horizontal) {
+            connectionLineContent(showsLabel: true)
+            connectionLineContent(showsLabel: false)
+        }
+    }
+
+    private func connectionLineContent(showsLabel: Bool) -> some View {
         HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             deviceIdentity
 
-            transportPicker
-                .frame(width: SidecarSettingsColumnWidth.connection)
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                if showsLabel {
+                    Label(
+                        localization.string(
+                            "settings.group.connectionPolicy",
+                            defaultValue: "连接策略"
+                        ),
+                        systemImage: "cable.connector"
+                    )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: SidecarSettingsColumnWidth.connectionLabel, alignment: .leading)
+                    .help(localization.string(
+                        "settings.group.connectionPolicy",
+                        defaultValue: "连接策略"
+                    ))
+                } else {
+                    Image(systemName: "cable.connector")
+                        .font(PluginSettingsTheme.Typography.rowIcon)
+                        .foregroundStyle(.secondary)
+                        .frame(width: PluginSettingsTheme.Size.rowIcon)
+                        .help(localization.string(
+                            "settings.group.connectionPolicy",
+                            defaultValue: "连接策略"
+                        ))
+                }
+
+                transportPicker
+                    .frame(width: SidecarSettingsColumnWidth.connection)
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 
@@ -478,23 +516,40 @@ private struct SidecarDeviceSettingsRow: View {
     }
 
     private var shortcutLine: some View {
+        ViewThatFits(in: .horizontal) {
+            shortcutLineContent(showsShortcutLabel: true)
+            shortcutLineContent(showsShortcutLabel: false)
+        }
+    }
+
+    private func shortcutLineContent(showsShortcutLabel: Bool) -> some View {
         HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Color.clear
                 .frame(width: 14)
 
-            Image(systemName: "keyboard")
-                .font(PluginSettingsTheme.Typography.rowIcon)
-                .foregroundStyle(.secondary)
-                .frame(width: PluginSettingsTheme.Size.rowIcon)
-
-            Text(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
+            Label(
+                localization.string("settings.column.action", defaultValue: "操作"),
+                systemImage: "keyboard"
+            )
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .frame(minWidth: 80, maxWidth: .infinity, alignment: .leading)
+                .truncationMode(.tail)
+                .frame(width: SidecarSettingsColumnWidth.shortcutActionLabel, alignment: .leading)
+                .help(localization.string("settings.column.action", defaultValue: "操作"))
 
             shortcutActionPicker
                 .frame(width: SidecarSettingsColumnWidth.shortcutAction)
+
+            if showsShortcutLabel {
+                Text(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: SidecarSettingsColumnWidth.shortcutLabel, alignment: .leading)
+                    .help(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
+            }
 
             shortcutControl
                 .frame(
@@ -503,6 +558,8 @@ private struct SidecarDeviceSettingsRow: View {
                         + PluginSettingsTheme.Spacing.controlCluster,
                     alignment: .leading
                 )
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -674,29 +731,5 @@ private struct SidecarDeviceSettingsRow: View {
         case .unavailable:
             localization.string("settings.deviceStatus.unavailable", defaultValue: "当前不可用")
         }
-    }
-}
-
-private struct SidecarDeviceSettingsColumnHeader: View {
-    let localization: PluginLocalization
-
-    var body: some View {
-        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Color.clear.frame(width: 14)
-            Color.clear.frame(width: PluginSettingsTheme.Size.rowIcon)
-            Color.clear.frame(minWidth: 130, maxWidth: .infinity)
-
-            Label(
-                localization.string("settings.group.connectionPolicy", defaultValue: "连接策略"),
-                systemImage: "cable.connector"
-            )
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(localization.string("settings.group.connectionPolicy", defaultValue: "连接策略"))
-                .frame(width: SidecarSettingsColumnWidth.connection, alignment: .leading)
-        }
-        .font(PluginSettingsTheme.Typography.rowDescription)
-        .foregroundStyle(.secondary)
-        .pluginSettingsListRowPadding(interactive: true)
     }
 }

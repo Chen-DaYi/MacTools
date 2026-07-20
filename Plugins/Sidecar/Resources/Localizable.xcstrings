@@ -873,6 +873,12 @@
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "طريقة الاتصال" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbindungsart" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection Mode" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Modo de conexión" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mode de connexion" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続方法" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 방식" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Modo de ligação" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Способ подключения" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接方式" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線方式" } }
       }
     },
+    "settings.column.action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الإجراء" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktion" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Action" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Acción" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Action" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "操作" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "동작" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ação" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Действие" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "操作" } }
+      }
+    },
     "settings.column.shortcut" : {
       "extractionState" : "manual",
       "localizations" : {
