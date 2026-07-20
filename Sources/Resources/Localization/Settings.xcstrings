@@ -4172,67 +4172,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "قم بتعيين رمز شريط قائمة واحد للمظاهر الفاتحة والداكنة. تتم إزالة الخلفيات ذات الألوان الصلبة عند الاستيراد."
+            "value": "قم بتعيين رمز شريط قائمة واحد للمظاهر الفاتحة والداكنة. يتم الاحتفاظ بالصورة الأصلية عند الاستيراد."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Legen Sie ein Menüleistensymbol für helle und dunkle Darstellungen fest. Einfarbige Hintergründe werden beim Import entfernt."
+            "value": "Legen Sie ein Menüleistensymbol für helle und dunkle Darstellungen fest. Das Originalbild bleibt beim Import erhalten."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Set one menu bar icon for light and dark appearances. Solid-color backgrounds are removed on import."
+            "value": "Set one menu bar icon for light and dark appearances. The original image is preserved on import."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Establezca un ícono de barra de menú para apariencias claras y oscuras. Los fondos de colores sólidos se eliminan al importar."
+            "value": "Establezca un ícono de barra de menú para apariencias claras y oscuras. La imagen original se conserva al importar."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Définissez une icône dans la barre de menus pour les apparences claires et sombres. Les arrière-plans de couleur unie sont supprimés lors de l'importation."
+            "value": "Définissez une icône dans la barre de menus pour les apparences claires et sombres. L'image d'origine est conservée lors de l'importation."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "明暗の外観用に 1 つのメニュー バー アイコンを設定します。単色の背景はインポート時に削除されます。"
+            "value": "明暗の外観用に 1 つのメニュー バー アイコンを設定します。インポート時に元の画像が保持されます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "밝은 모양과 어두운 모양에 대해 하나의 메뉴 표시줄 아이콘을 설정합니다. 단색 배경은 가져올 때 제거됩니다."
+            "value": "밝은 모양과 어두운 모양에 대해 하나의 메뉴 표시줄 아이콘을 설정합니다. 가져올 때 원본 이미지를 유지합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Defina um ícone na barra de menu para aparências claras e escuras. Os planos de fundo de cores sólidas são removidos na importação."
+            "value": "Defina um ícone na barra de menu para aparências claras e escuras. A imagem original é preservada na importação."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Установите один значок в строке меню для светлого и темного внешнего вида. Однотонные фоны удаляются при импорте."
+            "value": "Установите один значок в строке меню для светлого и темного внешнего вида. При импорте исходное изображение сохраняется."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "统一设置浅色和深色菜单栏图标，导入时会自动扣除纯色背景。"
+            "value": "统一设置浅色和深色菜单栏图标，导入时会保留原图。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "統一設定淺色和深色選單列圖標，導入時會自動扣除純色背景。"
+            "value": "統一設定淺色和深色選單列圖標，導入時會保留原圖。"
           }
         }
       }
@@ -6657,67 +6657,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يدعم الصور وملفات GIF/MP4 خفيفة الوزن والأيقونات المتحركة عبر الإنترنت. تتم إزالة الخلفيات ذات الألوان الصلبة عند الاستيراد."
+            "value": "يدعم الصور وملفات GIF/MP4 خفيفة الوزن والأيقونات المتحركة عبر الإنترنت. يتم الاحتفاظ بالصورة الأصلية عند الاستيراد."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unterstützt Bilder, einfache GIF/MP4-Dateien und animierte Online-Symbole. Einfarbige Hintergründe werden beim Import entfernt."
+            "value": "Unterstützt Bilder, einfache GIF/MP4-Dateien und animierte Online-Symbole. Das Originalbild bleibt beim Import erhalten."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supports images, lightweight GIF/MP4 files, and online animated icons. Solid-color backgrounds are removed on import."
+            "value": "Supports images, lightweight GIF/MP4 files, and online animated icons. The original image is preserved on import."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Admite imágenes, archivos ligeros GIF/MP4 e íconos animados en línea. Los fondos de colores sólidos se eliminan al importar."
+            "value": "Admite imágenes, archivos ligeros GIF/MP4 e íconos animados en línea. La imagen original se conserva al importar."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prend en charge les images, les fichiers légers GIF/MP4 et les icônes animées en ligne. Les arrière-plans de couleur unie sont supprimés lors de l'importation."
+            "value": "Prend en charge les images, les fichiers légers GIF/MP4 et les icônes animées en ligne. L'image d'origine est conservée lors de l'importation."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "画像、軽量の GIF/MP4 ファイル、オンライン アニメーション アイコンをサポートします。単色の背景はインポート時に削除されます。"
+            "value": "画像、軽量の GIF/MP4 ファイル、オンライン アニメーション アイコンをサポートします。インポート時に元の画像が保持されます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이미지, 가벼운 GIF/MP4 파일 및 온라인 애니메이션 아이콘을 지원합니다. 단색 배경은 가져올 때 제거됩니다."
+            "value": "이미지, 가벼운 GIF/MP4 파일 및 온라인 애니메이션 아이콘을 지원합니다. 가져올 때 원본 이미지를 유지합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Suporta imagens, arquivos GIF/MP4 leves e ícones animados on-line. Planos de fundo de cores sólidas são removidos na importação."
+            "value": "Suporta imagens, arquivos GIF/MP4 leves e ícones animados on-line. A imagem original é preservada na importação."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Поддерживает изображения, легкие файлы GIF/MP4 и анимированные значки онлайн. Однотонный фон удаляется при импорте."
+            "value": "Поддерживает изображения, легкие файлы GIF/MP4 и анимированные значки онлайн. При импорте исходное изображение сохраняется."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会自动扣除纯色背景。"
+            "value": "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会保留原图。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "支持圖片、輕量 GIF/MP4 和在線動態圖標；導入時會自動扣除純色背景。"
+            "value": "支持圖片、輕量 GIF/MP4 和在線動態圖標；導入時會保留原圖。"
           }
         }
       }

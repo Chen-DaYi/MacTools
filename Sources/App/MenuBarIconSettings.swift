@@ -534,12 +534,11 @@ final class MenuBarIconSettings: ObservableObject {
             lastErrorMessage = AppL10n.settings("menuBarIcon.error.readSelectedImage", defaultValue: "无法读取所选图片。")
             return
         }
-        let processedImage = MenuBarIconBackgroundRemover.removingBackground(from: sourceImage) ?? sourceImage
 
         let fileName = "icon-\(UUID().uuidString).png"
         let destinationURL = localIconsDirectory.appendingPathComponent(fileName)
 
-        guard saveOriginalImage(processedImage, to: destinationURL) else {
+        guard saveOriginalImage(sourceImage, to: destinationURL) else {
             lastErrorMessage = AppL10n.settings("menuBarIcon.error.saveSelectedImage", defaultValue: "无法保存所选图片。")
             return
         }
@@ -578,11 +577,7 @@ final class MenuBarIconSettings: ObservableObject {
             "animation-\(animationID)-frame-\(index).png"
         }
 
-        let processedFrames = sourceFrames.map { frame in
-            MenuBarIconBackgroundRemover.removingBackground(from: frame) ?? frame
-        }
-
-        guard saveAnimationFrames(processedFrames, fileNames: fileNames) else {
+        guard saveAnimationFrames(sourceFrames, fileNames: fileNames) else {
             lastErrorMessage = AppL10n.settings("menuBarIcon.error.saveAnimationIcon", defaultValue: "无法保存动画图标。")
             return
         }

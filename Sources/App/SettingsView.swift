@@ -59,7 +59,7 @@ struct SettingsView: View {
         .id(runtimeLocale.revision)
         .background {
             SettingsDestinationShortcutButtons(
-                selection: $pluginHost.selectedSettingsDestination
+                selection: settingsDestinationBinding
             )
         }
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
