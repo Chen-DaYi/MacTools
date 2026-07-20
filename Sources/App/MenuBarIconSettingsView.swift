@@ -410,21 +410,27 @@ private struct MenuBarIconGalleryAssetCell: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            ZStack(alignment: .bottomTrailing) {
-                preview
-                    .frame(
-                        width: MenuBarIconSettingsMetrics.galleryTileSize.width,
-                        height: MenuBarIconSettingsMetrics.galleryTileSize.height
-                    )
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(borderColor, lineWidth: isSelected ? 2 : 1)
-                    )
-
-                badge
-            }
+            preview
+                .frame(
+                    width: MenuBarIconSettingsMetrics.galleryTileSize.width,
+                    height: MenuBarIconSettingsMetrics.galleryTileSize.height
+                )
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: isSelected ? 2 : 1)
+                )
+                .overlay(alignment: .topTrailing) {
+                    stateBadge
+                        .padding(5)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if asset.isAnimated {
+                        animatedBadge
+                            .padding(5)
+                    }
+                }
 
             Text(asset.title)
                 .font(PluginSettingsTheme.Typography.statusBadge)
@@ -456,7 +462,7 @@ private struct MenuBarIconGalleryAssetCell: View {
     }
 
     @ViewBuilder
-    private var badge: some View {
+    private var stateBadge: some View {
         if isBusy {
             ProgressView()
                 .controlSize(.small)
@@ -492,6 +498,27 @@ private struct MenuBarIconGalleryAssetCell: View {
                     .clipShape(Circle())
             }
         }
+    }
+
+    private var animatedBadge: some View {
+        Label {
+            Text(AppL10n.settings("menuBarIcon.gallery.animated", defaultValue: "动态"))
+        } icon: {
+            Image(systemName: "play.fill")
+                .font(.system(size: 7, weight: .bold))
+        }
+        .font(.system(size: 9, weight: .semibold))
+        .labelStyle(.titleAndIcon)
+        .foregroundStyle(.white)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.black.opacity(0.68), in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.14), radius: 1, y: 1)
+        .accessibilityLabel(AppL10n.settings("menuBarIcon.gallery.animated", defaultValue: "动态"))
     }
 
     private var borderColor: Color {

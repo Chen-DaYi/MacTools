@@ -4,6 +4,42 @@ import XCTest
 
 @MainActor
 final class MenuBarIconGalleryTests: XCTestCase {
+    func testCheckedInGalleryIncludesStaticAssetsAcrossAllCategories() throws {
+        let galleryRoot = repositoryRoot
+            .appendingPathComponent("docs", isDirectory: true)
+            .appendingPathComponent("icon-gallery", isDirectory: true)
+        let catalogData = try Data(contentsOf: galleryRoot.appendingPathComponent("catalog.json"))
+        let catalog = try MenuBarIconGalleryCoding.decoder.decode(MenuBarIconGalleryCatalog.self, from: catalogData)
+        let staticAssets = catalog.assets.filter { !$0.isAnimated }
+        let staticAssetsByCategory = Dictionary(grouping: staticAssets, by: \.categoryID)
+
+        XCTAssertEqual(staticAssets.count, 13)
+        XCTAssertEqual(staticAssetsByCategory["featured"]?.count, 3)
+        for category in catalog.categories where category.id != "featured" {
+            XCTAssertEqual(staticAssetsByCategory[category.id]?.count, 2, "Missing static icons in \(category.id)")
+        }
+        XCTAssertTrue(staticAssets.allSatisfy { $0.frameCount == 1 })
+        XCTAssertTrue(staticAssets.allSatisfy { $0.renderingMode == .template })
+    }
+
+    func testCheckedInStaticAssetsHaveTrackedSources() throws {
+        let galleryRoot = repositoryRoot
+            .appendingPathComponent("docs", isDirectory: true)
+            .appendingPathComponent("icon-gallery", isDirectory: true)
+        let catalogData = try Data(contentsOf: galleryRoot.appendingPathComponent("catalog.json"))
+        let catalog = try MenuBarIconGalleryCoding.decoder.decode(MenuBarIconGalleryCatalog.self, from: catalogData)
+        let staticAssetIDs = Set(catalog.assets.filter { !$0.isAnimated }.map(\.id))
+        let manifestData = try Data(contentsOf: galleryRoot.appendingPathComponent("sources/manifest.json"))
+        let manifest = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
+        let sources = try XCTUnwrap(manifest?["sources"] as? [[String: Any]])
+        let trackedAssetIDs = Set(sources.flatMap { source -> [String] in
+            let assets = source["assets"] as? [[String: Any]] ?? []
+            return assets.compactMap { $0["catalogID"] as? String }
+        })
+
+        XCTAssertEqual(trackedAssetIDs, staticAssetIDs)
+    }
+
     func testCheckedInTemplateAssetsUseBlackTransparentFrames() throws {
         let galleryRoot = repositoryRoot
             .appendingPathComponent("docs", isDirectory: true)

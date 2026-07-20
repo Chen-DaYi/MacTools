@@ -38,6 +38,10 @@
 
 不要为模板素材批量生成白色副本，也不要在运行时逐像素反色。新增或更新 `template` 素材时，应检查全部帧，而不只是预览图；测试会拒绝包含彩色像素或不透明背景的模板帧。旧 catalog 未声明该字段时，客户端为兼容性按 `original` 处理。
 
+静态素材使用 `frameCount: 1` 和单个 `framePaths` 文件；动画素材使用 `frameCount > 1`。图库卡片会根据这个字段自动在动画右下角显示“动态”标签，静态素材不显示标签。
+
+已提交的第三方静态 SVG、固定上游 revision、许可证和 catalog ID 映射记录在 `docs/icon-gallery/sources/manifest.json`。生成后的 PNG 使用透明画布和黑色模板图形，不应直接修改而丢失上游来源。
+
 也可以不用 zip，直接声明帧路径：
 
 ```json
@@ -78,6 +82,8 @@ make generate-icon-gallery
   --gallery-dir docs/icon-gallery \
   --output-dir build/LocalIconGallery
 ```
+
+当前首批静态素材来自 Apache-2.0 的 `Kyome22/menubar_runcat` 和 MIT 的 `tabler/tabler-icons`。选择新来源时优先使用流行、持续维护、许可证允许再分发且具有统一 SVG 规格的项目；不要从来源不明确的动画或商业素材中抽取静态帧。
 
 ## Safety Limits
 

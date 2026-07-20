@@ -30,6 +30,10 @@ struct MenuBarIconGalleryAsset: Identifiable, Codable, Equatable, Hashable {
     let frameCount: Int
     let frameDuration: TimeInterval
 
+    var isAnimated: Bool {
+        frameCount > 1
+    }
+
     init(
         id: String,
         title: String,

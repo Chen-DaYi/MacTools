@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "menubar-runcat",
+      "repository": "https://github.com/Kyome22/menubar_runcat",
+      "revision": "82747b139cc32e13a7b713f8521f44c70317f7d4",
+      "license": "Apache-2.0",
+      "assets": [
+        {
+          "catalogID": "static-sleeping-cat",
+          "sourcePath": "resources/cat/svg/cat_sleep.svg",
+          "modifications": "Rasterized onto a transparent square canvas and normalized for menu-bar template rendering."
+        }
+      ]
+    },
+    {
+      "id": "tabler-icons",
+      "repository": "https://github.com/tabler/tabler-icons",
+      "revision": "fe319f05d943a17efb29c5089e21364d3975843c",
+      "license": "MIT",
+      "assets": [
+        { "catalogID": "static-coffee", "sourcePath": "icons/outline/coffee.svg" },
+        { "catalogID": "static-moon-stars", "sourcePath": "icons/outline/moon-stars.svg" },
+        { "catalogID": "static-rocket", "sourcePath": "icons/outline/rocket.svg" },
+        { "catalogID": "static-bolt", "sourcePath": "icons/outline/bolt.svg" },
+        { "catalogID": "static-cat", "sourcePath": "icons/outline/cat.svg" },
+        { "catalogID": "static-paw", "sourcePath": "icons/outline/paw.svg" },
+        { "catalogID": "static-mountain", "sourcePath": "icons/outline/mountain.svg" },
+        { "catalogID": "static-cloud", "sourcePath": "icons/outline/cloud.svg" },
+        { "catalogID": "static-terminal", "sourcePath": "icons/outline/terminal-2.svg" },
+        { "catalogID": "static-headphones", "sourcePath": "icons/outline/headphones.svg" },
+        { "catalogID": "static-heart", "sourcePath": "icons/outline/heart.svg" },
+        { "catalogID": "static-star", "sourcePath": "icons/outline/star.svg" }
+      ]
+    }
+  ]
+}

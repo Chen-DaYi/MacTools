@@ -3,6 +3,7 @@
 This directory records third-party assets, dependencies, and implementation references used by MacTools. The links below are provided for source tracking and acknowledgements; they do not imply that every listed project is packaged as a third-party component.
 
 - [Kyome22/menubar_runcat](https://github.com/Kyome22/menubar_runcat)
+- [tabler/tabler-icons](https://github.com/tabler/tabler-icons)
 - [sparkle-project/Sparkle](https://github.com/sparkle-project/Sparkle)
 - [LunarBar-app/LunarBar](https://github.com/LunarBar-app/LunarBar)
 - [MonitorControl/MonitorControl](https://github.com/MonitorControl/MonitorControl)

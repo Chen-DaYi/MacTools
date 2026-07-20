@@ -1,6 +1,175 @@
 {
   "assets": [
     {
+      "categoryID": "featured",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-sleeping-cat/frames/frame-000.png"
+      ],
+      "id": "static-sleeping-cat",
+      "previewPath": "assets/static-sleeping-cat/preview.png",
+      "title": "休息猫",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "featured",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-coffee/frames/frame-000.png"
+      ],
+      "id": "static-coffee",
+      "previewPath": "assets/static-coffee/preview.png",
+      "title": "咖啡",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "featured",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-moon-stars/frames/frame-000.png"
+      ],
+      "id": "static-moon-stars",
+      "previewPath": "assets/static-moon-stars/preview.png",
+      "title": "月夜",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "motion",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-rocket/frames/frame-000.png"
+      ],
+      "id": "static-rocket",
+      "previewPath": "assets/static-rocket/preview.png",
+      "title": "火箭",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "motion",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-bolt/frames/frame-000.png"
+      ],
+      "id": "static-bolt",
+      "previewPath": "assets/static-bolt/preview.png",
+      "title": "闪电",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "animals",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-cat/frames/frame-000.png"
+      ],
+      "id": "static-cat",
+      "previewPath": "assets/static-cat/preview.png",
+      "title": "猫咪",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "animals",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-paw/frames/frame-000.png"
+      ],
+      "id": "static-paw",
+      "previewPath": "assets/static-paw/preview.png",
+      "title": "爪印",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "scenes",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-mountain/frames/frame-000.png"
+      ],
+      "id": "static-mountain",
+      "previewPath": "assets/static-mountain/preview.png",
+      "title": "山峰",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "scenes",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-cloud/frames/frame-000.png"
+      ],
+      "id": "static-cloud",
+      "previewPath": "assets/static-cloud/preview.png",
+      "title": "云朵",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "objects",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-terminal/frames/frame-000.png"
+      ],
+      "id": "static-terminal",
+      "previewPath": "assets/static-terminal/preview.png",
+      "title": "终端",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "objects",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-headphones/frames/frame-000.png"
+      ],
+      "id": "static-headphones",
+      "previewPath": "assets/static-headphones/preview.png",
+      "title": "耳机",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "symbols",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-heart/frames/frame-000.png"
+      ],
+      "id": "static-heart",
+      "previewPath": "assets/static-heart/preview.png",
+      "title": "爱心",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
+      "categoryID": "symbols",
+      "frameCount": 1,
+      "frameDuration": 1.0,
+      "framePaths": [
+        "assets/static-star/frames/frame-000.png"
+      ],
+      "id": "static-star",
+      "previewPath": "assets/static-star/preview.png",
+      "title": "星星",
+      "version": "1",
+      "renderingMode": "template"
+    },
+    {
       "archiveFramePathPattern": "frame-%03d.png",
       "archivePath": "assets/runcat/asset.zip",
       "categoryID": "featured",
