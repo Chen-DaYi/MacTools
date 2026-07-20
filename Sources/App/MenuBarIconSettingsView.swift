@@ -428,7 +428,7 @@ private struct MenuBarIconGalleryAssetCell: View {
                 .overlay(alignment: .bottomTrailing) {
                     if asset.isAnimated {
                         animatedBadge
-                            .padding(5)
+                            .padding(4)
                     }
                 }
 
@@ -501,24 +501,17 @@ private struct MenuBarIconGalleryAssetCell: View {
     }
 
     private var animatedBadge: some View {
-        Label {
-            Text(AppL10n.settings("menuBarIcon.gallery.animated", defaultValue: "动态"))
-        } icon: {
-            Image(systemName: "play.fill")
-                .font(.system(size: 7, weight: .bold))
-        }
-        .font(.system(size: 9, weight: .semibold))
-        .labelStyle(.titleAndIcon)
-        .foregroundStyle(.white)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(Color.black.opacity(0.68), in: Capsule())
-        .overlay(
-            Capsule()
-                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.14), radius: 1, y: 1)
-        .accessibilityLabel(AppL10n.settings("menuBarIcon.gallery.animated", defaultValue: "动态"))
+        Image(systemName: "play.fill")
+            .font(.system(size: 6, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 14, height: 14)
+            .background(Color.black.opacity(0.68), in: Circle())
+            .overlay(
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+            )
+            .shadow(color: .black.opacity(0.14), radius: 1, y: 1)
+            .accessibilityLabel(AppL10n.settings("menuBarIcon.gallery.animated", defaultValue: "动态"))
     }
 
     private var borderColor: Color {
