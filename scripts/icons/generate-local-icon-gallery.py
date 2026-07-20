@@ -7,6 +7,17 @@ from pathlib import Path
 from typing import Optional
 
 
+def validate_catalog(catalog: dict) -> None:
+    assets = catalog.get("assets", [])
+    for asset in assets:
+        asset_id = asset.get("id", "<unknown>")
+        rendering_mode = asset.get("renderingMode")
+        if rendering_mode not in {"original", "template"}:
+            raise SystemExit(
+                f"Icon gallery asset {asset_id!r} must declare renderingMode as 'original' or 'template'."
+            )
+
+
 def copy_gallery(source_dir: Path, output_dir: Path) -> None:
     if output_dir.exists():
         shutil.rmtree(output_dir)
@@ -25,6 +36,7 @@ def rewrite_catalog(output_dir: Path, catalog_name: str, base_url: Optional[str]
     with source_catalog.open("r", encoding="utf-8") as file:
         catalog = json.load(file)
 
+    validate_catalog(catalog)
     catalog["generatedAt"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     catalog["baseURL"] = base_url or (output_dir.as_uri() + "/")
 

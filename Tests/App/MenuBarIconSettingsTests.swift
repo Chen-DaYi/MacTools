@@ -124,6 +124,95 @@ final class MenuBarIconSettingsTests: XCTestCase {
 
         XCTAssertEqual(preview.size.height, MenuBarIconProcessing.standardIconPointSize)
         XCTAssertGreaterThan(preview.size.width, MenuBarIconProcessing.standardIconPointSize)
+        XCTAssertFalse(preview.isTemplate)
+    }
+
+    func testTemplateGalleryAssetAdaptsThroughAppKitButton() async throws {
+        let sourceURL = try makeTransparentImageFile(
+            name: "template-black.png",
+            artworkColor: .black
+        )
+        let baseURL = URL(fileURLWithPath: sourceURL.deletingLastPathComponent().path + "/", isDirectory: true)
+        let asset = MenuBarIconGalleryAsset(
+            id: "template-gallery-icon",
+            title: "Template Gallery Icon",
+            categoryID: "tests",
+            version: "1",
+            renderingMode: .template,
+            previewPath: sourceURL.lastPathComponent,
+            framePaths: [sourceURL.lastPathComponent],
+            framePathPattern: nil,
+            archivePath: nil,
+            archiveFramePathPattern: nil,
+            frameCount: 1,
+            frameDuration: 1.0 / 6.0
+        )
+        let remoteRoot = rootDirectory
+            .appendingPathComponent("MenuBarIcons", isDirectory: true)
+            .appendingPathComponent("RemoteAssets", isDirectory: true)
+        let store = MenuBarIconRemoteAssetStore(rootDirectory: remoteRoot)
+        let preview = try await store.loadPreviewImage(
+            for: asset,
+            contentBaseURL: baseURL,
+            allowsFileResources: true
+        )
+        let selection = try await store.installAsset(
+            asset,
+            contentBaseURL: baseURL,
+            allowsFileResources: true
+        )
+        let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+
+        settings.useRemoteAsset(selection)
+        let payload = settings.imagePayload(for: NSAppearance(named: .darkAqua))
+        let reloadedSettings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+        let reloadedPayload = reloadedSettings.imagePayload(for: NSAppearance(named: .darkAqua))
+        let lightBrightness = averageBrightnessWhenRendered(payload.image, appearance: .aqua)
+        let darkBrightness = averageBrightnessWhenRendered(payload.image, appearance: .darkAqua)
+
+        XCTAssertTrue(preview.isTemplate)
+        XCTAssertEqual(selection.renderingMode, .template)
+        XCTAssertTrue(payload.isTemplate)
+        XCTAssertTrue(payload.animationFrames.allSatisfy(\.isTemplate))
+        XCTAssertTrue(reloadedPayload.isTemplate)
+        XCTAssertTrue(reloadedPayload.animationFrames.allSatisfy(\.isTemplate))
+        XCTAssertLessThan(lightBrightness, 30)
+        XCTAssertGreaterThan(darkBrightness, 100)
+        XCTAssertGreaterThan(darkBrightness - lightBrightness, 80)
+    }
+
+    func testLegacyGalleryAssetWithoutRenderingModeDefaultsToOriginal() throws {
+        let data = Data(#"""
+        {
+            "id":"legacy",
+            "title":"Legacy",
+            "categoryID":"tests",
+            "version":"1",
+            "framePaths":["frame.png"],
+            "frameCount":1,
+            "frameDuration":0.1
+        }
+        """#.utf8)
+
+        let asset = try MenuBarIconGalleryCoding.decoder.decode(MenuBarIconGalleryAsset.self, from: data)
+
+        XCTAssertEqual(asset.renderingMode, .original)
+    }
+
+    func testLegacyRemoteSelectionWithoutRenderingModeDefaultsToOriginal() throws {
+        let data = Data(#"""
+        {
+            "id":"legacy",
+            "version":"1",
+            "displayName":"Legacy",
+            "frameFileNames":["frame-000.png"],
+            "frameDuration":0.1
+        }
+        """#.utf8)
+
+        let selection = try JSONDecoder().decode(MenuBarIconRemoteAssetSelection.self, from: data)
+
+        XCTAssertEqual(selection.renderingMode, .original)
     }
 
     func testAnimatedFramesShareVisibleBounds() throws {
@@ -252,5 +341,58 @@ final class MenuBarIconSettingsTests: XCTestCase {
                 count += 1
             }
         }
+    }
+
+    private func averageBrightnessWhenRendered(
+        _ image: NSImage,
+        appearance: NSAppearance.Name
+    ) -> Int {
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        button.appearance = NSAppearance(named: appearance)
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleNone
+        button.image = image
+
+        guard let representation = button.bitmapImageRepForCachingDisplay(in: button.bounds) else {
+            return 0
+        }
+        representation.size = button.bounds.size
+        button.cacheDisplay(in: button.bounds, to: representation)
+
+        guard let source = representation.cgImage else {
+            return 0
+        }
+        let width = source.width
+        let height = source.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return 0
+        }
+
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let statistics = stride(from: 0, to: pixels.count, by: 4).reduce(into: (brightness: 0, count: 0)) { result, pixelOffset in
+            guard pixels[pixelOffset + 3] > 8 else {
+                return
+            }
+            result.brightness += (
+                Int(pixels[pixelOffset])
+                    + Int(pixels[pixelOffset + 1])
+                    + Int(pixels[pixelOffset + 2])
+            ) / 3
+            result.count += 1
+        }
+        guard statistics.count > 0 else {
+            return 0
+        }
+        return statistics.brightness / statistics.count
     }
 }

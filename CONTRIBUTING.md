@@ -25,6 +25,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - `project.yml`: root XcodeGen project source, only for the App, PluginKit, and shared aggregate entry points. Plugin targets are generated automatically.
 - `Plugins/<PluginName>/project.yml`: optional per-plugin build overrides, only when a plugin needs extra frameworks, include paths, bundle resources, helper/tool targets, or target overrides.
 - `docs/plugins/`: plugin packages, catalogs, local debugging, and release flow documentation.
+- `docs/icon-gallery/`: checked-in menu-bar icon catalog, previews, animation frames, and archives; rendering-mode rules are documented in `docs/icon-gallery.md`.
 - `docs/superpowers/`: larger product, interaction, or implementation design documents.
 
 ## Development Guidelines
@@ -33,6 +34,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Features that require macOS app extensions, such as Finder Sync, must add the extension target to the root `project.yml` and embed it in the main app. Use the dynamic plugin only for the MacTools panel/settings surface.
 - Command workflows for adding and updating plugins are documented in the Development Steps section of `docs/plugins/local-native-plugins.md`.
 - Keep documentation short and task-focused. User-visible behavior changes should update `README.md` or the relevant file under `docs/`; plugin package, catalog, or release flow changes should update `docs/plugins/`.
+- Icon gallery assets must explicitly declare `renderingMode`; use `template` only for black artwork on transparency, and use `original` for color or grayscale detail. Run the gallery generation and related tests after catalog changes.
 - Plugins implement `MacToolsPlugin`; menu panel plugins implement `PluginPrimaryPanel`, and component panel plugins implement `PluginComponentPanel`.
 - `plugin.json.id` must be stable, readable, and exactly match the runtime `PluginMetadata.id`; each plugin package should return exactly one plugin instance.
 - Plugin display state should be expressed through `PluginPanelState`, `PluginPanelDetail`, `PluginPanelControl`, and related models. Do not bypass the existing panel framework.

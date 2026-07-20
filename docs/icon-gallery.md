@@ -18,6 +18,7 @@
       "title": "RunCat",
       "categoryID": "featured",
       "version": "1",
+      "renderingMode": "template",
       "previewPath": "assets/runcat/preview.png",
       "archivePath": "assets/runcat/asset.zip",
       "archiveFramePathPattern": "frame-%03d.png",
@@ -29,6 +30,13 @@
 ```
 
 `archivePath` 推荐用于线上资源，减少多帧动画的请求次数。压缩包内只需要放帧文件，路径用 `archiveFramePathPattern` 描述。
+
+`renderingMode` 必须显式声明：
+
+- `template`：用于黑色图形 + 透明背景的单色素材。AppKit 根据菜单栏背景和按钮状态自动着色，所有动画帧都必须满足同一模板要求。
+- `original`：用于彩色、灰度渐变或需要保留原始颜色的素材。
+
+不要为模板素材批量生成白色副本，也不要在运行时逐像素反色。新增或更新 `template` 素材时，应检查全部帧，而不只是预览图；测试会拒绝包含彩色像素或不透明背景的模板帧。旧 catalog 未声明该字段时，客户端为兼容性按 `original` 处理。
 
 也可以不用 zip，直接声明帧路径：
 
@@ -52,6 +60,7 @@
 - `make run` 会自动生成 `build/LocalIconGallery/catalog.dev.json` 并注入 `MACTOOLS_ICON_CATALOG_URL`。
 - 远程素材下载到 `~/Library/Application Support/MacTools/MenuBarIcons/RemoteAssets/`，Debug 为 `MacTools Dev`。
 - 当前选中的在线素材直接从 `RemoteAssets` 读帧，渲染后进入内存缓存；动画播放时不会访问网络。
+- `template` 素材在进入内存缓存后只设置一次 `NSImage.isTemplate`，由 AppKit 在状态栏绘制时适配颜色，不执行逐帧像素转换。
 - 选择新的在线素材后，会清理旧的 `RemoteAssets`，只保留当前选中素材。
 
 ## Local Debug Gallery

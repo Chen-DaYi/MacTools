@@ -7,11 +7,21 @@ struct MenuBarIconGalleryCategory: Identifiable, Codable, Equatable, Hashable {
     let title: String
 }
 
+enum MenuBarIconRenderingMode: String, Codable, Equatable, Hashable {
+    case original
+    case template
+
+    var isTemplate: Bool {
+        self == .template
+    }
+}
+
 struct MenuBarIconGalleryAsset: Identifiable, Codable, Equatable, Hashable {
     let id: String
     let title: String
     let categoryID: String
     let version: String
+    let renderingMode: MenuBarIconRenderingMode
     let previewPath: String?
     let framePaths: [String]?
     let framePathPattern: String?
@@ -19,6 +29,50 @@ struct MenuBarIconGalleryAsset: Identifiable, Codable, Equatable, Hashable {
     let archiveFramePathPattern: String?
     let frameCount: Int
     let frameDuration: TimeInterval
+
+    init(
+        id: String,
+        title: String,
+        categoryID: String,
+        version: String,
+        renderingMode: MenuBarIconRenderingMode = .original,
+        previewPath: String?,
+        framePaths: [String]?,
+        framePathPattern: String?,
+        archivePath: String?,
+        archiveFramePathPattern: String?,
+        frameCount: Int,
+        frameDuration: TimeInterval
+    ) {
+        self.id = id
+        self.title = title
+        self.categoryID = categoryID
+        self.version = version
+        self.renderingMode = renderingMode
+        self.previewPath = previewPath
+        self.framePaths = framePaths
+        self.framePathPattern = framePathPattern
+        self.archivePath = archivePath
+        self.archiveFramePathPattern = archiveFramePathPattern
+        self.frameCount = frameCount
+        self.frameDuration = frameDuration
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        categoryID = try container.decode(String.self, forKey: .categoryID)
+        version = try container.decode(String.self, forKey: .version)
+        renderingMode = try container.decodeIfPresent(MenuBarIconRenderingMode.self, forKey: .renderingMode) ?? .original
+        previewPath = try container.decodeIfPresent(String.self, forKey: .previewPath)
+        framePaths = try container.decodeIfPresent([String].self, forKey: .framePaths)
+        framePathPattern = try container.decodeIfPresent(String.self, forKey: .framePathPattern)
+        archivePath = try container.decodeIfPresent(String.self, forKey: .archivePath)
+        archiveFramePathPattern = try container.decodeIfPresent(String.self, forKey: .archiveFramePathPattern)
+        frameCount = try container.decode(Int.self, forKey: .frameCount)
+        frameDuration = try container.decode(TimeInterval.self, forKey: .frameDuration)
+    }
 }
 
 struct MenuBarIconGalleryCatalog: Codable, Equatable {
@@ -33,8 +87,35 @@ struct MenuBarIconRemoteAssetSelection: Codable, Equatable, Hashable {
     let id: String
     let version: String
     let displayName: String
+    let renderingMode: MenuBarIconRenderingMode
     let frameFileNames: [String]
     let frameDuration: TimeInterval
+
+    init(
+        id: String,
+        version: String,
+        displayName: String,
+        renderingMode: MenuBarIconRenderingMode = .original,
+        frameFileNames: [String],
+        frameDuration: TimeInterval
+    ) {
+        self.id = id
+        self.version = version
+        self.displayName = displayName
+        self.renderingMode = renderingMode
+        self.frameFileNames = frameFileNames
+        self.frameDuration = frameDuration
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        version = try container.decode(String.self, forKey: .version)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        renderingMode = try container.decodeIfPresent(MenuBarIconRenderingMode.self, forKey: .renderingMode) ?? .original
+        frameFileNames = try container.decode([String].self, forKey: .frameFileNames)
+        frameDuration = try container.decode(TimeInterval.self, forKey: .frameDuration)
+    }
 }
 
 enum MenuBarIconGalleryStatus: Equatable {
@@ -292,6 +373,7 @@ struct MenuBarIconRemoteAssetStore {
                 id: asset.id,
                 version: asset.version,
                 displayName: asset.title,
+                renderingMode: asset.renderingMode,
                 frameFileNames: expectedFrameFileNames(frameCount: asset.frameCount),
                 frameDuration: asset.frameDuration
             )
@@ -372,6 +454,7 @@ struct MenuBarIconRemoteAssetStore {
             throw MenuBarIconGalleryError.invalidFrame(asset.id)
         }
 
+        image.isTemplate = asset.renderingMode.isTemplate
         return image
     }
 

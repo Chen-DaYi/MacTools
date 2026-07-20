@@ -645,7 +645,8 @@ final class MenuBarIconSettings: ObservableObject {
         if let selection = storedState.localIconSelection,
            let payload = customImagePayload(
                frames: renderedImages(for: selection),
-               frameDuration: selection.frameDuration
+               frameDuration: selection.frameDuration,
+               renderingMode: .original
            ) {
             return payload
         }
@@ -654,7 +655,8 @@ final class MenuBarIconSettings: ObservableObject {
            remoteAssetStore.hasFrames(for: selection),
            let payload = customImagePayload(
                frames: renderedImages(for: selection),
-               frameDuration: selection.frameDuration
+               frameDuration: selection.frameDuration,
+               renderingMode: selection.renderingMode
            ) {
             return payload
         }
@@ -671,20 +673,21 @@ final class MenuBarIconSettings: ObservableObject {
 
     private func customImagePayload(
         frames: [NSImage],
-        frameDuration: TimeInterval
+        frameDuration: TimeInterval,
+        renderingMode: MenuBarIconRenderingMode
     ) -> MenuBarIconImagePayload? {
         guard let image = frames.first else {
             return nil
         }
 
-        image.isTemplate = false
+        image.isTemplate = renderingMode.isTemplate
         for frame in frames {
-            frame.isTemplate = false
+            frame.isTemplate = renderingMode.isTemplate
         }
 
         return MenuBarIconImagePayload(
             image: image,
-            isTemplate: false,
+            isTemplate: renderingMode.isTemplate,
             animationFrames: frames,
             frameDuration: frameDuration
         )
