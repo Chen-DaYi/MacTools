@@ -506,6 +506,7 @@ private struct SidecarDeviceSettingsRow: View {
             }
             .fixedSize(horizontal: true, vertical: false)
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private var innerDivider: some View {
@@ -564,6 +565,7 @@ private struct SidecarDeviceSettingsRow: View {
             }
             .fixedSize(horizontal: true, vertical: false)
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     @ViewBuilder
