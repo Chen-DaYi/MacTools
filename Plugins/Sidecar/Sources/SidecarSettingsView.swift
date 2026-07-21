@@ -5,9 +5,6 @@ import MacToolsPluginKit
 
 private enum SidecarSettingsColumnWidth {
     static let picker: CGFloat = 144
-    static let connectionLabel: CGFloat = 154
-    static let shortcutActionLabel: CGFloat = 82
-    static let shortcutLabel: CGFloat = 104
     static let shortcutRecorder: CGFloat = 126
     static let shortcutActionButton: CGFloat = 22
     static let shortcutActions: CGFloat = 50
@@ -483,8 +480,7 @@ private struct SidecarDeviceSettingsRow: View {
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(width: SidecarSettingsColumnWidth.connectionLabel, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
                     .help(localization.string(
                         "settings.group.connectionPolicy",
                         defaultValue: "连接策略"
@@ -529,38 +525,43 @@ private struct SidecarDeviceSettingsRow: View {
 
             Spacer(minLength: 0)
 
-            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Label(
-                    localization.string("settings.column.shortcut", defaultValue: "快捷键"),
-                    systemImage: "keyboard"
-                )
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: SidecarSettingsColumnWidth.shortcutLabel, alignment: .leading)
-                .help(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
-
-                shortcutControl
-                    .frame(
-                        width: SidecarSettingsColumnWidth.shortcutRecorder
-                            + SidecarSettingsColumnWidth.shortcutActions
-                            + PluginSettingsTheme.Spacing.controlCluster,
-                        alignment: .leading
+            HStack(
+                alignment: .center,
+                spacing: PluginSettingsTheme.Spacing.rowContentControl * 2
+            ) {
+                HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                    Label(
+                        localization.string("settings.column.shortcut", defaultValue: "快捷键"),
+                        systemImage: "keyboard"
                     )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .help(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
 
-                if showsActionLabel {
-                    Text(localization.string("settings.column.action", defaultValue: "操作"))
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(width: SidecarSettingsColumnWidth.shortcutActionLabel, alignment: .leading)
-                        .help(localization.string("settings.column.action", defaultValue: "操作"))
+                    shortcutControl
+                        .frame(
+                            width: SidecarSettingsColumnWidth.shortcutRecorder
+                                + SidecarSettingsColumnWidth.shortcutActions
+                                + PluginSettingsTheme.Spacing.controlCluster,
+                            alignment: .leading
+                        )
                 }
 
-                shortcutActionPicker
-                    .frame(width: SidecarSettingsColumnWidth.picker)
+                HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                    if showsActionLabel {
+                        Text(localization.string("settings.column.action", defaultValue: "操作"))
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .help(localization.string("settings.column.action", defaultValue: "操作"))
+                    }
+
+                    shortcutActionPicker
+                        .frame(width: SidecarSettingsColumnWidth.picker)
+                }
             }
             .fixedSize(horizontal: true, vertical: false)
         }
