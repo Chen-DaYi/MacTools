@@ -68,17 +68,17 @@ document.querySelectorAll<HTMLElement>("[data-menubar-simulator]").forEach((simu
     if (day === 1) {
       return [
         {
-          zh: "建党节",
-          en: "CPC Founding Day",
-          timeZh: "全天",
-          timeEn: "All day",
+          zh: "补充日用品",
+          en: "Pick up groceries",
+          timeZh: "18:00–18:30",
+          timeEn: "6:00–6:30 PM",
           color: "#0a84ff",
         },
         {
-          zh: "新建日程",
-          en: "New event",
-          timeZh: "22:00–23:00",
-          timeEn: "22:00–23:00",
+          zh: "给植物浇水",
+          en: "Water the plants",
+          timeZh: "全天",
+          timeEn: "All day",
           color: "#d92de3",
         },
       ];
@@ -86,16 +86,16 @@ document.querySelectorAll<HTMLElement>("[data-menubar-simulator]").forEach((simu
 
     const eventSets = [
       [
-        { zh: "晨会", en: "Daily stand-up", timeZh: "09:30–10:00", timeEn: "09:30–10:00", color: "#0a84ff" },
-        { zh: "产品评审", en: "Product review", timeZh: "14:00–15:00", timeEn: "14:00–15:00", color: "#ff9f0a" },
+        { zh: "晨间散步", en: "Morning walk", timeZh: "07:30–08:00", timeEn: "7:30–8:00 AM", color: "#0a84ff" },
+        { zh: "阅读时间", en: "Reading time", timeZh: "20:30–21:00", timeEn: "8:30–9:00 PM", color: "#ff9f0a" },
       ],
       [
-        { zh: "设计同步", en: "Design sync", timeZh: "10:00–10:30", timeEn: "10:00–10:30", color: "#bf5af2" },
-        { zh: "版本计划", en: "Release planning", timeZh: "16:30–17:30", timeEn: "16:30–17:30", color: "#30d158" },
-        { zh: "晚餐", en: "Dinner", timeZh: "19:00–20:00", timeEn: "19:00–20:00", color: "#ff375f" },
+        { zh: "喝水休息", en: "Water break", timeZh: "10:30", timeEn: "10:30 AM", color: "#bf5af2" },
+        { zh: "锻炼", en: "Workout", timeZh: "18:30–19:00", timeEn: "6:30–7:00 PM", color: "#30d158" },
+        { zh: "给家人打电话", en: "Call family", timeZh: "20:00–20:30", timeEn: "8:00–8:30 PM", color: "#ff375f" },
       ],
       [
-        { zh: "项目回顾", en: "Project retrospective", timeZh: "11:00–12:00", timeEn: "11:00–12:00", color: "#64d2ff" },
+        { zh: "整理房间", en: "Tidy up", timeZh: "10:00–10:30", timeEn: "10:00–10:30 AM", color: "#64d2ff" },
       ],
     ];
     return eventSets[day % eventSets.length];
