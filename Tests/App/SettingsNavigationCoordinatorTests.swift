@@ -64,6 +64,24 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.canGoForward)
     }
 
+    func testHistoryKeepsOnlyTheMostRecent128Destinations() {
+        let coordinator = SettingsNavigationCoordinator()
+
+        for index in 0..<200 {
+            coordinator.navigate(to: index.isMultiple(of: 2) ? .about : .general)
+        }
+
+        XCTAssertEqual(coordinator.history.count, 128)
+        XCTAssertEqual(coordinator.historyIndex, 127)
+        XCTAssertEqual(coordinator.history.first, .about)
+        XCTAssertEqual(coordinator.destination, .general)
+
+        coordinator.goBack()
+
+        XCTAssertEqual(coordinator.historyIndex, 126)
+        XCTAssertEqual(coordinator.destination, .about)
+    }
+
     func testTraversalSkipsPluginConfigurationsThatAreNoLongerAvailable() {
         var availableConfigurationIDs: Set<String> = ["fan-control"]
         let coordinator = SettingsNavigationCoordinator(

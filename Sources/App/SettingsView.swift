@@ -135,28 +135,38 @@ struct SettingsHistoryNavigationControls: View {
             Button {
                 coordinator.goBack()
             } label: {
-                Image(systemName: "chevron.backward")
+                Label(backTitle, systemImage: "chevron.backward")
+                    .labelStyle(.iconOnly)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(!coordinator.canGoBack)
-            .help(AppL10n.settings("navigation.back", defaultValue: "后退"))
+            .help(backTitle)
 
             Button {
                 coordinator.goForward()
             } label: {
-                Image(systemName: "chevron.forward")
+                Label(forwardTitle, systemImage: "chevron.forward")
+                    .labelStyle(.iconOnly)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(!coordinator.canGoForward)
-            .help(AppL10n.settings("navigation.forward", defaultValue: "前进"))
+            .help(forwardTitle)
 
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(SettingsStyle.windowBackground)
+    }
+
+    private var backTitle: String {
+        AppL10n.settings("navigation.back", defaultValue: "后退")
+    }
+
+    private var forwardTitle: String {
+        AppL10n.settings("navigation.forward", defaultValue: "前进")
     }
 }
 

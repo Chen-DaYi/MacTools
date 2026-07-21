@@ -257,6 +257,38 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛" } }
       }
     },
+    "navigation.back": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "رجوع" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Zurück" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Back" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Volver" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Retour" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "戻る" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "뒤로" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Voltar" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Назад" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "后退" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "後退" } }
+      }
+    },
+    "navigation.forward": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تقدّم" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Vorwärts" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Forward" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Avanzar" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Avancer" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "進む" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앞으로" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Avançar" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Вперёд" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "前进" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "前進" } }
+      }
+    },
     "secondaryPanel.back": {
       "extractionState": "manual",
       "localizations": {

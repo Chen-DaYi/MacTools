@@ -31,6 +31,8 @@ enum SettingsNavigationDestination: Hashable {
 
 @MainActor
 final class SettingsNavigationCoordinator: ObservableObject {
+    private static let maximumHistoryCount = 128
+
     @Published private(set) var destination: SettingsNavigationDestination
 
     private(set) var history: [SettingsNavigationDestination]
@@ -95,6 +97,9 @@ final class SettingsNavigationCoordinator: ObservableObject {
         }
 
         history.append(destination)
+        if history.count > Self.maximumHistoryCount {
+            history.removeFirst(history.count - Self.maximumHistoryCount)
+        }
         historyIndex = history.count - 1
         activate(destination)
     }
