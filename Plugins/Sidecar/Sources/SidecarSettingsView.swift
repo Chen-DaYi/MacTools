@@ -4,9 +4,8 @@ import UniformTypeIdentifiers
 import MacToolsPluginKit
 
 private enum SidecarSettingsColumnWidth {
-    static let connection: CGFloat = 144
+    static let picker: CGFloat = 144
     static let connectionLabel: CGFloat = 154
-    static let shortcutAction: CGFloat = 112
     static let shortcutActionLabel: CGFloat = 82
     static let shortcutLabel: CGFloat = 104
     static let shortcutRecorder: CGFloat = 126
@@ -502,7 +501,7 @@ private struct SidecarDeviceSettingsRow: View {
                 }
 
                 transportPicker
-                    .frame(width: SidecarSettingsColumnWidth.connection)
+                    .frame(width: SidecarSettingsColumnWidth.picker)
             }
             .fixedSize(horizontal: true, vertical: false)
         }
@@ -561,7 +560,7 @@ private struct SidecarDeviceSettingsRow: View {
                 }
 
                 shortcutActionPicker
-                    .frame(width: SidecarSettingsColumnWidth.shortcutAction)
+                    .frame(width: SidecarSettingsColumnWidth.picker)
             }
             .fixedSize(horizontal: true, vertical: false)
         }
