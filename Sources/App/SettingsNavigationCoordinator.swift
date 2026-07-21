@@ -107,6 +107,14 @@ final class SettingsNavigationCoordinator: ObservableObject {
         traverseHistory(startingAt: historyIndex + 1, step: 1)
     }
 
+    func reconcileCurrentDestinationAvailability() {
+        guard !isAvailable(destination) else {
+            return
+        }
+
+        navigate(to: .plugins(.marketplace))
+    }
+
     private func traverseHistory(startingAt index: Int, step: Int) {
         guard let index = traversableHistoryIndex(startingAt: index, step: step) else {
             return
@@ -121,7 +129,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
         var index = index
 
         while history.indices.contains(index) {
-            if isAvailable(history[index]) {
+            let candidate = history[index]
+            if isAvailable(candidate), candidate != destination {
                 return index
             }
 

@@ -953,6 +953,9 @@ private struct FeatureSettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsStyle.windowBackground)
+        .onChange(of: pluginHost.pluginConfigurationItems.map(\.id)) {
+            navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
     }
 
     private var selectionBinding: Binding<FeatureSettingsPane> {

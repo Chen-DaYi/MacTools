@@ -82,6 +82,33 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
     }
 
+    func testUnavailableCurrentPluginConfigurationFallsBackWithoutNoOpHistoryTraversal() {
+        var availableConfigurationIDs: Set<String> = ["fan-control"]
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { availableConfigurationIDs.contains($0) }
+        )
+
+        coordinator.navigate(to: .plugins(.marketplace))
+        coordinator.navigate(to: .plugins(.configuration("fan-control")))
+        availableConfigurationIDs.remove("fan-control")
+
+        coordinator.reconcileCurrentDestinationAvailability()
+
+        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+        XCTAssertEqual(
+            coordinator.history,
+            [
+                .general,
+                .plugins(.marketplace),
+                .plugins(.configuration("fan-control")),
+                .plugins(.marketplace)
+            ]
+        )
+
+        coordinator.goBack()
+        XCTAssertEqual(coordinator.destination, .general)
+    }
+
     func testNewSettingsWindowCoordinatorStartsWithFreshHistory() {
         let firstCoordinator = SettingsNavigationCoordinator()
         firstCoordinator.navigate(to: .about)
