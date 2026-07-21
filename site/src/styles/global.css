@@ -228,9 +228,9 @@ main {
 .home-hero {
   min-height: calc(100svh - var(--nav-height));
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(440px, 1fr);
+  grid-template-columns: minmax(0, 620px) minmax(316px, 1fr);
   align-items: center;
-  gap: clamp(36px, 5vw, 72px);
+  gap: clamp(40px, 3.5vw, 48px);
   padding-block: clamp(58px, 8vw, 112px) clamp(28px, 5vw, 72px);
   background: var(--canvas);
 }
@@ -239,6 +239,11 @@ main {
 .page-hero {
   text-align: left;
   animation: rise-in 760ms var(--ease-out) 80ms both;
+}
+
+.home-hero-copy {
+  width: 100%;
+  max-width: 620px;
 }
 
 .hero-lockup {
@@ -281,12 +286,18 @@ h1 {
   text-wrap: balance;
 }
 
+.home-hero h1 {
+  max-width: 620px;
+  font-size: 64px;
+  line-height: 1.07;
+}
+
 .hero-title-zh span {
   display: block;
 }
 
 .hero-lead {
-  max-width: 730px;
+  max-width: 620px;
   margin: 22px 0 0;
   color: var(--ink-soft);
   font-size: 25px;
@@ -407,12 +418,19 @@ h1 {
   --sim-card: color-mix(in srgb, #ffffff 58%, transparent);
   --sim-card-hover: color-mix(in srgb, #ffffff 76%, transparent);
   --sim-hairline: color-mix(in srgb, #3a3a3d 12%, transparent);
+  --sim-panel-border: color-mix(in srgb, #3a3a3d 10%, transparent);
   --sim-toggle: #b8b8bc;
-  --sim-blue: #0a84ff;
+  --sim-blue: #007aff;
   --sim-green: #30d158;
   --sim-orange: #ff9f0a;
   --sim-pink: #ff375f;
   --sim-cyan: #00a7c4;
+  --sim-gpu: rgb(242 137 78);
+  --sim-network: rgb(46 176 168);
+  --sim-download: rgb(52 152 219);
+  --sim-upload: rgb(240 119 75);
+  --sim-disk-read: rgb(70 150 240);
+  --sim-disk-write: rgb(155 110 230);
   position: relative;
   isolation: isolate;
   width: min(var(--sim-panel-width), 100%);
@@ -430,7 +448,25 @@ h1 {
   --sim-card: color-mix(in srgb, #ffffff 8%, transparent);
   --sim-card-hover: color-mix(in srgb, #ffffff 12%, transparent);
   --sim-hairline: color-mix(in srgb, #ffffff 12%, transparent);
+  --sim-panel-border: color-mix(in srgb, #ffffff 10%, transparent);
   --sim-toggle: #55565a;
+  --sim-blue: #0a84ff;
+}
+
+.sim-sf-symbol {
+  width: 1em;
+  height: 1em;
+  display: block;
+  flex: 0 0 auto;
+  background: currentColor;
+  -webkit-mask-image: var(--sim-symbol);
+  mask-image: var(--sim-symbol);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .sim-panel {
@@ -442,15 +478,13 @@ h1 {
   width: 100%;
   display: flex;
   flex-direction: column;
-  border: 1px solid color-mix(in srgb, var(--sim-ink) 10%, transparent);
+  border: 1px solid var(--sim-panel-border);
   border-radius: 12px;
   padding: 6px;
   overflow: visible;
   background: var(--sim-panel);
   color: var(--sim-ink);
-  box-shadow:
-    0 28px 60px color-mix(in srgb, #000000 26%, transparent),
-    0 1px 0 color-mix(in srgb, #ffffff 46%, transparent) inset;
+  box-shadow: 0 28px 60px color-mix(in srgb, #000000 26%, transparent);
   backdrop-filter: saturate(160%) blur(28px);
   transform: translateX(-50%);
   transform-origin: center top;
@@ -459,17 +493,39 @@ h1 {
 
 .sim-panel-notch {
   position: absolute;
-  top: -8px;
-  right: calc(50% - 8px);
+  top: -12px;
+  right: calc(50% - 12px);
+  width: 24px;
+  height: 13px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sim-panel-notch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 4px;
   width: 16px;
   height: 16px;
-  border-top: 1px solid color-mix(in srgb, var(--sim-ink) 10%, transparent);
-  border-left: 1px solid color-mix(in srgb, var(--sim-ink) 10%, transparent);
-  border-radius: 2px 0 0;
+  border-top: 1px solid var(--sim-panel-border);
+  border-left: 1px solid var(--sim-panel-border);
   background: var(--sim-panel);
+  backdrop-filter: saturate(160%) blur(28px);
   transform: rotate(45deg);
-  box-shadow: -3px -3px 8px color-mix(in srgb, #000000 8%, transparent);
   transition: background-color 260ms ease, border-color 260ms ease;
+}
+
+.sim-panel-notch::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 0;
+  left: 3px;
+  z-index: 1;
+  height: 2px;
+  background: var(--sim-panel);
+  transition: background-color 260ms ease;
 }
 
 .sim-panel-toolbar {
@@ -482,8 +538,7 @@ h1 {
   justify-content: center;
 }
 
-.sim-panel-tabs,
-.sim-panel-actions {
+.sim-panel-tabs {
   display: flex;
   align-items: center;
 }
@@ -495,8 +550,7 @@ h1 {
   background: color-mix(in srgb, var(--sim-ink) 6%, transparent);
 }
 
-.sim-panel-tab,
-.sim-panel-actions button {
+.sim-panel-tab {
   position: relative;
   width: 28px;
   height: 24px;
@@ -511,14 +565,12 @@ h1 {
   transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
-.sim-panel-tab:hover,
-.sim-panel-actions button:hover {
+.sim-panel-tab:hover {
   background: color-mix(in srgb, var(--sim-ink) 8%, transparent);
   color: var(--sim-ink);
 }
 
-.sim-panel-tab:active,
-.sim-panel-actions button:active {
+.sim-panel-tab:active {
   transform: scale(0.93);
 }
 
@@ -527,75 +579,9 @@ h1 {
   color: var(--sim-ink);
 }
 
-.sim-panel-actions {
-  position: absolute;
-  right: 0;
-  gap: 2px;
-}
-
-.sim-panel-actions button {
-  width: 28px;
-  height: 28px;
-  font-family: system-ui, sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.sim-grid-icon {
-  width: 12px;
-  height: 12px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 2px;
-}
-
-.sim-grid-icon i {
-  border-radius: 1px;
-  background: currentColor;
-}
-
-.sim-switch-icon {
-  position: relative;
-  width: 13px;
-  height: 12px;
-}
-
-.sim-switch-icon::before,
-.sim-switch-icon::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 1.5px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.sim-switch-icon::before {
-  top: 3px;
-}
-
-.sim-switch-icon::after {
-  bottom: 2px;
-}
-
-.sim-switch-icon i {
-  position: absolute;
-  z-index: 1;
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.sim-switch-icon i:first-child {
-  top: 1.5px;
-  left: 3px;
-}
-
-.sim-switch-icon i:last-child {
-  right: 2px;
-  bottom: 0.5px;
+.sim-tab-symbol {
+  width: 24px;
+  height: 24px;
 }
 
 .sim-tooltip {
@@ -618,10 +604,11 @@ h1 {
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
-.sim-panel-tab:hover .sim-tooltip,
-.sim-panel-tab:focus-visible .sim-tooltip {
-  opacity: 1;
-  transform: translate(-50%, 0);
+@media (hover: hover) and (pointer: fine) {
+  .sim-panel-tab:hover .sim-tooltip {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .sim-panel-view {
@@ -631,6 +618,7 @@ h1 {
   flex: 1 1 auto;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-top: 4px;
   opacity: 0;
   transform: translateY(4px);
@@ -674,9 +662,9 @@ h1 {
   min-width: 0;
   height: 99px;
   display: grid;
-  grid-template-rows: 12px 22px 28px 12px;
+  grid-template-rows: 20px 19px 22px 11px;
   gap: 3px;
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 8px;
   overflow: hidden;
   background: var(--sim-card);
@@ -696,7 +684,8 @@ h1 {
   min-width: 0;
   gap: 6px;
   color: var(--sim-muted);
-  font-size: 8px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 8.5px;
   line-height: 1;
 }
 
@@ -709,9 +698,58 @@ h1 {
 }
 
 .sim-hud-tile header strong {
-  color: var(--sim-ink);
-  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sim-muted);
+  font-family: "SF Pro Text", system-ui, sans-serif;
+  font-size: 10px;
   font-weight: 650;
+}
+
+.sim-hud-tile header strong .sim-sf-symbol {
+  width: 11px;
+  height: 11px;
+}
+
+.sim-hud-chip {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  padding-inline: 7px;
+  background: color-mix(in srgb, var(--sim-ink) 6%, transparent);
+  color: var(--sim-muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.sim-hud-cpu header strong,
+.sim-hud-cpu .sim-spark-bars {
+  color: var(--sim-green);
+}
+
+.sim-hud-gpu header strong,
+.sim-hud-gpu .sim-spark-bars {
+  color: var(--sim-gpu);
+}
+
+.sim-hud-network header strong {
+  color: var(--sim-network);
+}
+
+.sim-hud-disk header strong {
+  color: var(--sim-disk-read);
+}
+
+.sim-hud-memory header strong {
+  color: var(--sim-orange);
+}
+
+.sim-hud-battery header strong {
+  color: var(--sim-green);
 }
 
 .sim-hud-reading {
@@ -721,21 +759,22 @@ h1 {
 }
 
 .sim-hud-reading b {
-  min-width: 29px;
   color: var(--sim-ink);
-  font-size: 20px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 15px;
   font-weight: 630;
   line-height: 1;
 }
 
 .sim-hud-reading small {
   color: var(--sim-muted);
-  font-size: 8px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 9px;
   line-height: 1;
 }
 
 .sim-spark-bars {
-  height: 28px;
+  height: 22px;
   display: flex;
   align-items: flex-end;
   gap: 2px;
@@ -746,107 +785,83 @@ h1 {
   min-width: 1px;
   height: 100%;
   border-radius: 1px 1px 0 0;
-  background: var(--sim-blue);
+  background: currentColor;
   opacity: 0.78;
   transform: scaleY(0.28);
   transform-origin: bottom;
   transition: transform 520ms var(--ease-out), opacity 240ms ease;
 }
 
-.sim-hud-gpu .sim-spark-bars i {
-  background: var(--sim-pink);
+.sim-hud-chart {
+  width: 100%;
+  height: 22px;
+  overflow: visible;
 }
 
-.sim-rate-lines {
-  position: relative;
-  height: 28px;
-  overflow: hidden;
+.sim-chart-area {
+  fill: currentColor;
+  opacity: 0.16;
+  transition: d 520ms var(--ease-out);
 }
 
-.sim-rate-lines i {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 8px;
-  border-radius: 50%;
-  border-top: 2px solid var(--sim-cyan);
-  transform: skewX(-18deg);
+.sim-chart-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+  transition: d 520ms var(--ease-out);
 }
 
-.sim-rate-lines i:first-child {
-  top: 5px;
-}
-
-.sim-rate-lines i:last-child {
-  top: 12px;
-  border-top-color: var(--sim-green);
-  transform: skewX(24deg);
-}
-
+.sim-chart-download,
 .sim-download {
-  color: var(--sim-cyan);
+  color: var(--sim-download);
 }
 
+.sim-chart-upload,
 .sim-upload {
+  color: var(--sim-upload);
+}
+
+.sim-chart-disk-read,
+.sim-disk-read {
+  color: var(--sim-disk-read);
+}
+
+.sim-chart-disk-write,
+.sim-disk-write {
+  color: var(--sim-disk-write);
+}
+
+.sim-chart-memory {
+  color: var(--sim-orange);
+}
+
+.sim-chart-battery {
   color: var(--sim-green);
 }
 
-.sim-download b,
-.sim-upload b,
+.sim-rate-footer {
+  justify-content: flex-start !important;
+  gap: 6px !important;
+}
+
+.sim-rate-footer > span {
+  width: 61px;
+  flex: 0 0 61px;
+}
+
+.sim-rate-footer b,
 .sim-hud-tile footer b {
-  font-weight: 600;
-}
-
-.sim-capacity-bar,
-.sim-battery-bar {
-  align-self: center;
-  height: 7px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--sim-ink) 9%, transparent);
-}
-
-.sim-capacity-bar i,
-.sim-battery-bar i {
-  display: block;
-  width: 82%;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--sim-blue);
-  transition: width 520ms var(--ease-out);
-}
-
-.sim-battery-bar i {
-  width: 84%;
-  background: var(--sim-green);
-}
-
-.sim-memory-bar {
-  align-self: center;
-  height: 8px;
-  display: grid;
-  grid-template-columns: 58fr 14fr 28fr;
-  gap: 2px;
-  overflow: hidden;
-  border-radius: 999px;
-}
-
-.sim-memory-bar i {
-  background: var(--sim-orange);
-}
-
-.sim-memory-bar i:nth-child(2) {
-  background: var(--sim-pink);
-}
-
-.sim-memory-bar i:nth-child(3) {
-  background: color-mix(in srgb, var(--sim-ink) 9%, transparent);
+  color: var(--sim-muted);
+  font-weight: 500;
 }
 
 .sim-process-card {
   min-height: 96px;
   margin-top: 6px;
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 8px 9px 7px;
   background: var(--sim-card);
 }
@@ -929,9 +944,9 @@ h1 {
 .sim-device-row {
   min-height: 34px;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 33px 24px;
+  grid-template-columns: 26px minmax(0, 1fr) 38px 23px;
   align-items: center;
-  gap: 7px;
+  gap: 10px;
   border-top: 1px solid var(--sim-hairline);
   color: var(--sim-ink);
   font-size: 10px;
@@ -955,104 +970,17 @@ h1 {
 }
 
 .sim-device-icon {
-  position: relative;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 34px;
   display: grid;
   place-items: center;
   color: var(--sim-muted);
-  font-size: 15px;
+  opacity: 0.78;
 }
 
-.sim-device-airpods {
-  font-size: 0;
-}
-
-.sim-device-airpods::before {
-  content: "";
-  width: 7px;
-  height: 10px;
-  border: 1.5px solid var(--sim-muted);
-  border-radius: 5px 5px 4px 4px;
-  transform: rotate(20deg) translate(-1px, -2px);
-}
-
-.sim-device-airpods::after {
-  content: "";
-  position: absolute;
-  left: 11px;
-  bottom: 1px;
-  width: 2px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--sim-muted);
-  transform: rotate(12deg);
-}
-
-.sim-device-mac {
-  width: 21px;
-  height: 14px;
-  border: 1.5px solid var(--sim-muted);
-  border-radius: 4px;
-}
-
-.sim-device-mac::after {
-  content: "";
-  position: absolute;
-  right: 4px;
-  bottom: 2px;
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--sim-green);
-}
-
-.sim-device-mouse {
-  width: 13px;
-  height: 20px;
-  border: 1.5px solid var(--sim-muted);
-  border-radius: 7px 7px 8px 8px;
-}
-
-.sim-device-mouse::before {
-  content: "";
-  position: absolute;
-  top: 1px;
-  left: 50%;
-  width: 1px;
-  height: 6px;
-  background: var(--sim-muted);
-}
-
-.sim-device-keyboard {
-  width: 22px;
-  height: 14px;
-  border: 1.5px solid var(--sim-muted);
-  border-radius: 3px;
-  background:
-    repeating-linear-gradient(90deg, transparent 0 3px, var(--sim-muted) 3px 4px),
-    repeating-linear-gradient(0deg, transparent 0 3px, var(--sim-muted) 3px 4px);
-  background-size: 16px 8px;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.sim-device-trackpad {
-  width: 20px;
-  height: 15px;
-  border: 1.5px solid var(--sim-muted);
-  border-radius: 4px;
-}
-
-.sim-device-trackpad::after {
-  content: "";
-  position: absolute;
-  right: 3px;
-  bottom: 2px;
-  left: 3px;
-  height: 1px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--sim-muted) 60%, transparent);
+.sim-device-icon .sim-sf-symbol {
+  width: 24px;
+  height: 24px;
 }
 
 .sim-device-battery {
@@ -1082,6 +1010,10 @@ h1 {
   border-radius: 1px;
   background: var(--sim-green);
   transition: width 520ms var(--ease-out);
+}
+
+.sim-device-battery i.is-low {
+  background: var(--sim-orange);
 }
 
 .sim-activity-widget {
@@ -1140,6 +1072,12 @@ h1 {
   cursor: default;
 }
 
+.sim-activity-header button .sim-sf-symbol,
+.sim-calendar-header button .sim-sf-symbol {
+  width: 11px;
+  height: 11px;
+}
+
 .sim-activity-header > div > span {
   min-width: 48px;
   color: var(--sim-muted);
@@ -1160,37 +1098,33 @@ h1 {
   display: flex;
   align-items: center;
   gap: 7px;
-  border-radius: 9px;
+  border-radius: 12px;
   padding: 6px 7px;
   background: color-mix(in srgb, var(--sim-ink) 4%, transparent);
 }
 
-.sim-activity-stats i {
-  width: 23px;
-  height: 23px;
+.sim-activity-stats .sim-sf-symbol {
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-size: 10px;
-  font-style: normal;
+  margin: 4px;
+  background: currentColor;
 }
 
 .activity-blue {
-  background: var(--sim-blue);
+  color: var(--sim-blue);
 }
 
 .activity-pink {
-  background: var(--sim-pink);
+  color: var(--sim-pink);
 }
 
 .activity-green {
-  background: var(--sim-green);
+  color: var(--sim-green);
 }
 
 .activity-orange {
-  background: var(--sim-orange);
+  color: var(--sim-orange);
 }
 
 .sim-activity-stats span {
@@ -1267,7 +1201,7 @@ h1 {
   min-width: 0;
   height: 36px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
   display: grid;
   grid-template-rows: 15px 10px 4px;
   place-items: center;
@@ -1309,15 +1243,262 @@ h1 {
   white-space: nowrap;
 }
 
-.sim-calendar-grid i {
+.sim-calendar-event-dots {
+  height: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.sim-calendar-event-dots i {
   width: 3px;
   height: 3px;
   border-radius: 999px;
-  background: transparent;
+  background: var(--event-color, var(--sim-pink));
 }
 
-.sim-calendar-grid .has-events i {
-  background: var(--sim-pink);
+.sim-resolution-secondary-panel {
+  position: absolute;
+  z-index: 18;
+  width: 216px;
+  min-height: 148px;
+  max-height: calc(100vh - 16px);
+  border: 1px solid var(--sim-panel-border);
+  border-radius: 12px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--sim-panel);
+  color: var(--sim-ink);
+  box-shadow: 0 18px 38px color-mix(in srgb, #000000 24%, transparent);
+  backdrop-filter: saturate(160%) blur(28px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-3px) scale(0.99);
+  transform-origin: left top;
+  transition: opacity 90ms ease, transform 110ms ease;
+  scrollbar-width: none;
+}
+
+.sim-resolution-secondary-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.sim-resolution-secondary-panel[hidden] {
+  display: none;
+}
+
+.sim-resolution-secondary-panel[data-side="left"] {
+  transform: translateX(3px) scale(0.99);
+  transform-origin: right top;
+}
+
+.sim-resolution-secondary-panel[data-side="inline"] {
+  transform: translateY(3px) scale(0.99);
+  transform-origin: center top;
+}
+
+.sim-resolution-secondary-panel.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0) scale(1);
+}
+
+.sim-resolution-secondary-panel header {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding-inline: 6px;
+}
+
+.sim-resolution-secondary-panel header strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-resolution-list {
+  display: grid;
+  gap: 0;
+  margin-top: 8px;
+}
+
+.sim-resolution-list button {
+  width: 100%;
+  min-height: 27px;
+  border: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  background: transparent;
+  color: var(--sim-ink);
+  cursor: pointer;
+  font-size: 11.5px;
+  line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sim-resolution-list button:not(.is-selected):hover {
+  background: color-mix(in srgb, var(--sim-ink) 6%, transparent);
+}
+
+.sim-resolution-list button.is-selected {
+  cursor: default;
+}
+
+.sim-resolution-check {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.sim-resolution-check .sim-sf-symbol {
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+}
+
+.sim-resolution-list button.is-selected .sim-resolution-check .sim-sf-symbol {
+  opacity: 1;
+}
+
+.sim-calendar-popover {
+  position: absolute;
+  z-index: 16;
+  width: 230px;
+  max-height: 260px;
+  border: 1px solid var(--sim-panel-border);
+  border-radius: 12px;
+  padding: 10px;
+  overflow: visible;
+  background: var(--sim-panel);
+  color: var(--sim-ink);
+  box-shadow: 0 16px 34px color-mix(in srgb, #000000 24%, transparent);
+  backdrop-filter: saturate(160%) blur(28px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px) scale(0.985);
+  transform-origin: center;
+  transition: opacity 90ms ease, transform 100ms ease;
+}
+
+.sim-calendar-popover[hidden] {
+  display: none;
+}
+
+.sim-calendar-popover.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.sim-calendar-popover::before {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--sim-panel-border);
+  background: var(--sim-panel);
+  transform: rotate(45deg);
+}
+
+.sim-calendar-popover[data-side="right"]::before {
+  top: var(--sim-popover-arrow-offset, 30px);
+  left: -6px;
+  border-top: 0;
+  border-right: 0;
+}
+
+.sim-calendar-popover[data-side="left"]::before {
+  top: var(--sim-popover-arrow-offset, 30px);
+  right: -6px;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+.sim-calendar-popover[data-side="over"]::before {
+  top: -6px;
+  left: var(--sim-popover-arrow-offset, 110px);
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.sim-calendar-popover-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.sim-calendar-popover-heading strong,
+.sim-calendar-popover-heading small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-calendar-popover-heading strong {
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.sim-calendar-popover-heading small {
+  color: var(--sim-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.sim-calendar-popover-divider {
+  height: 1px;
+  margin-block: 7px;
+  background: var(--sim-hairline);
+}
+
+.sim-calendar-popover-events {
+  display: grid;
+  gap: 5px;
+}
+
+.sim-calendar-popover-event {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.sim-calendar-popover-event i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--event-color, var(--sim-blue));
+}
+
+.sim-calendar-popover-event strong,
+.sim-calendar-popover-event time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-calendar-popover-event strong {
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.sim-calendar-popover-event time {
+  color: var(--sim-muted);
+  font-family: ui-rounded, "SF Pro Rounded", "SF Pro Text", system-ui, sans-serif;
+  font-size: 9.5px;
+  font-weight: 500;
 }
 
 .sim-feature-list {
@@ -1331,9 +1512,8 @@ h1 {
   transition: background-color 160ms ease;
 }
 
-.sim-feature-item:hover,
-.sim-feature-item.is-expanded {
-  background: color-mix(in srgb, var(--sim-ink) 5.5%, transparent);
+.sim-feature-item:hover {
+  background: color-mix(in srgb, var(--sim-ink) 6%, transparent);
 }
 
 .sim-feature-row {
@@ -1362,10 +1542,14 @@ button.sim-feature-row {
   place-items: center;
   background: color-mix(in srgb, var(--sim-ink) 8%, transparent);
   color: var(--sim-muted);
-  font-family: "SF Pro Text", system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
+}
+
+.sim-feature-icon .sim-sf-symbol {
+  /* The exported 26pt symbol sits on a 64pt canvas; 30px matches App's 12pt glyph. */
+  width: 26px;
+  height: 26px;
+  -webkit-mask-size: 30px 30px;
+  mask-size: 30px 30px;
 }
 
 .sim-feature-copy {
@@ -1398,33 +1582,51 @@ button.sim-feature-row {
 
 .sim-disclosure-chevron {
   width: 14px;
+  height: 14px;
   flex: 0 0 auto;
+  display: grid;
+  place-items: center;
   color: var(--sim-muted);
-  font-size: 17px;
-  line-height: 1;
-  text-align: center;
-  transition: transform 180ms ease;
 }
 
-.sim-feature-item.is-expanded .sim-disclosure-chevron {
-  transform: rotate(90deg);
+.sim-disclosure-chevron .sim-sf-symbol {
+  width: 10px;
+  height: 10px;
+  grid-area: 1 / 1;
+}
+
+.sim-disclosure-chevron .sim-chevron-down,
+.sim-feature-item.is-expanded .sim-chevron-right {
+  display: none;
+}
+
+.sim-feature-item.is-expanded .sim-chevron-down {
+  display: block;
 }
 
 .sim-feature-detail {
-  margin: -1px 10px 8px 46px;
-  border-top: 1px solid var(--sim-hairline);
-  padding: 8px 0 2px;
+  margin: 0 10px 8px 36px;
+  padding: 0;
+}
+
+.sim-detail-section-title,
+.sim-detail-heading {
+  min-height: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sim-muted);
+  font-size: 10.5px;
+  font-weight: 500;
 }
 
 .sim-detail-heading {
-  min-height: 14px;
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  color: var(--sim-muted);
-  font-size: 9px;
-  font-weight: 550;
+  padding-inline: 10px;
+}
+
+.sim-detail-section-title {
+  padding: 0 0 4px 15px;
 }
 
 .sim-detail-heading b {
@@ -1433,92 +1635,208 @@ button.sim-feature-row {
 }
 
 .sim-feature-detail input[type="range"] {
-  width: 100%;
-  height: 16px;
-  margin: 5px 0 1px;
-  accent-color: var(--sim-blue);
+  --sim-range-progress: 0%;
+  appearance: none;
+  -webkit-appearance: none;
+  width: calc(100% - 20px);
+  height: 18px;
+  margin: 5px 10px 1px;
+  padding: 0;
+  background: transparent;
   cursor: pointer;
 }
 
-.sim-detail-segments {
+.sim-feature-detail input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--sim-blue) 0 var(--sim-range-progress),
+    color-mix(in srgb, var(--sim-ink) 14%, transparent) var(--sim-range-progress) 100%
+  );
+}
+
+.sim-feature-detail input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 999px;
+  margin-top: -6px;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, #000000 12%, transparent),
+    0 1px 3px color-mix(in srgb, #000000 28%, transparent);
+}
+
+.sim-feature-detail input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sim-ink) 14%, transparent);
+}
+
+.sim-feature-detail input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--sim-blue);
+}
+
+.sim-feature-detail input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, #000000 12%, transparent),
+    0 1px 3px color-mix(in srgb, #000000 28%, transparent);
+}
+
+.sim-feature-detail input[type="range"]:focus-visible {
+  outline: none;
+}
+
+.sim-feature-detail input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, #000000 12%, transparent),
+    0 1px 3px color-mix(in srgb, #000000 28%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--sim-blue) 26%, transparent);
+}
+
+.sim-feature-detail input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, #000000 12%, transparent),
+    0 1px 3px color-mix(in srgb, #000000 28%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--sim-blue) 26%, transparent);
+}
+
+.sim-feature-detail input[type="range"] + .sim-detail-list {
+  margin-top: 8px;
+}
+
+.sim-detail-list {
+  display: grid;
+  gap: 0;
+}
+
+.sim-detail-divider {
+  height: 1px;
+  margin: 4px 10px;
+  background: var(--sim-hairline);
+}
+
+.sim-detail-list-row {
+  width: 100%;
+  min-width: 0;
+  min-height: 26px;
+  border: 0;
+  border-radius: 8px;
   display: flex;
-  gap: 2px;
-  margin-top: 6px;
-  border-radius: 7px;
-  padding: 2px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  background: transparent;
+  color: var(--sim-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.sim-detail-list-row.is-action-row,
+.sim-detail-list-row.is-switch-row {
+  min-height: 30px;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.sim-detail-list-row:hover {
   background: color-mix(in srgb, var(--sim-ink) 6%, transparent);
 }
 
-.sim-detail-segments button {
-  min-width: 0;
-  min-height: 23px;
-  flex: 1 1 0;
-  border: 0;
-  border-radius: 5px;
-  padding: 3px 5px;
-  overflow: hidden;
+.sim-detail-list-row.is-navigation-row:hover {
+  background: color-mix(in srgb, var(--sim-ink) 10%, transparent);
+}
+
+.sim-detail-list-row.is-navigation-row.is-selected {
+  background: color-mix(in srgb, var(--sim-ink) 13%, transparent);
+}
+
+.sim-detail-list-row.is-select-row.is-selected:hover {
   background: transparent;
+  cursor: default;
+}
+
+.sim-detail-list-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.sim-detail-row-icon,
+.sim-detail-row-chevron {
+  width: 14px;
+  height: 14px;
   color: var(--sim-muted);
-  cursor: pointer;
-  font-size: 8px;
-  font-weight: 550;
+}
+
+.sim-detail-row-chevron {
+  width: 10px;
+  height: 10px;
+}
+
+.sim-selection-mark {
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+}
+
+.sim-selection-mark .sim-sf-symbol {
+  width: 10px;
+  height: 10px;
+  opacity: 0;
+}
+
+.sim-detail-list-row.is-selected .sim-selection-mark .sim-sf-symbol {
+  opacity: 1;
+}
+
+.sim-detail-row-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+}
+
+.sim-detail-row-copy strong,
+.sim-detail-row-copy small {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sim-detail-segments button.is-selected {
-  background: var(--sim-card-hover);
-  color: var(--sim-ink);
-  box-shadow: 0 1px 2px color-mix(in srgb, #000000 12%, transparent);
+.sim-detail-row-copy strong {
+  font-size: 11.5px;
+  font-weight: 500;
 }
 
-.sim-detail-checks {
-  display: grid;
-  gap: 3px;
-  margin-top: 5px;
+.sim-detail-list-row.is-action-row .sim-detail-row-copy strong,
+.sim-detail-list-row.is-switch-row .sim-detail-row-copy strong {
+  font-size: 12px;
 }
 
-.sim-detail-checks button {
-  min-height: 24px;
-  border: 0;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 5px;
-  background: transparent;
+.sim-detail-row-copy small {
   color: var(--sim-muted);
-  cursor: pointer;
-  font-size: 9px;
-  text-align: left;
-}
-
-.sim-detail-checks button:hover {
-  background: color-mix(in srgb, var(--sim-ink) 5%, transparent);
-}
-
-.sim-detail-checks i {
-  width: 14px;
-  height: 14px;
-  border: 1px solid color-mix(in srgb, var(--sim-muted) 70%, transparent);
-  border-radius: 4px;
-  display: grid;
-  place-items: center;
-  color: transparent;
-  font-size: 9px;
-  font-style: normal;
-}
-
-.sim-detail-checks button[aria-checked="true"] i {
-  border-color: var(--sim-blue);
-  background: var(--sim-blue);
-  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 500;
 }
 
 .sim-toggle {
   position: relative;
-  width: 35px;
-  height: 20px;
+  width: 27px;
+  height: 16px;
   flex: 0 0 auto;
   border: 0;
   border-radius: 999px;
@@ -1532,8 +1850,8 @@ button.sim-feature-row {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 999px;
   background: #ffffff;
   box-shadow: 0 1px 3px color-mix(in srgb, #000000 26%, transparent);
@@ -1545,7 +1863,7 @@ button.sim-feature-row {
 }
 
 .sim-toggle.is-on i {
-  transform: translateX(15px);
+  transform: translateX(11px);
 }
 
 .sim-control-action {
@@ -1562,6 +1880,7 @@ button.sim-feature-row {
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
+  box-shadow: 0 1px 0 color-mix(in srgb, #ffffff 28%, transparent) inset;
   transition: background-color 160ms ease, transform 160ms ease;
 }
 
@@ -1578,7 +1897,7 @@ button.sim-feature-row {
 }
 
 .sim-control-action:disabled {
-  background: var(--sim-green);
+  opacity: 0.72;
   cursor: default;
 }
 
@@ -2245,6 +2564,14 @@ button.sim-feature-row {
   }
 }
 
+@media (max-width: 1068px) {
+  .home-hero h1 {
+    margin-inline: auto;
+    font-size: 40px;
+    line-height: 1.1;
+  }
+}
+
 @media (max-width: 940px) {
   .site-nav {
     grid-template-columns: auto 1fr auto;
@@ -2253,11 +2580,13 @@ button.sim-feature-row {
   .home-hero {
     min-height: auto;
     grid-template-columns: 1fr;
-    gap: 54px;
+    gap: 48px;
     padding-block: 64px 76px;
   }
 
   .home-hero-copy {
+    max-width: 680px;
+    justify-self: center;
     text-align: center;
   }
 
@@ -2378,6 +2707,11 @@ button.sim-feature-row {
   h1 {
     font-size: 44px;
     line-height: 1.08;
+  }
+
+  .home-hero h1 {
+    font-size: 34px;
+    line-height: 1.12;
   }
 
   .hero-lockup {
@@ -2578,6 +2912,18 @@ button.sim-feature-row {
     padding-left: 12px;
   }
 
+}
+
+@media (max-width: 419px) {
+  .home-hero {
+    gap: 36px;
+    padding-block: 40px 52px;
+  }
+
+  .home-hero h1 {
+    font-size: 28px;
+    line-height: 1.14;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
