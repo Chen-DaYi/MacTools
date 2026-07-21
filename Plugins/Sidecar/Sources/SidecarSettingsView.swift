@@ -7,8 +7,8 @@ private enum SidecarSettingsColumnWidth {
     static let connection: CGFloat = 144
     static let connectionLabel: CGFloat = 154
     static let shortcutAction: CGFloat = 112
-    static let shortcutActionLabel: CGFloat = 104
-    static let shortcutLabel: CGFloat = 82
+    static let shortcutActionLabel: CGFloat = 82
+    static let shortcutLabel: CGFloat = 104
     static let shortcutRecorder: CGFloat = 126
     static let shortcutActionButton: CGFloat = 22
     static let shortcutActions: CGFloat = 50
@@ -517,49 +517,52 @@ private struct SidecarDeviceSettingsRow: View {
 
     private var shortcutLine: some View {
         ViewThatFits(in: .horizontal) {
-            shortcutLineContent(showsShortcutLabel: true)
-            shortcutLineContent(showsShortcutLabel: false)
+            shortcutLineContent(showsActionLabel: true)
+            shortcutLineContent(showsActionLabel: false)
         }
     }
 
-    private func shortcutLineContent(showsShortcutLabel: Bool) -> some View {
+    private func shortcutLineContent(showsActionLabel: Bool) -> some View {
         HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Color.clear
                 .frame(width: 14)
 
-            Label(
-                localization.string("settings.column.action", defaultValue: "操作"),
-                systemImage: "keyboard"
-            )
+            Spacer(minLength: 0)
+
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Label(
+                    localization.string("settings.column.shortcut", defaultValue: "快捷键"),
+                    systemImage: "keyboard"
+                )
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(width: SidecarSettingsColumnWidth.shortcutActionLabel, alignment: .leading)
-                .help(localization.string("settings.column.action", defaultValue: "操作"))
+                .frame(width: SidecarSettingsColumnWidth.shortcutLabel, alignment: .leading)
+                .help(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
 
-            shortcutActionPicker
-                .frame(width: SidecarSettingsColumnWidth.shortcutAction)
+                shortcutControl
+                    .frame(
+                        width: SidecarSettingsColumnWidth.shortcutRecorder
+                            + SidecarSettingsColumnWidth.shortcutActions
+                            + PluginSettingsTheme.Spacing.controlCluster,
+                        alignment: .leading
+                    )
 
-            if showsShortcutLabel {
-                Text(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(width: SidecarSettingsColumnWidth.shortcutLabel, alignment: .leading)
-                    .help(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
+                if showsActionLabel {
+                    Text(localization.string("settings.column.action", defaultValue: "操作"))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(width: SidecarSettingsColumnWidth.shortcutActionLabel, alignment: .leading)
+                        .help(localization.string("settings.column.action", defaultValue: "操作"))
+                }
+
+                shortcutActionPicker
+                    .frame(width: SidecarSettingsColumnWidth.shortcutAction)
             }
-
-            shortcutControl
-                .frame(
-                    width: SidecarSettingsColumnWidth.shortcutRecorder
-                        + SidecarSettingsColumnWidth.shortcutActions
-                        + PluginSettingsTheme.Spacing.controlCluster,
-                    alignment: .leading
-                )
-
-            Spacer(minLength: 0)
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 
