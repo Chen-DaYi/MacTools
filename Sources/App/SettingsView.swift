@@ -982,6 +982,7 @@ private struct FeatureSettingsView: View {
 
             FeatureSettingsDetailPane(
                 pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
                 selectedPane: selectedPane,
                 uninstallConfirmationSession: uninstallConfirmationSession,
                 showDashboard: showDashboard,
@@ -1147,6 +1148,7 @@ private struct FeatureSettingsSidebarRow: View {
 
 private struct FeatureSettingsDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let selectedPane: FeatureSettingsPane
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     let showDashboard: () -> Void
@@ -1230,6 +1232,7 @@ private struct FeatureSettingsDetailPane: View {
         case .marketplace:
             PluginManagementSettingsView(
                 pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
                 uninstallConfirmationSession: uninstallConfirmationSession
             )
         case let .configuration(pluginID):

@@ -100,6 +100,81 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         )
     }
 
+    func testPanelCommandResolverAddsSettingsWithoutCapturingSearchCloseOrQuit() {
+        XCTAssertEqual(
+            MenuBarPanelKeyboardAction.resolve(
+                for: makeCommandKeyEvent(
+                    characters: "\u{1B}",
+                    keyCode: UInt16(kVK_Escape),
+                    modifiers: []
+                )
+            ),
+            .dismissPanel
+        )
+        XCTAssertEqual(
+            MenuBarPanelKeyboardAction.resolve(
+                for: makeCommandKeyEvent(
+                    characters: ",",
+                    keyCode: UInt16(kVK_ANSI_Comma)
+                )
+            ),
+            .showSettings
+        )
+        XCTAssertEqual(
+            MenuBarPanelKeyboardAction.resolve(
+                for: makeCommandKeyEvent(
+                    characters: "1",
+                    keyCode: UInt16(kVK_ANSI_1)
+                )
+            ),
+            .selectTab(.components)
+        )
+
+        for keyCode in [kVK_ANSI_F, kVK_ANSI_W, kVK_ANSI_Q] {
+            XCTAssertNil(
+                MenuBarPanelKeyboardAction.resolve(
+                    for: makeCommandKeyEvent(
+                        characters: "",
+                        keyCode: UInt16(keyCode)
+                    )
+                )
+            )
+        }
+    }
+
+    func testPanelSettingsCommandUsesInjectedWindowRouterPath() {
+        var presentationCount = 0
+        let presenter = makePresenter(
+            onOpenSettings: { presentationCount += 1 }
+        )
+
+        presenter.performKeyboardAction(.showSettings)
+
+        XCTAssertEqual(presentationCount, 1)
+    }
+
+    func testEscapeUsesCoordinatedPanelDismissalPath() {
+        var dismissalCount = 0
+        let presenter = makePresenter(onDismiss: { dismissalCount += 1 })
+
+        presenter.performKeyboardAction(.dismissPanel)
+
+        XCTAssertEqual(dismissalCount, 1)
+    }
+
+    func testEscapeDismissalDoesNotDependOnTheCurrentFirstResponder() {
+        var dismissalCount = 0
+        let presenter = makePresenter(onDismiss: { dismissalCount += 1 })
+        let window = makeWindow()
+        let control = NSButton(frame: .zero)
+        window.contentView = control
+        XCTAssertTrue(window.makeFirstResponder(control))
+
+        presenter.performKeyboardAction(.dismissPanel)
+
+        XCTAssertEqual(dismissalCount, 1)
+    }
+
     func testPanelModelSelectionUsesPresenterRoutingWithoutShowingWindow() throws {
         let presenter = makePresenter()
         let popover = presenter.debugPopoverForTests
@@ -222,7 +297,10 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         )
     }
 
-    private func makePresenter() -> MenuBarPanelPresenter {
+    private func makePresenter(
+        onDismiss: @escaping () -> Void = {},
+        onOpenSettings: @escaping () -> Void = {}
+    ) -> MenuBarPanelPresenter {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
 
@@ -236,8 +314,8 @@ final class MenuBarPanelPresenterTests: XCTestCase {
 
         return MenuBarPanelPresenter(
             pluginHost: host,
-            onDismiss: {},
-            onOpenSettings: {},
+            onDismiss: onDismiss,
+            onOpenSettings: onOpenSettings,
             onPresentDiskCleanConfiguration: {},
             onPresentLaunchControlConfiguration: {},
             onAllPanelsClosed: {}
