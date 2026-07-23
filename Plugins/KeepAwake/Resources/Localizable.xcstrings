@@ -149,67 +149,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "إبقاء Mac مستيقظًا عند إغلاق الغطاء"
+            "value": "إبقاء Mac مستيقظًا عند إغلاق الغطاء أثناء توصيله بالطاقة"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bei geschlossenem Deckel wach halten"
+            "value": "Bei geschlossenem Deckel und angeschlossenem Netzteil wach halten"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keep awake with lid closed"
+            "value": "Keep awake with lid closed while plugged in"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mantener activo con la tapa cerrada"
+            "value": "Mantener activo con la tapa cerrada mientras está enchufado"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rester actif avec le couvercle fermé"
+            "value": "Garder le Mac actif avec le couvercle fermé lorsqu’il est branché"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ディスプレイを閉じてもスリープさせない"
+            "value": "電源接続中はディスプレイを閉じてもスリープさせない"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "덮개를 닫아도 깨우기"
+            "value": "전원 연결 중 덮개를 닫아도 깨우기"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Manter ativo com a tampa fechada"
+            "value": "Manter ativo com a tampa fechada enquanto estiver ligado à energia"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Не засыпать при закрытой крышке"
+            "value": "Не переходить в режим сна с закрытой крышкой при подключении к питанию"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "合盖时保持唤醒"
+            "value": "接通电源时合盖保持唤醒"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "闔蓋時保持喚醒"
+            "value": "接通電源時闔蓋保持喚醒"
           }
         }
       }
@@ -362,67 +362,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يمنع السكون عند إغلاق الغطاء؛ حافظ على التهوية ولا تضع Mac في حقيبة."
+            "value": "يتوقف تلقائيًا عند فصل الطاقة. حافظ على تهوية Mac جيدًا ولا تضعه أبدًا في حقيبة."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verhindert den Ruhezustand bei geschlossenem Deckel. Für Belüftung sorgen und nicht in einer Tasche verwenden."
+            "value": "Schaltet sich beim Trennen vom Netzteil automatisch aus. Sorgen Sie für eine gute Belüftung des Mac und legen Sie ihn niemals in eine Tasche."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prevents lid-close sleep. Keep the Mac ventilated and out of bags."
+            "value": "Turns off automatically when unplugged. Keep the Mac well ventilated and never place it in a bag."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Evita la suspensión al cerrar la tapa. Mantén el Mac ventilado y fuera de bolsas."
+            "value": "Se desactiva automáticamente al desenchufarlo. Mantén el Mac bien ventilado y no lo metas nunca en una bolsa."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Empêche la mise en veille à la fermeture. Gardez le Mac ventilé et hors de tout sac."
+            "value": "Se désactive automatiquement lorsqu’il est débranché. Gardez le Mac bien ventilé et ne le placez jamais dans un sac."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ディスプレイを閉じたときのスリープを防ぎます。通気を確保し、バッグには入れないでください。"
+            "value": "電源を外すと自動的にオフになります。Mac の通気を十分に確保し、バッグには絶対に入れないでください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "덮개를 닫을 때 잠자기를 방지합니다. 통풍을 유지하고 가방에 넣지 마십시오."
+            "value": "전원을 분리하면 자동으로 꺼집니다. Mac을 충분히 환기하고 절대 가방에 넣지 마십시오."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Impede a suspensão ao fechar a tampa. Mantenha o Mac ventilado e fora de bolsas."
+            "value": "Desativa-se automaticamente ao desconectar da energia. Mantenha o Mac bem ventilado e nunca o coloque em uma bolsa."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Не даёт Mac уснуть при закрытии крышки. Обеспечьте вентиляцию и не кладите Mac в сумку."
+            "value": "Автоматически отключается при отсоединении питания. Обеспечьте хорошую вентиляцию Mac и никогда не кладите его в сумку."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "阻止合盖休眠；请保持通风，勿放入包中。"
+            "value": "拔掉电源后会自动关闭。请保持 Mac 通风，切勿将其放入包中。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "阻止闔蓋睡眠；請保持通風，勿放入包中。"
+            "value": "拔除電源後會自動關閉。請保持 Mac 通風，切勿將其放入包中。"
           }
         }
       }

@@ -44,38 +44,40 @@ struct KeepAwakeSettingsView: View {
                 .pluginSettingsCardBackground(.plugin)
             }
 
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                Label(
-                    localization.string("settings.lidClose.section", defaultValue: "MacBook"),
-                    systemImage: "laptopcomputer"
-                )
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .foregroundStyle(.secondary)
+            if powerSourceState.isPortableMac {
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                    Label(
+                        localization.string("settings.lidClose.section", defaultValue: "MacBook"),
+                        systemImage: "laptopcomputer"
+                    )
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
+                    .foregroundStyle(.secondary)
 
-                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                        Text(localization.string(
-                            "settings.lidClose.keepAwake",
-                            defaultValue: "合盖时保持唤醒"
-                        ))
-                        .font(PluginSettingsTheme.Typography.rowTitle)
+                    HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                            Text(localization.string(
+                                "settings.lidClose.keepAwake",
+                                defaultValue: "接通电源时合盖保持唤醒"
+                            ))
+                            .font(PluginSettingsTheme.Typography.rowTitle)
 
-                        Text(lidCloseDescription)
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(lidCloseDescriptionColor)
-                            .fixedSize(horizontal: false, vertical: true)
+                            Text(lidCloseDescription)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .foregroundStyle(lidCloseDescriptionColor)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                        Toggle("", isOn: $keepAwakeWithLidClosed)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .disabled(!powerSourceState.canPreventLidCloseSleep)
                     }
-
-                    Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-
-                    Toggle("", isOn: $keepAwakeWithLidClosed)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .disabled(!powerSourceState.canPreventLidCloseSleep)
+                    .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+                    .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+                    .pluginSettingsCardBackground(.plugin)
                 }
-                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
-                .pluginSettingsCardBackground(.plugin)
             }
         }
     }
@@ -97,7 +99,7 @@ struct KeepAwakeSettingsView: View {
 
         return localization.string(
             "settings.lidClose.keepAwake.description",
-            defaultValue: "阻止合盖休眠；请保持通风，勿放入包中。"
+            defaultValue: "拔掉电源后会自动关闭。请保持 Mac 通风，切勿将其放入包中。"
         )
     }
 
