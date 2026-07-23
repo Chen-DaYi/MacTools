@@ -14,6 +14,7 @@ enum GeneralSettingsCardLayout {
 
 struct SettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
     @ObservedObject var appUpdater: AppUpdater
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
@@ -27,41 +28,44 @@ struct SettingsView: View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
 
-        return TabView(selection: settingsDestinationBinding) {
-            GeneralSettingsView(
-                pluginHost: pluginHost,
-                menuBarIconSettings: menuBarIconSettings,
-                menuBarIconGallery: menuBarIconGallery,
-                launchAtLoginController: launchAtLoginController
-            )
-                .tag(SettingsDestination.general)
-                .tabItem {
-                    Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
-                }
+        return VStack(spacing: 0) {
+            SettingsHistoryNavigationControls(coordinator: navigationCoordinator)
 
-            FeatureSettingsView(
-                pluginHost: pluginHost,
-                uninstallConfirmationSession: uninstallConfirmationSession,
-                showDashboard: showDashboard,
-                showFeaturePanel: showFeaturePanel
-            )
-                .tag(SettingsDestination.pluginConfiguration)
-                .tabItem {
-                    Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
-                }
+            TabView(selection: settingsDestinationBinding) {
+                GeneralSettingsView(
+                    pluginHost: pluginHost,
+                    menuBarIconSettings: menuBarIconSettings,
+                    menuBarIconGallery: menuBarIconGallery,
+                    launchAtLoginController: launchAtLoginController
+                )
+                    .tag(SettingsDestination.general)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
+                    }
 
-            AboutSettingsView(appUpdater: appUpdater)
-                .tag(SettingsDestination.about)
-                .tabItem {
-                    Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
-                }
+                FeatureSettingsView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    uninstallConfirmationSession: uninstallConfirmationSession,
+                    showDashboard: showDashboard,
+                    showFeaturePanel: showFeaturePanel
+                )
+                    .tag(SettingsDestination.pluginConfiguration)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
+                    }
+
+                AboutSettingsView(appUpdater: appUpdater)
+                    .tag(SettingsDestination.about)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
+                    }
+            }
+            .background {
+                SettingsDestinationShortcutButtons(coordinator: navigationCoordinator)
+            }
         }
         .id(runtimeLocale.revision)
-        .background {
-            SettingsDestinationShortcutButtons(
-                selection: settingsDestinationBinding
-            )
-        }
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
@@ -75,16 +79,9 @@ struct SettingsView: View {
 
     private var settingsDestinationBinding: Binding<SettingsDestination> {
         Binding(
-            get: { pluginHost.selectedSettingsDestination },
+            get: { navigationCoordinator.destination.settingsDestination },
             set: { destination in
-                // A direct route has already selected the Plugins tab and a
-                // specific pane. Only a normal tab selection chooses the
-                // capability-aware landing page.
-                if destination == .pluginConfiguration,
-                   pluginHost.selectedSettingsDestination != .pluginConfiguration {
-                    pluginHost.selectPluginSettingsLandingPage()
-                }
-                pluginHost.selectedSettingsDestination = destination
+                navigationCoordinator.selectSettingsDestination(destination)
             }
         )
     }
@@ -94,13 +91,15 @@ struct SettingsView: View {
 // Commands are unavailable. These nonvisual buttons register window-local key
 // equivalents while keeping the Settings layout and accessibility tree clean.
 struct SettingsDestinationShortcutButtons: View {
-    @Binding var selection: SettingsDestination
+    @ObservedObject var coordinator: SettingsNavigationCoordinator
 
     var body: some View {
         HStack(spacing: 0) {
             shortcutButton(for: .general, key: "1")
             shortcutButton(for: .pluginConfiguration, key: "2")
             shortcutButton(for: .about, key: "3")
+            historyShortcutButton(key: "[") { coordinator.goBack() }
+            historyShortcutButton(key: "]") { coordinator.goForward() }
         }
         .frame(width: 0, height: 0)
         .opacity(0)
@@ -112,14 +111,62 @@ struct SettingsDestinationShortcutButtons: View {
         key: KeyEquivalent
     ) -> some View {
         Button("") {
-            guard selection != destination else {
-                return
-            }
-
-            selection = destination
+            coordinator.selectSettingsDestination(destination)
         }
         .keyboardShortcut(key, modifiers: [.command])
         .focusable(false)
+    }
+
+    private func historyShortcutButton(
+        key: KeyEquivalent,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button("", action: action)
+            .keyboardShortcut(key, modifiers: [.command])
+            .focusable(false)
+    }
+}
+
+struct SettingsHistoryNavigationControls: View {
+    @ObservedObject var coordinator: SettingsNavigationCoordinator
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                coordinator.goBack()
+            } label: {
+                Label(backTitle, systemImage: "chevron.backward")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!coordinator.canGoBack)
+            .help(backTitle)
+
+            Button {
+                coordinator.goForward()
+            } label: {
+                Label(forwardTitle, systemImage: "chevron.forward")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!coordinator.canGoForward)
+            .help(forwardTitle)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(SettingsStyle.windowBackground)
+    }
+
+    private var backTitle: String {
+        AppL10n.settings("navigation.back", defaultValue: "后退")
+    }
+
+    private var forwardTitle: String {
+        AppL10n.settings("navigation.forward", defaultValue: "前进")
     }
 }
 
@@ -893,6 +940,7 @@ private struct LaunchAtLoginSettingsRow: View {
 
 private struct FeatureSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     let showDashboard: () -> Void
     let showFeaturePanel: () -> Void
@@ -907,6 +955,7 @@ private struct FeatureSettingsView: View {
 
             FeatureSettingsDetailPane(
                 pluginHost: pluginHost,
+                selectedPane: selectedPane,
                 uninstallConfirmationSession: uninstallConfirmationSession,
                 showDashboard: showDashboard,
                 showFeaturePanel: showFeaturePanel
@@ -914,14 +963,22 @@ private struct FeatureSettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsStyle.windowBackground)
+        .onChange(of: pluginHost.pluginConfigurationItems.map(\.id)) {
+            navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
     }
 
     private var selectionBinding: Binding<FeatureSettingsPane> {
         Binding {
-            pluginHost.selectedFeatureSettingsPane
+            selectedPane
         } set: { selection in
-            pluginHost.selectFeatureSettingsPane(selection)
+            navigationCoordinator.navigate(to: .plugins(selection))
         }
+    }
+
+    private var selectedPane: FeatureSettingsPane {
+        navigationCoordinator.destination.featureSettingsPane
+            ?? pluginHost.pluginSettingsLandingPage()
     }
 }
 
@@ -1063,6 +1120,7 @@ private struct FeatureSettingsSidebarRow: View {
 
 private struct FeatureSettingsDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
+    let selectedPane: FeatureSettingsPane
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     let showDashboard: () -> Void
     let showFeaturePanel: () -> Void
@@ -1073,7 +1131,7 @@ private struct FeatureSettingsDetailPane: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch pluginHost.selectedFeatureSettingsPane {
+        switch selectedPane {
         case .dashboardLayout:
             SurfaceLayoutSettingsView(
                 surface: .dashboard,

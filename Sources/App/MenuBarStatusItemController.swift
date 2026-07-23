@@ -107,6 +107,9 @@ final class MenuBarStatusItemController: NSObject {
             showDashboard: { [weak self] in self?.showDashboard() },
             showFeaturePanel: { [weak self] in self?.showFeaturePanel() }
         )
+        windowRouter.setProgrammaticSettingsPresentationAction { [weak self] in
+            self?.requestPanelClose()
+        }
     }
 
     private func statusItemButtonScreenRect() -> NSRect? {
@@ -192,15 +195,6 @@ final class MenuBarStatusItemController: NSObject {
             }
             .store(in: &cancellables)
 
-        pluginHost.$settingsPresentationRequestCount
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.windowRouter.showSettings()
-                // Settings can be opened from a panel, so close any menu-bar
-                // panel after routing to the settings window.
-                self?.requestPanelClose()
-            }
-            .store(in: &cancellables)
     }
 
     private func observeIconSettings() {

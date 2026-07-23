@@ -579,11 +579,6 @@ struct MenuBarContent: View {
         .onChange(of: hoverCoordinator.activeActivation) {
             syncSecondaryPanelWindowIfVisible()
         }
-        .onReceive(pluginHost.$settingsPresentationRequestCount.dropFirst()) { _ in
-            if isPanelVisible {
-                presentSettings()
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)) { _ in
             secondaryPanelController.applyCurrentAppearance()
         }

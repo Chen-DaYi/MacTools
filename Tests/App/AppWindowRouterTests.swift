@@ -1,6 +1,8 @@
+import AppKit
 import XCTest
 @testable import MacTools
 
+@MainActor
 final class AppWindowRouterTests: XCTestCase {
     func testDashboardTargetInvokesOnlyDashboardAction() {
         var dashboardCallCount = 0
@@ -35,5 +37,55 @@ final class AppWindowRouterTests: XCTestCase {
 
         actions.present(.dashboard)
         actions.present(.featurePanel)
+    }
+
+    func testClosingSettingsWindowDiscardsNavigationHistory() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let host = PluginHost(
+            plugins: [],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        let router = AppWindowRouter(
+            pluginHost: host,
+            appUpdater: AppUpdater(),
+            menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
+            menuBarIconGallery: MenuBarIconGalleryLibrary(),
+            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())
+        )
+
+        host.presentPluginMarketplace()
+        let firstCoordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        XCTAssertEqual(firstCoordinator.destination, .plugins(.marketplace))
+        firstCoordinator.navigate(to: .about)
+
+        try XCTUnwrap(router.settingsWindow).close()
+        XCTAssertNil(router.settingsNavigationCoordinator)
+
+        router.showSettings()
+        let reopenedCoordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        XCTAssertEqual(reopenedCoordinator.history, [.general])
+        XCTAssertFalse(reopenedCoordinator.canGoBack)
+
+        try XCTUnwrap(router.settingsWindow).close()
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+}
+
+@MainActor
+private final class FakeLaunchAtLoginService: LaunchAtLoginServicing {
+    var isRegistered = false
+
+    func register() throws {
+        isRegistered = true
+    }
+
+    func unregister() throws {
+        isRegistered = false
     }
 }

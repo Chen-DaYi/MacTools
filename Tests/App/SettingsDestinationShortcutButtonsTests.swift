@@ -8,42 +8,58 @@ import MacToolsPluginKit
 @MainActor
 final class SettingsDestinationShortcutButtonsTests: XCTestCase {
     func testCommandNumberShortcutsSelectMatchingDestinations() {
-        var selection = SettingsDestination.general
-        let window = makeWindow(selection: Binding(
-            get: { selection },
-            set: { selection = $0 }
-        ))
+        let coordinator = SettingsNavigationCoordinator(
+            pluginSettingsLandingPage: { .featurePanelLayout }
+        )
+        let window = makeWindow(coordinator: coordinator)
 
         XCTAssertTrue(performCommandShortcut(key: "2", keyCode: UInt16(kVK_ANSI_2), in: window))
-        XCTAssertEqual(selection, .pluginConfiguration)
+        XCTAssertEqual(coordinator.destination, .plugins(.featurePanelLayout))
 
         XCTAssertTrue(performCommandShortcut(key: "3", keyCode: UInt16(kVK_ANSI_3), in: window))
-        XCTAssertEqual(selection, .about)
+        XCTAssertEqual(coordinator.destination, .about)
 
         XCTAssertTrue(performCommandShortcut(key: "1", keyCode: UInt16(kVK_ANSI_1), in: window))
-        XCTAssertEqual(selection, .general)
+        XCTAssertEqual(coordinator.destination, .general)
     }
 
     func testCurrentAndUnknownDestinationsDoNotChangeSelection() {
-        var selection = SettingsDestination.general
-        var selectionCount = 0
-        let window = makeWindow(selection: Binding(
-            get: { selection },
-            set: {
-                selection = $0
-                selectionCount += 1
-            }
-        ))
+        let coordinator = SettingsNavigationCoordinator()
+        let window = makeWindow(coordinator: coordinator)
 
         XCTAssertTrue(performCommandShortcut(key: "1", keyCode: UInt16(kVK_ANSI_1), in: window))
-        XCTAssertEqual(selectionCount, 0)
+        XCTAssertEqual(coordinator.history, [.general])
 
         XCTAssertFalse(performCommandShortcut(key: "4", keyCode: UInt16(kVK_ANSI_4), in: window))
-        XCTAssertEqual(selection, .general)
-        XCTAssertEqual(selectionCount, 0)
+        XCTAssertEqual(coordinator.destination, .general)
+        XCTAssertEqual(coordinator.history, [.general])
     }
 
-    private func makeWindow(selection: Binding<SettingsDestination>) -> NSWindow {
+    func testCommandTwoPreservesCurrentPluginSubpage() {
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { $0 == "fan-control" }
+        )
+        coordinator.navigate(to: .plugins(.configuration("fan-control")))
+        let window = makeWindow(coordinator: coordinator)
+
+        XCTAssertTrue(performCommandShortcut(key: "2", keyCode: UInt16(kVK_ANSI_2), in: window))
+        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
+        XCTAssertEqual(coordinator.history, [.general, .plugins(.configuration("fan-control"))])
+    }
+
+    func testCommandBracketShortcutsTraverseSettingsHistory() {
+        let coordinator = SettingsNavigationCoordinator()
+        coordinator.navigate(to: .about)
+        let window = makeWindow(coordinator: coordinator)
+
+        XCTAssertTrue(performCommandShortcut(key: "[", keyCode: UInt16(kVK_ANSI_LeftBracket), in: window))
+        XCTAssertEqual(coordinator.destination, .general)
+
+        XCTAssertTrue(performCommandShortcut(key: "]", keyCode: UInt16(kVK_ANSI_RightBracket), in: window))
+        XCTAssertEqual(coordinator.destination, .about)
+    }
+
+    private func makeWindow(coordinator: SettingsNavigationCoordinator) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 120),
             styleMask: .borderless,
@@ -51,7 +67,7 @@ final class SettingsDestinationShortcutButtonsTests: XCTestCase {
             defer: false
         )
         window.contentView = NSHostingView(
-            rootView: SettingsDestinationShortcutButtons(selection: selection)
+            rootView: SettingsDestinationShortcutButtons(coordinator: coordinator)
         )
         window.layoutIfNeeded()
         return window
