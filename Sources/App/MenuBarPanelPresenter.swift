@@ -83,6 +83,37 @@ enum MenuBarPanelKeyboardAction: Equatable {
 }
 
 @MainActor
+final class MenuBarPanelHostingController<Content: View>: NSHostingController<Content> {
+    private let onUnhandledEscape: () -> Void
+
+    init(
+        rootView: Content,
+        onUnhandledEscape: @escaping () -> Void
+    ) {
+        self.onUnhandledEscape = onUnhandledEscape
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard MenuBarPanelKeyboardAction.resolve(for: event) == .dismissPanel else {
+            super.keyDown(with: event)
+            return
+        }
+
+        onUnhandledEscape()
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        onUnhandledEscape()
+    }
+}
+
+@MainActor
 final class MenuBarPanelPresenter: NSObject {
     static let popoverBehavior: NSPopover.Behavior = .applicationDefined
 
@@ -100,7 +131,7 @@ final class MenuBarPanelPresenter: NSObject {
 
     private let popover = NSPopover()
     private let panelModel: MenuBarUnifiedPanelModel
-    private let hostingController: NSHostingController<MenuBarUnifiedPanelContent>
+    private let hostingController: MenuBarPanelHostingController<MenuBarUnifiedPanelContent>
     private var appearanceObserver: NSObjectProtocol?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var heightRefreshCancellables: Set<AnyCancellable> = []
@@ -129,7 +160,7 @@ final class MenuBarPanelPresenter: NSObject {
             isPanelVisible: false
         )
         self.panelModel = panelModel
-        self.hostingController = NSHostingController(
+        self.hostingController = MenuBarPanelHostingController(
             rootView: MenuBarUnifiedPanelContent(
                 pluginHost: pluginHost,
                 model: panelModel,
@@ -137,7 +168,8 @@ final class MenuBarPanelPresenter: NSObject {
                 onOpenSettings: onOpenSettings,
                 onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
                 onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
-            )
+            ),
+            onUnhandledEscape: onDismiss
         )
 
         super.init()
@@ -340,6 +372,12 @@ final class MenuBarPanelPresenter: NSObject {
 
         if case .selectTab = action,
            eventWindow !== popover.contentViewController?.view.window {
+            return event
+        }
+
+        if action == .dismissPanel,
+           let firstResponder = eventWindow.firstResponder,
+           firstResponder !== eventWindow {
             return event
         }
 

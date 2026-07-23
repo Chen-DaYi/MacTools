@@ -162,17 +162,39 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         XCTAssertEqual(dismissalCount, 1)
     }
 
-    func testEscapeDismissalDoesNotDependOnTheCurrentFirstResponder() {
+    func testUnhandledEscapeFromFocusedChildUsesHostingControllerFallback() throws {
         var dismissalCount = 0
-        let presenter = makePresenter(onDismiss: { dismissalCount += 1 })
         let window = makeWindow()
-        let control = NSButton(frame: .zero)
-        window.contentView = control
+        let controller = MenuBarPanelHostingController(
+            rootView: EmptyView(),
+            onUnhandledEscape: { dismissalCount += 1 }
+        )
+        window.contentViewController = controller
+        let control = EscapeForwardingView(frame: .zero)
+        controller.view.addSubview(control)
         XCTAssertTrue(window.makeFirstResponder(control))
 
-        presenter.performKeyboardAction(.dismissPanel)
+        window.sendEvent(makeEscapeKeyEvent(windowNumber: window.windowNumber))
 
         XCTAssertEqual(dismissalCount, 1)
+    }
+
+    func testFocusedChildCanConsumeActualEscapeEventBeforePanelFallback() {
+        var dismissalCount = 0
+        let window = makeWindow()
+        let controller = MenuBarPanelHostingController(
+            rootView: EmptyView(),
+            onUnhandledEscape: { dismissalCount += 1 }
+        )
+        window.contentViewController = controller
+        let control = EscapeConsumingView(frame: .zero)
+        controller.view.addSubview(control)
+        XCTAssertTrue(window.makeFirstResponder(control))
+
+        window.sendEvent(makeEscapeKeyEvent(windowNumber: window.windowNumber))
+
+        XCTAssertEqual(control.escapeCount, 1)
+        XCTAssertEqual(dismissalCount, 0)
     }
 
     func testPanelModelSelectionUsesPresenterRoutingWithoutShowingWindow() throws {
@@ -348,5 +370,47 @@ final class MenuBarPanelPresenterTests: XCTestCase {
             isARepeat: false,
             keyCode: keyCode
         )!
+    }
+
+    private func makeEscapeKeyEvent(windowNumber: Int) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: windowNumber,
+            context: nil,
+            characters: "\u{1B}",
+            charactersIgnoringModifiers: "\u{1B}",
+            isARepeat: false,
+            keyCode: UInt16(kVK_Escape)
+        )!
+    }
+}
+
+private final class EscapeForwardingView: NSView {
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        nextResponder?.keyDown(with: event)
+    }
+}
+
+private final class EscapeConsumingView: NSView {
+    private(set) var escapeCount = 0
+
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard event.keyCode == UInt16(kVK_Escape) else {
+            super.keyDown(with: event)
+            return
+        }
+
+        escapeCount += 1
     }
 }
