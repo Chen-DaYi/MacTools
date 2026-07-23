@@ -1798,7 +1798,8 @@ final class PluginHost: ObservableObject {
             }
         }
 
-        shortcutItems = shortcutDescriptors().map { descriptor in
+        let shortcutDescriptors = shortcutDescriptors()
+        shortcutItems = shortcutDescriptors.map { descriptor in
             let customization = shortcutStore.customization(for: descriptor.itemID)
             let binding = resolvedBinding(for: descriptor)
 
@@ -1830,7 +1831,10 @@ final class PluginHost: ObservableObject {
                 systemImage: action.systemImage,
                 bindingText: ShortcutFormatter.displayString(for: binding),
                 canClear: binding != nil,
-                errorMessage: appShortcutErrors[action]
+                errorMessage: appShortcutErrors[action] ?? appShortcutConflictError(
+                    for: action,
+                    descriptors: shortcutDescriptors
+                )
             )
         }
 
@@ -2532,6 +2536,37 @@ final class PluginHost: ObservableObject {
         shortcutStore.resolvedBinding(for: action.rawValue, default: nil)
     }
 
+    private func pluginShortcutConflict(
+        for binding: ShortcutBinding,
+        descriptors: [ShortcutDescriptor]
+    ) -> ShortcutDescriptor? {
+        descriptors.first { resolvedBinding(for: $0) == binding }
+    }
+
+    private func pluginShortcutConflict(
+        for action: AppShortcutAction,
+        descriptors: [ShortcutDescriptor]
+    ) -> ShortcutDescriptor? {
+        guard let binding = resolvedAppShortcutBinding(for: action) else {
+            return nil
+        }
+
+        return pluginShortcutConflict(for: binding, descriptors: descriptors)
+    }
+
+    private func appShortcutConflictError(
+        for action: AppShortcutAction,
+        descriptors: [ShortcutDescriptor]
+    ) -> String? {
+        guard let conflict = pluginShortcutConflict(for: action, descriptors: descriptors) else {
+            return nil
+        }
+
+        return ShortcutValidationError.duplicate(
+            ownerDescription: "\(conflict.pluginTitle) · \(conflict.definition.title)"
+        ).localizedDescription
+    }
+
     private func resolvedBinding(forPluginID pluginID: String, shortcutDefinitionID: String) -> ShortcutBinding? {
         guard let descriptor = shortcutDescriptors().first(where: {
             $0.pluginID == pluginID && $0.definition.id == shortcutDefinitionID
@@ -2811,9 +2846,10 @@ final class PluginHost: ObservableObject {
             throw ShortcutValidationError.modifierOnly
         }
 
-        if let conflict = shortcutDescriptors().first(where: {
-            resolvedBinding(for: $0) == binding
-        }) {
+        if let conflict = pluginShortcutConflict(
+            for: binding,
+            descriptors: shortcutDescriptors()
+        ) {
             throw ShortcutValidationError.duplicate(
                 ownerDescription: "\(conflict.pluginTitle) · \(conflict.definition.title)"
             )
@@ -2848,7 +2884,8 @@ final class PluginHost: ObservableObject {
     }
 
     private func syncGlobalShortcuts() {
-        var registrations = shortcutDescriptors().compactMap { descriptor -> GlobalShortcutManager.Registration? in
+        let descriptors = shortcutDescriptors()
+        var registrations = descriptors.compactMap { descriptor -> GlobalShortcutManager.Registration? in
             guard descriptor.definition.scope == .global else {
                 return nil
             }
@@ -2865,7 +2902,7 @@ final class PluginHost: ObservableObject {
 
         for action in AppShortcutAction.allCases {
             guard let binding = resolvedAppShortcutBinding(for: action),
-                  !shortcutDescriptors().contains(where: { resolvedBinding(for: $0) == binding })
+                  pluginShortcutConflict(for: binding, descriptors: descriptors) == nil
             else {
                 continue
             }
