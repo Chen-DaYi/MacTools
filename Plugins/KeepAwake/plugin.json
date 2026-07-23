@@ -1,54 +1,54 @@
 {
   "id": "keep-awake",
   "displayName": "阻止休眠",
-  "summary": "阻止系统空闲休眠；可选保持屏幕常亮",
+  "summary": "阻止系统空闲休眠；可选保持屏幕常亮，或接通电源时合盖运行",
   "localizedMetadata": {
     "ar": {
       "displayName": "منع السكون",
-      "summary": "يمنع سكون النظام؛ ويمكن اختياريًا إبقاء الشاشة قيد التشغيل."
+      "summary": "يمنع سكون النظام؛ ويمكن إبقاء الشاشة قيد التشغيل أو تشغيل Mac والغطاء مغلق عند توصيل الطاقة."
     },
     "de": {
       "displayName": "Wach halten",
-      "summary": "Verhindert den Leerlauf des Systems; optional bleibt das Display an."
+      "summary": "Verhindert den Leerlauf des Systems; optional bleibt das Display an oder der Mac läuft am Netzteil mit geschlossenem Deckel."
     },
     "en": {
       "displayName": "Keep Awake",
-      "summary": "Prevent idle system sleep; optionally keep the display on."
+      "summary": "Prevent idle system sleep; optionally keep the display on or run with the lid closed while on power."
     },
     "es": {
       "displayName": "Mantener activo",
-      "summary": "Evita la suspensión del sistema; opcionalmente mantiene la pantalla encendida."
+      "summary": "Evita la suspensión del sistema; opcionalmente mantiene la pantalla encendida o funciona con la tapa cerrada al conectarse a la corriente."
     },
     "fr": {
       "displayName": "Empêcher la suspension",
-      "summary": "Empêche la mise en veille du système ; option pour garder l’écran allumé."
+      "summary": "Empêche la mise en veille du système ; option pour garder l’écran allumé ou fonctionner couvercle fermé sur secteur."
     },
     "ja": {
       "displayName": "スリープを防止",
-      "summary": "システムのアイドルスリープを防止。必要に応じてディスプレイもオンのままにできます。"
+      "summary": "システムのアイドルスリープを防止。必要に応じてディスプレイをオンのままにするか、電源接続時に閉じた状態で動作できます。"
     },
     "ko": {
       "displayName": "잠자기 방지",
-      "summary": "시스템 유휴 절전을 방지하며, 선택적으로 디스플레이를 켜 둡니다."
+      "summary": "시스템 유휴 절전을 방지하며, 선택적으로 디스플레이를 켜 두거나 전원 연결 시 덮개를 닫은 채 실행합니다."
     },
     "pt": {
       "displayName": "Manter ativo",
-      "summary": "Impede a suspensão ociosa do sistema; opcionalmente mantém a tela ligada."
+      "summary": "Impede a suspensão ociosa do sistema; opcionalmente mantém a tela ligada ou funciona com a tampa fechada quando conectado à energia."
     },
     "ru": {
       "displayName": "Не давать уснуть",
-      "summary": "Предотвращает спящий режим системы; по желанию не даёт экрану гаснуть."
+      "summary": "Предотвращает спящий режим системы; по желанию не даёт экрану гаснуть или позволяет работать с закрытой крышкой при питании от сети."
     },
     "zh-Hans": {
       "displayName": "阻止休眠",
-      "summary": "阻止系统空闲休眠；可选保持屏幕常亮"
+      "summary": "阻止系统空闲休眠；可选保持屏幕常亮，或接通电源时合盖运行"
     },
     "zh-Hant": {
       "displayName": "防止睡眠",
-      "summary": "阻止系統空閒休眠；可選保持螢幕常亮"
+      "summary": "阻止系統空閒休眠；可選保持螢幕常亮，或接通電源時闔蓋運作"
     }
   },
-  "version": "1.0.8",
+  "version": "1.0.9",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 3,
   "bundleRelativePath": "KeepAwake.bundle",
