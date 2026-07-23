@@ -127,6 +127,7 @@ final class MenuBarStatusItemController: NSObject {
         windowRouter.setProgrammaticSettingsPresentationAction { [weak self] in
             self?.requestPanelClose()
         }
+        // This controller is the sole production owner of app-level presentation routing.
         pluginHost.appPresentationHandler = { [weak self, weak windowRouter] request in
             switch MenuBarStatusItemPresentationAction(request: request) {
             case let .presentSettings(settingsRequest):

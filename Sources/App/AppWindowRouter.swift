@@ -52,12 +52,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
         super.init()
-        pluginHost.appPresentationHandler = { [weak self] request in
-            guard case let .settings(settingsRequest) = request else {
-                return
-            }
-            self?.presentSettings(settingsRequest)
-        }
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in

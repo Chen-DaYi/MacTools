@@ -158,7 +158,12 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             forKey: MenuBarClickBehaviorPreference.userDefaultsKey
         )
 
-        XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
+        let isSwapped = MenuBarClickBehaviorPreference.current(defaults).isSwapped
+        XCTAssertTrue(isSwapped)
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: nil, swapped: isSwapped),
+            .featurePanel
+        )
         XCTAssertEqual(
             MenuBarStatusItemPresentationAction(request: .toggleDashboard),
             .toggleComponentPanel

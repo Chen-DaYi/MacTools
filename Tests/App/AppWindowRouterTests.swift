@@ -59,7 +59,7 @@ final class AppWindowRouterTests: XCTestCase {
             launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())
         )
 
-        host.presentPluginMarketplace()
+        router.presentSettings(.pluginMarketplace)
         let firstCoordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
         XCTAssertEqual(firstCoordinator.destination, .plugins(.marketplace))
         firstCoordinator.navigate(to: .about)
@@ -74,6 +74,37 @@ final class AppWindowRouterTests: XCTestCase {
 
         try XCTUnwrap(router.settingsWindow).close()
         defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    func testInitializationDoesNotReplaceExistingAppPresentationHandler() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let host = PluginHost(
+            plugins: [],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+        var receivedRequests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { request in
+            receivedRequests.append(request)
+        }
+
+        let router = AppWindowRouter(
+            pluginHost: host,
+            appUpdater: AppUpdater(),
+            menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
+            menuBarIconGallery: MenuBarIconGalleryLibrary(),
+            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())
+        )
+
+        host.presentPluginMarketplace()
+
+        XCTAssertEqual(receivedRequests, [.settings(.pluginMarketplace)])
+        XCTAssertNil(router.settingsWindow)
     }
 }
 
