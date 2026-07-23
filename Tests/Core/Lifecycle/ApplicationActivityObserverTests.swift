@@ -167,8 +167,15 @@ final class ApplicationActivityObserverTests: XCTestCase {
             observer: observer,
             expecting: .waking
         )
+
+        let settlement = expectation(description: "wake settlement rechecks locked session")
+        observer.onStateChange = { state in
+            if state == .sessionInactive {
+                settlement.fulfill()
+            }
+        }
         workspaceCenter.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
-        try? await Task.sleep(for: .milliseconds(60))
+        await fulfillment(of: [settlement], timeout: 1)
 
         XCTAssertEqual(observer.state, .sessionInactive)
     }
