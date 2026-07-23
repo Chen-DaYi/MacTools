@@ -27,6 +27,23 @@ enum MenuBarStatusItemInvocation: Equatable {
     }
 }
 
+enum MenuBarStatusItemPresentationAction: Equatable {
+    case presentSettings(SettingsPresentationRequest)
+    case toggleComponentPanel
+    case toggleFeaturePanel
+
+    init(request: AppPresentationRequest) {
+        switch request {
+        case let .settings(settingsRequest):
+            self = .presentSettings(settingsRequest)
+        case .toggleDashboard:
+            self = .toggleComponentPanel
+        case .toggleFeaturePanel:
+            self = .toggleFeaturePanel
+        }
+    }
+}
+
 struct MenuBarGlobalMouseEvent: Equatable, Sendable {
     let screenX: Double
     let screenY: Double
@@ -110,6 +127,17 @@ final class MenuBarStatusItemController: NSObject {
         windowRouter.setProgrammaticSettingsPresentationAction { [weak self] in
             self?.requestPanelClose()
         }
+        // This controller is the sole production owner of app-level presentation routing.
+        pluginHost.appPresentationHandler = { [weak self, weak windowRouter] request in
+            switch MenuBarStatusItemPresentationAction(request: request) {
+            case let .presentSettings(settingsRequest):
+                windowRouter?.presentSettings(settingsRequest)
+            case .toggleComponentPanel:
+                self?.toggleDashboard()
+            case .toggleFeaturePanel:
+                self?.toggleFeaturePanel()
+            }
+        }
     }
 
     private func statusItemButtonScreenRect() -> NSRect? {
@@ -165,6 +193,24 @@ final class MenuBarStatusItemController: NSObject {
 
         panelPresenter.showFeaturePanel(relativeTo: button)
         handlePresentationResult()
+    }
+
+    func toggleDashboard() {
+        guard let button = statusItem.button else {
+            AppLog.pluginHost.error("Cannot toggle Dashboard because the status item button is unavailable")
+            return
+        }
+
+        toggleComponentPanel(relativeTo: button)
+    }
+
+    func toggleFeaturePanel() {
+        guard let button = statusItem.button else {
+            AppLog.pluginHost.error("Cannot toggle Feature Panel because the status item button is unavailable")
+            return
+        }
+
+        toggleFeaturePanel(relativeTo: button)
     }
 
     private func requestPanelClose() {

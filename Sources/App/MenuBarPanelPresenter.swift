@@ -22,6 +22,24 @@ enum MenuBarPanelPresentationAction: Equatable {
     }
 }
 
+enum MenuBarPanelToggleAction: Equatable {
+    case open
+    case close
+    case switchPanel
+
+    static func resolve(
+        isPanelShown: Bool,
+        selectedTab: MenuBarPanelTab,
+        requestedTab: MenuBarPanelTab
+    ) -> MenuBarPanelToggleAction {
+        guard isPanelShown else {
+            return .open
+        }
+
+        return selectedTab == requestedTab ? .close : .switchPanel
+    }
+}
+
 enum MenuBarPanelWindowRegistry {
     private static let secondaryPanelIdentifier = NSUserInterfaceItemIdentifier(
         "MacTools.MenuBarSecondaryPanel"
@@ -180,7 +198,13 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private func toggle(_ panel: PanelKind, relativeTo button: NSStatusBarButton) {
-        if popover.isShown, selectedPanel == panel {
+        let action = MenuBarPanelToggleAction.resolve(
+            isPanelShown: popover.isShown,
+            selectedTab: tab(for: selectedPanel),
+            requestedTab: tab(for: panel)
+        )
+
+        if action == .close {
             popover.performClose(nil)
             return
         }

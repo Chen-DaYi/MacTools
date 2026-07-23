@@ -8600,6 +8600,102 @@
         }
       }
     },
+    "shortcuts.openSettings.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "افتح إعدادات MacTools." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Öffnet die MacTools-Einstellungen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open MacTools Settings." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abre los ajustes de MacTools." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvre les réglages de MacTools." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "MacToolsの設定を開きます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "MacTools 설정을 엽니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abre os Ajustes do MacTools." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открывает настройки MacTools." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开 MacTools 设置。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開 MacTools 設定。" } }
+      }
+    },
+    "shortcuts.openSettings.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح الإعدادات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Einstellungen öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open Settings" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir ajustes" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir les réglages" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "設定を開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "설정 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir Ajustes" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть настройки" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開設定" } }
+      }
+    },
+    "shortcuts.toggleDashboard.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إظهار لوحة المعلومات أو إخفاؤها أو التبديل إليها." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard ein-/ausblenden oder direkt dorthin wechseln." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show, hide, or switch to the Dashboard." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Muestra, oculta o cambia al panel." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Affiche, masque ou ouvre le tableau de bord." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードを表示、非表示、または切り替えます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드를 표시하거나 가리거나 전환합니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostra, oculta ou alterna para o Painel." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показывает, скрывает или переключает на панель." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示、隐藏或切换到仪表盘。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "顯示、隱藏或切換至儀表板。" } }
+      }
+    },
+    "shortcuts.toggleDashboard.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تبديل لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard umschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Toggle Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Alternar panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Afficher/masquer le tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードを切り替える" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드 전환" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Alternar Painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Переключить панель" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "切换仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "切換儀表板" } }
+      }
+    },
+    "shortcuts.toggleFeaturePanel.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إظهار لوحة الميزات أو إخفاؤها أو التبديل إليها." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsleiste ein-/ausblenden oder direkt dorthin wechseln." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show, hide, or switch to the Feature Panel." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Muestra, oculta o cambia al panel de funciones." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Affiche, masque ou ouvre le panneau de fonctions." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルを表示、非表示、または切り替えます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널을 표시하거나 가리거나 전환합니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostra, oculta ou alterna para o Painel de Recursos." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показывает, скрывает или переключает на панель функций." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示、隐藏或切换到功能面板。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "顯示、隱藏或切換至功能面板。" } }
+      }
+    },
+    "shortcuts.toggleFeaturePanel.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تبديل لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsleiste umschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Toggle Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Alternar panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Afficher/masquer le panneau de fonctions" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルを切り替える" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널 전환" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Alternar Painel de Recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Переключить панель функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "切换功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "切換功能面板" } }
+      }
+    },
     "shortcuts.title": {
       "extractionState": "manual",
       "localizations": {

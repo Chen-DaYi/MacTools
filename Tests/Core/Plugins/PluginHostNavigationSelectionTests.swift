@@ -71,23 +71,23 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
     func testPresentPluginMarketplaceRequestsMarketplaceSettings() {
         let plugin = MockNavigationPlugin()
         let host = makeHost(plugin: plugin)
-        var requests: [SettingsPresentationRequest] = []
-        host.settingsPresentationHandler = { requests.append($0) }
+        var requests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { requests.append($0) }
 
         host.presentPluginMarketplace()
 
-        XCTAssertEqual(requests, [.pluginMarketplace])
+        XCTAssertEqual(requests, [.settings(.pluginMarketplace)])
     }
 
     func testPresentPluginConfigurationRequestsSpecificConfiguration() {
         let plugin = MockNavigationPlugin()
         let host = makeHost(plugin: plugin)
-        var requests: [SettingsPresentationRequest] = []
-        host.settingsPresentationHandler = { requests.append($0) }
+        var requests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { requests.append($0) }
 
         host.presentPluginConfiguration(pluginID: plugin.metadata.id)
 
-        XCTAssertEqual(requests, [.pluginConfiguration(plugin.metadata.id)])
+        XCTAssertEqual(requests, [.settings(.pluginConfiguration(plugin.metadata.id))])
     }
 
     func testLayoutSettingsDestinationsCanBeSelectedIndependently() {

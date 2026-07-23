@@ -322,15 +322,21 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let host = makeHost(plugins: [])
         let binding = ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
 
-        XCTAssertNil(host.setOpenSettingsShortcutBindingAndReturnError(binding))
-        XCTAssertEqual(host.openSettingsShortcut.bindingText, ShortcutFormatter.displayString(for: binding))
-        XCTAssertTrue(host.openSettingsShortcut.canClear)
-        XCTAssertNil(host.openSettingsShortcut.errorMessage)
+        XCTAssertNil(host.setAppShortcutBindingAndReturnError(binding, for: .openSettings))
+        XCTAssertEqual(
+            host.appShortcutItems.first { $0.action == .openSettings }?.bindingText,
+            ShortcutFormatter.displayString(for: binding)
+        )
+        XCTAssertTrue(host.appShortcutItems.first { $0.action == .openSettings }?.canClear == true)
+        XCTAssertNil(host.appShortcutItems.first { $0.action == .openSettings }?.errorMessage)
 
-        host.clearOpenSettingsShortcut()
+        host.clearAppShortcut(.openSettings)
 
-        XCTAssertEqual(host.openSettingsShortcut.bindingText, ShortcutFormatter.displayString(for: nil))
-        XCTAssertFalse(host.openSettingsShortcut.canClear)
+        XCTAssertEqual(
+            host.appShortcutItems.first { $0.action == .openSettings }?.bindingText,
+            ShortcutFormatter.displayString(for: nil)
+        )
+        XCTAssertFalse(host.appShortcutItems.first { $0.action == .openSettings }?.canClear == true)
     }
 
     func testHostNotifiesDynamicShortcutPluginAfterAcceptingBinding() {
@@ -363,10 +369,13 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let host = makeHost(plugins: [])
         let binding = ShortcutBinding(keyCode: UInt16(kVK_F1), modifiers: [])
 
-        XCTAssertNil(host.setOpenSettingsShortcutBindingAndReturnError(binding))
-        XCTAssertEqual(host.openSettingsShortcut.bindingText, ShortcutFormatter.displayString(for: binding))
-        XCTAssertTrue(host.openSettingsShortcut.canClear)
-        XCTAssertNil(host.openSettingsShortcut.errorMessage)
+        XCTAssertNil(host.setAppShortcutBindingAndReturnError(binding, for: .openSettings))
+        XCTAssertEqual(
+            host.appShortcutItems.first { $0.action == .openSettings }?.bindingText,
+            ShortcutFormatter.displayString(for: binding)
+        )
+        XCTAssertTrue(host.appShortcutItems.first { $0.action == .openSettings }?.canClear == true)
+        XCTAssertNil(host.appShortcutItems.first { $0.action == .openSettings }?.errorMessage)
     }
 
     func testOpenSettingsShortcutRejectsRegularKeyWithoutModifier() {
@@ -374,14 +383,14 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let binding = ShortcutBinding(keyCode: UInt16(kVK_ANSI_A), modifiers: [])
 
         XCTAssertEqual(
-            host.setOpenSettingsShortcutBindingAndReturnError(binding),
+            host.setAppShortcutBindingAndReturnError(binding, for: .openSettings),
             ShortcutValidationError.missingModifier.localizedDescription
         )
         XCTAssertEqual(
-            host.openSettingsShortcut.errorMessage,
+            host.appShortcutItems.first { $0.action == .openSettings }?.errorMessage,
             ShortcutValidationError.missingModifier.localizedDescription
         )
-        XCTAssertFalse(host.openSettingsShortcut.canClear)
+        XCTAssertFalse(host.appShortcutItems.first { $0.action == .openSettings }?.canClear == true)
     }
 
     func testOpenSettingsShortcutRejectsPluginShortcutBinding() {
@@ -402,9 +411,9 @@ final class PluginHostComponentSupportTests: XCTestCase {
         )
         let host = makeHost(plugins: [plugin])
 
-        XCTAssertNotNil(host.setOpenSettingsShortcutBindingAndReturnError(binding))
-        XCTAssertNotNil(host.openSettingsShortcut.errorMessage)
-        XCTAssertFalse(host.openSettingsShortcut.canClear)
+        XCTAssertNotNil(host.setAppShortcutBindingAndReturnError(binding, for: .openSettings))
+        XCTAssertNotNil(host.appShortcutItems.first { $0.action == .openSettings }?.errorMessage)
+        XCTAssertFalse(host.appShortcutItems.first { $0.action == .openSettings }?.canClear == true)
     }
 
     func testPluginsWithoutConfigurationSurfaceAreHiddenFromConfigurationList() {

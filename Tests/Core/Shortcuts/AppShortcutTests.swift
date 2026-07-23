@@ -1,0 +1,374 @@
+import AppKit
+import XCTest
+import MacToolsPluginKit
+@testable import MacTools
+
+@MainActor
+final class AppShortcutTests: XCTestCase {
+    private var suiteName = ""
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "AppShortcutTests-\(UUID().uuidString)"
+    }
+
+    override func tearDown() {
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+        super.tearDown()
+    }
+
+    func testAppShortcutsDefaultToUnboundAndRecordClearIndependently() throws {
+        let defaults = try makeDefaults()
+        let manager = GlobalShortcutManager()
+        let host = makeHost(defaults: defaults, manager: manager)
+        let dashboardBinding = ShortcutBinding(keyCode: 2, modifiers: [.command, .option])
+
+        XCTAssertEqual(host.appShortcutItems.map(\.action), AppShortcutAction.allCases)
+        XCTAssertTrue(host.appShortcutItems.allSatisfy { !$0.canClear })
+        XCTAssertTrue(
+            host.appShortcutItems.allSatisfy {
+                $0.bindingText == ShortcutFormatter.displayString(for: nil)
+            }
+        )
+
+        XCTAssertNil(
+            host.setAppShortcutBindingAndReturnError(dashboardBinding, for: .toggleDashboard)
+        )
+        XCTAssertEqual(
+            try item(.toggleDashboard, in: host).bindingText,
+            ShortcutFormatter.displayString(for: dashboardBinding)
+        )
+        XCTAssertTrue(try item(.toggleDashboard, in: host).canClear)
+        XCTAssertFalse(try item(.toggleFeaturePanel, in: host).canClear)
+        XCTAssertTrue(
+            manager.debugRegistrationsForTests.contains(
+                .init(
+                    shortcutID: AppShortcutAction.toggleDashboard.rawValue,
+                    binding: dashboardBinding
+                )
+            )
+        )
+
+        host.clearAppShortcut(.toggleDashboard)
+
+        XCTAssertFalse(try item(.toggleDashboard, in: host).canClear)
+        XCTAssertFalse(
+            manager.debugRegistrationsForTests.contains {
+                $0.shortcutID == AppShortcutAction.toggleDashboard.rawValue
+            }
+        )
+    }
+
+    func testAppShortcutPersistsAcrossHostInstances() throws {
+        let defaults = try makeDefaults()
+        let binding = ShortcutBinding(keyCode: 3, modifiers: [.command, .shift])
+        let firstHost = makeHost(defaults: defaults)
+
+        XCTAssertNil(
+            firstHost.setAppShortcutBindingAndReturnError(binding, for: .toggleFeaturePanel)
+        )
+
+        let restoredHost = makeHost(defaults: defaults)
+
+        XCTAssertEqual(
+            try item(.toggleFeaturePanel, in: restoredHost).bindingText,
+            ShortcutFormatter.displayString(for: binding)
+        )
+        XCTAssertFalse(try item(.toggleDashboard, in: restoredHost).canClear)
+    }
+
+    func testAppShortcutRejectsConflictWithAnotherAppShortcutIncludingOpenSettings() throws {
+        let defaults = try makeDefaults()
+        let host = makeHost(defaults: defaults)
+        let binding = ShortcutBinding(keyCode: 4, modifiers: [.command, .option])
+
+        XCTAssertNil(host.setAppShortcutBindingAndReturnError(binding, for: .openSettings))
+        XCTAssertEqual(
+            host.setAppShortcutBindingAndReturnError(binding, for: .toggleDashboard),
+            ShortcutValidationError.duplicate(
+                ownerDescription: AppShortcutAction.openSettings.title
+            ).localizedDescription
+        )
+        XCTAssertFalse(try item(.toggleDashboard, in: host).canClear)
+    }
+
+    func testAppAndPluginShortcutsRejectConflictsInBothDirections() throws {
+        let pluginBinding = ShortcutBinding(keyCode: 5, modifiers: [.command, .option])
+        let appBinding = ShortcutBinding(keyCode: 6, modifiers: [.command, .shift])
+        let plugin = AppShortcutTestPlugin(defaultBinding: pluginBinding)
+        let host = makeHost(defaults: try makeDefaults(), plugins: [plugin])
+
+        XCTAssertNotNil(
+            host.setAppShortcutBindingAndReturnError(pluginBinding, for: .toggleDashboard)
+        )
+
+        XCTAssertNil(
+            host.setAppShortcutBindingAndReturnError(appBinding, for: .toggleFeaturePanel)
+        )
+        XCTAssertNotNil(
+            host.setShortcutBindingAndReturnError(
+                appBinding,
+                for: AppShortcutTestPlugin.shortcutItemID
+            )
+        )
+    }
+
+    func testStoredAppShortcutConflictWithGlobalPluginIsVisibleAndPluginKeepsPrecedence() throws {
+        let defaults = try makeDefaults()
+        let binding = ShortcutBinding(keyCode: 7, modifiers: [.command, .option])
+        let store = ShortcutStore(userDefaults: defaults)
+        store.setCustomization(.custom(binding), for: AppShortcutAction.toggleDashboard.rawValue)
+        let manager = GlobalShortcutManager()
+        let host = makeHost(
+            defaults: defaults,
+            plugins: [AppShortcutTestPlugin(defaultBinding: binding)],
+            manager: manager
+        )
+
+        XCTAssertEqual(
+            try item(.toggleDashboard, in: host).errorMessage,
+            pluginConflictError
+        )
+        XCTAssertTrue(try item(.toggleDashboard, in: host).canClear)
+        XCTAssertEqual(
+            host.makePreferencesBackup()
+                .shortcutCustomizations[AppShortcutAction.toggleDashboard.rawValue],
+            .custom(binding)
+        )
+        XCTAssertTrue(
+            manager.debugRegistrationsForTests.contains(
+                .init(shortcutID: AppShortcutTestPlugin.shortcutItemID, binding: binding)
+            )
+        )
+        XCTAssertFalse(
+            manager.debugRegistrationsForTests.contains {
+                $0.shortcutID == AppShortcutAction.toggleDashboard.rawValue
+            }
+        )
+    }
+
+    func testStoredAppShortcutConflictWithLocalPluginIsVisibleAndNeitherRegistersGlobally() throws {
+        let defaults = try makeDefaults()
+        let binding = ShortcutBinding(keyCode: 8, modifiers: [.command, .shift])
+        let store = ShortcutStore(userDefaults: defaults)
+        store.setCustomization(.custom(binding), for: AppShortcutAction.toggleFeaturePanel.rawValue)
+        let manager = GlobalShortcutManager()
+        let host = makeHost(
+            defaults: defaults,
+            plugins: [
+                AppShortcutTestPlugin(
+                    defaultBinding: binding,
+                    scope: .whilePluginActive
+                )
+            ],
+            manager: manager
+        )
+
+        XCTAssertEqual(
+            try item(.toggleFeaturePanel, in: host).errorMessage,
+            pluginConflictError
+        )
+        XCTAssertFalse(
+            manager.debugRegistrationsForTests.contains {
+                $0.shortcutID == AppShortcutTestPlugin.shortcutItemID
+                    || $0.shortcutID == AppShortcutAction.toggleFeaturePanel.rawValue
+            }
+        )
+    }
+
+    func testStoredAppShortcutReactivatesWhenConflictingPluginIsAbsent() throws {
+        let defaults = try makeDefaults()
+        let binding = ShortcutBinding(keyCode: 9, modifiers: [.control, .option])
+        let store = ShortcutStore(userDefaults: defaults)
+        store.setCustomization(.custom(binding), for: AppShortcutAction.toggleDashboard.rawValue)
+        let conflictedManager = GlobalShortcutManager()
+        let conflictedHost = makeHost(
+            defaults: defaults,
+            plugins: [AppShortcutTestPlugin(defaultBinding: binding)],
+            manager: conflictedManager
+        )
+
+        XCTAssertEqual(
+            try item(.toggleDashboard, in: conflictedHost).errorMessage,
+            pluginConflictError
+        )
+
+        let restoredManager = GlobalShortcutManager()
+        let restoredHost = makeHost(defaults: defaults, manager: restoredManager)
+
+        XCTAssertNil(try item(.toggleDashboard, in: restoredHost).errorMessage)
+        XCTAssertEqual(
+            try item(.toggleDashboard, in: restoredHost).bindingText,
+            ShortcutFormatter.displayString(for: binding)
+        )
+        XCTAssertTrue(
+            restoredManager.debugRegistrationsForTests.contains(
+                .init(
+                    shortcutID: AppShortcutAction.toggleDashboard.rawValue,
+                    binding: binding
+                )
+            )
+        )
+    }
+
+    func testBackupRoundTripPreservesAppShortcutBindings() throws {
+        let dashboardBinding = ShortcutBinding(keyCode: 7, modifiers: [.command, .option])
+        let featureBinding = ShortcutBinding(keyCode: 8, modifiers: [.command, .shift])
+        let sourceHost = makeHost(defaults: try makeDefaults())
+        XCTAssertNil(
+            sourceHost.setAppShortcutBindingAndReturnError(dashboardBinding, for: .toggleDashboard)
+        )
+        XCTAssertNil(
+            sourceHost.setAppShortcutBindingAndReturnError(featureBinding, for: .toggleFeaturePanel)
+        )
+
+        let backup = sourceHost.makePreferencesBackup()
+        XCTAssertEqual(
+            backup.shortcutCustomizations[AppShortcutAction.toggleDashboard.rawValue],
+            .custom(dashboardBinding)
+        )
+        XCTAssertEqual(
+            backup.shortcutCustomizations[AppShortcutAction.toggleFeaturePanel.rawValue],
+            .custom(featureBinding)
+        )
+
+        let restoredHost = makeHost(defaults: try makeDefaults())
+        let result = try restoredHost.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(
+            try item(.toggleDashboard, in: restoredHost).bindingText,
+            ShortcutFormatter.displayString(for: dashboardBinding)
+        )
+        XCTAssertEqual(
+            try item(.toggleFeaturePanel, in: restoredHost).bindingText,
+            ShortcutFormatter.displayString(for: featureBinding)
+        )
+    }
+
+    func testImportRejectsAppToAppAndAppToPluginConflictsAtomically() throws {
+        let conflictBinding = ShortcutBinding(keyCode: 9, modifiers: [.command, .option])
+        let plugin = AppShortcutTestPlugin(defaultBinding: conflictBinding)
+        let host = makeHost(defaults: try makeDefaults(), plugins: [plugin])
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: [plugin.metadata.id],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [
+                AppShortcutAction.openSettings.rawValue: .custom(conflictBinding),
+                AppShortcutAction.toggleDashboard.rawValue: .custom(conflictBinding),
+                AppShortcutTestPlugin.shortcutItemID: .custom(conflictBinding)
+            ]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertEqual(
+            Set(result.shortcutErrors.keys),
+            [
+                AppShortcutAction.openSettings.rawValue,
+                AppShortcutAction.toggleDashboard.rawValue,
+                AppShortcutTestPlugin.shortcutItemID
+            ]
+        )
+        XCTAssertTrue(host.makePreferencesBackup().shortcutCustomizations.isEmpty)
+    }
+
+    func testGlobalAppShortcutTriggersEmitTypedPresentationRequests() throws {
+        let manager = GlobalShortcutManager()
+        let host = makeHost(defaults: try makeDefaults(), manager: manager)
+        var requests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { requests.append($0) }
+
+        manager.triggerForTests(shortcutID: AppShortcutAction.toggleDashboard.rawValue)
+        manager.triggerForTests(shortcutID: AppShortcutAction.toggleFeaturePanel.rawValue)
+        manager.triggerForTests(shortcutID: AppShortcutAction.openSettings.rawValue)
+
+        XCTAssertEqual(
+            requests,
+            [
+                .toggleDashboard,
+                .toggleFeaturePanel,
+                .settings(.settings)
+            ]
+        )
+    }
+
+    private var pluginConflictError: String {
+        ShortcutValidationError.duplicate(
+            ownerDescription: "Test Plugin · Plugin Action"
+        ).localizedDescription
+    }
+
+    private var validApplicationPreferences: PreferencesBackup.ApplicationPreferences {
+        PreferencesBackup.ApplicationPreferences(
+            appearancePreference: AppAppearancePreference.system.rawValue,
+            languagePreference: AppLanguagePreference.system.rawValue,
+            menuBarClickBehavior: MenuBarClickBehaviorPreference.standard.rawValue
+        )
+    }
+
+    private func item(
+        _ action: AppShortcutAction,
+        in host: PluginHost
+    ) throws -> AppShortcutSettingsItem {
+        try XCTUnwrap(host.appShortcutItems.first { $0.action == action })
+    }
+
+    private func makeDefaults() throws -> UserDefaults {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+
+    private func makeHost(
+        defaults: UserDefaults,
+        plugins: [any MacToolsPlugin] = [],
+        manager: GlobalShortcutManager? = nil
+    ) -> PluginHost {
+        PluginHost(
+            plugins: plugins,
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: manager ?? GlobalShortcutManager()
+        )
+    }
+}
+
+@MainActor
+private final class AppShortcutTestPlugin: MacToolsPlugin {
+    static let shortcutItemID = "app-shortcut-test.shortcut.action"
+
+    let metadata = PluginMetadata(
+        id: "app-shortcut-test",
+        title: "Test Plugin",
+        iconName: "puzzlepiece",
+        iconTint: .blue,
+        order: 1,
+        defaultDescription: "Test plugin"
+    )
+    let shortcutDefinitions: [PluginShortcutDefinition]
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    init(
+        defaultBinding: ShortcutBinding?,
+        scope: ShortcutScope = .global
+    ) {
+        shortcutDefinitions = [
+            PluginShortcutDefinition(
+                id: "action",
+                title: "Plugin Action",
+                description: "Run the plugin action.",
+                actionID: "action",
+                scope: scope,
+                defaultBinding: defaultBinding,
+                isRequired: false
+            )
+        ]
+    }
+}

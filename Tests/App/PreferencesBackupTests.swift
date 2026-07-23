@@ -29,7 +29,7 @@ final class PreferencesBackupTests: XCTestCase {
             for: "first.shortcut.toggle"
         )
         let openSettingsBinding = ShortcutBinding(keyCode: 13, modifiers: [.command, .option])
-        XCTAssertNil(host.setOpenSettingsShortcutBindingAndReturnError(openSettingsBinding))
+        XCTAssertNil(host.setAppShortcutBindingAndReturnError(openSettingsBinding, for: .openSettings))
 
         let backup = host.makePreferencesBackup()
         let decodedBackup = try PreferencesBackup.decodeJSON(backup.encodedJSON())
@@ -227,7 +227,7 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertFalse(host.shortcutItems.first(where: { $0.id == "second.shortcut.open" })?.canClear ?? true)
         XCTAssertTrue(host.shortcutItems.first(where: { $0.id == "first.shortcut.toggle" })?.usesDefaultValue ?? false)
         XCTAssertEqual(
-            host.openSettingsShortcut.bindingText,
+            host.appShortcutItems.first { $0.action == .openSettings }?.bindingText,
             ShortcutFormatter.displayString(for: ShortcutBinding(keyCode: 13, modifiers: [.command, .option]))
         )
     }
