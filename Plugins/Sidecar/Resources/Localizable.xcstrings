@@ -801,6 +801,12 @@
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "هذا الاختصار مستخدم لعملية Sidecar أخرى." } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Kurzbefehl wird bereits für eine andere Sidecar-Aktion verwendet." } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "This shortcut is already used by another Sidecar action." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Este atajo ya se usa para otra acción de Sidecar." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ce raccourci est déjà utilisé par une autre action Sidecar." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このショートカットは別のSidecarアクションで使用されています。" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 단축키는 다른 Sidecar 동작에 이미 사용 중입니다." } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Este atalho já é utilizado por outra ação do Sidecar." } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это сочетание клавиш уже используется другим действием Sidecar." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此快捷键已用于其他 Sidecar 操作。" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "此快速鍵已用於其他 Sidecar 操作。" } }
       }
     },
+    "settings.shortcut.clear" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مسح الاختصار" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Kurzbefehl löschen" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear Shortcut" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Borrar atajo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Effacer le raccourci" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ショートカットを消去" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "단축키 지우기" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Limpar atalho" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очистить сочетание клавиш" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清除快捷键" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清除快速鍵" } }
+      }
+    },
     "settings.shortcut.unset" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -865,6 +871,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "طريقة الاتصال" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbindungsart" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection Mode" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Modo de conexión" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mode de connexion" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続方法" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 방식" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Modo de ligação" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Способ подключения" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接方式" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "連線方式" } }
+      }
+    },
+    "settings.column.action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الإجراء" } }, "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktion" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Action" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Acción" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Action" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "操作" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "동작" } }, "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ação" } }, "ru" : { "stringUnit" : { "state" : "translated", "value" : "Действие" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "操作" } }
       }
     },
     "settings.column.shortcut" : {

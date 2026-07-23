@@ -1056,7 +1056,25 @@ final class PluginHost: ObservableObject {
             return PluginConfigurationViewItem(id: pluginID, content: AnyView(EmptyView()))
         }
 
-        let context = PluginConfigurationContext(pluginID: pluginID)
+        let context = PluginConfigurationContext(
+            pluginID: pluginID,
+            shortcutItems: shortcutItems.filter { $0.pluginID == pluginID },
+            recordShortcut: { [weak self] itemID, binding in
+                self?.clearShortcutError(for: itemID)
+                return self?.setShortcutBindingAndReturnError(binding, for: itemID)
+            },
+            beginShortcutRecording: { [weak self] itemID in
+                self?.clearShortcutError(for: itemID)
+            },
+            clearShortcut: { [weak self] itemID in
+                self?.clearShortcutError(for: itemID)
+                self?.clearShortcut(for: itemID)
+            },
+            resetShortcut: { [weak self] itemID in
+                self?.clearShortcutError(for: itemID)
+                self?.resetShortcut(for: itemID)
+            }
+        )
         let content: AnyView
 
         switch configurations.count {
@@ -1986,7 +2004,7 @@ final class PluginHost: ObservableObject {
             let pluginID = descriptor.metadata.id
             let matchingSettingsCards = settingsCards.filter { $0.pluginID == pluginID }
             let matchingPermissionCards = permissionCards.filter { $0.pluginID == pluginID }
-            let matchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
+            let allMatchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
             let configurations: [PluginConfiguration]
             if descriptor.hasConfiguration,
                let configuration = guardedOptionalValue(
@@ -1997,6 +2015,13 @@ final class PluginHost: ObservableObject {
                 configurations = [configuration]
             } else {
                 configurations = []
+            }
+            let integratedShortcutGroupIDs = Set(
+                configurations.flatMap(\.integratedShortcutGroupIDs)
+            )
+            let matchingShortcutItems = allMatchingShortcutItems.filter { item in
+                guard let groupID = item.settingsGroupID else { return true }
+                return !integratedShortcutGroupIDs.contains(groupID)
             }
             let hasConfigurationSurface = !matchingSettingsCards.isEmpty
                 || !matchingPermissionCards.isEmpty

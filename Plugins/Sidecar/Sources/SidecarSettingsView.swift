@@ -4,14 +4,17 @@ import UniformTypeIdentifiers
 import MacToolsPluginKit
 
 private enum SidecarSettingsColumnWidth {
-    static let connection: CGFloat = 144
-    static let shortcutAction: CGFloat = 112
+    static let picker: CGFloat = 144
+    static let shortcutRecorder: CGFloat = 126
+    static let shortcutActionButton: CGFloat = 22
+    static let shortcutActions: CGFloat = 50
 }
 
 struct SidecarSettingsView: View {
     @ObservedObject var store: SidecarPreferencesStore
     let liveDevices: [SidecarDevice]
     let localization: PluginLocalization
+    let configurationContext: PluginConfigurationContext
     let onRefresh: () -> Void
     let onUpdate: () -> Void
 
@@ -100,25 +103,27 @@ struct SidecarSettingsView: View {
                 .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
                 .pluginSettingsCardBackground(.host)
             } else {
-                VStack(spacing: 0) {
-                    SidecarDeviceSettingsColumnHeader(localization: localization)
-                    PluginSettingsListDivider()
-
-                    SidecarDeviceSettingsTable(
-                        items: displayedDeviceRows,
-                        makeRow: { item, isLast in
-                            AnyView(deviceSettingsRow(for: item, isLast: isLast))
-                        },
-                        onMoveBefore: { draggedDeviceID, targetDeviceID in
-                            store.move(deviceID: draggedDeviceID, before: targetDeviceID)
-                            onUpdate()
-                        }
-                    )
-                    .frame(height: SidecarDeviceSettingsTable.preferredHeight(for: displayedDeviceRows.count))
-                }
-                .pluginSettingsCardBackground(.host)
+                deviceSettingsCard
             }
         }
+    }
+
+    private var deviceSettingsCard: some View {
+        VStack(spacing: 0) {
+            SidecarDeviceSettingsTable(
+                items: displayedDeviceRows,
+                makeRow: { item, isLast in
+                    AnyView(deviceSettingsRow(for: item, isLast: isLast))
+                },
+                onMoveBefore: { draggedDeviceID, targetDeviceID in
+                    store.move(deviceID: draggedDeviceID, before: targetDeviceID)
+                    onUpdate()
+                }
+            )
+            .frame(height: SidecarDeviceSettingsTable.preferredHeight(for: displayedDeviceRows.count))
+        }
+        .frame(maxWidth: .infinity)
+        .pluginSettingsCardBackground(.host)
     }
 
     private func state(for preference: SidecarDevicePreference) -> SidecarDeviceSettingsState {
@@ -147,6 +152,7 @@ struct SidecarSettingsView: View {
                 preference: item.preference,
                 state: item.state,
                 localization: localization,
+                configurationContext: configurationContext,
                 onTransportChange: { transport in
                     store.updateTransport(transport, for: item.preference.id)
                     onUpdate()
@@ -182,7 +188,7 @@ private struct SidecarDeviceSettingsTable: NSViewRepresentable {
         var id: String { preference.id }
     }
 
-    static let rowHeight: CGFloat = 66
+    static let rowHeight: CGFloat = 116
     private static let dragType = NSPasteboard.PasteboardType("com.ggbond.mactools.sidecar-device")
 
     let items: [Item]
@@ -437,11 +443,197 @@ private struct SidecarDeviceSettingsRow: View {
     let preference: SidecarDevicePreference
     let state: SidecarDeviceSettingsState
     let localization: PluginLocalization
+    let configurationContext: PluginConfigurationContext
     let onTransportChange: (SidecarConnectionTransport) -> Void
     let onShortcutActionChange: (SidecarShortcutAction) -> Void
     let isReorderable: Bool
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            connectionLine
+            innerDivider
+            shortcutLine
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private var connectionLine: some View {
+        ViewThatFits(in: .horizontal) {
+            connectionLineContent(showsLabel: true)
+            connectionLineContent(showsLabel: false)
+        }
+    }
+
+    private func connectionLineContent(showsLabel: Bool) -> some View {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            deviceIdentity
+
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                if showsLabel {
+                    Label(
+                        localization.string(
+                            "settings.group.connectionPolicy",
+                            defaultValue: "连接策略"
+                        ),
+                        systemImage: "cable.connector"
+                    )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .help(localization.string(
+                        "settings.group.connectionPolicy",
+                        defaultValue: "连接策略"
+                    ))
+                } else {
+                    Image(systemName: "cable.connector")
+                        .font(PluginSettingsTheme.Typography.rowIcon)
+                        .foregroundStyle(.secondary)
+                        .frame(width: PluginSettingsTheme.Size.rowIcon)
+                        .help(localization.string(
+                            "settings.group.connectionPolicy",
+                            defaultValue: "连接策略"
+                        ))
+                }
+
+                transportPicker
+                    .frame(width: SidecarSettingsColumnWidth.picker)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private var innerDivider: some View {
+        PluginSettingsListDivider()
+            .padding(.leading, shortcutContentInset)
+            .padding(.vertical, PluginSettingsTheme.Spacing.rowTitleDescription + 1)
+            .opacity(0.55)
+    }
+
+    private var shortcutLine: some View {
+        ViewThatFits(in: .horizontal) {
+            shortcutLineContent(showsActionLabel: true)
+            shortcutLineContent(showsActionLabel: false)
+        }
+    }
+
+    private func shortcutLineContent(showsActionLabel: Bool) -> some View {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Color.clear
+                .frame(width: 14)
+
+            Spacer(minLength: 0)
+
+            HStack(
+                alignment: .center,
+                spacing: PluginSettingsTheme.Spacing.rowContentControl * 2
+            ) {
+                HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                    Label(
+                        localization.string("settings.column.shortcut", defaultValue: "快捷键"),
+                        systemImage: "keyboard"
+                    )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .help(localization.string("settings.column.shortcut", defaultValue: "快捷键"))
+
+                    shortcutControl
+                        .frame(
+                            width: SidecarSettingsColumnWidth.shortcutRecorder
+                                + SidecarSettingsColumnWidth.shortcutActions
+                                + PluginSettingsTheme.Spacing.controlCluster,
+                            alignment: .leading
+                        )
+                }
+
+                HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                    if showsActionLabel {
+                        Text(localization.string("settings.column.action", defaultValue: "操作"))
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .help(localization.string("settings.column.action", defaultValue: "操作"))
+                    }
+
+                    shortcutActionPicker
+                        .frame(width: SidecarSettingsColumnWidth.picker)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    @ViewBuilder
+    private var shortcutControl: some View {
+        if let shortcutItem {
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                PluginShortcutRecorder(
+                    title: shortcutItem.title,
+                    displayText: shortcutItem.bindingText,
+                    minWidth: SidecarSettingsColumnWidth.shortcutRecorder,
+                    onRecord: { binding in
+                        configurationContext.recordShortcut(binding, for: shortcutItem.id)
+                    },
+                    onBeginRecording: {
+                        configurationContext.beginShortcutRecording(for: shortcutItem.id)
+                    }
+                )
+                .frame(width: SidecarSettingsColumnWidth.shortcutRecorder)
+
+                HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                    if let errorMessage = shortcutItem.errorMessage {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundStyle(.red)
+                            .frame(width: SidecarSettingsColumnWidth.shortcutActionButton)
+                            .help(errorMessage)
+                    }
+
+                    if shortcutItem.canClear {
+                        Button {
+                            configurationContext.clearShortcut(for: shortcutItem.id)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(PluginSettingsTheme.Typography.rowIcon)
+                                .frame(
+                                    width: SidecarSettingsColumnWidth.shortcutActionButton,
+                                    height: SidecarSettingsColumnWidth.shortcutActionButton
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help(localization.string("settings.shortcut.clear", defaultValue: "清除快捷键"))
+                    }
+                }
+                .frame(width: SidecarSettingsColumnWidth.shortcutActions, alignment: .leading)
+            }
+        } else {
+            PluginShortcutRecorderField(
+                displayText: "",
+                isRecording: false,
+                minWidth: SidecarSettingsColumnWidth.shortcutRecorder
+            )
+            .frame(width: SidecarSettingsColumnWidth.shortcutRecorder)
+            .disabled(true)
+        }
+    }
+
+    private var shortcutItem: ShortcutSettingsItem? {
+        configurationContext.shortcutItem(definitionID: "device.\(preference.id)")
+    }
+
+    private var shortcutContentInset: CGFloat {
+        14
+            + PluginSettingsTheme.Spacing.rowContentControl
+            + PluginSettingsTheme.Size.rowIcon
+            + PluginSettingsTheme.Spacing.rowContentControl
+    }
+
+    private var deviceIdentity: some View {
         HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Group {
                 if isReorderable {
@@ -469,44 +661,50 @@ private struct SidecarDeviceSettingsRow: View {
                     .lineLimit(1)
             }
             .frame(minWidth: 130, maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
 
-            Picker(String(), selection: Binding(
+    private var transportPicker: some View {
+        Picker(String(), selection: Binding(
                 get: { preference.transport },
                 set: { transport in
                     onTransportChange(transport)
                 }
-            )) {
-                Text(localization.string("settings.transport.automatic", defaultValue: "自动"))
-                    .tag(SidecarConnectionTransport.automatic)
-                Text(localization.string("settings.transport.wiredOnly", defaultValue: "仅有线"))
-                    .tag(SidecarConnectionTransport.wiredOnly)
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: SidecarSettingsColumnWidth.connection)
-            .accessibilityLabel(localization.string("settings.column.connection", defaultValue: "连接方式"))
-            .help(localization.string("settings.transport.help", defaultValue: "连接时使用的传输方式"))
+        )) {
+            Text(localization.string("settings.transport.automatic", defaultValue: "自动"))
+                .tag(SidecarConnectionTransport.automatic)
+            Text(localization.string("settings.transport.wiredOnly", defaultValue: "仅有线"))
+                .tag(SidecarConnectionTransport.wiredOnly)
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel(localization.string("settings.column.connection", defaultValue: "连接方式"))
+        .help(localization.string("settings.transport.help", defaultValue: "连接时使用的传输方式"))
+    }
 
-            Picker(String(), selection: Binding(
+    private var shortcutActionPicker: some View {
+        Picker(String(), selection: Binding(
                 get: { preference.shortcutAction },
                 set: { action in
                     onShortcutActionChange(action)
                 }
-            )) {
-                Text(localization.string("settings.shortcutAction.toggle", defaultValue: "切换"))
-                    .tag(SidecarShortcutAction.toggle)
-                Text(localization.string("panel.action.connect", defaultValue: "连接"))
-                    .tag(SidecarShortcutAction.connect)
-                Text(localization.string("panel.action.disconnect", defaultValue: "断开连接"))
-                    .tag(SidecarShortcutAction.disconnect)
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: SidecarSettingsColumnWidth.shortcutAction)
-            .accessibilityLabel(localization.string("settings.column.shortcutAction", defaultValue: "快捷键操作"))
-            .help(localization.string("settings.shortcutAction.help", defaultValue: "此设备快捷键执行的操作"))
+        )) {
+            Text(localization.string("settings.shortcutAction.toggle", defaultValue: "切换"))
+                .tag(SidecarShortcutAction.toggle)
+            Text(localization.string("panel.action.connect", defaultValue: "连接"))
+                .tag(SidecarShortcutAction.connect)
+            Text(localization.string("panel.action.disconnect", defaultValue: "断开连接"))
+                .tag(SidecarShortcutAction.disconnect)
         }
-        .pluginSettingsListRowPadding(interactive: true)
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel(localization.string("settings.column.shortcutAction", defaultValue: "快捷键操作"))
+        .help(localization.string("settings.shortcutAction.help", defaultValue: "此设备快捷键执行的操作"))
     }
 
     private var statusIcon: String {
@@ -538,34 +736,5 @@ private struct SidecarDeviceSettingsRow: View {
         case .unavailable:
             localization.string("settings.deviceStatus.unavailable", defaultValue: "当前不可用")
         }
-    }
-}
-
-private struct SidecarDeviceSettingsColumnHeader: View {
-    let localization: PluginLocalization
-
-    var body: some View {
-        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Color.clear.frame(width: 14)
-            Color.clear.frame(width: PluginSettingsTheme.Size.rowIcon)
-            Color.clear.frame(minWidth: 130, maxWidth: .infinity)
-
-            Label(
-                localization.string("settings.group.connectionPolicy", defaultValue: "连接策略"),
-                systemImage: "cable.connector"
-            )
-                .frame(width: SidecarSettingsColumnWidth.connection, alignment: .leading)
-            Label(
-                localization.string("settings.column.shortcutAction", defaultValue: "快捷键操作"),
-                systemImage: "keyboard"
-            )
-            .frame(
-                width: SidecarSettingsColumnWidth.shortcutAction,
-                alignment: .leading
-            )
-        }
-        .font(PluginSettingsTheme.Typography.rowDescription)
-        .foregroundStyle(.secondary)
-        .pluginSettingsListRowPadding(interactive: true)
     }
 }

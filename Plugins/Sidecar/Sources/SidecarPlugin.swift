@@ -209,12 +209,16 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [weak self] _ in
+        PluginConfiguration(
+            description: metadata.defaultDescription,
+            integratedShortcutGroupIDs: ["devices"]
+        ) { [weak self] context in
             if let self {
                 SidecarSettingsView(
                     store: self.preferences,
                     liveDevices: self.devices,
                     localization: self.localization,
+                    configurationContext: context,
                     onRefresh: { [weak self] in self?.refresh() },
                     onUpdate: { [weak self] in
                         self?.onStateChange?()
