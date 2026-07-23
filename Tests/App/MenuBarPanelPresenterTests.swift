@@ -189,6 +189,39 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         )
     }
 
+    func testTogglePresentationOpensRequestedSurfaceWhenClosed() {
+        XCTAssertEqual(
+            MenuBarPanelToggleAction.resolve(
+                isPanelShown: false,
+                selectedTab: .features,
+                requestedTab: .components
+            ),
+            .open
+        )
+    }
+
+    func testTogglePresentationClosesAlreadyOpenRequestedSurface() {
+        XCTAssertEqual(
+            MenuBarPanelToggleAction.resolve(
+                isPanelShown: true,
+                selectedTab: .components,
+                requestedTab: .components
+            ),
+            .close
+        )
+    }
+
+    func testTogglePresentationSwitchesDirectlyFromOtherOpenSurface() {
+        XCTAssertEqual(
+            MenuBarPanelToggleAction.resolve(
+                isPanelShown: true,
+                selectedTab: .features,
+                requestedTab: .components
+            ),
+            .switchPanel
+        )
+    }
+
     private func makePresenter() -> MenuBarPanelPresenter {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)

@@ -149,6 +149,26 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
     }
 
+    func testTypedPanelRequestsIgnoreSwappedClickPreference() {
+        let suite = "MenuBarTypedPresentationPreferenceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(
+            MenuBarClickBehaviorPreference.swapped.rawValue,
+            forKey: MenuBarClickBehaviorPreference.userDefaultsKey
+        )
+
+        XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
+        XCTAssertEqual(
+            MenuBarStatusItemPresentationAction(request: .toggleDashboard),
+            .toggleComponentPanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemPresentationAction(request: .toggleFeaturePanel),
+            .toggleFeaturePanel
+        )
+    }
+
     func testGlobalMousePolicyRecognizesStatusItemLocation() {
         let buttonFrame = NSRect(x: 100, y: 900, width: 24, height: 24)
 

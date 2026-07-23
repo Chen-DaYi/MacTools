@@ -25,12 +25,20 @@ final class GlobalShortcutManager {
     private var shortcutIDsByCarbonID: [UInt32: [String]] = [:]
     private var nextCarbonID: UInt32 = 1
 
+    #if DEBUG
+    private(set) var debugRegistrationsForTests: [Registration] = []
+    #endif
+
     init() {
         installHandlerIfNeeded()
     }
 
     func updateBindings(_ registrations: [Registration]) {
         installHandlerIfNeeded()
+
+        #if DEBUG
+        debugRegistrationsForTests = registrations
+        #endif
 
         let targetGroups = registrations.reduce(into: [ShortcutBinding: [String]]()) { result, registration in
             guard registration.binding.isValid else {
@@ -59,6 +67,12 @@ final class GlobalShortcutManager {
             register(binding: binding, shortcutIDs: shortcutIDs)
         }
     }
+
+    #if DEBUG
+    func triggerForTests(shortcutID: String) {
+        onShortcutTriggered?(shortcutID)
+    }
+    #endif
 
     private func installHandlerIfNeeded() {
         guard handlerRef == nil else {

@@ -251,7 +251,7 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                OpenSettingsShortcutSettingsRow(pluginHost: pluginHost)
+                AppShortcutSettingsRows(pluginHost: pluginHost)
             } header: {
                 Text(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"))
             }
@@ -297,16 +297,32 @@ struct GeneralSettingsView: View {
     }
 }
 
-private struct OpenSettingsShortcutSettingsRow: View {
+private struct AppShortcutSettingsRows: View {
     @ObservedObject var pluginHost: PluginHost
 
-    private var item: AppShortcutSettingsItem {
-        pluginHost.openSettingsShortcut
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(pluginHost.appShortcutItems.enumerated()), id: \.element.id) { index, item in
+                AppShortcutSettingsRow(pluginHost: pluginHost, item: item)
+
+                if index < pluginHost.appShortcutItems.count - 1 {
+                    PluginSettingsListDivider()
+                }
+            }
+        }
+    }
+}
+
+private struct AppShortcutSettingsRow: View {
+    private enum Layout {
+        static let recorderWidth: CGFloat = 126
+        static let actionButtonSize: CGFloat = 22
+        static let controlSpacing = PluginSettingsTheme.Spacing.controlCluster
+        static let controlClusterWidth = recorderWidth + controlSpacing + actionButtonSize
     }
 
-    private var title: String {
-        AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
-    }
+    @ObservedObject var pluginHost: PluginHost
+    let item: AppShortcutSettingsItem
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -314,20 +330,17 @@ private struct OpenSettingsShortcutSettingsRow: View {
                 RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
                     .fill(Color.accentColor.opacity(0.12))
 
-                Image(systemName: "command")
+                Image(systemName: item.systemImage)
                     .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                     .foregroundStyle(Color.accentColor)
             }
             .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(item.title)
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
-                Text(item.errorMessage ?? AppL10n.settings(
-                    "shortcuts.description",
-                    defaultValue: "为常用动作配置全局快捷键。编辑后立即生效，必要项不可删除。"
-                ))
+                Text(item.errorMessage ?? item.description)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(item.errorMessage == nil ? Color.secondary : Color.red)
                     .lineLimit(2)
@@ -335,36 +348,50 @@ private struct OpenSettingsShortcutSettingsRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            HStack(spacing: Layout.controlSpacing) {
                 PluginShortcutRecorder(
-                    title: title,
+                    title: item.title,
                     displayText: item.bindingText,
-                    minWidth: 126,
+                    minWidth: Layout.recorderWidth,
                     onRecord: { binding in
                         PluginShortcutRecordingResult.from(
-                            errorMessage: pluginHost.setOpenSettingsShortcutBindingAndReturnError(binding)
+                            errorMessage: pluginHost.setAppShortcutBindingAndReturnError(
+                                binding,
+                                for: item.action
+                            )
                         )
                     },
                     onBeginRecording: {
-                        pluginHost.clearOpenSettingsShortcutError()
+                        pluginHost.clearAppShortcutError(item.action)
                     }
                 )
-                .frame(width: 126)
+                .frame(width: Layout.recorderWidth)
 
                 if item.canClear {
                     Button {
-                        pluginHost.clearOpenSettingsShortcut()
+                        pluginHost.clearAppShortcut(item.action)
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(PluginSettingsTheme.Typography.rowIcon)
                             .symbolRenderingMode(.monochrome)
-                            .frame(width: 22, height: 22)
+                            .frame(
+                                width: Layout.actionButtonSize,
+                                height: Layout.actionButtonSize
+                            )
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.secondary)
                     .help(AppL10n.settings("shortcuts.clearHelp", defaultValue: "清除快捷键"))
+                } else {
+                    Color.clear
+                        .frame(
+                            width: Layout.actionButtonSize,
+                            height: Layout.actionButtonSize
+                        )
+                        .accessibilityHidden(true)
                 }
             }
+            .frame(width: Layout.controlClusterWidth, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
