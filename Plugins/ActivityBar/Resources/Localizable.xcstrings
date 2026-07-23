@@ -2486,6 +2486,22 @@
         }
       }
     },
+    "error.hook.uninstallFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل إلغاء تثبيت الخطافات: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Hooks konnten nicht deinstalliert werden: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Failed to uninstall Hooks: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudieron desinstalar los hooks: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de désinstaller les hooks : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Hook をアンインストールできませんでした: %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "Hook을 제거하지 못했습니다: %@" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível desinstalar os hooks: %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось удалить хуки: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "Hook 卸载失败：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "Hook 解除安裝失敗：%@" } }
+      }
+    },
     "error.hook.invalidJSON": {
       "extractionState": "manual",
       "localizations": {
@@ -4683,6 +4699,290 @@
           "stringUnit": {
             "state": "translated",
             "value": "運行中"
+          }
+        }
+      }
+    },
+    "component.footer.uninstallHooks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إزالة الخطافات"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hooks deinstallieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uninstall Hooks"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desinstalar hooks"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désinstaller les hooks"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hooks をアンインストール"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hook 제거"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desinstalar hooks"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить хуки"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载 Hook"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解除安裝 Hook"
+          }
+        }
+      }
+    },
+    "panel.action.uninstallHooks": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إزالة خطافات الذكاء الاصطناعي"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-Hooks deinstallieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uninstall AI Hooks"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desinstalar hooks de IA"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désinstaller les hooks IA"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Hook をアンインストール"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Hook 제거"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desinstalar hooks de IA"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить AI-хуки"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载 AI Hook"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解除安裝 AI Hook"
+          }
+        }
+      }
+    },
+    "settings.aiHooks.uninstallButton": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إزالة الخطافات"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hooks deinstallieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uninstall Hooks"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desinstalar hooks"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désinstaller les hooks"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hooks をアンインストール"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hook 제거"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desinstalar hooks"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить хуки"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载 Hook"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解除安裝 Hook"
+          }
+        }
+      }
+    },
+    "settings.aiHooks.uninstallFootnote": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يزيل فقط إدخالات Hooks والبرامج النصية التي كتبها MacTools؛ ولا يمس إعدادات الأدوات الأخرى."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt nur von MacTools geschriebene Hook-Einträge und Skripte; Konfigurationen anderer Tools bleiben erhalten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only removes Hook entries and scripts written by MacTools; other tool configurations remain unchanged."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo elimina las entradas y los scripts de hooks escritos por MacTools; las configuraciones de otras herramientas no cambian."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprime uniquement les entrées et scripts de hooks écrits par MacTools ; les configurations des autres outils restent inchangées."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacTools が書き込んだ Hook の項目とスクリプトだけを削除し、ほかのツールの設定は変更しません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacTools가 작성한 Hook 항목과 스크립트만 제거하며 다른 도구의 설정은 유지합니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove apenas as entradas e os scripts de hooks gravados pelo MacTools; as configurações de outras ferramentas permanecem inalteradas."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удаляет только записи и сценарии хуков, созданные MacTools; настройки других инструментов не затрагиваются."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只移除 MacTools 写入的 Hook 条目和脚本，不会清空其他工具配置。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只移除 MacTools 寫入的 Hook 項目和指令碼，不會清空其他工具設定。"
           }
         }
       }

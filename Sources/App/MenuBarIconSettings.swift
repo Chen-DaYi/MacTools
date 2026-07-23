@@ -21,107 +21,26 @@ enum MenuBarIconAppearance: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-enum MenuBarIconAnimationSpeedMode: String, CaseIterable, Identifiable, Codable {
-    case manual
-    case adaptiveSystemLoad
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .manual:
-            return AppL10n.settings("menuBarIcon.animationSpeed.manual", defaultValue: "手动速度")
-        case .adaptiveSystemLoad:
-            return AppL10n.settings("menuBarIcon.animationSpeed.adaptiveSystemLoad", defaultValue: "随系统负载")
-        }
-    }
-}
-
-struct MenuBarIconAnimationSystemLoad: Equatable {
-    var cpuUsage: Double?
-    var gpuUsage: Double?
-    var memoryUsage: Double?
-}
-
-enum MenuBarIconAnimationSpeedPolicy {
-    static let minimumMultiplier = 0.5
-    static let maximumMultiplier = 5.0
-    static let defaultManualMultiplier = 1.0
-
-    static func normalizedManualMultiplier(_ value: Double) -> Double {
-        min(max(value, minimumMultiplier), maximumMultiplier)
-    }
-
-    static func multiplier(
-        mode: MenuBarIconAnimationSpeedMode,
-        manualMultiplier: Double,
-        systemLoad: MenuBarIconAnimationSystemLoad?
-    ) -> Double {
-        switch mode {
-        case .manual:
-            return normalizedManualMultiplier(manualMultiplier)
-        case .adaptiveSystemLoad:
-            let loadValues = [
-                systemLoad?.cpuUsage,
-                systemLoad?.gpuUsage,
-                systemLoad?.memoryUsage
-            ].compactMap { $0 }.map { min(max($0, 0), 1) }
-
-            guard !loadValues.isEmpty else {
-                return defaultManualMultiplier
-            }
-
-            let averageLoad = loadValues.reduce(0, +) / Double(loadValues.count)
-            return min(max(0.75 + (averageLoad * 1.25), minimumMultiplier), maximumMultiplier)
-        }
-    }
-}
-
-enum MenuBarIconMediaKind: String, Codable, Equatable {
-    case image
-    case animation
-}
-
-struct MenuBarIconRecentItem: Identifiable, Codable, Equatable {
-    let id: UUID
-    var fileName: String
-    var frameFileNames: [String]
-    var displayName: String
-    var addedAt: Date
-    var mediaKind: MenuBarIconMediaKind
-    var frameDuration: TimeInterval
-    var thumbnailFileName: String?
+struct MenuBarIconLocalSelection: Codable, Equatable {
+    let fileName: String
+    let frameFileNames: [String]
+    let frameDuration: TimeInterval
 
     init(
-        id: UUID,
         fileName: String,
         frameFileNames: [String],
-        displayName: String,
-        addedAt: Date,
-        mediaKind: MenuBarIconMediaKind,
-        frameDuration: TimeInterval,
-        thumbnailFileName: String? = nil
+        frameDuration: TimeInterval
     ) {
-        self.id = id
         self.fileName = fileName
         self.frameFileNames = frameFileNames
-        self.displayName = displayName
-        self.addedAt = addedAt
-        self.mediaKind = mediaKind
         self.frameDuration = frameDuration
-        self.thumbnailFileName = thumbnailFileName
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
         fileName = try container.decode(String.self, forKey: .fileName)
         frameFileNames = try container.decodeIfPresent([String].self, forKey: .frameFileNames) ?? [fileName]
-        displayName = try container.decode(String.self, forKey: .displayName)
-        addedAt = try container.decode(Date.self, forKey: .addedAt)
-        mediaKind = try container.decodeIfPresent(MenuBarIconMediaKind.self, forKey: .mediaKind) ?? .image
         frameDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .frameDuration) ?? 1.0 / 6.0
-        thumbnailFileName = try container.decodeIfPresent(String.self, forKey: .thumbnailFileName)
     }
 }
 
@@ -130,33 +49,9 @@ struct MenuBarIconImagePayload: Equatable {
     let isTemplate: Bool
     let animationFrames: [NSImage]
     let frameDuration: TimeInterval
-    let speedMode: MenuBarIconAnimationSpeedMode
-    let manualSpeedMultiplier: Double
 
     var isAnimated: Bool {
         animationFrames.count > 1
-    }
-}
-
-struct MenuBarIconContrastReport: Equatable {
-    var lightContrast: Double?
-    var darkContrast: Double?
-
-    var warningText: String? {
-        let threshold = 2.4
-        let lightIsLow = lightContrast.map { $0 < threshold } ?? false
-        let darkIsLow = darkContrast.map { $0 < threshold } ?? false
-
-        switch (lightIsLow, darkIsLow) {
-        case (true, true):
-            return AppL10n.settings("menuBarIcon.contrast.warningBoth", defaultValue: "当前图标在深浅色菜单栏里都可能不够清晰。")
-        case (true, false):
-            return AppL10n.settings("menuBarIcon.contrast.warningLight", defaultValue: "当前图标在浅色菜单栏里对比度可能偏低。")
-        case (false, true):
-            return AppL10n.settings("menuBarIcon.contrast.warningDark", defaultValue: "当前图标在深色菜单栏里对比度可能偏低。")
-        case (false, false):
-            return nil
-        }
     }
 }
 
@@ -361,75 +256,6 @@ enum MenuBarIconProcessing {
         throw MenuBarIconImportError.unsupportedAnimation
     }
 
-    static func contrastReport(for image: NSImage?) -> MenuBarIconContrastReport {
-        guard let image, let cgImage = cgImage(from: image) else {
-            return MenuBarIconContrastReport(lightContrast: nil, darkContrast: nil)
-        }
-
-        guard let averageLuminance = averageVisibleLuminance(in: cgImage) else {
-            return MenuBarIconContrastReport(lightContrast: nil, darkContrast: nil)
-        }
-
-        let lightMenuBarLuminance = 0.94
-        let darkMenuBarLuminance = 0.08
-        return MenuBarIconContrastReport(
-            lightContrast: contrastRatio(averageLuminance, lightMenuBarLuminance),
-            darkContrast: contrastRatio(averageLuminance, darkMenuBarLuminance)
-        )
-    }
-
-    private static func averageVisibleLuminance(in image: CGImage) -> Double? {
-        let width = 16
-        let height = 16
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        guard
-            let context = CGContext(
-                data: &pixels,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: width * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )
-        else {
-            return nil
-        }
-
-        context.interpolationQuality = .medium
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-
-        var weightedLuminance = 0.0
-        var visibleWeight = 0.0
-
-        for index in stride(from: 0, to: pixels.count, by: 4) {
-            let alpha = Double(pixels[index + 3]) / 255
-            guard alpha > 0.08 else {
-                continue
-            }
-
-            let red = Double(pixels[index]) / 255
-            let green = Double(pixels[index + 1]) / 255
-            let blue = Double(pixels[index + 2]) / 255
-            let luminance = (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
-
-            weightedLuminance += luminance * alpha
-            visibleWeight += alpha
-        }
-
-        guard visibleWeight > 0 else {
-            return nil
-        }
-
-        return weightedLuminance / visibleWeight
-    }
-
-    private static func contrastRatio(_ first: Double, _ second: Double) -> Double {
-        let lighter = max(first, second)
-        let darker = min(first, second)
-        return (lighter + 0.05) / (darker + 0.05)
-    }
-
     private static func cgImage(from image: NSImage) -> CGImage? {
         var proposedRect = NSRect(origin: .zero, size: image.size)
         return image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil)
@@ -584,23 +410,67 @@ final class MenuBarIconSettings: ObservableObject {
     }
 
     private struct StoredState: Codable, Equatable {
-        var animationSpeedMode: MenuBarIconAnimationSpeedMode = .manual
-        var manualAnimationSpeedMultiplier: Double = MenuBarIconAnimationSpeedPolicy.defaultManualMultiplier
-        var lightIconFileName: String?
-        var darkIconFileName: String?
+        var localIconSelection: MenuBarIconLocalSelection?
         var remoteAssetSelection: MenuBarIconRemoteAssetSelection?
-        var recentItems: [MenuBarIconRecentItem] = []
+
+        private enum CodingKeys: String, CodingKey {
+            case localIconSelection
+            case remoteAssetSelection
+            case lightIconFileName
+            case darkIconFileName
+            case recentItems
+        }
+
+        init(
+            localIconSelection: MenuBarIconLocalSelection? = nil,
+            remoteAssetSelection: MenuBarIconRemoteAssetSelection? = nil
+        ) {
+            self.localIconSelection = localIconSelection
+            self.remoteAssetSelection = remoteAssetSelection
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            remoteAssetSelection = try container.decodeIfPresent(
+                MenuBarIconRemoteAssetSelection.self,
+                forKey: .remoteAssetSelection
+            )
+            localIconSelection = try container.decodeIfPresent(
+                MenuBarIconLocalSelection.self,
+                forKey: .localIconSelection
+            )
+
+            guard localIconSelection == nil, remoteAssetSelection == nil else {
+                return
+            }
+
+            let lightIconFileName = try container.decodeIfPresent(String.self, forKey: .lightIconFileName)
+            let darkIconFileName = try container.decodeIfPresent(String.self, forKey: .darkIconFileName)
+            let selectedFileNames = [lightIconFileName, darkIconFileName].compactMap { $0 }
+            let legacySelections = try container.decodeIfPresent(
+                [MenuBarIconLocalSelection].self,
+                forKey: .recentItems
+            ) ?? []
+            localIconSelection = legacySelections.first { selectedFileNames.contains($0.fileName) }
+            if localIconSelection == nil, let fileName = lightIconFileName ?? darkIconFileName {
+                localIconSelection = MenuBarIconLocalSelection(
+                    fileName: fileName,
+                    frameFileNames: [fileName],
+                    frameDuration: 1.0 / MenuBarIconProcessing.animationFramesPerSecond
+                )
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(localIconSelection, forKey: .localIconSelection)
+            try container.encodeIfPresent(remoteAssetSelection, forKey: .remoteAssetSelection)
+        }
     }
 
     private struct RenderedFramesCacheKey: Hashable {
-        let id: UUID
         let fileName: String
         let frameFileNames: [String]
-    }
-
-    private struct RecentPreviewCacheKey: Hashable {
-        let id: UUID
-        let fileName: String
     }
 
     private struct RemoteFramesCacheKey: Hashable {
@@ -610,7 +480,6 @@ final class MenuBarIconSettings: ObservableObject {
     }
 
     private static let defaultIconName = NSImage.Name("MenuBarIcon")
-    private static let maxRecentItems = 6
 
     @Published private var storedState: StoredState
     @Published private(set) var lastErrorMessage: String?
@@ -621,12 +490,9 @@ final class MenuBarIconSettings: ObservableObject {
     private let rootDirectory: URL
     private let remoteAssetStore: MenuBarIconRemoteAssetStore
     private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
     private var imagePayloadCache: [MenuBarIconAppearance: MenuBarIconImagePayload] = [:]
     private var renderedFramesCache: [RenderedFramesCacheKey: [NSImage]] = [:]
     private var remoteFramesCache: [RemoteFramesCacheKey: [NSImage]] = [:]
-    private var recentPreviewCache: [RecentPreviewCacheKey: NSImage] = [:]
-    private var contrastReportCache: [MenuBarIconAppearance: MenuBarIconContrastReport] = [:]
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -644,61 +510,17 @@ final class MenuBarIconSettings: ObservableObject {
             fileManager: fileManager
         )
         self.storedState = Self.loadState(userDefaults: userDefaults)
-        pruneMissingRecentItems()
+        pruneMissingLocalIconSelection()
         pruneMissingRemoteAssetSelection()
-    }
-
-    var recentItems: [MenuBarIconRecentItem] {
-        storedState.recentItems
-    }
-
-    var animationSpeedMode: MenuBarIconAnimationSpeedMode {
-        get { storedState.animationSpeedMode }
-        set {
-            guard storedState.animationSpeedMode != newValue else {
-                return
-            }
-
-            storedState.animationSpeedMode = newValue
-            invalidateImagePayloadCache()
-            persist()
-        }
-    }
-
-    var manualAnimationSpeedMultiplier: Double {
-        get { storedState.manualAnimationSpeedMultiplier }
-        set {
-            let normalizedValue = MenuBarIconAnimationSpeedPolicy.normalizedManualMultiplier(newValue)
-            guard storedState.manualAnimationSpeedMultiplier != normalizedValue else {
-                return
-            }
-
-            storedState.manualAnimationSpeedMultiplier = normalizedValue
-            invalidateImagePayloadCache()
-            persist()
-        }
+        pruneUnusedLocalIconFiles()
     }
 
     var hasCustomIcon: Bool {
-        storedState.lightIconFileName != nil
-            || storedState.darkIconFileName != nil
-            || storedState.remoteAssetSelection != nil
+        storedState.localIconSelection != nil || storedState.remoteAssetSelection != nil
     }
 
     var selectedRemoteAsset: MenuBarIconRemoteAssetSelection? {
         storedState.remoteAssetSelection
-    }
-
-    func remoteAssetSelection(forRecentItem item: MenuBarIconRecentItem) -> MenuBarIconRemoteAssetSelection? {
-        remoteAssetSelection(for: item)
-    }
-
-    func isRemoteAssetCached(for item: MenuBarIconRecentItem) -> Bool {
-        guard let selection = remoteAssetSelection(for: item) else {
-            return false
-        }
-
-        return remoteAssetStore.hasFrames(for: selection)
     }
 
     func importIcon(from sourceURL: URL, for _: MenuBarIconAppearance) {
@@ -712,33 +534,22 @@ final class MenuBarIconSettings: ObservableObject {
             lastErrorMessage = AppL10n.settings("menuBarIcon.error.readSelectedImage", defaultValue: "无法读取所选图片。")
             return
         }
-        let processedImage = MenuBarIconBackgroundRemover.removingBackground(from: sourceImage) ?? sourceImage
 
-        let displayName = sourceURL.deletingPathExtension().lastPathComponent
-        let recentFileName = "recent-\(UUID().uuidString).png"
-        let recentURL = recentsDirectory.appendingPathComponent(recentFileName)
+        let fileName = "icon-\(UUID().uuidString).png"
+        let destinationURL = localIconsDirectory.appendingPathComponent(fileName)
 
-        guard saveOriginalImage(processedImage, to: recentURL) else {
+        guard saveOriginalImage(sourceImage, to: destinationURL) else {
             lastErrorMessage = AppL10n.settings("menuBarIcon.error.saveSelectedImage", defaultValue: "无法保存所选图片。")
             return
         }
 
-        let recentItem = MenuBarIconRecentItem(
-            id: UUID(),
-            fileName: recentFileName,
-            frameFileNames: [recentFileName],
-            displayName: displayName.isEmpty
-                ? AppL10n.settings("menuBarIcon.recent.customIcon", defaultValue: "自定义图标")
-                : displayName,
-            addedAt: Date(),
-            mediaKind: .image,
+        storedState.localIconSelection = MenuBarIconLocalSelection(
+            fileName: fileName,
+            frameFileNames: [fileName],
             frameDuration: 1.0 / MenuBarIconProcessing.animationFramesPerSecond
         )
-
-        storeRecentItem(recentItem)
         clearRemoteAssetSelection()
-        pruneUnusedRecentFiles()
-        setIconFileNameForAllAppearances(recentFileName)
+        pruneUnusedLocalIconFiles()
         invalidateAllIconCaches()
         persist()
     }
@@ -766,32 +577,18 @@ final class MenuBarIconSettings: ObservableObject {
             "animation-\(animationID)-frame-\(index).png"
         }
 
-        let processedFrames = sourceFrames.map { frame in
-            MenuBarIconBackgroundRemover.removingBackground(from: frame) ?? frame
-        }
-
-        guard saveAnimationFrames(processedFrames, fileNames: fileNames) else {
+        guard saveAnimationFrames(sourceFrames, fileNames: fileNames) else {
             lastErrorMessage = AppL10n.settings("menuBarIcon.error.saveAnimationIcon", defaultValue: "无法保存动画图标。")
             return
         }
 
-        let displayName = sourceURL.deletingPathExtension().lastPathComponent
-        let recentItem = MenuBarIconRecentItem(
-            id: UUID(),
+        storedState.localIconSelection = MenuBarIconLocalSelection(
             fileName: fileNames[0],
             frameFileNames: fileNames,
-            displayName: displayName.isEmpty
-                ? AppL10n.settings("menuBarIcon.recent.animationIcon", defaultValue: "动画图标")
-                : displayName,
-            addedAt: Date(),
-            mediaKind: .animation,
             frameDuration: 1.0 / MenuBarIconProcessing.animationFramesPerSecond
         )
-
-        storeRecentItem(recentItem)
         clearRemoteAssetSelection()
-        pruneUnusedRecentFiles()
-        setIconFileNameForAllAppearances(recentItem.fileName)
+        pruneUnusedLocalIconFiles()
         invalidateAllIconCaches()
         persist()
     }
@@ -805,57 +602,17 @@ final class MenuBarIconSettings: ObservableObject {
         }
 
         storedState.remoteAssetSelection = selection
-        storedState.lightIconFileName = nil
-        storedState.darkIconFileName = nil
-        storeRemoteRecentItem(selection)
-        pruneUnusedRecentFiles()
+        storedState.localIconSelection = nil
+        pruneUnusedLocalIconFiles()
         invalidateAllIconCaches()
         remoteAssetStore.pruneRemoteAssets(keeping: selection)
         persist()
     }
 
-    func useRecentIcon(_ item: MenuBarIconRecentItem, for _: MenuBarIconAppearance) {
-        useRecentIcon(item)
-    }
-
-    func useRecentIcon(_ item: MenuBarIconRecentItem) {
-        clearError()
-
-        if let remoteSelection = remoteAssetSelection(for: item) {
-            guard remoteAssetStore.hasFrames(for: remoteSelection) else {
-                lastErrorMessage = AppL10n.settings("menuBarIcon.error.recentRemoteMissing", defaultValue: "最近使用的在线图标文件已不存在。")
-                pruneMissingRecentItems()
-                return
-            }
-
-            storedState.remoteAssetSelection = remoteSelection
-            storedState.lightIconFileName = nil
-            storedState.darkIconFileName = nil
-            storeRemoteRecentItem(remoteSelection)
-            pruneUnusedRecentFiles()
-            invalidateSelectedIconCaches()
-            remoteAssetStore.pruneRemoteAssets(keeping: remoteSelection)
-            persist()
-            return
-        }
-
-        let requiredFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
-        guard requiredFileNames.allSatisfy({ fileManager.fileExists(atPath: recentsDirectory.appendingPathComponent($0).path) }) else {
-            lastErrorMessage = AppL10n.settings("menuBarIcon.error.recentIconMissing", defaultValue: "最近使用的图标文件已不存在。")
-            pruneMissingRecentItems()
-            return
-        }
-
-        setIconFileNameForAllAppearances(item.fileName)
-        clearRemoteAssetSelection()
-        invalidateSelectedIconCaches()
-        persist()
-    }
-
     func resetToDefault() {
-        storedState.lightIconFileName = nil
-        storedState.darkIconFileName = nil
+        storedState.localIconSelection = nil
         storedState.remoteAssetSelection = nil
+        pruneUnusedLocalIconFiles()
         remoteAssetStore.pruneRemoteAssets(keeping: nil)
         invalidateAllIconCaches()
         persist()
@@ -870,41 +627,8 @@ final class MenuBarIconSettings: ObservableObject {
         imagePayload(for: appearance).image
     }
 
-    func previewImage(for recentItem: MenuBarIconRecentItem) -> NSImage {
-        let cacheKey = RecentPreviewCacheKey(id: recentItem.id, fileName: recentItem.fileName)
-        if let cachedImage = recentPreviewCache[cacheKey] {
-            return cachedImage
-        }
-
-        let image: NSImage
-        if let thumbnailFileName = recentItem.thumbnailFileName,
-           let thumbnail = renderedImage(fileName: thumbnailFileName) {
-            image = thumbnail
-        } else if let remoteSelection = remoteAssetSelection(for: recentItem) {
-            image = renderedImages(for: remoteSelection).first ?? Self.defaultImage()
-        } else {
-            image = renderedImage(fileName: recentItem.fileName) ?? Self.defaultImage()
-        }
-        recentPreviewCache[cacheKey] = image
-        return image
-    }
-
-    func contrastReport(for appearance: MenuBarIconAppearance) -> MenuBarIconContrastReport {
-        if let cachedReport = contrastReportCache[appearance] {
-            return cachedReport
-        }
-
-        let report = MenuBarIconProcessing.contrastReport(for: previewImage(for: appearance))
-        contrastReportCache[appearance] = report
-        return report
-    }
-
-    func clearError() {
+    private func clearError() {
         lastErrorMessage = nil
-    }
-
-    func reportError(_ message: String) {
-        lastErrorMessage = message
     }
 
     private func imagePayload(for resolvedAppearance: MenuBarIconAppearance) -> MenuBarIconImagePayload {
@@ -917,66 +641,55 @@ final class MenuBarIconSettings: ObservableObject {
         return payload
     }
 
-    private func makeImagePayload(for resolvedAppearance: MenuBarIconAppearance) -> MenuBarIconImagePayload {
-        guard let item = selectedRecentItem(for: resolvedAppearance) else {
-            if let selection = storedState.remoteAssetSelection,
-               remoteAssetStore.hasFrames(for: selection) {
-                let frames = renderedImages(for: selection)
-                if let image = frames.first {
-                    image.isTemplate = false
-                    for frame in frames {
-                        frame.isTemplate = false
-                    }
-
-                    return MenuBarIconImagePayload(
-                        image: image,
-                        isTemplate: false,
-                        animationFrames: frames,
-                        frameDuration: selection.frameDuration,
-                        speedMode: animationSpeedMode,
-                        manualSpeedMultiplier: manualAnimationSpeedMultiplier
-                    )
-                }
-            }
-
-            let image = Self.defaultImage()
-            image.isTemplate = true
-            return MenuBarIconImagePayload(
-                image: image,
-                isTemplate: true,
-                animationFrames: [image],
-                frameDuration: 1.0 / MenuBarIconProcessing.animationFramesPerSecond,
-                speedMode: animationSpeedMode,
-                manualSpeedMultiplier: manualAnimationSpeedMultiplier
-            )
+    private func makeImagePayload(for _: MenuBarIconAppearance) -> MenuBarIconImagePayload {
+        if let selection = storedState.localIconSelection,
+           let payload = customImagePayload(
+               frames: renderedImages(for: selection),
+               frameDuration: selection.frameDuration,
+               renderingMode: .original
+           ) {
+            return payload
         }
 
-        let frames = renderedImages(for: item)
+        if let selection = storedState.remoteAssetSelection,
+           remoteAssetStore.hasFrames(for: selection),
+           let payload = customImagePayload(
+               frames: renderedImages(for: selection),
+               frameDuration: selection.frameDuration,
+               renderingMode: selection.renderingMode
+           ) {
+            return payload
+        }
+
+        let image = Self.defaultImage()
+        image.isTemplate = true
+        return MenuBarIconImagePayload(
+            image: image,
+            isTemplate: true,
+            animationFrames: [image],
+            frameDuration: 1.0 / MenuBarIconProcessing.animationFramesPerSecond
+        )
+    }
+
+    private func customImagePayload(
+        frames: [NSImage],
+        frameDuration: TimeInterval,
+        renderingMode: MenuBarIconRenderingMode
+    ) -> MenuBarIconImagePayload? {
         guard let image = frames.first else {
-            let image = Self.defaultImage()
-            image.isTemplate = true
-            return MenuBarIconImagePayload(
-                image: image,
-                isTemplate: true,
-                animationFrames: [image],
-                frameDuration: 1.0 / MenuBarIconProcessing.animationFramesPerSecond,
-                speedMode: animationSpeedMode,
-                manualSpeedMultiplier: manualAnimationSpeedMultiplier
-            )
+            return nil
         }
 
-        image.isTemplate = false
+        image.isTemplate = renderingMode.isTemplate
         for frame in frames {
-            frame.isTemplate = image.isTemplate
+            frame.isTemplate = renderingMode.isTemplate
         }
 
         return MenuBarIconImagePayload(
             image: image,
-            isTemplate: image.isTemplate,
+            isTemplate: renderingMode.isTemplate,
             animationFrames: frames,
-            frameDuration: item.frameDuration,
-            speedMode: animationSpeedMode,
-            manualSpeedMultiplier: manualAnimationSpeedMultiplier
+            frameDuration: frameDuration
         )
     }
 
@@ -984,7 +697,7 @@ final class MenuBarIconSettings: ObservableObject {
         rootDirectory.appendingPathComponent("MenuBarIcons", isDirectory: true)
     }
 
-    private var recentsDirectory: URL {
+    private var localIconsDirectory: URL {
         iconsDirectory.appendingPathComponent("Recents", isDirectory: true)
     }
 
@@ -1024,32 +737,20 @@ final class MenuBarIconSettings: ObservableObject {
         settingsRevision += 1
     }
 
-    private func selectedRecentItem(for appearance: MenuBarIconAppearance) -> MenuBarIconRecentItem? {
-        guard let selection = iconSelection(for: appearance) else {
-            return nil
-        }
-
-        return storedState.recentItems.first { item in
-            item.fileName == selection.fileName
-        }
-    }
-
-    private func renderedImages(for item: MenuBarIconRecentItem) -> [NSImage] {
+    private func renderedImages(for selection: MenuBarIconLocalSelection) -> [NSImage] {
         let cacheKey = RenderedFramesCacheKey(
-            id: item.id,
-            fileName: item.fileName,
-            frameFileNames: item.frameFileNames
+            fileName: selection.fileName,
+            frameFileNames: selection.frameFileNames
         )
         if let cachedImages = renderedFramesCache[cacheKey] {
             return cachedImages
         }
 
-        let frameFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
-        let sourceImages = frameFileNames.compactMap { fileName in
-            let url = recentsDirectory.appendingPathComponent(fileName)
+        let sourceImages = selection.frameFileNames.compactMap { fileName in
+            let url = localIconsDirectory.appendingPathComponent(fileName)
             return NSImage(contentsOf: url)
         }
-        let images = item.mediaKind == .animation
+        let images = selection.frameFileNames.count > 1
             ? MenuBarIconProcessing.renderedImages(from: sourceImages)
             : sourceImages.compactMap { MenuBarIconProcessing.renderedImage(from: $0) }
         renderedFramesCache[cacheKey] = images
@@ -1075,102 +776,9 @@ final class MenuBarIconSettings: ObservableObject {
         return images
     }
 
-    private func renderedImage(fileName: String) -> NSImage? {
-        let url = recentsDirectory.appendingPathComponent(fileName)
-        guard let sourceImage = NSImage(contentsOf: url) else {
-            return nil
-        }
-
-        return MenuBarIconProcessing.renderedImage(from: sourceImage)
-    }
-
-    private func iconSelection(for appearance: MenuBarIconAppearance) -> (fileName: String, appearance: MenuBarIconAppearance)? {
-        switch appearance {
-        case .light:
-            return storedState.lightIconFileName.map { (fileName: $0, appearance: .light) }
-        case .dark:
-            if let darkIconFileName = storedState.darkIconFileName {
-                return (fileName: darkIconFileName, appearance: .dark)
-            }
-
-            return storedState.lightIconFileName.map { (fileName: $0, appearance: .light) }
-        }
-    }
-
-    private func storeRecentItem(_ recentItem: MenuBarIconRecentItem) {
-        storedState.recentItems.removeAll { item in
-            item.fileName == recentItem.fileName || item.displayName == recentItem.displayName
-        }
-        storedState.recentItems.insert(recentItem, at: 0)
-        storedState.recentItems = Array(storedState.recentItems.prefix(Self.maxRecentItems))
-    }
-
-    private func storeRemoteRecentItem(_ selection: MenuBarIconRemoteAssetSelection) {
-        let referenceFileName = MenuBarIconRemoteAssetReference.fileName(
-            assetID: selection.id,
-            version: selection.version
-        )
-        let thumbnailFileName = saveRemoteThumbnailIfNeeded(for: selection)
-        let recentItem = MenuBarIconRecentItem(
-            id: UUID(),
-            fileName: referenceFileName,
-            frameFileNames: selection.frameFileNames,
-            displayName: selection.displayName,
-            addedAt: Date(),
-            mediaKind: .animation,
-            frameDuration: selection.frameDuration,
-            thumbnailFileName: thumbnailFileName
-        )
-
-        storedState.recentItems.removeAll { item in
-            item.fileName == referenceFileName
-                || item.displayName == selection.displayName
-        }
-        storedState.recentItems.insert(recentItem, at: 0)
-        storedState.recentItems = Array(storedState.recentItems.prefix(Self.maxRecentItems))
-    }
-
-    private func remoteAssetSelection(for item: MenuBarIconRecentItem) -> MenuBarIconRemoteAssetSelection? {
-        guard let reference = MenuBarIconRemoteAssetReference.parse(item.fileName) else {
-            return nil
-        }
-
-        return MenuBarIconRemoteAssetSelection(
-            id: reference.assetID,
-            version: reference.version,
-            displayName: item.displayName,
-            frameFileNames: item.frameFileNames,
-            frameDuration: item.frameDuration
-        )
-    }
-
-    private func setIconFileNameForAllAppearances(_ fileName: String?) {
-        storedState.lightIconFileName = fileName
-        storedState.darkIconFileName = fileName
-    }
-
     private func clearRemoteAssetSelection() {
         storedState.remoteAssetSelection = nil
         remoteAssetStore.pruneRemoteAssets(keeping: nil)
-    }
-
-    private func saveRemoteThumbnailIfNeeded(for selection: MenuBarIconRemoteAssetSelection) -> String? {
-        guard let thumbnail = renderedImages(for: selection).first,
-              let data = MenuBarIconProcessing.pngData(from: thumbnail)
-        else {
-            return nil
-        }
-
-        let fileName = "remote-thumbnail-\(UUID().uuidString).png"
-        let destinationURL = recentsDirectory.appendingPathComponent(fileName, isDirectory: false)
-
-        do {
-            try fileManager.createDirectory(at: recentsDirectory, withIntermediateDirectories: true)
-            try data.write(to: destinationURL, options: .atomic)
-            return fileName
-        } catch {
-            return nil
-        }
     }
 
     private func saveOriginalImage(_ image: NSImage, to destinationURL: URL) -> Bool {
@@ -1194,13 +802,13 @@ final class MenuBarIconSettings: ObservableObject {
         }
 
         do {
-            try fileManager.createDirectory(at: recentsDirectory, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: localIconsDirectory, withIntermediateDirectories: true)
             for (frame, fileName) in zip(frames, fileNames) {
                 guard let data = MenuBarIconProcessing.pngData(from: frame) else {
                     return false
                 }
 
-                let destinationURL = recentsDirectory.appendingPathComponent(fileName)
+                let destinationURL = localIconsDirectory.appendingPathComponent(fileName)
                 try data.write(to: destinationURL, options: .atomic)
             }
 
@@ -1216,67 +824,37 @@ final class MenuBarIconSettings: ObservableObject {
         return bestMatch == .darkAqua ? .dark : .light
     }
 
-    private func pruneMissingRecentItems() {
-        let items = storedState.recentItems.filter { item in
-            if let selection = remoteAssetSelection(for: item) {
-                if let thumbnailFileName = item.thumbnailFileName,
-                   fileManager.fileExists(atPath: recentsDirectory.appendingPathComponent(thumbnailFileName).path) {
-                    return true
-                }
-
-                return remoteAssetStore.hasFrames(for: selection)
-            }
-
-            let requiredFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
-            return requiredFileNames.allSatisfy { fileName in
-                fileManager.fileExists(atPath: recentsDirectory.appendingPathComponent(fileName).path)
-            }
-        }
-
-        guard items != storedState.recentItems else {
+    private func pruneMissingLocalIconSelection() {
+        guard let selection = storedState.localIconSelection else {
             return
         }
 
-        storedState.recentItems = items
+        let hasAllFrames = !selection.frameFileNames.isEmpty
+            && selection.frameFileNames.allSatisfy { fileName in
+                fileManager.fileExists(atPath: localIconsDirectory.appendingPathComponent(fileName).path)
+            }
+        guard !hasAllFrames else {
+            return
+        }
+
+        storedState.localIconSelection = nil
         invalidateAllIconCaches()
         persist()
     }
 
-    private func pruneUnusedRecentFiles() {
+    private func pruneUnusedLocalIconFiles() {
         guard let fileURLs = try? fileManager.contentsOfDirectory(
-            at: recentsDirectory,
+            at: localIconsDirectory,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else {
             return
         }
 
-        let referencedFileNames = referencedRecentFileNames()
+        let referencedFileNames = Set(storedState.localIconSelection?.frameFileNames ?? [])
         for fileURL in fileURLs where !referencedFileNames.contains(fileURL.lastPathComponent) {
             try? fileManager.removeItem(at: fileURL)
         }
-    }
-
-    private func referencedRecentFileNames() -> Set<String> {
-        var fileNames = Set<String>()
-
-        for item in storedState.recentItems {
-            if let thumbnailFileName = item.thumbnailFileName {
-                fileNames.insert(thumbnailFileName)
-            }
-
-            guard remoteAssetSelection(for: item) == nil else {
-                continue
-            }
-
-            if item.mediaKind == .animation {
-                fileNames.formUnion(item.frameFileNames)
-            } else {
-                fileNames.insert(item.fileName)
-            }
-        }
-
-        return fileNames
     }
 
     private func pruneMissingRemoteAssetSelection() {
@@ -1292,19 +870,13 @@ final class MenuBarIconSettings: ObservableObject {
         persist()
     }
 
-    private func invalidateImagePayloadCache() {
-        imagePayloadCache.removeAll()
-    }
-
     private func invalidateSelectedIconCaches() {
         imagePayloadCache.removeAll()
-        contrastReportCache.removeAll()
     }
 
     private func invalidateAllIconCaches() {
         invalidateSelectedIconCaches()
         renderedFramesCache.removeAll()
         remoteFramesCache.removeAll()
-        recentPreviewCache.removeAll()
     }
 }

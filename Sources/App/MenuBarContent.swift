@@ -23,10 +23,16 @@ enum MenuBarPanelLayout {
     static let detailControlSpacing: CGFloat = 8
     static let emptyContentHeight: CGFloat = 150
     static let actionRowVerticalPadding: CGFloat = 8
+    static let actionRowSectionTitleHeight: CGFloat = 30
+    static let actionRowSectionTitleSpacing: CGFloat = 4
+    static let navigationSectionTitleHeight: CGFloat = 15
+    static let navigationSectionTitleSpacing: CGFloat = 3
     static let selectRowVerticalPadding: CGFloat = 5
     static let sliderVerticalPadding: CGFloat = 9
     static let navigationRowHeight: CGFloat = 52
     static let secondaryPanelMinimumHeight: CGFloat = 148
+    static let secondaryPanelScreenMargin: CGFloat = 8
+    static let secondaryPanelContentChromeHeight: CGFloat = 40
 
     static var surfaceWidth: CGFloat {
         baseWidth - (outerPadding * 2)
@@ -212,7 +218,9 @@ enum MenuBarPanelLayout {
             let titleHeight = control.sectionTitle == nil ? CGFloat(0) : CGFloat(15)
             return titleHeight + CGFloat(control.options.count) * 26
         case .navigationList:
-            return CGFloat(control.options.count) * navigationRowHeight
+            let titleHeight = control.sectionTitle == nil ? CGFloat(0) : navigationSectionTitleHeight
+            let titleSpacing = titleHeight > 0 ? navigationSectionTitleSpacing : CGFloat(0)
+            return titleHeight + titleSpacing + CGFloat(control.options.count) * navigationRowHeight
         case .slider:
             let titleHeight = control.sectionTitle == nil && control.valueLabel == nil ? CGFloat(0) : CGFloat(15)
             let titleSpacing = titleHeight > 0 ? CGFloat(6) : CGFloat(0)
@@ -220,10 +228,62 @@ enum MenuBarPanelLayout {
         case .switchRow:
             return 20 + actionRowVerticalPadding * 2
         case .actionRow:
-            return 16 + actionRowVerticalPadding * 2
+            let titleHeight = control.sectionTitle == nil ? CGFloat(0) : actionRowSectionTitleHeight
+            let titleSpacing = titleHeight > 0 ? actionRowSectionTitleSpacing : CGFloat(0)
+            return titleHeight + titleSpacing + 16 + actionRowVerticalPadding * 2
         }
     }
 
+}
+
+enum SecondaryPanelPlacement: Equatable {
+    case right(CGRect)
+    case left(CGRect)
+    case inline
+
+    static func resolve(
+        anchorRect: CGRect,
+        panelSize: CGSize,
+        visibleFrame: CGRect
+    ) -> Self {
+        let availableFrame = visibleFrame.insetBy(
+            dx: MenuBarPanelLayout.secondaryPanelScreenMargin,
+            dy: MenuBarPanelLayout.secondaryPanelScreenMargin
+        )
+
+        guard
+            panelSize.width <= availableFrame.width,
+            panelSize.height <= availableFrame.height
+        else {
+            return .inline
+        }
+
+        let y = min(
+            max(anchorRect.maxY - panelSize.height, availableFrame.minY),
+            availableFrame.maxY - panelSize.height
+        )
+        let rightFrame = CGRect(
+            x: anchorRect.maxX + MenuBarPanelLayout.panelSpacing,
+            y: y,
+            width: panelSize.width,
+            height: panelSize.height
+        )
+        if rightFrame.maxX <= availableFrame.maxX {
+            return .right(rightFrame)
+        }
+
+        let leftFrame = CGRect(
+            x: anchorRect.minX - MenuBarPanelLayout.panelSpacing - panelSize.width,
+            y: y,
+            width: panelSize.width,
+            height: panelSize.height
+        )
+        if leftFrame.minX >= availableFrame.minX {
+            return .left(leftFrame)
+        }
+
+        return .inline
+    }
 }
 
 private enum FeatureRowLayout {
@@ -235,6 +295,12 @@ private enum FeatureRowLayout {
     static let rowHorizontalPadding: CGFloat = 10
     static let rowVerticalPadding: CGFloat = MenuBarPanelLayout.rowVerticalPadding / 2
     static let chevronSize: CGFloat = 14
+    static let actionButtonWidth: CGFloat = 45
+    static let actionButtonHeight: CGFloat = 21
+    static let actionButtonHorizontalPadding: CGFloat = 5
+    static let actionButtonChineseFontSize: CGFloat = 11
+    static let actionButtonLocalizedFontSize: CGFloat = 9
+    static let actionButtonLocalizedMinimumScale: CGFloat = 0.7
 }
 
 private enum MenuBarHoverStyle {
@@ -264,6 +330,7 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
     private var activationTask: Task<Void, Never>?
     private var pendingActivation: Activation?
     private var dismissTask: Task<Void, Never>?
+    private var pinnedActivation: Activation?
     private var isPanelHovered = false
     private var rowFrames: [Activation: CGRect] = [:]
 
@@ -289,6 +356,10 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
         cancelDismissal()
         isPanelHovered = false
 
+        guard pinnedActivation == nil || pinnedActivation == activation else {
+            return
+        }
+
         guard activeActivation != activation else {
             selectedRowFrame = rowFrames[activation]
             return
@@ -310,6 +381,25 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 
             self?.activate(activation)
         }
+    }
+
+    func pin(
+        pluginID: String,
+        controlID: String,
+        optionID: String
+    ) {
+        let activation = Activation(
+            pluginID: pluginID,
+            controlID: controlID,
+            optionID: optionID
+        )
+
+        cancelPendingActivation()
+        cancelDismissal()
+        pinnedActivation = activation
+        isPanelHovered = false
+        activeActivation = activation
+        selectedRowFrame = rowFrames[activation]
     }
 
     private func activate(_ activation: Activation) {
@@ -372,7 +462,8 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 
         guard
             let expectedActivation,
-            activeActivation == expectedActivation
+            activeActivation == expectedActivation,
+            pinnedActivation != expectedActivation
         else {
             return
         }
@@ -409,6 +500,7 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 
         activeActivation = nil
         selectedRowFrame = nil
+        pinnedActivation = nil
         isPanelHovered = false
 
         if notify {
@@ -487,11 +579,6 @@ struct MenuBarContent: View {
         .onChange(of: hoverCoordinator.activeActivation) {
             syncSecondaryPanelWindowIfVisible()
         }
-        .onReceive(pluginHost.$settingsPresentationRequestCount.dropFirst()) { _ in
-            if isPanelVisible {
-                presentSettings()
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)) { _ in
             secondaryPanelController.applyCurrentAppearance()
         }
@@ -521,13 +608,68 @@ struct MenuBarContent: View {
     }
 
     private var content: some View {
-        featureList
-            .frame(height: visibleFeatureListHeight, alignment: .topLeading)
-            .frame(
-                width: MenuBarPanelLayout.surfaceWidth,
-                height: contentBodyHeight,
-                alignment: .topLeading
-            )
+        ZStack(alignment: .topLeading) {
+            featureList
+                .frame(height: visibleFeatureListHeight, alignment: .topLeading)
+                // Keep the navigation rows alive behind the drill-in panel. Their screen frames
+                // are also the hover coordinator's anchors; removing them would immediately
+                // dismiss the active secondary panel.
+                .opacity(secondaryPanelController.isPresentingInline ? 0 : 1)
+                .allowsHitTesting(!secondaryPanelController.isPresentingInline)
+
+            if
+                secondaryPanelController.isPresentingInline,
+                let activeSecondaryPanel
+            {
+                SecondarySlidingPanel(
+                    title: activeSecondaryPanel.panel.title,
+                    controls: activeSecondaryPanel.panel.controls,
+                    maximumContentHeight: max(
+                        0,
+                        contentBodyHeight - MenuBarPanelLayout.secondaryPanelContentChromeHeight
+                    ),
+                    showsDismissButton: true,
+                    onDismiss: {
+                        hoverCoordinator.dismissImmediately()
+                    },
+                    onSelectionChange: { controlID, optionID in
+                        pluginHost.setPanelSelectionValue(
+                            optionID,
+                            controlID: controlID,
+                            for: activeSecondaryPanel.item.id
+                        )
+                    },
+                    onNavigationSelectionChange: { controlID, optionID in
+                        pluginHost.setPanelNavigationSelectionValue(
+                            optionID,
+                            controlID: controlID,
+                            for: activeSecondaryPanel.item.id
+                        )
+                    },
+                    onDateChange: { controlID, date in
+                        pluginHost.setPanelDateValue(
+                            date,
+                            controlID: controlID,
+                            for: activeSecondaryPanel.item.id
+                        )
+                    },
+                    onHoverChange: handleSecondaryPanelHoverChange,
+                    onSliderChange: { controlID, value, phase in
+                        pluginHost.setPanelSliderValue(
+                            value,
+                            controlID: controlID,
+                            for: activeSecondaryPanel.item.id,
+                            phase: phase
+                        )
+                    }
+                )
+            }
+        }
+        .frame(
+            width: MenuBarPanelLayout.surfaceWidth,
+            height: contentBodyHeight,
+            alignment: .topLeading
+        )
     }
 
     @ViewBuilder
@@ -563,10 +705,11 @@ struct MenuBarContent: View {
         onDismiss()
     }
 
-    private func handlePanelSwitchChange(_ newValue: Bool, for item: PluginPanelItem) {
+    private func handlePanelSwitchChange(_ newValue: Bool, for item: PluginPanelItem) -> Bool {
         switch item.menuActionBehavior {
         case .keepPresented:
             pluginHost.setSwitchValue(newValue, for: item.id)
+            return pluginHost.isSwitchOn(for: item.id)
         case .dismissBeforeHandling:
             deferredActionDispatcher.deferPanelSwitch(
                 pluginID: item.id,
@@ -574,6 +717,7 @@ struct MenuBarContent: View {
             )
             onDismiss()
             flushDeferredActionsAfterDismiss()
+            return newValue
         }
     }
 
@@ -693,6 +837,18 @@ struct MenuBarContent: View {
         pluginID == Self.batteryChargeLimitPluginID && controlID == Self.batteryChargeLimitManageSettingsActionID
     }
 
+    private func isNavigationOptionSelected(
+        in controls: [PluginPanelControl],
+        controlID: String,
+        optionID: String
+    ) -> Bool {
+        controls.contains { control in
+            control.id == controlID
+                && control.kind == .navigationList
+                && control.selectedOptionID == optionID
+        }
+    }
+
     private func presentDiskCleanDetails() {
         onPresentDiskCleanConfiguration()
     }
@@ -702,37 +858,63 @@ struct MenuBarContent: View {
     }
 
     private func syncSecondaryPanelWindow() {
-        guard
-            let activation = hoverCoordinator.activeActivation,
-            let panelItem = pluginHost.panelItems.first(where: { $0.id == activation.pluginID }),
-            let panel = panelItem.detail?.secondaryPanel(
-                controlID: activation.controlID,
-                optionID: activation.optionID
-            ),
-            let anchorRect = hoverCoordinator.selectedRowFrame
-        else {
+        guard let activeSecondaryPanel, let anchorRect = hoverCoordinator.selectedRowFrame else {
             secondaryPanelController.hide()
             return
         }
 
         secondaryPanelController.show(
-            panel: panel,
+            panel: activeSecondaryPanel.panel,
             anchorRect: anchorRect,
             onSelectionChange: { controlID, optionID in
-                pluginHost.setPanelSelectionValue(optionID, controlID: controlID, for: panelItem.id)
+                pluginHost.setPanelSelectionValue(
+                    optionID,
+                    controlID: controlID,
+                    for: activeSecondaryPanel.item.id
+                )
             },
             onNavigationSelectionChange: { controlID, optionID in
-                pluginHost.setPanelNavigationSelectionValue(optionID, controlID: controlID, for: panelItem.id)
+                let controls = activeSecondaryPanel.panel.controls
+                if isNavigationOptionSelected(in: controls, controlID: controlID, optionID: optionID) {
+                    pluginHost.clearPanelNavigationSelection(
+                        controlID: controlID,
+                        for: activeSecondaryPanel.item.id
+                    )
+                    hoverCoordinator.dismissImmediately()
+                    return
+                }
+
+                if activeSecondaryPanel.item.detail?.secondaryPanel(
+                    controlID: controlID,
+                    optionID: optionID
+                ) != nil {
+                    hoverCoordinator.pin(
+                        pluginID: activeSecondaryPanel.item.id,
+                        controlID: controlID,
+                        optionID: optionID
+                    )
+                } else {
+                    hoverCoordinator.dismissImmediately()
+                }
+                pluginHost.setPanelNavigationSelectionValue(
+                    optionID,
+                    controlID: controlID,
+                    for: activeSecondaryPanel.item.id
+                )
             },
             onDateChange: { controlID, date in
-                pluginHost.setPanelDateValue(date, controlID: controlID, for: panelItem.id)
+                pluginHost.setPanelDateValue(
+                    date,
+                    controlID: controlID,
+                    for: activeSecondaryPanel.item.id
+                )
             },
             onHoverChange: handleSecondaryPanelHoverChange,
             onSliderChange: { controlID, value, phase in
                 pluginHost.setPanelSliderValue(
                     value,
                     controlID: controlID,
-                    for: panelItem.id,
+                    for: activeSecondaryPanel.item.id,
                     phase: phase
                 )
             }
@@ -766,10 +948,19 @@ struct MenuBarContent: View {
     }
 
     private var activeSecondaryPanelSignature: String? {
+        guard let activeSecondaryPanel else {
+            return nil
+        }
+
+        let controlIDs = activeSecondaryPanel.panel.controls.map(\.id).joined(separator: ",")
+        return "\(activeSecondaryPanel.activation.pluginID)|\(activeSecondaryPanel.activation.optionID)|\(activeSecondaryPanel.panel.title)|\(controlIDs)"
+    }
+
+    private var activeSecondaryPanel: ActiveSecondaryPanel? {
         guard
             let activation = hoverCoordinator.activeActivation,
-            let panelItem = pluginHost.panelItems.first(where: { $0.id == activation.pluginID }),
-            let panel = panelItem.detail?.secondaryPanel(
+            let item = pluginHost.panelItems.first(where: { $0.id == activation.pluginID }),
+            let panel = item.detail?.secondaryPanel(
                 controlID: activation.controlID,
                 optionID: activation.optionID
             )
@@ -777,8 +968,17 @@ struct MenuBarContent: View {
             return nil
         }
 
-        let controlIDs = panel.controls.map(\.id).joined(separator: ",")
-        return "\(activation.pluginID)|\(activation.optionID)|\(panel.title)|\(controlIDs)"
+        return ActiveSecondaryPanel(
+            activation: activation,
+            item: item,
+            panel: panel
+        )
+    }
+
+    private struct ActiveSecondaryPanel {
+        let activation: HoverSecondaryPanelCoordinator.Activation
+        let item: PluginPanelItem
+        let panel: PluginPanelSecondaryPanel
     }
 
     private var featureCards: some View {
@@ -790,9 +990,6 @@ struct MenuBarContent: View {
                     iconTint: .blue,
                     onInstall: {
                         pluginHost.presentPluginMarketplace()
-                    },
-                    onEnable: {
-                        pluginHost.presentInstalledPlugins()
                     }
                 )
                 .frame(minHeight: MenuBarPanelLayout.emptyContentHeight)
@@ -801,12 +998,6 @@ struct MenuBarContent: View {
                     FeatureRowView(
                         item: item,
                         indicator: pluginHost.primaryPanelIndicatorsByID[item.id],
-                        isOn: Binding(
-                            get: { pluginHost.isSwitchOn(for: item.id) },
-                            set: { newValue in
-                                handlePanelSwitchChange(newValue, for: item)
-                            }
-                        ),
                         onDisclosureToggle: { isExpanded in
                             pluginHost.setDisclosureExpanded(isExpanded, for: item.id)
                         },
@@ -814,6 +1005,25 @@ struct MenuBarContent: View {
                             pluginHost.setPanelSelectionValue(optionID, controlID: controlID, for: item.id)
                         },
                         onNavigationSelectionChange: { controlID, optionID in
+                            if isNavigationOptionSelected(
+                                in: item.detail?.primaryControls ?? [],
+                                controlID: controlID,
+                                optionID: optionID
+                            ) {
+                                pluginHost.clearPanelNavigationSelection(controlID: controlID, for: item.id)
+                                hoverCoordinator.dismissImmediately()
+                                return
+                            }
+
+                            if item.detail?.secondaryPanel(controlID: controlID, optionID: optionID) != nil {
+                                hoverCoordinator.pin(
+                                    pluginID: item.id,
+                                    controlID: controlID,
+                                    optionID: optionID
+                                )
+                            } else {
+                                hoverCoordinator.dismissImmediately()
+                            }
                             pluginHost.setPanelNavigationSelectionValue(optionID, controlID: controlID, for: item.id)
                         },
                         onNavigationHoverChange: { controlID, optionID, isHovering in
@@ -927,17 +1137,78 @@ final class DeferredPanelActionDispatcher: ObservableObject {
     }
 }
 
+struct MenuBarPanelSwitchState: Equatable {
+    private(set) var value: Bool
+
+    init(value: Bool) {
+        self.value = value
+    }
+
+    mutating func synchronize(with value: Bool) {
+        self.value = value
+    }
+
+    mutating func resolve(
+        requestedValue: Bool,
+        using handler: (Bool) -> Bool
+    ) {
+        value = handler(requestedValue)
+    }
+}
+
+private struct MenuBarPanelSwitchControl: View {
+    let value: Bool
+    let isEnabled: Bool
+    let accessibilityTitle: String
+    let onChange: (Bool) -> Bool
+
+    @State private var state: MenuBarPanelSwitchState
+
+    init(
+        value: Bool,
+        isEnabled: Bool,
+        accessibilityTitle: String,
+        onChange: @escaping (Bool) -> Bool
+    ) {
+        self.value = value
+        self.isEnabled = isEnabled
+        self.accessibilityTitle = accessibilityTitle
+        self.onChange = onChange
+        _state = State(initialValue: MenuBarPanelSwitchState(value: value))
+    }
+
+    var body: some View {
+        Toggle(
+            accessibilityTitle,
+            isOn: Binding(
+                get: { state.value },
+                set: { requestedValue in
+                    guard isEnabled else { return }
+                    state.resolve(requestedValue: requestedValue, using: onChange)
+                }
+            )
+        )
+        .labelsHidden()
+        .controlSize(.small)
+        .toggleStyle(.switch)
+        .id(state.value)
+        .disabled(!isEnabled)
+        .onChange(of: value) { _, newValue in
+            state.synchronize(with: newValue)
+        }
+    }
+}
+
 struct FeatureRowView: View {
     let item: PluginPanelItem
     let indicator: PluginPrimaryPanelIndicator?
-    @Binding var isOn: Bool
     let onDisclosureToggle: (Bool) -> Void
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
     let onNavigationHoverChange: (String, String, Bool) -> Void
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
-    let onSwitchChange: (Bool) -> Void
+    let onSwitchChange: (Bool) -> Bool
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
     @State private var isHovered = false
@@ -978,15 +1249,25 @@ struct FeatureRowView: View {
                             onActionInvoke(actionID, item.menuActionBehavior)
                         }
                     } label: {
-                        Text(item.buttonTitle ?? AppL10n.plugins("plugin.panel.actionFallback", defaultValue: "操作"))
-                            .font(.system(size: 11))
+                        Text(actionButtonTitle)
+                            .font(.system(size: actionButtonFontSize))
+                            .lineLimit(1)
+                            .minimumScaleFactor(actionButtonMinimumScale)
+                            .allowsTightening(true)
                             .foregroundStyle(.white)
-                            .frame(minWidth: 45, minHeight: 21)
-                            .background(item.isEnabled ? Color.accentColor : Color(NSColor.secondaryLabelColor))
-                            .cornerRadius(15)
+                            .padding(.horizontal, FeatureRowLayout.actionButtonHorizontalPadding)
+                            .frame(
+                                width: FeatureRowLayout.actionButtonWidth,
+                                height: FeatureRowLayout.actionButtonHeight
+                            )
+                            .background(
+                                item.isEnabled ? Color.accentColor : Color(NSColor.secondaryLabelColor),
+                                in: Capsule()
+                            )
                     }
                     .buttonStyle(.plain)
                     .disabled(!item.isEnabled)
+                    .help(actionButtonTitle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -996,7 +1277,7 @@ struct FeatureRowView: View {
             if let detail = detailToDisplay {
                 PluginPanelDetailView(
                     detail: detail,
-                    isOn: $isOn,
+                    isOn: item.isOn,
                     showsSecondaryPanel: false,
                     onSelectionChange: onSelectionChange,
                     onNavigationSelectionChange: onNavigationSelectionChange,
@@ -1049,11 +1330,12 @@ struct FeatureRowView: View {
 
             switch item.controlStyle {
             case .switch:
-                Toggle(String(), isOn: $isOn)
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .toggleStyle(.switch)
-                    .disabled(!item.isEnabled)
+                MenuBarPanelSwitchControl(
+                    value: item.isOn,
+                    isEnabled: item.isEnabled,
+                    accessibilityTitle: item.title,
+                    onChange: onSwitchChange
+                )
             case .disclosure:
                 Image(systemName: item.isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
@@ -1081,6 +1363,26 @@ struct FeatureRowView: View {
         }
 
         return detail
+    }
+
+    private var actionButtonTitle: String {
+        item.buttonTitle ?? AppL10n.plugins("plugin.panel.actionFallback", defaultValue: "操作")
+    }
+
+    private var actionButtonUsesChineseTypography: Bool {
+        PluginRuntimeLocalization.locale.language.languageCode?.identifier == "zh"
+    }
+
+    private var actionButtonFontSize: CGFloat {
+        actionButtonUsesChineseTypography
+            ? FeatureRowLayout.actionButtonChineseFontSize
+            : FeatureRowLayout.actionButtonLocalizedFontSize
+    }
+
+    private var actionButtonMinimumScale: CGFloat {
+        actionButtonUsesChineseTypography
+            ? 1
+            : FeatureRowLayout.actionButtonLocalizedMinimumScale
     }
 
     private var rowText: some View {
@@ -1170,14 +1472,14 @@ struct FeatureRowView: View {
 
 private struct PluginPanelDetailView: View {
     let detail: PluginPanelDetail
-    @Binding var isOn: Bool
+    let isOn: Bool
     let showsSecondaryPanel: Bool
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
     let onNavigationHoverChange: (String, String, Bool) -> Void
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
-    let onSwitchChange: (Bool) -> Void
+    let onSwitchChange: (Bool) -> Bool
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
 
@@ -1275,7 +1577,7 @@ private struct PluginPanelDetailView: View {
         case .switchRow:
             SwitchRowControl(
                 control: control,
-                isOn: $isOn,
+                isOn: isOn,
                 onChange: onSwitchChange
             )
         case .actionRow:
@@ -1291,8 +1593,8 @@ private struct PluginPanelDetailView: View {
 
 private struct SwitchRowControl: View {
     let control: PluginPanelControl
-    @Binding var isOn: Bool
-    let onChange: (Bool) -> Void
+    let isOn: Bool
+    let onChange: (Bool) -> Bool
 
     @State private var isHovered = false
 
@@ -1312,17 +1614,12 @@ private struct SwitchRowControl: View {
 
             Spacer()
 
-            Toggle(String(), isOn: Binding(
-                get: { isOn },
-                set: { newValue in
-                    guard control.isEnabled else { return }
-                    onChange(newValue)
-                }
-            ))
-            .labelsHidden()
-            .controlSize(.small)
-            .toggleStyle(.switch)
-            .disabled(!control.isEnabled)
+            MenuBarPanelSwitchControl(
+                value: isOn,
+                isEnabled: control.isEnabled,
+                accessibilityTitle: switchTitle,
+                onChange: onChange
+            )
         }
         .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
         .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
@@ -1335,6 +1632,12 @@ private struct SwitchRowControl: View {
         }
         .onHover { isHovered = $0 }
     }
+
+    private var switchTitle: String {
+        control.actionTitle
+            ?? control.sectionTitle
+            ?? AppL10n.plugins("plugin.panel.switch", defaultValue: "开关")
+    }
 }
 
 private struct ActionRowControl: View {
@@ -1344,36 +1647,62 @@ private struct ActionRowControl: View {
     @State private var isHovered = false
 
     var body: some View {
-        Button {
-            guard control.isEnabled else { return }
-            onInvoke()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: control.actionIconSystemName ?? "arrow.up.right.square")
-                    .font(.system(size: 12, weight: .medium))
+        VStack(alignment: .leading, spacing: 4) {
+            if let sectionTitle = control.sectionTitle, !sectionTitle.isEmpty {
+                Text(sectionTitle)
+                    .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 14, height: 14)
-
-                Text(control.actionTitle ?? "")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer()
+                    .lineLimit(2)
+                    .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
             }
-            .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
-            .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .background(alignment: .center) {
-                RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
-                    .inset(by: MenuBarHoverStyle.inset)
-                    .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+
+            Button {
+                guard control.isEnabled else { return }
+                onInvoke()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: control.actionIconSystemName ?? "arrow.up.right.square")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(actionIconTint)
+                        .frame(width: 14, height: 14)
+
+                    Text(control.actionTitle ?? "")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Spacer()
+                }
+                .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
+                .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .background(alignment: .center) {
+                    RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
+                        .inset(by: MenuBarHoverStyle.inset)
+                        .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+                }
             }
+            .buttonStyle(.plain)
+            .disabled(!control.isEnabled)
+            .onHover { isHovered = $0 }
         }
-        .buttonStyle(.plain)
-        .disabled(!control.isEnabled)
-        .onHover { isHovered = $0 }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var actionIconTint: Color {
+        switch control.actionIconSystemName {
+        case "checkmark.circle.fill":
+            .green
+        case "arrow.triangle.2.circlepath.circle.fill", "checkmark.circle":
+            .blue
+        case "exclamationmark.circle.fill":
+            .red
+        case "questionmark.circle":
+            .orange
+        default:
+            .secondary
+        }
     }
 }
 
@@ -1460,22 +1789,46 @@ private struct NavigationListControl: View {
     let onRowFrameChange: (String, CGRect?) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(control.options) { option in
-                NavigationListRow(
-                    title: option.title,
-                    subtitle: option.subtitle,
-                    isSelected: option.id == control.selectedOptionID,
-                    isEnabled: control.isEnabled,
-                    action: { onSelect(option.id) },
-                    onHoverChange: { isHovering in
-                        onHoverChange(option.id, isHovering)
-                    },
-                    onRowFrameChange: { frame in
-                        onRowFrameChange(option.id, frame)
-                    }
-                )
+        VStack(alignment: .leading, spacing: MenuBarPanelLayout.navigationSectionTitleSpacing) {
+            if let sectionTitle = control.sectionTitle {
+                Text(sectionTitle)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, FeatureRowLayout.detailControlHorizontalPadding + 5)
             }
+
+            VStack(spacing: 0) {
+                ForEach(control.options) { option in
+                    NavigationListRow(
+                        title: option.title,
+                        subtitle: option.subtitle,
+                        leadingIconSystemName: control.actionIconSystemName,
+                        leadingIconTint: navigationIconTint,
+                        isSelected: option.id == control.selectedOptionID,
+                        isEnabled: control.isEnabled,
+                        action: { onSelect(option.id) },
+                        onHoverChange: { isHovering in
+                            onHoverChange(option.id, isHovering)
+                        },
+                        onRowFrameChange: { frame in
+                            onRowFrameChange(option.id, frame)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private var navigationIconTint: Color {
+        switch control.actionIconSystemName {
+        case "checkmark.circle.fill":
+            .green
+        case "arrow.triangle.2.circlepath.circle.fill", "checkmark.circle":
+            .blue
+        case "exclamationmark.circle.fill":
+            .red
+        default:
+            .secondary
         }
     }
 }
@@ -1483,6 +1836,8 @@ private struct NavigationListControl: View {
 private struct NavigationListRow: View {
     let title: String
     let subtitle: String?
+    let leadingIconSystemName: String?
+    let leadingIconTint: Color
     let isSelected: Bool
     let isEnabled: Bool
     let action: () -> Void
@@ -1500,6 +1855,14 @@ private struct NavigationListRow: View {
             action()
         } label: {
             HStack(spacing: 8) {
+                if let leadingIconSystemName {
+                    Image(systemName: leadingIconSystemName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(leadingIconTint)
+                        .frame(width: 16)
+                        .accessibilityHidden(true)
+                }
+
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.system(size: 12, weight: .semibold))
@@ -1549,7 +1912,9 @@ private struct NavigationListRow: View {
     }
 
     private var isInteractive: Bool {
-        isEnabled && !isSelected
+        // A second click on a selected row clears its selection and closes the pinned
+        // secondary panel. The parent handles that toggle-off action explicitly.
+        isEnabled
     }
 
     private var backgroundFill: Color {
@@ -1675,6 +2040,9 @@ private struct SecondarySlidingPanel: View {
 
     let title: String
     let controls: [PluginPanelControl]
+    let maximumContentHeight: CGFloat
+    let showsDismissButton: Bool
+    let onDismiss: (() -> Void)?
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
     let onDateChange: (String, Date) -> Void
@@ -1683,23 +2051,46 @@ private struct SecondarySlidingPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.primary)
+            HStack(spacing: 8) {
+                if showsDismissButton {
+                    Button(action: { onDismiss?() }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 18, height: 18)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        AppL10n.settings("secondaryPanel.back", defaultValue: "返回")
+                    )
+                    .help(
+                        AppL10n.settings("secondaryPanel.back", defaultValue: "返回")
+                    )
+                }
 
-            PluginPanelDetailView(
-                detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: nil),
-                isOn: .constant(false),
-                showsSecondaryPanel: false,
-                onSelectionChange: onSelectionChange,
-                onNavigationSelectionChange: onNavigationSelectionChange,
-                onNavigationHoverChange: { _, _, _ in },
-                onNavigationRowFrameChange: { _, _, _ in },
-                onDateChange: onDateChange,
-                onSwitchChange: { _ in },
-                onSliderChange: onSliderChange,
-                onActionInvoke: { _, _ in }
-            )
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+            }
+
+            ScrollView(.vertical, showsIndicators: true) {
+                PluginPanelDetailView(
+                    detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: nil),
+                    isOn: false,
+                    showsSecondaryPanel: false,
+                    onSelectionChange: onSelectionChange,
+                    onNavigationSelectionChange: onNavigationSelectionChange,
+                    onNavigationHoverChange: { _, _, _ in },
+                    onNavigationRowFrameChange: { _, _, _ in },
+                    onDateChange: onDateChange,
+                    onSwitchChange: { _ in false },
+                    onSliderChange: onSliderChange,
+                    onActionInvoke: { _, _ in }
+                )
+            }
+            .frame(maxHeight: maximumContentHeight, alignment: .top)
         }
         .padding(MenuBarPanelLayout.outerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1755,9 +2146,9 @@ private final class SecondaryPanelController: ObservableObject {
     // `WindowMenuBarExtraBehavior`, relies on the popover's `didResignKey` notification. Once this
     // panel is attached as a child window, the popover never closes itself.
     //
-    // Solution: keep it as an independent sibling NSPanel and never call `addChildWindow`. Position
-    // is computed directly from `anchorRect`; the level is raised above the popover; lifecycle
-    // cleanup is driven by the SwiftUI view's `.onDisappear` cascading to `hide()`.
+    // Solution: keep it as an independent sibling NSPanel and never call `addChildWindow`. Its
+    // placement is computed from `anchorRect` and the anchor screen's visible frame; when neither
+    // side has enough room, MenuBarContent renders the same panel as an in-place drill-in view.
     //
     // References:
     // - MenuBarExtraAccess source, which observes `didResignKey` on `MenuBarExtraWindow`
@@ -1769,6 +2160,7 @@ private final class SecondaryPanelController: ObservableObject {
     private var panelWindow: SecondaryPanelWindow?
     private var panelHostingView: NSHostingView<AnyView>?
     private var hostWindowObservers: [NSObjectProtocol] = []
+    @Published private(set) var isPresentingInline = false
     var onHostWindowDismissRequest: (() -> Void)?
 
     func setHostWindow(_ window: NSWindow?) {
@@ -1802,10 +2194,16 @@ private final class SecondaryPanelController: ObservableObject {
         // is already not visible; use that to block the race from re-showing the panel.
         guard hostWindow.isVisible else { return }
 
+        let screen = screenContaining(anchorRect: anchorRect)
         let rootView = AnyView(
             SecondarySlidingPanel(
                 title: panel.title,
                 controls: panel.controls,
+                maximumContentHeight: maximumSecondaryPanelContentHeight(
+                    for: screen
+                ),
+                showsDismissButton: false,
+                onDismiss: nil,
                 onSelectionChange: onSelectionChange,
                 onNavigationSelectionChange: onNavigationSelectionChange,
                 onDateChange: onDateChange,
@@ -1833,18 +2231,32 @@ private final class SecondaryPanelController: ObservableObject {
 
         let fittingSize = hostingView.fittingSize
         let width = MenuBarPanelLayout.secondaryPanelWidth
-        let height = max(fittingSize.height, MenuBarPanelLayout.secondaryPanelMinimumHeight)
-        let origin = CGPoint(
-            x: anchorRect.maxX + MenuBarPanelLayout.panelSpacing,
-            y: anchorRect.maxY - height
+        let height = min(
+            max(fittingSize.height, MenuBarPanelLayout.secondaryPanelMinimumHeight),
+            maximumSecondaryPanelHeight(for: screen)
         )
-        let frame = CGRect(origin: origin, size: CGSize(width: width, height: height))
+        let visibleFrame = screen?.visibleFrame
+            ?? hostWindow.screen?.visibleFrame
+            ?? NSScreen.main?.visibleFrame
+            ?? .zero
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: anchorRect,
+            panelSize: CGSize(width: width, height: height),
+            visibleFrame: visibleFrame
+        )
 
-        panelWindow.setFrame(frame, display: true)
-        // Align the panel level to `hostWindow.level + 1` at runtime so it stays above the popover.
-        // The MenuBarExtra popover level is a private SwiftUI implementation detail.
-        panelWindow.level = NSWindow.Level(rawValue: hostWindow.level.rawValue + 1)
-        panelWindow.orderFrontRegardless()
+        switch placement {
+        case let .right(frame), let .left(frame):
+            isPresentingInline = false
+            panelWindow.setFrame(frame, display: true)
+            // Align the panel level to `hostWindow.level + 1` at runtime so it stays above the popover.
+            // The MenuBarExtra popover level is a private SwiftUI implementation detail.
+            panelWindow.level = NSWindow.Level(rawValue: hostWindow.level.rawValue + 1)
+            panelWindow.orderFrontRegardless()
+        case .inline:
+            isPresentingInline = true
+            panelWindow.orderOut(nil)
+        }
         self.panelWindow = panelWindow
     }
 
@@ -1855,10 +2267,32 @@ private final class SecondaryPanelController: ObservableObject {
     }
 
     func hide() {
-        guard let panelWindow else { return }
-        panelWindow.orderOut(nil)
+        panelWindow?.orderOut(nil)
         self.panelWindow = nil
         self.panelHostingView = nil
+        isPresentingInline = false
+    }
+
+    private func screenContaining(anchorRect: CGRect) -> NSScreen? {
+        let anchorPoint = CGPoint(x: anchorRect.midX, y: anchorRect.midY)
+        return NSScreen.screens.first(where: { $0.frame.contains(anchorPoint) })
+            ?? hostWindow?.screen
+            ?? NSScreen.main
+    }
+
+    private func maximumSecondaryPanelHeight(for screen: NSScreen?) -> CGFloat {
+        let visibleHeight = screen?.visibleFrame.height
+            ?? NSScreen.main?.visibleFrame.height
+            ?? MenuBarPanelLayout.maximumPanelHeight
+        return max(0, visibleHeight - (MenuBarPanelLayout.secondaryPanelScreenMargin * 2))
+    }
+
+    private func maximumSecondaryPanelContentHeight(for screen: NSScreen?) -> CGFloat {
+        max(
+            0,
+            maximumSecondaryPanelHeight(for: screen)
+                - MenuBarPanelLayout.secondaryPanelContentChromeHeight
+        )
     }
 
     private func makePanel() -> SecondaryPanelWindow {

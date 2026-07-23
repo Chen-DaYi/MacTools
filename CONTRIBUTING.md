@@ -25,6 +25,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - `project.yml`: root XcodeGen project source, only for the App, PluginKit, and shared aggregate entry points. Plugin targets are generated automatically.
 - `Plugins/<PluginName>/project.yml`: optional per-plugin build overrides, only when a plugin needs extra frameworks, include paths, bundle resources, helper/tool targets, or target overrides.
 - `docs/plugins/`: plugin packages, catalogs, local debugging, and release flow documentation.
+- `docs/icon-gallery/`: checked-in menu-bar icon catalog, previews, animation frames, and archives; rendering-mode rules are documented in `docs/icon-gallery.md`.
 - `docs/superpowers/`: larger product, interaction, or implementation design documents.
 
 ## Development Guidelines
@@ -33,6 +34,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Features that require macOS app extensions, such as Finder Sync, must add the extension target to the root `project.yml` and embed it in the main app. Use the dynamic plugin only for the MacTools panel/settings surface.
 - Command workflows for adding and updating plugins are documented in the Development Steps section of `docs/plugins/local-native-plugins.md`.
 - Keep documentation short and task-focused. User-visible behavior changes should update `README.md` or the relevant file under `docs/`; plugin package, catalog, or release flow changes should update `docs/plugins/`.
+- Icon gallery assets must explicitly declare `renderingMode`; use `template` only for black artwork on transparency, and use `original` for color or grayscale detail. Third-party static assets must pin their upstream revision and catalog mapping in `docs/icon-gallery/sources/manifest.json`, with the corresponding license under `Sources/Resources/ThirdPartyNotices/`. Run the gallery generation and related tests after catalog changes.
 - Plugins implement `MacToolsPlugin`; menu panel plugins implement `PluginPrimaryPanel`, and component panel plugins implement `PluginComponentPanel`.
 - `plugin.json.id` must be stable, readable, and exactly match the runtime `PluginMetadata.id`; each plugin package should return exactly one plugin instance.
 - Plugin display state should be expressed through `PluginPanelState`, `PluginPanelDetail`, `PluginPanelControl`, and related models. Do not bypass the existing panel framework.
@@ -44,6 +46,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Localize user-facing copy with `.xcstrings`. App/Core copy belongs under `Sources/Resources/Localization`, PluginKit copy under `Sources/MacToolsPluginKit/Resources`, and plugin copy under `Plugins/<PluginName>/Resources`. Plugin `plugin.json` files should keep `displayName`/`summary` as fallbacks and add `localizedMetadata` for marketplace and unloaded-plugin presentation.
 - New plugins should provide localization whenever practical, at minimum for panel copy, settings copy, permission text, and plugin metadata.
 - Prefer Apple native frameworks. When adding system frameworks, private include paths, or helper executables inside a plugin bundle, declare the smallest necessary differences in the plugin's own `project.yml`. Bundle resource executables that need separate signing should be listed in `plugin.json.package.signPaths`.
+- Plugins that use private Apple frameworks must load them dynamically at runtime and validate the required classes and selectors. Do not statically link private frameworks, and surface unsupported-system errors instead of crashing.
 
 ## Testing
 - Behavioral changes should add or update adjacent XCTest coverage. Test files should be named `<TypeName>Tests.swift`.
@@ -64,8 +67,8 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Releases are handled by maintainers. Do not create tags, publish GitHub Releases, or commit release artifacts in ordinary contributions.
 - For GitHub-based releases, prefer `Actions` -> `Prepare Release`. Enter `type`, target `version`, and whether to `release`; when `release` is enabled, the workflow continues to the actual release workflow after bumping, committing, and creating the tag.
 - For quick releases, prefer `make release`. The command interactively chooses `app` or `plugin`, analyzes the next `patch`/`minor`/`major` version, previews the bump, then only after confirmation runs `git pull --rebase`, lightweight checks, version updates, commit, tag creation, and tag push.
-- App releases update `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `Configs/AppVersion.xcconfig`. The app and embedded extensions inherit this shared version config. After pushing a `v*.*.*` tag, the `Release` workflow builds, signs, notarizes, and uploads the DMG.
-- Plugin releases push a `plugins-*` batch tag. The default `auto` mode uses the production catalog to find new plugins, already bumped plugins, and package-related plugin changes; it updates `plugin.json.version` when needed, then the `Plugin Release` workflow builds plugins and merges the signed catalog.
+- App releases update `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `Configs/AppVersion.xcconfig`. The app and embedded extensions inherit this shared version config. After pushing a `v*.*.*` tag, the `Release` workflow builds, signs, notarizes, uploads the DMG, marks the stable App release as GitHub Latest, and updates the Appcast plus website download metadata.
+- Plugin releases push a `plugins-*` batch tag. The default `auto` mode uses the production catalog to find new plugins, already bumped plugins, and package-related plugin changes; it updates `plugin.json.version` when needed, then the `Plugin Release` workflow builds plugins and merges the signed catalog. Plugin batch releases are never marked as GitHub Latest.
 - On first launch, a new app version checks installed plugins and automatically updates them from the signed production catalog. It does not automatically install plugins the user has not installed.
 - Non-interactive examples: `make release ARGS="--type app --version 1.0.7 --yes"` or `make release ARGS="--type plugin --version 1.0.10 --plugin-mode selected --plugin calendar --yes"`.
 - Add `--dry-run` to preview the steps. The working tree must be clean before a real release.

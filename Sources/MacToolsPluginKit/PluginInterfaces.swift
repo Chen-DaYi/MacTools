@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 @MainActor
@@ -165,9 +166,12 @@ public protocol PluginConfigurationPresenting: AnyObject {
     var requestConfigurationPresentation: (() -> Void)? { get set }
 }
 
-/// Optional protocol for built-in plugins whose feature visibility should
-/// pause/resume heavyweight observers or external side effects.
-/// Dynamic plugins are paused by `DynamicPluginManager` instead.
+/// Legacy PluginKit v3 compatibility surface.
+///
+/// The host no longer ties plugin lifecycle to Dashboard or Feature Panel
+/// visibility, but previously released plugin binaries still reference this
+/// protocol descriptor. Keep the declaration until the next PluginKit ABI
+/// version so those installed packages continue to load.
 @MainActor
 public protocol PluginFeatureVisibilityLifecycleHandling: AnyObject {
     func featureVisibilityDidChange(_ isVisible: Bool)
@@ -181,4 +185,21 @@ public protocol PluginFeatureVisibilityLifecycleHandling: AnyObject {
 @MainActor
 public protocol PluginRuntimeLocalizationRefreshing: AnyObject {
     func refreshLocalization()
+}
+
+/// Optional hook for plugins whose dynamic shortcut definitions need to retain a shortcut after
+/// the host accepts, clears, or restores its binding. Registration and conflict validation remain
+/// owned by the host's shared shortcut manager.
+@MainActor
+public protocol PluginShortcutBindingChangeHandling: AnyObject {
+    func shortcutBindingDidChange(id: String, binding: ShortcutBinding?)
+}
+
+/// Optional protocol for plugins that explicitly opt a small, non-sensitive settings payload
+/// into MacTools preferences backup and restore. This preserves the `MacToolsPlugin` ABI for
+/// existing dynamic plugins while keeping cache, credentials, and other private data excluded.
+@MainActor
+public protocol PluginPortablePreferencesProviding: AnyObject {
+    func makePortablePreferencesBackup() -> Data?
+    func restorePortablePreferences(from data: Data)
 }

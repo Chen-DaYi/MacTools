@@ -76,6 +76,8 @@ In this repository, plugin Xcode targets are generated before XcodeGen runs. The
 
 The manifest ID is the stable identity of the package. It must match the runtime `PluginMetadata.id`, and a package must return exactly one plugin instance. Use lower-case, readable IDs such as `display-brightness` unless there is a strong reason to use a reverse-DNS identifier.
 
+When a plugin uses a private Apple framework, it must load that framework dynamically at runtime and validate every required class and selector before use. Do not add a static framework link: unsupported systems must present a clear plugin error instead of crashing.
+
 ## Development Steps
 
 To add a plugin, create `Plugins/<PluginName>/plugin.json`, `Sources/`, and `Bundle/`. Add `Tests/` when the behavior is testable. Most plugins can then run directly with:
@@ -182,6 +184,6 @@ func activate(context: PluginRuntimeContext)
 func deactivate(reason: PluginDeactivationReason)
 ```
 
-`deactivate` is called before disabling, updating, uninstalling, and host shutdown. Plugins should cancel tasks, timers, observers, event taps, windows, and other retained system resources there.
+`deactivate` is called before updating, uninstalling, and host shutdown. It can also be called when the host isolates a plugin after a runtime failure or when an installed package is no longer loadable. Plugins should cancel tasks, timers, observers, event taps, windows, and other retained system resources there.
 
-Native bundle code is treated as loaded for the lifetime of the current app process. If a loaded plugin is disabled, updated, or uninstalled, its contributions are removed from MacTools immediately and `deactivate` is called, but the executable code is considered fully released only after the app restarts. Updating a loaded plugin replaces the package files on disk and activates the new code on the next launch.
+Native bundle code is treated as loaded for the lifetime of the current app process. If a loaded plugin is updated or uninstalled, its contributions are removed from MacTools immediately and `deactivate` is called, but the executable code is considered fully released only after the app restarts. Updating a loaded plugin replaces the package files on disk and activates the new code on the next launch.

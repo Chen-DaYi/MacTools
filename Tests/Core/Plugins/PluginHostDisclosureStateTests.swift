@@ -113,6 +113,7 @@ final class PluginHostDisclosureStateTests: XCTestCase {
             plugins: plugins,
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(),
             pluginStateChangeRebuildDelay: pluginStateChangeRebuildDelay
         )

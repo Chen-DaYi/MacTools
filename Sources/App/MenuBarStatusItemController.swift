@@ -25,17 +25,38 @@ enum MenuBarStatusItemInvocation: Equatable {
         let secondary: MenuBarStatusItemInvocation = swapped ? .componentPanel : .featurePanel
         return isSecondary ? secondary : primary
     }
+}
 
-    /// Expanded-interface session callbacks carry no NSEvent; Option held at
-    /// session begin selects the right-click action.
-    static func invocationForExpandedSession(
-        swapped: Bool,
-        liveModifierFlags: NSEvent.ModifierFlags
-    ) -> MenuBarStatusItemInvocation {
-        let isSecondary = liveModifierFlags.contains(.option)
-        let primary: MenuBarStatusItemInvocation = swapped ? .featurePanel : .componentPanel
-        let secondary: MenuBarStatusItemInvocation = swapped ? .componentPanel : .featurePanel
-        return isSecondary ? secondary : primary
+enum MenuBarStatusItemPresentationAction: Equatable {
+    case presentSettings(SettingsPresentationRequest)
+    case toggleComponentPanel
+    case toggleFeaturePanel
+
+    init(request: AppPresentationRequest) {
+        switch request {
+        case let .settings(settingsRequest):
+            self = .presentSettings(settingsRequest)
+        case .toggleDashboard:
+            self = .toggleComponentPanel
+        case .toggleFeaturePanel:
+            self = .toggleFeaturePanel
+        }
+    }
+}
+
+struct MenuBarGlobalMouseEvent: Equatable, Sendable {
+    let screenX: Double
+    let screenY: Double
+}
+
+enum MenuBarGlobalMouseEventPolicy {
+    static func isStatusItemClick(
+        for event: MenuBarGlobalMouseEvent,
+        buttonFrame: NSRect?
+    ) -> Bool {
+        let location = NSPoint(x: event.screenX, y: event.screenY)
+        guard let buttonFrame, !buttonFrame.isEmpty else { return false }
+        return buttonFrame.contains(location)
     }
 }
 
@@ -53,19 +74,10 @@ final class MenuBarStatusItemController: NSObject {
     private var appearanceObserver: NSObjectProtocol?
     private var appTerminationObserver: NSObjectProtocol?
     private var statusItemWindowMoveObserver: NSObjectProtocol?
-    // The status item holds its expanded-interface delegate weakly; the
-    // controller must own the adapter strongly or callbacks silently stop.
-    private let expandedInterfaceAdapter = MenuBarStatusItemExpandedInterfaceAdapter()
-    private let expandedSessionCoordinator = MenuBarExpandedSessionCoordinator()
     private var animationTimer: DispatchSourceTimer?
-    private var animationLoadSampleTimer: Timer?
-    private let animationLoadMonitor = MenuBarIconAnimationLoadMonitor()
     private var animationFrames: [NSImage] = []
     private var animationFrameIndex = 0
-    private var animationBaseFrameDuration: TimeInterval = 1.0 / MenuBarIconProcessing.animationFramesPerSecond
-    private var animationSpeedMode: MenuBarIconAnimationSpeedMode = .manual
-    private var manualAnimationSpeedMultiplier: Double = MenuBarIconAnimationSpeedPolicy.defaultManualMultiplier
-    private var currentAnimationSystemLoad: MenuBarIconAnimationSystemLoad?
+    private var animationFrameDuration: TimeInterval = 1.0 / MenuBarIconProcessing.animationFramesPerSecond
 
     init(
         pluginHost: PluginHost,
@@ -108,6 +120,24 @@ final class MenuBarStatusItemController: NSObject {
         pluginHost.statusItemButtonFrameProvider = { [weak self] in
             self?.statusItemButtonScreenRect()
         }
+        windowRouter.setPanelPresentationActions(
+            showDashboard: { [weak self] in self?.showDashboard() },
+            showFeaturePanel: { [weak self] in self?.showFeaturePanel() }
+        )
+        windowRouter.setProgrammaticSettingsPresentationAction { [weak self] in
+            self?.requestPanelClose()
+        }
+        // This controller is the sole production owner of app-level presentation routing.
+        pluginHost.appPresentationHandler = { [weak self, weak windowRouter] request in
+            switch MenuBarStatusItemPresentationAction(request: request) {
+            case let .presentSettings(settingsRequest):
+                windowRouter?.presentSettings(settingsRequest)
+            case .toggleComponentPanel:
+                self?.toggleDashboard()
+            case .toggleFeaturePanel:
+                self?.toggleFeaturePanel()
+            }
+        }
     }
 
     private func statusItemButtonScreenRect() -> NSRect? {
@@ -119,7 +149,6 @@ final class MenuBarStatusItemController: NSObject {
     deinit {
         MainActor.assumeIsolated {
             animationTimer?.cancel()
-            animationLoadSampleTimer?.invalidate()
             if let appearanceObserver {
                 DistributedNotificationCenter.default().removeObserver(appearanceObserver)
             }
@@ -129,6 +158,15 @@ final class MenuBarStatusItemController: NSObject {
             if let statusItemWindowMoveObserver {
                 NotificationCenter.default.removeObserver(statusItemWindowMoveObserver)
             }
+            if let localEventMonitor {
+                NSEvent.removeMonitor(localEventMonitor)
+            }
+            if let globalEventMonitor {
+                NSEvent.removeMonitor(globalEventMonitor)
+            }
+            if let appActivationObserver {
+                NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
+            }
         }
     }
 
@@ -137,78 +175,46 @@ final class MenuBarStatusItemController: NSObject {
         removeDismissMonitorsIfNeeded()
     }
 
-    /// Single close gate for user-driven dismissals. While an expanded
-    /// interface session is active, close through `cancel()` so AppKit owns
-    /// the session lifecycle. With no active session this is a plain
-    /// `dismissPanels()`.
-    private func requestPanelClose() {
-        expandedSessionCoordinator.requestClose(
-            cancel: { session in
-                MenuBarStatusItemExpandedInterfaceAdapter.cancel(session: session)
-            },
-            directDismiss: { [weak self] in
-                self?.dismissPanels()
-            }
-        )
-    }
-
-    /// Expanded-interface session begin. No NSEvent exists on this path, so
-    /// the target panel comes from the click-behavior preference plus the live
-    /// keyboard state.
-    private func handleExpandedSessionBegin(_ session: NSObject) {
-        if let activeSession = expandedSessionCoordinator.activeSession, activeSession !== session {
-            MenuBarStatusItemExpandedInterfaceAdapter.cancel(session: activeSession)
-        }
-        expandedSessionCoordinator.sessionDidBegin(session)
-
-        if panelPresenter.isAnyPanelShown {
-            // A fresh session means the host considers nothing presented, so
-            // settle stale panels before reopening.
-            panelPresenter.dismissPanels()
-        }
-
-        let swapped = MenuBarClickBehaviorPreference.current().isSwapped
-        let invocation = MenuBarStatusItemInvocation.invocationForExpandedSession(
-            swapped: swapped,
-            liveModifierFlags: NSEvent.modifierFlags
-        )
+    func showDashboard() {
         guard let button = statusItem.button else {
-            // Nothing to anchor to. Leaving the session open would make the
-            // item permanently inert (no further didBegin until it ends), so
-            // close it instead of failing silently.
-            AppLog.pluginHost.error(
-                "Expanded session began but the status item button is unavailable; cancelling the session"
-            )
-            requestPanelClose()
+            AppLog.pluginHost.error("Cannot show Dashboard because the status item button is unavailable")
             return
         }
 
-        switch invocation {
-        case .featurePanel:
-            toggleFeaturePanel(relativeTo: button)
-        case .componentPanel:
-            toggleComponentPanel(relativeTo: button)
-        }
-
-        if !panelPresenter.isAnyPanelShown {
-            // Presentation failed (the desync guard above closed everything,
-            // so the toggle can only have tried to open). A session left open
-            // with nothing shown keeps the item inert — no further didBegin
-            // arrives until the session ends — so cancel it.
-            AppLog.pluginHost.error(
-                "Expanded session began but no panel was presented; cancelling the session"
-            )
-            requestPanelClose()
-        }
+        panelPresenter.showDashboard(relativeTo: button)
+        handlePresentationResult()
     }
 
-    /// Expanded-interface session end. Reached synchronously from `cancel()`
-    /// inside `requestPanelClose()` (coordinator re-entry guard absorbs the
-    /// loop) or directly should the host ever end a session itself.
-    private func handleExpandedSessionEnd() {
-        expandedSessionCoordinator.sessionDidEnd { [weak self] in
-            self?.dismissPanels()
+    func showFeaturePanel() {
+        guard let button = statusItem.button else {
+            AppLog.pluginHost.error("Cannot show Feature Panel because the status item button is unavailable")
+            return
         }
+
+        panelPresenter.showFeaturePanel(relativeTo: button)
+        handlePresentationResult()
+    }
+
+    func toggleDashboard() {
+        guard let button = statusItem.button else {
+            AppLog.pluginHost.error("Cannot toggle Dashboard because the status item button is unavailable")
+            return
+        }
+
+        toggleComponentPanel(relativeTo: button)
+    }
+
+    func toggleFeaturePanel() {
+        guard let button = statusItem.button else {
+            AppLog.pluginHost.error("Cannot toggle Feature Panel because the status item button is unavailable")
+            return
+        }
+
+        toggleFeaturePanel(relativeTo: button)
+    }
+
+    private func requestPanelClose() {
+        dismissPanels()
     }
 
     private func configureStatusItem() {
@@ -221,25 +227,10 @@ final class MenuBarStatusItemController: NSObject {
         button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         button.toolTip = AppMetadata.appName
 
-        // Expanded-interface route. The API is discovered at runtime so the
-        // app can still build and run on older systems. When
-        // attached, the session route replaces the button action channel;
-        // failed attach falls back to the action route above.
-        if MenuBarStatusItemExpandedInterfaceAdapter.isSupported(by: statusItem) {
-            expandedInterfaceAdapter.onSessionBegin = { [weak self] session in
-                self?.handleExpandedSessionBegin(session)
-            }
-            expandedInterfaceAdapter.onSessionEnd = { [weak self] _ in
-                self?.handleExpandedSessionEnd()
-            }
-            let attached = expandedInterfaceAdapter.attach(to: statusItem)
-            if !attached {
-                AppLog.pluginHost.warning(
-                    "Expanded-interface delegate attach failed; status item falls back to the action route"
-                )
-            }
-        }
-
+        // MacTools intentionally uses one target/action route on every OS.
+        // AppKit's expanded-interface delegate models one undifferentiated
+        // interface and carries no NSEvent, so it cannot represent the app's
+        // distinct left- and right-click panels without a competing owner.
     }
 
     private func observePluginHost() {
@@ -250,15 +241,6 @@ final class MenuBarStatusItemController: NSObject {
             }
             .store(in: &cancellables)
 
-        pluginHost.$settingsPresentationRequestCount
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.windowRouter.showSettings()
-                // Route through the session gate: settings can be opened from
-                // a panel while an expanded-interface session is still active.
-                self?.requestPanelClose()
-            }
-            .store(in: &cancellables)
     }
 
     private func observeIconSettings() {
@@ -328,8 +310,7 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func resetStatusItemPosition() {
-        // Cancel any active expanded-interface session while its owning item
-        // is still alive.
+        // Dismiss panels while their owning status item is still alive.
         requestPanelClose()
 
         let oldItem = statusItem
@@ -348,73 +329,31 @@ final class MenuBarStatusItemController: NSObject {
     private func configureAnimationIfNeeded(_ payload: MenuBarIconImagePayload) {
         animationTimer?.cancel()
         animationTimer = nil
-        animationLoadSampleTimer?.invalidate()
-        animationLoadSampleTimer = nil
         animationFrames = []
         animationFrameIndex = 0
-        animationBaseFrameDuration = payload.frameDuration
-        animationSpeedMode = payload.speedMode
-        manualAnimationSpeedMultiplier = payload.manualSpeedMultiplier
-        currentAnimationSystemLoad = nil
+        animationFrameDuration = max(payload.frameDuration, 0.04)
 
         guard payload.isAnimated else {
             return
         }
 
         animationFrames = payload.animationFrames
-        refreshAnimationLoadIfNeeded()
         scheduleAnimationTimer()
-        scheduleAnimationLoadSamplingIfNeeded()
     }
 
     private func scheduleAnimationTimer() {
         animationTimer?.cancel()
-        let frameDuration = effectiveAnimationFrameDuration()
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(
-            deadline: .now() + frameDuration,
-            repeating: frameDuration,
-            leeway: .milliseconds(Int((frameDuration * 500).rounded()))
+            deadline: .now() + animationFrameDuration,
+            repeating: animationFrameDuration,
+            leeway: .milliseconds(Int((animationFrameDuration * 500).rounded()))
         )
         timer.setEventHandler { [weak self] in
             self?.advanceAnimationFrame()
         }
         animationTimer = timer
         timer.resume()
-    }
-
-    private func scheduleAnimationLoadSamplingIfNeeded() {
-        guard animationSpeedMode == .adaptiveSystemLoad else {
-            return
-        }
-
-        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshAnimationLoadIfNeeded()
-                self?.scheduleAnimationTimer()
-            }
-        }
-        timer.tolerance = 2
-        animationLoadSampleTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
-    }
-
-    private func refreshAnimationLoadIfNeeded() {
-        guard animationSpeedMode == .adaptiveSystemLoad else {
-            return
-        }
-
-        currentAnimationSystemLoad = animationLoadMonitor.sample()
-    }
-
-    private func effectiveAnimationFrameDuration() -> TimeInterval {
-        let multiplier = MenuBarIconAnimationSpeedPolicy.multiplier(
-            mode: animationSpeedMode,
-            manualMultiplier: manualAnimationSpeedMultiplier,
-            systemLoad: currentAnimationSystemLoad
-        )
-        let normalizedMultiplier = max(multiplier, MenuBarIconAnimationSpeedPolicy.minimumMultiplier)
-        return max(animationBaseFrameDuration / normalizedMultiplier, 0.04)
     }
 
     private func advanceAnimationFrame() {
@@ -424,8 +363,6 @@ final class MenuBarStatusItemController: NSObject {
         else {
             animationTimer?.cancel()
             animationTimer = nil
-            animationLoadSampleTimer?.invalidate()
-            animationLoadSampleTimer = nil
             return
         }
 
@@ -478,13 +415,7 @@ final class MenuBarStatusItemController: NSObject {
             }
         }
 
-        if globalEventMonitor == nil {
-            globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] _ in
-                Task { @MainActor in
-                    self?.requestPanelClose()
-                }
-            }
-        }
+        installGlobalMouseMonitorIfNeeded()
 
         if appActivationObserver == nil {
             appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -532,6 +463,37 @@ final class MenuBarStatusItemController: NSObject {
 
         requestPanelClose()
         return event
+    }
+
+    private func installGlobalMouseMonitorIfNeeded() {
+        guard globalEventMonitor == nil else { return }
+        let mouseEvents: NSEvent.EventTypeMask = [
+            .leftMouseDown,
+            .rightMouseDown,
+            .otherMouseDown
+        ]
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] event in
+            let location = event.locationInWindow
+            let snapshot = MenuBarGlobalMouseEvent(
+                screenX: Double(location.x),
+                screenY: Double(location.y)
+            )
+            Task { @MainActor [weak self] in
+                self?.handleGlobalMouseEvent(snapshot)
+            }
+        }
+    }
+
+    private func handleGlobalMouseEvent(_ event: MenuBarGlobalMouseEvent) {
+        if MenuBarGlobalMouseEventPolicy.isStatusItemClick(
+            for: event,
+            buttonFrame: statusItemButtonScreenRect()
+        ) {
+            return
+        }
+
+        guard panelPresenter.isAnyPanelShown else { return }
+        requestPanelClose()
     }
 
     private func isEventInsidePresentedPanel(_ event: NSEvent) -> Bool {

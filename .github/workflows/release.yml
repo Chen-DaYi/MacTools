@@ -297,8 +297,10 @@ jobs:
           hdiutil create \
             -volname "$PROJECT_NAME" \
             -srcfolder "$STAGE_DIR" \
+            -fs HFS+ \
             -ov \
             -format UDZO \
+            -imagekey zlib-level=9 \
             "$DMG_PATH" >/dev/null
 
           /bin/rm -rf "$STAGE_DIR"
@@ -399,6 +401,7 @@ jobs:
           export ED_SIGNATURE FILE_SIZE DOWNLOAD_URL RELEASE_NOTES_URL FULL_RELEASE_NOTES_URL PUB_DATE MINIMUM_SYSTEM_VERSION
 
           python3 <<'PY_APPCAST'
+          import json
           import os
           import xml.sax.saxutils as xml
           from pathlib import Path
@@ -442,9 +445,20 @@ jobs:
           </rss>
           '''
           Path("docs/appcast.xml").write_text(content, encoding="utf-8")
+          if os.environ["PRERELEASE"] == "false":
+              release_metadata = {
+                  "version": values["VERSION"],
+                  "downloadURL": values["DOWNLOAD_URL"],
+                  "releaseNotesURL": values["RELEASE_NOTES_URL"],
+              }
+              Path("docs/app-release.json").write_text(
+                  json.dumps(release_metadata, indent=2) + "\n",
+                  encoding="utf-8",
+              )
           PY_APPCAST
 
           python3 -c 'import xml.etree.ElementTree as ET; ET.parse("docs/appcast.xml")'
+          python3 -m json.tool docs/app-release.json >/dev/null
 
       - name: Upload notarized DMG artifact
         uses: actions/upload-artifact@v4
@@ -462,7 +476,9 @@ jobs:
         run: |
           RELEASE_ARGS=(--title "${PROJECT_NAME} ${VERSION}" --notes-file "$RELEASE_NOTES_PATH")
           if [[ "$PRERELEASE" == "true" ]]; then
-            RELEASE_ARGS+=(--prerelease)
+            RELEASE_ARGS+=(--prerelease --latest=false)
+          else
+            RELEASE_ARGS+=(--latest)
           fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -472,109 +488,26 @@ jobs:
             gh release create "$TAG" "$DMG_PATH#${PROJECT_NAME}.dmg" "$SHA256_PATH#${PROJECT_NAME}.sha256" "${RELEASE_ARGS[@]}"
           fi
 
-      - name: Open Homebrew tap update PR
-        env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
-        run: |
-          TAP_REPOSITORY="ggbond268/homebrew-mactools"
-
-          if [[ "$PRERELEASE" == "true" ]]; then
-            echo "Skipping Homebrew tap update for prerelease ${TAG}."
-            exit 0
-          fi
-
-          if [[ -z "$HOMEBREW_GITHUB_API_TOKEN" ]]; then
-            echo "Skipping Homebrew tap update because HOMEBREW_GITHUB_API_TOKEN is not configured."
-            exit 0
-          fi
-
-          export GH_TOKEN="$HOMEBREW_GITHUB_API_TOKEN"
-
-          SHA256="$(awk '{ print $1; exit }' "$SHA256_PATH")"
-          if [[ -z "$SHA256" ]]; then
-            echo "Unable to read SHA256 from ${SHA256_PATH}." >&2
-            exit 1
-          fi
-          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${PROJECT_NAME}.dmg"
-          export SHA256 DOWNLOAD_URL
-          TAP_DIR="$(mktemp -d)"
-          BRANCH="update-mactools-${VERSION}"
-
-          gh repo clone "$TAP_REPOSITORY" "$TAP_DIR"
-          cd "$TAP_DIR"
-          gh auth setup-git
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$BRANCH"
-
-          mkdir -p Casks
-          ruby -e 'File.write("Casks/mactools.rb", <<~CASK)
-            cask "mactools" do
-              version "#{ENV.fetch("VERSION")}"
-              sha256 "#{ENV.fetch("SHA256")}"
-
-              url "#{ENV.fetch("DOWNLOAD_URL")}"
-              name "MacTools"
-              desc "Menu bar toolbox"
-              homepage "https://github.com/#{ENV.fetch("GITHUB_REPOSITORY")}"
-
-              livecheck do
-                url :url
-                strategy :github_latest
-              end
-
-              auto_updates true
-              depends_on macos: :sonoma
-
-              app "MacTools.app"
-            end
-          CASK'
-
-          brew style Casks/mactools.rb
-
-          if git diff --quiet -- Casks/mactools.rb; then
-            echo "Homebrew tap cask is already up to date."
-            exit 0
-          fi
-
-          git add Casks/mactools.rb
-          git commit -m "Update mactools to ${VERSION}"
-          git push --force-with-lease origin "$BRANCH"
-
-          pr_number="$(gh pr list --repo "$TAP_REPOSITORY" --head "$BRANCH" --json number --jq '.[0].number // empty')"
-          if [[ -n "$pr_number" ]]; then
-            echo "Homebrew tap update PR already exists: #${pr_number}"
-          else
-            pr_url="$(gh pr create \
-              --repo "$TAP_REPOSITORY" \
-              --base main \
-              --head "$BRANCH" \
-              --title "Update mactools to ${VERSION}" \
-              --body "Updates the MacTools cask for ${TAG}.")"
-            pr_number="${pr_url##*/}"
-            echo "Created Homebrew tap update PR: #${pr_number}"
-          fi
-
-          gh pr merge "$pr_number" \
-            --repo "$TAP_REPOSITORY" \
-            --squash \
-            --delete-branch \
-            --subject "Update mactools to ${VERSION}"
-
-      - name: Commit appcast to main
+      - name: Commit app release metadata to main
         run: |
           cp docs/appcast.xml "$RUNNER_TEMP/appcast.xml"
+          if [[ "$PRERELEASE" == "false" ]]; then
+            cp docs/app-release.json "$RUNNER_TEMP/app-release.json"
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git checkout -B main origin/main
           cp "$RUNNER_TEMP/appcast.xml" docs/appcast.xml
           git add docs/appcast.xml
+          if [[ "$PRERELEASE" == "false" ]]; then
+            cp "$RUNNER_TEMP/app-release.json" docs/app-release.json
+            git add docs/app-release.json
+          fi
           if git diff --cached --quiet; then
-            echo "No appcast changes to commit."
+            echo "No app release metadata changes to commit."
           else
-            git commit -m "ci: update appcast for ${TAG}"
+            git commit -m "ci: update app release metadata for ${TAG}"
             git push origin main
           fi
 

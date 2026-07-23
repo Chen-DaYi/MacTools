@@ -48,7 +48,7 @@
       "summary": "選擇並退出正在運行的App，或一鍵退出全部"
     }
   },
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 3,
   "bundleRelativePath": "QuitApps.bundle",

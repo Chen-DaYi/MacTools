@@ -1,7 +1,44 @@
 import AppKit
+import Carbon
 import Combine
 import SwiftUI
 import MacToolsPluginKit
+
+enum MenuBarPanelPresentationAction: Equatable {
+    case open
+    case switchPanel
+    case focus
+
+    static func resolve(
+        isPanelShown: Bool,
+        selectedTab: MenuBarPanelTab,
+        requestedTab: MenuBarPanelTab
+    ) -> MenuBarPanelPresentationAction {
+        guard isPanelShown else {
+            return .open
+        }
+
+        return selectedTab == requestedTab ? .focus : .switchPanel
+    }
+}
+
+enum MenuBarPanelToggleAction: Equatable {
+    case open
+    case close
+    case switchPanel
+
+    static func resolve(
+        isPanelShown: Bool,
+        selectedTab: MenuBarPanelTab,
+        requestedTab: MenuBarPanelTab
+    ) -> MenuBarPanelToggleAction {
+        guard isPanelShown else {
+            return .open
+        }
+
+        return selectedTab == requestedTab ? .close : .switchPanel
+    }
+}
 
 enum MenuBarPanelWindowRegistry {
     private static let secondaryPanelIdentifier = NSUserInterfaceItemIdentifier(
@@ -41,6 +78,7 @@ final class MenuBarPanelPresenter: NSObject {
     private var appearanceObserver: NSObjectProtocol?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var heightRefreshCancellables: Set<AnyCancellable> = []
+    private var keyboardShortcutMonitor: Any?
     private var selectedPanel: PanelKind = .components
 
     init(
@@ -100,6 +138,7 @@ final class MenuBarPanelPresenter: NSObject {
         if let appearanceObserver {
             NotificationCenter.default.removeObserver(appearanceObserver)
         }
+        removeKeyboardShortcutMonitorIfNeeded()
         runtimeLocaleCancellable?.cancel()
     }
 
@@ -123,6 +162,14 @@ final class MenuBarPanelPresenter: NSObject {
     var debugPopoverForTests: NSPopover {
         popover
     }
+
+    var debugHasKeyboardShortcutMonitorForTests: Bool {
+        keyboardShortcutMonitor != nil
+    }
+
+    var debugSelectedTabForTests: MenuBarPanelTab {
+        tab(for: selectedPanel)
+    }
     #endif
 
     func toggleFeaturePanel(relativeTo button: NSStatusBarButton) {
@@ -131,6 +178,14 @@ final class MenuBarPanelPresenter: NSObject {
 
     func toggleComponentPanel(relativeTo button: NSStatusBarButton) {
         toggle(.components, relativeTo: button)
+    }
+
+    func showFeaturePanel(relativeTo button: NSStatusBarButton) {
+        present(.features, relativeTo: button)
+    }
+
+    func showDashboard(relativeTo button: NSStatusBarButton) {
+        present(.components, relativeTo: button)
     }
 
     func dismissPanels() {
@@ -143,12 +198,26 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private func toggle(_ panel: PanelKind, relativeTo button: NSStatusBarButton) {
-        if popover.isShown, selectedPanel == panel {
+        let action = MenuBarPanelToggleAction.resolve(
+            isPanelShown: popover.isShown,
+            selectedTab: tab(for: selectedPanel),
+            requestedTab: tab(for: panel)
+        )
+
+        if action == .close {
             popover.performClose(nil)
             return
         }
 
-        let wasShown = popover.isShown
+        present(panel, relativeTo: button)
+    }
+
+    private func present(_ panel: PanelKind, relativeTo button: NSStatusBarButton) {
+        let action = MenuBarPanelPresentationAction.resolve(
+            isPanelShown: popover.isShown,
+            selectedTab: tab(for: selectedPanel),
+            requestedTab: tab(for: panel)
+        )
         selectedPanel = panel
         updateContent(
             selectedTab: tab(for: panel),
@@ -157,7 +226,7 @@ final class MenuBarPanelPresenter: NSObject {
         )
         updatePanelSurfaceVisibility(for: tab(for: panel), isPanelVisible: true)
 
-        if wasShown {
+        if action != .open {
             focus(popover)
             scheduleHeightRefresh(for: tab(for: panel))
             return
@@ -210,6 +279,59 @@ final class MenuBarPanelPresenter: NSObject {
         focus(popover)
     }
 
+    private func installKeyboardShortcutMonitorIfNeeded() {
+        guard keyboardShortcutMonitor == nil else {
+            return
+        }
+
+        // Host navigation wins before the responder chain so plugin content
+        // cannot shadow these two panel-level commands.
+        keyboardShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+            [weak self] event in
+            self?.handleKeyboardShortcut(event) ?? event
+        }
+    }
+
+    private func removeKeyboardShortcutMonitorIfNeeded() {
+        guard let keyboardShortcutMonitor else {
+            return
+        }
+
+        NSEvent.removeMonitor(keyboardShortcutMonitor)
+        self.keyboardShortcutMonitor = nil
+    }
+
+    private func handleKeyboardShortcut(_ event: NSEvent) -> NSEvent? {
+        guard
+            popover.isShown,
+            event.window === popover.contentViewController?.view.window,
+            let tab = Self.keyboardShortcutTab(for: event)
+        else {
+            return event
+        }
+
+        select(tab)
+        return nil
+    }
+
+    // Internal so focused tests can validate layout-independent key matching.
+    static func keyboardShortcutTab(for event: NSEvent) -> MenuBarPanelTab? {
+        let shortcutModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+        let modifiers = event.modifierFlags.intersection(shortcutModifiers)
+        guard modifiers == .command else {
+            return nil
+        }
+
+        switch event.keyCode {
+        case UInt16(kVK_ANSI_1):
+            return .components
+        case UInt16(kVK_ANSI_2):
+            return .features
+        default:
+            return nil
+        }
+    }
+
     private func focus(_ popover: NSPopover) {
         NSApplication.shared.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
@@ -220,8 +342,20 @@ final class MenuBarPanelPresenter: NSObject {
                 return
             }
 
-            popover.contentViewController?.view.window?.makeKey()
+            guard let window = popover.contentViewController?.view.window else {
+                return
+            }
+
+            window.makeKey()
+            Self.clearAutomaticInitialFocus(in: window)
         }
+    }
+
+    /// Prevent SwiftUI from leaving the first toolbar button focused when the
+    /// popover becomes key. Keyboard navigation can still focus controls
+    /// normally after the popover opens.
+    static func clearAutomaticInitialFocus(in window: NSWindow) {
+        window.makeFirstResponder(nil)
     }
 
     private func observeAppearancePreference() {
@@ -402,8 +536,17 @@ final class MenuBarPanelPresenter: NSObject {
 }
 
 extension MenuBarPanelPresenter: NSPopoverDelegate {
+    func popoverWillShow(_ notification: Notification) {
+        guard let openingPopover = notification.object as? NSPopover, openingPopover === popover else {
+            return
+        }
+
+        installKeyboardShortcutMonitorIfNeeded()
+    }
+
     func popoverDidClose(_ notification: Notification) {
         if let closedPopover = notification.object as? NSPopover, closedPopover === popover {
+            removeKeyboardShortcutMonitorIfNeeded()
             updateContent(
                 selectedTab: tab(for: selectedPanel),
                 screen: NSScreen.main,
@@ -618,13 +761,11 @@ private struct MenuBarPanelToolbar: View {
     let onQuit: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
+        ZStack {
             MenuBarPanelTabSwitcher(
                 selectedTab: selectedTab,
                 onTabSelection: onTabSelection
             )
-
-            Spacer(minLength: 8)
 
             HStack(spacing: 4) {
                 MenuBarPanelIconButton(
@@ -639,6 +780,7 @@ private struct MenuBarPanelToolbar: View {
                     action: onQuit
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 }
@@ -667,14 +809,14 @@ private struct MenuBarPanelTabSwitcher: View {
                 .help(tab.accessibilityTitle)
                 .accessibilityLabel(tab.accessibilityTitle)
                 .background {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    Capsule()
                         .fill(selectedTab == tab ? Color.primary.opacity(0.10) : Color.clear)
                 }
             }
         }
         .padding(3)
         .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            Capsule()
                 .fill(Color.primary.opacity(0.06))
         }
     }
@@ -691,16 +833,17 @@ private struct MenuBarPanelIconButton: View {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .frame(width: 28, height: 24)
+                .background {
+                    Capsule()
+                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+                }
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(accessibilityTitle)
         .accessibilityLabel(accessibilityTitle)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
-        }
         .onHover { isHovered = $0 }
     }
 }

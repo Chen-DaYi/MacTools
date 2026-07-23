@@ -48,7 +48,7 @@
       "summary": "選單列圖標隱藏功能的設定與彈窗界面"
     }
   },
-  "version": "1.0.7",
+  "version": "1.0.8",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 3,
   "bundleRelativePath": "MenuBarHidden.bundle",

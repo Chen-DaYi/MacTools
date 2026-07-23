@@ -1,6 +1,294 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "plugin.management.hideFromDashboardFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إخفاء %@ من لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@ im Dashboard ausblenden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Hide %@ from Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Ocultar %@ del panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Masquer %@ du tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@をダッシュボードから隠す" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@을(를) 대시보드에서 가리기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ocultar %@ do painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Скрыть %@ с панели управления" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从仪表盘隐藏%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "從儀表板隱藏%@" } }
+      }
+    },
+    "plugin.management.hideFromFeaturePanelFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إخفاء %@ من لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@ im Funktionsbereich ausblenden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Hide %@ from Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Ocultar %@ del panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Masquer %@ du panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@を機能パネルから隠す" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@을(를) 기능 패널에서 가리기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ocultar %@ do painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Скрыть %@ с панели функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从功能面板隐藏%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "從功能面板隱藏%@" } }
+      }
+    },
+    "plugin.management.showInFeaturePanelFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إظهار %@ في لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@ im Funktionsbereich anzeigen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show %@ in Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Mostrar %@ en el panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Afficher %@ dans le panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@を機能パネルに表示" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@을(를) 기능 패널에 표시" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostrar %@ no painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показать %@ на панели функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在功能面板显示%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在功能面板顯示%@" } }
+      }
+    },
+    "plugin.management.showOnDashboardFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إظهار %@ في لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@ im Dashboard anzeigen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show %@ on Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Mostrar %@ en el panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Afficher %@ sur le tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@をダッシュボードに表示" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@을(를) 대시보드에 표시" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostrar %@ no painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показать %@ на панели управления" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在仪表盘显示%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在儀表板顯示%@" } }
+      }
+    },
+    "plugin.management.uninstall.confirmationMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "ستتم إزالته من %@. ستُزال اختصاراته وإدخاله في الإعدادات، وسيتوقف عمله في الخلفية. ستُحتفَظ ببيانات الإضافة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Es wird aus %@ entfernt. Seine Kurzbefehle und sein Eintrag in den Einstellungen werden entfernt, und die Hintergrundarbeit wird beendet. Plug-in-Daten bleiben erhalten." } },
+        "en": { "stringUnit": { "state": "translated", "value": "It will be removed from %@. Its shortcuts and settings entry will be removed, and its background work will stop. Plugin data will be kept." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Se eliminará de %@. Se eliminarán sus atajos y su entrada en Ajustes, y se detendrá su actividad en segundo plano. Se conservarán los datos del complemento." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Il sera supprimé de %@. Ses raccourcis et son entrée dans les réglages seront supprimés, et son activité en arrière-plan s’arrêtera. Les données du module seront conservées." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ から削除されます。ショートカットと設定項目が削除され、バックグラウンドでの処理も停止します。プラグインのデータは保持されます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@에서 제거됩니다. 단축키와 설정 항목이 제거되고 백그라운드 작업도 중단됩니다. 플러그인 데이터는 유지됩니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ele será removido de %@. Seus atalhos e a entrada nos Ajustes serão removidos, e a atividade em segundo plano será interrompida. Os dados do plug-in serão mantidos." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Плагин будет удалён из %@. Его сочетания клавиш и пункт настроек будут удалены, а фоновая работа остановится. Данные плагина будут сохранены." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "它将从%@移除，快捷键和设置入口也会移除，后台工作将停止。插件数据会保留。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "它將從%@移除，快捷鍵和設定入口也會移除，背景工作將停止。外掛資料會保留。" } }
+      }
+    },
+    "plugin.management.uninstall.confirmationTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "هل تريد إلغاء تثبيت «%@»؟" } },
+        "de": { "stringUnit": { "state": "translated", "value": "„%@“ deinstallieren?" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Uninstall “%@”?" } },
+        "es": { "stringUnit": { "state": "translated", "value": "¿Desinstalar “%@”?" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Désinstaller « %@ » ?" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "「%@」をアンインストールしますか？" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "“%@”을(를) 제거할까요?" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Desinstalar “%@”?" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Удалить «%@»?" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "卸载“%@”？" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "解除安裝「%@」？" } }
+      }
+    },
+    "plugin.management.uninstall.confirmationPausedNotice": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تم إيقاف تأكيدات إلغاء التثبيت مؤقتًا لجلسة الإعدادات هذه." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Deinstallationsbestätigungen sind für diese Einstellungen-Sitzung pausiert." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Uninstall confirmations are paused for this Settings session." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Las confirmaciones de desinstalación están pausadas durante esta sesión de Ajustes." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Les confirmations de désinstallation sont suspendues pour cette session de réglages." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この設定セッションではアンインストールの確認が一時停止されています。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 설정 세션에서는 제거 확인이 일시 중지됩니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "As confirmações de desinstalação estão pausadas nesta sessão de Ajustes." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Подтверждения удаления приостановлены для этого сеанса настроек." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本次设置会话已暂停卸载确认。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本次設定工作階段已暫停解除安裝確認。" } }
+      }
+    },
+    "plugin.management.uninstall.pauseConfirmation": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "عدم السؤال مرة أخرى خلال جلسة الإعدادات هذه" } },
+        "de": { "stringUnit": { "state": "translated", "value": "In dieser Einstellungen-Sitzung nicht erneut fragen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Don’t ask again for this Settings session" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No volver a preguntar en esta sesión de Ajustes" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ne plus demander pendant cette session de réglages" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この設定セッションでは今後確認しない" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 설정 세션에서는 다시 묻지 않기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não perguntar novamente nesta sessão de Ajustes" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Больше не спрашивать в этом сеансе настроек" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在本次设置会话中不再询问" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在本次設定工作階段中不再詢問" } }
+      }
+    },
+    "plugin.management.uninstall.resumeConfirmation": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إعادة تشغيل التأكيدات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Bestätigungen wieder einschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Turn Confirmations Back On" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Volver a activar las confirmaciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Réactiver les confirmations" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "確認を再びオンにする" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "확인 다시 켜기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Reativar confirmações" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Снова включить подтверждения" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重新开启确认" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "重新開啟確認" } }
+      }
+    },
+    "plugin.management.viewMarketplace": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "عرض في المتجر" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Im Marktplatz anzeigen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "View in Marketplace" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Ver en Marketplace" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Voir dans la place de marché" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "マーケットプレイスで表示" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "마켓플레이스에서 보기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ver na Loja" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показать в магазине" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在市场中查看" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在市集中檢視" } }
+      }
+    },
+    "plugin.management.active": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "نشط" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Aktiv" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Active" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Activo" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Actif" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "使用中" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "활성" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ativo" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Активен" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用中" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "使用中" } }
+      }
+    },
+    "plugin.capability.both": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة المعلومات ولوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard und Funktionsbereich" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Dashboard and Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel y panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Tableau de bord et panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードと機能パネル" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드 및 기능 패널" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel e painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель управления и панель функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘与功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板與功能面板" } }
+      }
+    },
+    "plugin.capability.dashboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボード" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель управления" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板" } }
+      }
+    },
+    "plugin.capability.featurePanel": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsbereich" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネル" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
+      }
+    },
+    "plugin.capability.settingsOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الإعدادات فقط" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Nur Einstellungen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Settings Only" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Solo ajustes" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Réglages uniquement" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "設定のみ" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "설정만" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Somente ajustes" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Только настройки" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仅设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "僅設定" } }
+      }
+    },
+    "plugin.capability.unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "ميزات الإضافة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Plug-in-Funktionen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Plugin Features" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Funciones del complemento" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Fonctionnalités du module" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "プラグインの機能" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "플러그인 기능" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Recursos do plug-in" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Возможности плагина" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件功能" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛功能" } }
+      }
+    },
+    "plugin.management.openSettings": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح إعدادات الإضافة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Plug-in-Einstellungen öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open Plugin Settings" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir ajustes del complemento" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir les réglages du module" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "プラグイン設定を開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "플러그인 설정 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir ajustes do plug-in" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть настройки плагина" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开插件设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開外掛設定" } }
+      }
+    },
+    "plugin.management.openSettingsForPlugin": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح إعدادات %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@-Einstellungen öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open %@ Settings" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir ajustes de %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir les réglages de %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@の設定を開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@ 설정 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir ajustes de %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть настройки %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开%@设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開%@設定" } }
+      }
+    },
     "plugin.autoUpdate.detail.checking": {
       "extractionState": "manual",
       "localizations": {
@@ -9882,13 +10170,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "名称 A → Z"
+            "value": "名称（升序）"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "名稱 A → Z"
+            "value": "名稱（遞增）"
           }
         },
         "de": {
@@ -9912,13 +10200,13 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "名前 A → Z"
+            "value": "名前順（昇順）"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이름 A → Z"
+            "value": "이름순 (오름차순)"
           }
         },
         "pt": {
@@ -9930,13 +10218,13 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Имя A → Z"
+            "value": "Имя (по возрастанию)"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "الاسم A → Z"
+            "value": "الاسم (تصاعدي)"
           }
         }
       }
@@ -9953,13 +10241,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "名称 Z → A"
+            "value": "名称（降序）"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "名稱 Z → A"
+            "value": "名稱（遞減）"
           }
         },
         "de": {
@@ -9983,13 +10271,13 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "名前 Z → A"
+            "value": "名前順（降順）"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이름 Z → A"
+            "value": "이름순 (내림차순)"
           }
         },
         "pt": {
@@ -10001,13 +10289,13 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Имя Z → A"
+            "value": "Имя (по убыванию)"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "الاسم Z → A"
+            "value": "الاسم (تنازلي)"
           }
         }
       }

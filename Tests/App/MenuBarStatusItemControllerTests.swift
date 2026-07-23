@@ -149,35 +149,53 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
     }
 
-    func testExpandedSessionUsesOptionAsRightClickAction() {
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: []
-            ),
-            .componentPanel
+    func testTypedPanelRequestsIgnoreSwappedClickPreference() {
+        let suite = "MenuBarTypedPresentationPreferenceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(
+            MenuBarClickBehaviorPreference.swapped.rawValue,
+            forKey: MenuBarClickBehaviorPreference.userDefaultsKey
         )
+
+        let isSwapped = MenuBarClickBehaviorPreference.current(defaults).isSwapped
+        XCTAssertTrue(isSwapped)
         XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: [.control]
-            ),
-            .componentPanel
-        )
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: [.option]
-            ),
+            MenuBarStatusItemInvocation.invocation(for: nil, swapped: isSwapped),
             .featurePanel
         )
         XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: true,
-                liveModifierFlags: [.option]
-            ),
-            .componentPanel
+            MenuBarStatusItemPresentationAction(request: .toggleDashboard),
+            .toggleComponentPanel
         )
+        XCTAssertEqual(
+            MenuBarStatusItemPresentationAction(request: .toggleFeaturePanel),
+            .toggleFeaturePanel
+        )
+    }
+
+    func testGlobalMousePolicyRecognizesStatusItemLocation() {
+        let buttonFrame = NSRect(x: 100, y: 900, width: 24, height: 24)
+
+        XCTAssertTrue(
+            MenuBarGlobalMouseEventPolicy.isStatusItemClick(
+                for: globalMouseEvent(x: 110, y: 910),
+                buttonFrame: buttonFrame
+            )
+        )
+        XCTAssertFalse(
+            MenuBarGlobalMouseEventPolicy.isStatusItemClick(
+                for: globalMouseEvent(x: 400, y: 400),
+                buttonFrame: buttonFrame
+            )
+        )
+    }
+
+    private func globalMouseEvent(
+        x: Double,
+        y: Double
+    ) -> MenuBarGlobalMouseEvent {
+        MenuBarGlobalMouseEvent(screenX: x, screenY: y)
     }
 
 }

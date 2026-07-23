@@ -85,7 +85,7 @@ public enum PluginDeactivationReason: Equatable {
     case hostShutdown
 
     /// `true` when the plugin should revert any external side-effects it owns
-    /// (user disabled, plugin uninstalled, or app is quitting).
+    /// (host isolation, plugin uninstalled, or app is quitting).
     /// `false` during hot-reload updates — the new version will re-activate.
     public var requiresStateCleanup: Bool {
         switch self {
@@ -272,24 +272,70 @@ public enum MenuBarControlItemDefaults {
 
 public struct PluginConfigurationContext {
     public let pluginID: String
+    public let shortcutItems: [ShortcutSettingsItem]
 
-    public init(pluginID: String) {
+    private let recordShortcutHandler: (String, ShortcutBinding) -> String?
+    private let beginShortcutRecordingHandler: (String) -> Void
+    private let clearShortcutHandler: (String) -> Void
+    private let resetShortcutHandler: (String) -> Void
+
+    public init(
+        pluginID: String,
+        shortcutItems: [ShortcutSettingsItem] = [],
+        recordShortcut: @escaping (String, ShortcutBinding) -> String? = { _, _ in nil },
+        beginShortcutRecording: @escaping (String) -> Void = { _ in },
+        clearShortcut: @escaping (String) -> Void = { _ in },
+        resetShortcut: @escaping (String) -> Void = { _ in }
+    ) {
         self.pluginID = pluginID
+        self.shortcutItems = shortcutItems
+        self.recordShortcutHandler = recordShortcut
+        self.beginShortcutRecordingHandler = beginShortcutRecording
+        self.clearShortcutHandler = clearShortcut
+        self.resetShortcutHandler = resetShortcut
+    }
+
+    public func shortcutItem(definitionID: String) -> ShortcutSettingsItem? {
+        shortcutItems.first { $0.id == "\(pluginID).shortcut.\(definitionID)" }
+    }
+
+    public func recordShortcut(
+        _ binding: ShortcutBinding,
+        for itemID: String
+    ) -> PluginShortcutRecordingResult {
+        PluginShortcutRecordingResult.from(
+            errorMessage: recordShortcutHandler(itemID, binding)
+        )
+    }
+
+    public func beginShortcutRecording(for itemID: String) {
+        beginShortcutRecordingHandler(itemID)
+    }
+
+    public func clearShortcut(for itemID: String) {
+        clearShortcutHandler(itemID)
+    }
+
+    public func resetShortcut(for itemID: String) {
+        resetShortcutHandler(itemID)
     }
 }
 
 public struct PluginConfiguration {
     public let description: String?
     public let prefersFullHeight: Bool
+    public let integratedShortcutGroupIDs: Set<String>
     public let makeView: (PluginConfigurationContext) -> AnyView
 
     public init<Content: View>(
         description: String? = nil,
         prefersFullHeight: Bool = false,
+        integratedShortcutGroupIDs: Set<String> = [],
         @ViewBuilder content: @escaping (PluginConfigurationContext) -> Content
     ) {
         self.description = description
         self.prefersFullHeight = prefersFullHeight
+        self.integratedShortcutGroupIDs = integratedShortcutGroupIDs
         self.makeView = { context in
             AnyView(content(context))
         }

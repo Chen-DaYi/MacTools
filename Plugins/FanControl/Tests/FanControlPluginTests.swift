@@ -180,7 +180,7 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertEqual(stateChangeCount, 2)
     }
 
-    func testFeatureVisibilityAndDisclosureControlActiveMonitoring() async throws {
+    func testPanelVisibilityAndDisclosureControlActiveMonitoring() async throws {
         let snapshot = FanSnapshot(
             fanCount: 1,
             fanSpeeds: [3600],
@@ -199,20 +199,24 @@ final class FanControlPluginTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(40))
         let idleReadCount = reader.readCount
 
-        plugin.featureVisibilityDidChange(true)
         plugin.handleAction(.setDisclosureExpanded(true))
         try await Task.sleep(for: .milliseconds(45))
-        let activeReadCount = reader.readCount
+        let expandedWhileHiddenReadCount = reader.readCount
 
-        plugin.featureVisibilityDidChange(false)
+        plugin.panelSurfaceDidBecomeVisible(.primary)
         try await Task.sleep(for: .milliseconds(45))
-        let closedReadCount = reader.readCount
+        let visibleReadCount = reader.readCount
+
+        plugin.panelSurfaceDidBecomeHidden(.primary)
+        try await Task.sleep(for: .milliseconds(45))
+        let hiddenReadCount = reader.readCount
 
         plugin.deactivate(reason: .disabled)
 
         XCTAssertLessThanOrEqual(idleReadCount, 2)
-        XCTAssertGreaterThanOrEqual(activeReadCount - idleReadCount, 3)
-        XCTAssertLessThanOrEqual(closedReadCount - activeReadCount, 2)
+        XCTAssertLessThanOrEqual(expandedWhileHiddenReadCount - idleReadCount, 2)
+        XCTAssertGreaterThanOrEqual(visibleReadCount - expandedWhileHiddenReadCount, 3)
+        XCTAssertLessThanOrEqual(hiddenReadCount - visibleReadCount, 2)
     }
 
     private func makePlugin(

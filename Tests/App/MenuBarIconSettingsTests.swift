@@ -26,7 +26,15 @@ final class MenuBarIconSettingsTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    func testImportPersistsCustomIconAndRecentItem() throws {
+    func testBundledDefaultIconIsAvailable() {
+        XCTAssertNotNil(NSImage(named: NSImage.Name("MenuBarIcon")))
+    }
+
+    func testBundledAppIconIsAvailable() {
+        XCTAssertNotNil(AppMetadata.appIcon)
+    }
+
+    func testImportPersistsCurrentCustomIcon() throws {
         let sourceURL = try makeImageFile(name: "status-icon.png", color: .systemBlue)
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
 
@@ -35,13 +43,28 @@ final class MenuBarIconSettingsTests: XCTestCase {
 
         XCTAssertTrue(settings.hasCustomIcon)
         XCTAssertNil(settings.lastErrorMessage)
-        XCTAssertEqual(settings.recentItems.first?.displayName, "status-icon")
         XCTAssertFalse(payload.isTemplate)
         XCTAssertEqual(payload.image.size, NSSize(width: 18, height: 18))
 
         let reloadedSettings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+        let reloadedPayload = reloadedSettings.imagePayload(for: NSAppearance(named: .aqua))
         XCTAssertTrue(reloadedSettings.hasCustomIcon)
-        XCTAssertEqual(reloadedSettings.recentItems.count, 1)
+        XCTAssertFalse(reloadedPayload.isTemplate)
+        XCTAssertEqual(reloadedPayload.image.size, NSSize(width: 18, height: 18))
+    }
+
+    func testImportPreservesWhiteArtworkOnTransparentBackground() throws {
+        let sourceURL = try makeTransparentImageFile(
+            name: "white-transparent.png",
+            artworkColor: .white
+        )
+        let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+
+        settings.importIcon(from: sourceURL)
+        let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
+
+        XCTAssertNil(settings.lastErrorMessage)
+        XCTAssertGreaterThan(visiblePixelCount(in: payload.image), 500)
     }
 
     func testDarkAppearanceFallsBackToLightCustomIcon() throws {
@@ -101,6 +124,95 @@ final class MenuBarIconSettingsTests: XCTestCase {
 
         XCTAssertEqual(preview.size.height, MenuBarIconProcessing.standardIconPointSize)
         XCTAssertGreaterThan(preview.size.width, MenuBarIconProcessing.standardIconPointSize)
+        XCTAssertFalse(preview.isTemplate)
+    }
+
+    func testTemplateGalleryAssetAdaptsThroughAppKitButton() async throws {
+        let sourceURL = try makeTransparentImageFile(
+            name: "template-black.png",
+            artworkColor: .black
+        )
+        let baseURL = URL(fileURLWithPath: sourceURL.deletingLastPathComponent().path + "/", isDirectory: true)
+        let asset = MenuBarIconGalleryAsset(
+            id: "template-gallery-icon",
+            title: "Template Gallery Icon",
+            categoryID: "tests",
+            version: "1",
+            renderingMode: .template,
+            previewPath: sourceURL.lastPathComponent,
+            framePaths: [sourceURL.lastPathComponent],
+            framePathPattern: nil,
+            archivePath: nil,
+            archiveFramePathPattern: nil,
+            frameCount: 1,
+            frameDuration: 1.0 / 6.0
+        )
+        let remoteRoot = rootDirectory
+            .appendingPathComponent("MenuBarIcons", isDirectory: true)
+            .appendingPathComponent("RemoteAssets", isDirectory: true)
+        let store = MenuBarIconRemoteAssetStore(rootDirectory: remoteRoot)
+        let preview = try await store.loadPreviewImage(
+            for: asset,
+            contentBaseURL: baseURL,
+            allowsFileResources: true
+        )
+        let selection = try await store.installAsset(
+            asset,
+            contentBaseURL: baseURL,
+            allowsFileResources: true
+        )
+        let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+
+        settings.useRemoteAsset(selection)
+        let payload = settings.imagePayload(for: NSAppearance(named: .darkAqua))
+        let reloadedSettings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+        let reloadedPayload = reloadedSettings.imagePayload(for: NSAppearance(named: .darkAqua))
+        let lightBrightness = averageBrightnessWhenRendered(payload.image, appearance: .aqua)
+        let darkBrightness = averageBrightnessWhenRendered(payload.image, appearance: .darkAqua)
+
+        XCTAssertTrue(preview.isTemplate)
+        XCTAssertEqual(selection.renderingMode, .template)
+        XCTAssertTrue(payload.isTemplate)
+        XCTAssertTrue(payload.animationFrames.allSatisfy(\.isTemplate))
+        XCTAssertTrue(reloadedPayload.isTemplate)
+        XCTAssertTrue(reloadedPayload.animationFrames.allSatisfy(\.isTemplate))
+        XCTAssertLessThan(lightBrightness, 30)
+        XCTAssertGreaterThan(darkBrightness, 100)
+        XCTAssertGreaterThan(darkBrightness - lightBrightness, 80)
+    }
+
+    func testLegacyGalleryAssetWithoutRenderingModeDefaultsToOriginal() throws {
+        let data = Data(#"""
+        {
+            "id":"legacy",
+            "title":"Legacy",
+            "categoryID":"tests",
+            "version":"1",
+            "framePaths":["frame.png"],
+            "frameCount":1,
+            "frameDuration":0.1
+        }
+        """#.utf8)
+
+        let asset = try MenuBarIconGalleryCoding.decoder.decode(MenuBarIconGalleryAsset.self, from: data)
+
+        XCTAssertEqual(asset.renderingMode, .original)
+    }
+
+    func testLegacyRemoteSelectionWithoutRenderingModeDefaultsToOriginal() throws {
+        let data = Data(#"""
+        {
+            "id":"legacy",
+            "version":"1",
+            "displayName":"Legacy",
+            "frameFileNames":["frame-000.png"],
+            "frameDuration":0.1
+        }
+        """#.utf8)
+
+        let selection = try JSONDecoder().decode(MenuBarIconRemoteAssetSelection.self, from: data)
+
+        XCTAssertEqual(selection.renderingMode, .original)
     }
 
     func testAnimatedFramesShareVisibleBounds() throws {
@@ -125,7 +237,7 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertEqual(renderedFrames[0].size.height, MenuBarIconProcessing.standardIconPointSize)
     }
 
-    func testResetToDefaultClearsCustomSelectionButKeepsRecents() throws {
+    func testResetToDefaultClearsCustomSelection() throws {
         let sourceURL = try makeImageFile(name: "reset.png", color: .systemGreen)
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
 
@@ -133,42 +245,41 @@ final class MenuBarIconSettingsTests: XCTestCase {
         settings.resetToDefault()
 
         XCTAssertFalse(settings.hasCustomIcon)
-        XCTAssertEqual(settings.recentItems.count, 1)
         XCTAssertTrue(settings.imagePayload(for: NSAppearance(named: .aqua)).isTemplate)
     }
 
-    func testRecentItemsKeepOnlyLatestSix() throws {
+    func testLegacySpeedSettingsAreIgnoredWhileCurrentIconMigrates() throws {
+        let sourceURL = try makeImageFile(name: "legacy.png", color: .systemPurple)
+        let localIconsDirectory = rootDirectory
+            .appendingPathComponent("MenuBarIcons", isDirectory: true)
+            .appendingPathComponent("Recents", isDirectory: true)
+        try FileManager.default.createDirectory(at: localIconsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(
+            at: sourceURL,
+            to: localIconsDirectory.appendingPathComponent("legacy.png")
+        )
+        let legacyState: [String: Any] = [
+            "animationSpeedMode": "adaptiveSystemLoad",
+            "manualAnimationSpeedMultiplier": 5.0,
+            "lightIconFileName": "legacy.png",
+            "darkIconFileName": "legacy.png",
+            "recentItems": [[
+                "fileName": "legacy.png",
+                "frameFileNames": ["legacy.png"],
+                "frameDuration": 0.2
+            ]]
+        ]
+        userDefaults.set(
+            try JSONSerialization.data(withJSONObject: legacyState),
+            forKey: "menubar.icon.settings"
+        )
+
         let settings = MenuBarIconSettings(userDefaults: userDefaults, rootDirectory: rootDirectory)
+        let payload = settings.imagePayload(for: NSAppearance(named: .aqua))
 
-        for index in 0..<7 {
-            let sourceURL = try makeImageFile(name: "recent-\(index).png", color: .systemBlue)
-            settings.importIcon(from: sourceURL)
-        }
-
-        XCTAssertEqual(settings.recentItems.count, 6)
-        XCTAssertEqual(settings.recentItems.first?.displayName, "recent-6")
-        XCTAssertFalse(settings.recentItems.contains { $0.displayName == "recent-0" })
-    }
-
-    func testAnimationSpeedPolicyClampsAndUsesSystemLoad() {
-        XCTAssertEqual(
-            MenuBarIconAnimationSpeedPolicy.normalizedManualMultiplier(9),
-            MenuBarIconAnimationSpeedPolicy.maximumMultiplier
-        )
-
-        let lowLoadMultiplier = MenuBarIconAnimationSpeedPolicy.multiplier(
-            mode: .adaptiveSystemLoad,
-            manualMultiplier: 1,
-            systemLoad: MenuBarIconAnimationSystemLoad(cpuUsage: 0.1, gpuUsage: nil, memoryUsage: 0.2)
-        )
-        let highLoadMultiplier = MenuBarIconAnimationSpeedPolicy.multiplier(
-            mode: .adaptiveSystemLoad,
-            manualMultiplier: 1,
-            systemLoad: MenuBarIconAnimationSystemLoad(cpuUsage: 0.9, gpuUsage: 0.8, memoryUsage: 0.7)
-        )
-
-        XCTAssertGreaterThan(highLoadMultiplier, lowLoadMultiplier)
-        XCTAssertLessThanOrEqual(highLoadMultiplier, MenuBarIconAnimationSpeedPolicy.maximumMultiplier)
+        XCTAssertTrue(settings.hasCustomIcon)
+        XCTAssertFalse(payload.isTemplate)
+        XCTAssertEqual(payload.frameDuration, 0.2, accuracy: 0.0001)
     }
 
     private func makeImageFile(
@@ -187,5 +298,101 @@ final class MenuBarIconSettingsTests: XCTestCase {
         let data = try XCTUnwrap(MenuBarIconProcessing.pngData(from: image))
         try data.write(to: url)
         return url
+    }
+
+    private func makeTransparentImageFile(name: String, artworkColor: NSColor) throws -> URL {
+        let directory = rootDirectory.appendingPathComponent("Fixtures", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(name)
+        let image = NSImage(size: NSSize(width: 32, height: 32))
+        image.lockFocus()
+        artworkColor.setFill()
+        NSRect(x: 8, y: 8, width: 16, height: 16).fill()
+        image.unlockFocus()
+        let data = try XCTUnwrap(MenuBarIconProcessing.pngData(from: image))
+        try data.write(to: url)
+        return url
+    }
+
+    private func visiblePixelCount(in image: NSImage) -> Int {
+        var proposedRect = NSRect(origin: .zero, size: image.size)
+        guard let source = image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) else {
+            return 0
+        }
+
+        let width = source.width
+        let height = source.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return 0
+        }
+
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return stride(from: 3, to: pixels.count, by: 4).reduce(into: 0) { count, alphaIndex in
+            if pixels[alphaIndex] > 8 {
+                count += 1
+            }
+        }
+    }
+
+    private func averageBrightnessWhenRendered(
+        _ image: NSImage,
+        appearance: NSAppearance.Name
+    ) -> Int {
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        button.appearance = NSAppearance(named: appearance)
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleNone
+        button.image = image
+
+        guard let representation = button.bitmapImageRepForCachingDisplay(in: button.bounds) else {
+            return 0
+        }
+        representation.size = button.bounds.size
+        button.cacheDisplay(in: button.bounds, to: representation)
+
+        guard let source = representation.cgImage else {
+            return 0
+        }
+        let width = source.width
+        let height = source.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return 0
+        }
+
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let statistics = stride(from: 0, to: pixels.count, by: 4).reduce(into: (brightness: 0, count: 0)) { result, pixelOffset in
+            guard pixels[pixelOffset + 3] > 8 else {
+                return
+            }
+            result.brightness += (
+                Int(pixels[pixelOffset])
+                    + Int(pixels[pixelOffset + 1])
+                    + Int(pixels[pixelOffset + 2])
+            ) / 3
+            result.count += 1
+        }
+        guard statistics.count > 0 else {
+            return 0
+        }
+        return statistics.brightness / statistics.count
     }
 }

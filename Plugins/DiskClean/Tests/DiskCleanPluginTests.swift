@@ -114,13 +114,14 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertTrue(host.pluginConfigurationItems.contains { $0.id == "disk-clean" })
     }
 
-    func testPresentPluginConfigurationSelectsDiskCleanSettings() {
+    func testPresentPluginConfigurationRequestsDiskCleanSettings() {
         let host = makePluginHostForTests(plugins: [DiskCleanPlugin(controller: DiskCleanController())])
+        var requests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { requests.append($0) }
 
         host.presentPluginConfiguration(pluginID: "disk-clean")
 
-        XCTAssertEqual(host.selectedSettingsDestination, .pluginConfiguration)
-        XCTAssertEqual(host.selectedFeatureSettingsPane, .configuration("disk-clean"))
+        XCTAssertEqual(requests, [.settings(.pluginConfiguration("disk-clean"))])
     }
 }
 

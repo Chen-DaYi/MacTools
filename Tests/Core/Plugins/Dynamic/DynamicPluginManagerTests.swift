@@ -25,34 +25,6 @@ final class DynamicPluginManagerTests: XCTestCase {
         temporaryRoot = nil
     }
 
-    func testDisablingLoadedPluginRemovesItAndDefersReloadUntilRestart() throws {
-        let sourceURL = try makePackage(id: "com.example.demo")
-        let store = makeStore()
-        _ = try store.installPackage(from: sourceURL)
-        let plugin = MockDynamicPlugin(id: "com.example.demo")
-        let loader = StubDynamicPluginLoader { records in
-            records.map { record in
-                DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
-            }
-        }
-        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
-
-        XCTAssertEqual(manager.loadInstalledPlugins().map(\.metadata.id), ["com.example.demo"])
-
-        manager.setPluginEnabled(false, pluginID: "com.example.demo")
-
-        XCTAssertEqual(plugin.deactivationReasons, [.disabled])
-        XCTAssertTrue(manager.loadInstalledPlugins().isEmpty)
-        XCTAssertEqual(manager.pluginManagementItems.first?.state, .disabled)
-        XCTAssertEqual(
-            manager.pluginManagementItems.first?.detailText,
-            AppL10n.plugins(
-                "plugin.detail.restartRequiredAfterRemoval",
-                defaultValue: "已移出界面，重启后彻底释放已加载代码。"
-            )
-        )
-    }
-
     func testReloadKeepsExistingLoadedPluginInstances() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
@@ -104,7 +76,7 @@ final class DynamicPluginManagerTests: XCTestCase {
         )
     }
 
-    func testBatchUpdatingLoadedPluginsReloadsOnlyOnce() throws {
+    func testBatchUpdatingLoadedPluginsReloadsOnlyOnce() async throws {
         let firstAlphaURL = try makePackage(id: "com.example.alpha", version: "1.0.0", displayName: "Alpha")
         let firstBetaURL = try makePackage(id: "com.example.beta", version: "1.0.0", displayName: "Beta")
         let updateAlphaURL = try makePackage(id: "com.example.alpha", version: "2.0.0", displayName: "Alpha")
@@ -135,7 +107,7 @@ final class DynamicPluginManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.loadInstalledPlugins().map(\.metadata.id), ["com.example.alpha", "com.example.beta"])
 
-        let failures = manager.updatePluginPackages([
+        let failures = await manager.updatePluginPackages([
             (sourceURL: updateAlphaURL, catalogEntry: makeCatalogEntry(id: "com.example.alpha", version: "2.0.0")),
             (sourceURL: updateBetaURL, catalogEntry: makeCatalogEntry(id: "com.example.beta", version: "2.0.0")),
         ])
@@ -161,6 +133,43 @@ final class DynamicPluginManagerTests: XCTestCase {
 
             return false
         })
+    }
+
+    func testBatchUpdateYieldsMainActorBetweenProgressCallbacks() async throws {
+        let firstAlphaURL = try makePackage(id: "com.example.alpha", version: "1.0.0", displayName: "Alpha")
+        let firstBetaURL = try makePackage(id: "com.example.beta", version: "1.0.0", displayName: "Beta")
+        let updateAlphaURL = try makePackage(id: "com.example.alpha", version: "2.0.0", displayName: "Alpha")
+        let updateBetaURL = try makePackage(id: "com.example.beta", version: "2.0.0", displayName: "Beta")
+        let store = makeStore()
+        _ = try store.installPackage(from: firstAlphaURL)
+        _ = try store.installPackage(from: firstBetaURL)
+        let manager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        var processedCount = 0
+        var didRunScheduledMainActorWork = false
+        var observedScheduledWorkBeforeCompletion = false
+
+        _ = await manager.updatePluginPackages(
+            [
+                (sourceURL: updateAlphaURL, catalogEntry: makeCatalogEntry(id: "com.example.alpha", version: "2.0.0")),
+                (sourceURL: updateBetaURL, catalogEntry: makeCatalogEntry(id: "com.example.beta", version: "2.0.0")),
+            ],
+            onPackageProcessed: {
+                processedCount += 1
+
+                if processedCount == 1 {
+                    Task { @MainActor in
+                        didRunScheduledMainActorWork = true
+                    }
+                } else {
+                    observedScheduledWorkBeforeCompletion = didRunScheduledMainActorWork
+                }
+            }
+        )
+
+        XCTAssertTrue(observedScheduledWorkBeforeCompletion)
     }
 
     func testUninstallingLoadedPluginDeletesPackageAndRemovesManagementItem() throws {
@@ -207,17 +216,16 @@ final class DynamicPluginManagerTests: XCTestCase {
         manager.rebuildManagementItems(catalogSnapshot: snapshot)
 
         let item = try XCTUnwrap(manager.pluginManagementItems.first)
-        XCTAssertEqual(item.state, .enabled)
+        XCTAssertEqual(item.state, .installed)
         XCTAssertEqual(item.detailText, "示例插件")
         XCTAssertNotEqual(item.detailText, installedRecord.packageURL.path)
     }
 
     func testInstalledItemDetailKeepsStatusSpecificMessages() {
         let packageURL = URL(fileURLWithPath: "/tmp/Demo.mactoolsplugin", isDirectory: true)
-        let enabledItem = makeManagementItem(state: .enabled, packageURL: packageURL)
-        let disabledItem = makeManagementItem(state: .disabled, packageURL: packageURL)
+        let installedItem = makeManagementItem(state: .installed, packageURL: packageURL)
         let restartingItem = makeManagementItem(
-            state: .enabled,
+            state: .installed,
             packageURL: packageURL,
             requiresRestartToFullyUnload: true
         )
@@ -226,10 +234,8 @@ final class DynamicPluginManagerTests: XCTestCase {
             packageURL: packageURL
         )
 
-        XCTAssertEqual(enabledItem.detailText, "示例插件")
-        XCTAssertEqual(disabledItem.detailText, "示例插件")
-        XCTAssertNotEqual(enabledItem.detailText, packageURL.path)
-        XCTAssertNotEqual(disabledItem.detailText, packageURL.path)
+        XCTAssertEqual(installedItem.detailText, "示例插件")
+        XCTAssertNotEqual(installedItem.detailText, packageURL.path)
         XCTAssertEqual(
             restartingItem.detailText,
             AppL10n.plugins(
@@ -325,28 +331,6 @@ final class DynamicPluginManagerTests: XCTestCase {
                 )
             )
         )
-    }
-
-    func testResumePluginReactivatesWithPackageScopedContext() throws {
-        let sourceURL = try makePackage(id: "com.example.demo")
-        let store = makeStore()
-        _ = try store.installPackage(from: sourceURL)
-        let plugin = MockDynamicPlugin(id: "com.example.demo")
-        let loader = StubDynamicPluginLoader { records in
-            records.map { DynamicPluginLoadResult(record: $0, plugins: [plugin], errorMessage: nil) }
-        }
-        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
-        _ = manager.loadInstalledPlugins()
-
-        manager.pausePlugin("com.example.demo")
-        manager.resumePlugin("com.example.demo")
-
-        // Resume must re-activate with the package-scoped context (support
-        // directory etc.), not a bare nil-directory PluginRuntimeContext(pluginID:).
-        let expected = store.runtimeContext(for: store.installedRecords().first!)
-        XCTAssertNotNil(expected.supportDirectory)
-        XCTAssertEqual(plugin.activationContexts.last?.supportDirectory, expected.supportDirectory)
-        XCTAssertEqual(plugin.deactivationReasons, [.disabled])
     }
 
     private func makeStore() -> PluginPackageStore {

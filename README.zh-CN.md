@@ -7,7 +7,7 @@
   <p>
     <a href="https://github.com/ggbond268/MacTools/stargazers"><img src="https://img.shields.io/github/stars/ggbond268/MacTools?style=social" alt="GitHub stars"></a>
     <a href="https://github.com/ggbond268/MacTools/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ggbond268/MacTools" alt="License"></a>
-    <a href="https://github.com/ggbond268/MacTools/releases"><img src="https://img.shields.io/github/v/release/ggbond268/MacTools" alt="Latest release"></a>
+    <a href="https://github.com/ggbond268/MacTools/releases"><img src="https://img.shields.io/github/v/release/ggbond268/MacTools?filter=v*" alt="Latest app release"></a>
     <a href="https://hellogithub.com/repository/ggbond268/MacTools" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=6cddbd75f09848fb8848b58510394a5c&claim_uid=g4n28zqFcD0Vhw3&theme=small" alt="Featured｜HelloGitHub" /></a>
   </p>
 
@@ -57,11 +57,11 @@
 | 风扇控制         | 通过预设管理风扇转速，支持自动、全速与自定义固定转速，实时显示当前转速；首次控制时会安装内置组件并请求管理员授权。          |
 | 电池充电上限     | 限制电池充电至指定上限（默认 80%），达到上限后停止充电；电量低于上限时不自动恢复，由用户决定何时继续充电或强制放电。      |
 | 修复损坏应用     | 移除应用隔离属性，解决「已损坏，无法打开」提示，通过文件面板选择 .app 并以管理员权限执行修复。                            |
-| 退出应用         | 选择并退出正在运行的应用，或一键退出全部；支持反选，方便快速圈定目标。                                                    |
+| 退出应用         | 选择并退出正在运行的应用，或一键退出全部；同一应用的多个实例会合并为一个稳定条目，并支持反选，方便快速圈定目标。                                                    |
 | zsh 配置         | 在应用内直接查看和编辑 zsh 配置文件（.zshrc、.zshenv 等），支持语法高亮、常用片段快速插入和保存前自动备份。               |
-| 插件与设置       | 在插件市场中安装、更新和批量更新插件（支持分类/搜索筛选；可按未安装优先、已安装优先或名称排序），并在各插件设置页维护权限、快捷键和专属设置。                                        |
-| 状态栏图标自定义 | 上传本地图片或轻量 GIF/MP4 动画作为菜单栏图标，也可从在线图库按需下载动态图标，并支持自动扣背景、播放速度调整和恢复默认。 |
-| 多语言           | 默认跟随系统语言，也可在「设置 > 通用 > 外观」中固定应用语言；语言选择器会同时显示系统语言名称和语言本名。                |
+| 插件与设置       | 通过菜单栏面板顶部居中的切换器选择功能或组件面板；在插件市场中安装、更新和批量更新插件（支持分类/搜索筛选；可按未安装优先、已安装优先或按所选语言的名称排序），并在各插件设置页维护权限、快捷键（支持单独使用 F1-F12 功能键）和专属设置；还可设置全局快捷键打开设置窗口。                                |
+| 状态栏图标自定义 | 上传本地图片或轻量 GIF/MP4 动画作为菜单栏图标，也可从在线图库按需下载动态图标，并支持自动扣背景和恢复默认。 |
+| 多语言           | 默认跟随系统语言，也可在「设置 > 通用 > 外观」中固定应用语言；语言选择器会同时显示系统语言名称和语言本名，菜单栏操作按钮会适配不同语言的文案长度。                |
 
 > **右键功能：** 可以使用 Option + 左键点击 MacTools 图标触发右键功能。
 
@@ -95,6 +95,10 @@ brew info --cask mactools
 ## 许可证
 
 MacTools 基于 [Apache License 2.0](LICENSE) 开源。
+
+## 隐私
+
+MacTools 以本地处理为优先，不包含由项目维护者运营的分析或广告服务。关于本地数据、系统权限和需要联网的功能，请查看中英双语[隐私政策](https://mactools.ggbond.app/privacy-policy)。
 
 ## 致谢
 

@@ -2,16 +2,84 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
+enum FeatureManagementTableMode: Equatable {
+    case surface(PluginDisplaySurface)
+
+    var supportsReordering: Bool {
+        true
+    }
+}
+
+enum FeatureManagementReorderPolicy {
+    static func canReorder(
+        mode: FeatureManagementTableMode,
+        isReorderEnabled: Bool
+    ) -> Bool {
+        mode.supportsReordering && isReorderEnabled
+    }
+
+    static func targetOffset(
+        for pluginID: String,
+        proposedRow: Int,
+        items: [FeatureManagementTableItem],
+        mode: FeatureManagementTableMode,
+        isReorderEnabled: Bool
+    ) -> Int? {
+        guard canReorder(mode: mode, isReorderEnabled: isReorderEnabled) else {
+            return nil
+        }
+        guard items.contains(where: { $0.id == pluginID }) else {
+            return nil
+        }
+
+        return min(max(proposedRow, 0), items.count)
+    }
+}
+
+struct FeatureManagementTableItem: Identifiable {
+    let id: String
+    let title: String
+    let description: String
+    let iconName: String
+    let iconTint: Color
+    let capabilities: PluginHostCapabilities
+    let isVisible: Bool
+    let isActive: Bool
+    let canUninstall: Bool
+    let hasSettings: Bool
+    let category: String?
+    let releaseChannel: String?
+
+    init(surfaceItem item: PluginSurfaceLayoutItem, hasSettings: Bool = false) {
+        id = item.id
+        title = item.title
+        description = item.description
+        iconName = item.iconName
+        iconTint = item.iconTint
+        capabilities = item.capabilities
+        isVisible = item.isVisible
+        isActive = item.isActive
+        canUninstall = item.canUninstall
+        self.hasSettings = hasSettings
+        category = item.category
+        releaseChannel = item.releaseChannel
+    }
+}
+
 struct FeatureManagementTableView: NSViewRepresentable {
     static let rowHeight: CGFloat = 62
     static let rowSpacing: CGFloat = 6
     static let verticalContentInset: CGFloat = 6
     private static let dragType = NSPasteboard.PasteboardType("com.ggbond.mactools.feature-management-item")
 
-    let items: [PluginFeatureManagementItem]
+    let items: [FeatureManagementTableItem]
+    let mode: FeatureManagementTableMode
     var isReorderEnabled: Bool = true
-    let onVisibilityChange: (String, Bool) -> Void
-    let onMove: (String, Int) -> Void
+    var onMove: (String, Int) -> Void = { _, _ in }
+    var onSetVisible: (String, Bool) -> Void = { _, _ in }
+    var onOpenSettings: (String) -> Void = { _ in }
+    var onOpenMarketplace: () -> Void = {}
+    var onRequestUninstall: (String) -> Void = { _ in }
 
     static func preferredHeight(for itemCount: Int) -> CGFloat {
         let visibleItemCount = max(itemCount, 1)
@@ -40,23 +108,9 @@ struct FeatureManagementTableView: NSViewRepresentable {
             right: 0
         )
 
-        let tableView = NSTableView()
-        tableView.headerView = nil
+        let tableView = PluginSettingsReorderTableView(dragType: Self.dragType)
         tableView.rowHeight = Self.rowHeight
         tableView.intercellSpacing = NSSize(width: 0, height: Self.rowSpacing)
-        tableView.backgroundColor = .clear
-        tableView.selectionHighlightStyle = .none
-        tableView.focusRingType = .none
-        tableView.usesAlternatingRowBackgroundColors = false
-        tableView.allowsColumnReordering = false
-        tableView.allowsColumnResizing = false
-        tableView.allowsEmptySelection = true
-        tableView.allowsTypeSelect = false
-        tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-        tableView.draggingDestinationFeedbackStyle = .gap
-        tableView.verticalMotionCanBeginDrag = true
-        tableView.setDraggingSourceOperationMask(.move, forLocal: true)
-        tableView.registerForDraggedTypes([Self.dragType])
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("feature"))
         column.isEditable = false
@@ -90,6 +144,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
         let contentWidth = max(scrollView.contentSize.width, 1)
         let signature = FeatureManagementTableSignature(
             items: items,
+            mode: mode,
             isReorderEnabled: isReorderEnabled,
             contentWidth: contentWidth
         )
@@ -136,19 +191,40 @@ struct FeatureManagementTableView: NSViewRepresentable {
                 ?? FeatureManagementTableCellView(frame: .zero)
             view.identifier = identifier
 
+            guard parent.items.indices.contains(row) else {
+                return view
+            }
+
             let item = parent.items[row]
             view.configure(
                 item: item,
-                showsHandle: parent.isReorderEnabled,
-                onVisibilityChange: { [weak self] isVisible in
-                    self?.parent.onVisibilityChange(item.id, isVisible)
+                mode: parent.mode,
+                showsHandle: parent.mode.supportsReordering && parent.isReorderEnabled,
+                onSetVisible: { [weak self] isVisible in
+                    self?.parent.onSetVisible(item.id, isVisible)
+                },
+                onOpenSettings: { [weak self] in
+                    self?.parent.onOpenSettings(item.id)
+                },
+                onOpenMarketplace: { [weak self] in
+                    self?.parent.onOpenMarketplace()
+                },
+                onRequestUninstall: { [weak self] in
+                    self?.parent.onRequestUninstall(item.id)
                 }
             )
             return view
         }
 
         func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
-            guard parent.isReorderEnabled else {
+            guard FeatureManagementReorderPolicy.canReorder(
+                mode: parent.mode,
+                isReorderEnabled: parent.isReorderEnabled
+            ) else {
+                return nil
+            }
+
+            guard parent.items.indices.contains(row) else {
                 return nil
             }
 
@@ -178,7 +254,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
         ) {
             isDragging = false
             lastSignature = nil
-            tableView.reloadData()
+            DispatchQueue.main.async { [weak tableView] in
+                tableView?.reloadData()
+                tableView?.noteNumberOfRowsChanged()
+            }
         }
 
         func tableView(_ tableView: NSTableView, updateDraggingItemsForDrag draggingInfo: NSDraggingInfo) {
@@ -199,6 +278,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
 
                 let image = FeatureManagementDragPreview.image(
                     for: item,
+                    mode: parent.mode,
                     width: tableView.bounds.width
                 )
                 let frame = NSRect(
@@ -215,7 +295,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
             proposedRow row: Int,
             proposedDropOperation dropOperation: NSTableView.DropOperation
         ) -> NSDragOperation {
-            guard parent.isReorderEnabled else {
+            guard FeatureManagementReorderPolicy.canReorder(
+                mode: parent.mode,
+                isReorderEnabled: parent.isReorderEnabled
+            ) else {
                 return []
             }
 
@@ -234,18 +317,22 @@ struct FeatureManagementTableView: NSViewRepresentable {
             row: Int,
             dropOperation: NSTableView.DropOperation
         ) -> Bool {
-            guard parent.isReorderEnabled else {
-                return false
-            }
-
             guard
-                let draggedID = info.draggingPasteboard.string(forType: FeatureManagementTableView.dragType)
+                let draggedID = info.draggingPasteboard.string(forType: FeatureManagementTableView.dragType),
+                let targetRow = FeatureManagementReorderPolicy.targetOffset(
+                    for: draggedID,
+                    proposedRow: row,
+                    items: parent.items,
+                    mode: parent.mode,
+                    isReorderEnabled: parent.isReorderEnabled
+                )
             else {
                 return false
             }
 
-            let targetRow = min(max(row, 0), parent.items.count)
-            parent.onMove(draggedID, targetRow)
+            DispatchQueue.main.async { [parent] in
+                parent.onMove(draggedID, targetRow)
+            }
             return true
         }
     }
@@ -257,19 +344,23 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
         let title: String
         let description: String
         let iconName: String
+        let hasSettings: Bool
         let isVisible: Bool
         let isActive: Bool
-        let presentation: PluginFeaturePresentation
+        let canUninstall: Bool
+        let capabilities: PluginHostCapabilities
         let category: String?
         let releaseChannel: String?
     }
 
     let rows: [Row]
+    let mode: FeatureManagementTableMode
     let isReorderEnabled: Bool
     let contentWidth: CGFloat
 
     init(
-        items: [PluginFeatureManagementItem],
+        items: [FeatureManagementTableItem],
+        mode: FeatureManagementTableMode,
         isReorderEnabled: Bool,
         contentWidth: CGFloat
     ) {
@@ -279,13 +370,16 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
                 title: $0.title,
                 description: $0.description,
                 iconName: $0.iconName,
+                hasSettings: $0.hasSettings,
                 isVisible: $0.isVisible,
                 isActive: $0.isActive,
-                presentation: $0.presentation,
+                canUninstall: $0.canUninstall,
+                capabilities: $0.capabilities,
                 category: $0.category,
                 releaseChannel: $0.releaseChannel
             )
         }
+        self.mode = mode
         self.isReorderEnabled = isReorderEnabled
         self.contentWidth = contentWidth.rounded(.toNearestOrAwayFromZero)
     }
@@ -294,8 +388,10 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
 #if DEBUG
 enum FeatureManagementTableUpdatePolicy {
     static func needsUpdate(
-        previousItems: [PluginFeatureManagementItem],
-        currentItems: [PluginFeatureManagementItem],
+        previousItems: [FeatureManagementTableItem],
+        currentItems: [FeatureManagementTableItem],
+        previousMode: FeatureManagementTableMode,
+        currentMode: FeatureManagementTableMode,
         previousIsReorderEnabled: Bool,
         currentIsReorderEnabled: Bool,
         previousContentWidth: CGFloat,
@@ -303,10 +399,12 @@ enum FeatureManagementTableUpdatePolicy {
     ) -> Bool {
         FeatureManagementTableSignature(
             items: previousItems,
+            mode: previousMode,
             isReorderEnabled: previousIsReorderEnabled,
             contentWidth: previousContentWidth
         ) != FeatureManagementTableSignature(
             items: currentItems,
+            mode: currentMode,
             isReorderEnabled: currentIsReorderEnabled,
             contentWidth: currentContentWidth
         )
@@ -330,7 +428,11 @@ private final class LockedClipView: NSClipView {
 
 @MainActor
 private enum FeatureManagementDragPreview {
-    static func image(for item: PluginFeatureManagementItem, width: CGFloat) -> NSImage {
+    static func image(
+        for item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        width: CGFloat
+    ) -> NSImage {
         let imageSize = NSSize(
             width: min(max(width, 320), 620),
             height: FeatureManagementTableView.rowHeight
@@ -367,7 +469,7 @@ private enum FeatureManagementDragPreview {
             pointSize: 16
         )
 
-        let trailingWidth: CGFloat = 74
+        let trailingWidth: CGFloat = 30
         let textX = iconBackgroundRect.maxX + 12
         let textWidth = max(imageSize.width - textX - trailingWidth - 12, 80)
         let titleRect = NSRect(x: textX, y: 34, width: textWidth, height: 18)
@@ -381,7 +483,7 @@ private enum FeatureManagementDragPreview {
         )
 
         drawText(
-            "\(item.description) · \(featureManagementPresentationText(for: item.presentation))",
+            featureManagementDescription(for: item, mode: mode),
             in: descriptionRect,
             font: .systemFont(ofSize: 11, weight: .medium),
             color: .secondaryLabelColor
@@ -391,7 +493,7 @@ private enum FeatureManagementDragPreview {
             NSColor.systemGreen.setFill()
             NSBezierPath(
                 ovalIn: NSRect(
-                    x: imageSize.width - 72,
+                    x: imageSize.width - 48,
                     y: (imageSize.height - 8) / 2,
                     width: 8,
                     height: 8
@@ -400,10 +502,6 @@ private enum FeatureManagementDragPreview {
             .fill()
         }
 
-        drawVisibilityCheckbox(
-            isOn: item.isVisible,
-            in: NSRect(x: imageSize.width - 50, y: 24, width: 14, height: 14)
-        )
         drawSymbol(
             "line.3.horizontal",
             in: NSRect(x: imageSize.width - 20, y: 23, width: 13, height: 13),
@@ -452,38 +550,61 @@ private enum FeatureManagementDragPreview {
         tintedSymbol.draw(in: rect)
     }
 
-    private static func drawVisibilityCheckbox(isOn: Bool, in rect: NSRect) {
-        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
+}
 
-        if isOn {
-            NSColor.controlAccentColor.setFill()
-            path.fill()
+private final class FeatureManagementIconActionButton: NSButton {
+    var onHoverChanged: ((Bool) -> Void)?
+    private var trackingArea: NSTrackingArea?
 
-            let checkPath = NSBezierPath()
-            checkPath.lineWidth = 1.5
-            checkPath.lineCapStyle = .round
-            checkPath.lineJoinStyle = .round
-            checkPath.move(to: NSPoint(
-                x: rect.minX + rect.width * 0.2,
-                y: rect.midY
-            ))
-            checkPath.line(to: NSPoint(
-                x: rect.minX + rect.width * 0.42,
-                y: rect.minY + rect.height * 0.28
-            ))
-            checkPath.line(to: NSPoint(
-                x: rect.maxX - rect.width * 0.18,
-                y: rect.maxY - rect.height * 0.22
-            ))
-            NSColor.white.setStroke()
-            checkPath.stroke()
-        } else {
-            NSColor.windowBackgroundColor.setFill()
-            path.fill()
-            NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
-            path.lineWidth = 1
-            path.stroke()
+    override func updateTrackingAreas() {
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
         }
+
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        onHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onHoverChanged?(false)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard !isHidden, isEnabled else {
+            return
+        }
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+}
+
+enum FeatureManagementVisibilityPresentation {
+    static func symbolName(isVisible: Bool) -> String {
+        isVisible ? "eye" : "eye.slash"
+    }
+
+    static func tintColor(isVisible: Bool) -> NSColor {
+        isVisible ? .systemBlue : .tertiaryLabelColor
+    }
+}
+
+enum FeatureManagementVisibilityToggleState {
+    static func nextValue(currentValue: inout Bool) -> Bool {
+        currentValue.toggle()
+        return currentValue
     }
 }
 
@@ -493,12 +614,22 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private let iconImageView = NSImageView()
     private let titleRowStackView = NSStackView()
     private let titleLabel = NSTextField(labelWithString: "")
-    private let releaseChannelBadgeView = NSHostingView(rootView: PluginReleaseChannelBadge(releaseChannel: nil))
+    private let releaseChannelBadgeView = FeatureManagementReleaseChannelBadgeView()
     private let descriptionLabel = NSTextField(labelWithString: "")
     private let activeDotView = NSView()
-    private let visibilityButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let iconActionButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
+    private let visibilityButton = FeatureManagementIconActionButton(title: "", target: nil, action: nil)
     private let handleImageView = NSImageView()
-    private var visibilityHandler: ((Bool) -> Void)?
+    private var openSettingsHandler: (() -> Void)?
+    private var setVisibleHandler: ((Bool) -> Void)?
+    private var openMarketplaceHandler: (() -> Void)?
+    private var requestUninstallHandler: (() -> Void)?
+    private var hasSettings = false
+    private var canUninstall = false
+    private var isVisible = true
+    private var pluginTitle = ""
+    private var mode: FeatureManagementTableMode?
+    private var iconTintColor = NSColor.controlAccentColor
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -513,26 +644,53 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     }
 
     func configure(
-        item: PluginFeatureManagementItem,
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
         showsHandle: Bool,
-        onVisibilityChange: @escaping (Bool) -> Void
+        onSetVisible: @escaping (Bool) -> Void,
+        onOpenSettings: @escaping () -> Void,
+        onOpenMarketplace: @escaping () -> Void,
+        onRequestUninstall: @escaping () -> Void
     ) {
-        visibilityHandler = onVisibilityChange
+        openSettingsHandler = onOpenSettings
+        setVisibleHandler = onSetVisible
+        openMarketplaceHandler = onOpenMarketplace
+        requestUninstallHandler = onRequestUninstall
+        hasSettings = item.hasSettings
+        canUninstall = item.canUninstall
+        isVisible = item.isVisible
+        pluginTitle = item.title
+        self.mode = mode
 
         titleLabel.stringValue = item.title
         configureReleaseChannelBadge(item.releaseChannel)
-        descriptionLabel.stringValue = "\(item.description) · \(featureManagementPresentationText(for: item.presentation))"
+        descriptionLabel.stringValue = featureManagementDescription(for: item, mode: mode)
         iconImageView.image = NSImage(
             systemSymbolName: item.iconName,
             accessibilityDescription: item.title
         )
-        iconImageView.contentTintColor = NSColor(item.iconTint)
-        iconBackgroundView.layer?.backgroundColor = NSColor(item.iconTint.opacity(0.14)).cgColor
+        iconTintColor = NSColor(item.iconTint)
+        iconImageView.contentTintColor = iconTintColor
+        setIconActionHovered(false)
         activeDotView.isHidden = !item.isActive
-        visibilityButton.state = item.isVisible ? .on : .off
+        configureVisibilityAction(
+            pluginTitle: item.title,
+            isVisible: item.isVisible,
+            mode: mode
+        )
+        configureActions()
         handleImageView.isHidden = !showsHandle
+        containerView.alphaValue = 1
         toolTip = item.title
-        visibilityButton.toolTip = item.title
+        iconActionButton.toolTip = hasSettings
+            ? AppL10n.pluginsFormat(
+                "plugin.management.openSettingsForPlugin",
+                defaultValue: "打开%@设置",
+                item.title
+            )
+            : nil
+        iconActionButton.setAccessibilityLabel(iconActionButton.toolTip ?? item.title)
+        iconActionButton.setAccessibilityHelp(iconActionButton.toolTip ?? "")
     }
 
     private func buildViewHierarchy() {
@@ -544,6 +702,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         addSubview(containerView)
         containerView.addSubview(iconBackgroundView)
         iconBackgroundView.addSubview(iconImageView)
+        iconBackgroundView.addSubview(iconActionButton)
         containerView.addSubview(titleRowStackView)
         titleRowStackView.addArrangedSubview(titleLabel)
         titleRowStackView.addArrangedSubview(releaseChannelBadgeView)
@@ -581,10 +740,18 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         activeDotView.layer?.cornerRadius = 4
         activeDotView.layer?.backgroundColor = NSColor.systemGreen.cgColor
 
-        visibilityButton.setButtonType(.switch)
-        visibilityButton.title = ""
+        iconActionButton.isBordered = false
+        iconActionButton.target = self
+        iconActionButton.action = #selector(handleOpenSettings(_:))
+        iconActionButton.onHoverChanged = { [weak self] isHovered in
+            self?.setIconActionHovered(isHovered)
+        }
+
+        visibilityButton.isBordered = false
         visibilityButton.target = self
-        visibilityButton.action = #selector(handleVisibilityToggle(_:))
+        visibilityButton.action = #selector(handleVisibilityAction(_:))
+        visibilityButton.contentTintColor = .secondaryLabelColor
+        visibilityButton.symbolConfiguration = .init(pointSize: 14, weight: .medium)
 
         handleImageView.image = NSImage(
             systemSymbolName: "line.3.horizontal",
@@ -602,6 +769,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             containerView,
             iconBackgroundView,
             iconImageView,
+            iconActionButton,
             titleRowStackView,
             descriptionLabel,
             activeDotView,
@@ -625,6 +793,11 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             iconImageView.centerXAnchor.constraint(equalTo: iconBackgroundView.centerXAnchor),
             iconImageView.centerYAnchor.constraint(equalTo: iconBackgroundView.centerYAnchor),
 
+            iconActionButton.leadingAnchor.constraint(equalTo: iconBackgroundView.leadingAnchor),
+            iconActionButton.trailingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor),
+            iconActionButton.topAnchor.constraint(equalTo: iconBackgroundView.topAnchor),
+            iconActionButton.bottomAnchor.constraint(equalTo: iconBackgroundView.bottomAnchor),
+
             titleRowStackView.leadingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor, constant: 12),
             titleRowStackView.trailingAnchor.constraint(lessThanOrEqualTo: activeDotView.leadingAnchor, constant: -10),
             titleRowStackView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
@@ -636,10 +809,12 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             activeDotView.widthAnchor.constraint(equalToConstant: 8),
             activeDotView.heightAnchor.constraint(equalToConstant: 8),
             activeDotView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            activeDotView.trailingAnchor.constraint(equalTo: visibilityButton.leadingAnchor, constant: -14),
+            activeDotView.trailingAnchor.constraint(equalTo: visibilityButton.leadingAnchor, constant: -12),
 
             visibilityButton.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
             visibilityButton.trailingAnchor.constraint(equalTo: handleImageView.leadingAnchor, constant: -12),
+            visibilityButton.widthAnchor.constraint(equalToConstant: 22),
+            visibilityButton.heightAnchor.constraint(equalToConstant: 22),
 
             handleImageView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
             handleImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
@@ -648,25 +823,315 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         ])
     }
 
+    private func configureActions() {
+        iconActionButton.isHidden = !hasSettings
+        window?.invalidateCursorRects(for: iconActionButton)
+        window?.invalidateCursorRects(for: visibilityButton)
+    }
+
+    private func configureVisibilityAction(
+        pluginTitle: String,
+        isVisible: Bool,
+        mode: FeatureManagementTableMode
+    ) {
+        let title = visibilityActionTitle(
+            pluginTitle: pluginTitle,
+            isVisible: isVisible,
+            mode: mode
+        )
+        visibilityButton.image = NSImage(
+            systemSymbolName: FeatureManagementVisibilityPresentation.symbolName(isVisible: isVisible),
+            accessibilityDescription: title
+        )
+        visibilityButton.contentTintColor = FeatureManagementVisibilityPresentation.tintColor(isVisible: isVisible)
+        visibilityButton.toolTip = title
+        visibilityButton.setAccessibilityLabel(pluginTitle)
+        visibilityButton.setAccessibilityHelp(title)
+    }
+
     @objc
-    private func handleVisibilityToggle(_ sender: NSButton) {
-        visibilityHandler?(sender.state == .on)
+    private func handleOpenSettings(_ sender: NSButton) {
+        openSettingsHandler?()
+    }
+
+    @objc
+    private func handleVisibilityAction(_ sender: NSButton) {
+        guard let mode else {
+            return
+        }
+
+        let nextValue = FeatureManagementVisibilityToggleState.nextValue(currentValue: &isVisible)
+        configureVisibilityAction(
+            pluginTitle: pluginTitle,
+            isVisible: nextValue,
+            mode: mode
+        )
+        setVisibleHandler?(nextValue)
+    }
+
+    @objc
+    private func handleOpenMarketplace(_ sender: NSMenuItem) {
+        openMarketplaceHandler?()
+    }
+
+    @objc
+    private func handleRequestUninstall(_ sender: NSMenuItem) {
+        requestUninstallHandler?()
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        actionsMenu()
+    }
+
+    private func actionsMenu() -> NSMenu? {
+        guard canUninstall else {
+            return nil
+        }
+
+        let menu = NSMenu()
+        if hasSettings {
+            let openSettings = NSMenuItem(
+                title: AppL10n.plugins("plugin.management.openSettings", defaultValue: "打开插件设置"),
+                action: #selector(handleOpenSettingsMenuItem(_:)),
+                keyEquivalent: ""
+            )
+            openSettings.target = self
+            menu.addItem(openSettings)
+        }
+
+        let marketplace = NSMenuItem(
+            title: AppL10n.plugins("plugin.management.viewMarketplace", defaultValue: "在市场中查看"),
+            action: #selector(handleOpenMarketplace(_:)),
+            keyEquivalent: ""
+        )
+        marketplace.target = self
+        menu.addItem(marketplace)
+
+        menu.addItem(.separator())
+        let uninstall = NSMenuItem(
+            title: AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"),
+            action: #selector(handleRequestUninstall(_:)),
+            keyEquivalent: ""
+        )
+        uninstall.target = self
+        menu.addItem(uninstall)
+
+        return menu
+    }
+
+    @objc
+    private func handleOpenSettingsMenuItem(_ sender: NSMenuItem) {
+        openSettingsHandler?()
+    }
+
+    private func setIconActionHovered(_ isHovered: Bool) {
+        guard hasSettings else {
+            iconBackgroundView.layer?.setAffineTransform(.identity)
+            iconBackgroundView.layer?.backgroundColor = iconTintColor.withAlphaComponent(0.14).cgColor
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.allowsImplicitAnimation = true
+            iconBackgroundView.layer?.setAffineTransform(
+                isHovered ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
+            )
+            iconBackgroundView.layer?.backgroundColor = iconTintColor
+                .withAlphaComponent(isHovered ? 0.22 : 0.14)
+                .cgColor
+        }
     }
 
     private func configureReleaseChannelBadge(_ rawValue: String?) {
-        releaseChannelBadgeView.rootView = PluginReleaseChannelBadge(releaseChannel: rawValue)
-        releaseChannelBadgeView.isHidden = PluginReleaseChannel(rawString: rawValue) == nil
+        releaseChannelBadgeView.configure(releaseChannel: PluginReleaseChannel(rawString: rawValue))
+    }
+
+    private func visibilityActionTitle(
+        pluginTitle: String,
+        isVisible: Bool,
+        mode: FeatureManagementTableMode
+    ) -> String {
+        switch (mode, isVisible) {
+        case (.surface(.dashboard), true):
+            return AppL10n.pluginsFormat(
+                "plugin.management.hideFromDashboardFormat",
+                defaultValue: "从仪表盘隐藏%@",
+                pluginTitle
+            )
+        case (.surface(.dashboard), false):
+            return AppL10n.pluginsFormat(
+                "plugin.management.showOnDashboardFormat",
+                defaultValue: "在仪表盘显示%@",
+                pluginTitle
+            )
+        case (.surface(.featurePanel), true):
+            return AppL10n.pluginsFormat(
+                "plugin.management.hideFromFeaturePanelFormat",
+                defaultValue: "从功能面板隐藏%@",
+                pluginTitle
+            )
+        case (.surface(.featurePanel), false):
+            return AppL10n.pluginsFormat(
+                "plugin.management.showInFeaturePanelFormat",
+                defaultValue: "在功能面板显示%@",
+                pluginTitle
+            )
+        }
     }
 }
 
-private func featureManagementPresentationText(for presentation: PluginFeaturePresentation) -> String {
-    switch presentation {
-    case .featurePanel:
-        return AppL10n.plugins("plugin.presentation.featurePanel", defaultValue: "操作面板")
-    case .componentPanel:
-        return AppL10n.plugins("plugin.presentation.componentPanel", defaultValue: "组件")
-    case .featureAndComponentPanel:
-        return AppL10n.plugins("plugin.presentation.featureAndComponentPanel", defaultValue: "操作面板与组件")
+private final class FeatureManagementReleaseChannelBadgeView: NSView {
+    private let textField = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        buildViewHierarchy()
+        configureStyles()
+        configureLayout()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(releaseChannel: PluginReleaseChannel?) {
+        guard let releaseChannel else {
+            isHidden = true
+            return
+        }
+
+        textField.stringValue = releaseChannel.displayName
+        isHidden = false
+    }
+
+    private func buildViewHierarchy() {
+        wantsLayer = true
+        addSubview(textField)
+    }
+
+    private func configureStyles() {
+        layer?.cornerRadius = 8
+        layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.14).cgColor
+
+        textField.font = .systemFont(ofSize: 10, weight: .semibold)
+        textField.textColor = .systemOrange
+        textField.alignment = .center
+        textField.lineBreakMode = .byTruncatingTail
+
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    private func configureLayout() {
+        textField.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            textField.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            textField.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1)
+        ])
+    }
+}
+
+#if DEBUG
+enum FeatureManagementTableCellInspection {
+    @MainActor
+    static func containsSwiftUIHostingViewAfterConfiguring(
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        showsHandle: Bool
+    ) -> Bool {
+        let cell = configuredCell(
+            item: item,
+            mode: mode,
+            showsHandle: showsHandle
+        )
+        return containsSwiftUIHostingView(in: cell)
+    }
+
+    @MainActor
+    static func inlineActionButtonCountAfterConfiguring(
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        showsHandle: Bool
+    ) -> Int {
+        let cell = configuredCell(
+            item: item,
+            mode: mode,
+            showsHandle: showsHandle
+        )
+        return actionButtons(in: cell).count
+    }
+
+    @MainActor
+    private static func configuredCell(
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        showsHandle: Bool
+    ) -> FeatureManagementTableCellView {
+        let cell = FeatureManagementTableCellView(
+            frame: NSRect(
+                x: 0,
+                y: 0,
+                width: 480,
+                height: FeatureManagementTableView.rowHeight
+            )
+        )
+        cell.configure(
+            item: item,
+            mode: mode,
+            showsHandle: showsHandle,
+            onSetVisible: { _ in },
+            onOpenSettings: {},
+            onOpenMarketplace: {},
+            onRequestUninstall: {}
+        )
+        return cell
+    }
+
+    @MainActor
+    private static func containsSwiftUIHostingView(in view: NSView) -> Bool {
+        if NSStringFromClass(type(of: view)).contains("NSHostingView") {
+            return true
+        }
+
+        return view.subviews.contains { containsSwiftUIHostingView(in: $0) }
+    }
+
+    @MainActor
+    private static func actionButtons(in view: NSView) -> [FeatureManagementIconActionButton] {
+        let ownButton = (view as? FeatureManagementIconActionButton).map { [$0] } ?? []
+        return ownButton + view.subviews.flatMap { actionButtons(in: $0) }
+    }
+}
+#endif
+
+func featureManagementDescription(
+    for item: FeatureManagementTableItem,
+    mode: FeatureManagementTableMode
+) -> String {
+    var details = [item.description]
+
+    if item.isActive {
+        details.append(AppL10n.plugins("plugin.management.active", defaultValue: "使用中"))
+    }
+
+    return details.joined(separator: " · ")
+}
+
+func pluginCapabilitySummary(_ capabilities: PluginHostCapabilities) -> String {
+    switch (capabilities.supportsDashboard, capabilities.supportsFeaturePanel) {
+    case (true, true):
+        return AppL10n.plugins("plugin.capability.both", defaultValue: "仪表盘与功能面板")
+    case (true, false):
+        return AppL10n.plugins("plugin.capability.dashboard", defaultValue: "仪表盘")
+    case (false, true):
+        return AppL10n.plugins("plugin.capability.featurePanel", defaultValue: "功能面板")
+    case (false, false):
+        return AppL10n.plugins("plugin.capability.settingsOnly", defaultValue: "仅设置")
     }
 }
 

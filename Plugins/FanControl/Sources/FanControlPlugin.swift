@@ -32,7 +32,7 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureVisibilityLifecycleHandling {
+final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling {
 
     // MARK: Metadata
 
@@ -59,7 +59,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureV
     private let monitoringIdleInterval: Duration
 
     private var isExpanded = false
-    private var isFeaturePanelVisible = false
+    private var isPrimaryPanelVisible = false
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
     private var requiresAutoRestore = false
@@ -112,6 +112,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureV
     func deactivate(reason: PluginDeactivationReason) {
         unregisterSleepWakeObservers()
         stopMonitoring()
+        isPrimaryPanelVisible = false
         if reason.requiresStateCleanup {
             restoreAutomaticControlIfNeeded(reason: String(describing: reason))
         }
@@ -192,12 +193,23 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureV
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
 
-    func featureVisibilityDidChange(_ isVisible: Bool) {
-        guard isFeaturePanelVisible != isVisible else {
+    // MARK: - PluginPanelSurfaceLifecycleHandling
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .primary, !isPrimaryPanelVisible else {
             return
         }
 
-        isFeaturePanelVisible = isVisible
+        isPrimaryPanelVisible = true
+        restartMonitoringIfRunning()
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .primary, isPrimaryPanelVisible else {
+            return
+        }
+
+        isPrimaryPanelVisible = false
         restartMonitoringIfRunning()
     }
 
@@ -264,7 +276,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginFeatureV
     }
 
     private var currentMonitoringInterval: Duration {
-        if isFeaturePanelVisible && isExpanded {
+        if isPrimaryPanelVisible && isExpanded {
             return monitoringActiveInterval
         }
         return monitoringIdleInterval

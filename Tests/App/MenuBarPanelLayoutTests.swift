@@ -5,6 +5,60 @@ import MacToolsPluginKit
 @testable import MacTools
 
 final class MenuBarPanelLayoutTests: XCTestCase {
+    func testSecondaryPanelPlacementPrefersRightWhenItFits() {
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: CGRect(x: 100, y: 500, width: 280, height: 52),
+            panelSize: CGSize(width: 216, height: 300),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        guard case let .right(frame) = placement else {
+            return XCTFail("Expected a right-side secondary panel")
+        }
+
+        XCTAssertEqual(frame.origin.x, 390)
+        XCTAssertEqual(frame.origin.y, 252)
+    }
+
+    func testSecondaryPanelPlacementFallsBackToLeftWhenRightDoesNotFit() {
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: CGRect(x: 1_150, y: 500, width: 200, height: 52),
+            panelSize: CGSize(width: 216, height: 300),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        guard case let .left(frame) = placement else {
+            return XCTFail("Expected a left-side secondary panel")
+        }
+
+        XCTAssertEqual(frame.origin.x, 924)
+        XCTAssertEqual(frame.origin.y, 252)
+    }
+
+    func testSecondaryPanelPlacementUsesInlineFallbackWhenNeitherSideFits() {
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: CGRect(x: 82, y: 500, width: 316, height: 52),
+            panelSize: CGSize(width: 216, height: 300),
+            visibleFrame: CGRect(x: 0, y: 0, width: 470, height: 900)
+        )
+
+        XCTAssertEqual(placement, .inline)
+    }
+
+    func testSecondaryPanelPlacementKeepsPanelWithinVerticalScreenBounds() {
+        let placement = SecondaryPanelPlacement.resolve(
+            anchorRect: CGRect(x: 100, y: 100, width: 200, height: 52),
+            panelSize: CGSize(width: 216, height: 500),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        guard case let .right(frame) = placement else {
+            return XCTFail("Expected a right-side secondary panel")
+        }
+
+        XCTAssertEqual(frame.minY, MenuBarPanelLayout.secondaryPanelScreenMargin)
+    }
+
     func testBaseLayoutMetricsStayStable() {
         XCTAssertEqual(MenuBarPanelLayout.baseWidth, 316)
         XCTAssertEqual(
@@ -179,6 +233,40 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         )
     }
 
+    func testActionRowFeatureContentHeightIncludesSectionTitle() {
+        let item = makeItem(
+            controlStyle: .button,
+            isExpanded: false,
+            controls: [
+                PluginPanelControl(
+                    id: "wired-only",
+                    kind: .actionRow,
+                    options: [],
+                    selectedOptionID: nil,
+                    dateValue: nil,
+                    minimumDate: nil,
+                    displayedComponents: nil,
+                    datePickerStyle: nil,
+                    sectionTitle: "仅有线：不会回退到 Wi-Fi",
+                    actionTitle: "仅通过有线连接",
+                    actionIconSystemName: "cable.connector",
+                    isEnabled: true
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.featureContentHeight(for: [item]),
+            MenuBarPanelLayout.rowHeaderHeight
+                + MenuBarPanelLayout.detailSpacing
+                + MenuBarPanelLayout.actionRowSectionTitleHeight
+                + MenuBarPanelLayout.actionRowSectionTitleSpacing
+                + 16
+                + MenuBarPanelLayout.actionRowVerticalPadding * 2
+                + MenuBarPanelLayout.rowVerticalPadding
+        )
+    }
+
     func testCollapsedDisclosureFeatureContentHeightIgnoresDetail() {
         let item = makeItem(
             controlStyle: .disclosure,
@@ -302,6 +390,54 @@ final class HoverSecondaryPanelCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.activeActivation, activation)
         XCTAssertEqual(coordinator.selectedRowFrame, frame)
+    }
+
+    func testPinnedActivationSurvivesHoverExit() async {
+        let coordinator = HoverSecondaryPanelCoordinator(
+            dismissDelay: .milliseconds(5),
+            activationDelay: nil
+        )
+        let activation = makeActivation(optionID: "3")
+        var dismissedActivation: HoverSecondaryPanelCoordinator.Activation?
+        coordinator.onDismissRequest = { dismissedActivation = $0 }
+
+        coordinator.pin(
+            pluginID: activation.pluginID,
+            controlID: activation.controlID,
+            optionID: activation.optionID
+        )
+        coordinator.hoverEnded(
+            pluginID: activation.pluginID,
+            controlID: activation.controlID,
+            optionID: activation.optionID
+        )
+        coordinator.setPanelHovered(false)
+        try? await Task.sleep(for: .milliseconds(25))
+
+        XCTAssertEqual(coordinator.activeActivation, activation)
+        XCTAssertNil(dismissedActivation)
+    }
+
+    func testPinnedActivationIgnoresHoverPreviewFromOtherRows() {
+        let coordinator = HoverSecondaryPanelCoordinator(
+            dismissDelay: .milliseconds(5),
+            activationDelay: nil
+        )
+        let pinnedActivation = makeActivation(optionID: "3")
+        let previewActivation = makeActivation(optionID: "4")
+
+        coordinator.pin(
+            pluginID: pinnedActivation.pluginID,
+            controlID: pinnedActivation.controlID,
+            optionID: pinnedActivation.optionID
+        )
+        coordinator.hoverBegan(
+            pluginID: previewActivation.pluginID,
+            controlID: previewActivation.controlID,
+            optionID: previewActivation.optionID
+        )
+
+        XCTAssertEqual(coordinator.activeActivation, pinnedActivation)
     }
 
     private func makeActivation(optionID: String) -> HoverSecondaryPanelCoordinator.Activation {

@@ -1,4 +1,6 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import MacToolsPluginKit
 
 enum GeneralSettingsCardLayout {
@@ -12,38 +14,56 @@ enum GeneralSettingsCardLayout {
 
 struct SettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
     @ObservedObject var appUpdater: AppUpdater
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
+    @StateObject private var uninstallConfirmationSession = PluginUninstallConfirmationSession()
+    var showDashboard: () -> Void = {}
+    var showFeaturePanel: () -> Void = {}
 
     var body: some View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
 
-        return TabView(selection: $pluginHost.selectedSettingsDestination) {
-            GeneralSettingsView(
-                menuBarIconSettings: menuBarIconSettings,
-                menuBarIconGallery: menuBarIconGallery,
-                launchAtLoginController: launchAtLoginController
-            )
-                .tag(SettingsDestination.general)
-                .tabItem {
-                    Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
-                }
+        return VStack(spacing: 0) {
+            SettingsHistoryNavigationControls(coordinator: navigationCoordinator)
 
-            FeatureSettingsView(pluginHost: pluginHost)
-                .tag(SettingsDestination.pluginConfiguration)
-                .tabItem {
-                    Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
-                }
+            TabView(selection: settingsDestinationBinding) {
+                GeneralSettingsView(
+                    pluginHost: pluginHost,
+                    menuBarIconSettings: menuBarIconSettings,
+                    menuBarIconGallery: menuBarIconGallery,
+                    launchAtLoginController: launchAtLoginController
+                )
+                    .tag(SettingsDestination.general)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
+                    }
 
-            AboutSettingsView(appUpdater: appUpdater)
-                .tag(SettingsDestination.about)
-                .tabItem {
-                    Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
-                }
+                FeatureSettingsView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    uninstallConfirmationSession: uninstallConfirmationSession,
+                    showDashboard: showDashboard,
+                    showFeaturePanel: showFeaturePanel
+                )
+                    .tag(SettingsDestination.pluginConfiguration)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
+                    }
+
+                AboutSettingsView(appUpdater: appUpdater)
+                    .tag(SettingsDestination.about)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
+                    }
+            }
+            .background {
+                SettingsDestinationShortcutButtons(coordinator: navigationCoordinator)
+            }
         }
         .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
@@ -55,6 +75,98 @@ struct SettingsView: View {
         PluginRuntimeLocalization.locale.language.characterDirection == .rightToLeft
             ? .rightToLeft
             : .leftToRight
+    }
+
+    private var settingsDestinationBinding: Binding<SettingsDestination> {
+        Binding(
+            get: { navigationCoordinator.destination.settingsDestination },
+            set: { destination in
+                navigationCoordinator.selectSettingsDestination(destination)
+            }
+        )
+    }
+}
+
+// AppWindowRouter hosts Settings in an AppKit NSWindow, so scene-level SwiftUI
+// Commands are unavailable. These nonvisual buttons register window-local key
+// equivalents while keeping the Settings layout and accessibility tree clean.
+struct SettingsDestinationShortcutButtons: View {
+    @ObservedObject var coordinator: SettingsNavigationCoordinator
+
+    var body: some View {
+        HStack(spacing: 0) {
+            shortcutButton(for: .general, key: "1")
+            shortcutButton(for: .pluginConfiguration, key: "2")
+            shortcutButton(for: .about, key: "3")
+            historyShortcutButton(key: "[") { coordinator.goBack() }
+            historyShortcutButton(key: "]") { coordinator.goForward() }
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
+
+    private func shortcutButton(
+        for destination: SettingsDestination,
+        key: KeyEquivalent
+    ) -> some View {
+        Button("") {
+            coordinator.selectSettingsDestination(destination)
+        }
+        .keyboardShortcut(key, modifiers: [.command])
+        .focusable(false)
+    }
+
+    private func historyShortcutButton(
+        key: KeyEquivalent,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button("", action: action)
+            .keyboardShortcut(key, modifiers: [.command])
+            .focusable(false)
+    }
+}
+
+struct SettingsHistoryNavigationControls: View {
+    @ObservedObject var coordinator: SettingsNavigationCoordinator
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                coordinator.goBack()
+            } label: {
+                Label(backTitle, systemImage: "chevron.backward")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!coordinator.canGoBack)
+            .help(backTitle)
+
+            Button {
+                coordinator.goForward()
+            } label: {
+                Label(forwardTitle, systemImage: "chevron.forward")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!coordinator.canGoForward)
+            .help(forwardTitle)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(SettingsStyle.windowBackground)
+    }
+
+    private var backTitle: String {
+        AppL10n.settings("navigation.back", defaultValue: "后退")
+    }
+
+    private var forwardTitle: String {
+        AppL10n.settings("navigation.forward", defaultValue: "前进")
     }
 }
 
@@ -105,6 +217,7 @@ private struct PermissionSettingsRow: View {
 }
 
 struct GeneralSettingsView: View {
+    @ObservedObject var pluginHost: PluginHost
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
@@ -135,6 +248,18 @@ struct GeneralSettingsView: View {
                 MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
             } header: {
                 Text(AppL10n.settings("general.section.menuBarIcon", defaultValue: "状态栏图标"))
+            }
+
+            Section {
+                AppShortcutSettingsRows(pluginHost: pluginHost)
+            } header: {
+                Text(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"))
+            }
+
+            Section {
+                PreferencesBackupSettingsRow(pluginHost: pluginHost)
+            } header: {
+                Text(AppL10n.preferencesBackup("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
             }
         }
         .formStyle(.grouped)
@@ -168,6 +293,470 @@ struct GeneralSettingsView: View {
             MenuBarClickBehaviorPreference(rawValue: clickBehaviorRawValue) ?? .standard
         } set: { preference in
             clickBehaviorRawValue = preference.rawValue
+        }
+    }
+}
+
+private struct AppShortcutSettingsRows: View {
+    @ObservedObject var pluginHost: PluginHost
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(pluginHost.appShortcutItems.enumerated()), id: \.element.id) { index, item in
+                AppShortcutSettingsRow(pluginHost: pluginHost, item: item)
+
+                if index < pluginHost.appShortcutItems.count - 1 {
+                    PluginSettingsListDivider()
+                }
+            }
+        }
+    }
+}
+
+private struct AppShortcutSettingsRow: View {
+    private enum Layout {
+        static let recorderWidth: CGFloat = 126
+        static let actionButtonSize: CGFloat = 22
+        static let controlSpacing = PluginSettingsTheme.Spacing.controlCluster
+        static let controlClusterWidth = recorderWidth + controlSpacing + actionButtonSize
+    }
+
+    @ObservedObject var pluginHost: PluginHost
+    let item: AppShortcutSettingsItem
+
+    var body: some View {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: item.systemImage)
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text(item.errorMessage ?? item.description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(item.errorMessage == nil ? Color.secondary : Color.red)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: Layout.controlSpacing) {
+                PluginShortcutRecorder(
+                    title: item.title,
+                    displayText: item.bindingText,
+                    minWidth: Layout.recorderWidth,
+                    onRecord: { binding in
+                        PluginShortcutRecordingResult.from(
+                            errorMessage: pluginHost.setAppShortcutBindingAndReturnError(
+                                binding,
+                                for: item.action
+                            )
+                        )
+                    },
+                    onBeginRecording: {
+                        pluginHost.clearAppShortcutError(item.action)
+                    }
+                )
+                .frame(width: Layout.recorderWidth)
+
+                if item.canClear {
+                    Button {
+                        pluginHost.clearAppShortcut(item.action)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(PluginSettingsTheme.Typography.rowIcon)
+                            .symbolRenderingMode(.monochrome)
+                            .frame(
+                                width: Layout.actionButtonSize,
+                                height: Layout.actionButtonSize
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.secondary)
+                    .help(AppL10n.settings("shortcuts.clearHelp", defaultValue: "清除快捷键"))
+                } else {
+                    Color.clear
+                        .frame(
+                            width: Layout.actionButtonSize,
+                            height: Layout.actionButtonSize
+                        )
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: Layout.controlClusterWidth, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+    }
+}
+
+private struct PendingPreferencesImport: Identifiable {
+    let id = UUID()
+    let backup: PreferencesBackup
+    let preview: PreferencesImportPreview
+}
+
+private struct PreferencesBackupSettingsRow: View {
+    @ObservedObject var pluginHost: PluginHost
+    @State private var pendingImport: PendingPreferencesImport?
+    @State private var alertMessage: String?
+    @State private var isPreparingImport = false
+    @State private var isImporting = false
+
+    var body: some View {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: "externaldrive.badge.checkmark")
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(AppL10n.preferencesBackup("preferencesBackup.title", defaultValue: "导出与导入偏好设置"))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text(AppL10n.preferencesBackup(
+                    "preferencesBackup.description",
+                    defaultValue: "包含应用偏好、插件显示顺序、快捷键和支持导出的插件设置；不会包含权限、缓存、凭证或其他私有数据。"
+                ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 8) {
+                Button(AppL10n.preferencesBackup("preferencesBackup.export", defaultValue: "导出偏好设置…"), action: exportPreferences)
+                    .buttonStyle(.bordered)
+                    .disabled(isPreparingImport || isImporting)
+
+                Button(AppL10n.preferencesBackup("preferencesBackup.import", defaultValue: "导入偏好设置…"), action: choosePreferencesImport)
+                    .buttonStyle(.bordered)
+                    .disabled(isPreparingImport || isImporting)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+        .sheet(item: $pendingImport) { pending in
+            PreferencesImportPreviewSheet(
+                preview: pending.preview,
+                isImporting: isImporting,
+                onCancel: { pendingImport = nil },
+                onImport: { selectedPluginIDs in
+                    importPreferences(
+                        pending.backup,
+                        installingMissingPluginIDs: selectedPluginIDs
+                    )
+                }
+            )
+        }
+        .alert(
+            AppL10n.preferencesBackup("preferencesBackup.alert.title", defaultValue: "偏好设置备份"),
+            isPresented: Binding(
+                get: { alertMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        alertMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
+        } message: {
+            Text(alertMessage ?? "")
+        }
+    }
+
+    private func exportPreferences() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = PreferencesBackupExportFileName.make()
+        panel.message = AppL10n.preferencesBackup("preferencesBackup.export.prompt", defaultValue: "将可移植的 MacTools 偏好设置保存为 JSON 文件。")
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        do {
+            try pluginHost.makePreferencesBackup().encodedJSON().write(to: url, options: .atomic)
+            alertMessage = AppL10n.preferencesBackup("preferencesBackup.exported", defaultValue: "偏好设置已导出。")
+        } catch {
+            alertMessage = preferencesBackupErrorMessage(error)
+        }
+    }
+
+    private func choosePreferencesImport() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = AppL10n.preferencesBackup("preferencesBackup.import.prompt", defaultValue: "选择 MacTools 导出的偏好设置 JSON 文件。")
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        Task { @MainActor in
+            isPreparingImport = true
+            defer { isPreparingImport = false }
+
+            do {
+                let backup = try await PreferencesBackup.decodeJSON(contentsOf: url)
+                await pluginHost.refreshPluginCatalog()
+                pendingImport = PendingPreferencesImport(
+                    backup: backup,
+                    preview: try pluginHost.preferencesImportPreview(for: backup)
+                )
+            } catch {
+                alertMessage = preferencesBackupErrorMessage(error)
+            }
+        }
+    }
+
+    private func importPreferences(
+        _ backup: PreferencesBackup,
+        installingMissingPluginIDs pluginIDs: Set<String>
+    ) {
+        Task { @MainActor in
+            isImporting = true
+            defer { isImporting = false }
+
+            do {
+                let result = try await pluginHost.importPreferences(
+                    backup,
+                    installingMissingPluginIDs: pluginIDs
+                )
+                pendingImport = nil
+                let importedMessage = AppL10n.preferencesBackup(
+                    "preferencesBackup.imported",
+                    defaultValue: "偏好设置已导入。"
+                )
+                let warnings = result.pluginInstallationFailures
+                    .sorted { $0.key < $1.key }
+                    .map { pluginID, message in
+                        let title = pluginHost.pluginManagementItems
+                            .first(where: { $0.id == pluginID })?
+                            .title
+                            ?? pluginID
+                        return "\(title): \(message)"
+                    }
+                    + result.shortcutErrors
+                        .values
+                        .sorted()
+                alertMessage = warnings.isEmpty
+                    ? importedMessage
+                    : ([importedMessage] + warnings).joined(separator: "\n")
+            } catch {
+                pendingImport = nil
+                alertMessage = preferencesBackupErrorMessage(error)
+            }
+        }
+    }
+
+    private func preferencesBackupErrorMessage(_ error: Error) -> String {
+        switch error as? PreferencesBackupError {
+        case let .unsupportedFormatVersion(version):
+            return AppL10n.preferencesBackupFormat(
+                "preferencesBackup.error.unsupportedFormat",
+                defaultValue: "不支持的偏好设置备份版本（%d）。",
+                version
+            )
+        case .invalidApplicationPreferences:
+            return AppL10n.preferencesBackup(
+                "preferencesBackup.error.invalidApplicationPreferences",
+                defaultValue: "备份中的应用偏好设置无效。"
+            )
+        case let .fileTooLarge(maximumBytes):
+            return AppL10n.preferencesBackupFormat(
+                "preferencesBackup.error.fileTooLarge",
+                defaultValue: "偏好设置备份不能超过 %d MB。",
+                maximumBytes / (1024 * 1024)
+            )
+        case nil:
+            return error.localizedDescription
+        }
+    }
+}
+
+enum PreferencesBackupExportFileName {
+    static func make(date: Date = .now, timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        return "MacTools Preferences \(formatter.string(from: date)).json"
+    }
+}
+
+private struct PreferencesImportPreviewSheet: View {
+    let preview: PreferencesImportPreview
+    let isImporting: Bool
+    let onCancel: () -> Void
+    let onImport: (Set<String>) -> Void
+    @State private var selectedInstallablePluginIDs: Set<String> = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(AppL10n.preferencesBackup("preferencesBackup.preview.title", defaultValue: "导入偏好设置"))
+                .font(PluginSettingsTheme.Typography.pageTitle)
+
+            Text(previewDescription)
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
+                GridRow {
+                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.application", defaultValue: "应用偏好"))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.preview.applicationSummary",
+                        defaultValue: "应用外观、语言和状态栏点击行为"
+                    ))
+                }
+                GridRow {
+                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.plugins", defaultValue: "插件设置"))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    Text(AppL10n.preferencesBackupFormat(
+                        "preferencesBackup.preview.pluginsCount",
+                        defaultValue: "%d 个可用插件",
+                        preview.pluginCount
+                    ))
+                }
+                GridRow {
+                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.shortcuts", defaultValue: "快捷键"))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    Text(AppL10n.preferencesBackupFormat(
+                        "preferencesBackup.preview.shortcutsCount",
+                        defaultValue: "%d 项自定义",
+                        preview.shortcutCount
+                    ))
+                }
+            }
+            .font(PluginSettingsTheme.Typography.rowDescription)
+
+            Text(AppL10n.preferencesBackup(
+                "preferencesBackup.preview.replaceNotice",
+                defaultValue: "将替换以上偏好类别；备份中未包含的设置会恢复为默认值。"
+            ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !preview.installablePlugins.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.preview.installablePlugins",
+                        defaultValue: "可安装的缺失插件"
+                    ))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                    Text(AppL10n.preferencesBackup(
+                        "preferencesBackup.preview.installablePluginsDescription",
+                        defaultValue: "仅会从已验证的插件列表下载你选中的插件。"
+                    ))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ForEach(preview.installablePlugins) { plugin in
+                        Toggle(isOn: installationSelectionBinding(for: plugin.id)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(plugin.title)
+                                    .font(PluginSettingsTheme.Typography.rowTitle)
+
+                                Text("\(plugin.version) · \(plugin.summary ?? plugin.id)")
+                                    .font(PluginSettingsTheme.Typography.rowDescription)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+            }
+
+            if !preview.unavailablePluginIDs.isEmpty || !preview.unavailableShortcutIDs.isEmpty {
+                Text(AppL10n.preferencesBackupFormat(
+                    "preferencesBackup.preview.skipped",
+                    defaultValue: "将跳过 %d 个本机不可用的插件设置和 %d 项快捷键；不会安装缺失插件。",
+                    preview.unavailablePluginIDs.count,
+                    preview.unavailableShortcutIDs.count
+                ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Spacer()
+                Button(AppL10n.settings("common.cancel", defaultValue: "取消"), action: onCancel)
+                    .buttonStyle(.bordered)
+                    .disabled(isImporting)
+                Button(confirmTitle) {
+                    onImport(selectedInstallablePluginIDs)
+                }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isImporting)
+            }
+
+            if isImporting {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .padding(24)
+        .frame(width: 500)
+    }
+
+    private var confirmTitle: String {
+        if selectedInstallablePluginIDs.isEmpty {
+            return AppL10n.preferencesBackup("preferencesBackup.preview.confirm", defaultValue: "导入")
+        }
+
+        return AppL10n.preferencesBackup(
+            "preferencesBackup.preview.installAndImport",
+            defaultValue: "安装所选插件并导入"
+        )
+    }
+
+    private var previewDescription: String {
+        if selectedInstallablePluginIDs.isEmpty {
+            return AppL10n.preferencesBackup(
+                "preferencesBackup.preview.description",
+                defaultValue: "请确认以下更改。导入不会安装插件，也不会修改权限、缓存、Keychain 密钥或插件私有数据。"
+            )
+        }
+
+        return AppL10n.preferencesBackup(
+            "preferencesBackup.description",
+            defaultValue: "备份包含应用偏好、插件显示顺序和快捷键；不会包含权限、缓存或插件私有数据。"
+        )
+    }
+
+    private func installationSelectionBinding(for pluginID: String) -> Binding<Bool> {
+        Binding {
+            selectedInstallablePluginIDs.contains(pluginID)
+        } set: { isSelected in
+            if isSelected {
+                selectedInstallablePluginIDs.insert(pluginID)
+            } else {
+                selectedInstallablePluginIDs.remove(pluginID)
+            }
         }
     }
 }
@@ -297,7 +886,8 @@ private struct LanguageSettingsRow: View {
                 Text(AppL10n.settings("language.description", defaultValue: "默认跟随系统语言，也可以固定为指定语言。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -309,7 +899,7 @@ private struct LanguageSettingsRow: View {
             }
             .pickerStyle(.menu)
             .labelsHidden()
-            .frame(width: 150, alignment: .trailing)
+            .frame(minWidth: 280, idealWidth: 320, maxWidth: 360, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
@@ -377,6 +967,10 @@ private struct LaunchAtLoginSettingsRow: View {
 
 private struct FeatureSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
+    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
+    let showDashboard: () -> Void
+    let showFeaturePanel: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -386,18 +980,32 @@ private struct FeatureSettingsView: View {
             )
             .frame(width: 220)
 
-            FeatureSettingsDetailPane(pluginHost: pluginHost)
+            FeatureSettingsDetailPane(
+                pluginHost: pluginHost,
+                selectedPane: selectedPane,
+                uninstallConfirmationSession: uninstallConfirmationSession,
+                showDashboard: showDashboard,
+                showFeaturePanel: showFeaturePanel
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsStyle.windowBackground)
+        .onChange(of: pluginHost.pluginConfigurationItems.map(\.id)) {
+            navigationCoordinator.reconcileCurrentDestinationAvailability()
+        }
     }
 
     private var selectionBinding: Binding<FeatureSettingsPane> {
         Binding {
-            pluginHost.selectedFeatureSettingsPane
+            selectedPane
         } set: { selection in
-            pluginHost.selectFeatureSettingsPane(selection)
+            navigationCoordinator.navigate(to: .plugins(selection))
         }
+    }
+
+    private var selectedPane: FeatureSettingsPane {
+        navigationCoordinator.destination.featureSettingsPane
+            ?? pluginHost.pluginSettingsLandingPage()
     }
 }
 
@@ -408,16 +1016,28 @@ private struct FeatureSettingsSidebar: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
-                FeatureSettingsSidebarSectionTitle(AppL10n.settings("plugins.sidebar.marketplaceSection", defaultValue: "插件市场"))
+                FeatureSettingsSidebarSectionTitle(AppL10n.settings(
+                    "plugins.sidebar.pluginsSection",
+                    defaultValue: "插件"
+                ))
                     .padding(.top, 14)
 
                 FeatureSettingsSidebarRow(
-                    title: AppL10n.settings("plugins.sidebar.installed", defaultValue: "已安装"),
-                    systemImage: "checkmark.circle",
-                    iconTint: .green,
-                    isSelected: selection == .installed
+                    title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
+                    systemImage: "square.grid.2x2",
+                    iconTint: .blue,
+                    isSelected: selection == .dashboardLayout
                 ) {
-                    selection = .installed
+                    selection = .dashboardLayout
+                }
+
+                FeatureSettingsSidebarRow(
+                    title: AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板"),
+                    systemImage: "switch.2",
+                    iconTint: .purple,
+                    isSelected: selection == .featurePanelLayout
+                ) {
+                    selection = .featurePanelLayout
                 }
 
                 FeatureSettingsSidebarRow(
@@ -487,16 +1107,18 @@ private struct FeatureSettingsSidebarRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: systemImage)
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(isSelected ? Color.accentColor : iconTint)
-                    .frame(width: 18, height: 18)
+                Group {
+                    Image(systemName: systemImage)
+                        .font(PluginSettingsTheme.Typography.sectionTitle)
+                        .foregroundStyle(isSelected ? Color.accentColor : iconTint)
+                        .frame(width: 18, height: 18)
 
-                Text(title)
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    Text(title)
+                        .font(PluginSettingsTheme.Typography.sectionTitle)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
 
                 Spacer(minLength: 0)
             }
@@ -525,13 +1147,91 @@ private struct FeatureSettingsSidebarRow: View {
 
 private struct FeatureSettingsDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
+    let selectedPane: FeatureSettingsPane
+    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
+    let showDashboard: () -> Void
+    let showFeaturePanel: () -> Void
 
     var body: some View {
-        switch pluginHost.selectedFeatureSettingsPane {
-        case .installed:
-            InstalledFeaturesSettingsView(pluginHost: pluginHost)
+        detail
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch selectedPane {
+        case .dashboardLayout:
+            SurfaceLayoutSettingsView(
+                surface: .dashboard,
+                title: AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘"),
+                description: AppL10n.settings(
+                    "plugins.dashboard.description",
+                    defaultValue: "拖拽调整仪表盘组件的排列顺序。"
+                ),
+                systemImage: "square.grid.2x2",
+                iconTint: .blue,
+                items: pluginHost.dashboardLayoutItems,
+                hiddenItems: pluginHost.dashboardHiddenLayoutItems,
+                openButtonTitle: AppL10n.settings("plugins.dashboard.open", defaultValue: "打开仪表盘"),
+                emptyTitle: AppL10n.settings("plugins.dashboard.empty.title", defaultValue: "暂无仪表盘组件"),
+                emptyDescription: AppL10n.settings(
+                    "plugins.dashboard.empty.description",
+                    defaultValue: "已安装且支持仪表盘的插件会显示在这里。"
+                ),
+                onMove: { pluginID, targetOffset in
+                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
+                },
+                onSetVisible: { pluginID, isVisible in
+                    pluginHost.setPluginVisible(isVisible, id: pluginID, on: .dashboard)
+                },
+                onResetOrder: { pluginHost.resetPluginOrder(on: .dashboard) },
+                onOpenPanel: showDashboard,
+                configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
+                uninstallConfirmationSession: uninstallConfirmationSession,
+                onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
+                onOpenMarketplace: pluginHost.presentPluginMarketplace,
+                onUninstall: { pluginID in
+                    try pluginHost.uninstallDynamicPlugin(pluginID: pluginID)
+                }
+            )
+        case .featurePanelLayout:
+            SurfaceLayoutSettingsView(
+                surface: .featurePanel,
+                title: AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板"),
+                description: AppL10n.settings(
+                    "plugins.featurePanel.description",
+                    defaultValue: "拖拽调整功能面板操作的排列顺序。"
+                ),
+                systemImage: "switch.2",
+                iconTint: .purple,
+                items: pluginHost.featurePanelLayoutItems,
+                hiddenItems: pluginHost.featurePanelHiddenLayoutItems,
+                openButtonTitle: AppL10n.settings("plugins.featurePanel.open", defaultValue: "打开功能面板"),
+                emptyTitle: AppL10n.settings("plugins.featurePanel.empty.title", defaultValue: "暂无功能面板操作"),
+                emptyDescription: AppL10n.settings(
+                    "plugins.featurePanel.empty.description",
+                    defaultValue: "已安装且支持功能面板的插件会显示在这里。"
+                ),
+                onMove: { pluginID, targetOffset in
+                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
+                },
+                onSetVisible: { pluginID, isVisible in
+                    pluginHost.setPluginVisible(isVisible, id: pluginID, on: .featurePanel)
+                },
+                onResetOrder: { pluginHost.resetPluginOrder(on: .featurePanel) },
+                onOpenPanel: showFeaturePanel,
+                configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
+                uninstallConfirmationSession: uninstallConfirmationSession,
+                onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
+                onOpenMarketplace: pluginHost.presentPluginMarketplace,
+                onUninstall: { pluginID in
+                    try pluginHost.uninstallDynamicPlugin(pluginID: pluginID)
+                }
+            )
         case .marketplace:
-            PluginManagementSettingsView(pluginHost: pluginHost)
+            PluginManagementSettingsView(
+                pluginHost: pluginHost,
+                uninstallConfirmationSession: uninstallConfirmationSession
+            )
         case let .configuration(pluginID):
             PluginConfigurationDetailPane(
                 pluginHost: pluginHost,
@@ -545,98 +1245,180 @@ private struct FeatureSettingsDetailPane: View {
     }
 }
 
-private struct InstalledFeaturesSettingsView: View {
-    @ObservedObject var pluginHost: PluginHost
-    @State private var searchText: String = ""
-    @State private var selectedFilter: PluginCategoryFilter = .all
+private struct SurfaceLayoutSettingsView: View {
+    let surface: PluginDisplaySurface
+    let title: String
+    let description: String
+    let systemImage: String
+    let iconTint: Color
+    let items: [PluginSurfaceLayoutItem]
+    let hiddenItems: [PluginSurfaceLayoutItem]
+    let openButtonTitle: String
+    let emptyTitle: String
+    let emptyDescription: String
+    let onMove: (String, Int) -> Void
+    let onSetVisible: (String, Bool) -> Void
+    let onResetOrder: () -> Void
+    let onOpenPanel: () -> Void
+    let configurationPluginIDs: Set<String>
+    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
+    let onOpenSettings: (String) -> Void
+    let onOpenMarketplace: () -> Void
+    let onUninstall: (String) throws -> Void
+    @State private var pendingUninstallItem: PluginUninstallConfirmation?
+    @State private var uninstallErrorMessage: String?
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
-                SettingsPageHeader(
-                    title: AppL10n.settings("plugins.installed.title", defaultValue: "已安装"),
-                    description: AppL10n.settings(
-                        "plugins.installed.description",
-                        defaultValue: "启用、隐藏并拖拽调整插件在菜单栏里的显示顺序。"
-                    ),
-                    systemImage: "checkmark.circle",
-                    iconTint: .green
-                )
-
-                if !pluginHost.featureManagementItems.isEmpty {
-                    PluginFilterBarView(
-                        searchText: $searchText,
-                        selectedFilter: $selectedFilter,
-                        countsByFilter: countsByFilter,
-                        searchPrompt: AppL10n.settings("plugins.installed.searchPrompt", defaultValue: "搜索已安装插件")
+                HStack(alignment: .center, spacing: 12) {
+                    SettingsPageHeader(
+                        title: title,
+                        description: description,
+                        systemImage: systemImage,
+                        iconTint: iconTint
                     )
+
+                    Button(AppL10n.settings(
+                        "plugins.layout.restoreDefaultOrder",
+                        defaultValue: "恢复默认排列"
+                    ), action: onResetOrder)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(items.count < 2)
+
+                    Button(action: onOpenPanel) {
+                        Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+
+                if uninstallConfirmationSession.isConfirmationPaused {
+                    PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
                 }
 
                 SettingsCardContainer {
-                    if pluginHost.featureManagementItems.isEmpty {
+                    if items.isEmpty {
                         ContentUnavailableView(
-                            AppL10n.settings("plugins.installed.empty.title", defaultValue: "暂无已安装插件"),
-                            systemImage: "checkmark.circle",
-                            description: Text(AppL10n.settings("plugins.installed.empty.description", defaultValue: "安装插件后，会显示在这里。"))
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                    } else if filteredItems.isEmpty {
-                        ContentUnavailableView(
-                            AppL10n.settings("plugins.filter.empty.title", defaultValue: "未找到匹配的插件"),
-                            systemImage: "magnifyingglass",
-                            description: Text(AppL10n.settings("plugins.filter.empty.description", defaultValue: "尝试调整关键字或切换分类。"))
+                            emptyTitle,
+                            systemImage: systemImage,
+                            description: Text(emptyDescription)
                         )
                         .frame(maxWidth: .infinity, minHeight: 180)
                     } else {
                         FeatureManagementTableView(
-                            items: filteredItems,
-                            isReorderEnabled: !isFiltering,
-                            onVisibilityChange: { pluginID, isVisible in
-                                pluginHost.setFeatureVisibility(isVisible, for: pluginID)
+                            items: items.map {
+                                FeatureManagementTableItem(
+                                    surfaceItem: $0,
+                                    hasSettings: configurationPluginIDs.contains($0.id)
+                                )
                             },
-                            onMove: { pluginID, targetOffset in
-                                pluginHost.moveFeatureManagementItem(id: pluginID, toOffset: targetOffset)
-                            }
+                            mode: .surface(surface),
+                            onMove: onMove,
+                            onSetVisible: onSetVisible,
+                            onOpenSettings: onOpenSettings,
+                            onOpenMarketplace: onOpenMarketplace,
+                            onRequestUninstall: requestUninstall
                         )
-                        .frame(height: featureManagementListHeight)
+                        .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
                     }
                 }
 
-                if isFiltering && !filteredItems.isEmpty {
-                    Text(AppL10n.settings(
-                        "plugins.installed.filteringReorderHint",
-                        defaultValue: "筛选中暂时不能拖拽排序，清除关键字或选择「全部」即可重新排序。"
-                    ))
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
+                if !hiddenItems.isEmpty {
+                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                        Label(hiddenSectionTitle, systemImage: "eye.slash")
+                            .font(PluginSettingsTheme.Typography.sectionTitle)
+                            .foregroundStyle(.secondary)
+
+                        SettingsCardContainer {
+                            FeatureManagementTableView(
+                                items: hiddenItems.map {
+                                    FeatureManagementTableItem(
+                                        surfaceItem: $0,
+                                        hasSettings: configurationPluginIDs.contains($0.id)
+                                    )
+                                },
+                                mode: .surface(surface),
+                                isReorderEnabled: false,
+                                onSetVisible: onSetVisible,
+                                onOpenSettings: onOpenSettings,
+                                onOpenMarketplace: onOpenMarketplace,
+                                onRequestUninstall: requestUninstall
+                            )
+                            .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
+                        }
+                    }
                 }
             }
             .padding(PluginSettingsTheme.Spacing.pagePadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(SettingsStyle.contentBackground)
-    }
-
-    private var filteredItems: [PluginFeatureManagementItem] {
-        pluginHost.featureManagementItems.filter {
-            PluginListFilter.matches(featureItem: $0, query: searchText, filter: selectedFilter)
+        .sheet(item: $pendingUninstallItem) { item in
+            PluginUninstallConfirmationSheet(
+                confirmation: item,
+                session: uninstallConfirmationSession,
+                onConfirm: uninstall
+            )
+        }
+        .alert(
+            AppL10n.plugins("plugin.marketplace.operationFailed.title", defaultValue: "插件操作失败"),
+            isPresented: Binding(
+                get: { uninstallErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        uninstallErrorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
+        } message: {
+            Text(uninstallErrorMessage ?? "")
         }
     }
 
-    private var countsByFilter: [PluginCategoryFilter: Int] {
-        PluginListFilter.countsByFilter(
-            featureItems: pluginHost.featureManagementItems,
-            query: searchText
+    private func requestUninstall(_ pluginID: String) {
+        guard let item = (items + hiddenItems).first(where: { $0.id == pluginID && $0.canUninstall }) else {
+            return
+        }
+
+        let confirmation = PluginUninstallConfirmation(
+            pluginID: item.id,
+            pluginTitle: item.title,
+            surfaceCapabilitySummary: pluginCapabilitySummary(item.capabilities)
         )
+        if uninstallConfirmationSession.shouldConfirmUninstall {
+            pendingUninstallItem = confirmation
+        } else {
+            uninstall(confirmation)
+        }
     }
 
-    private var isFiltering: Bool {
-        !PluginListFilter.normalized(searchText).isEmpty || selectedFilter != .all
+    private var hiddenSectionTitle: String {
+        switch surface {
+        case .dashboard:
+            return AppL10n.settingsFormat(
+                "plugins.dashboard.hiddenSectionFormat",
+                defaultValue: "已在仪表盘隐藏（%d）",
+                hiddenItems.count
+            )
+        case .featurePanel:
+            return AppL10n.settingsFormat(
+                "plugins.featurePanel.hiddenSectionFormat",
+                defaultValue: "已在功能面板隐藏（%d）",
+                hiddenItems.count
+            )
+        }
     }
 
-    private var featureManagementListHeight: CGFloat {
-        FeatureManagementTableView.preferredHeight(for: filteredItems.count)
+    private func uninstall(_ confirmation: PluginUninstallConfirmation) {
+        do {
+            try onUninstall(confirmation.pluginID)
+        } catch {
+            uninstallErrorMessage = error.localizedDescription
+        }
     }
 }
 

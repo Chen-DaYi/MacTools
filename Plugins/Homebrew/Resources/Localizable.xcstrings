@@ -5,6 +5,24 @@
     "detail.confirm.cancel": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "취소"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмена"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -58,6 +76,24 @@
     "detail.confirm.cleanup.button": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereinigen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정리"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -111,6 +147,24 @@
     "detail.confirm.cleanup.message": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Führt die Brew-Bereinigung aus, um alte Homebrew-Versionen zu entfernen und Caches herunterzuladen."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brew 정리를 실행하여 이전 Homebrew 버전을 제거하고 캐시를 다운로드합니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запускает очистку Brew для удаления старых версий Homebrew и загрузки кешей."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -164,6 +218,24 @@
     "detail.confirm.cleanup.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Cache leeren?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈브류 캐시를 정리하시겠습니까?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить кэш Homebrew?"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -217,6 +289,24 @@
     "detail.confirm.defaultTitle": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktion bestätigen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "조치 확인"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подтвердить действие"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -270,6 +360,24 @@
     "detail.confirm.tap.button": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hinzufügen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추가"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -323,6 +431,24 @@
     "detail.confirm.tap.message": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Führt brew tap %@ aus, damit Homebrew Formula- und Cask-Daten aus dieser Quelle abrufen kann."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "brew tap %@을(를) 실행하여 Homebrew가 이 소스에서 formula 및 cask 데이터를 가져올 수 있게 합니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выполняет brew tap %@, чтобы Homebrew мог получать данные formula и cask из этого источника."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -376,6 +502,24 @@
     "detail.confirm.tap.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Repository hinzufügen?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탭을 추가하시겠습니까?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить репозиторий Homebrew?"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -429,6 +573,24 @@
     "detail.confirm.uninstall.button": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deinstallieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제거"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -482,6 +644,24 @@
     "detail.confirm.uninstall.message": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Führt brew uninstall %@ aus. Davon abhängige Funktionen können beeinträchtigt werden."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "brew uninstall %@을(를) 실행합니다. 이에 의존하는 기능에 영향을 줄 수 있습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выполняет brew uninstall %@. Функции, зависящие от этого пакета, могут быть затронуты."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -535,6 +715,24 @@
     "detail.confirm.uninstall.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ deinstallieren?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@을(를) 제거하시겠습니까?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить %@?"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -588,6 +786,24 @@
     "detail.confirm.untap.button": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제거"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -641,6 +857,24 @@
     "detail.confirm.untap.message": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Führt brew untap %@ aus. Pakete aus dieser Quelle erhalten möglicherweise keine Updates mehr."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "brew untap %@을(를) 실행합니다. 이 소스의 패키지는 더 이상 업데이트를 받지 못할 수 있습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выполняет brew untap %@. Пакеты из этого источника могут перестать получать обновления."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -694,6 +928,24 @@
     "detail.confirm.untap.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ entfernen?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@을(를) 제거하시겠습니까?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить %@?"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -747,6 +999,24 @@
     "detail.confirm.upgradeAll.button": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle aktualisieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모두 업그레이드"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить все"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -800,6 +1070,24 @@
     "detail.confirm.upgradeAll.message": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Führt brew upgrade aus, um alle aktualisierbaren Homebrew-Pakete zu aktualisieren. Die installierte Software kann sich ändern."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brew 업그레이드를 실행하여 업그레이드 가능한 모든 Homebrew 패키지를 업데이트합니다. 설치된 소프트웨어는 변경될 수 있습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запускает обновление для обновления всех обновляемых пакетов Homebrew. Установленное программное обеспечение может измениться."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -853,6 +1141,24 @@
     "detail.confirm.upgradeAll.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Pakete upgraden?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모든 패키지를 업그레이드하시겠습니까?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить все пакеты?"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -906,6 +1212,24 @@
     "detail.console.buttonCancel": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorgang abbrechen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "작업 취소"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить операцию"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -959,6 +1283,24 @@
     "detail.console.buttonClear": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leeren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지우기"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1012,6 +1354,24 @@
     "detail.console.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konsolenprotokolle"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "콘솔 로그"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журналы консоли"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1065,6 +1425,24 @@
     "detail.detail.actionPin": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version anheften"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버전 고정"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрепить версию"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1118,6 +1496,24 @@
     "detail.detail.actionUninstall": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deinstallieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제거"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1171,6 +1567,24 @@
     "detail.detail.actionUnpin": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lösen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "고정 해제"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открепить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1224,6 +1638,24 @@
     "detail.detail.actionUpgrade": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업그레이드"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1277,6 +1709,24 @@
     "detail.detail.dependencies": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abhängigkeiten (%d)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종속성 (%d)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зависимости (%d)"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1330,6 +1780,24 @@
     "detail.detail.installedVer": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installiert"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치됨"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установлено"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1383,6 +1851,24 @@
     "detail.detail.latestAvailableVer": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neueste verfügbar"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최신 사용 가능"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последние доступные"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1436,6 +1922,24 @@
     "detail.detail.latestVer": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neueste"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최신"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последние"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1489,6 +1993,24 @@
     "detail.detail.onlineHint": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählen Sie ein Suchergebnis zur Installation aus"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치할 검색 결과를 선택하세요"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите результат поиска для установки"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1542,6 +2064,24 @@
     "detail.detail.pinned": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angepinnt"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "고정됨"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закреплено"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1595,6 +2135,24 @@
     "detail.detail.selectionHint": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählen Sie ein Paket aus, um Details anzuzeigen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "세부정보를 보려면 패키지를 선택하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите пакет, чтобы просмотреть подробности"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1648,6 +2206,24 @@
     "detail.detail.type": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "유형"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тип"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1701,6 +2277,24 @@
     "detail.detail.typeCask": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GUI-App (Cask)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GUI 앱(Cask)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приложение с графическим интерфейсом (Cask)"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1754,6 +2348,24 @@
     "detail.detail.typeFormula": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLI-Paket (Formel)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLI 패키지(공식)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пакет CLI (формула)"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1807,6 +2419,24 @@
     "detail.detail.usedBy": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erforderlich für (%d)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음에서 필요함 (%d)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Требуется для (%d)"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1860,6 +2490,24 @@
     "detail.detail.website": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homepage"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈페이지"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Домашняя страница"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1913,6 +2561,24 @@
     "detail.diagnostics.buttonExecute": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lauf"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Беги"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -1966,6 +2632,24 @@
     "detail.diagnostics.cleanup.desc": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen Sie alte Downloads und Caches."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오래된 다운로드와 캐시를 제거하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалите старые загрузки и кеши."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2019,6 +2703,24 @@
     "detail.diagnostics.cleanup.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache leeren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "캐시 정리"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить кэш"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2072,6 +2774,24 @@
     "detail.diagnostics.doctor.desc": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überprüfen Sie Umgebungsvariablen, Berechtigungen und Build-Pfade."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "환경 변수, 권한, 빌드 경로를 확인하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте переменные среды, разрешения и пути сборки."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2125,6 +2845,24 @@
     "detail.diagnostics.doctor.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Führen Sie die Diagnose aus"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "진단 실행"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запустить диагностику"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2178,6 +2916,24 @@
     "detail.diagnostics.maintenance.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartung"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "유지보수"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Техническое обслуживание"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2231,6 +2987,24 @@
     "detail.diagnostics.pathApply": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewerben"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Применить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2284,6 +3058,24 @@
     "detail.diagnostics.pathHelpTitle": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allgemeine Installationsorte"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일반적인 설치 위치"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общие места установки"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2337,6 +3129,24 @@
     "detail.diagnostics.pathNotFoundDesc": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installieren Sie Homebrew oder wählen Sie den Pfad für die ausführbare Brew-Datei manuell aus."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew를 설치하거나 Brew 실행 파일 경로를 수동으로 선택하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установите Homebrew или выберите путь к исполняемому файлу Brew вручную."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2390,6 +3200,24 @@
     "detail.diagnostics.pathNotFoundTitle": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew nicht gefunden"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈브류를 찾을 수 없음"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Домашнее пиво не найдено"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2443,6 +3271,24 @@
     "detail.diagnostics.pathPlaceholder": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Beispiel /opt/homebrew/bin/brew"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예를 들어 /opt/homebrew/bin/brew"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Например, /opt/homebrew/bin/brew"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2496,6 +3342,24 @@
     "detail.diagnostics.pathTitle": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Braupfad"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "양조 경로"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "путь пивоварения"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2549,6 +3413,24 @@
     "detail.diagnostics.update.desc": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synchronisieren Sie Homebrew-Formeln und Fasslisten."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew 공식과 캐스크 목록을 동기화하세요."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Синхронизируйте формулу Homebrew и списки бочек."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2602,6 +3484,24 @@
     "detail.diagnostics.update.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taps aktualisieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업데이트 탭"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить краны"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2655,6 +3555,24 @@
     "detail.diagnostics.upgrade.desc": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim Upgrade werden derzeit veraltete Pakete erkannt."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업그레이드가 현재 오래된 패키지를 감지했습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновите обнаруженные в данный момент устаревшие пакеты."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2708,6 +3626,24 @@
     "detail.diagnostics.upgrade.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upgrade-Pakete"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업그레이드 패키지"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пакеты обновления"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2761,6 +3697,24 @@
     "detail.filter.all": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모두"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2814,6 +3768,24 @@
     "detail.filter.cask": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fass"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "캐스크"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бочка"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2867,6 +3839,24 @@
     "detail.filter.formula": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formel"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "공식"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Формула"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2920,6 +3910,24 @@
     "detail.refresh.button": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새로고침"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -2973,6 +3981,24 @@
     "detail.refresh.help": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Status aktualisieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈브류 상태 새로 고침"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить статус Homebrew"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3026,6 +4052,24 @@
     "detail.search.button": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검색"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3079,6 +4123,24 @@
     "detail.search.empty": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geben Sie ein Schlüsselwort ein, um nach Paketen zu suchen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지를 검색하려면 키워드를 입력하세요"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите ключевое слово для поиска пакетов"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3132,6 +4194,24 @@
     "detail.search.fetchingDetail": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paketdetails werden geladen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지 세부정보 로드 중"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка сведений о пакете"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3185,6 +4265,24 @@
     "detail.search.hasUpdate": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "업데이트"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3238,6 +4336,24 @@
     "detail.search.installAction": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3291,6 +4407,24 @@
     "detail.search.installAgainAction": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut installieren"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다시 설치"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установить снова"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3344,6 +4478,24 @@
     "detail.search.installedHint": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Paket ist bereits installiert."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 패키지는 이미 설치되어 있습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот пакет уже установлен."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3397,6 +4549,24 @@
     "detail.search.loadingInstalled": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Status wird geladen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈브류 상태 로드 중"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка статуса Homebrew"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3450,6 +4620,24 @@
     "detail.search.noMatch": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden installierten Pakete"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일치하는 설치된 패키지가 없습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет соответствующих установленных пакетов"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3503,6 +4691,24 @@
     "detail.search.notLoaded": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installierte Pakete wurden noch nicht geladen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치된 패키지가 아직 로드되지 않았습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установленные пакеты еще не загружены"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3556,6 +4762,24 @@
     "detail.search.onlinePlaceholder": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pakete suchen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지 검색"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск пакетов"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3609,6 +4833,24 @@
     "detail.search.placeholder": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durchsuchen Sie installierte Pakete"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치된 패키지 검색"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск установленных пакетов"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3662,6 +4904,24 @@
     "detail.search.searching": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche nach Homebrew"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈브류 검색 중"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск доморощенного пива"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3715,6 +4975,24 @@
     "detail.status.brewPathMissing": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "brew nicht konfiguriert"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "양조가 구성되지 않았습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пивоварение не настроено"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3768,6 +5046,24 @@
     "detail.status.installed": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installiert"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치됨"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установлено"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3821,6 +5117,24 @@
     "detail.status.outdated": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Veraltet"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "구식"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Устаревший"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3927,6 +5241,24 @@
     "detail.subtitle": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwalten Sie Pakete, Apps und Repositorys visuell."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지, 앱, 저장소를 시각적으로 관리합니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Управляйте пакетами, приложениями и репозиториями визуально."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -3980,6 +5312,24 @@
     "detail.tabs.diagnostics": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnose"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "진단"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диагностика"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4033,6 +5383,24 @@
     "detail.tabs.installed": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installiert"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치됨"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установлено"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4086,6 +5454,24 @@
     "detail.tabs.picker": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "보기"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Посмотреть"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4139,6 +5525,24 @@
     "detail.tabs.search": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검색"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4192,6 +5596,24 @@
     "detail.tabs.taps": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wasserhähne"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탭"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Краны"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4245,6 +5667,24 @@
     "detail.taps.buttonAdd": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hinzufügen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추가"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4298,6 +5738,24 @@
     "detail.taps.buttonUntap": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제거"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4351,6 +5809,24 @@
     "detail.taps.empty": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Taps"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 탭하지 않음"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока нет кранов"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4404,6 +5880,24 @@
     "detail.taps.placeholderAdd": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzer-/Repository- oder Repository-URL"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용자/저장소 또는 저장소 URL"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL-адрес пользователя/репозитория или репозитория"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4457,6 +5951,24 @@
     "detail.taps.titleAdd": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Repository hinzufügen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탭 추가"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить репозиторий Homebrew"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4510,6 +6022,24 @@
     "detail.taps.titleList": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktivierte Taps (%d)"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "활성화된 탭 (%d)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключённые репозитории (%d)"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4563,6 +6093,24 @@
     "detail.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Manager"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈브류 관리자"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Менеджер по домашнему пивоварению"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4616,6 +6164,24 @@
     "log.command.cancelled": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Vorgang vom Benutzer abgebrochen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 사용자가 작업을 취소했습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Операция отменена пользователем"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4669,6 +6235,24 @@
     "log.command.completed": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Vorgang abgeschlossen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 작업 완료"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Операция завершена"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4722,6 +6306,24 @@
     "log.command.failed": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Befehl fehlgeschlagen: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 명령 실패: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Сбой команды: %@"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4775,6 +6377,24 @@
     "log.command.failedStatus": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Vorgang fehlgeschlagen, Exit-Code: %d"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 작업 실패, 종료 코드: %d"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Сбой операции, код выхода: %d"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4828,6 +6448,24 @@
     "log.details.loaded": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Paketmetadaten geladen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 패키지 메타데이터 로드됨"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Метаданные пакета загружены"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4881,6 +6519,24 @@
     "log.details.loading": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Paketmetadaten werden geladen..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 패키지 메타데이터 로드 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Загрузка метаданных пакета..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4934,6 +6590,24 @@
     "log.details.parseFailed": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Paketmetadaten konnten nicht analysiert werden: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 패키지 메타데이터를 분석하지 못했습니다: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Не удалось разобрать метаданные пакета: %@"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -4987,6 +6661,24 @@
     "log.installed.loaded": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] %d installierte Pakete geladen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 설치된 패키지 %d개를 불러왔습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Загружено установленных пакетов: %d"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5040,6 +6732,24 @@
     "log.installed.loading": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Installierte Pakete werden geladen..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 설치된 패키지를 로드하는 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Загрузка установленных пакетов..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5093,6 +6803,24 @@
     "log.outdated.loaded": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] %d veraltete Pakete gefunden"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 업데이트 가능한 패키지 %d개를 찾았습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Найдено устаревших пакетов: %d"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5146,6 +6874,24 @@
     "log.outdated.loading": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Veraltete Pakete werden geladen..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 오래된 패키지를 로드하는 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Загрузка устаревших пакетов..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5199,6 +6945,24 @@
     "log.outdated.parseFailed": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Veraltete Pakete konnten nicht analysiert werden: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 업데이트 가능한 패키지를 분석하지 못했습니다: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Не удалось разобрать устаревшие пакеты: %@"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5252,6 +7016,24 @@
     "log.path.invalid": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Ungültiger Homebrew-Pfad. Wählen Sie eine ausführbare Brew-Datei."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 잘못된 홈브루 경로입니다. 실행 가능한 Brew 파일을 선택하십시오."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Неверный путь Homebrew. Выберите исполняемый файл Brew."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5305,6 +7087,24 @@
     "log.path.updated": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Homebrew-Pfad aktualisiert."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] Homebrew 경로가 업데이트되었습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Обновлен путь Homebrew."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5358,6 +7158,24 @@
     "log.scan.completed": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Scan abgeschlossen."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 스캔이 완료되었습니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Сканирование завершено."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5411,6 +7229,24 @@
     "log.scan.failed": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Scan fehlgeschlagen: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 검사 실패: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Сканирование не удалось: %@"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5464,6 +7300,24 @@
     "log.scan.started": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Mit dem Scannen des Homebrew-Status begonnen ..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] Homebrew 상태 스캔을 시작했습니다..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Начато сканирование статуса Homebrew..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5517,6 +7371,24 @@
     "log.taps.loaded": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] %d Taps geladen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 탭 %d개를 불러왔습니다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Загружено репозиториев: %d"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5570,6 +7442,24 @@
     "log.taps.loading": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[System] Aktivierte Taps werden geladen..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[시스템] 활성화된 탭 로드 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Система] Загрузка включенных кранов..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5623,6 +7513,24 @@
     "metadata.description": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwalten Sie Homebrew-Pakete, Repositorys und Diagnosen."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew 패키지, 리포지토리 및 진단을 관리합니다."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Управляйте пакетами Homebrew, репозиториями и диагностикой."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5676,6 +7584,24 @@
     "metadata.title": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "홈브류"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Домашнее пиво"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5729,6 +7655,24 @@
     "operation.cleanup": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Cache leeren..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew 캐시를 청소하는 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистка кэша Homebrew..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5782,6 +7726,24 @@
     "operation.doctor": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Diagnose wird ausgeführt..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew 진단 실행 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запускаем Homebrew-диагностику..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5835,6 +7797,24 @@
     "operation.install": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird installiert..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 설치 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установка %@..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5888,6 +7868,24 @@
     "operation.pin": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird fixiert..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 고정 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрепление %@..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5941,6 +7939,24 @@
     "operation.scanAll": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pakete und Updates werden gescannt..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지 및 업데이트 검색 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сканирование пакетов и обновлений..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -5994,6 +8010,24 @@
     "operation.tap": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap %@ wird hinzugefügt..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탭 %@ 추가 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавление репозитория %@..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6047,6 +8081,24 @@
     "operation.uninstall": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird deinstalliert..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 제거 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удаление %@..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6100,6 +8152,24 @@
     "operation.unpin": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixierung von %@ wird aufgehoben..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 고정 해제 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Снятие закрепления %@..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6153,6 +8223,24 @@
     "operation.untap": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap %@ wird entfernt..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탭 %@ 제거 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удаление репозитория %@..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6206,6 +8294,24 @@
     "operation.updateBrew": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew-Quellen werden aktualisiert..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew 소스 업데이트 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление исходников Homebrew..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6259,6 +8365,24 @@
     "operation.upgrade": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird aktualisiert..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 업데이트 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление %@..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6312,6 +8436,24 @@
     "operation.upgradeAll": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Pakete werden aktualisiert..."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모든 패키지를 업그레이드하는 중..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление всех пакетов..."
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6418,6 +8560,24 @@
     "panel.action.manage": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwalten"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "관리하다"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Управление"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6683,6 +8843,24 @@
     "panel.error.brewPathRequired": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konfigurieren Sie den Brühpfad"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추출 경로 구성"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройте путь приготовления"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",
@@ -6736,6 +8914,24 @@
     "panel.subtitle.manage": {
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwalten Sie Pakete, Taps und Diagnosen"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "패키지, 탭 및 진단 관리"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Управление пакетами, кранами и диагностикой"
+          }
+        },
         "ar": {
           "stringUnit": {
             "state": "translated",

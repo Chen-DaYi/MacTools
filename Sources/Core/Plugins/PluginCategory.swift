@@ -178,6 +178,21 @@ enum PluginListFilter {
         ])
     }
 
+    static func matches(
+        surfaceItem item: PluginSurfaceLayoutItem,
+        query: String,
+        filter: PluginCategoryFilter
+    ) -> Bool {
+        matches(
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            category: item.category,
+            query: query,
+            filter: filter
+        )
+    }
+
     static func countsByFilter(managementItems items: [PluginManagementItem], query: String) -> [PluginCategoryFilter: Int] {
         var counts: [PluginCategoryFilter: Int] = [:]
         let allFiltered = items.filter { matches(managementItem: $0, query: query, filter: .all) }
@@ -199,6 +214,47 @@ enum PluginListFilter {
         for category in PluginCategory.allCases {
             let filter = PluginCategoryFilter.category(category)
             counts[filter] = allFiltered.filter { filter.contains(category: $0.category) }.count
+        }
+
+        return counts
+    }
+
+    static func countsByFilter(surfaceItems items: [PluginSurfaceLayoutItem], query: String) -> [PluginCategoryFilter: Int] {
+        countsByFilter(
+            categories: items.map(\.category),
+            matchingIndices: items.indices.filter {
+                matches(surfaceItem: items[$0], query: query, filter: .all)
+            }
+        )
+    }
+
+    private static func matches(
+        id: String,
+        title: String,
+        description: String,
+        category rawCategory: String?,
+        query: String,
+        filter: PluginCategoryFilter
+    ) -> Bool {
+        guard filter.contains(category: rawCategory) else {
+            return false
+        }
+
+        let category = PluginCategory(rawString: rawCategory)
+        return matches(query: query, in: [title, description, id, category.displayName])
+    }
+
+    private static func countsByFilter(
+        categories: [String?],
+        matchingIndices: [Int]
+    ) -> [PluginCategoryFilter: Int] {
+        var counts: [PluginCategoryFilter: Int] = [.all: matchingIndices.count]
+
+        for category in PluginCategory.allCases {
+            let filter = PluginCategoryFilter.category(category)
+            counts[filter] = matchingIndices.filter {
+                categories.indices.contains($0) && filter.contains(category: categories[$0])
+            }.count
         }
 
         return counts

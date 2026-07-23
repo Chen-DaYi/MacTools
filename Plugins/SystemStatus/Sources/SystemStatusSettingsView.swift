@@ -98,13 +98,30 @@ struct SystemStatusSettingsView: View {
         preference: SystemStatusMetricPreference,
         description: String
     ) -> SystemStatusMetricPreferenceTableItem {
-        SystemStatusMetricPreferenceTableItem(
+        let title = preference.kind.title(localization: localization)
+        let visibilityActionTitle = preference.isVisible
+            ? localization.format(
+                "settings.metric.visibility.hide",
+                defaultValue: "隐藏%@",
+                title
+            )
+            : localization.format(
+                "settings.metric.visibility.show",
+                defaultValue: "显示%@",
+                title
+            )
+
+        return SystemStatusMetricPreferenceTableItem(
             kind: preference.kind,
-            title: preference.kind.title(localization: localization),
+            title: title,
             description: description,
             iconName: preference.kind.symbolName,
             iconTint: tint(for: preference.kind),
-            isVisible: preference.isVisible
+            isVisible: preference.isVisible,
+            visibilityActionTitle: visibilityActionTitle,
+            visibilityStateTitle: preference.isVisible
+                ? localization.string("settings.metric.visibility.visible", defaultValue: "已显示")
+                : localization.string("settings.metric.visibility.hidden", defaultValue: "已隐藏")
         )
     }
 
@@ -173,6 +190,8 @@ struct SystemStatusMetricPreferenceTableItem: Equatable, Identifiable {
     let iconName: String
     let iconTint: Color
     let isVisible: Bool
+    let visibilityActionTitle: String
+    let visibilityStateTitle: String
 
     var id: String { kind.rawValue }
 
@@ -182,6 +201,8 @@ struct SystemStatusMetricPreferenceTableItem: Equatable, Identifiable {
             && lhs.description == rhs.description
             && lhs.iconName == rhs.iconName
             && lhs.isVisible == rhs.isVisible
+            && lhs.visibilityActionTitle == rhs.visibilityActionTitle
+            && lhs.visibilityStateTitle == rhs.visibilityStateTitle
     }
 }
 
@@ -436,9 +457,10 @@ private final class SystemStatusMetricPreferenceCellView: NSTableCellView {
     private let iconImageView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let descriptionLabel = NSTextField(labelWithString: "")
-    private let visibilityButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let visibilityButton = NSButton(title: "", target: nil, action: nil)
     private let handleImageView = NSImageView()
     private var visibilityHandler: ((Bool) -> Void)?
+    private var isVisible = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -465,9 +487,17 @@ private final class SystemStatusMetricPreferenceCellView: NSTableCellView {
         )
         iconImageView.contentTintColor = NSColor(item.iconTint)
         iconBackgroundView.layer?.backgroundColor = NSColor(item.iconTint.opacity(0.14)).cgColor
-        visibilityButton.state = item.isVisible ? .on : .off
+        isVisible = item.isVisible
+        visibilityButton.image = NSImage(
+            systemSymbolName: isVisible ? "eye" : "eye.slash",
+            accessibilityDescription: nil
+        )
+        visibilityButton.contentTintColor = isVisible ? .controlAccentColor : .secondaryLabelColor
         toolTip = item.title
-        visibilityButton.toolTip = item.title
+        visibilityButton.toolTip = item.visibilityActionTitle
+        visibilityButton.setAccessibilityLabel(item.title)
+        visibilityButton.setAccessibilityValue(item.visibilityStateTitle)
+        visibilityButton.setAccessibilityHelp(item.visibilityActionTitle)
     }
 
     private func buildViewHierarchy() {
@@ -498,8 +528,11 @@ private final class SystemStatusMetricPreferenceCellView: NSTableCellView {
         descriptionLabel.lineBreakMode = .byTruncatingTail
         descriptionLabel.maximumNumberOfLines = 1
 
-        visibilityButton.setButtonType(.switch)
+        visibilityButton.setButtonType(.momentaryPushIn)
         visibilityButton.title = ""
+        visibilityButton.imagePosition = .imageOnly
+        visibilityButton.bezelStyle = .inline
+        visibilityButton.isBordered = false
         visibilityButton.target = self
         visibilityButton.action = #selector(handleVisibilityToggle(_:))
 
@@ -548,6 +581,8 @@ private final class SystemStatusMetricPreferenceCellView: NSTableCellView {
 
             visibilityButton.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
             visibilityButton.trailingAnchor.constraint(equalTo: handleImageView.leadingAnchor, constant: -12),
+            visibilityButton.widthAnchor.constraint(equalToConstant: 22),
+            visibilityButton.heightAnchor.constraint(equalToConstant: 22),
 
             handleImageView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
             handleImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
@@ -558,6 +593,6 @@ private final class SystemStatusMetricPreferenceCellView: NSTableCellView {
 
     @objc
     private func handleVisibilityToggle(_ sender: NSButton) {
-        visibilityHandler?(sender.state == .on)
+        visibilityHandler?(!isVisible)
     }
 }

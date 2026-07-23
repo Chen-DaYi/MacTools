@@ -29,8 +29,7 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
     PluginPrimaryPanel,
     PluginComponentPanel,
     MenuBarHostStatusItemRecovering,
-    PluginPanelSurfaceLifecycleHandling,
-    PluginFeatureVisibilityLifecycleHandling
+    PluginPanelSurfaceLifecycleHandling
 {
     let metadata: PluginMetadata
 
@@ -54,7 +53,6 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
     private let localization: PluginLocalization
     private let controller: MenuBarHiddenController
     private var launchObserver: NSObjectProtocol?
-    private var isFeatureVisible = true
 
     var hostStatusItemFrameProvider: (() -> NSRect?)? {
         get { controller.manager.hostStatusItemFrameProvider }
@@ -108,7 +106,6 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
     // MARK: - Lifecycle
 
     func activate(context _: PluginRuntimeContext) {
-        guard isFeatureVisible else { return }
         activateAfterHostStatusItem()
     }
 
@@ -120,15 +117,6 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
         }
         controller.setHiddenIconsPanelVisible(false)
         controller.deactivate()
-    }
-
-    func featureVisibilityDidChange(_ isVisible: Bool) {
-        isFeatureVisible = isVisible
-        if isVisible {
-            activate(context: context)
-        } else {
-            deactivate(reason: .disabled)
-        }
     }
 
     func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
@@ -149,8 +137,6 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
     }
 
     private func activateAfterHostStatusItem() {
-        guard isFeatureVisible else { return }
-
         // The host app's NSStatusItem is created inside applicationDidFinishLaunching.
         // NSStatusBar inserts later items to the LEFT of earlier ones, so we must
         // install the divider AFTER the host icon exists. Otherwise expanding the

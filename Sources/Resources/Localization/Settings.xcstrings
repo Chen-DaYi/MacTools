@@ -1,6 +1,365 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "plugins.dashboard.hiddenSectionFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "مخفي في لوحة المعلومات (%d)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Im Dashboard ausgeblendet (%d)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Hidden on Dashboard (%d)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Oculto en el panel (%d)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Masqués du tableau de bord (%d)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードで非表示（%d）" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드에서 가림 (%d)" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ocultos no painel (%d)" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Скрыто на панели управления (%d)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已在仪表盘隐藏（%d）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已在儀表板隱藏（%d）" } }
+      }
+    },
+    "plugins.featurePanel.hiddenSectionFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "مخفي في لوحة الميزات (%d)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Im Funktionsbereich ausgeblendet (%d)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Hidden in Feature Panel (%d)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Oculto en el panel de funciones (%d)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Masqués du panneau de fonctionnalités (%d)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルで非表示（%d）" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널에서 가림 (%d)" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ocultos no painel de recursos (%d)" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Скрыто на панели функций (%d)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已在功能面板隐藏（%d）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已在功能面板隱藏（%d）" } }
+      }
+    },
+    "plugins.dashboard.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "اختر ما يظهر على لوحة المعلومات واسحب لإعادة الترتيب." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Wählen Sie, was im Dashboard angezeigt wird, und ziehen Sie zum Neuordnen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose what appears on Dashboard, then drag to reorder." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Elige qué aparece en el panel y arrastra para reordenar." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Choisissez ce qui apparaît dans le tableau de bord, puis faites glisser pour réorganiser." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードに表示する項目を選び、ドラッグして並べ替えます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드에 표시할 항목을 선택하고 드래그하여 순서를 변경하세요." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Escolha o que aparece no painel e arraste para reordenar." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Выберите элементы на панели управления и перетащите их для изменения порядка." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择在仪表盘显示的插件，再拖拽调整顺序。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇在儀表板顯示的外掛，再拖曳調整順序。" } }
+      }
+    },
+    "plugins.dashboard.empty.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تظهر هنا المكونات الإضافية المثبتة التي تدعم لوحة المعلومات." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Installierte Plugins, die das Dashboard unterstützen, werden hier angezeigt." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Installed plugins that support the Dashboard appear here." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Aquí aparecen los plugins instalados que admiten el panel." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Les modules installés qui prennent en charge le tableau de bord apparaissent ici." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードに対応するインストール済みプラグインがここに表示されます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드를 지원하는 설치된 플러그인이 여기에 표시됩니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Os plugins instalados compatíveis com o painel aparecem aqui." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Здесь отображаются установленные плагины, поддерживающие панель управления." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "支持仪表盘的已安装插件将显示在这里。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "支援儀表板的已安裝外掛會顯示在這裡。" } }
+      }
+    },
+    "plugins.dashboard.empty.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لا توجد مكوّنات للوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Keine Dashboard-Komponenten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No Dashboard Components" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No hay componentes del panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun composant de tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードコンポーネントはありません" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드 구성 요소 없음" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Nenhum componente do painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Нет компонентов панели управления" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无仪表盘组件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "暫無儀表板組件" } }
+      }
+    },
+    "plugins.dashboard.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir le tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードを開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть панель управления" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開儀表板" } }
+      }
+    },
+    "plugins.dashboard.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボード" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель управления" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板" } }
+      }
+    },
+    "plugins.featurePanel.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "اختر ما يظهر في لوحة الميزات واسحب لإعادة الترتيب." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Wählen Sie, was im Funktionsbereich angezeigt wird, und ziehen Sie zum Neuordnen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose what appears in Feature Panel, then drag to reorder." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Elige qué aparece en el panel de funciones y arrastra para reordenar." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Choisissez ce qui apparaît dans le panneau de fonctionnalités, puis faites glisser pour réorganiser." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルに表示する項目を選び、ドラッグして並べ替えます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널에 표시할 항목을 선택하고 드래그하여 순서를 변경하세요." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Escolha o que aparece no painel de recursos e arraste para reordenar." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Выберите элементы на панели функций и перетащите их для изменения порядка." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择在功能面板显示的插件，再拖拽调整顺序。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇在功能面板顯示的外掛，再拖曳調整順序。" } }
+      }
+    },
+    "plugins.featurePanel.empty.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تظهر هنا المكونات الإضافية المثبتة التي تدعم لوحة الميزات." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Installierte Plugins, die den Funktionsbereich unterstützen, werden hier angezeigt." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Installed plugins that support the Feature Panel appear here." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Aquí aparecen los plugins instalados que admiten el panel de funciones." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Les modules installés qui prennent en charge le panneau de fonctionnalités apparaissent ici." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルに対応するインストール済みプラグインがここに表示されます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널을 지원하는 설치된 플러그인이 여기에 표시됩니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Os plugins instalados compatíveis com o painel de recursos aparecem aqui." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Здесь отображаются установленные плагины, поддерживающие панель функций." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "支持功能面板的已安装插件将显示在这里。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "支援功能面板的已安裝外掛會顯示在這裡。" } }
+      }
+    },
+    "plugins.featurePanel.empty.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لا توجد إجراءات للوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Keine Aktionen im Funktionsbereich" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No Feature Panel Actions" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No hay acciones en el panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucune action du panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルのアクションはありません" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널 작업 없음" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Nenhuma ação do painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Нет действий панели функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "暂无功能面板操作" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "暫無功能面板操作" } }
+      }
+    },
+    "plugins.featurePanel.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsbereich öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir le panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルを開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть панель функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開功能面板" } }
+      }
+    },
+    "plugins.featurePanel.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsbereich" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネル" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
+      }
+    },
+    "plugins.layout.restoreDefaultOrder": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "استعادة الترتيب الافتراضي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Standardreihenfolge wiederherstellen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Restore Default Order" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Restaurar orden predeterminado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Rétablir l’ordre par défaut" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "デフォルトの順序に戻す" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기본 순서 복원" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Restaurar ordem padrão" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Восстановить порядок по умолчанию" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复默认排列" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "恢復預設排列" } }
+      }
+    },
+    "plugins.sidebar.dashboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボード" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель управления" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板" } }
+      }
+    },
+    "plugins.sidebar.featurePanel": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsbereich" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Panneau de fonctionnalités" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネル" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Painel de recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Панель функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
+      }
+    },
+    "plugins.sidebar.pluginsSection": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "الإضافات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Plug-ins" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Plugins" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Complementos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Modules" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "プラグイン" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "플러그인" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Plug-ins" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Плагины" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "插件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "外掛" } }
+      }
+    },
+    "navigation.back": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "رجوع" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Zurück" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Back" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Volver" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Retour" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "戻る" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "뒤로" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Voltar" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Назад" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "后退" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "後退" } }
+      }
+    },
+    "navigation.forward": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تقدّم" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Vorwärts" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Forward" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Avanzar" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Avancer" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "進む" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앞으로" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Avançar" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Вперёд" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "前进" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "前進" } }
+      }
+    },
+    "secondaryPanel.back": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "رجوع"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volver"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retour"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "戻る"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "뒤로"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voltar"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Назад"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回"
+          }
+      }
+      }
+    },
     "about.description": {
       "extractionState": "manual",
       "localizations": {
@@ -2063,6 +2422,77 @@
         }
       }
     },
+    "common.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إلغاء"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annuler"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "취소"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмена"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        }
+      }
+    },
     "common.ok": {
       "extractionState": "manual",
       "localizations": {
@@ -3626,148 +4056,6 @@
         }
       }
     },
-    "menuBarIcon.animationSpeed.adaptiveSystemLoad": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "اتبع تحميل النظام"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Systemlast folgen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Follow System Load"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seguir la carga del sistema"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Suivre la charge du système"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "システム負荷に従う"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "시스템 로드 따르기"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Siga o carregamento do sistema"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Следить за загрузкой системы"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "随系统负载"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "隨系統負載"
-          }
-        }
-      }
-    },
-    "menuBarIcon.animationSpeed.manual": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "السرعة اليدوية"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manuelle Geschwindigkeit"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manual Speed"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Velocidad manual"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vitesse manuelle"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "手動速度"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "수동 속도"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Velocidade manual"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ручная скорость"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "手动速度"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "手動速度"
-          }
-        }
-      }
-    },
     "menuBarIcon.appearance.dark": {
       "extractionState": "manual",
       "localizations": {
@@ -3910,286 +4198,73 @@
         }
       }
     },
-    "menuBarIcon.contrast.warningBoth": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "قد يكون من الصعب رؤية الرمز الحالي في شريطي القائمة الفاتحة والداكنة."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Das aktuelle Symbol ist möglicherweise sowohl in hellen als auch in dunklen Menüleisten schwer zu erkennen."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The current icon may be hard to see in both light and dark menu bars."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Es posible que sea difícil ver el icono actual en las barras de menú claras y oscuras."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "L'icône actuelle peut être difficile à voir dans les barres de menu claires et sombres."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在のアイコンは、明るいメニュー バーでも暗いメニュー バーでも見にくい場合があります。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "현재 아이콘은 밝은 메뉴 표시줄과 어두운 메뉴 표시줄 모두에서 보기 어려울 수 있습니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O ícone atual pode ser difícil de ver nas barras de menu claras e escuras."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Текущий значок может быть плохо виден как в светлой, так и в темной строке меню."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "当前图标在深浅色菜单栏里都可能不够清晰。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "當前圖標在深淺色選單列裏都可能不夠清晰。"
-          }
-        }
-      }
-    },
-    "menuBarIcon.contrast.warningDark": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "قد يكون للرمز الحالي تباين منخفض في شريط القائمة الداكن."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Das aktuelle Symbol hat möglicherweise einen geringen Kontrast in der dunklen Menüleiste."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The current icon may have low contrast in the dark menu bar."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "El icono actual puede tener poco contraste en la barra de menú oscura."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "L'icône actuelle peut avoir un faible contraste dans la barre de menu sombre."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暗いメニュー バーでは、現在のアイコンのコントラストが低い可能性があります。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "현재 아이콘은 어두운 메뉴 표시줄에서 대비가 낮을 수 있습니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O ícone atual pode ter baixo contraste na barra de menu escura."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Текущий значок может иметь низкую контрастность в темной строке меню."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "当前图标在深色菜单栏里对比度可能偏低。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "當前圖標在深色選單列裏對比度可能偏低。"
-          }
-        }
-      }
-    },
-    "menuBarIcon.contrast.warningLight": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "قد يكون للرمز الحالي تباين منخفض في شريط القائمة المضيئة."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Das aktuelle Symbol hat möglicherweise einen geringen Kontrast in der hellen Menüleiste."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The current icon may have low contrast in the light menu bar."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "El icono actual puede tener poco contraste en la barra de menú luminosa."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "L'icône actuelle peut avoir un faible contraste dans la barre de menu lumineuse."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "現在のアイコンのライト メニュー バーのコントラストが低い可能性があります。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "현재 아이콘은 라이트 메뉴 바에서 대비가 낮을 수 있습니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O ícone atual pode ter baixo contraste na barra de menu clara."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Текущий значок может иметь низкую контрастность в светлой строке меню."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "当前图标在浅色菜单栏里对比度可能偏低。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "當前圖標在淺色選單列裏對比度可能偏低。"
-          }
-        }
-      }
-    },
     "menuBarIcon.description": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "قم بتعيين رمز شريط قائمة واحد للمظاهر الفاتحة والداكنة. تتم إزالة الخلفيات ذات الألوان الصلبة عند الاستيراد."
+            "value": "قم بتعيين رمز شريط قائمة واحد للمظاهر الفاتحة والداكنة. يتم الاحتفاظ بالصورة الأصلية عند الاستيراد."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Legen Sie ein Menüleistensymbol für helle und dunkle Darstellungen fest. Einfarbige Hintergründe werden beim Import entfernt."
+            "value": "Legen Sie ein Menüleistensymbol für helle und dunkle Darstellungen fest. Das Originalbild bleibt beim Import erhalten."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Set one menu bar icon for light and dark appearances. Solid-color backgrounds are removed on import."
+            "value": "Set one menu bar icon for light and dark appearances. The original image is preserved on import."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Establezca un ícono de barra de menú para apariencias claras y oscuras. Los fondos de colores sólidos se eliminan al importar."
+            "value": "Establezca un ícono de barra de menú para apariencias claras y oscuras. La imagen original se conserva al importar."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Définissez une icône dans la barre de menus pour les apparences claires et sombres. Les arrière-plans de couleur unie sont supprimés lors de l'importation."
+            "value": "Définissez une icône dans la barre de menus pour les apparences claires et sombres. L'image d'origine est conservée lors de l'importation."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "明暗の外観用に 1 つのメニュー バー アイコンを設定します。単色の背景はインポート時に削除されます。"
+            "value": "明暗の外観用に 1 つのメニュー バー アイコンを設定します。インポート時に元の画像が保持されます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "밝은 모양과 어두운 모양에 대해 하나의 메뉴 표시줄 아이콘을 설정합니다. 단색 배경은 가져올 때 제거됩니다."
+            "value": "밝은 모양과 어두운 모양에 대해 하나의 메뉴 표시줄 아이콘을 설정합니다. 가져올 때 원본 이미지를 유지합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Defina um ícone na barra de menu para aparências claras e escuras. Os planos de fundo de cores sólidas são removidos na importação."
+            "value": "Defina um ícone na barra de menu para aparências claras e escuras. A imagem original é preservada na importação."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Установите один значок в строке меню для светлого и темного внешнего вида. Однотонные фоны удаляются при импорте."
+            "value": "Установите один значок в строке меню для светлого и темного внешнего вида. При импорте исходное изображение сохраняется."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "统一设置浅色和深色菜单栏图标，导入时会自动扣除纯色背景。"
+            "value": "统一设置浅色和深色菜单栏图标，导入时会保留原图。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "統一設定淺色和深色選單列圖標，導入時會自動扣除純色背景。"
+            "value": "統一設定淺色和深色選單列圖標，導入時會保留原圖。"
           }
         }
       }
@@ -4261,148 +4336,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "無法讀取所選圖片。"
-          }
-        }
-      }
-    },
-    "menuBarIcon.error.recentIconMissing": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ملف الرمز المستخدم مؤخرًا لم يعد موجودًا."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die zuletzt verwendete Symboldatei existiert nicht mehr."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The recently used icon file no longer exists."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "El archivo de icono utilizado recientemente ya no existe."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le fichier icône récemment utilisé n'existe plus."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用したアイコン ファイルは存在しません。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "최근에 사용한 아이콘 파일이 더 이상 존재하지 않습니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O arquivo de ícone usado recentemente não existe mais."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Недавно использованный файл значка больше не существует."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用的图标文件已不存在。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用的圖標檔案已不存在。"
-          }
-        }
-      }
-    },
-    "menuBarIcon.error.recentRemoteMissing": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "لم يعد ملف الرمز عبر الإنترنت المستخدم مؤخرًا موجودًا."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die zuletzt verwendete Online-Symboldatei existiert nicht mehr."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The recently used online icon file no longer exists."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "El archivo de icono en línea utilizado recientemente ya no existe."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le fichier d'icônes en ligne récemment utilisé n'existe plus."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用したオンライン アイコン ファイルはもう存在しません。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "최근에 사용한 온라인 아이콘 파일이 더 이상 존재하지 않습니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O arquivo de ícone on-line usado recentemente não existe mais."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Недавно использованный файл онлайн-значка больше не существует."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用的在线图标文件已不存在。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用的在線圖標檔案已不存在。"
           }
         }
       }
@@ -4687,6 +4620,77 @@
           "stringUnit": {
             "state": "translated",
             "value": "無法保存圖標設定。"
+          }
+        }
+      }
+    },
+    "menuBarIcon.gallery.animated": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "متحرك"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animiert"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animated"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アニメ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "동적"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animado"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Анимация"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "动态"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "動態"
           }
         }
       }
@@ -5184,77 +5188,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "圖標圖庫尚未加載。"
-          }
-        }
-      }
-    },
-    "menuBarIcon.gallery.error.recentAssetMissing": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "لم يعد رمز الإنترنت المستخدم مؤخرًا موجودًا في المعرض."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Das zuletzt verwendete Online-Symbol befindet sich nicht mehr in der Galerie."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The recently used online icon is no longer in the gallery."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "El ícono en línea usado recientemente ya no está en la galería."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "L'icône en ligne récemment utilisée n'est plus dans la galerie."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用したオンライン アイコンはギャラリーにありません。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "최근에 사용한 온라인 아이콘이 더 이상 갤러리에 없습니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O ícone on-line usado recentemente não está mais na galeria."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Недавно использованный онлайн-значок больше не находится в галерее."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用的在线图标已不在图库中。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用的在線圖標已不在圖庫中。"
           }
         }
       }
@@ -6324,77 +6257,6 @@
         }
       }
     },
-    "menuBarIcon.multiplier": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "المضاعف"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Multiplikator"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Multiplier"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Multiplicador"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Multiplicateur"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "乗数"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "승수"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Multiplicador"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Множитель"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "倍率"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "倍率"
-          }
-        }
-      }
-    },
     "menuBarIcon.openPanel.message": {
       "extractionState": "manual",
       "localizations": {
@@ -6462,77 +6324,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "選擇圖片、GIF 或 MP4 作為 MacTools 狀態列圖標"
-          }
-        }
-      }
-    },
-    "menuBarIcon.playbackSpeed": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "سرعة التشغيل"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wiedergabegeschwindigkeit"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Playback Speed"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Velocidad de reproducción"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vitesse de lecture"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "再生速度"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "재생 속도"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Velocidade de reprodução"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Скорость воспроизведения"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "播放速度"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "播放速度"
           }
         }
       }
@@ -6675,290 +6466,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "淺色"
-          }
-        }
-      }
-    },
-    "menuBarIcon.recent": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "الأخيرة"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Neu"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recent"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reciente"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Récent"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "최근"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recentes"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Недавние"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近使用"
-          }
-        }
-      }
-    },
-    "menuBarIcon.recent.animationIcon": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "رمز متحرك"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Animiertes Symbol"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Animated Icon"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Icono animado"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Icône animée"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "アニメーションアイコン"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "애니메이션 아이콘"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ícone animado"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Анимированный значок"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "动画图标"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "動畫圖標"
-          }
-        }
-      }
-    },
-    "menuBarIcon.recent.customIcon": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "رمز مخصص"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Benutzerdefiniertes Symbol"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Custom Icon"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Icono personalizado"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Icône personnalisée"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "カスタムアイコン"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사용자 정의 아이콘"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ícone personalizado"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Пользовательский значок"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "自定义图标"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "自定義圖標"
-          }
-        }
-      }
-    },
-    "menuBarIcon.recent.empty": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ستظهر هنا الرموز التي تم تحميلها أو تحديدها."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hochgeladene oder ausgewählte Symbole werden hier angezeigt."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uploaded or selected icons will appear here."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aquí aparecerán los iconos cargados o seleccionados."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les icônes téléchargées ou sélectionnées apparaîtront ici."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "アップロードまたは選択したアイコンがここに表示されます。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "업로드되었거나 선택된 아이콘이 여기에 표시됩니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Os ícones carregados ou selecionados aparecerão aqui."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Здесь появятся загруженные или выбранные значки."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上传或选择图标后会显示在这里。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上傳或選擇圖標後會顯示在這裏。"
           }
         }
       }
@@ -7253,209 +6760,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يدعم الصور وملفات GIF/MP4 خفيفة الوزن والأيقونات المتحركة عبر الإنترنت. تتم إزالة الخلفيات ذات الألوان الصلبة عند الاستيراد."
+            "value": "يدعم الصور وملفات GIF/MP4 خفيفة الوزن والأيقونات المتحركة عبر الإنترنت. يتم الاحتفاظ بالصورة الأصلية عند الاستيراد."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unterstützt Bilder, einfache GIF/MP4-Dateien und animierte Online-Symbole. Einfarbige Hintergründe werden beim Import entfernt."
+            "value": "Unterstützt Bilder, einfache GIF/MP4-Dateien und animierte Online-Symbole. Das Originalbild bleibt beim Import erhalten."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supports images, lightweight GIF/MP4 files, and online animated icons. Solid-color backgrounds are removed on import."
+            "value": "Supports images, lightweight GIF/MP4 files, and online animated icons. The original image is preserved on import."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Admite imágenes, archivos ligeros GIF/MP4 e íconos animados en línea. Los fondos de colores sólidos se eliminan al importar."
+            "value": "Admite imágenes, archivos ligeros GIF/MP4 e íconos animados en línea. La imagen original se conserva al importar."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prend en charge les images, les fichiers légers GIF/MP4 et les icônes animées en ligne. Les arrière-plans de couleur unie sont supprimés lors de l'importation."
+            "value": "Prend en charge les images, les fichiers légers GIF/MP4 et les icônes animées en ligne. L'image d'origine est conservée lors de l'importation."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "画像、軽量の GIF/MP4 ファイル、オンライン アニメーション アイコンをサポートします。単色の背景はインポート時に削除されます。"
+            "value": "画像、軽量の GIF/MP4 ファイル、オンライン アニメーション アイコンをサポートします。インポート時に元の画像が保持されます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이미지, 가벼운 GIF/MP4 파일 및 온라인 애니메이션 아이콘을 지원합니다. 단색 배경은 가져올 때 제거됩니다."
+            "value": "이미지, 가벼운 GIF/MP4 파일 및 온라인 애니메이션 아이콘을 지원합니다. 가져올 때 원본 이미지를 유지합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Suporta imagens, arquivos GIF/MP4 leves e ícones animados on-line. Planos de fundo de cores sólidas são removidos na importação."
+            "value": "Suporta imagens, arquivos GIF/MP4 leves e ícones animados on-line. A imagem original é preservada na importação."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Поддерживает изображения, легкие файлы GIF/MP4 и анимированные значки онлайн. Однотонный фон удаляется при импорте."
+            "value": "Поддерживает изображения, легкие файлы GIF/MP4 и анимированные значки онлайн. При импорте исходное изображение сохраняется."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会自动扣除纯色背景。"
+            "value": "支持图片、轻量 GIF/MP4 和在线动态图标；导入时会保留原图。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "支持圖片、輕量 GIF/MP4 和在線動態圖標；導入時會自動扣除純色背景。"
-          }
-        }
-      }
-    },
-    "menuBarIcon.speedDescription.adaptiveSystemLoad": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ارتفاع CPU، GPU، وتحميل الذاكرة يجعل التشغيل أسرع."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Höhere CPU, GPU und Speicherauslastung beschleunigen die Wiedergabe."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Higher CPU, GPU, and memory load makes playback faster."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Una mayor carga de memoria y CPU, GPU hace que la reproducción sea más rápida."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Des CPU, GPU et une charge mémoire plus élevés accélèrent la lecture."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CPU、GPU、メモリ負荷が高いほど、再生が速くなります。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CPU, GPU 및 메모리 로드가 높을수록 재생 속도가 빨라집니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Maiores CPU, GPU e carga de memória tornam a reprodução mais rápida."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Более высокие CPU, GPU и загрузка памяти ускоряют воспроизведение."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CPU、GPU、内存越高越快。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CPU、GPU、內存越高越快。"
-          }
-        }
-      }
-    },
-    "menuBarIcon.speedDescription.manual": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "التكرار عند مضاعف ثابت."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Schleife mit einem festen Multiplikator."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Loop at a fixed multiplier."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bucle con un multiplicador fijo."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Boucle à un multiplicateur fixe."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "固定乗数でループします。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "고정 승수로 반복합니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Loop em um multiplicador fixo."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Цикл с фиксированным множителем."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "固定倍率循环播放。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "固定倍率循環播放。"
+            "value": "支持圖片、輕量 GIF/MP4 和在線動態圖標；導入時會保留原圖。"
           }
         }
       }
@@ -7537,67 +6902,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "تحميل صورة أو رسوم متحركة"
+            "value": "رفع"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bild oder Animation hochladen"
+            "value": "Hochladen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Upload Image or Animation"
+            "value": "Upload"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Subir imagen o animación"
+            "value": "Subir"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Télécharger une image ou une animation"
+            "value": "Importer"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "画像またはアニメーションをアップロード"
+            "value": "アップロード"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이미지 또는 애니메이션 업로드"
+            "value": "업로드"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fazer upload de imagem ou animação"
+            "value": "Carregar"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Загрузить изображение или анимацию"
+            "value": "Загрузить"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "上传图片或动画"
+            "value": "上传"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "上傳圖片或動畫"
+            "value": "上傳"
           }
         }
       }
@@ -9233,6 +8598,102 @@
             "value": "重置為預設快速鍵"
           }
         }
+      }
+    },
+    "shortcuts.openSettings.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "افتح إعدادات MacTools." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Öffnet die MacTools-Einstellungen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open MacTools Settings." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abre los ajustes de MacTools." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvre les réglages de MacTools." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "MacToolsの設定を開きます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "MacTools 설정을 엽니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abre os Ajustes do MacTools." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открывает настройки MacTools." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开 MacTools 设置。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開 MacTools 設定。" } }
+      }
+    },
+    "shortcuts.openSettings.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح الإعدادات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Einstellungen öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open Settings" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir ajustes" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir les réglages" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "設定を開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "설정 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir Ajustes" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть настройки" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开设置" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開設定" } }
+      }
+    },
+    "shortcuts.toggleDashboard.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إظهار لوحة المعلومات أو إخفاؤها أو التبديل إليها." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard ein-/ausblenden oder direkt dorthin wechseln." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show, hide, or switch to the Dashboard." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Muestra, oculta o cambia al panel." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Affiche, masque ou ouvre le tableau de bord." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードを表示、非表示、または切り替えます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드를 표시하거나 가리거나 전환합니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostra, oculta ou alterna para o Painel." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показывает, скрывает или переключает на панель." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示、隐藏或切换到仪表盘。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "顯示、隱藏或切換至儀表板。" } }
+      }
+    },
+    "shortcuts.toggleDashboard.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تبديل لوحة المعلومات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dashboard umschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Toggle Dashboard" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Alternar panel" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Afficher/masquer le tableau de bord" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードを切り替える" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "대시보드 전환" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Alternar Painel" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Переключить панель" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "切换仪表盘" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "切換儀表板" } }
+      }
+    },
+    "shortcuts.toggleFeaturePanel.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إظهار لوحة الميزات أو إخفاؤها أو التبديل إليها." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsleiste ein-/ausblenden oder direkt dorthin wechseln." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show, hide, or switch to the Feature Panel." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Muestra, oculta o cambia al panel de funciones." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Affiche, masque ou ouvre le panneau de fonctions." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルを表示、非表示、または切り替えます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널을 표시하거나 가리거나 전환합니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostra, oculta ou alterna para o Painel de Recursos." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показывает, скрывает или переключает на панель функций." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示、隐藏或切换到功能面板。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "顯示、隱藏或切換至功能面板。" } }
+      }
+    },
+    "shortcuts.toggleFeaturePanel.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تبديل لوحة الميزات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Funktionsleiste umschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Toggle Feature Panel" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Alternar panel de funciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Afficher/masquer le panneau de fonctions" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "機能パネルを切り替える" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널 전환" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Alternar Painel de Recursos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Переключить панель функций" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "切换功能面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "切換功能面板" } }
       }
     },
     "shortcuts.title": {

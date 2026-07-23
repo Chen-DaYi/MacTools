@@ -162,12 +162,19 @@ final class PluginCatalogManager {
     func installPlugin(id: String) async throws {
         let entry = try catalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
-        try dynamicPluginManager.installPluginPackage(from: packageURL, catalogEntry: entry)
+        try dynamicPluginManager.installPluginPackage(
+            from: packageURL,
+            catalogEntry: entry
+        )
     }
 
     func updatePlugin(id: String) async throws {
         let entry = try catalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
+        guard dynamicPluginManager.isInstalledPlugin(id) else {
+            return
+        }
+
         try dynamicPluginManager.updatePluginPackage(from: packageURL, catalogEntry: entry)
     }
 
@@ -218,6 +225,7 @@ final class PluginCatalogManager {
         }
 
         reportProgress()
+        await Task.yield()
 
         for entry in entries {
             do {
@@ -227,11 +235,12 @@ final class PluginCatalogManager {
                 failures.append(PluginPackageUpdateFailure(pluginID: entry.id, error: error))
                 completedCount += 1
                 reportProgress()
+                await Task.yield()
             }
         }
 
         failures.append(
-            contentsOf: dynamicPluginManager.updatePluginPackages(
+            contentsOf: await dynamicPluginManager.updatePluginPackages(
                 resolvedUpdates,
                 reloadAfterUpdate: reloadAfterUpdate,
                 onPackageProcessed: {

@@ -162,6 +162,7 @@ Recommended production flow is an incremental batch plugin release:
 11. `Deploy Pages` publishes the signed catalog to GitHub Pages.
 
 The batch tag is stored per plugin entry through `package.url` and `releaseNotesURL`, so one catalog can point different plugins to different release tags without changing host code.
+Plugin batch releases are published with `--latest=false`; only stable `v*` App releases may become the repository's GitHub Latest release.
 
 The GitHub Release body for each plugin batch is extracted from the matching `CHANGELOG.md` entry, such as `## [plugins-1.0.1]`.
 
@@ -176,6 +177,8 @@ GitHub Release: plugins-1.0.1
 Unchanged plugin entries remain valid because the catalog preserves their previous URLs, checksums, and versions. They are not shown as updates in the app unless their catalog version is higher than the installed version.
 
 `pluginKitVersion` is the PluginKit ABI boundary. When it changes, every plugin package must be rebuilt and each plugin's manifest version must increase so installed users see an update. The new host reads the new catalog and updates all installed plugins before loading any dynamic bundle. The catalog merge step rejects mixed PluginKit versions.
+
+Within one PluginKit ABI line, a plugin that adopts a newly exported PluginKit type must set `minHostVersion` to the first MacTools app release that exports that symbol. This prevents an older host from accepting the manifest and then failing while loading the dynamic bundle.
 
 When a full rebuild is needed, run the `Plugin Release` workflow manually with `mode=all`. To publish a controlled subset, use `mode=selected` and pass comma-separated plugin IDs or directory names in `plugins`.
 
@@ -247,11 +250,10 @@ The catalog private key, Developer ID identity, and GitHub token must come from 
 
 ## Runtime Lifecycle
 
-Install, update, enable, disable, and uninstall are immediate at the UI contribution level:
+Install, update, and uninstall are immediate at the UI contribution level:
 
-- Installed and enabled plugins contribute panels, components, settings, permissions, and shortcuts.
-- Disabled plugins are removed from UI and function lists immediately.
-- Uninstalled plugins are removed from UI immediately and package files are deleted.
+- Installed plugins contribute every panel, component, settings, permission, and shortcut surface they support.
+- Uninstalled plugins are removed from UI immediately and package files are deleted. Scoped plugin data is retained so a later reinstall can recover it; a separate destructive data-removal flow may be added in the future.
 - Batch updates resolve the currently updateable catalog entries and rebuild plugin management state once after successful package replacements.
 - Already-loaded native code is not force-unloaded in-process. The executable code is fully released after the app restarts.
 
