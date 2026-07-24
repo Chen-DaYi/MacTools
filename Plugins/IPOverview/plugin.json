@@ -48,7 +48,7 @@
       "summary": "查看出口 IP、本地 IP、歸屬地與網路測速摘要"
     }
   },
-  "version": "1.0.12",
+  "version": "1.0.13",
   "minHostVersion": "1.0.10",
   "pluginKitVersion": 3,
   "bundleRelativePath": "IPOverview.bundle",

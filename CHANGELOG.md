@@ -7,6 +7,20 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [plugins-1.1.3] - 2026-07-24
+
+### Added
+
+- Keep Awake can optionally keep a Mac laptop running with its lid closed. The preference can be enabled on battery, waits for external power, and activates automatically when power connects.
+
+### Changed
+
+- IP Check now performs a lightweight local and public IPv4 refresh whenever its Feature Panel or settings page opens.
+
+### Fixed
+
+- Sidecar device settings now keep connection options and shortcuts readable in narrow Settings windows.
+
 ## [v1.1.3] - 2026-07-24
 
 ### Added
