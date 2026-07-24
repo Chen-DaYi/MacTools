@@ -603,9 +603,11 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
             lastErrorMessage = nil
             notifyChange()
         } catch {
-            logger.error("failed to release closed-lid assertion after power change: \(error.localizedDescription, privacy: .public)")
-            lastErrorMessage = error.localizedDescription
+            let errorMessage = error.localizedDescription
+            logger.error("failed to release closed-lid assertion after power change: \(errorMessage, privacy: .public)")
             session.requestStop(reason: .userRequested)
+            lastErrorMessage = errorMessage
+            notifyChange()
         }
     }
 

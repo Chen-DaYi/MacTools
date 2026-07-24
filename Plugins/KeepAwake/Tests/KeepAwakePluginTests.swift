@@ -314,6 +314,30 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 
+    func testDisconnectingPowerPreservesClosedLidReleaseErrorAfterStoppingSession() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.setKeepAwakeWithLidClosed(true)
+        plugin.handleAction(.setSwitch(true))
+        factory.sessions[0].lidCloseUpdateError = MockKeepAwakeSessionError.lidCloseUpdateFailed
+
+        factory.powerSourceMonitor.send(
+            KeepAwakePowerSourceState(
+                isPortableMac: true,
+                isOnExternalPower: false
+            )
+        )
+
+        XCTAssertEqual(factory.sessions[0].lidCloseSleepPreventionUpdates, [false])
+        XCTAssertEqual(factory.sessions[0].stopRequestCount, 1)
+        XCTAssertNil(storage.values["keep-awake-with-lid-closed"])
+        XCTAssertNil(plugin.primaryPanelIndicator)
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法更新合盖状态。")
+    }
+
     func testClosedLidPreferenceDoesNotRestoreWithoutExternalPower() {
         let storage = KeepAwakeMemoryStorage()
         storage.set(true, forKey: "keep-awake-with-lid-closed")
