@@ -1400,35 +1400,40 @@ h1 {
   transform: translateY(0) scale(1);
 }
 
-.sim-calendar-popover::before {
+.sim-calendar-popover-notch {
+  position: absolute;
+  z-index: 2;
+  top: -12px;
+  left: var(--sim-popover-arrow-offset, 103px);
+  width: 24px;
+  height: 13px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sim-calendar-popover-notch::before {
   content: "";
   position: absolute;
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--sim-panel-border);
+  top: 3px;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  border-top: 1px solid var(--sim-panel-border);
+  border-left: 1px solid var(--sim-panel-border);
   background: var(--sim-panel);
+  backdrop-filter: saturate(160%) blur(28px);
   transform: rotate(45deg);
 }
 
-.sim-calendar-popover[data-side="right"]::before {
-  top: var(--sim-popover-arrow-offset, 30px);
-  left: -6px;
-  border-top: 0;
-  border-right: 0;
-}
-
-.sim-calendar-popover[data-side="left"]::before {
-  top: var(--sim-popover-arrow-offset, 30px);
-  right: -6px;
-  border-bottom: 0;
-  border-left: 0;
-}
-
-.sim-calendar-popover[data-side="over"]::before {
-  top: -6px;
-  left: var(--sim-popover-arrow-offset, 110px);
-  border-right: 0;
-  border-bottom: 0;
+.sim-calendar-popover-notch::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 0;
+  left: 3px;
+  z-index: 1;
+  height: 2px;
+  background: var(--sim-panel);
 }
 
 .sim-calendar-popover-heading {
@@ -3120,7 +3125,6 @@ button.sim-feature-row {
 
 :root[data-theme="dark"] .market-search img,
 :root[data-theme="dark"] .market-categories img,
-:root[data-theme="dark"] .market-row-settings img,
 :root[data-theme="dark"] .market-empty img {
   filter: invert(1);
 }
@@ -3302,7 +3306,7 @@ button.sim-feature-row {
   min-height: 86px;
   border-radius: 8px;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 28px;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   padding: 13px 14px;
@@ -3315,18 +3319,32 @@ button.sim-feature-row {
 }
 
 .market-plugin-status {
+  position: relative;
   width: 48px;
   height: 48px;
   border-radius: 8px;
   display: grid;
   place-items: center;
+  background: color-mix(in srgb, var(--settings-accent) 14%, var(--settings-card-background));
+}
+
+.market-plugin-status::after {
+  width: 20px;
+  height: 20px;
+  background: var(--settings-accent);
+  content: "";
+  -webkit-mask: url("/assets/sf-symbols/shippingbox.fill.png") center / contain no-repeat;
+  mask: url("/assets/sf-symbols/shippingbox.fill.png") center / contain no-repeat;
+}
+
+.market-plugin-row[data-installed="true"] .market-plugin-status {
   background: color-mix(in srgb, var(--settings-green) 17%, var(--settings-card-background));
 }
 
-.market-plugin-status img {
-  width: 20px;
-  height: 20px;
-  filter: brightness(0) saturate(100%) invert(66%) sepia(57%) saturate(859%) hue-rotate(83deg) brightness(93%) contrast(88%);
+.market-plugin-row[data-installed="true"] .market-plugin-status::after {
+  background: var(--settings-green);
+  -webkit-mask-image: url("/assets/sf-symbols/checkmark.png");
+  mask-image: url("/assets/sf-symbols/checkmark.png");
 }
 
 .market-plugin-copy {
@@ -3360,32 +3378,55 @@ button.sim-feature-row {
   white-space: nowrap;
 }
 
-.market-row-settings {
-  width: 28px;
-  height: 28px;
+.market-plugin-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.market-plugin-action {
+  width: 72px;
+  height: 30px;
   border: 0;
   border-radius: 6px;
-  display: grid;
-  place-items: center;
-  background: transparent;
+  padding: 0 10px;
+  background: var(--settings-accent-strong);
+  color: #ffffff;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 150ms ease, background-color 150ms ease;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
-.market-plugin-row:hover .market-row-settings,
-.market-row-settings:focus-visible {
-  opacity: 1;
+.market-plugin-action:hover {
+  background: var(--settings-accent);
 }
 
-.market-row-settings:hover {
+.market-plugin-row[data-installed="true"] .market-plugin-action {
+  border: 0;
   background: var(--settings-control);
+  color: inherit;
 }
 
-.market-row-settings img {
-  width: 12px;
-  height: 12px;
-  opacity: 0.58;
+.market-plugin-row[data-installed="true"] .market-plugin-action:hover {
+  background: color-mix(in srgb, currentColor 12%, var(--settings-control));
+}
+
+.market-plugin-action.is-busy,
+.market-plugin-action:disabled {
+  border: 0;
+  background: var(--settings-control);
+  color: color-mix(in srgb, currentColor 55%, transparent);
+  cursor: default;
+}
+
+.market-plugin-row[data-installed="true"] .market-action-install,
+.market-plugin-row[data-installed="false"] .market-action-uninstall {
+  display: none;
 }
 
 .market-empty {
@@ -3878,10 +3919,6 @@ button.sim-feature-row {
     height: 680px;
   }
 
-  .market-row-settings {
-    opacity: 1;
-  }
-
   .settings-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 11px;
@@ -3946,7 +3983,7 @@ button.sim-feature-row {
 
   .market-plugin-row {
     min-height: 82px;
-    grid-template-columns: 40px minmax(0, 1fr) 24px;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
     gap: 11px;
     padding: 12px;
   }
@@ -3956,9 +3993,14 @@ button.sim-feature-row {
     height: 40px;
   }
 
-  .market-plugin-status img {
+  .market-plugin-status::after {
     width: 18px;
     height: 18px;
+  }
+
+  .market-plugin-action {
+    width: 62px;
+    padding-inline: 7px;
   }
 
   .market-plugin-copy h3 {

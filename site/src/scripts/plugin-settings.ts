@@ -4,7 +4,6 @@ if (settingsWindow) {
   const root = document.documentElement;
   const sidebarTabs = [...settingsWindow.querySelectorAll<HTMLButtonElement>("[data-settings-tab]")];
   const panels = [...settingsWindow.querySelectorAll<HTMLElement>("[data-settings-panel]")];
-  const openSettingsButtons = [...settingsWindow.querySelectorAll<HTMLButtonElement>("[data-open-settings]")];
   const marketSearch = settingsWindow.querySelector<HTMLInputElement>("[data-market-search]");
   const filterButtons = [...settingsWindow.querySelectorAll<HTMLButtonElement>("[data-market-filter]")];
   const pluginRows = [...settingsWindow.querySelectorAll<HTMLElement>("[data-market-plugin]")];
@@ -54,10 +53,6 @@ if (settingsWindow) {
 
   for (const tab of sidebarTabs) {
     tab.addEventListener("click", () => showPanel(tab.dataset.settingsTab ?? "market"));
-  }
-
-  for (const button of openSettingsButtons) {
-    button.addEventListener("click", () => showPanel(button.dataset.openSettings ?? "market"));
   }
 
   const applyMarketFilter = () => {
@@ -144,6 +139,35 @@ if (settingsWindow) {
         button.innerHTML = initialMarkup;
         button.classList.remove("is-complete");
       }, 1200);
+    });
+  });
+
+  settingsWindow.querySelectorAll<HTMLButtonElement>("[data-plugin-action]").forEach((button) => {
+    const row = button.closest<HTMLElement>("[data-market-plugin]");
+    const initialMarkup = button.innerHTML;
+    if (!row) return;
+
+    button.addEventListener("click", () => {
+      const isInstalled = row.dataset.installed === "true";
+      button.disabled = true;
+      button.classList.add("is-busy");
+      button.textContent = root.dataset.lang === "en"
+        ? isInstalled ? "Uninstalling" : "Installing"
+        : isInstalled ? "卸载中" : "安装中";
+
+      window.setTimeout(() => {
+        const nextInstalled = !isInstalled;
+        row.dataset.installed = String(nextInstalled);
+        row.querySelector<HTMLElement>(".market-plugin-status")?.setAttribute(
+          "aria-label",
+          root.dataset.lang === "en"
+            ? nextInstalled ? "Installed" : "Not installed"
+            : nextInstalled ? "已安装" : "未安装",
+        );
+        button.innerHTML = initialMarkup;
+        button.disabled = false;
+        button.classList.remove("is-busy");
+      }, 650);
     });
   });
 

@@ -121,7 +121,7 @@ document.querySelectorAll<HTMLElement>("[data-menubar-simulator]").forEach((simu
     calendarPopover.style.top = `${top}px`;
     calendarPopover.style.setProperty(
       "--sim-popover-arrow-offset",
-      `${clamp(cellRect.left - showcaseRect.left + cellRect.width / 2 - left - 5, 12, popoverWidth - 22)}px`,
+      `${clamp(cellRect.left - showcaseRect.left + cellRect.width / 2 - left - 12, 8, popoverWidth - 32)}px`,
     );
   };
 
