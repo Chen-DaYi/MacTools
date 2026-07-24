@@ -6,7 +6,7 @@ import MacToolsPluginKit
 final class IPOverviewViewModel: ObservableObject {
     private enum RefreshMode {
         case full
-        case publicIP
+        case addresses
     }
 
     private enum StorageKey {
@@ -153,7 +153,7 @@ final class IPOverviewViewModel: ObservableObject {
             return nil
         }
 
-        return refreshPublicIP()
+        return refreshAddresses()
     }
 
     @discardableResult
@@ -182,20 +182,20 @@ final class IPOverviewViewModel: ObservableObject {
     }
 
     @discardableResult
-    func refreshPublicIP() -> Task<Void, Never>? {
+    func refreshAddresses() -> Task<Void, Never>? {
         guard refreshTask == nil else {
             return nil
         }
 
         snapshot.isRefreshing = true
         snapshot.errorMessage = nil
-        refreshMode = .publicIP
+        refreshMode = .addresses
         refreshGeneration += 1
         let generation = refreshGeneration
         let currentSnapshot = snapshot
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            let nextSnapshot = await provider.collectPublicIPSnapshot(preserving: currentSnapshot)
+            let nextSnapshot = await provider.collectAddressSnapshot(preserving: currentSnapshot)
             defer {
                 clearRefreshTask(generation: generation)
             }
@@ -218,7 +218,7 @@ final class IPOverviewViewModel: ObservableObject {
     }
 
     func refreshAll() {
-        if refreshMode == .publicIP {
+        if refreshMode == .addresses {
             cancelRefresh()
         }
 

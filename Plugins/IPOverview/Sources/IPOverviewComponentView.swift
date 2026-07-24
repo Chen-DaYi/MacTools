@@ -14,7 +14,6 @@ struct IPOverviewComponentView: View {
     @State private var customName = ""
     @State private var customURL = ""
     @State private var addError = ""
-    @State private var didRunInitialDiagnostics = false
     @State private var presentedLeakDetails: IPOverviewLeakAssessmentKind?
 
     init(
@@ -38,7 +37,7 @@ struct IPOverviewComponentView: View {
             }
         }
         .onAppear {
-            viewModel.refreshIfNeeded()
+            viewModel.refreshAddresses()
             if startsInDetails {
                 viewModel.showDetails()
             }
@@ -128,14 +127,6 @@ struct IPOverviewComponentView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .onAppear {
-            guard !didRunInitialDiagnostics else {
-                return
-            }
-
-            didRunInitialDiagnostics = true
-            viewModel.refreshAllIfNeeded()
-        }
     }
 
     private var detailHeader: some View {

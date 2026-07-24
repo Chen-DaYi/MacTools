@@ -913,6 +913,14 @@ struct IPOverviewSnapshot: Codable, Equatable, Sendable {
         internationalIPv4 ?? internationalIPv6 ?? domesticIPv4 ?? domesticIPv6
     }
 
+    var preferredPublicIPv4: IPOverviewPublicIPResult? {
+        internationalIPv4 ?? domesticIPv4
+    }
+
+    var preferredLocalIPv4: IPOverviewLocalAddress? {
+        localAddresses.first { $0.family == .ipv4 }
+    }
+
     var preferredGeoInfo: IPOverviewGeoInfo? {
         guard let ip = preferredPublicIP?.ip else {
             return nil

@@ -20,13 +20,24 @@ final class IPOverviewPluginTests: XCTestCase {
     }
 
     func testPrimaryPanelUsesButtonEntry() {
-        let plugin = IPOverviewPlugin()
+        let viewModel = IPOverviewViewModel(storage: IPOverviewPluginTestStorage())
+        let plugin = IPOverviewPlugin(viewModel: viewModel)
 
         XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .button)
         XCTAssertEqual(plugin.primaryPanelDescriptor.buttonTitle, "检测")
         XCTAssertEqual(plugin.primaryPanelDescriptor.menuActionBehavior, .dismissBeforeHandling)
         XCTAssertFalse(plugin.primaryPanelState.isExpanded)
-        XCTAssertNil(plugin.primaryPanelState.detail)
+        XCTAssertEqual(
+            plugin.primaryPanelState.detail?.controls.map(\.id),
+            [
+                IPOverviewPlugin.ControlID.copyLocalIPv4,
+                IPOverviewPlugin.ControlID.copyPublicIPv4
+            ]
+        )
+        XCTAssertEqual(
+            plugin.primaryPanelState.detail?.controls.map(\.isEnabled),
+            [false, false]
+        )
     }
 
     func testPrimaryPanelButtonRequestsConfigurationPresentation() {
@@ -42,7 +53,140 @@ final class IPOverviewPluginTests: XCTestCase {
         XCTAssertTrue(didRequestConfigurationPresentation)
     }
 
-    func testRefreshIfNeededOnlyCollectsPublicIP() async throws {
+    func testPrimaryPanelShowsCopyableLocalAndPublicIPv4Values() async throws {
+        let snapshot = IPOverviewSnapshot(
+            domesticIPv4: IPOverviewPublicIPResult(
+                family: .ipv4,
+                route: .domestic,
+                ip: "198.51.100.8",
+                source: "Domestic Test"
+            ),
+            domesticIPv6: IPOverviewPublicIPResult(
+                family: .ipv6,
+                route: .domestic,
+                ip: "2001:db8::8",
+                source: "Domestic IPv6 Test"
+            ),
+            internationalIPv4: IPOverviewPublicIPResult(
+                family: .ipv4,
+                route: .international,
+                ip: "203.0.113.8",
+                source: "International Test"
+            ),
+            internationalIPv6: IPOverviewPublicIPResult(
+                family: .ipv6,
+                route: .international,
+                ip: "2001:db8::9",
+                source: "International IPv6 Test"
+            ),
+            localAddresses: [
+                IPOverviewLocalAddress(
+                    id: "en0-2001:db8::10",
+                    interfaceName: "en0",
+                    address: "2001:db8::10",
+                    family: .ipv6
+                ),
+                IPOverviewLocalAddress(
+                    id: "en0-192.168.1.10",
+                    interfaceName: "en0",
+                    address: "192.168.1.10",
+                    family: .ipv4
+                )
+            ],
+            geoInfoByIP: [:],
+            sourceResults: [],
+            lastUpdated: Date(),
+            errorMessage: nil,
+            isRefreshing: false
+        )
+        let viewModel = IPOverviewViewModel(
+            provider: IPOverviewProviderSpy(publicSnapshot: snapshot),
+            storage: IPOverviewPluginTestStorage()
+        )
+        let refreshTask = try XCTUnwrap(viewModel.refreshAddresses())
+        await refreshTask.value
+        let plugin = IPOverviewPlugin(viewModel: viewModel)
+        let controls = try XCTUnwrap(plugin.primaryPanelState.detail?.controls)
+
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "203.0.113.8")
+        XCTAssertEqual(
+            controls.map(\.id),
+            [
+                IPOverviewPlugin.ControlID.copyLocalIPv4,
+                IPOverviewPlugin.ControlID.copyPublicIPv4
+            ]
+        )
+        XCTAssertEqual(
+            controls.map(\.actionTitle),
+            ["192.168.1.10", "203.0.113.8"]
+        )
+        XCTAssertEqual(
+            controls.map(\.isEnabled),
+            [true, true]
+        )
+    }
+
+    func testPrimaryPanelKeepsBothIPv4SlotsWhenPublicAddressIsUnavailable() async throws {
+        let snapshot = IPOverviewSnapshot(
+            domesticIPv4: nil,
+            domesticIPv6: nil,
+            internationalIPv4: nil,
+            internationalIPv6: nil,
+            localAddresses: [
+                IPOverviewLocalAddress(
+                    id: "en0-192.168.1.10",
+                    interfaceName: "en0",
+                    address: "192.168.1.10",
+                    family: .ipv4
+                )
+            ],
+            geoInfoByIP: [:],
+            sourceResults: [],
+            lastUpdated: nil,
+            errorMessage: "未能从外部检测源获取公网 IP",
+            isRefreshing: false
+        )
+        let viewModel = IPOverviewViewModel(
+            provider: IPOverviewProviderSpy(publicSnapshot: snapshot),
+            storage: IPOverviewPluginTestStorage()
+        )
+        let refreshTask = try XCTUnwrap(viewModel.refreshAddresses())
+        await refreshTask.value
+        let controls = try XCTUnwrap(
+            IPOverviewPlugin(viewModel: viewModel).primaryPanelState.detail?.controls
+        )
+
+        XCTAssertEqual(controls.map(\.actionTitle), ["192.168.1.10", "--"])
+        XCTAssertEqual(controls.map(\.isEnabled), [true, false])
+    }
+
+    func testOpeningPrimaryPanelRefreshesAddressesWithoutUsingCacheFreshness() async throws {
+        let provider = IPOverviewProviderSpy(
+            publicSnapshot: testSnapshot(ip: "203.0.113.8", lastUpdated: Date())
+        )
+        let viewModel = IPOverviewViewModel(
+            provider: provider,
+            storage: IPOverviewPluginTestStorage()
+        )
+        let initialRefresh = try XCTUnwrap(viewModel.refreshAddresses())
+        await initialRefresh.value
+        let plugin = IPOverviewPlugin(viewModel: viewModel)
+
+        plugin.panelSurfaceDidBecomeVisible(.component)
+        await Task.yield()
+        var callCounts = await provider.callCounts()
+        XCTAssertEqual(callCounts.addresses, 1)
+
+        plugin.panelSurfaceDidBecomeVisible(.primary)
+        XCTAssertTrue(viewModel.snapshot.isRefreshing)
+        try await waitUntil { !viewModel.snapshot.isRefreshing }
+
+        callCounts = await provider.callCounts()
+        XCTAssertEqual(callCounts.addresses, 2)
+        XCTAssertEqual(callCounts.full, 0)
+    }
+
+    func testRefreshIfNeededOnlyCollectsAddresses() async throws {
         let provider = IPOverviewProviderSpy(
             publicSnapshot: IPOverviewSnapshot(
                 publicIPv4: IPOverviewPublicIPResult(
@@ -69,7 +213,7 @@ final class IPOverviewPluginTests: XCTestCase {
 
         XCTAssertEqual(viewModel.snapshot.publicIPv4?.ip, "203.0.113.8")
         let callCounts = await provider.callCounts()
-        XCTAssertEqual(callCounts.publicIP, 1)
+        XCTAssertEqual(callCounts.addresses, 1)
         XCTAssertEqual(callCounts.full, 0)
     }
 
@@ -98,7 +242,7 @@ final class IPOverviewPluginTests: XCTestCase {
         XCTAssertEqual(cachedViewModel.snapshot.publicIPv4?.ip, "203.0.113.8")
         XCTAssertNil(cachedViewModel.refreshIfNeeded())
         let callCounts = await provider.callCounts()
-        XCTAssertEqual(callCounts.publicIP, 0)
+        XCTAssertEqual(callCounts.addresses, 0)
         XCTAssertEqual(callCounts.full, 0)
     }
 
@@ -131,7 +275,7 @@ final class IPOverviewPluginTests: XCTestCase {
 
         XCTAssertEqual(cachedViewModel.snapshot.publicIPv4?.ip, "198.51.100.24")
         let callCounts = await provider.callCounts()
-        XCTAssertEqual(callCounts.publicIP, 1)
+        XCTAssertEqual(callCounts.addresses, 1)
         XCTAssertEqual(callCounts.full, 0)
     }
 
@@ -162,7 +306,7 @@ final class IPOverviewPluginTests: XCTestCase {
         await refreshTask.value
 
         let callCounts = await provider.callCounts()
-        XCTAssertEqual(callCounts.publicIP, 0)
+        XCTAssertEqual(callCounts.addresses, 0)
         XCTAssertEqual(callCounts.full, 1)
     }
 
@@ -542,7 +686,7 @@ private func testSnapshot(ip: String, lastUpdated: Date) -> IPOverviewSnapshot {
 
 private actor IPOverviewProviderSpy: IPOverviewProviding {
     private(set) var collectSnapshotCallCount = 0
-    private(set) var collectPublicIPSnapshotCallCount = 0
+    private(set) var collectAddressSnapshotCallCount = 0
     private let publicSnapshot: IPOverviewSnapshot
     private let fullSnapshot: IPOverviewSnapshot
 
@@ -556,13 +700,13 @@ private actor IPOverviewProviderSpy: IPOverviewProviding {
         return fullSnapshot
     }
 
-    func collectPublicIPSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot {
-        collectPublicIPSnapshotCallCount += 1
+    func collectAddressSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot {
+        collectAddressSnapshotCallCount += 1
         return publicSnapshot
     }
 
-    func callCounts() -> (full: Int, publicIP: Int) {
-        (collectSnapshotCallCount, collectPublicIPSnapshotCallCount)
+    func callCounts() -> (full: Int, addresses: Int) {
+        (collectSnapshotCallCount, collectAddressSnapshotCallCount)
     }
 }
 

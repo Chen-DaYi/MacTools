@@ -297,6 +297,126 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         )
     }
 
+    func testIPOverviewUsesFixedInlineIPv4SlotsWithoutAddingDetailHeight() {
+        let item = makeItem(
+            id: IPOverviewFeatureRowContract.pluginID,
+            controlStyle: .button,
+            isExpanded: false,
+            controls: [
+                makeIPOverviewControl(
+                    id: IPOverviewFeatureRowContract.copyLocalIPv4ActionID,
+                    address: "192.168.1.10",
+                    isEnabled: true
+                ),
+                makeIPOverviewControl(
+                    id: IPOverviewFeatureRowContract.copyPublicIPv4ActionID,
+                    address: "--",
+                    isEnabled: false
+                )
+            ]
+        )
+
+        let values = IPOverviewFeatureRowModel.values(for: item)
+        XCTAssertEqual(
+            values.map(\.id),
+            [
+                IPOverviewFeatureRowContract.copyLocalIPv4ActionID,
+                IPOverviewFeatureRowContract.copyPublicIPv4ActionID
+            ]
+        )
+        XCTAssertEqual(values.map(\.text), ["192.168.1.10", "--"])
+        XCTAssertEqual(values.map(\.isEnabled), [true, false])
+        XCTAssertEqual(
+            values.map(\.copyActionID),
+            [IPOverviewFeatureRowContract.copyLocalIPv4ActionID, nil]
+        )
+        XCTAssertEqual(
+            MenuBarPanelLayout.featureContentHeight(for: [item]),
+            MenuBarPanelLayout.rowHeaderHeight + MenuBarPanelLayout.rowVerticalPadding
+        )
+    }
+
+    func testFeatureRowDescriptionCopySupportsEnabledButtonAndSwitchRowsOnly() {
+        XCTAssertTrue(FeatureRowDescriptionCopyPolicy.allowsCopy(
+            controlStyle: .button,
+            isEnabled: true,
+            text: "检测结果"
+        ))
+        XCTAssertTrue(FeatureRowDescriptionCopyPolicy.allowsCopy(
+            controlStyle: .switch,
+            isEnabled: true,
+            text: "已开启"
+        ))
+        XCTAssertFalse(FeatureRowDescriptionCopyPolicy.allowsCopy(
+            controlStyle: .disclosure,
+            isEnabled: true,
+            text: "点击展开"
+        ))
+        XCTAssertFalse(FeatureRowDescriptionCopyPolicy.allowsCopy(
+            controlStyle: .button,
+            isEnabled: false,
+            text: "暂不可用"
+        ))
+        XCTAssertFalse(FeatureRowDescriptionCopyPolicy.allowsCopy(
+            controlStyle: .switch,
+            isEnabled: true,
+            text: "  "
+        ))
+    }
+
+    func testFeatureRowCopyFeedbackRestartsAndIgnoresStaleClear() {
+        var feedback = FeatureRowInlineCopyFeedbackState()
+
+        XCTAssertEqual(FeatureRowInlineCopyFeedbackState.displayDuration, .milliseconds(500))
+        XCTAssertNil(feedback.copiedTargetID)
+
+        feedback.show(for: "local")
+        let firstGeneration = feedback.generation
+        XCTAssertEqual(feedback.copiedTargetID, "local")
+
+        feedback.show(for: "public")
+        let secondGeneration = feedback.generation
+        XCTAssertGreaterThan(secondGeneration, firstGeneration)
+        XCTAssertEqual(feedback.copiedTargetID, "public")
+
+        feedback.clear(ifGenerationMatches: firstGeneration)
+        XCTAssertEqual(feedback.copiedTargetID, "public")
+
+        feedback.clear(ifGenerationMatches: secondGeneration)
+        XCTAssertNil(feedback.copiedTargetID)
+    }
+
+    func testFeatureRowCopyFeedbackCentersWithoutCrossingTheLeadingEdge() {
+        XCTAssertEqual(
+            FeatureRowCopyFeedbackPlacement.leadingOffset(
+                sourceWidth: 100,
+                feedbackWidth: 20
+            ),
+            40
+        )
+        XCTAssertEqual(
+            FeatureRowCopyFeedbackPlacement.leadingOffset(
+                sourceWidth: 20,
+                feedbackWidth: 20
+            ),
+            0
+        )
+        XCTAssertEqual(
+            FeatureRowCopyFeedbackPlacement.leadingOffset(
+                sourceWidth: 20,
+                feedbackWidth: 40
+            ),
+            0
+        )
+        XCTAssertEqual(
+            FeatureRowCopyFeedbackPlacement.leadingOffset(
+                sourceWidth: 0,
+                feedbackWidth: 40
+            ),
+            0
+        )
+    }
+
     func testPreferredPanelHeightCapsTallFeatureLists() {
         let items = (0..<40).map { index in
             makeItem(id: "plugin-\(index)", controlStyle: .switch, isExpanded: false)
@@ -340,6 +460,28 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: nil),
             buttonActionID: nil,
             buttonTitle: nil
+        )
+    }
+
+    private func makeIPOverviewControl(
+        id: String,
+        address: String,
+        isEnabled: Bool
+    ) -> PluginPanelControl {
+        PluginPanelControl(
+            id: id,
+            kind: .actionRow,
+            options: [],
+            selectedOptionID: nil,
+            dateValue: nil,
+            minimumDate: nil,
+            displayedComponents: nil,
+            datePickerStyle: nil,
+            sectionTitle: nil,
+            actionTitle: address,
+            actionIconSystemName: "doc.on.doc",
+            actionBehavior: .keepPresented,
+            isEnabled: isEnabled
         )
     }
 }

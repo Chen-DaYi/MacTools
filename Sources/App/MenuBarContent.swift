@@ -2,6 +2,12 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
+enum IPOverviewFeatureRowContract {
+    static let pluginID = "ip-overview"
+    static let copyLocalIPv4ActionID = "ip-overview-copy-local-ipv4"
+    static let copyPublicIPv4ActionID = "ip-overview-copy-public-ipv4"
+}
+
 enum MenuBarPanelLayout {
     static let baseWidth: CGFloat = 316
     static let secondaryPanelWidth: CGFloat = 216
@@ -187,6 +193,10 @@ enum MenuBarPanelLayout {
             return nil
         }
 
+        if !IPOverviewFeatureRowModel.values(for: item).isEmpty {
+            return nil
+        }
+
         if item.controlStyle == .disclosure && !item.isExpanded {
             return nil
         }
@@ -301,6 +311,8 @@ private enum FeatureRowLayout {
     static let actionButtonChineseFontSize: CGFloat = 11
     static let actionButtonLocalizedFontSize: CGFloat = 9
     static let actionButtonLocalizedMinimumScale: CGFloat = 0.7
+    static let copyFeedbackFontSize: CGFloat = 8.5
+    static let copyFeedbackSourceOpacity: CGFloat = 0.16
 }
 
 private enum MenuBarHoverStyle {
@@ -531,8 +543,6 @@ struct MenuBarContent: View {
     static let zshConfigOpenSettingsActionID = "execute"
     static let batteryChargeLimitPluginID = "battery-charge-limit"
     static let batteryChargeLimitManageSettingsActionID = "battery-manage-settings"
-    static let ipOverviewPluginID = "ip-overview"
-    static let ipOverviewCopyIPActionID = "ip-overview-copy-ip"
 
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
@@ -1213,8 +1223,12 @@ struct FeatureRowView: View {
     let onSwitchChange: (Bool) -> Bool
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @State private var isHovered = false
     @State private var didPushDisabledCursor = false
+    @State private var inlineCopyFeedback = FeatureRowInlineCopyFeedbackState()
+
+    private static let descriptionCopyTargetID = "description"
 
     var body: some View {
         VStack(alignment: .leading, spacing: detailToDisplay == nil ? 0 : MenuBarPanelLayout.detailSpacing) {
@@ -1313,6 +1327,22 @@ struct FeatureRowView: View {
             resetDisabledCursorIfNeeded()
         }
         .help(item.helpText)
+        .task(id: inlineCopyFeedback.generation) {
+            let generation = inlineCopyFeedback.generation
+            guard inlineCopyFeedback.copiedTargetID != nil else {
+                return
+            }
+
+            do {
+                try await Task.sleep(for: FeatureRowInlineCopyFeedbackState.displayDuration)
+            } catch {
+                return
+            }
+
+            withAnimation(copyFeedbackAnimation) {
+                inlineCopyFeedback.clear(ifGenerationMatches: generation)
+            }
+        }
     }
 
     private var rowHeader: some View {
@@ -1360,6 +1390,10 @@ struct FeatureRowView: View {
             return nil
         }
 
+        if !inlineValues.isEmpty {
+            return nil
+        }
+
         if item.controlStyle == .disclosure && !item.isExpanded {
             return nil
         }
@@ -1402,27 +1436,10 @@ struct FeatureRowView: View {
                 }
             }
 
-            HStack(spacing: 3) {
-                Text(item.description)
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(item.helpText)
-
-                if showsIPOverviewCopyButton {
-                    Button {
-                        onActionInvoke(MenuBarContent.ipOverviewCopyIPActionID, .keepPresented)
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 10.5, height: 10.5)
-                    }
-                    .buttonStyle(.plain)
-                    .opacity(isHovered ? 1 : 0)
-                    .help(AppL10n.plugins("plugin.panel.copyIP", defaultValue: "复制 IP"))
-                }
+            if showsInlineValues {
+                inlineValueRow
+            } else {
+                rowDescription
             }
         }
     }
@@ -1462,26 +1479,110 @@ struct FeatureRowView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private var showsIPOverviewCopyButton: Bool {
-        item.id == MenuBarContent.ipOverviewPluginID
-            && !descriptionIsError
-            && Self.looksLikeIPAddress(item.description)
-    }
-
-    private var descriptionIsError: Bool {
-        switch item.descriptionTone {
-        case .error:
-            return true
-        case .secondary:
-            return false
+    @ViewBuilder
+    private var rowDescription: some View {
+        if FeatureRowDescriptionCopyPolicy.allowsCopy(
+            controlStyle: item.controlStyle,
+            isEnabled: item.isEnabled,
+            text: item.description
+        ) {
+            descriptionText
+                .featureRowDoubleClickCopy(
+                    copiedText: copiedText,
+                    isCopied: inlineCopyFeedback.copiedTargetID == Self.descriptionCopyTargetID,
+                    isCopyEnabled: true,
+                    helpText: "\(item.helpText)\n\(doubleClickCopyText)",
+                    accessibilityLabel: "\(item.title) \(item.description)",
+                    accessibilityHint: doubleClickCopyText,
+                    onCopy: copyDescription
+                )
+        } else {
+            descriptionText
         }
     }
 
-    private static func looksLikeIPAddress(_ value: String) -> Bool {
-        let allowedCharacters = CharacterSet(charactersIn: "0123456789abcdefABCDEF:.")
-        return !value.isEmpty
-            && value.rangeOfCharacter(from: allowedCharacters.inverted) == nil
-            && (value.contains(".") || value.contains(":"))
+    private var descriptionText: some View {
+        Text(item.description)
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .help(item.helpText)
+    }
+
+    private var showsInlineValues: Bool {
+        !inlineValues.isEmpty
+    }
+
+    private var inlineValues: [IPOverviewFeatureRowValue] {
+        IPOverviewFeatureRowModel.values(for: item)
+    }
+
+    private var inlineValueRow: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(inlineValues.prefix(2).enumerated()), id: \.element.id) { index, value in
+                if index > 0 {
+                    Divider()
+                        .frame(height: 10)
+                        .padding(.horizontal, 6)
+                }
+
+                IPOverviewInlineValueText(
+                    value: value,
+                    copiedText: copiedText,
+                    isCopied: inlineCopyFeedback.copiedTargetID == value.id
+                ) {
+                    guard let actionID = value.copyActionID else {
+                        return
+                    }
+                    onActionInvoke(actionID, .keepPresented)
+                    showCopyFeedback(for: value.id, announcementLabel: value.label)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .help(item.helpText)
+    }
+
+    private var copiedText: String {
+        AppL10n.plugins("plugin.panel.copied", defaultValue: "已复制")
+    }
+
+    private var doubleClickCopyText: String {
+        AppL10n.plugins("plugin.panel.doubleClickToCopy", defaultValue: "双击复制")
+    }
+
+    private var copyFeedbackAnimation: Animation? {
+        accessibilityReduceMotion ? nil : .easeOut(duration: 0.12)
+    }
+
+    private func copyDescription() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setString(item.description, forType: .string) else {
+            return
+        }
+
+        showCopyFeedback(
+            for: Self.descriptionCopyTargetID,
+            announcementLabel: item.title
+        )
+    }
+
+    private func showCopyFeedback(for targetID: String, announcementLabel: String) {
+        withAnimation(copyFeedbackAnimation) {
+            inlineCopyFeedback.show(for: targetID)
+        }
+
+        NSAccessibility.post(
+            element: NSApplication.shared,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: "\(announcementLabel) \(copiedText)",
+                .priority: NSAccessibilityPriorityLevel.low.rawValue
+            ]
+        )
     }
 
     private func updateCursorForDisabledState(hovering: Bool) {
@@ -1500,6 +1601,252 @@ struct FeatureRowView: View {
             NSCursor.pop()
             didPushDisabledCursor = false
         }
+    }
+}
+
+struct IPOverviewFeatureRowValue: Identifiable, Equatable {
+    let id: String
+    let label: String
+    let text: String
+    let copyHelp: String
+    let isEnabled: Bool
+
+    var copyActionID: String? {
+        isEnabled ? id : nil
+    }
+}
+
+enum FeatureRowDescriptionCopyPolicy {
+    static func allowsCopy(
+        controlStyle: PluginControlStyle,
+        isEnabled: Bool,
+        text: String
+    ) -> Bool {
+        guard isEnabled, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        switch controlStyle {
+        case .button, .switch:
+            return true
+        case .disclosure:
+            return false
+        }
+    }
+}
+
+struct FeatureRowInlineCopyFeedbackState: Equatable {
+    static let displayDuration: Duration = .milliseconds(500)
+
+    private(set) var copiedTargetID: String?
+    private(set) var generation: UInt = 0
+
+    mutating func show(for targetID: String) {
+        generation &+= 1
+        copiedTargetID = targetID
+    }
+
+    mutating func clear(ifGenerationMatches expectedGeneration: UInt) {
+        guard generation == expectedGeneration else {
+            return
+        }
+
+        copiedTargetID = nil
+    }
+}
+
+enum FeatureRowCopyFeedbackPlacement {
+    static func leadingOffset(sourceWidth: CGFloat, feedbackWidth: CGFloat) -> CGFloat {
+        max(0, (sourceWidth - feedbackWidth) / 2)
+    }
+}
+
+private struct IPOverviewInlineValueText: View {
+    let value: IPOverviewFeatureRowValue
+    let copiedText: String
+    let isCopied: Bool
+    let onCopy: () -> Void
+
+    var body: some View {
+        Text(value.text)
+            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+            .foregroundStyle(value.isEnabled ? .secondary : .tertiary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .allowsTightening(true)
+            .featureRowDoubleClickCopy(
+                copiedText: copiedText,
+                isCopied: isCopied,
+                isCopyEnabled: value.copyActionID != nil,
+                helpText: value.copyHelp,
+                accessibilityLabel: "\(value.label) \(value.text)",
+                accessibilityHint: value.copyHelp,
+                onCopy: onCopy
+            )
+    }
+}
+
+private struct FeatureRowDoubleClickCopyModifier: ViewModifier {
+    let copiedText: String
+    let isCopied: Bool
+    let isCopyEnabled: Bool
+    let helpText: String
+    let accessibilityLabel: String
+    let accessibilityHint: String
+    let onCopy: () -> Void
+
+    func body(content: Content) -> some View {
+        FeatureRowCopyFeedbackLayout {
+            content
+                .opacity(isCopied ? FeatureRowLayout.copyFeedbackSourceOpacity : 1)
+
+            Text(copiedText)
+                .font(.system(size: FeatureRowLayout.copyFeedbackFontSize, weight: .semibold))
+                .foregroundStyle(.green)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .opacity(isCopied ? 1 : 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2, perform: copyIfAvailable)
+        .help(helpText)
+        .accessibilityRepresentation {
+            Button(accessibilityLabel, action: copyIfAvailable)
+                .disabled(!isCopyEnabled)
+                .accessibilityHint(accessibilityHint)
+        }
+    }
+
+    private func copyIfAvailable() {
+        guard isCopyEnabled else {
+            return
+        }
+
+        onCopy()
+    }
+}
+
+private struct FeatureRowCopyFeedbackLayout: Layout {
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout ()
+    ) -> CGSize {
+        guard let source = subviews.first else {
+            return .zero
+        }
+
+        return source.sizeThatFits(proposal)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal _: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout ()
+    ) {
+        guard subviews.count >= 2 else {
+            return
+        }
+
+        let source = subviews[0]
+        let feedback = subviews[1]
+        source.place(
+            at: bounds.origin,
+            proposal: ProposedViewSize(bounds.size)
+        )
+
+        let feedbackSize = feedback.sizeThatFits(.unspecified)
+        let feedbackX = bounds.minX + FeatureRowCopyFeedbackPlacement.leadingOffset(
+            sourceWidth: bounds.width,
+            feedbackWidth: feedbackSize.width
+        )
+        let feedbackY = bounds.midY - feedbackSize.height / 2
+        feedback.place(
+            at: CGPoint(x: feedbackX, y: feedbackY),
+            proposal: ProposedViewSize(feedbackSize)
+        )
+    }
+}
+
+private extension View {
+    func featureRowDoubleClickCopy(
+        copiedText: String,
+        isCopied: Bool,
+        isCopyEnabled: Bool,
+        helpText: String,
+        accessibilityLabel: String,
+        accessibilityHint: String,
+        onCopy: @escaping () -> Void
+    ) -> some View {
+        modifier(FeatureRowDoubleClickCopyModifier(
+            copiedText: copiedText,
+            isCopied: isCopied,
+            isCopyEnabled: isCopyEnabled,
+            helpText: helpText,
+            accessibilityLabel: accessibilityLabel,
+            accessibilityHint: accessibilityHint,
+            onCopy: onCopy
+        ))
+    }
+}
+
+enum IPOverviewFeatureRowModel {
+    static func values(for item: PluginPanelItem) -> [IPOverviewFeatureRowValue] {
+        guard
+            item.id == IPOverviewFeatureRowContract.pluginID,
+            let controls = item.detail?.primaryControls
+        else {
+            return []
+        }
+
+        guard
+            let localControl = controls.first(where: {
+                $0.id == IPOverviewFeatureRowContract.copyLocalIPv4ActionID
+            }),
+            let publicControl = controls.first(where: {
+                $0.id == IPOverviewFeatureRowContract.copyPublicIPv4ActionID
+            })
+        else {
+            return []
+        }
+        guard case .actionRow = localControl.kind else {
+            return []
+        }
+        guard case .actionRow = publicControl.kind else {
+            return []
+        }
+
+        return [
+            value(
+                from: localControl,
+                fallbackLabel: "内网 IPv4",
+                fallbackCopyHelp: "复制内网 IPv4"
+            ),
+            value(
+                from: publicControl,
+                fallbackLabel: "公网 IPv4",
+                fallbackCopyHelp: "复制公网 IPv4"
+            )
+        ]
+    }
+
+    private static func value(
+        from control: PluginPanelControl,
+        fallbackLabel: String,
+        fallbackCopyHelp: String
+    ) -> IPOverviewFeatureRowValue {
+        let label = control.sectionTitle ?? fallbackLabel
+        let copyHelp = control.valueLabel ?? fallbackCopyHelp
+        return IPOverviewFeatureRowValue(
+            id: control.id,
+            label: label,
+            text: control.actionTitle ?? "--",
+            copyHelp: control.isEnabled ? copyHelp : "\(label)不可用",
+            isEnabled: control.isEnabled
+        )
     }
 }
 

@@ -4,7 +4,7 @@ import MacToolsPluginKit
 
 protocol IPOverviewProviding: Sendable {
     func collectSnapshot() async -> IPOverviewSnapshot
-    func collectPublicIPSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot
+    func collectAddressSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot
 }
 
 protocol IPOverviewHTTPClient: Sendable {
@@ -121,36 +121,24 @@ struct IPOverviewService: IPOverviewProviding {
         )
     }
 
-    func collectPublicIPSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot {
-        async let domesticIPv4Results = fetchPublicIP(route: .domestic, family: .ipv4)
-        async let domesticIPv6Results = fetchPublicIP(route: .domestic, family: .ipv6)
-        async let internationalIPv4Results = fetchPublicIP(route: .international, family: .ipv4)
-        async let internationalIPv6Results = fetchPublicIP(route: .international, family: .ipv6)
+    func collectAddressSnapshot(preserving snapshot: IPOverviewSnapshot) async -> IPOverviewSnapshot {
+        async let localAddresses = Self.localAddresses()
+        async let domesticIPv4Result = fetchPreferredPublicIP(route: .domestic, family: .ipv4)
+        async let internationalIPv4Result = fetchPreferredPublicIP(route: .international, family: .ipv4)
 
-        let domesticIPv4 = await domesticIPv4Results
-        let domesticIPv6 = await domesticIPv6Results
-        let internationalIPv4 = await internationalIPv4Results
-        let internationalIPv6 = await internationalIPv6Results
-        let sourceResults = domesticIPv4.results
-            + domesticIPv6.results
-            + internationalIPv4.results
-            + internationalIPv6.results
-        let domesticIPv4Result = domesticIPv4.best
-        let domesticIPv6Result = domesticIPv6.best
-        let internationalIPv4Result = internationalIPv4.best
-        let internationalIPv6Result = internationalIPv6.best
+        let local = await localAddresses
+        let refreshedDomesticIPv4 = await domesticIPv4Result
+        let refreshedInternationalIPv4 = await internationalIPv4Result
+        let refreshedPublicIP = refreshedDomesticIPv4 != nil || refreshedInternationalIPv4 != nil
         let publicIPs = Set([
-            domesticIPv4Result?.ip,
-            domesticIPv6Result?.ip,
-            internationalIPv4Result?.ip,
-            internationalIPv6Result?.ip
+            refreshedDomesticIPv4?.ip,
+            refreshedInternationalIPv4?.ip,
+            snapshot.domesticIPv6?.ip,
+            snapshot.internationalIPv6?.ip
         ].compactMap(\.self))
 
         let errorMessage: String?
-        if domesticIPv4Result == nil
-            && domesticIPv6Result == nil
-            && internationalIPv4Result == nil
-            && internationalIPv6Result == nil {
+        if !refreshedPublicIP {
             errorMessage = localization.string(
                 "service.error.noPublicIP",
                 defaultValue: "未能从外部检测源获取公网 IP"
@@ -160,14 +148,14 @@ struct IPOverviewService: IPOverviewProviding {
         }
 
         return IPOverviewSnapshot(
-            domesticIPv4: domesticIPv4Result,
-            domesticIPv6: domesticIPv6Result,
-            internationalIPv4: internationalIPv4Result,
-            internationalIPv6: internationalIPv6Result,
-            localAddresses: snapshot.localAddresses,
+            domesticIPv4: refreshedDomesticIPv4,
+            domesticIPv6: snapshot.domesticIPv6,
+            internationalIPv4: refreshedInternationalIPv4,
+            internationalIPv6: snapshot.internationalIPv6,
+            localAddresses: local,
             geoInfoByIP: snapshot.geoInfoByIP.filter { publicIPs.contains($0.key) },
-            sourceResults: sourceResults,
-            lastUpdated: Date(),
+            sourceResults: snapshot.sourceResults,
+            lastUpdated: refreshedPublicIP ? Date() : snapshot.lastUpdated,
             errorMessage: errorMessage,
             isRefreshing: false
         )
@@ -233,8 +221,35 @@ struct IPOverviewService: IPOverviewProviding {
         return (best, results)
     }
 
-    private func fetchIP(from source: IPOverviewPublicIPSource) async throws -> String {
-        let (data, response) = try await fetch(source.url)
+    private func fetchPreferredPublicIP(
+        route: IPOverviewEgressRoute,
+        family: IPOverviewAddressFamily
+    ) async -> IPOverviewPublicIPResult? {
+        let lightweightTimeout = min(timeout, 0.75)
+        let sources = IPOverviewPublicIPSource.sources(route: route, family: family).prefix(2)
+
+        for source in sources {
+            do {
+                let ip = try await fetchIP(from: source, timeout: lightweightTimeout)
+                return IPOverviewPublicIPResult(
+                    family: family,
+                    route: route,
+                    ip: ip,
+                    source: source.name
+                )
+            } catch {
+                continue
+            }
+        }
+
+        return nil
+    }
+
+    private func fetchIP(
+        from source: IPOverviewPublicIPSource,
+        timeout requestTimeout: TimeInterval? = nil
+    ) async throws -> String {
+        let (data, response) = try await fetch(source.url, timeout: requestTimeout)
         guard (200..<300).contains(response.statusCode) else {
             throw IPOverviewServiceError.badStatus(response.statusCode)
         }
@@ -293,9 +308,12 @@ struct IPOverviewService: IPOverviewProviding {
         return nil
     }
 
-    private func fetch(_ url: URL) async throws -> (Data, HTTPURLResponse) {
+    private func fetch(
+        _ url: URL,
+        timeout requestTimeout: TimeInterval? = nil
+    ) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url)
-        request.timeoutInterval = timeout
+        request.timeoutInterval = requestTimeout ?? timeout
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("MacTools IP Overview", forHTTPHeaderField: "User-Agent")
         return try await httpClient.data(for: request)
