@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-07-20T14:08:33Z",
-  "minimumHostVersion": "1.1.1",
+  "generatedAt": "2026-07-24T15:28:33Z",
+  "minimumHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "plugins": [
     {
@@ -1424,16 +1424,16 @@
       },
       "minimumHostVersion": "1.0.10",
       "package": {
-        "sha256": "1ae3b651e15fa7a61a668faaa37e1fc75097e7d800011314da71aa2b3961e7a6",
-        "size": 1096425,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/ip-overview.mactoolsplugin.zip"
+        "sha256": "85cc55558769bcd4c6f4568c5a93c49d0bef3bb4c8e55591362ff82f8fedad58",
+        "size": 1097437,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.3/ip-overview.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.3",
       "summary": "查看出口 IP、本地 IP、归属地与网络测速摘要",
-      "version": "1.0.12"
+      "version": "1.0.13"
     },
     {
       "capabilities": {
@@ -1447,61 +1447,61 @@
       "localizedMetadata": {
         "ar": {
           "displayName": "منع السكون",
-          "summary": "يمنع سكون النظام؛ ويمكن اختياريًا إبقاء الشاشة قيد التشغيل."
+          "summary": "يمنع سكون النظام؛ ويمكن إبقاء الشاشة قيد التشغيل أو تشغيل Mac والغطاء مغلق عند توصيل الطاقة."
         },
         "de": {
           "displayName": "Wach halten",
-          "summary": "Verhindert den Leerlauf des Systems; optional bleibt das Display an."
+          "summary": "Verhindert den Leerlauf des Systems; optional bleibt das Display an oder der Mac läuft am Netzteil mit geschlossenem Deckel."
         },
         "en": {
           "displayName": "Keep Awake",
-          "summary": "Prevent idle system sleep; optionally keep the display on."
+          "summary": "Prevent idle system sleep; optionally keep the display on or run with the lid closed while on power."
         },
         "es": {
           "displayName": "Mantener activo",
-          "summary": "Evita la suspensión del sistema; opcionalmente mantiene la pantalla encendida."
+          "summary": "Evita la suspensión del sistema; opcionalmente mantiene la pantalla encendida o funciona con la tapa cerrada al conectarse a la corriente."
         },
         "fr": {
           "displayName": "Empêcher la suspension",
-          "summary": "Empêche la mise en veille du système ; option pour garder l’écran allumé."
+          "summary": "Empêche la mise en veille du système ; option pour garder l’écran allumé ou fonctionner couvercle fermé sur secteur."
         },
         "ja": {
           "displayName": "スリープを防止",
-          "summary": "システムのアイドルスリープを防止。必要に応じてディスプレイもオンのままにできます。"
+          "summary": "システムのアイドルスリープを防止。必要に応じてディスプレイをオンのままにするか、電源接続時に閉じた状態で動作できます。"
         },
         "ko": {
           "displayName": "잠자기 방지",
-          "summary": "시스템 유휴 절전을 방지하며, 선택적으로 디스플레이를 켜 둡니다."
+          "summary": "시스템 유휴 절전을 방지하며, 선택적으로 디스플레이를 켜 두거나 전원 연결 시 덮개를 닫은 채 실행합니다."
         },
         "pt": {
           "displayName": "Manter ativo",
-          "summary": "Impede a suspensão ociosa do sistema; opcionalmente mantém a tela ligada."
+          "summary": "Impede a suspensão ociosa do sistema; opcionalmente mantém a tela ligada ou funciona com a tampa fechada quando conectado à energia."
         },
         "ru": {
           "displayName": "Не давать уснуть",
-          "summary": "Предотвращает спящий режим системы; по желанию не даёт экрану гаснуть."
+          "summary": "Предотвращает спящий режим системы; по желанию не даёт экрану гаснуть или позволяет работать с закрытой крышкой при питании от сети."
         },
         "zh-Hans": {
           "displayName": "阻止休眠",
-          "summary": "阻止系统空闲休眠；可选保持屏幕常亮"
+          "summary": "阻止系统空闲休眠；可选保持屏幕常亮，或接通电源时合盖运行"
         },
         "zh-Hant": {
           "displayName": "防止睡眠",
-          "summary": "阻止系統空閒休眠；可選保持螢幕常亮"
+          "summary": "阻止系統空閒休眠；可選保持螢幕常亮，或接通電源時闔蓋運作"
         }
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "d93ffd20652e3cb50335368d9b0ec39541530f24aa9af884cdd4246b8f24ecf6",
-        "size": 139497,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/keep-awake.mactoolsplugin.zip"
+        "sha256": "09a8281e3cfbf0c6bb3fa64006b2961409ff21ae43dcb6723251f3f008bae10d",
+        "size": 173049,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.3/keep-awake.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
-      "summary": "阻止系统空闲休眠；可选保持屏幕常亮",
-      "version": "1.0.8"
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.3",
+      "summary": "阻止系统空闲休眠；可选保持屏幕常亮，或接通电源时合盖运行",
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -2248,16 +2248,16 @@
       },
       "minimumHostVersion": "1.1.1",
       "package": {
-        "sha256": "c03a7d436ab6466794da20fa7236e009e9af865e43c882aa78cd9d7fb5d1b70d",
-        "size": 435627,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/sidecar.mactoolsplugin.zip"
+        "sha256": "9a0cc827099151f783fae91e70464a21aac702d8aec6de983698596c1307437b",
+        "size": 498710,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.3/sidecar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.3",
       "summary": "连接附近可用的 Sidecar 显示器作为扩展显示器",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -2746,6 +2746,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "vXQqw5rFffk2uNIPWIAt1p3NGHR6O+aNdomttDg5tapfM1tkGQw16mKb5ebPEyAjY5VZ4cxfD5uRA4Ul1ErdBA=="
+    "value": "/tUq3Ee1cFJT4jlrjosNTUTXN/oSKU+jmO+Eb3xI3bXkc6EV3tVzu8DTog0kb9OATJxSzQLJC57xOOwYxe0HBw=="
   }
 }
