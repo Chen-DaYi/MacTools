@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_SHARED_PATHS = []
+DEFAULT_SHARED_PATHS = ["Sources/MacToolsPluginKit"]
 
 
 def parse_args():
@@ -26,7 +26,7 @@ def parse_args():
         default=[],
         help=(
             "Repository path that forces existing plugins to rebuild when changed. "
-            "Repeatable; defaults to none."
+            "Repeatable; added to the default PluginKit shared path."
         ),
     )
     return parser.parse_args()
@@ -159,7 +159,7 @@ def plan_release(args):
         entry["id"]: entry
         for entry in (previous_catalog or {}).get("plugins", [])
     }
-    shared_paths = args.shared_path or DEFAULT_SHARED_PATHS
+    shared_paths = list(dict.fromkeys([*DEFAULT_SHARED_PATHS, *args.shared_path]))
     selected_inputs, unknown_inputs = normalize_selected(
         [args.plugins, *args.plugin],
         plugins,

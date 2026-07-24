@@ -154,8 +154,8 @@ Recommended production flow is an incremental batch plugin release:
 3. The helper analyzes the production catalog and shows the planned manifest bumps.
 4. After confirmation, the helper syncs `main`, bumps changed plugin manifests when needed, compiles `release: plugin` changelog fragments into `CHANGELOG.md`, runs a release plan check, commits the bump, and pushes a batch tag such as `plugins-1.0.1`.
 5. The `Plugin Release` GitHub Action reads the catalog for the current PluginKit version. The first v3 release falls back to the legacy v2 catalog only to compare versions.
-6. In default `auto` mode, the workflow selects only new plugins and plugins whose manifest version is higher than the previous catalog entry.
-7. If package-relevant files changed inside a plugin or its `pluginKitVersion` changed but that plugin version did not increase, the workflow fails before signing or uploading. A PluginKit ABI change automatically becomes a full `mode=all` rebuild and replaces the catalog for that ABI line; other shared host changes can use `mode=all` or explicit `--shared-path` values when they really require repackaging existing plugins.
+6. In default `auto` mode, the workflow selects new plugins, plugins whose manifest version is higher than the previous catalog entry, and every plugin when shared `Sources/MacToolsPluginKit/` code changed since its previous package was built.
+7. If package-relevant files changed inside a plugin or shared PluginKit code changed but that plugin version did not increase, the workflow fails before signing or uploading. A `pluginKitVersion` change automatically becomes a full `mode=all` rebuild and replaces the catalog for that ABI line; other exceptional shared paths can still be supplied explicitly with `--shared-path`.
 8. The workflow builds, signs, zips, and uploads only the selected plugin packages.
 9. For an ABI migration, the workflow generates a complete catalog from all rebuilt packages. For later releases within an ABI line, it generates a delta catalog and merges it into that line's catalog, keeping unchanged entries pointing at their existing assets.
 10. The signed catalog is committed to `docs/plugins/catalog.json` for v2, or `docs/plugins/vN/catalog.json` for PluginKit N >= 3.
@@ -179,6 +179,8 @@ Unchanged plugin entries remain valid because the catalog preserves their previo
 `pluginKitVersion` is the PluginKit ABI boundary. When it changes, every plugin package must be rebuilt and each plugin's manifest version must increase so installed users see an update. The new host reads the new catalog and updates all installed plugins before loading any dynamic bundle. The catalog merge step rejects mixed PluginKit versions.
 
 Within one PluginKit ABI line, a plugin that adopts a newly exported PluginKit type must set `minHostVersion` to the first MacTools app release that exports that symbol. This prevents an older host from accepting the manifest and then failing while loading the dynamic bundle.
+
+Any change under `Sources/MacToolsPluginKit/` is conservatively treated as package-relevant for every plugin. This forces each affected manifest version to increase and prevents an incremental catalog from retaining binaries built against an older copy of the shared framework.
 
 When a full rebuild is needed, run the `Plugin Release` workflow manually with `mode=all`. To publish a controlled subset, use `mode=selected` and pass comma-separated plugin IDs or directory names in `plugins`.
 

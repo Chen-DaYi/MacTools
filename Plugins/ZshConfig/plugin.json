@@ -48,8 +48,8 @@
       "summary": "حرّر ~/.zshrc وملفات إعداد zsh الأخرى بسرعة، مع تحرير مدمج ومقتطفات شائعة."
     }
   },
-  "version": "1.0.5",
-  "minHostVersion": "1.0.2",
+  "version": "1.0.6",
+  "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "ZshConfig.bundle",
   "factoryClass": "ZshConfigPlugin.ZshConfigPluginFactory",
