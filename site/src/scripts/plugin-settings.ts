@@ -1,0 +1,152 @@
+const settingsWindow = document.querySelector<HTMLElement>("[data-settings-window]");
+
+if (settingsWindow) {
+  const root = document.documentElement;
+  const sidebarTabs = [...settingsWindow.querySelectorAll<HTMLButtonElement>("[data-settings-tab]")];
+  const panels = [...settingsWindow.querySelectorAll<HTMLElement>("[data-settings-panel]")];
+  const openSettingsButtons = [...settingsWindow.querySelectorAll<HTMLButtonElement>("[data-open-settings]")];
+  const marketSearch = settingsWindow.querySelector<HTMLInputElement>("[data-market-search]");
+  const filterButtons = [...settingsWindow.querySelectorAll<HTMLButtonElement>("[data-market-filter]")];
+  const pluginRows = [...settingsWindow.querySelectorAll<HTMLElement>("[data-market-plugin]")];
+  const resultCounts = [...settingsWindow.querySelectorAll<HTMLElement>("[data-result-count]")];
+  const marketEmpty = settingsWindow.querySelector<HTMLElement>("[data-market-empty]");
+  let activeFilter = "all";
+
+  const syncLocalizedFields = () => {
+    const language = root.dataset.lang === "en" ? "en" : "zh";
+    if (marketSearch) {
+      marketSearch.placeholder = language === "en"
+        ? marketSearch.dataset.placeholderEn ?? ""
+        : marketSearch.dataset.placeholderZh ?? "";
+    }
+    settingsWindow.querySelectorAll<HTMLOptionElement>("[data-option-zh]").forEach((item) => {
+      item.textContent = language === "en" ? item.dataset.optionEn ?? "" : item.dataset.optionZh ?? "";
+    });
+  };
+
+  const showPanel = (id: string, updateHash = true) => {
+    const targetPanel = panels.find((panel) => panel.dataset.settingsPanel === id) ?? panels[0];
+    if (!targetPanel) return;
+
+    const targetID = targetPanel.dataset.settingsPanel ?? "market";
+    for (const panel of panels) {
+      panel.hidden = panel !== targetPanel;
+    }
+
+    for (const tab of sidebarTabs) {
+      const isSelected = tab.dataset.settingsTab === targetID;
+      tab.classList.toggle("is-selected", isSelected);
+      tab.setAttribute("aria-selected", String(isSelected));
+      if (isSelected && window.matchMedia("(max-width: 760px)").matches) {
+        tab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }
+    }
+
+    if (targetID !== "market") {
+      targetPanel.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    if (updateHash) {
+      const nextHash = targetID === "market" ? "" : `#${targetID}`;
+      history.replaceState(null, "", `${location.pathname}${location.search}${nextHash}`);
+    }
+  };
+
+  for (const tab of sidebarTabs) {
+    tab.addEventListener("click", () => showPanel(tab.dataset.settingsTab ?? "market"));
+  }
+
+  for (const button of openSettingsButtons) {
+    button.addEventListener("click", () => showPanel(button.dataset.openSettings ?? "market"));
+  }
+
+  const applyMarketFilter = () => {
+    const query = marketSearch?.value.trim().toLocaleLowerCase() ?? "";
+    let visibleCount = 0;
+
+    for (const row of pluginRows) {
+      const matchesCategory = activeFilter === "all" || row.dataset.category === activeFilter;
+      const matchesSearch = !query || (row.dataset.search ?? "").includes(query);
+      const isVisible = matchesCategory && matchesSearch;
+      row.hidden = !isVisible;
+      if (isVisible) visibleCount += 1;
+    }
+
+    for (const count of resultCounts) {
+      count.textContent = String(visibleCount);
+    }
+    if (marketEmpty) marketEmpty.hidden = visibleCount !== 0;
+  };
+
+  for (const button of filterButtons) {
+    button.addEventListener("click", () => {
+      activeFilter = button.dataset.marketFilter ?? "all";
+      for (const item of filterButtons) {
+        const isSelected = item === button;
+        item.classList.toggle("is-selected", isSelected);
+        item.setAttribute("aria-pressed", String(isSelected));
+      }
+      applyMarketFilter();
+    });
+  }
+
+  marketSearch?.addEventListener("input", applyMarketFilter);
+  syncLocalizedFields();
+  new MutationObserver(syncLocalizedFields).observe(root, {
+    attributes: true,
+    attributeFilter: ["data-lang"],
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "f") {
+      const marketPanel = panels.find((panel) => panel.dataset.settingsPanel === "market");
+      if (!marketPanel?.hidden) {
+        event.preventDefault();
+        marketSearch?.focus();
+      }
+    }
+  });
+
+  settingsWindow.querySelectorAll<HTMLButtonElement>("[data-setting-switch]").forEach((control) => {
+    control.addEventListener("click", () => {
+      control.setAttribute("aria-checked", String(control.getAttribute("aria-checked") !== "true"));
+    });
+  });
+
+  settingsWindow.querySelectorAll<HTMLElement>("[data-segmented-control]").forEach((control) => {
+    const buttons = [...control.querySelectorAll<HTMLButtonElement>("button")];
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        for (const item of buttons) {
+          const isSelected = item === button;
+          item.classList.toggle("is-selected", isSelected);
+          item.setAttribute("aria-pressed", String(isSelected));
+        }
+      });
+    }
+  });
+
+  settingsWindow.querySelectorAll<HTMLInputElement>("[data-range-control]").forEach((control) => {
+    const output = control.parentElement?.querySelector<HTMLOutputElement>("output");
+    const initialText = output?.textContent ?? "";
+    const unit = initialText.replace(/^-?[\d,.]+/, "");
+    control.addEventListener("input", () => {
+      if (output) output.textContent = `${control.value}${unit}`;
+    });
+  });
+
+  settingsWindow.querySelectorAll<HTMLButtonElement>("[data-demo-action]").forEach((button) => {
+    const initialMarkup = button.innerHTML;
+    button.addEventListener("click", () => {
+      button.textContent = root.dataset.lang === "en" ? "Done" : "完成";
+      button.classList.add("is-complete");
+      window.setTimeout(() => {
+        button.innerHTML = initialMarkup;
+        button.classList.remove("is-complete");
+      }, 1200);
+    });
+  });
+
+  const requestedPanel = location.hash.replace(/^#/, "");
+  showPanel(requestedPanel || "market", false);
+}
