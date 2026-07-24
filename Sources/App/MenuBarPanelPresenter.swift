@@ -56,6 +56,63 @@ enum MenuBarPanelWindowRegistry {
     }
 }
 
+enum MenuBarPanelKeyboardAction: Equatable {
+    case dismissPanel
+    case showSettings
+    case selectTab(MenuBarPanelTab)
+
+    @MainActor
+    static func resolve(for event: NSEvent) -> MenuBarPanelKeyboardAction? {
+        let relevantModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+        if event.type == .keyDown,
+           event.keyCode == UInt16(kVK_Escape),
+           event.modifierFlags.intersection(relevantModifiers).isEmpty {
+            return .dismissPanel
+        }
+
+        if MacToolsLocalKeyboardCommand.resolve(for: event) == .showSettings {
+            return .showSettings
+        }
+
+        guard let tab = MenuBarPanelPresenter.keyboardShortcutTab(for: event) else {
+            return nil
+        }
+
+        return .selectTab(tab)
+    }
+}
+
+@MainActor
+final class MenuBarPanelHostingController<Content: View>: NSHostingController<Content> {
+    private let onUnhandledEscape: () -> Void
+
+    init(
+        rootView: Content,
+        onUnhandledEscape: @escaping () -> Void
+    ) {
+        self.onUnhandledEscape = onUnhandledEscape
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard MenuBarPanelKeyboardAction.resolve(for: event) == .dismissPanel else {
+            super.keyDown(with: event)
+            return
+        }
+
+        onUnhandledEscape()
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        onUnhandledEscape()
+    }
+}
+
 @MainActor
 final class MenuBarPanelPresenter: NSObject {
     static let popoverBehavior: NSPopover.Behavior = .applicationDefined
@@ -74,7 +131,7 @@ final class MenuBarPanelPresenter: NSObject {
 
     private let popover = NSPopover()
     private let panelModel: MenuBarUnifiedPanelModel
-    private let hostingController: NSHostingController<MenuBarUnifiedPanelContent>
+    private let hostingController: MenuBarPanelHostingController<MenuBarUnifiedPanelContent>
     private var appearanceObserver: NSObjectProtocol?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var heightRefreshCancellables: Set<AnyCancellable> = []
@@ -103,7 +160,7 @@ final class MenuBarPanelPresenter: NSObject {
             isPanelVisible: false
         )
         self.panelModel = panelModel
-        self.hostingController = NSHostingController(
+        self.hostingController = MenuBarPanelHostingController(
             rootView: MenuBarUnifiedPanelContent(
                 pluginHost: pluginHost,
                 model: panelModel,
@@ -111,7 +168,8 @@ final class MenuBarPanelPresenter: NSObject {
                 onOpenSettings: onOpenSettings,
                 onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
                 onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
-            )
+            ),
+            onUnhandledEscape: onDismiss
         )
 
         super.init()
@@ -284,8 +342,9 @@ final class MenuBarPanelPresenter: NSObject {
             return
         }
 
-        // Host navigation wins before the responder chain so plugin content
-        // cannot shadow these two panel-level commands.
+        // Panel navigation and Settings presentation are local key equivalents.
+        // Escape is intentionally handled later by the hosting controller's
+        // responder-chain cancelOperation fallback.
         keyboardShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
             [weak self] event in
             self?.handleKeyboardShortcut(event) ?? event
@@ -304,14 +363,37 @@ final class MenuBarPanelPresenter: NSObject {
     private func handleKeyboardShortcut(_ event: NSEvent) -> NSEvent? {
         guard
             popover.isShown,
-            event.window === popover.contentViewController?.view.window,
-            let tab = Self.keyboardShortcutTab(for: event)
+            let eventWindow = event.window,
+            containsPresentedWindow(eventWindow),
+            let action = MenuBarPanelKeyboardAction.resolve(for: event)
         else {
             return event
         }
 
-        select(tab)
+        if case .selectTab = action,
+           eventWindow !== popover.contentViewController?.view.window {
+            return event
+        }
+
+        if action == .dismissPanel,
+           let firstResponder = eventWindow.firstResponder,
+           firstResponder !== eventWindow {
+            return event
+        }
+
+        performKeyboardAction(action)
         return nil
+    }
+
+    func performKeyboardAction(_ action: MenuBarPanelKeyboardAction) {
+        switch action {
+        case .dismissPanel:
+            onDismiss()
+        case .showSettings:
+            onOpenSettings()
+        case let .selectTab(tab):
+            select(tab)
+        }
     }
 
     // Internal so focused tests can validate layout-independent key matching.

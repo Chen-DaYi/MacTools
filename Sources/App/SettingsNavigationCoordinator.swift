@@ -27,6 +27,23 @@ enum SettingsNavigationDestination: Hashable {
 
         return pane
     }
+
+    var searchField: SettingsSearchField? {
+        guard case .plugins(.marketplace) = self else {
+            return nil
+        }
+
+        return .pluginMarketplace
+    }
+}
+
+enum SettingsSearchField: Equatable {
+    case pluginMarketplace
+}
+
+struct SettingsSearchFocusRequest: Equatable {
+    let id: UInt
+    let field: SettingsSearchField
 }
 
 @MainActor
@@ -34,13 +51,16 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private static let maximumHistoryCount = 128
 
     @Published private(set) var destination: SettingsNavigationDestination
+    @Published private(set) var searchFocusRequest: SettingsSearchFocusRequest?
 
     private(set) var history: [SettingsNavigationDestination]
     private(set) var historyIndex: Int
+    private(set) var focusedSearchField: SettingsSearchField?
 
     private let pluginSettingsLandingPage: () -> FeatureSettingsPane
     private let isPluginConfigurationAvailable: (String) -> Bool
     private let selectPluginSettingsPane: (FeatureSettingsPane) -> Bool
+    private var nextSearchFocusRequestID: UInt = 0
 
     convenience init(pluginHost: PluginHost) {
         self.init(
@@ -118,6 +138,31 @@ final class SettingsNavigationCoordinator: ObservableObject {
         }
 
         navigate(to: .plugins(.marketplace))
+    }
+
+    @discardableResult
+    func requestSearchFocus() -> Bool {
+        guard
+            let field = destination.searchField,
+            focusedSearchField != field
+        else {
+            return false
+        }
+
+        nextSearchFocusRequestID &+= 1
+        searchFocusRequest = SettingsSearchFocusRequest(
+            id: nextSearchFocusRequestID,
+            field: field
+        )
+        return true
+    }
+
+    func setSearchField(_ field: SettingsSearchField, focused: Bool) {
+        if focused {
+            focusedSearchField = field
+        } else if focusedSearchField == field {
+            focusedSearchField = nil
+        }
     }
 
     private func traverseHistory(startingAt index: Int, step: Int) {

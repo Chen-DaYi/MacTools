@@ -4,6 +4,7 @@ import MacToolsPluginKit
 struct PluginFilterBarView: View {
     @Binding var searchText: String
     @Binding var selectedFilter: PluginCategoryFilter
+    @FocusState.Binding var isSearchFocused: Bool
     let countsByFilter: [PluginCategoryFilter: Int]
     var searchPrompt: String = AppL10n.plugins("plugin.filter.searchPrompt", defaultValue: "搜索插件名称或简介")
 
@@ -26,6 +27,7 @@ struct PluginFilterBarView: View {
             TextField(searchPrompt, text: $searchText)
                 .textFieldStyle(.plain)
                 .font(PluginSettingsTheme.Typography.rowTitle)
+                .focused($isSearchFocused)
 
             if !searchText.isEmpty {
                 Button {

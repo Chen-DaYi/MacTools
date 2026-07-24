@@ -137,4 +137,44 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertEqual(reopenedCoordinator.history, [.general])
         XCTAssertFalse(reopenedCoordinator.canGoBack)
     }
+
+    func testSearchFocusRequestsAreContextualAndRepeatOnlyAfterFocusLeaves() {
+        let coordinator = SettingsNavigationCoordinator()
+
+        XCTAssertFalse(coordinator.requestSearchFocus())
+        XCTAssertNil(coordinator.searchFocusRequest)
+
+        coordinator.navigate(to: .plugins(.marketplace))
+        XCTAssertTrue(coordinator.requestSearchFocus())
+        let firstRequest = coordinator.searchFocusRequest
+        XCTAssertEqual(firstRequest?.field, .pluginMarketplace)
+
+        coordinator.setSearchField(.pluginMarketplace, focused: true)
+        XCTAssertFalse(coordinator.requestSearchFocus())
+        XCTAssertEqual(coordinator.searchFocusRequest, firstRequest)
+
+        coordinator.setSearchField(.pluginMarketplace, focused: false)
+        XCTAssertTrue(coordinator.requestSearchFocus())
+        XCTAssertNotEqual(coordinator.searchFocusRequest, firstRequest)
+    }
+
+    func testSearchFocusIsNoOpOnEveryNonSearchableSettingsDestination() {
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { $0 == "fan-control" }
+        )
+        let destinations: [SettingsNavigationDestination] = [
+            .general,
+            .about,
+            .plugins(.dashboardLayout),
+            .plugins(.featurePanelLayout),
+            .plugins(.configuration("fan-control"))
+        ]
+
+        for destination in destinations {
+            coordinator.navigate(to: destination)
+            XCTAssertFalse(coordinator.requestSearchFocus(), "\(destination) should not request search focus")
+        }
+
+        XCTAssertNil(coordinator.searchFocusRequest)
+    }
 }

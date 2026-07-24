@@ -3,6 +3,7 @@ import MacToolsPluginKit
 
 struct PluginManagementSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     var appRelauncher: any AppRelaunching = AppRelauncher()
 
@@ -11,6 +12,7 @@ struct PluginManagementSettingsView: View {
     @State private var activeOperationID: String?
     @State private var searchText: String = ""
     @State private var selectedFilter: PluginCategoryFilter = .all
+    @FocusState private var isSearchFocused: Bool
     @AppStorage(PluginMarketplaceSortMode.userDefaultsKey) private var sortMode = PluginMarketplaceSortMode.notInstalledFirst
     @State private var bulkUpdateProgressText: String?
     @State private var bulkUpdateProgressOpacity: Double = 0
@@ -39,6 +41,7 @@ struct PluginManagementSettingsView: View {
                     PluginFilterBarView(
                         searchText: $searchText,
                         selectedFilter: $selectedFilter,
+                        isSearchFocused: $isSearchFocused,
                         countsByFilter: countsByFilter
                     )
 
@@ -110,10 +113,37 @@ struct PluginManagementSettingsView: View {
         }
         .onAppear {
             syncAutomaticBulkUpdateProgress(pluginHost.automaticPluginUpdateStatus)
+            applySearchFocusRequest(navigationCoordinator.searchFocusRequest)
+        }
+        .onDisappear {
+            navigationCoordinator.setSearchField(.pluginMarketplace, focused: false)
+        }
+        .onChange(of: navigationCoordinator.searchFocusRequest) { _, request in
+            applySearchFocusRequest(request)
+        }
+        .onChange(of: isSearchFocused) { _, isFocused in
+            navigationCoordinator.setSearchField(.pluginMarketplace, focused: isFocused)
+        }
+        .onChange(of: pluginHost.pluginManagementItems.isEmpty) { _, isEmpty in
+            if isEmpty {
+                isSearchFocused = false
+            }
         }
         .onChange(of: pluginHost.automaticPluginUpdateStatus) { _, status in
             syncAutomaticBulkUpdateProgress(status)
         }
+    }
+
+    private func applySearchFocusRequest(_ request: SettingsSearchFocusRequest?) {
+        guard
+            request?.field == .pluginMarketplace,
+            !pluginHost.pluginManagementItems.isEmpty,
+            !isSearchFocused
+        else {
+            return
+        }
+
+        isSearchFocused = true
     }
 
     private var filteredItems: [PluginManagementItem] {
