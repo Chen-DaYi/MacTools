@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 import SwiftUI
@@ -19,7 +20,7 @@ private struct KeepAwakePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelIndicatorProviding {
+final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelCompactIndicatorProviding {
     typealias SessionFactory = (
         PluginLocalization,
         @escaping (KeepAwakeSession.EndReason) -> Void
@@ -27,6 +28,13 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
     private enum Timing {
         static let secondsPerMinute: TimeInterval = 60
+    }
+
+    private enum Symbol {
+        static let closedLid = NSImage(
+            systemSymbolName: "laptopcomputer.and.arrow.down",
+            accessibilityDescription: nil
+        ) == nil ? "laptopcomputer" : "laptopcomputer.and.arrow.down"
     }
 
     private enum StorageKey {
@@ -142,7 +150,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         )
     }
 
-    var primaryPanelIndicator: PluginPrimaryPanelIndicator? {
+    var primaryPanelCompactIndicator: PluginPrimaryPanelCompactIndicator? {
         guard session != nil else {
             return nil
         }
@@ -151,31 +159,41 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
             keepAwakeWithLidClosed
             && powerSourceState.canPreventLidCloseSleep
 
-        if keepDisplayOn, isClosedLidModeActive {
-            return PluginPrimaryPanelIndicator(
-                text: localization.string(
-                    "panel.displayAndLidClose.indicator",
-                    defaultValue: "屏幕 + 合盖模式"
-                ),
-                systemImage: "laptopcomputer"
+        var icons: [PluginPrimaryPanelIndicatorIcon] = []
+
+        if keepDisplayOn {
+            icons.append(
+                PluginPrimaryPanelIndicatorIcon(
+                    systemImage: "display",
+                    label: localization.string(
+                        "panel.display.indicator",
+                        defaultValue: "屏幕"
+                    ),
+                    accessibilityLabel: localization.string(
+                        "settings.display.keepOn",
+                        defaultValue: "保持屏幕常亮"
+                    )
+                )
             )
         }
 
         if isClosedLidModeActive {
-            return PluginPrimaryPanelIndicator(
-                text: localization.string("panel.lidClose.indicator", defaultValue: "合盖模式"),
-                systemImage: "laptopcomputer"
+            icons.append(
+                PluginPrimaryPanelIndicatorIcon(
+                    systemImage: Symbol.closedLid,
+                    label: localization.string(
+                        "panel.lidClose.indicator",
+                        defaultValue: "合盖"
+                    ),
+                    accessibilityLabel: localization.string(
+                        "settings.lidClose.keepAwake",
+                        defaultValue: "合盖保持唤醒"
+                    )
+                )
             )
         }
 
-        if keepDisplayOn {
-            return PluginPrimaryPanelIndicator(
-                text: localization.string("panel.display.indicator", defaultValue: "屏幕常亮"),
-                systemImage: "display"
-            )
-        }
-
-        return nil
+        return icons.isEmpty ? nil : PluginPrimaryPanelCompactIndicator(icons: icons)
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
@@ -396,23 +414,13 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
         lastErrorMessage = nil
 
-        if shouldKeepAwakeWithLidClosed {
-            guard powerSourceState.isPortableMac else {
-                lastErrorMessage = localization.string(
-                    "error.lidCloseRequiresPortableMac",
-                    defaultValue: "合盖保持唤醒仅适用于 Mac 笔记本电脑。"
-                )
-                notifyChange()
-                return
-            }
-            guard powerSourceState.isOnExternalPower else {
-                lastErrorMessage = localization.string(
-                    "error.lidCloseRequiresExternalPower",
-                    defaultValue: "连接电源后才能启用合盖保持唤醒。"
-                )
-                notifyChange()
-                return
-            }
+        if shouldKeepAwakeWithLidClosed, !powerSourceState.isPortableMac {
+            lastErrorMessage = localization.string(
+                "error.lidCloseRequiresPortableMac",
+                defaultValue: "合盖保持唤醒仅适用于 Mac 笔记本电脑。"
+            )
+            notifyChange()
+            return
         }
 
         guard let session else {
@@ -423,7 +431,10 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         }
 
         do {
-            try session.setPreventLidCloseSleep(shouldKeepAwakeWithLidClosed)
+            try session.setPreventLidCloseSleep(
+                shouldKeepAwakeWithLidClosed
+                && powerSourceState.canPreventLidCloseSleep
+            )
             keepAwakeWithLidClosed = shouldKeepAwakeWithLidClosed
             persistKeepAwakeWithLidClosedPreference()
             notifyChange()

@@ -621,6 +621,27 @@ public struct PluginPrimaryPanelIndicator: Equatable {
     }
 }
 
+public struct PluginPrimaryPanelCompactIndicator: Equatable {
+    public let icons: [PluginPrimaryPanelIndicatorIcon]
+
+    public init(icons: [PluginPrimaryPanelIndicatorIcon]) {
+        precondition(!icons.isEmpty, "Primary panel indicators require at least one icon.")
+        self.icons = icons
+    }
+}
+
+public struct PluginPrimaryPanelIndicatorIcon: Equatable {
+    public let systemImage: String
+    public let label: String
+    public let accessibilityLabel: String
+
+    public init(systemImage: String, label: String, accessibilityLabel: String) {
+        self.systemImage = systemImage
+        self.label = label
+        self.accessibilityLabel = accessibilityLabel
+    }
+}
+
 public enum PluginPanelControlKind {
     case segmented
     case datePicker
