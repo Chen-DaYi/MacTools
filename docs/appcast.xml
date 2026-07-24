@@ -5,58 +5,26 @@
         <description>Latest release metadata for MacTools.</description>
         <language>en</language>
         <item>
-            <title>Version 1.1.2</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.1.2</link>
-            <sparkle:version>64</sparkle:version>
-            <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
+            <title>Version 1.1.3</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.1.3</link>
+            <sparkle:version>65</sparkle:version>
+            <sparkle:shortVersionString>1.1.3</sparkle:shortVersionString>
             <description sparkle:format="markdown"><![CDATA[## App Updates
 
 ### Added
 
-- Use Command-number shortcuts to switch menu-bar panels and jump among the main Settings pages.
-- Show, hide, and reorder Dashboard components and Feature Panel actions independently. Hiding affects only that surface and does not stop a plugin’s background behavior.
-- Manage installation, updates, and removal in Marketplace, or open plugin settings and uninstall directly from a layout row. Repeated uninstall confirmations can be paused for the current Settings session.
-- Existing global layouts and older backups migrate safely to both surfaces. New backups preserve independent layouts while retaining a conservative legacy projection for older app versions.
-- Plugins previously disabled from Installed load after upgrade but remain hidden on supported surfaces. Downgrading cannot restore the former disabled lifecycle state, so uninstall plugins you do not want running.
-- The online icon gallery now includes a curated set of static icons across every category and marks animated icons with a clear badge for easier browsing.
-
-### Changed
-
-- Background-aware plugins can now pause nonessential work while the session is locked or the Mac is asleep.
-- Animated items in the online icon gallery now use a compact play indicator that leaves more of each icon visible.
-- Menu bar icon settings now show the current selection in a compact preview, play animations at their default speed, and omit playback controls, contrast warnings, and the recent-icons list.
+- General Settings now offers optional global shortcuts to toggle Dashboard and Feature Panel.
+- The Feature Panel now copies button and switch subtitles, including either inline IP Check address, on double-click and briefly confirms successful copies.
+- Settings now provides Back and Forward navigation with ⌘[ and ⌘], including exact restoration of Plugin subpages.
+- Menu-bar panels and Settings now support standard local shortcuts for dismissal, Settings, and search.
 
 ### Fixed
 
-- Feature-panel switches now update reliably after being clicked on macOS 27.
-- Importing menu bar icons now preserves their original colors and transparency, preventing white artwork on transparent PNGs from disappearing.
-- Monochrome icons from the online gallery now automatically adapt to light and dark menu bar backgrounds while colorful icons keep their original appearance.
-
-## Plugin Updates
-
-### Added
-
-- Connect nearby Sidecar-compatible displays with direct actions and status indicators. Switching disconnects the current display before connecting another.
-- Save per-display connection priorities and shortcuts, with a priority-aware shortcut that connects the first available display.
-- Request wired-only transport without falling back to Wi-Fi. Automatic Sidecar controls remain available when wired-only transport is unsupported.
-- Sidecar shortcuts now use MacTools-wide conflict validation, imported settings are normalized, and unavailable states stay distinct from connectable displays. Panel feedback clears on close or before it becomes stale.
-
-### Changed
-
-- Use clear visibility controls when choosing System Status metrics for the panel or menu bar.
-
-### Fixed
-
-- Device Battery now avoids unnecessary Bluetooth scans when its widget and low-battery alerts are inactive.
-- Keep Fan Control’s faster refresh limited to its visible, expanded panel, and keep Hide Menu Bar Icons running when it is hidden from a layout.
-- Eject Disks now detects all visible ejectable mounts when the panel opens, including disk images, fixed external drives, and network volumes.
-- Homebrew, Mouse Enhancer, Activity Bar, System Status, and Window Switcher controls now use the selected app language.
-- Quit Apps now groups multiple running instances of the same app into one entry, preventing blank or misplaced cells while still quitting every instance selected.
-- Finder Right Click now offers path-copy actions on window backgrounds and copies the current folder instead of requiring a selected item.
+- Grouped shortcut controls now stay readable and inside their settings card when labels are long or many actions are shown.
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Mon, 20 Jul 2026 14:14:58 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.1.2/MacTools.dmg" length="6128184" type="application/octet-stream" sparkle:edSignature="3Lcoi0/i0VxMNThIU87BK8RXaNB3mP3l7ENGhgLFaHHWE4IXZcMzm44AkQOggSz04n4y7+SOUr6VHnyj493OCQ==" />
+            <pubDate>Fri, 24 Jul 2026 15:33:24 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.1.3/MacTools.dmg" length="6256431" type="application/octet-stream" sparkle:edSignature="Iwz9U3CvIWadbYogoZZIozm2GHH8x2Wk+LA47b8NitdsT1bACD9ZOWK4XiATTRpho3nrDMx9METFu8ounROKDg==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
