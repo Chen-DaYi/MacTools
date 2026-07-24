@@ -143,6 +143,13 @@ public protocol PluginPrimaryPanelIndicatorProviding: AnyObject {
     var primaryPanelIndicator: PluginPrimaryPanelIndicator? { get }
 }
 
+/// Optional protocol for plugins that expose one or more icon-only statuses in the primary panel row.
+/// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
+@MainActor
+public protocol PluginPrimaryPanelCompactIndicatorProviding: AnyObject {
+    var primaryPanelCompactIndicator: PluginPrimaryPanelCompactIndicator? { get }
+}
+
 /// Optional protocol for plugins that need a floating-window anchor.
 /// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
 @MainActor

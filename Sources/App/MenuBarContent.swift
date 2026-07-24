@@ -998,6 +998,7 @@ struct MenuBarContent: View {
                     FeatureRowView(
                         item: item,
                         indicator: pluginHost.primaryPanelIndicatorsByID[item.id],
+                        compactIndicator: pluginHost.primaryPanelCompactIndicatorsByID[item.id],
                         onDisclosureToggle: { isExpanded in
                             pluginHost.setDisclosureExpanded(isExpanded, for: item.id)
                         },
@@ -1202,6 +1203,7 @@ private struct MenuBarPanelSwitchControl: View {
 struct FeatureRowView: View {
     let item: PluginPanelItem
     let indicator: PluginPrimaryPanelIndicator?
+    let compactIndicator: PluginPrimaryPanelCompactIndicator?
     let onDisclosureToggle: (Bool) -> Void
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
@@ -1391,16 +1393,12 @@ struct FeatureRowView: View {
                 Text(item.title)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
+                    .layoutPriority(1)
 
-                if let indicator {
-                    Label(indicator.text, systemImage: indicator.systemImage)
-                        .font(.system(size: 8.5, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.primary.opacity(0.07), in: Capsule())
-                        .fixedSize(horizontal: true, vertical: false)
+                if let compactIndicator {
+                    primaryPanelCompactIndicator(compactIndicator)
+                } else if let indicator {
+                    primaryPanelIndicator(indicator)
                 }
             }
 
@@ -1427,6 +1425,41 @@ struct FeatureRowView: View {
                 }
             }
         }
+    }
+
+    private func primaryPanelIndicator(_ indicator: PluginPrimaryPanelIndicator) -> some View {
+        Label(indicator.text, systemImage: indicator.systemImage)
+            .font(.system(size: 8.5, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.primary.opacity(0.07), in: Capsule())
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func primaryPanelCompactIndicator(
+        _ indicator: PluginPrimaryPanelCompactIndicator
+    ) -> some View {
+        HStack(spacing: 4) {
+            ForEach(indicator.icons.indices, id: \.self) { index in
+                let icon = indicator.icons[index]
+                HStack(spacing: 3) {
+                    Image(systemName: icon.systemImage)
+                    Text(icon.label)
+                }
+                .lineLimit(1)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.primary.opacity(0.07), in: Capsule())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(icon.accessibilityLabel)
+                .help(icon.accessibilityLabel)
+            }
+        }
+        .font(.system(size: 8.5, weight: .semibold))
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var showsIPOverviewCopyButton: Bool {

@@ -1,6 +1,716 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "panel.lidClose.indicator": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الغطاء"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deckel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lid"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tapa"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couvercle"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "蓋"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "덮개"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tampa"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Крышка"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合盖"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "闔蓋"
+          }
+        }
+      }
+    },
+    "settings.lidClose.section": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacBook"
+          }
+        }
+      }
+    },
+    "settings.lidClose.keepAwake": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إبقاء Mac مستيقظًا عند إغلاق الغطاء"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei geschlossenem Deckel wach halten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep awake with lid closed"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantener activo con la tapa cerrada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder le Mac actif avec le couvercle fermé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディスプレイを閉じてもスリープさせない"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "덮개를 닫아도 깨우기"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manter ativo com a tampa fechada"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не переходить в режим сна с закрытой крышкой"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合盖保持唤醒"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "闔蓋保持喚醒"
+          }
+        }
+      }
+    },
+    "settings.lidClose.unavailable.notebook": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "متاح فقط على أجهزة Mac المحمولة."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur auf Mac-Notebooks verfügbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Available only on Mac laptops."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disponible solo en portátiles Mac."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disponible uniquement sur les ordinateurs portables Mac."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Macノートブックでのみ使用できます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac 노트북에서만 사용할 수 있습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disponível apenas em notebooks Mac."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступно только на ноутбуках Mac."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅适用于 Mac 笔记本电脑。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅適用於 Mac 筆記型電腦。"
+          }
+        }
+      }
+    },
+    "settings.lidClose.unavailable.power": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يعمل فقط عند توصيل الطاقة. يمكنك تمكينه الآن."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funktioniert nur bei angeschlossenem Netzteil. Kann jetzt aktiviert werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Works only while connected to power. You can enable it now."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo funciona con alimentación conectada. Puedes activarlo ahora."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fonctionne uniquement sur secteur. Vous pouvez l’activer maintenant."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "電源接続時のみ動作します。今すぐ有効にできます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전원 연결 시에만 작동합니다. 지금 활성화할 수 있습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funciona apenas com a energia conectada. Você pode ativá-lo agora."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работает только при подключении к питанию. Можно включить сейчас."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅在接通电源时生效。可随时启用。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅在接通電源時生效。可隨時啟用。"
+          }
+        }
+      }
+    },
+    "settings.lidClose.paused.power": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• في انتظار توصيل الطاقة؛ يتم تشغيله تلقائيًا عند توصيلها.\n• حافظ على تهوية Mac جيدًا.\n• لا تضعه أبدًا في حقيبة."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Wartet auf Strom und wird beim Anschließen automatisch aktiviert.\n• Sorgen Sie für eine gute Belüftung des Mac.\n• Legen Sie ihn niemals in eine Tasche."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Waiting for power; turns on automatically when plugged in.\n• Keep the Mac well ventilated.\n• Never place it in a bag."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Esperando alimentación; se activa automáticamente al enchufarlo.\n• Mantén el Mac bien ventilado.\n• No lo metas nunca en una bolsa."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• En attente d’alimentation ; s’active automatiquement une fois branché.\n• Gardez le Mac bien ventilé.\n• Ne le placez jamais dans un sac."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• 電源接続を待っています。接続すると自動的に有効になります。\n• Mac の通気を十分に確保してください。\n• バッグには絶対に入れないでください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• 전원 연결을 기다리는 중이며, 연결하면 자동으로 활성화됩니다.\n• Mac을 충분히 환기하십시오.\n• 절대 가방에 넣지 마십시오."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Aguardando energia; ativa automaticamente ao conectar.\n• Mantenha o Mac bem ventilado.\n• Nunca o coloque em uma bolsa."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Ожидание питания; включится автоматически после подключения.\n• Обеспечьте хорошую вентиляцию Mac.\n• Никогда не кладите его в сумку."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• 正在等待电源，接通后自动启用。\n• 请保持 Mac 通风。\n• 切勿将其放入包中。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• 正在等待電源，接通後自動啟用。\n• 請保持 Mac 通風。\n• 切勿將其放入包中。"
+          }
+        }
+      }
+    },
+    "settings.lidClose.keepAwake.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• يتوقف مؤقتًا عند استخدام البطارية ويُستأنف عند إعادة توصيل الطاقة.\n• حافظ على تهوية Mac جيدًا.\n• لا تضعه أبدًا في حقيبة."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Pausiert im Batteriebetrieb und wird nach dem Anschließen automatisch fortgesetzt.\n• Sorgen Sie für eine gute Belüftung des Mac.\n• Legen Sie ihn niemals in eine Tasche."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Pauses on battery and resumes when power reconnects.\n• Keep the Mac well ventilated.\n• Never place it in a bag."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Se pausa con la batería y se reanuda al volver a conectar la corriente.\n• Mantén el Mac bien ventilado.\n• No lo metas nunca en una bolsa."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Se met en pause sur batterie et reprend lorsque l’alimentation est reconnectée.\n• Gardez le Mac bien ventilé.\n• Ne le placez jamais dans un sac."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• バッテリー使用中は一時停止し、電源を再接続すると再開します。\n• Mac の通気を十分に確保してください。\n• バッグには絶対に入れないでください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• 배터리 사용 중에는 일시 정지되고 전원을 다시 연결하면 재개됩니다.\n• Mac을 충분히 환기하십시오.\n• 절대 가방에 넣지 마십시오."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Pausa ao usar a bateria e retoma ao reconectar à energia.\n• Mantenha o Mac bem ventilado.\n• Nunca o coloque em uma bolsa."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• Приостанавливается при работе от аккумулятора и возобновляется после подключения питания.\n• Обеспечьте хорошую вентиляцию Mac.\n• Никогда не кладите его в сумку."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• 使用电池时暂停，重新接通电源后恢复。\n• 请保持 Mac 通风。\n• 切勿将其放入包中。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "• 使用電池時暫停，重新接通電源後恢復。\n• 請保持 Mac 通風。\n• 切勿將其放入包中。"
+          }
+        }
+      }
+    },
+    "error.lidCloseRequiresPortableMac": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا يتوفر إبقاء Mac مستيقظًا والغطاء مغلق إلا على أجهزة Mac المحمولة."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Betrieb mit geschlossenem Deckel ist nur auf Mac-Notebooks verfügbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeping awake with the lid closed is available only on Mac laptops."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantenerse activo con la tapa cerrada solo está disponible en portátiles Mac."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le maintien actif avec le couvercle fermé est disponible uniquement sur les ordinateurs portables Mac."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じた状態での動作はMacノートブックでのみ使用できます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "덮개를 닫은 상태로 깨우기는 Mac 노트북에서만 사용할 수 있습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manter ativo com a tampa fechada está disponível apenas em notebooks Mac."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работа с закрытой крышкой доступна только на ноутбуках Mac."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合盖保持唤醒仅适用于 Mac 笔记本电脑。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "闔蓋保持喚醒僅適用於 Mac 筆記型電腦。"
+          }
+        }
+      }
+    },
+    "error.lidCloseAssertionCreationFailedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذر إبقاء Mac مستيقظًا والغطاء مغلق. خطأ النظام %d."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Betrieb mit geschlossenem Deckel konnte nicht aktiviert werden. Systemfehler %d."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not enable closed-lid operation. System error %d."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo activar el funcionamiento con la tapa cerrada. Error del sistema %d."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d’activer le fonctionnement couvercle fermé. Erreur système %d."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じた状態での動作を有効にできませんでした。システムエラー%d。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "덮개를 닫은 상태로 실행할 수 없습니다. 시스템 오류 %d."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível ativar o funcionamento com a tampa fechada. Erro do sistema %d."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось включить работу с закрытой крышкой. Системная ошибка %d."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法启用合盖保持唤醒，系统返回错误 %d。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法啟用闔蓋保持喚醒，系統傳回錯誤 %d。"
+          }
+        }
+      }
+    },
+    "error.lidCloseAssertionReleaseFailedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذر إيقاف إبقاء Mac مستيقظًا والغطاء مغلق. خطأ النظام %d."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Betrieb mit geschlossenem Deckel konnte nicht deaktiviert werden. Systemfehler %d."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not disable closed-lid operation. System error %d."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo desactivar el funcionamiento con la tapa cerrada. Error del sistema %d."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de désactiver le fonctionnement couvercle fermé. Erreur système %d."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じた状態での動作を無効にできませんでした。システムエラー%d。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "덮개를 닫은 상태로 실행을 중지할 수 없습니다. 시스템 오류 %d."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível desativar o funcionamento com a tampa fechada. Erro do sistema %d."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось отключить работу с закрытой крышкой. Системная ошибка %d."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法关闭合盖保持唤醒，系统返回错误 %d。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法關閉闔蓋保持喚醒，系統傳回錯誤 %d。"
+          }
+        }
+      }
+    },
     "metadata.title": {
       "extractionState": "manual",
       "localizations": {
@@ -78,67 +788,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يمنع سكون النظام؛ ويمكن اختياريًا إبقاء الشاشة قيد التشغيل."
+            "value": "يمنع سكون النظام؛ ويمكن إبقاء الشاشة قيد التشغيل أو تشغيل Mac والغطاء مغلق عند توصيل الطاقة."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verhindert den Ruhezustand des Systems; optional bleibt das Display an."
+            "value": "Verhindert den Ruhezustand des Systems; optional bleibt das Display an oder der Mac läuft am Netzteil mit geschlossenem Deckel."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prevent idle system sleep; optionally keep the display on."
+            "value": "Prevent idle system sleep; optionally keep the display on or run with the lid closed while on power."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Evita la suspensión del sistema; opcionalmente mantiene la pantalla encendida."
+            "value": "Evita la suspensión del sistema; opcionalmente mantiene la pantalla encendida o funciona con la tapa cerrada al conectarse a la corriente."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Empêche la mise en veille du système ; option pour garder l’écran allumé."
+            "value": "Empêche la mise en veille du système ; option pour garder l’écran allumé ou fonctionner couvercle fermé sur secteur."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "システムのアイドルスリープを防止。必要に応じてディスプレイもオンのままにできます。"
+            "value": "システムのアイドルスリープを防止。必要に応じてディスプレイをオンのままにするか、電源接続時に閉じた状態で動作できます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "시스템 유휴 절전을 방지하며, 선택적으로 디스플레이를 켜 둡니다."
+            "value": "시스템 유휴 절전을 방지하며, 선택적으로 디스플레이를 켜 두거나 전원 연결 시 덮개를 닫은 채 실행합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Impede a suspensão ociosa do sistema; opcionalmente mantém a tela ligada."
+            "value": "Impede a suspensão ociosa do sistema; opcionalmente mantém a tela ligada ou funciona com a tampa fechada quando conectado à energia."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Предотвращает спящий режим системы; по желанию не даёт экрану гаснуть."
+            "value": "Предотвращает спящий режим системы; по желанию не даёт экрану гаснуть или позволяет работать с закрытой крышкой при питании от сети."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "阻止系统空闲休眠；可选保持屏幕常亮"
+            "value": "阻止系统空闲休眠；可选保持屏幕常亮，或接通电源时合盖运行"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "阻止系統空閒休眠；可選保持螢幕常亮"
+            "value": "阻止系統空閒休眠；可選保持螢幕常亮，或接通電源時闔蓋運作"
           }
         }
       }
@@ -504,67 +1214,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "الشاشة قيد التشغيل"
+            "value": "الشاشة"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Display an"
+            "value": "Display"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Display on"
+            "value": "Display"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pantalla encendida"
+            "value": "Pantalla"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Écran allumé"
+            "value": "Écran"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "画面をオン"
+            "value": "画面"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "화면 켜짐"
+            "value": "화면"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tela ligada"
+            "value": "Tela"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Экран включён"
+            "value": "Экран"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "屏幕常亮"
+            "value": "屏幕"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "螢幕常亮"
+            "value": "螢幕"
           }
         }
       }

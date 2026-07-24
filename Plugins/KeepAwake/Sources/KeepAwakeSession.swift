@@ -6,8 +6,13 @@ import MacToolsPluginKit
 
 @MainActor
 protocol KeepAwakeSessionManaging: AnyObject {
-    func start(until endDate: Date?, preventDisplaySleep: Bool) throws
+    func start(
+        until endDate: Date?,
+        preventDisplaySleep: Bool,
+        preventLidCloseSleep: Bool
+    ) throws
     func setPreventDisplaySleep(_ preventDisplaySleep: Bool) throws
+    func setPreventLidCloseSleep(_ preventLidCloseSleep: Bool) throws
     func requestStop(reason: KeepAwakeSession.EndReason)
 }
 
@@ -16,6 +21,7 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
     enum AssertionKind: Equatable {
         case system
         case display
+        case lidClose
 
         var type: CFString {
             switch self {
@@ -23,6 +29,10 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
                 return kIOPMAssertionTypePreventUserIdleSystemSleep as CFString
             case .display:
                 return kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString
+            case .lidClose:
+                // Matches `caffeinate -s`. powerd honors this assertion only while
+                // the Mac is connected to an unlimited external power source.
+                return "PreventSystemSleep" as CFString
             }
         }
 
@@ -32,6 +42,8 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
                 return "MacTools Keep Awake" as CFString
             case .display:
                 return "MacTools Keep Awake Display" as CFString
+            case .lidClose:
+                return "MacTools Keep Awake Closed Lid" as CFString
             }
         }
     }
@@ -68,6 +80,8 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
         case systemAssertionCreationFailed(IOReturn, PluginLocalization)
         case displayAssertionCreationFailed(IOReturn, PluginLocalization)
         case displayAssertionReleaseFailed(IOReturn, PluginLocalization)
+        case lidCloseAssertionCreationFailed(IOReturn, PluginLocalization)
+        case lidCloseAssertionReleaseFailed(IOReturn, PluginLocalization)
 
         var errorDescription: String? {
             switch self {
@@ -94,6 +108,18 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
                     defaultValue: "无法允许屏幕关闭，系统返回错误 %d。",
                     result
                 )
+            case let .lidCloseAssertionCreationFailed(result, localization):
+                return localization.format(
+                    "error.lidCloseAssertionCreationFailedFormat",
+                    defaultValue: "无法启用合盖保持唤醒，系统返回错误 %d。",
+                    result
+                )
+            case let .lidCloseAssertionReleaseFailed(result, localization):
+                return localization.format(
+                    "error.lidCloseAssertionReleaseFailedFormat",
+                    defaultValue: "无法关闭合盖保持唤醒，系统返回错误 %d。",
+                    result
+                )
             }
         }
     }
@@ -105,6 +131,7 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
 
     private var systemAssertionID = IOPMAssertionID(0)
     private var displayAssertionID = IOPMAssertionID(0)
+    private var lidCloseAssertionID = IOPMAssertionID(0)
     private var autoStopTask: Task<Void, Never>?
     private var isStopping = false
     private var isObservingTermination = false
@@ -147,6 +174,10 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
             _ = assertionOperations.release(displayAssertionID)
         }
 
+        if lidCloseAssertionID != IOPMAssertionID(0) {
+            _ = assertionOperations.release(lidCloseAssertionID)
+        }
+
         if isObservingTermination {
             NotificationCenter.default.removeObserver(
                 self,
@@ -156,10 +187,16 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
         }
     }
 
-    func start(until endDate: Date?, preventDisplaySleep: Bool) throws {
+    func start(
+        until endDate: Date?,
+        preventDisplaySleep: Bool,
+        preventLidCloseSleep: Bool
+    ) throws {
         if systemAssertionID == IOPMAssertionID(0) {
             try createSystemAssertionIfNeeded()
         }
+
+        try updateLidCloseAssertion(preventLidCloseSleep: preventLidCloseSleep)
 
         do {
             try updateDisplayAssertion(preventDisplaySleep: preventDisplaySleep)
@@ -172,6 +209,10 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
 
     func setPreventDisplaySleep(_ preventDisplaySleep: Bool) throws {
         try updateDisplayAssertion(preventDisplaySleep: preventDisplaySleep)
+    }
+
+    func setPreventLidCloseSleep(_ preventLidCloseSleep: Bool) throws {
+        try updateLidCloseAssertion(preventLidCloseSleep: preventLidCloseSleep)
     }
 
     func requestStop(reason: EndReason) {
@@ -240,6 +281,43 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
         displayAssertionID = IOPMAssertionID(0)
     }
 
+    private func updateLidCloseAssertion(preventLidCloseSleep: Bool) throws {
+        if preventLidCloseSleep {
+            if lidCloseAssertionID == IOPMAssertionID(0) {
+                try createLidCloseAssertionIfNeeded()
+            }
+            return
+        }
+
+        try releaseLidCloseAssertionIfNeeded()
+    }
+
+    private func createLidCloseAssertionIfNeeded() throws {
+        let creation = assertionOperations.create(.lidClose)
+
+        guard creation.result == kIOReturnSuccess else {
+            logger.error("failed to create closed-lid assertion result=\(creation.result, privacy: .public)")
+            throw SessionError.lidCloseAssertionCreationFailed(creation.result, localization)
+        }
+
+        lidCloseAssertionID = creation.assertionID
+    }
+
+    private func releaseLidCloseAssertionIfNeeded() throws {
+        guard lidCloseAssertionID != IOPMAssertionID(0) else {
+            return
+        }
+
+        let existingAssertionID = lidCloseAssertionID
+        let result = assertionOperations.release(existingAssertionID)
+        guard result == kIOReturnSuccess else {
+            logger.error("failed to release closed-lid assertion result=\(result, privacy: .public)")
+            throw SessionError.lidCloseAssertionReleaseFailed(result, localization)
+        }
+
+        lidCloseAssertionID = IOPMAssertionID(0)
+    }
+
     private func scheduleAutoStop(until endDate: Date?) throws {
         autoStopTask?.cancel()
         autoStopTask = nil
@@ -279,6 +357,7 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
         autoStopTask = nil
 
         try? releaseDisplayAssertionIfNeeded()
+        try? releaseLidCloseAssertionIfNeeded()
 
         if systemAssertionID != IOPMAssertionID(0) {
             let existingAssertionID = systemAssertionID

@@ -304,6 +304,8 @@ final class PluginHost: ObservableObject {
     private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
     private var cachedPrimaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
     private var evaluatedPrimaryPanelIndicatorPluginIDs: Set<String> = []
+    private var cachedPrimaryPanelCompactIndicatorsByID: [String: PluginPrimaryPanelCompactIndicator] = [:]
+    private var evaluatedPrimaryPanelCompactIndicatorPluginIDs: Set<String> = []
     private var cachedComponentStatesByID: [String: PluginComponentState] = [:]
     private var loggedCapabilityMismatchPluginIDs: Set<String> = []
     private var builtInCapabilitiesByID: [String: PluginHostCapabilities] = [:]
@@ -311,6 +313,7 @@ final class PluginHost: ObservableObject {
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var primaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
+    @Published private(set) var primaryPanelCompactIndicatorsByID: [String: PluginPrimaryPanelCompactIndicator] = [:]
     @Published private(set) var componentItems: [PluginComponentItem] = []
     // Legacy management projection retained for failure isolation and older
     // tests. Layout settings use the per-surface order projections below.
@@ -1518,6 +1521,12 @@ final class PluginHost: ObservableObject {
         var evaluatedIndicatorPluginIDs = dirtyPluginIDs == nil
             ? Set<String>()
             : evaluatedPrimaryPanelIndicatorPluginIDs.intersection(descriptorIDs)
+        var primaryPanelCompactIndicatorsByID = dirtyPluginIDs == nil
+            ? [:]
+            : cachedPrimaryPanelCompactIndicatorsByID.filter { descriptorIDs.contains($0.key) }
+        var evaluatedCompactIndicatorPluginIDs = dirtyPluginIDs == nil
+            ? Set<String>()
+            : evaluatedPrimaryPanelCompactIndicatorPluginIDs.intersection(descriptorIDs)
         var componentStatesByID = dirtyPluginIDs == nil ? [:] : cachedComponentStatesByID.filter {
             descriptorIDs.contains($0.key)
         }
@@ -1559,10 +1568,30 @@ final class PluginHost: ObservableObject {
                     evaluatedIndicatorPluginIDs.remove(pluginID)
                     primaryPanelIndicatorsByID.removeValue(forKey: pluginID)
                 }
+
+                if let indicatorProvider = plugin as? any PluginPrimaryPanelCompactIndicatorProviding {
+                    if shouldReadPlugin || !evaluatedCompactIndicatorPluginIDs.contains(pluginID) {
+                        evaluatedCompactIndicatorPluginIDs.insert(pluginID)
+                        if let indicator = guardedOptionalValue(
+                            for: plugin,
+                            operation: "read compact primary panel indicator",
+                            indicatorProvider.primaryPanelCompactIndicator
+                        ) {
+                            primaryPanelCompactIndicatorsByID[pluginID] = indicator
+                        } else {
+                            primaryPanelCompactIndicatorsByID.removeValue(forKey: pluginID)
+                        }
+                    }
+                } else {
+                    evaluatedCompactIndicatorPluginIDs.remove(pluginID)
+                    primaryPanelCompactIndicatorsByID.removeValue(forKey: pluginID)
+                }
             } else {
                 panelStatesByID.removeValue(forKey: pluginID)
                 evaluatedIndicatorPluginIDs.remove(pluginID)
                 primaryPanelIndicatorsByID.removeValue(forKey: pluginID)
+                evaluatedCompactIndicatorPluginIDs.remove(pluginID)
+                primaryPanelCompactIndicatorsByID.removeValue(forKey: pluginID)
             }
 
             if descriptor.hasComponentPanel,
@@ -1587,8 +1616,11 @@ final class PluginHost: ObservableObject {
         cachedPanelStatesByID = panelStatesByID
         cachedPrimaryPanelIndicatorsByID = primaryPanelIndicatorsByID
         evaluatedPrimaryPanelIndicatorPluginIDs = evaluatedIndicatorPluginIDs
+        cachedPrimaryPanelCompactIndicatorsByID = primaryPanelCompactIndicatorsByID
+        evaluatedPrimaryPanelCompactIndicatorPluginIDs = evaluatedCompactIndicatorPluginIDs
         cachedComponentStatesByID = componentStatesByID
         self.primaryPanelIndicatorsByID = primaryPanelIndicatorsByID
+        self.primaryPanelCompactIndicatorsByID = primaryPanelCompactIndicatorsByID
 
         let featurePanelOrderedDescriptors = visiblePluginDescriptors(for: .featurePanel)
         let dashboardOrderedDescriptors = visiblePluginDescriptors(for: .dashboard)

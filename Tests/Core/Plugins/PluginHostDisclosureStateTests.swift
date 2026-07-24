@@ -60,6 +60,25 @@ final class PluginHostDisclosureStateTests: XCTestCase {
         XCTAssertEqual(host.primaryPanelIndicatorsByID[plugin.metadata.id], plugin.indicator)
     }
 
+    func testOptionalCompactPrimaryPanelIndicatorMapsByPluginID() {
+        let plugin = MockDisclosurePlugin()
+        plugin.compactIndicator = PluginPrimaryPanelCompactIndicator(
+            icons: [
+                PluginPrimaryPanelIndicatorIcon(
+                    systemImage: "display",
+                    label: "屏幕",
+                    accessibilityLabel: "屏幕常亮"
+                )
+            ]
+        )
+        let host = makeHost(plugin: plugin)
+
+        XCTAssertEqual(
+            host.primaryPanelCompactIndicatorsByID[plugin.metadata.id],
+            plugin.compactIndicator
+        )
+    }
+
     func testIncrementalRebuildDoesNotRereadNilIndicatorForUnrelatedPlugin() async throws {
         let changingPlugin = MockDisclosurePlugin(id: "changing", order: 1)
         let stablePlugin = MockDisclosurePlugin(id: "stable", order: 2)
@@ -121,7 +140,12 @@ final class PluginHostDisclosureStateTests: XCTestCase {
 }
 
 @MainActor
-private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelIndicatorProviding {
+private final class MockDisclosurePlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginPrimaryPanelIndicatorProviding,
+    PluginPrimaryPanelCompactIndicatorProviding
+{
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -135,6 +159,7 @@ private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel, Pl
     var isExpanded = false
     var errorMessage: String?
     var indicator: PluginPrimaryPanelIndicator?
+    var compactIndicator: PluginPrimaryPanelCompactIndicator?
     var stateReadCount = 0
     var indicatorReadCount = 0
 
@@ -152,6 +177,10 @@ private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel, Pl
     var primaryPanelIndicator: PluginPrimaryPanelIndicator? {
         indicatorReadCount += 1
         return indicator
+    }
+
+    var primaryPanelCompactIndicator: PluginPrimaryPanelCompactIndicator? {
+        compactIndicator
     }
 
     var primaryPanelState: PluginPanelState {
