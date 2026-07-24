@@ -260,13 +260,24 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventLidCloseSleep, true)
         XCTAssertEqual(
             plugin.primaryPanelIndicator,
-            PluginPrimaryPanelIndicator(text: "合盖唤醒", systemImage: "laptopcomputer")
+            PluginPrimaryPanelIndicator(text: "合盖模式", systemImage: "laptopcomputer")
+        )
+
+        plugin.setKeepDisplayOn(true)
+
+        XCTAssertEqual(
+            plugin.primaryPanelIndicator,
+            PluginPrimaryPanelIndicator(text: "屏幕 + 合盖模式", systemImage: "laptopcomputer")
         )
 
         plugin.setKeepAwakeWithLidClosed(false)
 
         XCTAssertEqual(factory.sessions[0].lidCloseSleepPreventionUpdates, [false])
         XCTAssertNil(storage.values["keep-awake-with-lid-closed"])
+        XCTAssertEqual(
+            plugin.primaryPanelIndicator,
+            PluginPrimaryPanelIndicator(text: "屏幕常亮", systemImage: "display")
+        )
     }
 
     func testFailedClosedLidUpdateDoesNotStorePreferenceAndCanRetry() {
@@ -293,12 +304,13 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 
-    func testDisconnectingPowerDisablesClosedLidModeAndReleasesAssertion() {
+    func testDisconnectingPowerPausesClosedLidModeAndReconnectRestoresIt() {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: storage)
 
         plugin.setKeepAwakeWithLidClosed(true)
+        plugin.setKeepDisplayOn(true)
         plugin.handleAction(.setSwitch(true))
 
         factory.powerSourceMonitor.send(
@@ -309,8 +321,26 @@ final class KeepAwakePluginTests: XCTestCase {
         )
 
         XCTAssertEqual(factory.sessions[0].lidCloseSleepPreventionUpdates, [false])
-        XCTAssertNil(storage.values["keep-awake-with-lid-closed"])
-        XCTAssertNil(plugin.primaryPanelIndicator)
+        XCTAssertEqual(storage.values["keep-awake-with-lid-closed"] as? Bool, true)
+        XCTAssertEqual(
+            plugin.primaryPanelIndicator,
+            PluginPrimaryPanelIndicator(text: "屏幕常亮", systemImage: "display")
+        )
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
+
+        factory.powerSourceMonitor.send(
+            KeepAwakePowerSourceState(
+                isPortableMac: true,
+                isOnExternalPower: true
+            )
+        )
+
+        XCTAssertEqual(factory.sessions[0].lidCloseSleepPreventionUpdates, [false, true])
+        XCTAssertEqual(storage.values["keep-awake-with-lid-closed"] as? Bool, true)
+        XCTAssertEqual(
+            plugin.primaryPanelIndicator,
+            PluginPrimaryPanelIndicator(text: "屏幕 + 合盖模式", systemImage: "laptopcomputer")
+        )
         XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 
@@ -338,7 +368,7 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法更新合盖状态。")
     }
 
-    func testClosedLidPreferenceDoesNotRestoreWithoutExternalPower() {
+    func testClosedLidPreferenceRestoresPausedWithoutExternalPower() {
         let storage = KeepAwakeMemoryStorage()
         storage.set(true, forKey: "keep-awake-with-lid-closed")
         storage.set(true, forKey: "persistent-enabled")
@@ -353,8 +383,38 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.activate(context: Self.context(storage: storage))
 
         XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventLidCloseSleep, false)
+        XCTAssertEqual(storage.values["keep-awake-with-lid-closed"] as? Bool, true)
+        XCTAssertNil(plugin.primaryPanelIndicator)
+    }
+
+    func testFailedClosedLidResumeClearsPreferenceAndKeepsNormalSessionRunning() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.setKeepAwakeWithLidClosed(true)
+        plugin.handleAction(.setSwitch(true))
+        factory.powerSourceMonitor.send(
+            KeepAwakePowerSourceState(
+                isPortableMac: true,
+                isOnExternalPower: false
+            )
+        )
+        factory.sessions[0].lidCloseUpdateError = MockKeepAwakeSessionError.lidCloseUpdateFailed
+
+        factory.powerSourceMonitor.send(
+            KeepAwakePowerSourceState(
+                isPortableMac: true,
+                isOnExternalPower: true
+            )
+        )
+
+        XCTAssertEqual(factory.sessions[0].lidCloseSleepPreventionUpdates, [false, true])
+        XCTAssertEqual(factory.sessions[0].stopRequestCount, 0)
         XCTAssertNil(storage.values["keep-awake-with-lid-closed"])
         XCTAssertNil(plugin.primaryPanelIndicator)
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法更新合盖状态。")
     }
 
     func testTimedSessionSubtitleKeepsRemainingAndAbsoluteStopCompact() {

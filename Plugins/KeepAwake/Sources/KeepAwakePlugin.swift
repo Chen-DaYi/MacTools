@@ -111,7 +111,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         self.powerSourceState = resolvedPowerSourceMonitor.currentState
         self.keepDisplayOn = context.storage.bool(forKey: StorageKey.keepDisplayOn)
         self.keepAwakeWithLidClosed =
-            resolvedPowerSourceMonitor.currentState.canPreventLidCloseSleep
+            resolvedPowerSourceMonitor.currentState.isPortableMac
             && context.storage.bool(forKey: StorageKey.keepAwakeWithLidClosed)
         self.metadata = PluginMetadata(
             id: "keep-awake",
@@ -147,9 +147,23 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
             return nil
         }
 
-        if keepAwakeWithLidClosed {
+        let isClosedLidModeActive =
+            keepAwakeWithLidClosed
+            && powerSourceState.canPreventLidCloseSleep
+
+        if keepDisplayOn, isClosedLidModeActive {
             return PluginPrimaryPanelIndicator(
-                text: localization.string("panel.lidClose.indicator", defaultValue: "合盖唤醒"),
+                text: localization.string(
+                    "panel.displayAndLidClose.indicator",
+                    defaultValue: "屏幕 + 合盖模式"
+                ),
+                systemImage: "laptopcomputer"
+            )
+        }
+
+        if isClosedLidModeActive {
+            return PluginPrimaryPanelIndicator(
+                text: localization.string("panel.lidClose.indicator", defaultValue: "合盖模式"),
                 systemImage: "laptopcomputer"
             )
         }
@@ -200,7 +214,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         )
         keepAwakeWithLidClosed =
             storedKeepAwakeWithLidClosed
-            && powerSourceState.canPreventLidCloseSleep
+            && powerSourceState.isPortableMac
         if storedKeepAwakeWithLidClosed, !keepAwakeWithLidClosed {
             storage.removeObject(forKey: StorageKey.keepAwakeWithLidClosed)
         }
@@ -585,13 +599,10 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
         powerSourceState = state
 
-        guard keepAwakeWithLidClosed, !state.canPreventLidCloseSleep else {
+        guard keepAwakeWithLidClosed else {
             notifyChange()
             return
         }
-
-        keepAwakeWithLidClosed = false
-        persistKeepAwakeWithLidClosedPreference()
 
         guard let session else {
             notifyChange()
@@ -599,13 +610,17 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         }
 
         do {
-            try session.setPreventLidCloseSleep(false)
+            try session.setPreventLidCloseSleep(state.canPreventLidCloseSleep)
             lastErrorMessage = nil
             notifyChange()
         } catch {
             let errorMessage = error.localizedDescription
-            logger.error("failed to release closed-lid assertion after power change: \(errorMessage, privacy: .public)")
-            session.requestStop(reason: .userRequested)
+            logger.error("failed to update closed-lid assertion after power change: \(errorMessage, privacy: .public)")
+            keepAwakeWithLidClosed = false
+            persistKeepAwakeWithLidClosedPreference()
+            if !state.canPreventLidCloseSleep {
+                session.requestStop(reason: .userRequested)
+            }
             lastErrorMessage = errorMessage
             notifyChange()
         }

@@ -72,7 +72,10 @@ struct KeepAwakeSettingsView: View {
                         Toggle("", isOn: $keepAwakeWithLidClosed)
                             .labelsHidden()
                             .toggleStyle(.switch)
-                            .disabled(!powerSourceState.canPreventLidCloseSleep)
+                            .disabled(
+                                !powerSourceState.canPreventLidCloseSleep
+                                && !keepAwakeWithLidClosed
+                            )
                     }
                     .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
                     .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
@@ -91,6 +94,13 @@ struct KeepAwakeSettingsView: View {
         }
 
         if !powerSourceState.isOnExternalPower {
+            if keepAwakeWithLidClosed {
+                return localization.string(
+                    "settings.lidClose.paused.power",
+                    defaultValue: "使用电池时已暂停。重新接通电源后会自动恢复。"
+                )
+            }
+
             return localization.string(
                 "settings.lidClose.unavailable.power",
                 defaultValue: "连接电源后可用。"
@@ -99,7 +109,7 @@ struct KeepAwakeSettingsView: View {
 
         return localization.string(
             "settings.lidClose.keepAwake.description",
-            defaultValue: "拔掉电源后会自动关闭。请保持 Mac 通风，切勿将其放入包中。"
+            defaultValue: "使用电池时暂停，重新接通电源后自动恢复。请保持 Mac 通风，切勿将其放入包中。"
         )
     }
 
