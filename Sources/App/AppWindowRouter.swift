@@ -3,6 +3,48 @@ import Combine
 import SwiftUI
 import MacToolsPluginKit
 
+enum MacToolsLocalKeyboardCommand: Equatable {
+    case showSettings
+    case focusSearch
+
+    static func resolve(for event: NSEvent) -> MacToolsLocalKeyboardCommand? {
+        guard event.type == .keyDown else {
+            return nil
+        }
+
+        let relevantModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+        guard event.modifierFlags.intersection(relevantModifiers) == .command else {
+            return nil
+        }
+
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case ",":
+            return .showSettings
+        case "f":
+            return .focusSearch
+        default:
+            return nil
+        }
+    }
+}
+
+@MainActor
+final class MacToolsCommandWindow: NSWindow {
+    var onLocalKeyboardCommand: ((MacToolsLocalKeyboardCommand) -> Void)?
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard
+            let command = MacToolsLocalKeyboardCommand.resolve(for: event),
+            let onLocalKeyboardCommand
+        else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        onLocalKeyboardCommand(command)
+        return true
+    }
+}
+
 enum SettingsPanelPresentationTarget {
     case dashboard
     case featurePanel
@@ -66,9 +108,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     func showSettings() {
-        let window = settingsWindow ?? makeSettingsWindow()
-        show(window)
-        settingsWindow = window
+        presentSettings(.settings)
     }
 
     func setPanelPresentationActions(
@@ -92,7 +132,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     private func makeSettingsWindow() -> NSWindow {
         let navigationCoordinator = SettingsNavigationCoordinator(pluginHost: pluginHost)
-        let window = NSWindow(
+        let window = MacToolsCommandWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1040, height: 720),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
@@ -118,6 +158,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         )
         window.delegate = self
         window.isReleasedWhenClosed = false
+        window.onLocalKeyboardCommand = { [weak self] command in
+            self?.handleLocalKeyboardCommand(command)
+        }
         window.center()
         settingsNavigationCoordinator = navigationCoordinator
         return window
@@ -138,6 +181,15 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         show(window)
         settingsWindow = window
         onProgrammaticSettingsPresentation()
+    }
+
+    private func handleLocalKeyboardCommand(_ command: MacToolsLocalKeyboardCommand) {
+        switch command {
+        case .showSettings:
+            showSettings()
+        case .focusSearch:
+            settingsNavigationCoordinator?.requestSearchFocus()
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

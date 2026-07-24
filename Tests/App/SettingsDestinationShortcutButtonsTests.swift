@@ -60,12 +60,13 @@ final class SettingsDestinationShortcutButtonsTests: XCTestCase {
     }
 
     private func makeWindow(coordinator: SettingsNavigationCoordinator) -> NSWindow {
-        let window = NSWindow(
+        let window = MacToolsCommandWindow(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 120),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
         )
+        window.onLocalKeyboardCommand = { _ in }
         window.contentView = NSHostingView(
             rootView: SettingsDestinationShortcutButtons(coordinator: coordinator)
         )

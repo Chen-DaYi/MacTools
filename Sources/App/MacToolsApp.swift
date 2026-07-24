@@ -14,6 +14,11 @@ struct MacToolsApp: App {
         Settings {
             EmptyView()
         }
+        .commands {
+            // Settings is presented exclusively by AppWindowRouter. Remove the
+            // placeholder scene's command so it can never expose an empty window.
+            CommandGroup(replacing: .appSettings) {}
+        }
     }
 }
 
