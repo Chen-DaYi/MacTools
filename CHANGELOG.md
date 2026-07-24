@@ -7,6 +7,19 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.1.3] - 2026-07-24
+
+### Added
+
+- General Settings now offers optional global shortcuts to toggle Dashboard and Feature Panel.
+- The Feature Panel now copies button and switch subtitles, including either inline IP Check address, on double-click and briefly confirms successful copies.
+- Settings now provides Back and Forward navigation with ⌘[ and ⌘], including exact restoration of Plugin subpages.
+- Menu-bar panels and Settings now support standard local shortcuts for dismissal, Settings, and search.
+
+### Fixed
+
+- Grouped shortcut controls now stay readable and inside their settings card when labels are long or many actions are shown.
+
 ## [v1.1.2] - 2026-07-20
 
 ### Added
