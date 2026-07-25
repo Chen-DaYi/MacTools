@@ -64,6 +64,11 @@ struct SettingsPanelPresentationActions {
     }
 }
 
+enum SettingsWindowLayout {
+    static let defaultContentSize = NSSize(width: 1040, height: 720)
+    static let minimumContentSize = NSSize(width: 860, height: 560)
+}
+
 @MainActor
 final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let pluginHost: PluginHost
@@ -133,14 +138,13 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private func makeSettingsWindow() -> NSWindow {
         let navigationCoordinator = SettingsNavigationCoordinator(pluginHost: pluginHost)
         let window = MacToolsCommandWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1040, height: 720),
+            contentRect: NSRect(origin: .zero, size: SettingsWindowLayout.defaultContentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = Self.settingsWindowTitle
-        window.minSize = NSSize(width: 860, height: 560)
-        window.contentView = NSHostingView(
+        let hostingView = NSHostingView(
             rootView: SettingsView(
                 pluginHost: pluginHost,
                 navigationCoordinator: navigationCoordinator,
@@ -156,6 +160,13 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 }
             )
         )
+        hostingView.sizingOptions = []
+        window.contentView = hostingView
+        window.toolbarStyle = .unified
+        window.setContentSize(SettingsWindowLayout.defaultContentSize)
+        window.layoutIfNeeded()
+        // SwiftUI installs its toolbar during layout and can reset window constraints.
+        window.contentMinSize = SettingsWindowLayout.minimumContentSize
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.onLocalKeyboardCommand = { [weak self] command in
@@ -202,6 +213,20 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         case .focusSearch:
             settingsNavigationCoordinator?.requestSearchFocus()
         }
+    }
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        guard sender === settingsWindow else {
+            return frameSize
+        }
+
+        let minimumFrameSize = sender.frameRect(
+            forContentRect: NSRect(origin: .zero, size: SettingsWindowLayout.minimumContentSize)
+        ).size
+        return NSSize(
+            width: max(frameSize.width, minimumFrameSize.width),
+            height: max(frameSize.height, minimumFrameSize.height)
+        )
     }
 
     func windowWillClose(_ notification: Notification) {

@@ -6,10 +6,6 @@ enum SettingsStyle {
         PluginSettingsTheme.Palette.windowBackground
     }
 
-    static var sidebarBackground: Color {
-        PluginSettingsTheme.Palette.sidebarBackground
-    }
-
     static var contentBackground: Color {
         PluginSettingsTheme.Palette.contentBackground
     }
@@ -36,14 +32,6 @@ enum SettingsStyle {
 
     static var cardBorder: Color {
         PluginSettingsTheme.Palette.cardBorder
-    }
-
-    static var sidebarHoverBackground: Color {
-        PluginSettingsTheme.Palette.sidebarHoverBackground
-    }
-
-    static var sidebarSelectionBackground: Color {
-        PluginSettingsTheme.Palette.sidebarSelectionBackground
     }
 
     static var activeControlBackground: Color {

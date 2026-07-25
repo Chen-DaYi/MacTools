@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import SwiftUI
 import XCTest
 @testable import MacTools
 
@@ -38,6 +39,79 @@ final class AppWindowRouterTests: XCTestCase {
 
         actions.present(.dashboard)
         actions.present(.featurePanel)
+    }
+
+    func testSettingsWindowKeepsItsWidthAcrossDestinations() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        let hostingView = try XCTUnwrap(window.contentView as? NSHostingView<SettingsView>)
+        let initialWidth = window.frame.width
+        let initialToolbarItemCount = window.toolbar?.items.count
+
+        XCTAssertNotNil(window.toolbar)
+        XCTAssertEqual(window.toolbarStyle, .unified)
+        XCTAssertFalse(
+            window.toolbar?.items.contains { $0.itemIdentifier == .toggleSidebar } ?? false
+        )
+        XCTAssertEqual(hostingView.sizingOptions, [])
+        XCTAssertEqual(window.contentMinSize, SettingsWindowLayout.minimumContentSize)
+        XCTAssertEqual(
+            hostingView.frame.width,
+            SettingsWindowLayout.defaultContentSize.width,
+            accuracy: 0.5
+        )
+
+        window.setContentSize(NSSize(width: 940, height: 640))
+        window.layoutIfNeeded()
+        let resizedWidth = window.frame.width
+        XCTAssertLessThan(resizedWidth, initialWidth)
+
+        for destination in [
+            SettingsNavigationDestination.plugins(.marketplace),
+            .about,
+            .general
+        ] {
+            coordinator.navigate(to: destination)
+            window.layoutIfNeeded()
+            XCTAssertEqual(window.frame.width, resizedWidth, accuracy: 0.5)
+            XCTAssertEqual(window.toolbar?.items.count, initialToolbarItemCount)
+        }
+
+        window.close()
+    }
+
+    func testSettingsWindowConstrainsLiveResizeToMinimumContentSize() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow)
+        let minimumFrameSize = window.frameRect(
+            forContentRect: NSRect(
+                origin: .zero,
+                size: SettingsWindowLayout.minimumContentSize
+            )
+        ).size
+
+        XCTAssertEqual(
+            router.windowWillResize(window, to: NSSize(width: 400, height: 300)),
+            minimumFrameSize
+        )
+
+        let largerSize = NSSize(width: 1200, height: 800)
+        XCTAssertEqual(router.windowWillResize(window, to: largerSize), largerSize)
+
+        window.close()
     }
 
     func testClosingSettingsWindowDiscardsNavigationHistory() throws {

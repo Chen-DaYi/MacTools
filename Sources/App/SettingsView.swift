@@ -28,44 +28,45 @@ struct SettingsView: View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
 
-        return VStack(spacing: 0) {
-            SettingsHistoryNavigationControls(coordinator: navigationCoordinator)
+        return TabView(selection: settingsDestinationBinding) {
+            GeneralSettingsView(
+                pluginHost: pluginHost,
+                menuBarIconSettings: menuBarIconSettings,
+                menuBarIconGallery: menuBarIconGallery,
+                launchAtLoginController: launchAtLoginController
+            )
+                .tag(SettingsDestination.general)
+                .tabItem {
+                    Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
+                }
 
-            TabView(selection: settingsDestinationBinding) {
-                GeneralSettingsView(
-                    pluginHost: pluginHost,
-                    menuBarIconSettings: menuBarIconSettings,
-                    menuBarIconGallery: menuBarIconGallery,
-                    launchAtLoginController: launchAtLoginController
-                )
-                    .tag(SettingsDestination.general)
-                    .tabItem {
-                        Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
-                    }
+            FeatureSettingsView(
+                pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
+                uninstallConfirmationSession: uninstallConfirmationSession,
+                showDashboard: showDashboard,
+                showFeaturePanel: showFeaturePanel
+            )
+                .tag(SettingsDestination.pluginConfiguration)
+                .tabItem {
+                    Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
+                }
 
-                FeatureSettingsView(
-                    pluginHost: pluginHost,
-                    navigationCoordinator: navigationCoordinator,
-                    uninstallConfirmationSession: uninstallConfirmationSession,
-                    showDashboard: showDashboard,
-                    showFeaturePanel: showFeaturePanel
-                )
-                    .tag(SettingsDestination.pluginConfiguration)
-                    .tabItem {
-                        Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
-                    }
-
-                AboutSettingsView(
-                    appUpdater: appUpdater,
-                    navigationCoordinator: navigationCoordinator
-                )
-                    .tag(SettingsDestination.about)
-                    .tabItem {
-                        Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
-                    }
-            }
-            .background {
-                SettingsDestinationShortcutButtons(coordinator: navigationCoordinator)
+            AboutSettingsView(
+                appUpdater: appUpdater,
+                navigationCoordinator: navigationCoordinator
+            )
+                .tag(SettingsDestination.about)
+                .tabItem {
+                    Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
+                }
+        }
+        .background {
+            SettingsDestinationShortcutButtons(coordinator: navigationCoordinator)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                SettingsHistoryNavigationControls(coordinator: navigationCoordinator)
             }
         }
         .id(runtimeLocale.revision)
@@ -134,15 +135,13 @@ struct SettingsHistoryNavigationControls: View {
     @ObservedObject var coordinator: SettingsNavigationCoordinator
 
     var body: some View {
-        HStack(spacing: 6) {
+        ControlGroup {
             Button {
                 coordinator.goBack()
             } label: {
                 Label(backTitle, systemImage: "chevron.backward")
                     .labelStyle(.iconOnly)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
             .disabled(!coordinator.canGoBack)
             .help(backTitle)
 
@@ -152,16 +151,10 @@ struct SettingsHistoryNavigationControls: View {
                 Label(forwardTitle, systemImage: "chevron.forward")
                     .labelStyle(.iconOnly)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
             .disabled(!coordinator.canGoForward)
             .help(forwardTitle)
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(SettingsStyle.windowBackground)
+        .controlGroupStyle(.navigation)
     }
 
     private var backTitle: String {
@@ -969,6 +962,13 @@ private struct LaunchAtLoginSettingsRow: View {
 }
 
 private struct FeatureSettingsView: View {
+    private enum Layout {
+        static let sidebarMinWidth: CGFloat = 180
+        static let sidebarIdealWidth: CGFloat = 220
+        static let sidebarMaxWidth: CGFloat = 280
+        static let detailMinWidth: CGFloat = 560
+    }
+
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
@@ -976,12 +976,16 @@ private struct FeatureSettingsView: View {
     let showFeaturePanel: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
+        HSplitView {
             FeatureSettingsSidebar(
                 configurationItems: pluginHost.pluginConfigurationItems,
                 selection: selectionBinding
             )
-            .frame(width: 220)
+            .frame(
+                minWidth: Layout.sidebarMinWidth,
+                idealWidth: Layout.sidebarIdealWidth,
+                maxWidth: Layout.sidebarMaxWidth
+            )
 
             FeatureSettingsDetailPane(
                 pluginHost: pluginHost,
@@ -991,9 +995,12 @@ private struct FeatureSettingsView: View {
                 showDashboard: showDashboard,
                 showFeaturePanel: showFeaturePanel
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(
+                minWidth: Layout.detailMinWidth,
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
         }
-        .background(SettingsStyle.windowBackground)
         .onChange(of: pluginHost.pluginConfigurationItems.map(\.id)) {
             navigationCoordinator.reconcileCurrentDestinationAvailability()
         }
@@ -1018,134 +1025,114 @@ private struct FeatureSettingsSidebar: View {
     @Binding var selection: FeatureSettingsPane
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 4) {
-                FeatureSettingsSidebarSectionTitle(AppL10n.settings(
-                    "plugins.sidebar.pluginsSection",
-                    defaultValue: "插件"
-                ))
-                    .padding(.top, 14)
-
+        List(selection: optionalSelectionBinding) {
+            Section(AppL10n.settings(
+                "plugins.sidebar.pluginsSection",
+                defaultValue: "插件"
+            )) {
                 FeatureSettingsSidebarRow(
                     title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
                     systemImage: "square.grid.2x2",
-                    iconTint: .blue,
-                    isSelected: selection == .dashboardLayout
-                ) {
-                    selection = .dashboardLayout
-                }
+                    iconTint: .blue
+                )
+                .tag(FeatureSettingsPane.dashboardLayout)
 
                 FeatureSettingsSidebarRow(
                     title: AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板"),
                     systemImage: "switch.2",
-                    iconTint: .purple,
-                    isSelected: selection == .featurePanelLayout
-                ) {
-                    selection = .featurePanelLayout
-                }
+                    iconTint: .purple
+                )
+                .tag(FeatureSettingsPane.featurePanelLayout)
 
                 FeatureSettingsSidebarRow(
                     title: AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场"),
                     systemImage: "shippingbox",
-                    iconTint: .blue,
-                    isSelected: selection == .marketplace
-                ) {
-                    selection = .marketplace
-                }
+                    iconTint: .blue
+                )
+                .tag(FeatureSettingsPane.marketplace)
+            }
 
-                FeatureSettingsSidebarSectionTitle(AppL10n.settings("plugins.sidebar.configurationSection", defaultValue: "插件设置"))
-                    .padding(.top, 16)
-
+            Section(AppL10n.settings(
+                "plugins.sidebar.configurationSection",
+                defaultValue: "插件设置"
+            )) {
                 if configurationItems.isEmpty {
                     Text(AppL10n.settings("plugins.sidebar.emptyConfigurations", defaultValue: "暂无可设置插件"))
                         .font(PluginSettingsTheme.Typography.secondaryLabel)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
                 } else {
                     ForEach(configurationItems) { item in
                         FeatureSettingsSidebarRow(
                             title: item.title,
                             systemImage: item.iconName,
-                            iconTint: item.iconTint,
-                            isSelected: selection == .configuration(item.id)
-                        ) {
-                            selection = .configuration(item.id)
-                        }
+                            iconTint: item.iconTint
+                        )
+                        .tag(FeatureSettingsPane.configuration(item.id))
                     }
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 14)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(SettingsStyle.sidebarBackground)
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background {
+            SettingsSidebarMaterialBackground()
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var optionalSelectionBinding: Binding<FeatureSettingsPane?> {
+        Binding(
+            get: { selection },
+            set: { newSelection in
+                guard let newSelection else {
+                    return
+                }
+                selection = newSelection
+            }
+        )
     }
 }
 
-private struct FeatureSettingsSidebarSectionTitle: View {
-    let title: String
-
-    init(_ title: String) {
-        self.title = title
+private struct SettingsSidebarMaterialBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        configure(view)
+        return view
     }
 
-    var body: some View {
-        Text(title)
-            .font(PluginSettingsTheme.Typography.statusBadge)
-            .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-            .padding(.horizontal, 10)
-            .padding(.bottom, 4)
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        configure(nsView)
+    }
+
+    private func configure(_ view: NSVisualEffectView) {
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
     }
 }
 
 private struct FeatureSettingsSidebarRow: View {
+    private enum Layout {
+        static let iconWidth: CGFloat = 14
+    }
+
     let title: String
     let systemImage: String
     let iconTint: Color
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var isHovered = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Group {
-                    Image(systemName: systemImage)
-                        .font(PluginSettingsTheme.Typography.sectionTitle)
-                        .foregroundStyle(isSelected ? Color.accentColor : iconTint)
-                        .frame(width: 18, height: 18)
-
-                    Text(title)
-                        .font(PluginSettingsTheme.Typography.sectionTitle)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(rowBackground)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        Label {
+            Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } icon: {
+            Image(systemName: systemImage)
+                .imageScale(.small)
+                .foregroundStyle(iconTint)
+                .frame(width: Layout.iconWidth)
         }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
+        .font(.body)
         .help(title)
-    }
-
-    private var rowBackground: Color {
-        if isSelected {
-            return SettingsStyle.sidebarSelectionBackground
-        }
-
-        return isHovered ? SettingsStyle.sidebarHoverBackground : .clear
     }
 }
 
