@@ -177,4 +177,37 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
 
         XCTAssertNil(coordinator.searchFocusRequest)
     }
+
+    func testAboutUpdateActionNavigatesAndCanOnlyBeConsumedOnce() throws {
+        let coordinator = SettingsNavigationCoordinator()
+
+        coordinator.requestAboutUpdateAction(version: "1.2.3")
+
+        XCTAssertEqual(coordinator.destination, .about)
+        let request = try XCTUnwrap(coordinator.aboutUpdateActionRequest)
+        XCTAssertEqual(request.version, "1.2.3")
+        XCTAssertTrue(coordinator.consumeAboutUpdateActionRequest(request))
+        XCTAssertNil(coordinator.aboutUpdateActionRequest)
+        XCTAssertFalse(coordinator.consumeAboutUpdateActionRequest(request))
+    }
+
+    func testRegularAboutNavigationDoesNotRequestAutomaticUpdateAction() {
+        let coordinator = SettingsNavigationCoordinator()
+
+        coordinator.navigate(to: .about)
+
+        XCTAssertEqual(coordinator.destination, .about)
+        XCTAssertNil(coordinator.aboutUpdateActionRequest)
+    }
+
+    func testRepeatedAboutUpdateActionsUseDistinctRequests() throws {
+        let coordinator = SettingsNavigationCoordinator()
+
+        coordinator.requestAboutUpdateAction(version: "1.2.3")
+        let firstRequest = try XCTUnwrap(coordinator.aboutUpdateActionRequest)
+        coordinator.requestAboutUpdateAction(version: "1.2.3")
+        let secondRequest = try XCTUnwrap(coordinator.aboutUpdateActionRequest)
+
+        XCTAssertNotEqual(firstRequest.id, secondRequest.id)
+    }
 }

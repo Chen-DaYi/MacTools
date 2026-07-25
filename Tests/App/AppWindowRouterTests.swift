@@ -54,7 +54,7 @@ final class AppWindowRouterTests: XCTestCase {
         )
         let router = AppWindowRouter(
             pluginHost: host,
-            appUpdater: AppUpdater(),
+            appUpdater: AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
             launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())
@@ -96,7 +96,7 @@ final class AppWindowRouterTests: XCTestCase {
 
         let router = AppWindowRouter(
             pluginHost: host,
-            appUpdater: AppUpdater(),
+            appUpdater: AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
             launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())
@@ -218,7 +218,37 @@ final class AppWindowRouterTests: XCTestCase {
         window.close()
     }
 
-    private func makeRouter(defaults: UserDefaults) -> AppWindowRouter {
+    func testAppUpdateRequestNavigatesDirectlyToAbout() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let updater = AppUpdater(startingUpdater: false)
+        updater.setAvailableUpdateVersionForTests("1.2.3")
+        let router = makeRouter(defaults: defaults, appUpdater: updater)
+
+        router.presentSettings(.appUpdate)
+
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .about)
+        router.settingsWindow?.close()
+    }
+
+    func testAppUpdateRequestStillOpensAboutWhenAvailabilityExpires() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.presentSettings(.appUpdate)
+
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .about)
+        XCTAssertNil(router.settingsNavigationCoordinator?.aboutUpdateActionRequest)
+        router.settingsWindow?.close()
+    }
+
+    private func makeRouter(
+        defaults: UserDefaults,
+        appUpdater: AppUpdater? = nil
+    ) -> AppWindowRouter {
         let host = PluginHost(
             plugins: [],
             shortcutStore: ShortcutStore(userDefaults: defaults),
@@ -228,7 +258,7 @@ final class AppWindowRouterTests: XCTestCase {
         )
         return AppWindowRouter(
             pluginHost: host,
-            appUpdater: AppUpdater(),
+            appUpdater: appUpdater ?? AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
             launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())

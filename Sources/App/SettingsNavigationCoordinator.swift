@@ -46,12 +46,18 @@ struct SettingsSearchFocusRequest: Equatable {
     let field: SettingsSearchField
 }
 
+struct AboutUpdateActionRequest: Equatable {
+    let id: UInt
+    let version: String
+}
+
 @MainActor
 final class SettingsNavigationCoordinator: ObservableObject {
     private static let maximumHistoryCount = 128
 
     @Published private(set) var destination: SettingsNavigationDestination
     @Published private(set) var searchFocusRequest: SettingsSearchFocusRequest?
+    @Published private(set) var aboutUpdateActionRequest: AboutUpdateActionRequest?
 
     private(set) var history: [SettingsNavigationDestination]
     private(set) var historyIndex: Int
@@ -61,6 +67,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private let isPluginConfigurationAvailable: (String) -> Bool
     private let selectPluginSettingsPane: (FeatureSettingsPane) -> Bool
     private var nextSearchFocusRequestID: UInt = 0
+    private var nextAboutUpdateActionRequestID: UInt = 0
 
     convenience init(pluginHost: PluginHost) {
         self.init(
@@ -122,6 +129,25 @@ final class SettingsNavigationCoordinator: ObservableObject {
         }
         historyIndex = history.count - 1
         activate(destination)
+    }
+
+    func requestAboutUpdateAction(version: String) {
+        navigate(to: .about)
+        nextAboutUpdateActionRequestID &+= 1
+        aboutUpdateActionRequest = AboutUpdateActionRequest(
+            id: nextAboutUpdateActionRequestID,
+            version: version
+        )
+    }
+
+    @discardableResult
+    func consumeAboutUpdateActionRequest(_ request: AboutUpdateActionRequest) -> Bool {
+        guard aboutUpdateActionRequest == request else {
+            return false
+        }
+
+        aboutUpdateActionRequest = nil
+        return true
     }
 
     func goBack() {

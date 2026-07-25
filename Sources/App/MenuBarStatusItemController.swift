@@ -82,6 +82,7 @@ final class MenuBarStatusItemController: NSObject {
     init(
         pluginHost: PluginHost,
         windowRouter: AppWindowRouter,
+        appUpdater: AppUpdater,
         iconSettings: MenuBarIconSettings
     ) {
         self.pluginHost = pluginHost
@@ -93,8 +94,12 @@ final class MenuBarStatusItemController: NSObject {
         super.init()
         panelPresenter = MenuBarPanelPresenter(
             pluginHost: pluginHost,
+            appUpdater: appUpdater,
             onDismiss: { [weak self] in
                 self?.requestPanelClose()
+            },
+            onOpenUpdate: { [weak self] in
+                self?.windowRouter.presentSettings(.appUpdate)
             },
             onOpenSettings: { [weak self] in
                 self?.windowRouter.showSettings()

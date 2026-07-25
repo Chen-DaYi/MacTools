@@ -12,6 +12,7 @@ enum FeatureSettingsPane: Hashable {
 
 enum SettingsPresentationRequest: Equatable {
     case settings
+    case appUpdate
     case pluginMarketplace
     case pluginConfiguration(String)
 }

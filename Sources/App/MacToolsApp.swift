@@ -52,6 +52,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,
             windowRouter: windowRouter,
+            appUpdater: appUpdater,
             iconSettings: menuBarIconSettings
         )
 

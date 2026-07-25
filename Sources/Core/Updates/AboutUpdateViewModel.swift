@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 protocol AppUpdating: AnyObject {
     var canCheckForUpdates: Bool { get }
+    var availableUpdateVersion: String? { get }
     func installationEligibility() -> UpdateInstallationEligibility
     func checkForUpdateInformation() async -> AppUpdateProbeResult
     func checkForUpdates()
@@ -135,6 +136,12 @@ final class AboutUpdateViewModel: ObservableObject {
         }
     }
 
+    func performAvailableUpdateAction(version: String) {
+        lastAvailableVersion = version
+        state = .updateAvailable(version: version)
+        startInteractiveUpdate()
+    }
+
     private var shouldOfferInstallAction: Bool {
         switch state {
         case .updateAvailable:
@@ -148,6 +155,12 @@ final class AboutUpdateViewModel: ObservableObject {
 
     private func probeForUpdates() async {
         guard state != .checking else {
+            return
+        }
+
+        if let version = updater.availableUpdateVersion {
+            lastAvailableVersion = version
+            state = .updateAvailable(version: version)
             return
         }
 

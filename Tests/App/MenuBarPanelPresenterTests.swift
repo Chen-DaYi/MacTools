@@ -336,7 +336,9 @@ final class MenuBarPanelPresenterTests: XCTestCase {
 
         return MenuBarPanelPresenter(
             pluginHost: host,
+            appUpdater: AppUpdater(startingUpdater: false),
             onDismiss: onDismiss,
+            onOpenUpdate: {},
             onOpenSettings: onOpenSettings,
             onPresentDiskCleanConfiguration: {},
             onPresentLaunchControlConfiguration: {},

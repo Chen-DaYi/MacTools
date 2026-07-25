@@ -51,6 +51,49 @@ final class AboutUpdateViewModelTests: XCTestCase {
         XCTAssertEqual(updater.checkForUpdatesCallCount, 0)
     }
 
+    func testKnownAvailableUpdateStartsInteractiveFlowWithoutAnotherProbe() {
+        let updater = StubUpdater()
+        let viewModel = AboutUpdateViewModel(updater: updater)
+
+        viewModel.performAvailableUpdateAction(version: "0.3.0")
+
+        XCTAssertEqual(viewModel.state, .updateAvailable(version: "0.3.0"))
+        XCTAssertEqual(updater.checkForUpdateInformationCallCount, 0)
+        XCTAssertEqual(updater.checkForUpdatesCallCount, 1)
+    }
+
+    func testManualCheckUsesKnownAvailabilityWithoutStartingAnotherProbe() async {
+        let updater = StubUpdater()
+        updater.availableUpdateVersion = "0.3.0"
+        let viewModel = AboutUpdateViewModel(updater: updater)
+
+        await viewModel.performPrimaryAction()
+
+        XCTAssertEqual(viewModel.state, .updateAvailable(version: "0.3.0"))
+        XCTAssertEqual(updater.checkForUpdateInformationCallCount, 0)
+        XCTAssertEqual(updater.checkForUpdatesCallCount, 0)
+    }
+
+    func testCreatingAboutViewModelDoesNotAutomaticallyCheckOrInstall() {
+        let updater = StubUpdater()
+
+        let viewModel = AboutUpdateViewModel(updater: updater)
+
+        XCTAssertEqual(viewModel.state, .idle)
+        XCTAssertEqual(updater.checkForUpdateInformationCallCount, 0)
+        XCTAssertEqual(updater.checkForUpdatesCallCount, 0)
+    }
+
+    func testStandardUpdateSessionCompletionClearsPanelAvailability() {
+        let updater = AppUpdater(startingUpdater: false)
+        updater.setAvailableUpdateVersionForTests("0.3.0")
+
+        updater.standardUserDriverWillFinishUpdateSession()
+
+        XCTAssertNil(updater.availableUpdateVersion)
+        XCTAssertTrue(updater.supportsGentleScheduledUpdateReminders)
+    }
+
     func testVersionDescriptionFormatting() {
         XCTAssertEqual(
             AppMetadata.formattedVersionDescription(shortVersion: "1.2.3", buildNumber: "45"),
@@ -62,8 +105,10 @@ final class AboutUpdateViewModelTests: XCTestCase {
 @MainActor
 private final class StubUpdater: AppUpdating {
     var canCheckForUpdates = true
+    var availableUpdateVersion: String?
     var eligibility = UpdateInstallationEligibility.allowed
     var probeResult: AppUpdateProbeResult = .upToDate
+    private(set) var checkForUpdateInformationCallCount = 0
     private(set) var checkForUpdatesCallCount = 0
 
     func installationEligibility() -> UpdateInstallationEligibility {
@@ -71,7 +116,8 @@ private final class StubUpdater: AppUpdating {
     }
 
     func checkForUpdateInformation() async -> AppUpdateProbeResult {
-        probeResult
+        checkForUpdateInformationCallCount += 1
+        return probeResult
     }
 
     func checkForUpdates() {

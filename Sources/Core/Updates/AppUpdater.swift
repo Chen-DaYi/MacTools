@@ -5,18 +5,21 @@ import Sparkle
 @MainActor
 final class AppUpdater: NSObject, ObservableObject, AppUpdating {
     @Published private(set) var canCheckForUpdates = false
+    @Published private(set) var availableUpdateVersion: String?
 
     private lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
+        startingUpdater: startsUpdater,
         updaterDelegate: self,
-        userDriverDelegate: nil
+        userDriverDelegate: self
     )
 
+    private let startsUpdater: Bool
     private var cancellables: Set<AnyCancellable> = []
     private var probeContinuation: CheckedContinuation<AppUpdateProbeResult, Never>?
     private var pendingProbeResult: AppUpdateProbeResult?
 
-    override init() {
+    init(startingUpdater: Bool = true) {
+        startsUpdater = startingUpdater
         super.init()
 
         let updater = updaterController.updater
@@ -68,24 +71,36 @@ final class AppUpdater: NSObject, ObservableObject, AppUpdating {
     }
 
     func checkForUpdateInformation() async -> AppUpdateProbeResult {
-        guard canCheckForUpdates else {
-            return .error(message: AppL10n.settings("about.update.error.servicePreparing", defaultValue: "更新服务正在准备中，请稍后再试。"))
-        }
+        let updater = updaterController.updater
 
         guard probeContinuation == nil else {
             return .error(message: AppL10n.settings("about.update.error.alreadyChecking", defaultValue: "正在检查更新，请稍后再试。"))
         }
 
+        guard canCheckForUpdates, !updater.sessionInProgress else {
+            if let availableUpdateVersion {
+                return .updateAvailable(version: availableUpdateVersion)
+            }
+
+            return .error(message: AppL10n.settings("about.update.error.servicePreparing", defaultValue: "更新服务正在准备中，请稍后再试。"))
+        }
+
         return await withCheckedContinuation { continuation in
             pendingProbeResult = nil
             probeContinuation = continuation
-            updaterController.updater.checkForUpdateInformation()
+            updater.checkForUpdateInformation()
         }
     }
 
     func checkForUpdates() {
         updaterController.updater.checkForUpdates()
     }
+
+    #if DEBUG
+    func setAvailableUpdateVersionForTests(_ version: String?) {
+        availableUpdateVersion = version
+    }
+    #endif
 
     private func finishProbe(with result: AppUpdateProbeResult) {
         guard let probeContinuation else {
@@ -118,6 +133,8 @@ final class AppUpdater: NSObject, ObservableObject, AppUpdating {
 @MainActor
 extension AppUpdater: SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        availableUpdateVersion = item.displayVersionString
+
         guard probeContinuation != nil else {
             return
         }
@@ -126,6 +143,8 @@ extension AppUpdater: SPUUpdaterDelegate {
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        availableUpdateVersion = nil
+
         guard probeContinuation != nil else {
             return
         }
@@ -160,5 +179,35 @@ extension AppUpdater: SPUUpdaterDelegate {
         }
 
         finishProbe(with: pendingProbeResult ?? .upToDate)
+    }
+}
+
+@MainActor
+extension AppUpdater: @preconcurrency SPUStandardUserDriverDelegate {
+    var supportsGentleScheduledUpdateReminders: Bool {
+        true
+    }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem,
+        andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        false
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate update: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        availableUpdateVersion = update.displayVersionString
+    }
+
+    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        availableUpdateVersion = nil
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        availableUpdateVersion = nil
     }
 }

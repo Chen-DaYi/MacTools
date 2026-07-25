@@ -82,6 +82,8 @@ brew update
 brew upgrade --cask --greedy mactools
 ```
 
+MacTools 每天会在后台静默检查一次应用更新。发现新版本后，菜单栏面板会在“设置”旁显示更新按钮；点击后会打开“关于”并进入 Sparkle 标准更新流程。
+
 如果仍提示已经是最新版本，可以先查看本地识别到的 cask 版本：
 
 ```bash

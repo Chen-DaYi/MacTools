@@ -123,7 +123,9 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private let pluginHost: PluginHost
+    private let appUpdater: AppUpdater
     private let onDismiss: () -> Void
+    private let onOpenUpdate: () -> Void
     private let onOpenSettings: () -> Void
     private let onPresentDiskCleanConfiguration: () -> Void
     private let onPresentLaunchControlConfiguration: () -> Void
@@ -140,14 +142,18 @@ final class MenuBarPanelPresenter: NSObject {
 
     init(
         pluginHost: PluginHost,
+        appUpdater: AppUpdater,
         onDismiss: @escaping () -> Void,
+        onOpenUpdate: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
         onPresentDiskCleanConfiguration: @escaping () -> Void,
         onPresentLaunchControlConfiguration: @escaping () -> Void,
         onAllPanelsClosed: @escaping () -> Void
     ) {
         self.pluginHost = pluginHost
+        self.appUpdater = appUpdater
         self.onDismiss = onDismiss
+        self.onOpenUpdate = onOpenUpdate
         self.onOpenSettings = onOpenSettings
         self.onPresentDiskCleanConfiguration = onPresentDiskCleanConfiguration
         self.onPresentLaunchControlConfiguration = onPresentLaunchControlConfiguration
@@ -163,8 +169,10 @@ final class MenuBarPanelPresenter: NSObject {
         self.hostingController = MenuBarPanelHostingController(
             rootView: MenuBarUnifiedPanelContent(
                 pluginHost: pluginHost,
+                appUpdater: appUpdater,
                 model: panelModel,
                 onDismiss: onDismiss,
+                onOpenUpdate: onOpenUpdate,
                 onOpenSettings: onOpenSettings,
                 onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
                 onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
@@ -207,8 +215,10 @@ final class MenuBarPanelPresenter: NSObject {
     private func refreshLocalization() {
         hostingController.rootView = MenuBarUnifiedPanelContent(
             pluginHost: pluginHost,
+            appUpdater: appUpdater,
             model: panelModel,
             onDismiss: onDismiss,
+            onOpenUpdate: onOpenUpdate,
             onOpenSettings: onOpenSettings,
             onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
             onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
@@ -721,9 +731,11 @@ final class MenuBarUnifiedPanelModel: ObservableObject {
 
 struct MenuBarUnifiedPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var appUpdater: AppUpdater
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
     @ObservedObject var model: MenuBarUnifiedPanelModel
     let onDismiss: () -> Void
+    let onOpenUpdate: () -> Void
     let onOpenSettings: () -> Void
     let onPresentDiskCleanConfiguration: () -> Void
     let onPresentLaunchControlConfiguration: () -> Void
@@ -737,7 +749,9 @@ struct MenuBarUnifiedPanelContent: View {
         VStack(spacing: MenuBarPanelLayout.rootSpacing) {
             MenuBarPanelToolbar(
                 selectedTab: model.selectedTab,
+                availableUpdateVersion: appUpdater.availableUpdateVersion,
                 onTabSelection: handleTabSelection,
+                onOpenUpdate: presentUpdate,
                 onOpenSettings: presentSettings,
                 onQuit: {
                     NSApplication.shared.terminate(nil)
@@ -799,6 +813,11 @@ struct MenuBarUnifiedPanelContent: View {
         onDismiss()
     }
 
+    private func presentUpdate() {
+        onOpenUpdate()
+        onDismiss()
+    }
+
     private func handleTabSelection(_ tab: MenuBarPanelTab) {
         guard model.selectedTab != tab else {
             return
@@ -838,7 +857,9 @@ private struct MenuBarPanelContentSurface<Content: View>: View {
 
 private struct MenuBarPanelToolbar: View {
     let selectedTab: MenuBarPanelTab
+    let availableUpdateVersion: String?
     let onTabSelection: (MenuBarPanelTab) -> Void
+    let onOpenUpdate: () -> Void
     let onOpenSettings: () -> Void
     let onQuit: () -> Void
 
@@ -850,6 +871,17 @@ private struct MenuBarPanelToolbar: View {
             )
 
             HStack(spacing: 4) {
+                if let availableUpdateVersion {
+                    MenuBarPanelIconButton(
+                        systemImage: "arrow.triangle.2.circlepath",
+                        accessibilityTitle: updateAccessibilityTitle(
+                            version: availableUpdateVersion
+                        ),
+                        showsNotificationDot: true,
+                        action: onOpenUpdate
+                    )
+                }
+
                 MenuBarPanelIconButton(
                     systemImage: "gearshape",
                     accessibilityTitle: AppL10n.settings("settings.window.title", defaultValue: "设置"),
@@ -864,6 +896,19 @@ private struct MenuBarPanelToolbar: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
+    }
+
+    private func updateAccessibilityTitle(version: String) -> String {
+        let action = AppL10n.settings(
+            "about.update.installNow",
+            defaultValue: "立即更新"
+        )
+        let availability = AppL10n.settingsFormat(
+            "about.update.headline.availableFormat",
+            defaultValue: "检测到新版本 %@",
+            version
+        )
+        return "\(action)：\(availability)"
     }
 }
 
@@ -907,6 +952,7 @@ private struct MenuBarPanelTabSwitcher: View {
 private struct MenuBarPanelIconButton: View {
     let systemImage: String
     let accessibilityTitle: String
+    var showsNotificationDot = false
     let action: () -> Void
     @State private var isHovered = false
 
@@ -914,7 +960,22 @@ private struct MenuBarPanelIconButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondary)
+                .overlay(alignment: .bottomTrailing) {
+                    if showsNotificationDot {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 6, height: 6)
+                            .overlay {
+                                Circle()
+                                    .stroke(
+                                        Color(nsColor: .windowBackgroundColor),
+                                        lineWidth: 1
+                                    )
+                            }
+                            .offset(x: 3, y: 3)
+                    }
+                }
                 .frame(width: 28, height: 24)
                 .background {
                     Capsule()

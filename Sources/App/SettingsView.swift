@@ -55,7 +55,10 @@ struct SettingsView: View {
                         Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
                     }
 
-                AboutSettingsView(appUpdater: appUpdater)
+                AboutSettingsView(
+                    appUpdater: appUpdater,
+                    navigationCoordinator: navigationCoordinator
+                )
                     .tag(SettingsDestination.about)
                     .tabItem {
                         Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
@@ -1749,11 +1752,16 @@ private func statusColor(for tone: PluginStatusTone) -> Color {
 
 struct AboutSettingsView: View {
     @StateObject private var updateViewModel: AboutUpdateViewModel
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
 
-    init(appUpdater: AppUpdater) {
+    init(
+        appUpdater: AppUpdater,
+        navigationCoordinator: SettingsNavigationCoordinator
+    ) {
         _updateViewModel = StateObject(
             wrappedValue: AboutUpdateViewModel(updater: appUpdater)
         )
+        self.navigationCoordinator = navigationCoordinator
     }
 
     var body: some View {
@@ -1795,6 +1803,26 @@ struct AboutSettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, 40)
         .padding(.vertical, 28)
+        .onChange(
+            of: navigationCoordinator.aboutUpdateActionRequest,
+            initial: true
+        ) { _, request in
+            handleUpdateActionRequest(request)
+        }
+    }
+
+    private func handleUpdateActionRequest(_ request: AboutUpdateActionRequest?) {
+        guard
+            let request,
+            navigationCoordinator.consumeAboutUpdateActionRequest(request)
+        else {
+            return
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            updateViewModel.performAvailableUpdateAction(version: request.version)
+        }
     }
 }
 

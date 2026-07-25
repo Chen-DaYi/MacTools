@@ -85,6 +85,8 @@ brew update
 brew upgrade --cask --greedy mactools
 ```
 
+MacTools quietly checks for app updates once per day. When an update is available, the menu-bar panel shows an Update button beside Settings; selecting it opens About and starts the standard Sparkle update flow.
+
 The in-app update dialog separates App Updates from Plugin Updates and includes plugin releases published since the previous app version.
 
 If Homebrew still reports that the cask is already up to date, check the locally resolved cask version first:

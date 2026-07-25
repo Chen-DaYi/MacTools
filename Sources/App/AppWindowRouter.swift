@@ -168,19 +168,31 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     func presentSettings(_ request: SettingsPresentationRequest) {
         let window = settingsWindow ?? makeSettingsWindow()
+        let pendingAppUpdateVersion: String?
 
         switch request {
         case .settings:
-            break
+            pendingAppUpdateVersion = nil
+        case .appUpdate:
+            pendingAppUpdateVersion = appUpdater.availableUpdateVersion
+            settingsNavigationCoordinator?.navigate(to: .about)
         case .pluginMarketplace:
+            pendingAppUpdateVersion = nil
             settingsNavigationCoordinator?.navigate(to: .plugins(.marketplace))
         case let .pluginConfiguration(pluginID):
+            pendingAppUpdateVersion = nil
             settingsNavigationCoordinator?.navigate(to: .plugins(.configuration(pluginID)))
         }
 
         show(window)
         settingsWindow = window
         onProgrammaticSettingsPresentation()
+
+        if let pendingAppUpdateVersion {
+            settingsNavigationCoordinator?.requestAboutUpdateAction(
+                version: pendingAppUpdateVersion
+            )
+        }
     }
 
     private func handleLocalKeyboardCommand(_ command: MacToolsLocalKeyboardCommand) {
