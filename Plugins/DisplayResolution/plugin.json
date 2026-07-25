@@ -48,8 +48,8 @@
       "summary": "查看並切換每個顯示器的分辨率"
     }
   },
-  "version": "1.0.7",
-  "minHostVersion": "1.0.2",
+  "version": "1.0.8",
+  "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "DisplayResolution.bundle",
   "factoryClass": "DisplayResolutionPlugin.DisplayResolutionPluginFactory",

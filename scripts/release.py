@@ -19,6 +19,7 @@ APP_VERSION_CONFIG = ROOT_DIR / "Configs" / "AppVersion.xcconfig"
 CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
 CHANGELOG_FRAGMENT_DIR = ROOT_DIR / "changes" / "unreleased"
 PLUGIN_SOURCE_DIR = ROOT_DIR / "Plugins"
+PLUGIN_SHARED_PATHS = [ROOT_DIR / "Sources/MacToolsPluginKit"]
 LEGACY_PLUGIN_CATALOG = ROOT_DIR / "docs/plugins/catalog.json"
 PLUGIN_PLAN_PATH = ROOT_DIR / "build/release/plugin-plan.json"
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -483,6 +484,15 @@ def changed_paths_since(ref: str, path: Path) -> list[str]:
     return result
 
 
+def plugin_package_relevant_changes_since(ref: str, plugin: PluginInfo) -> list[str]:
+    paths = [plugin.path, *PLUGIN_SHARED_PATHS]
+    return [
+        changed_path
+        for path in paths
+        for changed_path in changed_paths_since(ref, path)
+    ]
+
+
 def normalize_plugin_selection(raw_values: list[str], plugins: dict[str, PluginInfo]) -> list[str]:
     values: list[str] = []
     for raw in raw_values:
@@ -620,7 +630,7 @@ def analyze_plugins(mode: str, selection: list[str]) -> PluginAnalysis:
                 errors.append(f"{plugin_id}: previous release tag is not available locally: {tag}")
                 continue
 
-            changed = changed_paths_since(tag, plugin.path)
+            changed = plugin_package_relevant_changes_since(tag, plugin)
             if changed:
                 needs_bump.append(plugin)
                 select(plugin, f"package-relevant changes since {tag}")
@@ -651,7 +661,11 @@ def analyze_plugins(mode: str, selection: list[str]) -> PluginAnalysis:
                 continue
 
             tag = plugin_release_tag(previous_entry)
-            changed = changed_paths_since(tag, plugin.path) if tag and git_ref_exists(tag) else []
+            changed = (
+                plugin_package_relevant_changes_since(tag, plugin)
+                if tag and git_ref_exists(tag)
+                else []
+            )
             if changed:
                 needs_bump.append(plugin)
 

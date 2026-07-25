@@ -48,8 +48,8 @@
       "summary": "查看和管理 launchctl 啟動項"
     }
   },
-  "version": "1.0.8",
-  "minHostVersion": "1.0.2",
+  "version": "1.0.9",
+  "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "LaunchControl.bundle",
   "factoryClass": "LaunchControlPlugin.LaunchControlPluginFactory",
