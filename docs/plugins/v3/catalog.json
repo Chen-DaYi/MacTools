@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-07-24T15:28:33Z",
+  "generatedAt": "2026-07-25T02:14:01Z",
   "minimumHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "plugins": [
@@ -59,18 +59,18 @@
           "summary": "統計輸入、前臺應用使用時長和 AI 編程活動"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "5d49013d47757a2ddff6fd31e18eff91c6a3fccf79355658d98bdc79edf12d89",
-        "size": 824043,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/activity-bar.mactoolsplugin.zip"
+        "sha256": "c266d2ad83712a481006b2202e17fe5f3cb34e0157baf265ff67b3ff2d1ac44f",
+        "size": 824022,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.16"
+      "version": "1.0.17"
     },
     {
       "capabilities": {
@@ -127,18 +127,18 @@
           "summary": "為常用應用綁定全局快速鍵，快速打開或切換到前臺"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "c3154f0031603995d051352f2f979492b2cab5550f45f10e62b6d940131dadea",
-        "size": 196598,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/app-hotkey.mactoolsplugin.zip"
+        "sha256": "c033cad89549e634126008eb8e8e916f69bd97166aab083caa53057db6d2ab6c",
+        "size": 196732,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/app-hotkey.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "为常用应用绑定全局快捷键，快速打开或切换到前台",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -195,18 +195,18 @@
           "summary": "切換系統亮色與深色外觀"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "b941e77869da0baa29879af4252759e3e3364d98a258d0ec3e952a1343255714",
-        "size": 62876,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/appearance.mactoolsplugin.zip"
+        "sha256": "30a0eeeb9c842b6c0494cd4ea52765bf5e429437f88436ce2fadd0191cb4f8b3",
+        "size": 62877,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/appearance.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "切换系统亮色与深色外观",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -263,18 +263,18 @@
           "summary": "自動隱藏Dock，提供更乾淨的桌面環境"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "0121ebc62324847108b6eed5b6b028ab7cfaf906de8bae8fff0bd1f7518d6756",
-        "size": 67937,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/auto-hide-dock.mactoolsplugin.zip"
+        "sha256": "7a91edba1788b178ae04429ef93ee15ca6eeb65dec75db00123d9dd95848c615",
+        "size": 67916,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/auto-hide-dock.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "自动隐藏程序坞，提供更干净的桌面环境",
-      "version": "1.0.9"
+      "version": "1.0.10"
     },
     {
       "capabilities": {
@@ -331,18 +331,18 @@
           "summary": "自動隱藏選單列，提供更完整的螢幕顯示空間"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "89768a0793a033d3e723b8c4ae4958b41f19e918feda34a11ff288616bcb76ac",
+        "sha256": "8687725b0312391e75c6e0fdc493135dd1764b8067c68994380426b949fb9578",
         "size": 69851,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/auto-hide-menu-bar.mactoolsplugin.zip"
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/auto-hide-menu-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "自动隐藏菜单栏，提供更完整的屏幕显示空间",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -399,18 +399,18 @@
           "summary": "設定電池充電上限，達到上限後停止充電；不自動恢復，由用戶決定何時繼續充電"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "b93734fb46573b552eb3f13a48e7f0c81c677d9a4b6fbcc7411503bee31a865b",
-        "size": 292760,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/battery-charge-limit.mactoolsplugin.zip"
+        "sha256": "7d51ef34c905619051b98c59d03fcab00f8065aa163c9472d6df1451118870f2",
+        "size": 292986,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/battery-charge-limit.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "设置电池充电上限，达到上限后停止充电；不自动恢复，由用户决定何时继续充电",
-      "version": "1.0.5"
+      "version": "1.0.6"
     },
     {
       "capabilities": {
@@ -467,11 +467,11 @@
           "summary": "查看日期、節假日和系統行程"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "3b760127b1d2a5707da5402d858641fece2fb14c1ece1c981702abee1becc49c",
-        "size": 333640,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/calendar.mactoolsplugin.zip"
+        "sha256": "c195ba1a38fdece7e9c4ce24852c6f11ededcccd5848d7784530a2a118748de4",
+        "size": 333649,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/calendar.mactoolsplugin.zip"
       },
       "permissions": [
         "calendarFullAccess",
@@ -479,9 +479,9 @@
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "查看日期、节假日和系统日程",
-      "version": "1.0.11"
+      "version": "1.0.12"
     },
     {
       "capabilities": {
@@ -538,18 +538,18 @@
           "summary": "一鍵清空當前剪貼板內容"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "47bce81ee3a922799e2bd1ae69dc20e1a84066aa1077b183508e89563a65f43a",
-        "size": 59012,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/clipboard-clear.mactoolsplugin.zip"
+        "sha256": "11d0a4d5c8901a4406257f5f2e39dd74a2fae5a9c68ff1c709bfb67f42098d6d",
+        "size": 59001,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/clipboard-clear.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "一键清空当前剪贴板内容",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -606,18 +606,18 @@
           "summary": "查看 Mac、Apple 行動裝置、藍牙外設和雷柏滑鼠電量"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "cf3f7f5569f7da40183999f918c424c6aad8d8e78945eb8c8d80e66f2077566e",
-        "size": 884161,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.2/device-battery.mactoolsplugin.zip"
+        "sha256": "93fa9ed6ff9d0ae28bcc047cd08f456d10bf2473aa606f01d88b6efd15d8470f",
+        "size": 884126,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/device-battery.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.2",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "查看 Mac、Apple 移动设备、蓝牙外设和雷柏鼠标电量",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -674,18 +674,18 @@
           "summary": "緩存、開發者緩存和瀏覽器緩存清理"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "dc57c242161ff5a604efb0c218c8d0d672ca4b0ae1561e070bb3ae8d57a2b0ff",
-        "size": 448122,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/disk-clean.mactoolsplugin.zip"
+        "sha256": "2f0681715013a45226bac8e9f3c85a29587adfebd961f610747be92a193103b0",
+        "size": 448223,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/disk-clean.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "缓存、开发者缓存和浏览器缓存清理",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -742,18 +742,18 @@
           "summary": "快速調節每個顯示器的亮度"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "48f15f8ed47f55a4e8fc90af6d6a0e1c2ea21f3c80057dc637f68d4d483c94af",
-        "size": 451379,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/display-brightness.mactoolsplugin.zip"
+        "sha256": "5734558187055087561f574d495f142b0048acd8729011defb41ea08fffd5dfd",
+        "size": 451393,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/display-brightness.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "快速调节每个显示器的亮度",
-      "version": "1.0.11"
+      "version": "1.0.12"
     },
     {
       "capabilities": {
@@ -810,18 +810,18 @@
           "summary": "查看並切換每個顯示器的分辨率"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "10e825ec17f8b4d85ac3c6b3868322b9bb4f3dc84ad408e8b18fa9a8f11cfb06",
-        "size": 137822,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/display-resolution.mactoolsplugin.zip"
+        "sha256": "5f5cb58b18b26e3ed2ff99d42f0c3b59b8be63a598e266f77cbc5ed52ea00333",
+        "size": 137806,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/display-resolution.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "查看并切换每个显示器的分辨率",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -878,18 +878,18 @@
           "summary": "一鍵讓所有顯示器立即進入休眠"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "d2e8241c6376800f081a5cf5c1f83d6b4de42fd4b1ed7c2ea998eff09d933a95",
-        "size": 57782,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/display-sleep.mactoolsplugin.zip"
+        "sha256": "4a1ea40263c27fabb88da310a8d4dc7059616c6e46c6a8a3a66242266981b3b9",
+        "size": 57772,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/display-sleep.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "一键让所有显示器立即进入休眠",
-      "version": "1.0.5"
+      "version": "1.0.6"
     },
     {
       "capabilities": {
@@ -946,18 +946,18 @@
           "summary": "自動調節顯示器顏色以適應環境光"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "69207bf22fac391ad92cd5db13555be2343b1b6750c24bdbe21d8f8a72e26d4d",
+        "sha256": "6dcac89ad43078e7942f691dd71a533dc6f924ed42a522224851197182de0cbf",
         "size": 62446,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/display-true-color.mactoolsplugin.zip"
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/display-true-color.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "自动调节显示器颜色以适应环境光",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -1014,18 +1014,18 @@
           "summary": "推出所有可移動磁盤"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "d53e59374a72d6182568b63ac9c09589781c8a4e86957b7ace678d3cf9ebced4",
-        "size": 134639,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/eject-disk.mactoolsplugin.zip"
+        "sha256": "a444e0634395f9bad27ee8f31016119e661db2041932e07219f6c71c601a6cc5",
+        "size": 134624,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/eject-disk.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "推出所有可移动磁盘",
-      "version": "1.0.9"
+      "version": "1.0.10"
     },
     {
       "capabilities": {
@@ -1082,18 +1082,18 @@
           "summary": "清空垃圾桶中的所有項目"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "ecc512bb54d70481e6448c55e768288d8942896c8c6b34eabcf8de3b80bffa96",
-        "size": 85156,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/empty-trash.mactoolsplugin.zip"
+        "sha256": "aa35b8654cac94930deb4e2178a1f75306657ab496fee7d6c6fe987d7cb7b2b3",
+        "size": 85146,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/empty-trash.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "清空废纸篓中的所有项目",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -1150,18 +1150,18 @@
           "summary": "管理風扇轉速預設，支持自動、全速和自定義策略"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "c69d535d9f324dfac655c98105bb27f4acd2bd0849970ce8cd963bf47a8978ca",
-        "size": 368432,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.2/fan-control.mactoolsplugin.zip"
+        "sha256": "ddfaeb7aa2cdeb661d0eccd3f0660bf20f8c58d14a0a157fcef26e666d4db933",
+        "size": 368497,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/fan-control.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.2",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-      "version": "1.0.12"
+      "version": "1.0.13"
     },
     {
       "capabilities": {
@@ -1218,18 +1218,18 @@
           "summary": "移除隔離屬性，解決「已損壞」或「不受信任」提示"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "ea0a4c20521f0b4c9714ec27b46cc922f0366fd63500419e9e4b803bd87b62bc",
-        "size": 205021,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/fix-damaged-app.mactoolsplugin.zip"
+        "sha256": "d04ee0b3da59b0f12cd8a34b72a8ed6a4c92d13863a31cdc659d3fa7221e5757",
+        "size": 205196,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/fix-damaged-app.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "移除隔离属性，解决「已损坏」或「不受信任」提示",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -1286,18 +1286,18 @@
           "summary": "自動遮擋劉海螢幕頂部區域"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "27113017dc243a39e3dbcb8ba283267e298765857455e357261e31c8f00efb30",
-        "size": 168209,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/hide-notch.mactoolsplugin.zip"
+        "sha256": "adb8d51995584657fa17fceecd97483764bfcba1e028150ffcda7b6085a51313",
+        "size": 168211,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/hide-notch.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "自动遮挡刘海屏顶部区域",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -1354,18 +1354,18 @@
           "summary": "管理 Homebrew 包、軟體倉庫並執行系統診斷"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "cf65843695da87c196542921bb3f9cdec7dca53e80e8dbc6b9d54bf789ed9942",
-        "size": 874141,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/homebrew.mactoolsplugin.zip"
+        "sha256": "ee3c0c452ac622e597f0f804d19970207ed598d869c3ab0f89baca5447dab5ed",
+        "size": 874334,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/homebrew.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "管理 Homebrew 包、库仓库并执行系统诊断",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -1422,18 +1422,18 @@
           "summary": "查看出口 IP、本地 IP、歸屬地與網路測速摘要"
         }
       },
-      "minimumHostVersion": "1.0.10",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "85cc55558769bcd4c6f4568c5a93c49d0bef3bb4c8e55591362ff82f8fedad58",
+        "sha256": "41ff81b235525d9d2843851d4199f80fb5d9ea57394adba5c5c3beb8b6232cb7",
         "size": 1097437,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.3/ip-overview.mactoolsplugin.zip"
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/ip-overview.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.3",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "查看出口 IP、本地 IP、归属地与网络测速摘要",
-      "version": "1.0.13"
+      "version": "1.0.14"
     },
     {
       "capabilities": {
@@ -1490,18 +1490,18 @@
           "summary": "阻止系統空閒休眠；可選保持螢幕常亮，或接通電源時闔蓋運作"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "09a8281e3cfbf0c6bb3fa64006b2961409ff21ae43dcb6723251f3f008bae10d",
-        "size": 173049,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.3/keep-awake.mactoolsplugin.zip"
+        "sha256": "5dc21d86a6b3a7050719fe31752b714e5c12b43cd23e236b7ff7d4d335793aac",
+        "size": 173051,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/keep-awake.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.3",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "阻止系统空闲休眠；可选保持屏幕常亮，或接通电源时合盖运行",
-      "version": "1.0.9"
+      "version": "1.0.10"
     },
     {
       "capabilities": {
@@ -1558,18 +1558,18 @@
           "summary": "查看和管理 launchctl 啟動項"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "56559bee0ba00c1993adc391c7fb4e46a8bb355ba7ee0dca40a1f993566e893b",
-        "size": 574393,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/launch-control.mactoolsplugin.zip"
+        "sha256": "4a1c13247cc68e4a459d74885b69cae6c84940ff495be88082f32a35c47e9496",
+        "size": 574523,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/launch-control.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "查看和管理 launchctl 启动项",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -1626,18 +1626,18 @@
           "summary": "用全域快速鍵或選單列打開 App 網格，搜尋並啟動。"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "b5b16b8460b1a12982715c18e3b9d313f02258b19c9c109e44c196522bbb63f3",
-        "size": 987361,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/launchpad.mactoolsplugin.zip"
+        "sha256": "def660d7d287773fa7076277a849defd7e0b908fe6bec68eaeda67bd025d7af5",
+        "size": 987407,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/launchpad.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "用全局热键或菜单栏打开应用网格，搜索并启动。",
-      "version": "1.1.4"
+      "version": "1.1.5"
     },
     {
       "capabilities": {
@@ -1694,18 +1694,18 @@
           "summary": "一鍵立即鎖定螢幕，進入密碼解鎖界面"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "08f78d7683ff0ae45538823faec548bf54edfccb703abc6c78d5489ab3df1d7c",
-        "size": 57891,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/lock-screen.mactoolsplugin.zip"
+        "sha256": "e9d116cee756a162fd95fb067cadf50583c6897c0d904ff337d8797bfaaeee77",
+        "size": 57876,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/lock-screen.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "一键立即锁定屏幕，进入密码解锁界面",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -1762,11 +1762,11 @@
           "summary": "選單列圖標隱藏功能的設定與彈窗界面"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "9176cee9cd235af436f58611be27a9d400a9bc3c42019f88e8548a6af12b0067",
-        "size": 822076,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.2/menu-bar-hidden.mactoolsplugin.zip"
+        "sha256": "9194ed7abff27a2ee16d69bb72aa43458dc300dae4dde5af6dddbd9c9fd16077",
+        "size": 822028,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/menu-bar-hidden.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1774,9 +1774,9 @@
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.2",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "菜单栏图标隐藏功能的设置与弹窗界面",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -1833,18 +1833,18 @@
           "summary": "快速靜音或恢復預設麥克風輸入"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "5524b9a03a805bfee193e626c7c847b6df510e927c5db45c930da41dcc6f0f15",
-        "size": 56841,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/microphone-mute.mactoolsplugin.zip"
+        "sha256": "ef24056fd95ec3be3065aa1e19e0594b2f495c60358fbf3902595cfc09c6261d",
+        "size": 56847,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/microphone-mute.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "快速静音或恢复默认麦克风输入",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -1901,11 +1901,11 @@
           "summary": "增強滑鼠與觸控板控制"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "782ef5ea0d6a884366aa5e9ac77070b38aa31b90dd4208227c7139de5aadb687",
-        "size": 226705,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/mouse-enhancer.mactoolsplugin.zip"
+        "sha256": "037bec0526265420ccb20149d9fd60e830ac49325447cb1e8a18b8f23238d330",
+        "size": 226859,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/mouse-enhancer.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1913,9 +1913,9 @@
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "增强鼠标与触控板控制",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -1972,18 +1972,18 @@
           "summary": "降低藍光，使螢幕顏色更暖"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "9349d51e11f282301ecf62b06e92554802a567714b3bb85d101418c63a9d9fb2",
-        "size": 59692,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/night-shift.mactoolsplugin.zip"
+        "sha256": "0ed03066b3eb2251a2ab5762ca1c22b897d3e70e2f512f6ba3fed73b0ad0e280",
+        "size": 59696,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/night-shift.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "降低蓝光，使屏幕颜色更暖",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -2040,20 +2040,20 @@
           "summary": "螢幕全黑並臨時禁用鍵盤輸入"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "a98d562e613500faa80119e2a502bb0a0f77440c1e64673dc6c1cbce346bc61e",
-        "size": 199453,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/physical-clean-mode.mactoolsplugin.zip"
+        "sha256": "13ec4bdc52dabd1ac8c27b2458b2b10d627e4079ac384c867b80f571926b5c94",
+        "size": 199396,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/physical-clean-mode.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility"
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "屏幕全黑并临时禁用键盘输入",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -2110,18 +2110,18 @@
           "summary": "選擇並退出正在運行的App，或一鍵退出全部"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "74cf8fb37b071f79692028f9051def702f1dab8721241d3d295fb0dc14cfe942",
-        "size": 201135,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/quit-apps.mactoolsplugin.zip"
+        "sha256": "f71ee4cd96c47d515035393065c7b9243545440505fe31aac650fb532c1f241d",
+        "size": 201136,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/quit-apps.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "选择并退出正在运行的应用，或一键退出全部",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -2178,18 +2178,18 @@
           "summary": "為 Finder 右鍵菜單添加新建資料夾和路徑複製"
         }
       },
-      "minimumHostVersion": "1.0.21",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "016d8bd684d5318acb472bbbf6721b8a69480bd597cae1323785a19c2b0f70b2",
-        "size": 216109,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/right-click.mactoolsplugin.zip"
+        "sha256": "0a747deec1c796cc1e7ce056f36de61840b2dd8d117ad54c7c4580a0f6335543",
+        "size": 216266,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/right-click.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "为 Finder 右键菜单添加新建文件夹和路径复制",
-      "version": "1.0.5"
+      "version": "1.0.6"
     },
     {
       "capabilities": {
@@ -2246,18 +2246,18 @@
           "summary": "連接附近可用的 Sidecar 顯示器作為延伸顯示器"
         }
       },
-      "minimumHostVersion": "1.1.1",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "9a0cc827099151f783fae91e70464a21aac702d8aec6de983698596c1307437b",
-        "size": 498710,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.3/sidecar.mactoolsplugin.zip"
+        "sha256": "f803b0718758ab9509149c22fcaa1f546fe521aee255a1d51b68c6e3281f6ff0",
+        "size": 498706,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/sidecar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.3",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "连接附近可用的 Sidecar 显示器作为扩展显示器",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -2314,18 +2314,18 @@
           "summary": "開啟幕前調度，集中顯示當前窗口並把其他窗口收納到側邊"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "57c137b2b1bf2cf56301028aee6a028a26453caaf6b8aba334a86e2401e5e8bf",
-        "size": 66357,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/stage-manager.mactoolsplugin.zip"
+        "sha256": "97a7814f4f2cb603acc2bb9d6ebfa1394b28ab01f17c46bf27f6ee7bc876e3eb",
+        "size": 66352,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/stage-manager.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -2382,18 +2382,18 @@
           "summary": "快速靜音或恢復系統音頻輸出"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "1fe2ae69d325d77ed292798c3745653931a692edfd8ac081922bca049b0ee056",
-        "size": 56427,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/system-mute.mactoolsplugin.zip"
+        "sha256": "f720c9003582a5cb0b0989697d0225fcfb2182898d646a6e9cd14326a0516b47",
+        "size": 56416,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/system-mute.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "快速静音或恢复系统音频输出",
-      "version": "1.0.5"
+      "version": "1.0.6"
     },
     {
       "capabilities": {
@@ -2450,18 +2450,18 @@
           "summary": "實時查看系統狀態"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "1640eca07ff41f59fa31cbe10bfeac3eb296e59fe63888f5373dcd044c7158af",
-        "size": 701158,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.2/system-status.mactoolsplugin.zip"
+        "sha256": "7e3c45324750177ab4f4799015167da94e01e2c7b50318028fd9d89e42c7ad40",
+        "size": 701309,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.2",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "实时查看系统状态",
-      "version": "1.0.16"
+      "version": "1.0.17"
     },
     {
       "capabilities": {
@@ -2518,11 +2518,11 @@
           "summary": "透過快速鍵翻譯選取文字或截圖區域。"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "7563077bfb05c5e1e6beacc18b47e808a406c3b9bf0ff1662416b410c831f83c",
-        "size": 795251,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/translator.mactoolsplugin.zip"
+        "sha256": "dfde9c9bd6e854c933c03e5963b413eb92f73a048aea6a6524ce846e370bf333",
+        "size": 795491,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/translator.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -2531,9 +2531,9 @@
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "划词与截图快捷键翻译",
-      "version": "0.1.8"
+      "version": "0.1.9"
     },
     {
       "capabilities": {
@@ -2590,20 +2590,20 @@
           "summary": "用可設定快速鍵快速切換正在執行的視窗"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "e96b202a134435d961a3ed32c1b40a4df305785309939953ff6a06658fd8a21d",
-        "size": 471184,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.1/window-switcher.mactoolsplugin.zip"
+        "sha256": "1329dfc0d296632c95e4a3d83f82fd1a5a504aa019c9f89b138e3a84243615eb",
+        "size": 471257,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/window-switcher.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility"
       ],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.1",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "用可配置快捷键快速切换正在运行的窗口",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -2660,18 +2660,18 @@
           "summary": "分類清理 Xcode DerivedData、裝置支援、封存與快取"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "c02cb218f1faed36de9c391101384064ceb5324b1f4f351f4ea0f7c912ef7269",
-        "size": 484245,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/xcode-clean.mactoolsplugin.zip"
+        "sha256": "6edb47c446b6269399e11a9568bc333ed8c137dd12b9f347a8064e44b602cb16",
+        "size": 484376,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/xcode-clean.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "分类清理 Xcode DerivedData、设备支持、归档与缓存",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -2728,24 +2728,24 @@
           "summary": "快速編輯 ~/.zshrc 等 zsh 設定檔，支援內嵌編輯與常用片段快速插入"
         }
       },
-      "minimumHostVersion": "1.0.2",
+      "minimumHostVersion": "1.1.3",
       "package": {
-        "sha256": "aa57743a7e5d0286535d2431b950061397429a01de28e0d62b353470eaa5d579",
-        "size": 478276,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.0/zsh-config.mactoolsplugin.zip"
+        "sha256": "a20fa1bdd3ca9d9527e0341a8658fccf0695111e569dcd1395203954a5a656e2",
+        "size": 478362,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.1.4/zsh-config.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 3,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.0",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.1.4",
       "summary": "快速编辑 ~/.zshrc 等 zsh 配置文件，支持内联编辑和常用片段快速插入",
-      "version": "1.0.5"
+      "version": "1.0.6"
     }
   ],
   "revoked": [],
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "/tUq3Ee1cFJT4jlrjosNTUTXN/oSKU+jmO+Eb3xI3bXkc6EV3tVzu8DTog0kb9OATJxSzQLJC57xOOwYxe0HBw=="
+    "value": "wVFk7lSaeXHB40POTYuPTMPSRJ8WlHQwqONR4aIWqcpRKOOWRXOyk78S2yYRaEe8rEBzrbnjIjGgCNjOFTctDA=="
   }
 }
