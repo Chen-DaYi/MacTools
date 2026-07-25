@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.1.4] - 2026-07-25
+
+### Added
+
+- MacTools now checks quietly for app updates once per day and surfaces an Update action in the menu-bar panel when a new version is available.
+
+### Changed
+
+- The website About page now tells the MacTools story through an immersive, skippable galactic opening crawl.
+- The website plugin page now provides an interactive, responsive preview of the Marketplace and plugin settings.
+
+### Fixed
+
+- Restored loading for plugins installed before MacTools 1.1.3.
+
 ## [plugins-1.1.4] - 2026-07-25
 
 ### Fixed
