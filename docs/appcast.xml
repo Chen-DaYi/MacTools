@@ -5,26 +5,43 @@
         <description>Latest release metadata for MacTools.</description>
         <language>en</language>
         <item>
-            <title>Version 1.1.3</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.1.3</link>
-            <sparkle:version>65</sparkle:version>
-            <sparkle:shortVersionString>1.1.3</sparkle:shortVersionString>
+            <title>Version 1.1.4</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.1.4</link>
+            <sparkle:version>66</sparkle:version>
+            <sparkle:shortVersionString>1.1.4</sparkle:shortVersionString>
             <description sparkle:format="markdown"><![CDATA[## App Updates
 
 ### Added
 
-- General Settings now offers optional global shortcuts to toggle Dashboard and Feature Panel.
-- The Feature Panel now copies button and switch subtitles, including either inline IP Check address, on double-click and briefly confirms successful copies.
-- Settings now provides Back and Forward navigation with ⌘[ and ⌘], including exact restoration of Plugin subpages.
-- Menu-bar panels and Settings now support standard local shortcuts for dismissal, Settings, and search.
+- MacTools now checks quietly for app updates once per day and surfaces an Update action in the menu-bar panel when a new version is available.
+
+### Changed
+
+- The website About page now tells the MacTools story through an immersive, skippable galactic opening crawl.
+- The website plugin page now provides an interactive, responsive preview of the Marketplace and plugin settings.
 
 ### Fixed
 
-- Grouped shortcut controls now stay readable and inside their settings card when labels are long or many actions are shown.
+- Restored loading for plugins installed before MacTools 1.1.3.
+
+## Plugin Updates
+
+### Added
+
+- Keep Awake can optionally keep a Mac laptop running with its lid closed. The preference can be enabled on battery, waits for external power, and activates automatically when power connects.
+
+### Changed
+
+- IP Check now performs a lightweight local and public IPv4 refresh whenever its Feature Panel or settings page opens.
+
+### Fixed
+
+- Rebuilt every plugin package for compatibility with the current MacTools PluginKit runtime.
+- Sidecar device settings now keep connection options and shortcuts readable in narrow Settings windows.
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Fri, 24 Jul 2026 15:33:24 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.1.3/MacTools.dmg" length="6256431" type="application/octet-stream" sparkle:edSignature="Iwz9U3CvIWadbYogoZZIozm2GHH8x2Wk+LA47b8NitdsT1bACD9ZOWK4XiATTRpho3nrDMx9METFu8ounROKDg==" />
+            <pubDate>Sat, 25 Jul 2026 03:15:32 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.1.4/MacTools.dmg" length="6272885" type="application/octet-stream" sparkle:edSignature="KfUFS/7U2mo7g184oQFME2qJh8YuWPhELW002ufcu73ncDZ1CBssSHDnHD52O6L18G1z3q/pmP+WDSZ3MydlCQ==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
