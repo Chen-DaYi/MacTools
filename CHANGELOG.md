@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [plugins-1.1.4] - 2026-07-25
+
+### Fixed
+
+- Rebuilt every plugin package for compatibility with the current MacTools PluginKit runtime.
+
 ## [plugins-1.1.3] - 2026-07-24
 
 ### Added
