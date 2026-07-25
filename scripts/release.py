@@ -223,11 +223,16 @@ def prompt_text(title: str) -> str:
         print("输入不能为空，或按 Esc 退出。")
 
 
-def confirm(message: str, assume_yes: bool) -> None:
+def confirm(
+    message: str,
+    assume_yes: bool,
+    *,
+    noninteractive_error: str | None = None,
+) -> None:
     if assume_yes:
         return
     if not sys.stdin.isatty():
-        fail("非交互环境需要传入 --yes。")
+        fail(noninteractive_error or "非交互环境需要传入 --yes。")
     while True:
         raw = read_interactive_line(f"{message} [y/N] ").strip().lower()
         if raw in {"y", "yes"}:
@@ -491,6 +496,37 @@ def plugin_package_relevant_changes_since(ref: str, plugin: PluginInfo) -> list[
         for path in paths
         for changed_path in changed_paths_since(ref, path)
     ]
+
+
+def confirm_plugin_kit_changes_before_release() -> None:
+    latest_app_version = latest_tag_version("v*", APP_TAG_RE)
+    if latest_app_version is None:
+        return
+
+    latest_app_tag = f"v{latest_app_version}"
+    changed_paths = list(
+        dict.fromkeys(
+            changed_path
+            for path in PLUGIN_SHARED_PATHS
+            for changed_path in changed_paths_since(latest_app_tag, path)
+        )
+    )
+    if not changed_paths:
+        return
+
+    print()
+    print(f"检测到自 {latest_app_tag} 以来 PluginKit 代码有变化：")
+    for path in changed_paths:
+        print(f"  - {path}")
+    print("这些改动可能影响已发布插件的二进制兼容性。")
+    confirm(
+        "确认已检查这些 PluginKit 改动是否需要提升 pluginKitVersion，并继续发布？",
+        False,
+        noninteractive_error=(
+            "检测到 PluginKit 代码变化，非交互发布无法完成兼容性确认。"
+            "请在交互终端运行 `make release`，检查 pluginKitVersion 后确认。"
+        ),
+    )
 
 
 def normalize_plugin_selection(raw_values: list[str], plugins: dict[str, PluginInfo]) -> list[str]:
@@ -1088,13 +1124,14 @@ def main() -> int:
     try:
         require_command("git")
         require_command("make")
-        release_type = choose_release_type(args.type)
         ensure_release_branch(args.branch)
         if args.dry_run:
             warn_dirty_worktree_for_dry_run()
         else:
             ensure_clean_worktree()
         fetch_release_refs(args.remote, args.dry_run)
+        confirm_plugin_kit_changes_before_release()
+        release_type = choose_release_type(args.type)
         if release_type == "app":
             release_app(args)
         else:

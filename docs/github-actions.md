@@ -106,6 +106,8 @@ make release
 
 命令会交互选择发布类型、分析当前版本和最新 tag、选择 `patch`/`minor`/`major`，并先展示 bump 预览；确认后才自动 `git pull --rebase`、运行轻量检查、更新版本文件、提交版本 bump、创建并推送 tag。App 发布会推送 `v*.*.*` tag，后续构建、签名、公证、上传 GitHub Release、更新 Sparkle appcast 由 `Release` workflow 完成。`Release` 不更新 Homebrew；需要更新官方 cask 时，手动运行独立的 `Homebrew Cask Update` workflow。
 
+在选择 App 或插件发布之前，`make release` 会比较最新 App tag 与当前 `Sources/MacToolsPluginKit/`。没有代码变化时直接继续；检测到变化时会列出文件，并要求发布者通过 `y/N` 明确确认是否已经检查 `pluginKitVersion`。这项兼容性确认不会被 `--yes` 跳过；非交互发布遇到 PluginKit 变化时会停止，要求改用交互终端完成检查。
+
 非交互示例：
 
 ```bash

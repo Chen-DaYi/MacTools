@@ -23,6 +23,39 @@ RELEASE_SPEC.loader.exec_module(release)
 
 
 class InteractiveReleasePlanningTests(unittest.TestCase):
+    def test_release_preflight_skips_confirmation_without_plugin_kit_changes(self) -> None:
+        with (
+            mock.patch.object(release, "latest_tag_version", return_value="1.1.3"),
+            mock.patch.object(release, "changed_paths_since", return_value=[]),
+            mock.patch.object(release, "confirm") as confirm,
+        ):
+            release.confirm_plugin_kit_changes_before_release()
+
+        confirm.assert_not_called()
+
+    def test_release_preflight_confirms_plugin_kit_changes(self) -> None:
+        changed_paths = [
+            "Sources/MacToolsPluginKit/PluginModels.swift",
+            "Sources/MacToolsPluginKit/PluginInterfaces.swift",
+        ]
+
+        with (
+            mock.patch.object(release, "latest_tag_version", return_value="1.1.3"),
+            mock.patch.object(release, "changed_paths_since", return_value=changed_paths),
+            mock.patch.object(release, "confirm") as confirm,
+            mock.patch("builtins.print"),
+        ):
+            release.confirm_plugin_kit_changes_before_release()
+
+        confirm.assert_called_once_with(
+            "确认已检查这些 PluginKit 改动是否需要提升 pluginKitVersion，并继续发布？",
+            False,
+            noninteractive_error=(
+                "检测到 PluginKit 代码变化，非交互发布无法完成兼容性确认。"
+                "请在交互终端运行 `make release`，检查 pluginKitVersion 后确认。"
+            ),
+        )
+
     def test_plugin_kit_changes_are_package_relevant_for_every_plugin(self) -> None:
         plugin = release.PluginInfo(
             id="demo",
