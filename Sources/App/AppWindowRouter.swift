@@ -163,10 +163,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         hostingView.sizingOptions = []
         window.contentView = hostingView
         window.toolbarStyle = .unified
-        window.setContentSize(SettingsWindowLayout.defaultContentSize)
-        window.layoutIfNeeded()
-        // SwiftUI installs its toolbar during layout and can reset window constraints.
-        window.contentMinSize = SettingsWindowLayout.minimumContentSize
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.onLocalKeyboardCommand = { [weak self] command in
@@ -195,8 +191,14 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             settingsNavigationCoordinator?.navigate(to: .plugins(.configuration(pluginID)))
         }
 
-        show(window)
+        let contentSize = window.contentView?.bounds.size ?? SettingsWindowLayout.defaultContentSize
         settingsWindow = window
+        show(window)
+        // SwiftUI installs its toolbar when the window becomes visible. Finish that
+        // layout before restoring the content size.
+        window.layoutIfNeeded()
+        window.setContentSize(contentSize)
+        window.layoutIfNeeded()
         onProgrammaticSettingsPresentation()
 
         if let pendingAppUpdateVersion {

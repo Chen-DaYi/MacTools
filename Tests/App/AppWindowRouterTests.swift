@@ -41,7 +41,7 @@ final class AppWindowRouterTests: XCTestCase {
         actions.present(.featurePanel)
     }
 
-    func testSettingsWindowKeepsItsWidthAcrossDestinations() throws {
+    func testSettingsWindowKeepsItsWidthAcrossDestinations() async throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -52,6 +52,7 @@ final class AppWindowRouterTests: XCTestCase {
         let window = try XCTUnwrap(router.settingsWindow)
         let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
         let hostingView = try XCTUnwrap(window.contentView as? NSHostingView<SettingsView>)
+        await settleWindowLayout(window)
         let initialWidth = window.frame.width
         let initialToolbarItemCount = window.toolbar?.items.count
 
@@ -61,7 +62,6 @@ final class AppWindowRouterTests: XCTestCase {
             window.toolbar?.items.contains { $0.itemIdentifier == .toggleSidebar } ?? false
         )
         XCTAssertEqual(hostingView.sizingOptions, [])
-        XCTAssertEqual(window.contentMinSize, SettingsWindowLayout.minimumContentSize)
         XCTAssertEqual(
             hostingView.frame.width,
             SettingsWindowLayout.defaultContentSize.width,
@@ -69,7 +69,7 @@ final class AppWindowRouterTests: XCTestCase {
         )
 
         window.setContentSize(NSSize(width: 940, height: 640))
-        window.layoutIfNeeded()
+        await settleWindowLayout(window)
         let resizedWidth = window.frame.width
         XCTAssertLessThan(resizedWidth, initialWidth)
 
@@ -79,12 +79,21 @@ final class AppWindowRouterTests: XCTestCase {
             .general
         ] {
             coordinator.navigate(to: destination)
-            window.layoutIfNeeded()
+            await settleWindowLayout(window)
             XCTAssertEqual(window.frame.width, resizedWidth, accuracy: 0.5)
             XCTAssertEqual(window.toolbar?.items.count, initialToolbarItemCount)
         }
 
         window.close()
+    }
+
+    private func settleWindowLayout(_ window: NSWindow) async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
+        }
+        window.layoutIfNeeded()
     }
 
     func testSettingsWindowConstrainsLiveResizeToMinimumContentSize() throws {
