@@ -51,6 +51,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         "plugins.featurePanel.open",
         "plugins.featurePanel.title",
         "plugins.layout.restoreDefaultOrder",
+        "plugins.sidebar.accessibilityLabel",
         "plugins.sidebar.dashboard",
         "plugins.sidebar.featurePanel",
         "plugins.sidebar.pluginsSection",
