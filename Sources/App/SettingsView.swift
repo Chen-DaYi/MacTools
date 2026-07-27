@@ -1052,28 +1052,35 @@ private struct FeatureSettingsSidebar: View {
     var body: some View {
         ScrollViewReader { proxy in
             List(selection: optionalSelectionBinding) {
-                Section(AppL10n.settings(
-                    "plugins.sidebar.pluginsSection",
-                    defaultValue: "插件"
-                )) {
+                Section {
                     ForEach(primaryPanes, id: \.self) { pane in
                         sidebarRow(for: pane)
                     }
+                } header: {
+                    Text(AppL10n.settings(
+                        "plugins.sidebar.pluginsSection",
+                        defaultValue: "插件"
+                    ))
+                    .accessibilityHidden(true)
                 }
 
-                Section(AppL10n.settings(
-                    "plugins.sidebar.configurationSection",
-                    defaultValue: "插件设置"
-                )) {
+                Section {
                     if configurationPanes.isEmpty {
-                        Text(AppL10n.settings("plugins.sidebar.emptyConfigurations", defaultValue: "暂无可设置插件"))
+                        Text(emptyConfigurationsText)
                             .font(PluginSettingsTheme.Typography.secondaryLabel)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     } else {
                         ForEach(configurationPanes, id: \.self) { pane in
                             sidebarRow(for: pane)
                         }
                     }
+                } header: {
+                    Text(AppL10n.settings(
+                        "plugins.sidebar.configurationSection",
+                        defaultValue: "插件设置"
+                    ))
+                    .accessibilityHidden(true)
                 }
             }
             .listStyle(.sidebar)
@@ -1096,7 +1103,7 @@ private struct FeatureSettingsSidebar: View {
             }
             .onChange(of: selection) {
                 withAnimation {
-                    proxy.scrollTo(selection, anchor: .center)
+                    proxy.scrollTo(selection)
                 }
             }
             .overlay {
@@ -1113,7 +1120,15 @@ private struct FeatureSettingsSidebar: View {
                 "plugins.sidebar.accessibilityLabel",
                 defaultValue: "插件导航"
             ))
+            .accessibilityHint(configurationPanes.isEmpty ? emptyConfigurationsText : "")
         }
+    }
+
+    private var emptyConfigurationsText: String {
+        AppL10n.settings(
+            "plugins.sidebar.emptyConfigurations",
+            defaultValue: "暂无可设置插件"
+        )
     }
 
     private var primaryPanes: [FeatureSettingsPane] {
