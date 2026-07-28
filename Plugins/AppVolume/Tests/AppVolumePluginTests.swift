@@ -1,5 +1,6 @@
 import CoreAudio
 import XCTest
+import MacToolsPluginKit
 @testable import AppVolumePlugin
 @testable import MacTools
 
@@ -146,11 +147,15 @@ final class AppVolumePluginTests: XCTestCase {
     }
 
     private func makePlugin(
-        storage: AppVolumeStorageMock = AppVolumeStorageMock(),
-        monitor: AppVolumeMonitorMock = AppVolumeMonitorMock(),
-        router: AppVolumeRouterMock = AppVolumeRouterMock()
+        storage: AppVolumeStorageMock? = nil,
+        monitor: AppVolumeMonitorMock? = nil,
+        router: AppVolumeRouterMock? = nil
     ) -> AppVolumePlugin {
-        AppVolumePlugin(storage: storage, monitor: monitor, router: router)
+        AppVolumePlugin(
+            storage: storage ?? AppVolumeStorageMock(),
+            monitor: monitor ?? AppVolumeMonitorMock(),
+            router: router ?? AppVolumeRouterMock()
+        )
     }
 
     private func snapshot(applications: [AudioApplication]) -> AudioApplicationSnapshot {
