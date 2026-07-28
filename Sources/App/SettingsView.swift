@@ -13,6 +13,7 @@ enum GeneralSettingsCardLayout {
 }
 
 struct SettingsView: View {
+    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
@@ -63,6 +64,12 @@ struct SettingsView: View {
                         Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
                     }
             }
+            .blur(
+                radius: navigationCoordinator.isUnifiedSearchPresented
+                    && !accessibilityReduceTransparency
+                    ? 2.5
+                    : 0
+            )
             .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
             .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
 

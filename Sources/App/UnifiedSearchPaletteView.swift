@@ -1,38 +1,64 @@
 import SwiftUI
 import MacToolsPluginKit
 
+enum UnifiedSearchPaletteLayout {
+    static let maximumWidth: CGFloat = 672
+    static let minimumWidth: CGFloat = 560
+    static let outerHorizontalPadding: CGFloat = 48
+    static let maximumResultListHeight: CGFloat = 420
+    static let minimumResultListHeight: CGFloat = 260
+    static let verticalChromeHeight: CGFloat = 202
+
+    static func width(for availableWidth: CGFloat) -> CGFloat {
+        min(
+            maximumWidth,
+            max(minimumWidth, availableWidth - outerHorizontalPadding)
+        )
+    }
+
+    static func resultListHeight(for availableHeight: CGFloat) -> CGFloat {
+        min(
+            maximumResultListHeight,
+            max(minimumResultListHeight, availableHeight - verticalChromeHeight)
+        )
+    }
+}
+
 struct UnifiedSearchPresentationView: View {
+    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
 
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.16)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    navigationCoordinator.dismissUnifiedSearch()
-                }
-                .accessibilityHidden(true)
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.opacity(accessibilityReduceTransparency ? 0.30 : 0.24)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        navigationCoordinator.dismissUnifiedSearch()
+                    }
+                    .accessibilityHidden(true)
 
-            UnifiedSearchPaletteView(
-                pluginHost: pluginHost,
-                navigationCoordinator: navigationCoordinator
-            )
-            .padding(24)
+                UnifiedSearchPaletteView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    availableSize: geometry.size
+                )
+                .padding(24)
+            }
         }
     }
 }
 
 struct UnifiedSearchPaletteView: View {
     private enum Layout {
-        static let width: CGFloat = 640
-        static let resultListHeight: CGFloat = 390
         static let rowCornerRadius: CGFloat = 8
     }
 
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
+    let availableSize: CGSize
     @State private var query = ""
     @State private var selectedResultID: String?
     @State private var pendingConfirmation: MacToolsSearchResult?
@@ -49,7 +75,7 @@ struct UnifiedSearchPaletteView: View {
             footer
         }
         .padding(16)
-        .frame(width: Layout.width)
+        .frame(width: UnifiedSearchPaletteLayout.width(for: availableSize.width))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .background {
             quickSelectionShortcutButtons
@@ -229,7 +255,11 @@ struct UnifiedSearchPaletteView: View {
                     }
                 }
             }
-            .frame(height: Layout.resultListHeight)
+            .frame(
+                height: UnifiedSearchPaletteLayout.resultListHeight(
+                    for: availableSize.height
+                )
+            )
             .onChange(of: selectedResultID) { _, resultID in
                 guard let resultID else {
                     return

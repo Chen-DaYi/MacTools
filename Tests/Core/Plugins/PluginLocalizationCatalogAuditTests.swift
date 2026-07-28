@@ -35,6 +35,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         "plugin.capability.featurePanel",
         "plugin.capability.settingsOnly",
         "plugin.capability.unknown",
+        "plugin.marketplace.description",
     ]
 
     private let pluginLayoutSettingsLocalizationKeys = [

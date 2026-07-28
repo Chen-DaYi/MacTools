@@ -217,6 +217,25 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
+    func testPaletteLayoutUsesLargerMaximumSizeAndFitsMinimumSettingsWindow() {
+        XCTAssertEqual(
+            UnifiedSearchPaletteLayout.width(for: 720),
+            672
+        )
+        XCTAssertEqual(
+            UnifiedSearchPaletteLayout.width(for: 1_200),
+            672
+        )
+        XCTAssertEqual(
+            UnifiedSearchPaletteLayout.resultListHeight(for: 480),
+            278
+        )
+        XCTAssertEqual(
+            UnifiedSearchPaletteLayout.resultListHeight(for: 800),
+            420
+        )
+    }
+
     func testPluginHostPerformsOnlyDeclaredCommands() {
         let plugin = SearchableTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
