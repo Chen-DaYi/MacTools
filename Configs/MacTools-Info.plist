@@ -45,6 +45,8 @@
 	<string>$(RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH)</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>点击日历日期时需要控制系统日历应用并定位到对应日期。</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>仅在调节应用独立音量时于本机实时处理系统音频，不会录制、保存或上传声音。</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>读取蓝牙外设电量，用于在设备电量组件中显示鼠标、键盘和耳机状态。</string>
 	<key>NSCalendarsUsageDescription</key>

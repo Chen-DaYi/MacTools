@@ -1,0 +1,69 @@
+{
+  "id": "app-volume",
+  "displayName": "应用音量",
+  "summary": "分别调节正在播放音频的应用音量",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "مستوى صوت التطبيقات",
+      "summary": "اضبط مستوى صوت كل تطبيق يشغّل الصوت على حدة."
+    },
+    "de": {
+      "displayName": "App-Lautstärke",
+      "summary": "Lautstärke aktiver Audio-Apps einzeln anpassen."
+    },
+    "en": {
+      "displayName": "App Volume",
+      "summary": "Adjust the volume of each app currently playing audio."
+    },
+    "es": {
+      "displayName": "Volumen por aplicación",
+      "summary": "Ajusta por separado el volumen de cada aplicación con audio."
+    },
+    "fr": {
+      "displayName": "Volume des apps",
+      "summary": "Réglez séparément le volume de chaque app qui diffuse du son."
+    },
+    "ja": {
+      "displayName": "アプリ音量",
+      "summary": "再生中のアプリごとに音量を調整します。"
+    },
+    "ko": {
+      "displayName": "앱 음량",
+      "summary": "오디오를 재생 중인 앱별로 음량을 조절합니다."
+    },
+    "pt": {
+      "displayName": "Volume por app",
+      "summary": "Ajuste separadamente o volume de cada app que reproduz áudio."
+    },
+    "ru": {
+      "displayName": "Громкость приложений",
+      "summary": "Настраивайте громкость каждого приложения с активным звуком."
+    },
+    "zh-Hans": {
+      "displayName": "应用音量",
+      "summary": "分别调节正在播放音频的应用音量"
+    },
+    "zh-Hant": {
+      "displayName": "應用程式音量",
+      "summary": "分別調整正在播放音訊的應用程式音量"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.1.4",
+  "pluginKitVersion": 3,
+  "bundleRelativePath": "AppVolume.bundle",
+  "factoryClass": "AppVolumePlugin.AppVolumePluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "AppVolumePlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": [
+    "screen-recording"
+  ],
+  "category": "audio"
+}
