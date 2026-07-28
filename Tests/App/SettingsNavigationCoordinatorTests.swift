@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 
 @MainActor
@@ -209,5 +210,98 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         let secondRequest = try XCTUnwrap(coordinator.aboutUpdateActionRequest)
 
         XCTAssertNotEqual(firstRequest.id, secondRequest.id)
+    }
+
+    func testUnifiedSearchPresentationTracksOriginAndRepeatedFocusRequests() {
+        let coordinator = SettingsNavigationCoordinator()
+
+        coordinator.presentUnifiedSearch(origin: .pluginSidebar)
+        let firstFocusRequestID = coordinator.unifiedSearchFocusRequestID
+
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .pluginSidebar)
+
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .keyboard)
+        XCTAssertGreaterThan(coordinator.unifiedSearchFocusRequestID, firstFocusRequestID)
+
+        coordinator.dismissUnifiedSearch()
+
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertNil(coordinator.unifiedSearchPresentationOrigin)
+    }
+
+    func testLocalSearchFocusDoesNotMoveBehindUnifiedSearch() {
+        let coordinator = SettingsNavigationCoordinator()
+        coordinator.navigate(to: .plugins(.marketplace))
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        XCTAssertFalse(coordinator.requestSearchFocus())
+        XCTAssertNil(coordinator.searchFocusRequest)
+    }
+
+    func testSearchNavigationDismissesPaletteAndPublishesExactRevealTarget() throws {
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { $0 == "keep-awake" }
+        )
+        let target = PluginSettingsSearchTarget(
+            pluginID: "keep-awake",
+            entryID: "keep-display-on"
+        )
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        coordinator.navigateFromSearch(
+            to: .plugins(.configuration("keep-awake")),
+            target: .plugin(target)
+        )
+
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(
+            coordinator.destination,
+            .plugins(.configuration("keep-awake"))
+        )
+        let request = try XCTUnwrap(coordinator.searchRevealRequest)
+        XCTAssertEqual(request.target, .plugin(target))
+
+        coordinator.clearSearchRevealRequest(request)
+        XCTAssertNil(coordinator.searchRevealRequest)
+    }
+
+    func testPageLevelSearchNavigationClearsPreviousRevealTarget() {
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { $0 == "keep-awake" }
+        )
+        let target = PluginSettingsSearchTarget(
+            pluginID: "keep-awake",
+            entryID: "keep-display-on"
+        )
+
+        coordinator.navigateFromSearch(
+            to: .plugins(.configuration("keep-awake")),
+            target: .plugin(target)
+        )
+        coordinator.navigateFromSearch(to: .about, target: nil)
+
+        XCTAssertEqual(coordinator.destination, .about)
+        XCTAssertNil(coordinator.searchRevealRequest)
+    }
+
+    func testGeneralSettingSearchNavigationPublishesExactRevealTarget() throws {
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .about
+        )
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        coordinator.navigateFromSearch(
+            to: .general,
+            target: .general(.language)
+        )
+
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+        let request = try XCTUnwrap(coordinator.searchRevealRequest)
+        XCTAssertEqual(request.target, .general(.language))
     }
 }

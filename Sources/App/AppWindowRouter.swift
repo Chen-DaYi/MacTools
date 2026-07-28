@@ -6,6 +6,7 @@ import MacToolsPluginKit
 enum MacToolsLocalKeyboardCommand: Equatable {
     case showSettings
     case focusSearch
+    case showUnifiedSearch
 
     static func resolve(for event: NSEvent) -> MacToolsLocalKeyboardCommand? {
         guard event.type == .keyDown else {
@@ -22,6 +23,8 @@ enum MacToolsLocalKeyboardCommand: Equatable {
             return .showSettings
         case "f":
             return .focusSearch
+        case "k":
+            return .showUnifiedSearch
         default:
             return nil
         }
@@ -114,6 +117,11 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     func showSettings() {
         presentSettings(.settings)
+    }
+
+    func showUnifiedSearch() {
+        presentSettings(.settings)
+        settingsNavigationCoordinator?.presentUnifiedSearch(origin: .keyboard)
     }
 
     func setPanelPresentationActions(
@@ -214,6 +222,8 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             showSettings()
         case .focusSearch:
             settingsNavigationCoordinator?.requestSearchFocus()
+        case .showUnifiedSearch:
+            showUnifiedSearch()
         }
     }
 

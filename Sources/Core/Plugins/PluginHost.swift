@@ -150,6 +150,25 @@ struct AppShortcutSettingsItem: Identifiable, Equatable {
     }
 }
 
+struct PluginProvidedSettingsSearchItem: Identifiable, Hashable {
+    let pluginID: String
+    let entry: PluginSettingsSearchEntry
+
+    var id: String {
+        "\(pluginID).settings-search.\(entry.id)"
+    }
+}
+
+struct PluginCommandItem: Identifiable, Hashable {
+    let pluginID: String
+    let pluginTitle: String
+    let definition: PluginCommandDefinition
+
+    var id: String {
+        "\(pluginID).command.\(definition.id)"
+    }
+}
+
 struct PluginAutomaticUpdateStatus: Equatable {
     enum Phase: Equatable {
         case idle
@@ -328,6 +347,8 @@ final class PluginHost: ObservableObject {
     @Published private(set) var settingsCards: [PluginSettingsCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
+    @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
+    @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
@@ -787,6 +808,30 @@ final class PluginHost: ObservableObject {
                 plugin.handleSettingsAction(id: actionID)
             }
         }
+    }
+
+    func performCommand(pluginID: String, commandID: String) {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let commandProvider = plugin as? any PluginCommandProviding,
+            (guardedValue(
+                for: plugin,
+                operation: "read command definitions",
+                commandProvider.commandDefinitions
+            ) ?? []).contains(where: { $0.id == commandID })
+        else {
+            return
+        }
+
+        handlePluginAction {
+            guardPluginCall(plugin, operation: "perform command") {
+                commandProvider.handleCommand(id: commandID)
+            }
+        }
+    }
+
+    func performAppCommand(_ action: AppShortcutAction) {
+        appPresentationHandler?(action.presentationRequest)
     }
 
     func performPermissionAction(pluginID: String, permissionID: String) {
@@ -1869,6 +1914,40 @@ final class PluginHost: ObservableObject {
                     descriptors: shortcutDescriptors
                 )
             )
+        }
+
+        pluginSettingsSearchItems = orderedCorePlugins().flatMap { plugin -> [PluginProvidedSettingsSearchItem] in
+            guard let provider = plugin as? any PluginSettingsSearchProviding else {
+                return []
+            }
+
+            let entries = guardedValue(
+                for: plugin,
+                operation: "read settings search entries",
+                provider.settingsSearchEntries
+            ) ?? []
+            return entries.map {
+                PluginProvidedSettingsSearchItem(pluginID: plugin.metadata.id, entry: $0)
+            }
+        }
+
+        pluginCommandItems = orderedCorePlugins().flatMap { plugin -> [PluginCommandItem] in
+            guard let provider = plugin as? any PluginCommandProviding else {
+                return []
+            }
+
+            let definitions = guardedValue(
+                for: plugin,
+                operation: "read command definitions",
+                provider.commandDefinitions
+            ) ?? []
+            return definitions.map {
+                PluginCommandItem(
+                    pluginID: plugin.metadata.id,
+                    pluginTitle: plugin.metadata.title,
+                    definition: $0
+                )
+            }
         }
 
         pluginConfigurationItems = buildPluginConfigurationItems(

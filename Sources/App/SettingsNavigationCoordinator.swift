@@ -41,6 +41,11 @@ enum SettingsSearchField: Equatable {
     case pluginMarketplace
 }
 
+enum UnifiedSearchPresentationOrigin: Equatable {
+    case pluginSidebar
+    case keyboard
+}
+
 struct SettingsSearchFocusRequest: Equatable {
     let id: UInt
     let field: SettingsSearchField
@@ -51,6 +56,30 @@ struct AboutUpdateActionRequest: Equatable {
     let version: String
 }
 
+enum GeneralSettingsSearchTarget: String, Hashable {
+    case launchAtLogin
+    case appearance
+    case language
+    case menuBarIcon
+    case menuBarClickBehavior
+    case appShortcuts
+    case preferencesBackup
+
+    var scrollID: String {
+        "general-search-anchor.\(rawValue)"
+    }
+}
+
+enum SettingsSearchRevealTarget: Hashable {
+    case general(GeneralSettingsSearchTarget)
+    case plugin(PluginSettingsSearchTarget)
+}
+
+struct SettingsSearchRevealRequest: Equatable {
+    let id: UInt
+    let target: SettingsSearchRevealTarget
+}
+
 @MainActor
 final class SettingsNavigationCoordinator: ObservableObject {
     private static let maximumHistoryCount = 128
@@ -58,6 +87,10 @@ final class SettingsNavigationCoordinator: ObservableObject {
     @Published private(set) var destination: SettingsNavigationDestination
     @Published private(set) var searchFocusRequest: SettingsSearchFocusRequest?
     @Published private(set) var aboutUpdateActionRequest: AboutUpdateActionRequest?
+    @Published private(set) var isUnifiedSearchPresented = false
+    @Published private(set) var unifiedSearchPresentationOrigin: UnifiedSearchPresentationOrigin?
+    @Published private(set) var unifiedSearchFocusRequestID: UInt = 0
+    @Published private(set) var searchRevealRequest: SettingsSearchRevealRequest?
 
     private(set) var history: [SettingsNavigationDestination]
     private(set) var historyIndex: Int
@@ -68,6 +101,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private let selectPluginSettingsPane: (FeatureSettingsPane) -> Bool
     private var nextSearchFocusRequestID: UInt = 0
     private var nextAboutUpdateActionRequestID: UInt = 0
+    private var nextSearchRevealRequestID: UInt = 0
 
     convenience init(pluginHost: PluginHost) {
         self.init(
@@ -140,6 +174,44 @@ final class SettingsNavigationCoordinator: ObservableObject {
         )
     }
 
+    func presentUnifiedSearch(origin: UnifiedSearchPresentationOrigin) {
+        unifiedSearchPresentationOrigin = origin
+        isUnifiedSearchPresented = true
+        unifiedSearchFocusRequestID &+= 1
+    }
+
+    func dismissUnifiedSearch() {
+        isUnifiedSearchPresented = false
+        unifiedSearchPresentationOrigin = nil
+    }
+
+    func navigateFromSearch(
+        to destination: SettingsNavigationDestination,
+        target: SettingsSearchRevealTarget?
+    ) {
+        dismissUnifiedSearch()
+        navigate(to: destination)
+
+        guard let target else {
+            searchRevealRequest = nil
+            return
+        }
+
+        nextSearchRevealRequestID &+= 1
+        searchRevealRequest = SettingsSearchRevealRequest(
+            id: nextSearchRevealRequestID,
+            target: target
+        )
+    }
+
+    func clearSearchRevealRequest(_ request: SettingsSearchRevealRequest) {
+        guard searchRevealRequest == request else {
+            return
+        }
+
+        searchRevealRequest = nil
+    }
+
     @discardableResult
     func consumeAboutUpdateActionRequest(_ request: AboutUpdateActionRequest) -> Bool {
         guard aboutUpdateActionRequest == request else {
@@ -169,6 +241,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     @discardableResult
     func requestSearchFocus() -> Bool {
         guard
+            !isUnifiedSearchPresented,
             let field = destination.searchField,
             focusedSearchField != field
         else {

@@ -144,6 +144,12 @@ Recommended mapping:
 
 Avoid copying a plugin-local settings style enum. If a token is missing, add it to `PluginSettingsTheme` instead of hard-coding the same value in multiple plugins.
 
+### Unified Search
+
+MacTools automatically indexes a plugin's configuration page, declarative settings cards, permission rows, and shortcut definitions. A custom `PluginConfiguration` can expose individual destinations by conforming to `PluginSettingsSearchProviding`; apply `pluginSettingsSearchAnchor(pluginID:entryID:)` to the matching row so selecting a result scrolls to, highlights, and exposes accessibility focus on that control.
+
+Commands are never inferred from panel buttons. A plugin must explicitly conform to `PluginCommandProviding` and publish only actions that are safe and useful in the global palette. Commands that need an extra user decision should provide confirmation metadata. Destructive actions should remain in their contextual plugin UI unless their complete safety flow can be represented by that confirmation.
+
 ## Install Location
 
 Installed plugins are copied into:

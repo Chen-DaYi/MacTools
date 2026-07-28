@@ -24,6 +24,10 @@ enum AppL10n {
         string(key, defaultValue: defaultValue, table: "Plugins")
     }
 
+    static func search(_ key: String, defaultValue: String) -> String {
+        string(key, defaultValue: defaultValue, table: "Search")
+    }
+
     static func preferencesBackup(_ key: String, defaultValue: String) -> String {
         string(key, defaultValue: defaultValue, table: "PreferencesBackup")
     }
@@ -39,6 +43,14 @@ enum AppL10n {
     static func pluginsFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: plugins(key, defaultValue: defaultValue),
+            locale: PluginRuntimeLocalization.locale,
+            arguments: arguments
+        )
+    }
+
+    static func searchFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
+        String(
+            format: search(key, defaultValue: defaultValue),
             locale: PluginRuntimeLocalization.locale,
             arguments: arguments
         )

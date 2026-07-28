@@ -59,6 +59,7 @@ enum MenuBarPanelWindowRegistry {
 enum MenuBarPanelKeyboardAction: Equatable {
     case dismissPanel
     case showSettings
+    case showUnifiedSearch
     case selectTab(MenuBarPanelTab)
 
     @MainActor
@@ -72,6 +73,10 @@ enum MenuBarPanelKeyboardAction: Equatable {
 
         if MacToolsLocalKeyboardCommand.resolve(for: event) == .showSettings {
             return .showSettings
+        }
+
+        if MacToolsLocalKeyboardCommand.resolve(for: event) == .showUnifiedSearch {
+            return .showUnifiedSearch
         }
 
         guard let tab = MenuBarPanelPresenter.keyboardShortcutTab(for: event) else {
@@ -127,6 +132,7 @@ final class MenuBarPanelPresenter: NSObject {
     private let onDismiss: () -> Void
     private let onOpenUpdate: () -> Void
     private let onOpenSettings: () -> Void
+    private let onOpenUnifiedSearch: () -> Void
     private let onPresentDiskCleanConfiguration: () -> Void
     private let onPresentLaunchControlConfiguration: () -> Void
     private let onAllPanelsClosed: () -> Void
@@ -146,6 +152,7 @@ final class MenuBarPanelPresenter: NSObject {
         onDismiss: @escaping () -> Void,
         onOpenUpdate: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
+        onOpenUnifiedSearch: @escaping () -> Void,
         onPresentDiskCleanConfiguration: @escaping () -> Void,
         onPresentLaunchControlConfiguration: @escaping () -> Void,
         onAllPanelsClosed: @escaping () -> Void
@@ -155,6 +162,7 @@ final class MenuBarPanelPresenter: NSObject {
         self.onDismiss = onDismiss
         self.onOpenUpdate = onOpenUpdate
         self.onOpenSettings = onOpenSettings
+        self.onOpenUnifiedSearch = onOpenUnifiedSearch
         self.onPresentDiskCleanConfiguration = onPresentDiskCleanConfiguration
         self.onPresentLaunchControlConfiguration = onPresentLaunchControlConfiguration
         self.onAllPanelsClosed = onAllPanelsClosed
@@ -401,6 +409,8 @@ final class MenuBarPanelPresenter: NSObject {
             onDismiss()
         case .showSettings:
             onOpenSettings()
+        case .showUnifiedSearch:
+            onOpenUnifiedSearch()
         case let .selectTab(tab):
             select(tab)
         }

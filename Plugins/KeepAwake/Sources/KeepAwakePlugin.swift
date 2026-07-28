@@ -20,7 +20,12 @@ private struct KeepAwakePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelCompactIndicatorProviding {
+final class KeepAwakePlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginPrimaryPanelCompactIndicatorProviding,
+    PluginSettingsSearchProviding
+{
     typealias SessionFactory = (
         PluginLocalization,
         @escaping (KeepAwakeSession.EndReason) -> Void
@@ -201,6 +206,51 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
     var settingsSections: [PluginSettingsSection] { [] }
 
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    var settingsSearchEntries: [PluginSettingsSearchEntry] {
+        var entries = [
+            PluginSettingsSearchEntry(
+                id: KeepAwakeSettingsSearchEntryID.keepDisplayOn,
+                title: localization.string(
+                    "settings.display.keepOn",
+                    defaultValue: "保持屏幕常亮"
+                ),
+                description: localization.string(
+                    "settings.display.keepOn.description",
+                    defaultValue: "阻止休眠运行时，防止屏幕因空闲而关闭。"
+                ),
+                keywords: [
+                    localization.string("settings.display.section", defaultValue: "屏幕")
+                ],
+                systemImage: "display"
+            )
+        ]
+
+        if powerSourceState.isPortableMac {
+            entries.append(
+                PluginSettingsSearchEntry(
+                    id: KeepAwakeSettingsSearchEntryID.keepAwakeWithLidClosed,
+                    title: localization.string(
+                        "settings.lidClose.keepAwake",
+                        defaultValue: "合盖保持唤醒"
+                    ),
+                    description: localization.string(
+                        "settings.lidClose.keepAwake.description",
+                        defaultValue: "使用电池时暂停，重新接通电源后恢复。"
+                    ),
+                    keywords: [
+                        localization.string(
+                            "settings.lidClose.section",
+                            defaultValue: "MacBook"
+                        )
+                    ],
+                    systemImage: "laptopcomputer"
+                )
+            )
+        }
+
+        return entries
+    }
 
     var configuration: PluginConfiguration? {
         PluginConfiguration(description: metadata.defaultDescription) { [weak self, localization] _ in

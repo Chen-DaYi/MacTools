@@ -175,6 +175,45 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
     }
 
+    func testUnifiedSearchLocalizationKeysCoverAllSupportedLanguages() throws {
+        let localizationDirectory = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+        let catalogURL = localizationDirectory.appending(path: "Search.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        guard let strings = catalog["strings"] as? [String: [String: Any]] else {
+            throw AuditError.invalidCatalog(catalogURL.path)
+        }
+
+        let appDirectory = repositoryRoot.appending(path: "Sources").appending(path: "App")
+        let sourceNames = [
+            "MacToolsSearch.swift",
+            "SettingsView.swift",
+            "UnifiedSearchPaletteView.swift",
+        ]
+        let keys = try sourceNames.reduce(into: Set<String>()) { result, name in
+            let source = try String(
+                contentsOf: appDirectory.appending(path: name),
+                encoding: .utf8
+            )
+            result.formUnion(staticLocalizationKeys(in: source).filter { $0.hasPrefix("search.") })
+        }
+
+        var failures: [String] = []
+        for key in keys.sorted() {
+            validate(
+                key: key,
+                in: strings,
+                pluginName: "Unified Search",
+                failures: &failures
+            )
+        }
+
+        XCTAssertFalse(keys.isEmpty, "Unified Search: no static localization keys were discovered")
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
     private func validate(
         key: String,
         in catalog: [String: [String: Any]],
@@ -233,7 +272,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
 
     private func staticLocalizationKeys(in source: String) -> Set<String> {
         let expression = try! NSRegularExpression(
-            pattern: #"(?:\b(?:self\.)?[A-Za-z_]\w*|PluginLocalization\([^\n]*\))\.(?:string|format)\s*\(\s*\"([^\"]+)\"\s*,\s*defaultValue\s*:"#
+            pattern: #"(?:\b(?:self\.)?[A-Za-z_]\w*|PluginLocalization\([^\n]*\))\.(?:string|format|search|searchFormat)\s*\(\s*\"([^\"]+)\"\s*,\s*defaultValue\s*:"#
         )
         let range = NSRange(source.startIndex..., in: source)
         return Set(expression.matches(in: source, range: range).compactMap { match in

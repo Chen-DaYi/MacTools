@@ -19,7 +19,7 @@ private struct DisplaySleepPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCommandProviding {
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -59,6 +59,25 @@ final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel {
             detail: nil,
             errorMessage: nil
         )
+    }
+
+    var commandDefinitions: [PluginCommandDefinition] {
+        [
+            PluginCommandDefinition(
+                id: "execute",
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                systemImage: metadata.iconName
+            )
+        ]
+    }
+
+    func handleCommand(id: String) {
+        guard id == "execute" else {
+            return
+        }
+
+        handleAction(.invokeAction(controlID: "execute"))
     }
 
     func handleAction(_ action: PluginPanelAction) {

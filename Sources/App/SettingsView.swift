@@ -28,38 +28,52 @@ struct SettingsView: View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
 
-        return TabView(selection: settingsDestinationBinding) {
-            GeneralSettingsView(
-                pluginHost: pluginHost,
-                menuBarIconSettings: menuBarIconSettings,
-                menuBarIconGallery: menuBarIconGallery,
-                launchAtLoginController: launchAtLoginController
-            )
-                .tag(SettingsDestination.general)
-                .tabItem {
-                    Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
-                }
+        return ZStack {
+            TabView(selection: settingsDestinationBinding) {
+                GeneralSettingsView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    menuBarIconSettings: menuBarIconSettings,
+                    menuBarIconGallery: menuBarIconGallery,
+                    launchAtLoginController: launchAtLoginController
+                )
+                    .tag(SettingsDestination.general)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
+                    }
 
-            FeatureSettingsView(
-                pluginHost: pluginHost,
-                navigationCoordinator: navigationCoordinator,
-                uninstallConfirmationSession: uninstallConfirmationSession,
-                showDashboard: showDashboard,
-                showFeaturePanel: showFeaturePanel
-            )
-                .tag(SettingsDestination.pluginConfiguration)
-                .tabItem {
-                    Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
-                }
+                FeatureSettingsView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    uninstallConfirmationSession: uninstallConfirmationSession,
+                    showDashboard: showDashboard,
+                    showFeaturePanel: showFeaturePanel
+                )
+                    .tag(SettingsDestination.pluginConfiguration)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
+                    }
 
-            AboutSettingsView(
-                appUpdater: appUpdater,
-                navigationCoordinator: navigationCoordinator
-            )
-                .tag(SettingsDestination.about)
-                .tabItem {
-                    Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
-                }
+                AboutSettingsView(
+                    appUpdater: appUpdater,
+                    navigationCoordinator: navigationCoordinator
+                )
+                    .tag(SettingsDestination.about)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
+                    }
+            }
+            .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+            .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+
+            if navigationCoordinator.isUnifiedSearchPresented {
+                UnifiedSearchPresentationView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .zIndex(1)
+            }
         }
         .background {
             SettingsDestinationShortcutButtons(coordinator: navigationCoordinator)
@@ -73,6 +87,7 @@ struct SettingsView: View {
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
+        .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
     }
 
     private var layoutDirection: LayoutDirection {
@@ -107,6 +122,7 @@ struct SettingsDestinationShortcutButtons: View {
         }
         .frame(width: 0, height: 0)
         .opacity(0)
+        .disabled(coordinator.isUnifiedSearchPresented)
         .accessibilityHidden(true)
     }
 
@@ -214,51 +230,98 @@ private struct PermissionSettingsRow: View {
 
 struct GeneralSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
     @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
+    @State private var activeSearchTarget: GeneralSettingsSearchTarget?
+    @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
-        Form {
-            Section {
-                LaunchAtLoginSettingsRow(controller: launchAtLoginController)
-            } header: {
-                Text(AppL10n.settings("general.section.startup", defaultValue: "启动"))
-            }
+        ScrollViewReader { proxy in
+            Form {
+                Section {
+                    LaunchAtLoginSettingsRow(controller: launchAtLoginController)
+                        .generalSettingsSearchAnchor(
+                            target: .launchAtLogin,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.settings("general.section.startup", defaultValue: "启动"))
+                }
 
-            Section {
-                AppearanceSettingsRow(selection: appearancePreferenceBinding)
-                LanguageSettingsRow(selection: languagePreferenceBinding)
-            } header: {
-                Text(AppL10n.settings("general.section.appearance", defaultValue: "外观"))
-            }
+                Section {
+                    AppearanceSettingsRow(selection: appearancePreferenceBinding)
+                        .generalSettingsSearchAnchor(
+                            target: .appearance,
+                            activeTarget: activeSearchTarget
+                        )
+                    LanguageSettingsRow(selection: languagePreferenceBinding)
+                        .generalSettingsSearchAnchor(
+                            target: .language,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.settings("general.section.appearance", defaultValue: "外观"))
+                }
 
-            Section {
-                MenuBarIconSettingsView(
-                    iconSettings: menuBarIconSettings,
-                    gallery: menuBarIconGallery
+                Section {
+                    MenuBarIconSettingsView(
+                        iconSettings: menuBarIconSettings,
+                        gallery: menuBarIconGallery
+                    )
+                    .generalSettingsSearchAnchor(
+                        target: .menuBarIcon,
+                        activeTarget: activeSearchTarget
+                    )
+                    MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
+                        .generalSettingsSearchAnchor(
+                            target: .menuBarClickBehavior,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.settings("general.section.menuBarIcon", defaultValue: "状态栏图标"))
+                }
+
+                Section {
+                    AppShortcutSettingsRows(pluginHost: pluginHost)
+                        .generalSettingsSearchAnchor(
+                            target: .appShortcuts,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"))
+                }
+
+                Section {
+                    PreferencesBackupSettingsRow(pluginHost: pluginHost)
+                        .generalSettingsSearchAnchor(
+                            target: .preferencesBackup,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.preferencesBackup("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
+                }
+            }
+            .formStyle(.grouped)
+            .onAppear {
+                applySearchRevealRequest(
+                    navigationCoordinator.searchRevealRequest,
+                    proxy: proxy
                 )
-                MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
-            } header: {
-                Text(AppL10n.settings("general.section.menuBarIcon", defaultValue: "状态栏图标"))
             }
-
-            Section {
-                AppShortcutSettingsRows(pluginHost: pluginHost)
-            } header: {
-                Text(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"))
+            .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                applySearchRevealRequest(request, proxy: proxy)
             }
-
-            Section {
-                PreferencesBackupSettingsRow(pluginHost: pluginHost)
-            } header: {
-                Text(AppL10n.preferencesBackup("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
+            .onDisappear {
+                clearSearchTargetTask?.cancel()
+                clearSearchTargetTask = nil
+                activeSearchTarget = nil
             }
         }
-        .formStyle(.grouped)
     }
 
     private var appearancePreferenceBinding: Binding<AppAppearancePreference> {
@@ -290,6 +353,90 @@ struct GeneralSettingsView: View {
         } set: { preference in
             clickBehaviorRawValue = preference.rawValue
         }
+    }
+
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        proxy: ScrollViewProxy
+    ) {
+        guard
+            let request,
+            case let .general(target) = request.target
+        else {
+            return
+        }
+
+        clearSearchTargetTask?.cancel()
+        activeSearchTarget = target
+
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(target.scrollID, anchor: .center)
+            }
+        }
+
+        clearSearchTargetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            activeSearchTarget = nil
+            navigationCoordinator.clearSearchRevealRequest(request)
+        }
+    }
+}
+
+private struct GeneralSettingsSearchAnchorModifier: ViewModifier {
+    @AccessibilityFocusState private var isAccessibilityFocused: Bool
+
+    let target: GeneralSettingsSearchTarget
+    let activeTarget: GeneralSettingsSearchTarget?
+
+    func body(content: Content) -> some View {
+        content
+            .id(target.scrollID)
+            .accessibilityFocused($isAccessibilityFocused)
+            .overlay {
+                if activeTarget == target {
+                    RoundedRectangle(
+                        cornerRadius: PluginSettingsTheme.Radius.card,
+                        style: .continuous
+                    )
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
+            .onAppear {
+                focusIfNeeded(activeTarget)
+            }
+            .onChange(of: activeTarget) { _, newValue in
+                focusIfNeeded(newValue)
+            }
+    }
+
+    private func focusIfNeeded(_ activeTarget: GeneralSettingsSearchTarget?) {
+        guard activeTarget == target else {
+            return
+        }
+
+        isAccessibilityFocused = true
+    }
+}
+
+private extension View {
+    func generalSettingsSearchAnchor(
+        target: GeneralSettingsSearchTarget,
+        activeTarget: GeneralSettingsSearchTarget?
+    ) -> some View {
+        modifier(
+            GeneralSettingsSearchAnchorModifier(
+                target: target,
+                activeTarget: activeTarget
+            )
+        )
     }
 }
 
@@ -979,7 +1126,10 @@ private struct FeatureSettingsView: View {
         HSplitView {
             FeatureSettingsSidebar(
                 configurationItems: pluginHost.pluginConfigurationItems,
-                selection: selectionBinding
+                selection: selectionBinding,
+                onSearch: {
+                    navigationCoordinator.presentUnifiedSearch(origin: .pluginSidebar)
+                }
             )
             .frame(
                 minWidth: Layout.sidebarMinWidth,
@@ -1023,13 +1173,17 @@ private struct FeatureSettingsView: View {
 private struct FeatureSettingsSidebar: View {
     let configurationItems: [PluginConfigurationItem]
     @Binding var selection: FeatureSettingsPane
+    let onSearch: () -> Void
 
     var body: some View {
-        List(selection: optionalSelectionBinding) {
-            Section(AppL10n.settings(
-                "plugins.sidebar.pluginsSection",
-                defaultValue: "插件"
-            )) {
+        VStack(spacing: 0) {
+            searchLauncher
+
+            List(selection: optionalSelectionBinding) {
+                Section(AppL10n.settings(
+                    "plugins.sidebar.pluginsSection",
+                    defaultValue: "插件"
+                )) {
                 FeatureSettingsSidebarRow(
                     title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
                     systemImage: "square.grid.2x2",
@@ -1074,10 +1228,75 @@ private struct FeatureSettingsSidebar: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        }
         .background {
             SettingsSidebarMaterialBackground()
                 .allowsHitTesting(false)
         }
+    }
+
+    private var searchLauncher: some View {
+        Button(action: onSearch) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+
+                Text(
+                    AppL10n.search(
+                        "search.title",
+                        defaultValue: "搜索 MacTools"
+                    )
+                )
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Text("⌘K")
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.12))
+                    )
+                    .accessibilityHidden(true)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .help(
+            AppL10n.search(
+                "search.prompt",
+                defaultValue: "搜索插件、设置和命令"
+            )
+        )
+        .accessibilityLabel(
+            AppL10n.search(
+                "search.title",
+                defaultValue: "搜索 MacTools"
+            )
+        )
+        .accessibilityHint(
+            AppL10n.search(
+                "search.prompt",
+                defaultValue: "搜索插件、设置和命令"
+            )
+        )
+        .accessibilityIdentifier("mactools.unified-search.launcher")
     }
 
     private var optionalSelectionBinding: Binding<FeatureSettingsPane?> {
@@ -1228,6 +1447,7 @@ private struct FeatureSettingsDetailPane: View {
         case let .configuration(pluginID):
             PluginConfigurationDetailPane(
                 pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
                 item: configurationItem(for: pluginID)
             )
         }
@@ -1431,7 +1651,10 @@ private struct SettingsCardContainer<Content: View>: View {
 
 private struct PluginConfigurationDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let item: PluginConfigurationItem?
+    @State private var activeSearchTarget: PluginSettingsSearchTarget?
+    @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -1443,43 +1666,70 @@ private struct PluginConfigurationDetailPane: View {
 
                         if item.hasCustomConfiguration {
                             pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
+                                .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
                                 .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
                                 .padding(.bottom, PluginSettingsTheme.Spacing.pagePadding)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 18) {
-                            PluginConfigurationHeader(item: item)
-
-                            if !item.settingsCards.isEmpty {
-                                PluginSettingsCardSection(
-                                    pluginHost: pluginHost,
-                                    cards: item.settingsCards
-                                )
-                            }
-
-                            if !item.permissionCards.isEmpty {
-                                PluginPermissionCardSection(
-                                    pluginHost: pluginHost,
-                                    cards: item.permissionCards
-                                )
-                            }
-
-                            if item.hasCustomConfiguration {
-                                pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
-                            }
-
-                            if !item.shortcutItems.isEmpty {
-                                PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
-                            }
-                        }
-                        .padding(PluginSettingsTheme.Spacing.pagePadding)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .onAppear {
+                        applySearchRevealRequest(
+                            navigationCoordinator.searchRevealRequest,
+                            pluginID: item.pluginID
+                        )
                     }
-                    .background(SettingsStyle.contentBackground)
+                    .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                        applySearchRevealRequest(request, pluginID: item.pluginID)
+                    }
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 18) {
+                                PluginConfigurationHeader(item: item)
+
+                                if !item.settingsCards.isEmpty {
+                                    PluginSettingsCardSection(
+                                        pluginHost: pluginHost,
+                                        cards: item.settingsCards
+                                    )
+                                }
+
+                                if !item.permissionCards.isEmpty {
+                                    PluginPermissionCardSection(
+                                        pluginHost: pluginHost,
+                                        cards: item.permissionCards
+                                    )
+                                }
+
+                                if item.hasCustomConfiguration {
+                                    pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
+                                }
+
+                                if !item.shortcutItems.isEmpty {
+                                    PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
+                                }
+                            }
+                            .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
+                            .padding(PluginSettingsTheme.Spacing.pagePadding)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                        .background(SettingsStyle.contentBackground)
+                        .onAppear {
+                            applySearchRevealRequest(
+                                navigationCoordinator.searchRevealRequest,
+                                pluginID: item.pluginID,
+                                proxy: proxy
+                            )
+                        }
+                        .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                            applySearchRevealRequest(
+                                request,
+                                pluginID: item.pluginID,
+                                proxy: proxy
+                            )
+                        }
+                    }
                 }
             } else {
                 ContentUnavailableView(
@@ -1494,6 +1744,57 @@ private struct PluginConfigurationDetailPane: View {
             }
         }
         .background(SettingsStyle.contentBackground)
+        .onDisappear {
+            clearSearchTargetTask?.cancel()
+            clearSearchTargetTask = nil
+            activeSearchTarget = nil
+        }
+    }
+
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        pluginID: String,
+        proxy: ScrollViewProxy
+    ) {
+        guard
+            let target = applySearchRevealRequest(request, pluginID: pluginID)
+        else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(target.scrollID, anchor: .center)
+            }
+        }
+    }
+
+    @discardableResult
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        pluginID: String
+    ) -> PluginSettingsSearchTarget? {
+        guard
+            let request,
+            case let .plugin(target) = request.target,
+            target.pluginID == pluginID
+        else {
+            return nil
+        }
+
+        clearSearchTargetTask?.cancel()
+        activeSearchTarget = target
+        clearSearchTargetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            activeSearchTarget = nil
+            navigationCoordinator.clearSearchRevealRequest(request)
+        }
+        return target
     }
 }
 
@@ -1560,6 +1861,10 @@ private struct PluginSettingsCardSection: View {
                                 pluginHost.performSettingsAction(pluginID: card.pluginID, actionID: actionID)
                             }
                         }
+                    )
+                    .pluginSettingsSearchAnchor(
+                        pluginID: card.pluginID,
+                        entryID: card.id
                     )
 
                     if index < cards.count - 1 {
@@ -1640,6 +1945,10 @@ private struct PluginPermissionCardSection: View {
                     )
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
+                    .pluginSettingsSearchAnchor(
+                        pluginID: card.pluginID,
+                        entryID: card.id
+                    )
 
                     if index < cards.count - 1 {
                         PluginSettingsListDivider()

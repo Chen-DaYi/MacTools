@@ -123,6 +123,15 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         XCTAssertEqual(
             MenuBarPanelKeyboardAction.resolve(
                 for: makeCommandKeyEvent(
+                    characters: "k",
+                    keyCode: UInt16(kVK_ANSI_K)
+                )
+            ),
+            .showUnifiedSearch
+        )
+        XCTAssertEqual(
+            MenuBarPanelKeyboardAction.resolve(
+                for: makeCommandKeyEvent(
                     characters: "1",
                     keyCode: UInt16(kVK_ANSI_1)
                 )
@@ -149,6 +158,17 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         )
 
         presenter.performKeyboardAction(.showSettings)
+
+        XCTAssertEqual(presentationCount, 1)
+    }
+
+    func testPanelUnifiedSearchCommandUsesInjectedWindowRouterPath() {
+        var presentationCount = 0
+        let presenter = makePresenter(
+            onOpenUnifiedSearch: { presentationCount += 1 }
+        )
+
+        presenter.performKeyboardAction(.showUnifiedSearch)
 
         XCTAssertEqual(presentationCount, 1)
     }
@@ -321,7 +341,8 @@ final class MenuBarPanelPresenterTests: XCTestCase {
 
     private func makePresenter(
         onDismiss: @escaping () -> Void = {},
-        onOpenSettings: @escaping () -> Void = {}
+        onOpenSettings: @escaping () -> Void = {},
+        onOpenUnifiedSearch: @escaping () -> Void = {}
     ) -> MenuBarPanelPresenter {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -340,6 +361,7 @@ final class MenuBarPanelPresenterTests: XCTestCase {
             onDismiss: onDismiss,
             onOpenUpdate: {},
             onOpenSettings: onOpenSettings,
+            onOpenUnifiedSearch: onOpenUnifiedSearch,
             onPresentDiskCleanConfiguration: {},
             onPresentLaunchControlConfiguration: {},
             onAllPanelsClosed: {}

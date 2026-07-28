@@ -208,6 +208,16 @@ final class AppWindowRouterTests: XCTestCase {
             ),
             .focusSearch
         )
+        XCTAssertEqual(
+            MacToolsLocalKeyboardCommand.resolve(
+                for: keyEvent(
+                    keyCode: UInt16(kVK_ANSI_K),
+                    characters: "K",
+                    modifiers: [.command, .capsLock]
+                )
+            ),
+            .showUnifiedSearch
+        )
     }
 
     func testLocalCommandMatcherLeavesNavigationCloseAndQuitCommandsUntouched() {
@@ -297,6 +307,36 @@ final class AppWindowRouterTests: XCTestCase {
         coordinator.setSearchField(.pluginMarketplace, focused: false)
         XCTAssertTrue(window.performKeyEquivalent(with: commandF))
         XCTAssertEqual(coordinator.searchFocusRequest, firstRequest)
+
+        window.close()
+    }
+
+    func testCommandKReusesSettingsWindowAndRefocusesUnifiedSearch() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+        let window = try XCTUnwrap(router.settingsWindow)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        let commandK = keyEvent(
+            keyCode: UInt16(kVK_ANSI_K),
+            characters: "k",
+            windowNumber: window.windowNumber
+        )
+
+        XCTAssertTrue(window.performKeyEquivalent(with: commandK))
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .keyboard)
+        let firstFocusRequestID = coordinator.unifiedSearchFocusRequestID
+
+        XCTAssertTrue(window.performKeyEquivalent(with: commandK))
+        XCTAssertTrue(router.settingsWindow === window)
+        XCTAssertGreaterThan(
+            coordinator.unifiedSearchFocusRequestID,
+            firstFocusRequestID
+        )
 
         window.close()
     }
