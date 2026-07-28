@@ -66,7 +66,7 @@ final class SettingsDestinationShortcutButtonsTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
-        window.onLocalKeyboardCommand = { _ in }
+        window.onLocalKeyboardCommand = { _ in false }
         window.contentView = NSHostingView(
             rootView: SettingsDestinationShortcutButtons(coordinator: coordinator)
         )

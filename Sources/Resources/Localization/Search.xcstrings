@@ -56,7 +56,52 @@
       "ar": { "stringUnit": { "state": "translated", "value": "ابحث في الإضافات والإعدادات والأوامر" } }, "de": { "stringUnit": { "state": "translated", "value": "Plugins, Einstellungen und Befehle durchsuchen" } }, "en": { "stringUnit": { "state": "translated", "value": "Search plugins, settings, and commands" } }, "es": { "stringUnit": { "state": "translated", "value": "Buscar plugins, ajustes y comandos" } }, "fr": { "stringUnit": { "state": "translated", "value": "Rechercher des modules, réglages et commandes" } }, "ja": { "stringUnit": { "state": "translated", "value": "プラグイン、設定、コマンドを検索" } }, "ko": { "stringUnit": { "state": "translated", "value": "플러그인, 설정 및 명령 검색" } }, "pt": { "stringUnit": { "state": "translated", "value": "Buscar plugins, ajustes e comandos" } }, "ru": { "stringUnit": { "state": "translated", "value": "Поиск плагинов, настроек и команд" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "搜索插件、设置和命令" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "搜尋外掛、設定與指令" } }
     } },
     "search.resultCountFormat": { "extractionState": "manual", "localizations": {
-      "ar": { "stringUnit": { "state": "translated", "value": "%d نتيجة" } }, "de": { "stringUnit": { "state": "translated", "value": "%d Ergebnisse" } }, "en": { "stringUnit": { "state": "translated", "value": "%d results" } }, "es": { "stringUnit": { "state": "translated", "value": "%d resultados" } }, "fr": { "stringUnit": { "state": "translated", "value": "%d résultats" } }, "ja": { "stringUnit": { "state": "translated", "value": "%d件の結果" } }, "ko": { "stringUnit": { "state": "translated", "value": "결과 %d개" } }, "pt": { "stringUnit": { "state": "translated", "value": "%d resultados" } }, "ru": { "stringUnit": { "state": "translated", "value": "Результатов: %d" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "%d 个结果" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "%d 個結果" } }
+      "ar": { "variations": { "plural": {
+        "zero": { "stringUnit": { "state": "translated", "value": "لا نتائج" } },
+        "one": { "stringUnit": { "state": "translated", "value": "نتيجة واحدة" } },
+        "two": { "stringUnit": { "state": "translated", "value": "نتيجتان" } },
+        "few": { "stringUnit": { "state": "translated", "value": "%d نتائج" } },
+        "many": { "stringUnit": { "state": "translated", "value": "%d نتيجة" } },
+        "other": { "stringUnit": { "state": "translated", "value": "%d نتيجة" } }
+      } } },
+      "de": { "variations": { "plural": {
+        "one": { "stringUnit": { "state": "translated", "value": "%d Ergebnis" } },
+        "other": { "stringUnit": { "state": "translated", "value": "%d Ergebnisse" } }
+      } } },
+      "en": { "variations": { "plural": {
+        "one": { "stringUnit": { "state": "translated", "value": "%d result" } },
+        "other": { "stringUnit": { "state": "translated", "value": "%d results" } }
+      } } },
+      "es": { "variations": { "plural": {
+        "one": { "stringUnit": { "state": "translated", "value": "%d resultado" } },
+        "other": { "stringUnit": { "state": "translated", "value": "%d resultados" } }
+      } } },
+      "fr": { "variations": { "plural": {
+        "one": { "stringUnit": { "state": "translated", "value": "%d résultat" } },
+        "other": { "stringUnit": { "state": "translated", "value": "%d résultats" } }
+      } } },
+      "ja": { "variations": { "plural": {
+        "other": { "stringUnit": { "state": "translated", "value": "%d件の結果" } }
+      } } },
+      "ko": { "variations": { "plural": {
+        "other": { "stringUnit": { "state": "translated", "value": "결과 %d개" } }
+      } } },
+      "pt": { "variations": { "plural": {
+        "one": { "stringUnit": { "state": "translated", "value": "%d resultado" } },
+        "other": { "stringUnit": { "state": "translated", "value": "%d resultados" } }
+      } } },
+      "ru": { "variations": { "plural": {
+        "one": { "stringUnit": { "state": "translated", "value": "%d результат" } },
+        "few": { "stringUnit": { "state": "translated", "value": "%d результата" } },
+        "many": { "stringUnit": { "state": "translated", "value": "%d результатов" } },
+        "other": { "stringUnit": { "state": "translated", "value": "%d результата" } }
+      } } },
+      "zh-Hans": { "variations": { "plural": {
+        "other": { "stringUnit": { "state": "translated", "value": "%d 个结果" } }
+      } } },
+      "zh-Hant": { "variations": { "plural": {
+        "other": { "stringUnit": { "state": "translated", "value": "%d 個結果" } }
+      } } }
     } },
     "search.subtitle.appSettings": { "extractionState": "manual", "localizations": {
       "ar": { "stringUnit": { "state": "translated", "value": "إعدادات التطبيق" } }, "de": { "stringUnit": { "state": "translated", "value": "App-Einstellungen" } }, "en": { "stringUnit": { "state": "translated", "value": "App Settings" } }, "es": { "stringUnit": { "state": "translated", "value": "Ajustes de la app" } }, "fr": { "stringUnit": { "state": "translated", "value": "Réglages de l’app" } }, "ja": { "stringUnit": { "state": "translated", "value": "アプリ設定" } }, "ko": { "stringUnit": { "state": "translated", "value": "앱 설정" } }, "pt": { "stringUnit": { "state": "translated", "value": "Ajustes do app" } }, "ru": { "stringUnit": { "state": "translated", "value": "Настройки приложения" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "应用设置" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "應用程式設定" } }

@@ -88,6 +88,9 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 SettingsHistoryNavigationControls(coordinator: navigationCoordinator)
+                    .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
+                    .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+                    .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
             }
         }
         .id(runtimeLocale.revision)
@@ -326,6 +329,11 @@ struct GeneralSettingsView: View {
             .onDisappear {
                 clearSearchTargetTask?.cancel()
                 clearSearchTargetTask = nil
+                if let activeSearchTarget {
+                    navigationCoordinator.clearSearchRevealRequest(
+                        matching: .general(activeSearchTarget)
+                    )
+                }
                 activeSearchTarget = nil
             }
         }
@@ -1379,6 +1387,7 @@ private struct FeatureSettingsDetailPane: View {
         switch selectedPane {
         case .dashboardLayout:
             SurfaceLayoutSettingsView(
+                navigationCoordinator: navigationCoordinator,
                 surface: .dashboard,
                 title: AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘"),
                 description: AppL10n.settings(
@@ -1413,6 +1422,7 @@ private struct FeatureSettingsDetailPane: View {
             )
         case .featurePanelLayout:
             SurfaceLayoutSettingsView(
+                navigationCoordinator: navigationCoordinator,
                 surface: .featurePanel,
                 title: AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板"),
                 description: AppL10n.settings(
@@ -1466,6 +1476,7 @@ private struct FeatureSettingsDetailPane: View {
 }
 
 private struct SurfaceLayoutSettingsView: View {
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let surface: PluginDisplaySurface
     let title: String
     let description: String
@@ -1487,94 +1498,133 @@ private struct SurfaceLayoutSettingsView: View {
     let onUninstall: (String) throws -> Void
     @State private var pendingUninstallItem: PluginUninstallConfirmation?
     @State private var uninstallErrorMessage: String?
+    @State private var activeSearchTarget: SurfaceSettingsSearchTarget?
+    @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .center, spacing: 12) {
-                    SettingsPageHeader(
-                        title: title,
-                        description: description,
-                        systemImage: systemImage,
-                        iconTint: iconTint
-                    )
-
-                    Button(AppL10n.settings(
-                        "plugins.layout.restoreDefaultOrder",
-                        defaultValue: "恢复默认排列"
-                    ), action: onResetOrder)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(items.count < 2)
-
-                    Button(action: onOpenPanel) {
-                        Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-
-                if uninstallConfirmationSession.isConfirmationPaused {
-                    PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
-                }
-
-                SettingsCardContainer {
-                    if items.isEmpty {
-                        ContentUnavailableView(
-                            emptyTitle,
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .center, spacing: 12) {
+                        SettingsPageHeader(
+                            title: title,
+                            description: description,
                             systemImage: systemImage,
-                            description: Text(emptyDescription)
+                            iconTint: iconTint
                         )
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                    } else {
-                        FeatureManagementTableView(
-                            items: items.map {
-                                FeatureManagementTableItem(
-                                    surfaceItem: $0,
-                                    hasSettings: configurationPluginIDs.contains($0.id)
-                                )
-                            },
-                            mode: .surface(surface),
-                            onMove: onMove,
-                            onSetVisible: onSetVisible,
-                            onOpenSettings: onOpenSettings,
-                            onOpenMarketplace: onOpenMarketplace,
-                            onRequestUninstall: requestUninstall
-                        )
-                        .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
+
+                        Button(AppL10n.settings(
+                            "plugins.layout.restoreDefaultOrder",
+                            defaultValue: "恢复默认排列"
+                        ), action: onResetOrder)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(items.count < 2)
+
+                        Button(action: onOpenPanel) {
+                            Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
                     }
-                }
 
-                if !hiddenItems.isEmpty {
-                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                        Label(hiddenSectionTitle, systemImage: "eye.slash")
-                            .font(PluginSettingsTheme.Typography.sectionTitle)
-                            .foregroundStyle(.secondary)
+                    if uninstallConfirmationSession.isConfirmationPaused {
+                        PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
+                    }
 
-                        SettingsCardContainer {
+                    SettingsCardContainer {
+                        if items.isEmpty {
+                            ContentUnavailableView(
+                                emptyTitle,
+                                systemImage: systemImage,
+                                description: Text(emptyDescription)
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 180)
+                        } else {
                             FeatureManagementTableView(
-                                items: hiddenItems.map {
+                                items: items.map {
                                     FeatureManagementTableItem(
                                         surfaceItem: $0,
                                         hasSettings: configurationPluginIDs.contains($0.id)
                                     )
                                 },
                                 mode: .surface(surface),
-                                isReorderEnabled: false,
+                                highlightedPluginID: highlightedPluginID(in: items),
+                                onMove: onMove,
                                 onSetVisible: onSetVisible,
                                 onOpenSettings: onOpenSettings,
                                 onOpenMarketplace: onOpenMarketplace,
                                 onRequestUninstall: requestUninstall
                             )
-                            .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
+                            .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
+                            .overlay(alignment: .topLeading) {
+                                SurfaceLayoutSearchAnchors(
+                                    surface: surface,
+                                    items: items,
+                                    isHidden: false
+                                )
+                            }
+                        }
+                    }
+
+                    if !hiddenItems.isEmpty {
+                        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                            Label(hiddenSectionTitle, systemImage: "eye.slash")
+                                .font(PluginSettingsTheme.Typography.sectionTitle)
+                                .foregroundStyle(.secondary)
+
+                            SettingsCardContainer {
+                                FeatureManagementTableView(
+                                    items: hiddenItems.map {
+                                        FeatureManagementTableItem(
+                                            surfaceItem: $0,
+                                            hasSettings: configurationPluginIDs.contains($0.id)
+                                        )
+                                    },
+                                    mode: .surface(surface),
+                                    isReorderEnabled: false,
+                                    highlightedPluginID: highlightedPluginID(in: hiddenItems),
+                                    onSetVisible: onSetVisible,
+                                    onOpenSettings: onOpenSettings,
+                                    onOpenMarketplace: onOpenMarketplace,
+                                    onRequestUninstall: requestUninstall
+                                )
+                                .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
+                                .overlay(alignment: .topLeading) {
+                                    SurfaceLayoutSearchAnchors(
+                                        surface: surface,
+                                        items: hiddenItems,
+                                        isHidden: true
+                                    )
+                                }
+                            }
                         }
                     }
                 }
+                .padding(PluginSettingsTheme.Spacing.pagePadding)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(PluginSettingsTheme.Spacing.pagePadding)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .onAppear {
+                applySearchRevealRequest(
+                    navigationCoordinator.searchRevealRequest,
+                    proxy: proxy
+                )
+            }
+            .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                applySearchRevealRequest(request, proxy: proxy)
+            }
         }
         .background(SettingsStyle.contentBackground)
+        .onDisappear {
+            clearSearchTargetTask?.cancel()
+            clearSearchTargetTask = nil
+            if let activeSearchTarget {
+                navigationCoordinator.clearSearchRevealRequest(
+                    matching: .surface(activeSearchTarget)
+                )
+            }
+            activeSearchTarget = nil
+        }
         .sheet(item: $pendingUninstallItem) { item in
             PluginUninstallConfirmationSheet(
                 confirmation: item,
@@ -1596,6 +1646,62 @@ private struct SurfaceLayoutSettingsView: View {
             Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
         } message: {
             Text(uninstallErrorMessage ?? "")
+        }
+    }
+
+    private func highlightedPluginID(
+        in candidates: [PluginSurfaceLayoutItem]
+    ) -> String? {
+        guard
+            let pluginID = activeSearchTarget?.pluginID,
+            candidates.contains(where: { $0.id == pluginID })
+        else {
+            return nil
+        }
+
+        return pluginID
+    }
+
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        proxy: ScrollViewProxy
+    ) {
+        guard
+            let request,
+            case let .surface(target) = request.target,
+            target.surface == surface
+        else {
+            return
+        }
+
+        let isHidden: Bool
+        if items.contains(where: { $0.id == target.pluginID }) {
+            isHidden = false
+        } else if hiddenItems.contains(where: { $0.id == target.pluginID }) {
+            isHidden = true
+        } else {
+            navigationCoordinator.clearSearchRevealRequest(request)
+            return
+        }
+
+        clearSearchTargetTask?.cancel()
+        activeSearchTarget = target
+
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(target.scrollID(isHidden: isHidden), anchor: .center)
+            }
+        }
+
+        clearSearchTargetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            activeSearchTarget = nil
+            navigationCoordinator.clearSearchRevealRequest(request)
         }
     }
 
@@ -1653,6 +1759,32 @@ private struct SettingsCardContainer<Content: View>: View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
             .pluginSettingsCardBackground(.host)
+    }
+}
+
+private struct SurfaceLayoutSearchAnchors: View {
+    let surface: PluginDisplaySurface
+    let items: [PluginSurfaceLayoutItem]
+    let isHidden: Bool
+
+    var body: some View {
+        VStack(spacing: FeatureManagementTableView.rowSpacing) {
+            ForEach(items) { item in
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: FeatureManagementTableView.rowHeight)
+                    .id(
+                        SurfaceSettingsSearchTarget(
+                            surface: surface,
+                            pluginID: item.id
+                        )
+                        .scrollID(isHidden: isHidden)
+                    )
+            }
+        }
+        .padding(.top, FeatureManagementTableView.verticalContentInset)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -1754,6 +1886,11 @@ private struct PluginConfigurationDetailPane: View {
         .onDisappear {
             clearSearchTargetTask?.cancel()
             clearSearchTargetTask = nil
+            if let activeSearchTarget {
+                navigationCoordinator.clearSearchRevealRequest(
+                    matching: .plugin(activeSearchTarget)
+                )
+            }
             activeSearchTarget = nil
         }
     }

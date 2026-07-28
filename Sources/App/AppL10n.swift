@@ -56,6 +56,18 @@ enum AppL10n {
         )
     }
 
+    static func searchPluralFormat(
+        _ key: String,
+        defaultValue: String,
+        count: Int
+    ) -> String {
+        String(
+            format: search(key, defaultValue: defaultValue),
+            locale: PluginRuntimeLocalization.locale,
+            arguments: [count]
+        )
+    }
+
     static func preferencesBackupFormat(_ key: String, defaultValue: String, _ arguments: CVarArg...) -> String {
         String(
             format: preferencesBackup(key, defaultValue: defaultValue),

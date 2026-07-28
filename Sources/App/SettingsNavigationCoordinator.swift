@@ -73,11 +73,32 @@ enum GeneralSettingsSearchTarget: String, Hashable {
 enum SettingsSearchRevealTarget: Hashable {
     case general(GeneralSettingsSearchTarget)
     case plugin(PluginSettingsSearchTarget)
+    case surface(SurfaceSettingsSearchTarget)
 }
 
 struct SettingsSearchRevealRequest: Equatable {
     let id: UInt
     let target: SettingsSearchRevealTarget
+}
+
+struct SurfaceSettingsSearchTarget: Hashable {
+    let surface: PluginDisplaySurface
+    let pluginID: String
+
+    func scrollID(isHidden: Bool) -> String {
+        let surfaceID = switch surface {
+        case .dashboard:
+            "dashboard"
+        case .featurePanel:
+            "feature-panel"
+        }
+        return "surface-search-anchor.\(surfaceID).\(isHidden ? "hidden" : "visible").\(pluginID)"
+    }
+}
+
+struct UnifiedSearchQuickSelectionRequest: Equatable {
+    let id: UInt
+    let number: Int
 }
 
 @MainActor
@@ -90,6 +111,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     @Published private(set) var isUnifiedSearchPresented = false
     @Published private(set) var unifiedSearchPresentationOrigin: UnifiedSearchPresentationOrigin?
     @Published private(set) var unifiedSearchFocusRequestID: UInt = 0
+    @Published private(set) var unifiedSearchQuickSelectionRequest: UnifiedSearchQuickSelectionRequest?
     @Published private(set) var searchRevealRequest: SettingsSearchRevealRequest?
 
     private(set) var history: [SettingsNavigationDestination]
@@ -102,6 +124,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private var nextSearchFocusRequestID: UInt = 0
     private var nextAboutUpdateActionRequestID: UInt = 0
     private var nextSearchRevealRequestID: UInt = 0
+    private var nextUnifiedSearchQuickSelectionRequestID: UInt = 0
 
     convenience init(pluginHost: PluginHost) {
         self.init(
@@ -183,6 +206,21 @@ final class SettingsNavigationCoordinator: ObservableObject {
     func dismissUnifiedSearch() {
         isUnifiedSearchPresented = false
         unifiedSearchPresentationOrigin = nil
+        unifiedSearchQuickSelectionRequest = nil
+    }
+
+    @discardableResult
+    func requestUnifiedSearchQuickSelection(number: Int) -> Bool {
+        guard isUnifiedSearchPresented, (1...9).contains(number) else {
+            return false
+        }
+
+        nextUnifiedSearchQuickSelectionRequestID &+= 1
+        unifiedSearchQuickSelectionRequest = UnifiedSearchQuickSelectionRequest(
+            id: nextUnifiedSearchQuickSelectionRequestID,
+            number: number
+        )
+        return true
     }
 
     func navigateFromSearch(
@@ -206,6 +244,14 @@ final class SettingsNavigationCoordinator: ObservableObject {
 
     func clearSearchRevealRequest(_ request: SettingsSearchRevealRequest) {
         guard searchRevealRequest == request else {
+            return
+        }
+
+        searchRevealRequest = nil
+    }
+
+    func clearSearchRevealRequest(matching target: SettingsSearchRevealTarget) {
+        guard searchRevealRequest?.target == target else {
             return
         }
 

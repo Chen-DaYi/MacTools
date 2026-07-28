@@ -1,3 +1,5 @@
+import AppKit
+import Combine
 import SwiftUI
 import MacToolsPluginKit
 
@@ -24,9 +26,62 @@ enum UnifiedSearchPaletteLayout {
     }
 }
 
+@MainActor
+final class UnifiedSearchPaletteModel: ObservableObject {
+    @Published private(set) var results: [MacToolsSearchResult]
+
+    private let pluginHost: PluginHost
+    private var index: MacToolsSearchIndex
+    private var query = ""
+    private var pluginHostCancellable: AnyCancellable?
+    private var rebuildTask: Task<Void, Never>?
+
+    init(pluginHost: PluginHost) {
+        self.pluginHost = pluginHost
+        let index = MacToolsSearchIndexBuilder.build(pluginHost: pluginHost)
+        self.index = index
+        self.results = MacToolsSearchPresentation.orderedResults(
+            index.results(matching: "")
+        )
+        pluginHostCancellable = pluginHost.objectWillChange.sink { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.scheduleIndexRebuild()
+            }
+        }
+    }
+
+    func updateQuery(_ query: String) {
+        guard self.query != query else {
+            return
+        }
+
+        self.query = query
+        updateResults()
+    }
+
+    private func scheduleIndexRebuild() {
+        rebuildTask?.cancel()
+        rebuildTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled, let self else {
+                return
+            }
+
+            index = MacToolsSearchIndexBuilder.build(pluginHost: pluginHost)
+            updateResults()
+        }
+    }
+
+    private func updateResults() {
+        results = MacToolsSearchPresentation.orderedResults(
+            index.results(matching: query)
+        )
+    }
+}
+
 struct UnifiedSearchPresentationView: View {
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
 
     var body: some View {
@@ -56,13 +111,27 @@ struct UnifiedSearchPaletteView: View {
         static let rowCornerRadius: CGFloat = 8
     }
 
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let availableSize: CGSize
+    @StateObject private var model: UnifiedSearchPaletteModel
     @State private var query = ""
     @State private var selectedResultID: String?
     @State private var pendingConfirmation: MacToolsSearchResult?
     @FocusState private var isQueryFocused: Bool
+
+    init(
+        pluginHost: PluginHost,
+        navigationCoordinator: SettingsNavigationCoordinator,
+        availableSize: CGSize
+    ) {
+        self.pluginHost = pluginHost
+        self.navigationCoordinator = navigationCoordinator
+        self.availableSize = availableSize
+        _model = StateObject(
+            wrappedValue: UnifiedSearchPaletteModel(pluginHost: pluginHost)
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -77,9 +146,6 @@ struct UnifiedSearchPaletteView: View {
         .padding(16)
         .frame(width: UnifiedSearchPaletteLayout.width(for: availableSize.width))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .background {
-            quickSelectionShortcutButtons
-        }
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
@@ -91,6 +157,7 @@ struct UnifiedSearchPaletteView: View {
             focusQuery()
         }
         .onChange(of: query) {
+            model.updateQuery(query)
             syncSelection()
         }
         .onChange(of: resultIDs) {
@@ -98,6 +165,18 @@ struct UnifiedSearchPaletteView: View {
         }
         .onChange(of: navigationCoordinator.unifiedSearchFocusRequestID) {
             focusQuery()
+        }
+        .onChange(of: navigationCoordinator.unifiedSearchQuickSelectionRequest) { _, request in
+            guard
+                let request,
+                results.indices.contains(request.number - 1)
+            else {
+                return
+            }
+
+            let result = results[request.number - 1]
+            selectedResultID = result.id
+            activate(result)
         }
         .onExitCommand {
             navigationCoordinator.dismissUnifiedSearch()
@@ -214,7 +293,6 @@ struct UnifiedSearchPaletteView: View {
         .font(PluginSettingsTheme.Typography.secondaryLabel)
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(originText)，\(resultCountText)")
     }
 
     private var resultList: some View {
@@ -374,14 +452,8 @@ struct UnifiedSearchPaletteView: View {
         }
     }
 
-    private var index: MacToolsSearchIndex {
-        MacToolsSearchIndexBuilder.build(pluginHost: pluginHost)
-    }
-
     private var results: [MacToolsSearchResult] {
-        MacToolsSearchPresentation.orderedResults(
-            index.results(matching: query)
-        )
+        model.results
     }
 
     private var resultIDs: [String] {
@@ -397,10 +469,10 @@ struct UnifiedSearchPaletteView: View {
     }
 
     private var resultCountText: String {
-        AppL10n.searchFormat(
+        AppL10n.searchPluralFormat(
             "search.resultCountFormat",
             defaultValue: "%d 个结果",
-            results.count
+            count: results.count
         )
     }
 
@@ -422,28 +494,6 @@ struct UnifiedSearchPaletteView: View {
                 defaultValue: "搜索 MacTools"
             )
         }
-    }
-
-    private var quickSelectionShortcutButtons: some View {
-        HStack(spacing: 0) {
-            ForEach(
-                Array(results.prefix(MacToolsSearchPresentation.quickSelectionLimit).enumerated()),
-                id: \.element.id
-            ) { index, result in
-                Button("") {
-                    selectedResultID = result.id
-                    activate(result)
-                }
-                .keyboardShortcut(
-                    KeyEquivalent(Character(String(index + 1))),
-                    modifiers: [.command]
-                )
-                .focusable(false)
-            }
-        }
-        .frame(width: 0, height: 0)
-        .opacity(0)
-        .accessibilityHidden(true)
     }
 
     private func quickSelectionNumber(
@@ -486,7 +536,20 @@ struct UnifiedSearchPaletteView: View {
             availableResults.firstIndex { $0.id == selectedID }
         } ?? 0
         let nextIndex = (currentIndex + offset + availableResults.count) % availableResults.count
-        selectedResultID = availableResults[nextIndex].id
+        let result = availableResults[nextIndex]
+        selectedResultID = result.id
+        announceSelection(result)
+    }
+
+    private func announceSelection(_ result: MacToolsSearchResult) {
+        NSAccessibility.post(
+            element: NSApplication.shared,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: result.accessibilityLabel,
+                .priority: NSAccessibilityPriorityLevel.high.rawValue
+            ]
+        )
     }
 
     private func activateSelectedResult() {

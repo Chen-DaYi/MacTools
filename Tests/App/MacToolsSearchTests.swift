@@ -87,7 +87,7 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertTrue(results.contains { $0.id == "general-setting.appShortcuts" })
     }
 
-    func testSurfaceOnlyPluginNavigatesToItsFeaturePanelPage() throws {
+    func testSurfaceOnlyPluginNavigatesToAndRevealsItsFeaturePanelRow() throws {
         let plugin = SurfaceOnlySearchTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
         let result = try XCTUnwrap(
@@ -98,7 +98,15 @@ final class MacToolsSearchTests: XCTestCase {
 
         XCTAssertEqual(
             result.action,
-            .navigate(destination: .plugins(.featurePanelLayout), target: nil)
+            .navigate(
+                destination: .plugins(.featurePanelLayout),
+                target: .surface(
+                    SurfaceSettingsSearchTarget(
+                        surface: .featurePanel,
+                        pluginID: plugin.metadata.id
+                    )
+                )
+            )
         )
     }
 
@@ -215,6 +223,25 @@ final class MacToolsSearchTests: XCTestCase {
                 in: results
             )
         )
+    }
+
+    func testPaletteModelKeepsOneDerivedResultSnapshotPerQuery() {
+        let host = makePluginHostForTests(plugins: [SearchableTestPlugin()])
+        let model = UnifiedSearchPaletteModel(pluginHost: host)
+
+        XCTAssertEqual(
+            model.results.map(\.id),
+            [
+                "navigation.dashboard",
+                "navigation.feature-panel",
+                "navigation.marketplace",
+                "navigation.general",
+                "navigation.about"
+            ]
+        )
+
+        model.updateQuery("快捷键目标")
+        XCTAssertEqual(model.results.first?.title, "快捷键目标")
     }
 
     func testPaletteLayoutUsesLargerMaximumSizeAndFitsMinimumSettingsWindow() {

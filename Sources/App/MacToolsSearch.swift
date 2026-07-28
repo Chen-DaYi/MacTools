@@ -79,6 +79,12 @@ struct MacToolsSearchResult: Identifiable, Hashable {
 
 struct MacToolsSearchIndex {
     let items: [MacToolsSearchResult]
+    private let indexedItems: [IndexedItem]
+
+    init(items: [MacToolsSearchResult]) {
+        self.items = items
+        self.indexedItems = items.map(IndexedItem.init)
+    }
 
     func results(matching query: String) -> [MacToolsSearchResult] {
         let normalizedQuery = MacToolsSearchResult.normalize(query)
@@ -92,15 +98,9 @@ struct MacToolsSearchIndex {
             .split(whereSeparator: \.isWhitespace)
             .map(String.init)
 
-        return items
-            .compactMap { item -> (MacToolsSearchResult, Int)? in
-                let haystack = [
-                    item.normalizedTitle,
-                    item.normalizedSubtitle,
-                    item.normalizedDetail,
-                    item.normalizedKeywords
-                ].joined(separator: " ")
-                guard tokens.allSatisfy(haystack.contains) else {
+        return indexedItems
+            .compactMap { item -> (IndexedItem, Int)? in
+                guard tokens.allSatisfy(item.haystack.contains) else {
                     return nil
                 }
 
@@ -111,17 +111,17 @@ struct MacToolsSearchIndex {
                     return lhs.1 > rhs.1
                 }
 
-                if lhs.0.kind != rhs.0.kind {
-                    return kindOrder(lhs.0.kind) < kindOrder(rhs.0.kind)
+                if lhs.0.result.kind != rhs.0.result.kind {
+                    return kindOrder(lhs.0.result.kind) < kindOrder(rhs.0.result.kind)
                 }
 
-                return lhs.0.title.localizedStandardCompare(rhs.0.title) == .orderedAscending
+                return lhs.0.result.title.localizedStandardCompare(rhs.0.result.title) == .orderedAscending
             }
-            .map(\.0)
+            .map(\.0.result)
     }
 
     private func score(
-        _ item: MacToolsSearchResult,
+        _ item: IndexedItem,
         query: String,
         tokens: [String]
     ) -> Int {
@@ -150,7 +150,7 @@ struct MacToolsSearchIndex {
             }
         }
 
-        if item.kind == .navigation {
+        if item.result.kind == .navigation {
             score += 10
         }
 
@@ -175,6 +175,29 @@ struct MacToolsSearchIndex {
         case .navigation: 0
         case .setting: 1
         case .command: 2
+        }
+    }
+
+    private struct IndexedItem {
+        let result: MacToolsSearchResult
+        let normalizedTitle: String
+        let normalizedSubtitle: String
+        let normalizedDetail: String
+        let normalizedKeywords: String
+        let haystack: String
+
+        init(result: MacToolsSearchResult) {
+            self.result = result
+            normalizedTitle = result.normalizedTitle
+            normalizedSubtitle = result.normalizedSubtitle
+            normalizedDetail = result.normalizedDetail
+            normalizedKeywords = result.normalizedKeywords
+            haystack = [
+                normalizedTitle,
+                normalizedSubtitle,
+                normalizedDetail,
+                normalizedKeywords
+            ].joined(separator: " ")
         }
     }
 }
@@ -310,25 +333,24 @@ enum MacToolsSearchIndexBuilder {
             }
 
             let destination: SettingsNavigationDestination
+            let surface: PluginDisplaySurface
             let subtitle: String
             if item.capabilities.supportsFeaturePanel {
+                surface = .featurePanel
                 destination = .plugins(.featurePanelLayout)
                 subtitle = AppL10n.settings(
                     "plugins.sidebar.featurePanel",
                     defaultValue: "功能面板"
                 )
             } else if item.capabilities.supportsDashboard {
+                surface = .dashboard
                 destination = .plugins(.dashboardLayout)
                 subtitle = AppL10n.settings(
                     "plugins.sidebar.dashboard",
                     defaultValue: "仪表盘"
                 )
             } else {
-                destination = .plugins(.marketplace)
-                subtitle = AppL10n.settings(
-                    "plugins.sidebar.marketplace",
-                    defaultValue: "市场"
-                )
+                return nil
             }
 
             return MacToolsSearchResult(
@@ -339,7 +361,15 @@ enum MacToolsSearchIndexBuilder {
                 detail: item.description,
                 keywords: [item.category, item.releaseChannel].compactMap { $0 },
                 systemImage: item.iconName,
-                action: .navigate(destination: destination, target: nil),
+                action: .navigate(
+                    destination: destination,
+                    target: .surface(
+                        SurfaceSettingsSearchTarget(
+                            surface: surface,
+                            pluginID: item.id
+                        )
+                    )
+                ),
                 confirmation: nil,
                 suggestionPriority: nil
             )

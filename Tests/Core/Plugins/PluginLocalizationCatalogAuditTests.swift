@@ -215,6 +215,41 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
     }
 
+    func testUnifiedSearchResultCountUsesRequiredPluralForms() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+            .appending(path: "Search.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        let strings = try XCTUnwrap(catalog["strings"] as? [String: [String: Any]])
+        let entry = try XCTUnwrap(strings["search.resultCountFormat"])
+        let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
+        let expectedCategories: [String: Set<String>] = [
+            "ar": ["zero", "one", "two", "few", "many", "other"],
+            "de": ["one", "other"],
+            "en": ["one", "other"],
+            "es": ["one", "other"],
+            "fr": ["one", "other"],
+            "ja": ["other"],
+            "ko": ["other"],
+            "pt": ["one", "other"],
+            "ru": ["one", "few", "many", "other"],
+            "zh-Hans": ["other"],
+            "zh-Hant": ["other"],
+        ]
+
+        for (language, categories) in expectedCategories {
+            let localization = try XCTUnwrap(localizations[language] as? [String: Any])
+            let variations = try XCTUnwrap(localization["variations"] as? [String: Any])
+            let plural = try XCTUnwrap(variations["plural"] as? [String: Any])
+            XCTAssertTrue(
+                categories.isSubset(of: Set(plural.keys)),
+                "\(language) is missing plural categories \(categories.subtracting(plural.keys))"
+            )
+        }
+    }
+
     private func validate(
         key: String,
         in catalog: [String: [String: Any]],
@@ -228,12 +263,34 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
 
         let localizations = entry["localizations"] as? [String: Any]
         for language in supportedLanguages {
-            let value = ((localizations?[language] as? [String: Any])?["stringUnit"] as? [String: Any])?["value"] as? String
-            guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            guard
+                let localization = localizations?[language],
+                containsTranslatedValue(in: localization)
+            else {
                 failures.append("\(pluginName): localization key \(key) is missing a translated value for \(language)")
                 continue
             }
         }
+    }
+
+    private func containsTranslatedValue(in value: Any) -> Bool {
+        if let dictionary = value as? [String: Any] {
+            if
+                let stringUnit = dictionary["stringUnit"] as? [String: Any],
+                let translatedValue = stringUnit["value"] as? String,
+                !translatedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return true
+            }
+
+            return dictionary.values.contains(where: containsTranslatedValue)
+        }
+
+        if let array = value as? [Any] {
+            return array.contains(where: containsTranslatedValue)
+        }
+
+        return false
     }
 
     private func pluginDirectories() throws -> [URL] {
@@ -273,7 +330,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
 
     private func staticLocalizationKeys(in source: String) -> Set<String> {
         let expression = try! NSRegularExpression(
-            pattern: #"(?:\b(?:self\.)?[A-Za-z_]\w*|PluginLocalization\([^\n]*\))\.(?:string|format|search|searchFormat)\s*\(\s*\"([^\"]+)\"\s*,\s*defaultValue\s*:"#
+            pattern: #"(?:\b(?:self\.)?[A-Za-z_]\w*|PluginLocalization\([^\n]*\))\.(?:string|format|search|searchFormat|searchPluralFormat)\s*\(\s*\"([^\"]+)\"\s*,\s*defaultValue\s*:"#
         )
         let range = NSRange(source.startIndex..., in: source)
         return Set(expression.matches(in: source, range: range).compactMap { match in

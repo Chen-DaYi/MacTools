@@ -242,6 +242,26 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.searchFocusRequest)
     }
 
+    func testUnifiedSearchQuickSelectionRequestsAreValidatedAndRepeatable() throws {
+        let coordinator = SettingsNavigationCoordinator()
+
+        XCTAssertFalse(coordinator.requestUnifiedSearchQuickSelection(number: 1))
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+        XCTAssertFalse(coordinator.requestUnifiedSearchQuickSelection(number: 0))
+        XCTAssertFalse(coordinator.requestUnifiedSearchQuickSelection(number: 10))
+
+        XCTAssertTrue(coordinator.requestUnifiedSearchQuickSelection(number: 1))
+        let firstRequest = try XCTUnwrap(coordinator.unifiedSearchQuickSelectionRequest)
+        XCTAssertEqual(firstRequest.number, 1)
+
+        XCTAssertTrue(coordinator.requestUnifiedSearchQuickSelection(number: 1))
+        let secondRequest = try XCTUnwrap(coordinator.unifiedSearchQuickSelectionRequest)
+        XCTAssertNotEqual(firstRequest.id, secondRequest.id)
+
+        coordinator.dismissUnifiedSearch()
+        XCTAssertNil(coordinator.unifiedSearchQuickSelectionRequest)
+    }
+
     func testSearchNavigationDismissesPaletteAndPublishesExactRevealTarget() throws {
         let coordinator = SettingsNavigationCoordinator(
             isPluginConfigurationAvailable: { $0 == "keep-awake" }
@@ -303,5 +323,19 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.destination, .general)
         let request = try XCTUnwrap(coordinator.searchRevealRequest)
         XCTAssertEqual(request.target, .general(.language))
+    }
+
+    func testClearingRevealTargetOnlyClearsTheMatchingRequest() throws {
+        let coordinator = SettingsNavigationCoordinator(initialDestination: .about)
+        coordinator.navigateFromSearch(
+            to: .general,
+            target: .general(.language)
+        )
+
+        coordinator.clearSearchRevealRequest(matching: .general(.appearance))
+        XCTAssertNotNil(coordinator.searchRevealRequest)
+
+        coordinator.clearSearchRevealRequest(matching: .general(.language))
+        XCTAssertNil(coordinator.searchRevealRequest)
     }
 }

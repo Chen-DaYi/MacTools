@@ -96,6 +96,70 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         )
     }
 
+    func testUnifiedSearchResultCountUsesRuntimePluralRules() {
+        setRuntimePreference("en")
+        XCTAssertEqual(
+            AppL10n.searchPluralFormat(
+                "search.resultCountFormat",
+                defaultValue: "%d results",
+                count: 1
+            ),
+            "1 result"
+        )
+        XCTAssertEqual(
+            AppL10n.searchPluralFormat(
+                "search.resultCountFormat",
+                defaultValue: "%d results",
+                count: 2
+            ),
+            "2 results"
+        )
+
+        setRuntimePreference("ru")
+        XCTAssertEqual(
+            AppL10n.searchPluralFormat(
+                "search.resultCountFormat",
+                defaultValue: "%d результатов",
+                count: 2
+            ),
+            "2 результата"
+        )
+        XCTAssertEqual(
+            AppL10n.searchPluralFormat(
+                "search.resultCountFormat",
+                defaultValue: "%d результатов",
+                count: 5
+            ),
+            "5 результатов"
+        )
+
+        setRuntimePreference("ar")
+        XCTAssertEqual(
+            AppL10n.searchPluralFormat(
+                "search.resultCountFormat",
+                defaultValue: "%d نتيجة",
+                count: 0
+            ),
+            "لا نتائج"
+        )
+        XCTAssertEqual(
+            AppL10n.searchPluralFormat(
+                "search.resultCountFormat",
+                defaultValue: "%d نتيجة",
+                count: 2
+            ),
+            "نتيجتان"
+        )
+        XCTAssertEqual(
+            AppL10n.searchPluralFormat(
+                "search.resultCountFormat",
+                defaultValue: "%d نتيجة",
+                count: 3
+            ),
+            "3 نتائج"
+        )
+    }
+
     func testPrimaryPanelButtonTitleProviderIsReadOnEveryAccess() {
         var title = "English"
         let descriptor = PluginPrimaryPanelDescriptor(

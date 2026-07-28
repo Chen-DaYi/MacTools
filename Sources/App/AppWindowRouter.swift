@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import SwiftUI
 import MacToolsPluginKit
@@ -7,6 +8,7 @@ enum MacToolsLocalKeyboardCommand: Equatable {
     case showSettings
     case focusSearch
     case showUnifiedSearch
+    case selectUnifiedSearchResult(Int)
 
     static func resolve(for event: NSEvent) -> MacToolsLocalKeyboardCommand? {
         guard event.type == .keyDown else {
@@ -16,6 +18,10 @@ enum MacToolsLocalKeyboardCommand: Equatable {
         let relevantModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
         guard event.modifierFlags.intersection(relevantModifiers) == .command else {
             return nil
+        }
+
+        if let selectionNumber = physicalNumberRowSelection(for: event.keyCode) {
+            return .selectUnifiedSearchResult(selectionNumber)
         }
 
         switch event.charactersIgnoringModifiers?.lowercased() {
@@ -29,11 +35,36 @@ enum MacToolsLocalKeyboardCommand: Equatable {
             return nil
         }
     }
+
+    private static func physicalNumberRowSelection(for keyCode: UInt16) -> Int? {
+        switch keyCode {
+        case UInt16(kVK_ANSI_1):
+            1
+        case UInt16(kVK_ANSI_2):
+            2
+        case UInt16(kVK_ANSI_3):
+            3
+        case UInt16(kVK_ANSI_4):
+            4
+        case UInt16(kVK_ANSI_5):
+            5
+        case UInt16(kVK_ANSI_6):
+            6
+        case UInt16(kVK_ANSI_7):
+            7
+        case UInt16(kVK_ANSI_8):
+            8
+        case UInt16(kVK_ANSI_9):
+            9
+        default:
+            nil
+        }
+    }
 }
 
 @MainActor
 final class MacToolsCommandWindow: NSWindow {
-    var onLocalKeyboardCommand: ((MacToolsLocalKeyboardCommand) -> Void)?
+    var onLocalKeyboardCommand: ((MacToolsLocalKeyboardCommand) -> Bool)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard
@@ -43,7 +74,10 @@ final class MacToolsCommandWindow: NSWindow {
             return super.performKeyEquivalent(with: event)
         }
 
-        onLocalKeyboardCommand(command)
+        guard onLocalKeyboardCommand(command) else {
+            return super.performKeyEquivalent(with: event)
+        }
+
         return true
     }
 }
@@ -174,7 +208,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.onLocalKeyboardCommand = { [weak self] command in
-            self?.handleLocalKeyboardCommand(command)
+            self?.handleLocalKeyboardCommand(command) ?? false
         }
         window.center()
         settingsNavigationCoordinator = navigationCoordinator
@@ -216,14 +250,37 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         }
     }
 
-    private func handleLocalKeyboardCommand(_ command: MacToolsLocalKeyboardCommand) {
+    private func handleLocalKeyboardCommand(_ command: MacToolsLocalKeyboardCommand) -> Bool {
         switch command {
         case .showSettings:
             showSettings()
+            return true
         case .focusSearch:
             settingsNavigationCoordinator?.requestSearchFocus()
+            return true
         case .showUnifiedSearch:
             showUnifiedSearch()
+            return true
+        case let .selectUnifiedSearchResult(number):
+            guard let settingsNavigationCoordinator else {
+                return false
+            }
+
+            if settingsNavigationCoordinator.requestUnifiedSearchQuickSelection(number: number) {
+                return true
+            }
+
+            switch number {
+            case 1:
+                settingsNavigationCoordinator.selectSettingsDestination(.general)
+            case 2:
+                settingsNavigationCoordinator.selectSettingsDestination(.pluginConfiguration)
+            case 3:
+                settingsNavigationCoordinator.selectSettingsDestination(.about)
+            default:
+                return false
+            }
+            return true
         }
     }
 
