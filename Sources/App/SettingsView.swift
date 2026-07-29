@@ -1254,10 +1254,6 @@ private struct FeatureSettingsSidebar: View {
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
-                .background {
-                    SettingsSidebarMaterialBackground()
-                        .allowsHitTesting(false)
-                }
                 .focusable(interactions: .activate)
                 .focused($isSidebarFocused)
                 .onMoveCommand { direction in
@@ -1291,6 +1287,10 @@ private struct FeatureSettingsSidebar: View {
                 ))
                 .accessibilityHint(configurationPanes.isEmpty ? emptyConfigurationsText : "")
             }
+        }
+        .background {
+            SettingsSidebarMaterialBackground()
+                .allowsHitTesting(false)
         }
     }
 
