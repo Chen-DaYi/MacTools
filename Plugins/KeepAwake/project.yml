@@ -1,3 +1,22 @@
 settings:
   base:
     OTHER_LDFLAGS: -framework IOKit
+
+targets:
+  mactools-keep-awake-virtual-display-helper:
+    type: tool
+    platform: macOS
+    deploymentTarget: '14.0'
+    bundleResourcePath: VirtualDisplayHelper
+    sources:
+      - path: VirtualDisplayHelper/Sources
+    settings:
+      base:
+        PRODUCT_NAME: mactools-keep-awake-virtual-display-helper
+        PRODUCT_BUNDLE_IDENTIFIER: "$(BUNDLE_IDENTIFIER_PREFIX).mactools.plugins.keep-awake.virtual-display-helper"
+        GENERATE_INFOPLIST_FILE: true
+        CLANG_ENABLE_OBJC_ARC: true
+        MACOSX_DEPLOYMENT_TARGET: '14.0'
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: "$(DEVELOPMENT_TEAM)"
+        OTHER_LDFLAGS: -framework CoreGraphics
