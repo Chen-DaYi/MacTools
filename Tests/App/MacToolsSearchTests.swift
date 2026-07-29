@@ -244,6 +244,37 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertEqual(model.results.first?.title, "快捷键目标")
     }
 
+    func testUnifiedSearchFieldLeavesCommandsToActiveInputMethod() {
+        for selector in [
+            #selector(NSResponder.moveUp(_:)),
+            #selector(NSResponder.moveDown(_:)),
+            #selector(NSResponder.insertNewline(_:)),
+            #selector(NSResponder.cancelOperation(_:))
+        ] {
+            XCTAssertNil(
+                UnifiedSearchTextField.command(
+                    for: selector,
+                    hasMarkedText: true
+                )
+            )
+        }
+
+        XCTAssertEqual(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.moveDown(_:)),
+                hasMarkedText: false
+            ),
+            .moveSelection(1)
+        )
+        XCTAssertEqual(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertNewline(_:)),
+                hasMarkedText: false
+            ),
+            .submit
+        )
+    }
+
     func testPaletteLayoutUsesLargerMaximumSizeAndFitsMinimumSettingsWindow() {
         XCTAssertEqual(
             UnifiedSearchPaletteLayout.width(for: 720),

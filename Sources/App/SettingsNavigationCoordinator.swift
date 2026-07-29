@@ -223,10 +223,27 @@ final class SettingsNavigationCoordinator: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func consumeUnifiedSearchQuickSelectionRequest(
+        _ request: UnifiedSearchQuickSelectionRequest
+    ) -> Bool {
+        guard unifiedSearchQuickSelectionRequest == request else {
+            return false
+        }
+
+        unifiedSearchQuickSelectionRequest = nil
+        return true
+    }
+
     func navigateFromSearch(
         to destination: SettingsNavigationDestination,
         target: SettingsSearchRevealTarget?
     ) {
+        guard isAvailable(destination) else {
+            searchRevealRequest = nil
+            return
+        }
+
         dismissUnifiedSearch()
         navigate(to: destination)
 

@@ -160,6 +160,22 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         )
     }
 
+    func testUnifiedSearchPluginMetadataIncludesLocalizedCategoryAndStableID() {
+        setRuntimePreference("zh-Hans")
+
+        let keywords = MacToolsSearchIndexBuilder.pluginMetadataKeywords(
+            pluginID: "lock-screen",
+            category: "system",
+            releaseChannel: "beta"
+        )
+
+        XCTAssertTrue(keywords.contains("lock-screen"))
+        XCTAssertTrue(keywords.contains("system"))
+        XCTAssertTrue(keywords.contains("系统"))
+        XCTAssertTrue(keywords.contains("beta"))
+        XCTAssertTrue(keywords.contains("Beta"))
+    }
+
     func testPrimaryPanelButtonTitleProviderIsReadOnEveryAccess() {
         var title = "English"
         let descriptor = PluginPrimaryPanelDescriptor(

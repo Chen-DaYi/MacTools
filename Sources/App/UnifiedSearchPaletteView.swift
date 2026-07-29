@@ -79,6 +79,116 @@ final class UnifiedSearchPaletteModel: ObservableObject {
     }
 }
 
+struct UnifiedSearchTextField: NSViewRepresentable {
+    enum Command: Equatable {
+        case moveSelection(Int)
+        case submit
+        case cancel
+    }
+
+    @Binding var text: String
+    let placeholder: String
+    let accessibilityLabel: String
+    let focusRequestID: UInt
+    let onCommand: (Command) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.delegate = context.coordinator
+        field.isBezeled = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+        field.lineBreakMode = .byTruncatingTail
+        field.placeholderString = placeholder
+        field.setAccessibilityLabel(accessibilityLabel)
+        field.setAccessibilityIdentifier("mactools.unified-search.field")
+        context.coordinator.focus(field, for: focusRequestID)
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.parent = self
+        field.placeholderString = placeholder
+        field.setAccessibilityLabel(accessibilityLabel)
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+        context.coordinator.focus(field, for: focusRequestID)
+    }
+
+    static func command(
+        for selector: Selector,
+        hasMarkedText: Bool
+    ) -> Command? {
+        guard !hasMarkedText else {
+            return nil
+        }
+
+        switch selector {
+        case #selector(NSResponder.moveDown(_:)):
+            return .moveSelection(1)
+        case #selector(NSResponder.moveUp(_:)):
+            return .moveSelection(-1)
+        case #selector(NSResponder.insertNewline(_:)):
+            return .submit
+        case #selector(NSResponder.cancelOperation(_:)):
+            return .cancel
+        default:
+            return nil
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: UnifiedSearchTextField
+        private var lastFocusRequestID: UInt?
+
+        init(parent: UnifiedSearchTextField) {
+            self.parent = parent
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else {
+                return
+            }
+
+            parent.text = field.stringValue
+        }
+
+        func control(
+            _ control: NSControl,
+            textView: NSTextView,
+            doCommandBy selector: Selector
+        ) -> Bool {
+            guard let command = UnifiedSearchTextField.command(
+                for: selector,
+                hasMarkedText: textView.hasMarkedText()
+            ) else {
+                return false
+            }
+
+            parent.onCommand(command)
+            return true
+        }
+
+        func focus(_ field: NSTextField, for requestID: UInt) {
+            guard lastFocusRequestID != requestID else {
+                return
+            }
+
+            lastFocusRequestID = requestID
+            DispatchQueue.main.async { [weak field] in
+                field?.window?.makeFirstResponder(field)
+            }
+        }
+    }
+}
+
 struct UnifiedSearchPresentationView: View {
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     let pluginHost: PluginHost
@@ -118,7 +228,6 @@ struct UnifiedSearchPaletteView: View {
     @State private var query = ""
     @State private var selectedResultID: String?
     @State private var pendingConfirmation: MacToolsSearchResult?
-    @FocusState private var isQueryFocused: Bool
 
     init(
         pluginHost: PluginHost,
@@ -154,7 +263,9 @@ struct UnifiedSearchPaletteView: View {
         .shadow(color: .black.opacity(0.22), radius: 28, y: 12)
         .onAppear {
             syncSelection()
-            focusQuery()
+            handleQuickSelectionRequest(
+                navigationCoordinator.unifiedSearchQuickSelectionRequest
+            )
         }
         .onChange(of: query) {
             model.updateQuery(query)
@@ -163,20 +274,8 @@ struct UnifiedSearchPaletteView: View {
         .onChange(of: resultIDs) {
             syncSelection()
         }
-        .onChange(of: navigationCoordinator.unifiedSearchFocusRequestID) {
-            focusQuery()
-        }
         .onChange(of: navigationCoordinator.unifiedSearchQuickSelectionRequest) { _, request in
-            guard
-                let request,
-                results.indices.contains(request.number - 1)
-            else {
-                return
-            }
-
-            let result = results[request.number - 1]
-            selectedResultID = result.id
-            activate(result)
+            handleQuickSelectionRequest(request)
         }
         .onExitCommand {
             navigationCoordinator.dismissUnifiedSearch()
@@ -209,31 +308,20 @@ struct UnifiedSearchPaletteView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField(
-                AppL10n.search(
+            UnifiedSearchTextField(
+                text: $query,
+                placeholder: AppL10n.search(
                     "search.prompt",
                     defaultValue: "搜索插件、设置和命令"
                 ),
-                text: $query
+                accessibilityLabel: AppL10n.search(
+                    "search.title",
+                    defaultValue: "搜索 MacTools"
+                ),
+                focusRequestID: navigationCoordinator.unifiedSearchFocusRequestID,
+                onCommand: handleSearchFieldCommand
             )
-            .textFieldStyle(.plain)
-            .font(PluginSettingsTheme.Typography.rowTitle)
-            .focused($isQueryFocused)
-            .onSubmit {
-                activateSelectedResult()
-            }
-            .onKeyPress(.downArrow) {
-                moveSelection(by: 1)
-                return .handled
-            }
-            .onKeyPress(.upArrow) {
-                moveSelection(by: -1)
-                return .handled
-            }
-            .accessibilityLabel(
-                AppL10n.search("search.title", defaultValue: "搜索 MacTools")
-            )
-            .accessibilityIdentifier("mactools.unified-search.field")
+            .frame(maxWidth: .infinity, minHeight: 22)
 
             if !query.isEmpty {
                 Button {
@@ -560,6 +648,38 @@ struct UnifiedSearchPaletteView: View {
         activate(selectedResult)
     }
 
+    private func handleSearchFieldCommand(
+        _ command: UnifiedSearchTextField.Command
+    ) {
+        switch command {
+        case let .moveSelection(offset):
+            moveSelection(by: offset)
+        case .submit:
+            activateSelectedResult()
+        case .cancel:
+            navigationCoordinator.dismissUnifiedSearch()
+        }
+    }
+
+    private func handleQuickSelectionRequest(
+        _ request: UnifiedSearchQuickSelectionRequest?
+    ) {
+        guard
+            let request,
+            navigationCoordinator.consumeUnifiedSearchQuickSelectionRequest(request)
+        else {
+            return
+        }
+
+        guard results.indices.contains(request.number - 1) else {
+            return
+        }
+
+        let result = results[request.number - 1]
+        selectedResultID = result.id
+        activate(result)
+    }
+
     private func activate(_ result: MacToolsSearchResult) {
         if result.confirmation != nil {
             pendingConfirmation = result
@@ -581,9 +701,4 @@ struct UnifiedSearchPaletteView: View {
         }
     }
 
-    private func focusQuery() {
-        DispatchQueue.main.async {
-            isQueryFocused = true
-        }
-    }
 }

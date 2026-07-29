@@ -314,8 +314,11 @@ enum MacToolsSearchIndexBuilder {
                     defaultValue: "插件设置"
                 ),
                 detail: item.description,
-                keywords: [managementItem?.category, managementItem?.releaseChannel]
-                    .compactMap { $0 },
+                keywords: pluginMetadataKeywords(
+                    pluginID: item.pluginID,
+                    category: managementItem?.category,
+                    releaseChannel: managementItem?.releaseChannel
+                ),
                 systemImage: item.iconName,
                 action: .navigate(
                     destination: .plugins(.configuration(item.pluginID)),
@@ -359,7 +362,11 @@ enum MacToolsSearchIndexBuilder {
                 title: item.title,
                 subtitle: subtitle,
                 detail: item.description,
-                keywords: [item.category, item.releaseChannel].compactMap { $0 },
+                keywords: pluginMetadataKeywords(
+                    pluginID: item.id,
+                    category: item.category,
+                    releaseChannel: item.releaseChannel
+                ),
                 systemImage: item.iconName,
                 action: .navigate(
                     destination: destination,
@@ -732,6 +739,37 @@ enum MacToolsSearchIndexBuilder {
                 + pluginHost.dashboardLayoutItems
                 + pluginHost.dashboardHiddenLayoutItems
         ).filter { seenIDs.insert($0.id).inserted }
+    }
+
+    static func pluginMetadataKeywords(
+        pluginID: String,
+        category: String?,
+        releaseChannel: String?
+    ) -> [String] {
+        var keywords = [pluginID]
+
+        if let category = nonEmptyMetadataValue(category) {
+            keywords.append(category)
+            keywords.append(PluginCategory(rawString: category).displayName)
+        }
+
+        if let releaseChannel = nonEmptyMetadataValue(releaseChannel) {
+            keywords.append(releaseChannel)
+            if let channel = PluginReleaseChannel(rawString: releaseChannel) {
+                keywords.append(channel.displayName)
+            }
+        }
+
+        return keywords
+    }
+
+    private static func nonEmptyMetadataValue(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func deduplicated(

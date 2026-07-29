@@ -262,6 +262,45 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.unifiedSearchQuickSelectionRequest)
     }
 
+    func testUnifiedSearchQuickSelectionRequestCanOnlyBeConsumedOnce() throws {
+        let coordinator = SettingsNavigationCoordinator()
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+        XCTAssertTrue(coordinator.requestUnifiedSearchQuickSelection(number: 2))
+        let request = try XCTUnwrap(
+            coordinator.unifiedSearchQuickSelectionRequest
+        )
+
+        XCTAssertTrue(
+            coordinator.consumeUnifiedSearchQuickSelectionRequest(request)
+        )
+        XCTAssertNil(coordinator.unifiedSearchQuickSelectionRequest)
+        XCTAssertFalse(
+            coordinator.consumeUnifiedSearchQuickSelectionRequest(request)
+        )
+    }
+
+    func testSearchNavigationKeepsPaletteOpenForUnavailablePlugin() {
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { _ in false }
+        )
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        coordinator.navigateFromSearch(
+            to: .plugins(.configuration("removed-plugin")),
+            target: .plugin(
+                PluginSettingsSearchTarget(
+                    pluginID: "removed-plugin",
+                    entryID: "setting"
+                )
+            )
+        )
+
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+        XCTAssertEqual(coordinator.history, [.general])
+        XCTAssertNil(coordinator.searchRevealRequest)
+    }
+
     func testSearchNavigationDismissesPaletteAndPublishesExactRevealTarget() throws {
         let coordinator = SettingsNavigationCoordinator(
             isPluginConfigurationAvailable: { $0 == "keep-awake" }
