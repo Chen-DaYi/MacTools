@@ -5,16 +5,20 @@ import MacToolsPluginKit
 @MainActor
 func makePluginHostForTests(
     plugins: [any MacToolsPlugin],
-    suiteName: String = "PluginHostTestSupport-\(UUID().uuidString)"
+    suiteName: String = "PluginHostTestSupport-\(UUID().uuidString)",
+    dynamicPluginManager: DynamicPluginManager? = nil,
+    loadDynamicPluginsOnInit: Bool = true
 ) -> PluginHost {
     let defaults = UserDefaults(suiteName: suiteName)!
     defaults.removePersistentDomain(forName: suiteName)
 
     return PluginHost(
         plugins: plugins,
+        dynamicPluginManager: dynamicPluginManager,
         shortcutStore: ShortcutStore(userDefaults: defaults),
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
         preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
-        globalShortcutManager: GlobalShortcutManager()
+        globalShortcutManager: GlobalShortcutManager(),
+        loadDynamicPluginsOnInit: loadDynamicPluginsOnInit
     )
 }

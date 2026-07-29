@@ -59,6 +59,12 @@ final class UnifiedSearchPaletteModel: ObservableObject {
         updateResults()
     }
 
+    func refresh() {
+        rebuildTask?.cancel()
+        index = MacToolsSearchIndexBuilder.build(pluginHost: pluginHost)
+        updateResults()
+    }
+
     private func scheduleIndexRebuild() {
         rebuildTask?.cancel()
         rebuildTask = Task { @MainActor [weak self] in
@@ -691,13 +697,27 @@ struct UnifiedSearchPaletteView: View {
     private func execute(_ result: MacToolsSearchResult) {
         switch result.action {
         case let .navigate(destination, target):
-            navigationCoordinator.navigateFromSearch(to: destination, target: target)
-        case let .pluginCommand(pluginID, commandID):
-            navigationCoordinator.dismissUnifiedSearch()
-            pluginHost.performCommand(pluginID: pluginID, commandID: commandID)
+            if !navigationCoordinator.navigateFromSearch(
+                to: destination,
+                target: target
+            ) {
+                model.refresh()
+            }
+        case let .pluginCommand(pluginID, expectedDefinition):
+            if pluginHost.performCommand(
+                pluginID: pluginID,
+                expectedDefinition: expectedDefinition
+            ) {
+                navigationCoordinator.dismissUnifiedSearch()
+            } else {
+                model.refresh()
+            }
         case let .appCommand(action):
-            navigationCoordinator.dismissUnifiedSearch()
-            pluginHost.performAppCommand(action)
+            if pluginHost.performAppCommand(action) {
+                navigationCoordinator.dismissUnifiedSearch()
+            } else {
+                model.refresh()
+            }
         }
     }
 

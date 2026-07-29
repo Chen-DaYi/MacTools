@@ -72,6 +72,7 @@ enum GeneralSettingsSearchTarget: String, Hashable {
 
 enum SettingsSearchRevealTarget: Hashable {
     case general(GeneralSettingsSearchTarget)
+    case marketplace(MarketplacePluginSearchTarget)
     case plugin(PluginSettingsSearchTarget)
     case surface(SurfaceSettingsSearchTarget)
 }
@@ -93,6 +94,14 @@ struct SurfaceSettingsSearchTarget: Hashable {
             "feature-panel"
         }
         return "surface-search-anchor.\(surfaceID).\(isHidden ? "hidden" : "visible").\(pluginID)"
+    }
+}
+
+struct MarketplacePluginSearchTarget: Hashable {
+    let pluginID: String
+
+    var scrollID: String {
+        "marketplace-search-anchor.\(pluginID)"
     }
 }
 
@@ -120,6 +129,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
 
     private let pluginSettingsLandingPage: () -> FeatureSettingsPane
     private let isPluginConfigurationAvailable: (String) -> Bool
+    private let isPluginSettingsSearchTargetAvailable: (PluginSettingsSearchTarget) -> Bool
+    private let isPluginManagementAvailable: (String) -> Bool
     private let isPluginSurfaceAvailable: (SurfaceSettingsSearchTarget) -> Bool
     private let selectPluginSettingsPane: (FeatureSettingsPane) -> Bool
     private var nextSearchFocusRequestID: UInt = 0
@@ -131,6 +142,14 @@ final class SettingsNavigationCoordinator: ObservableObject {
         self.init(
             pluginSettingsLandingPage: { pluginHost.pluginSettingsLandingPage() },
             isPluginConfigurationAvailable: { pluginHost.hasPluginConfiguration(pluginID: $0) },
+            isPluginSettingsSearchTargetAvailable: {
+                pluginHost.hasPluginSettingsSearchTarget($0)
+            },
+            isPluginManagementAvailable: { pluginID in
+                pluginHost.pluginManagementItems.contains {
+                    $0.id == pluginID && $0.canUninstall
+                }
+            },
             isPluginSurfaceAvailable: { target in
                 let items = switch target.surface {
                 case .dashboard:
@@ -148,6 +167,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
         initialDestination: SettingsNavigationDestination = .general,
         pluginSettingsLandingPage: @escaping () -> FeatureSettingsPane = { .marketplace },
         isPluginConfigurationAvailable: @escaping (String) -> Bool = { _ in true },
+        isPluginSettingsSearchTargetAvailable: @escaping (PluginSettingsSearchTarget) -> Bool = { _ in true },
+        isPluginManagementAvailable: @escaping (String) -> Bool = { _ in true },
         isPluginSurfaceAvailable: @escaping (SurfaceSettingsSearchTarget) -> Bool = { _ in true },
         selectPluginSettingsPane: @escaping (FeatureSettingsPane) -> Bool = { _ in true }
     ) {
@@ -156,6 +177,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
         self.historyIndex = 0
         self.pluginSettingsLandingPage = pluginSettingsLandingPage
         self.isPluginConfigurationAvailable = isPluginConfigurationAvailable
+        self.isPluginSettingsSearchTargetAvailable = isPluginSettingsSearchTargetAvailable
+        self.isPluginManagementAvailable = isPluginManagementAvailable
         self.isPluginSurfaceAvailable = isPluginSurfaceAvailable
         self.selectPluginSettingsPane = selectPluginSettingsPane
     }
@@ -247,16 +270,17 @@ final class SettingsNavigationCoordinator: ObservableObject {
         return true
     }
 
+    @discardableResult
     func navigateFromSearch(
         to destination: SettingsNavigationDestination,
         target: SettingsSearchRevealTarget?
-    ) {
+    ) -> Bool {
         guard
             isAvailable(destination),
-            target.map(isAvailable) ?? true
+            target.map(isAvailable) ?? true,
+            target.map({ isCompatible($0, with: destination) }) ?? true
         else {
-            searchRevealRequest = nil
-            return
+            return false
         }
 
         dismissUnifiedSearch()
@@ -264,7 +288,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
 
         guard let target else {
             searchRevealRequest = nil
-            return
+            return true
         }
 
         nextSearchRevealRequestID &+= 1
@@ -272,6 +296,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
             id: nextSearchRevealRequestID,
             target: target
         )
+        return true
     }
 
     func clearSearchRevealRequest(_ request: SettingsSearchRevealRequest) {
@@ -379,10 +404,35 @@ final class SettingsNavigationCoordinator: ObservableObject {
         switch target {
         case .general:
             true
+        case let .marketplace(target):
+            isPluginManagementAvailable(target.pluginID)
         case let .plugin(target):
-            isPluginConfigurationAvailable(target.pluginID)
+            isPluginSettingsSearchTargetAvailable(target)
         case let .surface(target):
             isPluginSurfaceAvailable(target)
+        }
+    }
+
+    private func isCompatible(
+        _ target: SettingsSearchRevealTarget,
+        with destination: SettingsNavigationDestination
+    ) -> Bool {
+        switch (target, destination) {
+        case (.general, .general):
+            true
+        case (.marketplace, .plugins(.marketplace)):
+            true
+        case let (.plugin(target), .plugins(.configuration(pluginID))):
+            target.pluginID == pluginID
+        case let (.surface(target), .plugins(pane)):
+            switch (target.surface, pane) {
+            case (.dashboard, .dashboardLayout), (.featurePanel, .featurePanelLayout):
+                true
+            default:
+                false
+            }
+        default:
+            false
         }
     }
 

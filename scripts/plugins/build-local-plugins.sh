@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -z "${PYTHON3:-}" ]]; then
+    if [[ -x /usr/bin/python3 ]]; then
+        PYTHON3=/usr/bin/python3
+    else
+        PYTHON3=python3
+    fi
+fi
+export PYTHON3
+
 usage() {
     cat <<'USAGE'
 Usage:
@@ -141,34 +150,11 @@ PY
 copy_manifest_for_configuration() {
     local source="$1"
     local destination="$2"
-
-    if [[ "$CONFIGURATION" != "Debug" ]]; then
-        ditto "$source" "$destination"
-        return
-    fi
-
-    local development_host_version
-    development_host_version="$(
-        awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' \
-            "$REPO_ROOT/Configs/AppVersion.xcconfig"
-    )"
-    if [[ -z "$development_host_version" ]]; then
-        echo "Unable to determine the local Debug host version." >&2
-        return 1
-    fi
-
-    python3 - "$source" "$destination" "$development_host_version" <<'PY'
-import json
-import sys
-
-source, destination, host_version = sys.argv[1:]
-with open(source, encoding="utf-8") as handle:
-    manifest = json.load(handle)
-manifest["minHostVersion"] = host_version
-with open(destination, "w", encoding="utf-8") as handle:
-    json.dump(manifest, handle, ensure_ascii=False, indent=2)
-    handle.write("\n")
-PY
+    "$PYTHON3" "$REPO_ROOT/scripts/plugins/copy-plugin-manifest.py" copy \
+        --source "$source" \
+        --destination "$destination" \
+        --configuration "$CONFIGURATION" \
+        --app-version-config "$REPO_ROOT/Configs/AppVersion.xcconfig"
 }
 
 discover_candidates() {

@@ -322,6 +322,70 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.searchRevealRequest)
     }
 
+    func testSearchNavigationKeepsPaletteOpenForUnavailableExactPluginEntry() {
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginConfigurationAvailable: { $0 == "installed-plugin" },
+            isPluginSettingsSearchTargetAvailable: { _ in false }
+        )
+        let target = PluginSettingsSearchTarget(
+            pluginID: "installed-plugin",
+            entryID: "removed-setting"
+        )
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        XCTAssertFalse(
+            coordinator.navigateFromSearch(
+                to: .plugins(.configuration("installed-plugin")),
+                target: .plugin(target)
+            )
+        )
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+        XCTAssertEqual(coordinator.history, [.general])
+        XCTAssertNil(coordinator.searchRevealRequest)
+    }
+
+    func testSearchNavigationRejectsMismatchedTargetAndDestination() {
+        let coordinator = SettingsNavigationCoordinator()
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        XCTAssertFalse(
+            coordinator.navigateFromSearch(
+                to: .plugins(.featurePanelLayout),
+                target: .surface(
+                    SurfaceSettingsSearchTarget(
+                        surface: .dashboard,
+                        pluginID: "display"
+                    )
+                )
+            )
+        )
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+        XCTAssertNil(coordinator.searchRevealRequest)
+    }
+
+    func testSearchNavigationRevealsAvailableMarketplacePlugin() throws {
+        let target = MarketplacePluginSearchTarget(pluginID: "failed-plugin")
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginManagementAvailable: { $0 == target.pluginID }
+        )
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        XCTAssertTrue(
+            coordinator.navigateFromSearch(
+                to: .plugins(.marketplace),
+                target: .marketplace(target)
+            )
+        )
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+        XCTAssertEqual(
+            try XCTUnwrap(coordinator.searchRevealRequest).target,
+            .marketplace(target)
+        )
+    }
+
     func testSearchNavigationAllowsAvailableSurfacePlugin() throws {
         let expectedTarget = SurfaceSettingsSearchTarget(
             surface: .dashboard,

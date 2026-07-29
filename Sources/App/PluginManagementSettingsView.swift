@@ -17,6 +17,8 @@ struct PluginManagementSettingsView: View {
     @State private var bulkUpdateProgressText: String?
     @State private var bulkUpdateProgressOpacity: Double = 0
     @State private var bulkUpdateProgressHideTask: Task<Void, Never>?
+    @State private var activeSearchTarget: MarketplacePluginSearchTarget?
+    @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
@@ -48,34 +50,52 @@ struct PluginManagementSettingsView: View {
                     marketplaceSortPicker
                 }
 
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        if filteredItems.isEmpty {
-                            ContentUnavailableView(
-                                AppL10n.plugins("plugin.filter.empty.title", defaultValue: "未找到匹配的插件"),
-                                systemImage: "magnifyingglass",
-                                description: Text(AppL10n.plugins("plugin.filter.empty.description", defaultValue: "尝试调整关键字或切换分类。"))
-                            )
-                            .frame(maxWidth: .infinity, minHeight: 180)
-                        } else {
-                            ForEach(filteredItems) { item in
-                                PluginManagementRow(
-                                    item: item,
-                                    hasSettings: configurationPluginIDs.contains(item.id),
-                                    isBusy: activeOperationID == item.id
-                                        || pluginHost.automaticPluginUpdateStatus.isUpdatingPlugin(id: item.id),
-                                    isInteractionDisabled: activeOperationID != nil
-                                        || pluginHost.automaticPluginUpdateStatus.isActive,
-                                    onInstall: { runOperation(id: item.id) { try await pluginHost.installPluginFromCatalog(pluginID: item.id) } },
-                                    onUpdate: { runOperation(id: item.id) { try await pluginHost.updatePluginFromCatalog(pluginID: item.id) } },
-                                    onUninstall: { requestUninstall(item) },
-                                    onOpenSettings: { pluginHost.presentPluginConfiguration(pluginID: item.id) },
-                                    onRelaunch: { appRelauncher.relaunch() }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            if filteredItems.isEmpty {
+                                ContentUnavailableView(
+                                    AppL10n.plugins("plugin.filter.empty.title", defaultValue: "未找到匹配的插件"),
+                                    systemImage: "magnifyingglass",
+                                    description: Text(AppL10n.plugins("plugin.filter.empty.description", defaultValue: "尝试调整关键字或切换分类。"))
                                 )
+                                .frame(maxWidth: .infinity, minHeight: 180)
+                            } else {
+                                ForEach(filteredItems) { item in
+                                    PluginManagementRow(
+                                        item: item,
+                                        hasSettings: configurationPluginIDs.contains(item.id),
+                                        isBusy: activeOperationID == item.id
+                                            || pluginHost.automaticPluginUpdateStatus.isUpdatingPlugin(id: item.id),
+                                        isInteractionDisabled: activeOperationID != nil
+                                            || pluginHost.automaticPluginUpdateStatus.isActive,
+                                        onInstall: { runOperation(id: item.id) { try await pluginHost.installPluginFromCatalog(pluginID: item.id) } },
+                                        onUpdate: { runOperation(id: item.id) { try await pluginHost.updatePluginFromCatalog(pluginID: item.id) } },
+                                        onUninstall: { requestUninstall(item) },
+                                        onOpenSettings: { pluginHost.presentPluginConfiguration(pluginID: item.id) },
+                                        onRelaunch: { appRelauncher.relaunch() }
+                                    )
+                                    .marketplaceSearchAnchor(
+                                        target: MarketplacePluginSearchTarget(
+                                            pluginID: item.id
+                                        ),
+                                        activeTarget: activeSearchTarget
+                                    )
+                                }
                             }
                         }
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
+                    .onAppear {
+                        applySearchRevealRequest(
+                            navigationCoordinator.searchRevealRequest,
+                            proxy: proxy
+                        )
+                    }
+                    .onChange(of: navigationCoordinator.searchRevealRequest) {
+                        _, request in
+                        applySearchRevealRequest(request, proxy: proxy)
+                    }
                 }
             }
         }
@@ -117,6 +137,13 @@ struct PluginManagementSettingsView: View {
         }
         .onDisappear {
             navigationCoordinator.setSearchField(.pluginMarketplace, focused: false)
+            clearSearchTargetTask?.cancel()
+            if let activeSearchTarget {
+                navigationCoordinator.clearSearchRevealRequest(
+                    matching: .marketplace(activeSearchTarget)
+                )
+            }
+            activeSearchTarget = nil
         }
         .onChange(of: navigationCoordinator.searchFocusRequest) { _, request in
             applySearchFocusRequest(request)
@@ -128,6 +155,22 @@ struct PluginManagementSettingsView: View {
             if isEmpty {
                 isSearchFocused = false
             }
+        }
+        .onChange(of: pluginHost.pluginManagementItems) { _, items in
+            guard
+                let activeSearchTarget,
+                !items.contains(where: {
+                    $0.id == activeSearchTarget.pluginID && $0.canUninstall
+                })
+            else {
+                return
+            }
+
+            clearSearchTargetTask?.cancel()
+            self.activeSearchTarget = nil
+            navigationCoordinator.clearSearchRevealRequest(
+                matching: .marketplace(activeSearchTarget)
+            )
         }
         .onChange(of: pluginHost.automaticPluginUpdateStatus) { _, status in
             syncAutomaticBulkUpdateProgress(status)
@@ -144,6 +187,47 @@ struct PluginManagementSettingsView: View {
         }
 
         isSearchFocused = true
+    }
+
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        proxy: ScrollViewProxy
+    ) {
+        guard
+            let request,
+            case let .marketplace(target) = request.target
+        else {
+            return
+        }
+
+        guard pluginHost.pluginManagementItems.contains(where: {
+            $0.id == target.pluginID && $0.canUninstall
+        }) else {
+            navigationCoordinator.clearSearchRevealRequest(request)
+            return
+        }
+
+        clearSearchTargetTask?.cancel()
+        searchText = ""
+        selectedFilter = .all
+        activeSearchTarget = target
+
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(target.scrollID, anchor: .center)
+            }
+        }
+
+        clearSearchTargetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            activeSearchTarget = nil
+            navigationCoordinator.clearSearchRevealRequest(request)
+        }
     }
 
     private var filteredItems: [PluginManagementItem] {
@@ -621,6 +705,60 @@ private struct PluginManagementRow: View {
         case .failed, .incompatible, .revoked:
             return "exclamationmark.triangle.fill"
         }
+    }
+}
+
+private struct MarketplaceSearchAnchorModifier: ViewModifier {
+    @AccessibilityFocusState private var isAccessibilityFocused: Bool
+
+    let target: MarketplacePluginSearchTarget
+    let activeTarget: MarketplacePluginSearchTarget?
+
+    func body(content: Content) -> some View {
+        content
+            .id(target.scrollID)
+            .accessibilityFocused($isAccessibilityFocused)
+            .overlay {
+                if activeTarget == target {
+                    RoundedRectangle(
+                        cornerRadius: PluginSettingsTheme.Radius.hostCard,
+                        style: .continuous
+                    )
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
+            .onAppear {
+                focusIfNeeded(activeTarget)
+            }
+            .onChange(of: activeTarget) { _, newValue in
+                focusIfNeeded(newValue)
+            }
+    }
+
+    private func focusIfNeeded(
+        _ activeTarget: MarketplacePluginSearchTarget?
+    ) {
+        guard activeTarget == target else {
+            return
+        }
+
+        isAccessibilityFocused = true
+    }
+}
+
+private extension View {
+    func marketplaceSearchAnchor(
+        target: MarketplacePluginSearchTarget,
+        activeTarget: MarketplacePluginSearchTarget?
+    ) -> some View {
+        modifier(
+            MarketplaceSearchAnchorModifier(
+                target: target,
+                activeTarget: activeTarget
+            )
+        )
     }
 }
 

@@ -65,6 +65,16 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
+    func testCustomSearchEntryRequiresACustomConfigurationSurface() {
+        let plugin = DeclarativeOnlySearchProviderTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let index = MacToolsSearchIndexBuilder.build(pluginHost: host)
+
+        XCTAssertFalse(index.items.contains {
+            $0.id == "\(plugin.metadata.id).settings-search.unrendered"
+        })
+    }
+
     func testGeneralSettingResultCarriesGeneralPageAndExactSearchTarget() throws {
         let host = makePluginHostForTests(plugins: [])
         let result = try XCTUnwrap(
@@ -297,12 +307,126 @@ final class MacToolsSearchTests: XCTestCase {
     func testPluginHostPerformsOnlyDeclaredCommands() {
         let plugin = SearchableTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
+        let definition = plugin.commandDefinitions[0]
 
-        host.performCommand(pluginID: plugin.metadata.id, commandID: "sleep")
-        host.performCommand(pluginID: plugin.metadata.id, commandID: "missing")
-        host.performCommand(pluginID: "missing", commandID: "sleep")
+        XCTAssertTrue(
+            host.performCommand(
+                pluginID: plugin.metadata.id,
+                expectedDefinition: definition
+            )
+        )
+        XCTAssertFalse(
+            host.performCommand(
+                pluginID: "missing",
+                expectedDefinition: definition
+            )
+        )
 
         XCTAssertEqual(plugin.performedCommandIDs, ["sleep"])
+    }
+
+    func testPluginHostRejectsAStaleCommandDefinition() {
+        let plugin = SearchableTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let staleDefinition = plugin.commandDefinitions[0]
+        plugin.commandTitle = "新的显示器命令"
+
+        XCTAssertFalse(
+            host.performCommand(
+                pluginID: plugin.metadata.id,
+                expectedDefinition: staleDefinition
+            )
+        )
+        XCTAssertTrue(plugin.performedCommandIDs.isEmpty)
+    }
+
+    func testPluginHostValidatesLiveExactSettingsTargets() {
+        let plugin = SearchableTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let index = MacToolsSearchIndexBuilder.build(pluginHost: host)
+        let targets = index.items.compactMap { item -> PluginSettingsSearchTarget? in
+            guard
+                case let .navigate(_, .plugin(target)) = item.action,
+                target.pluginID == plugin.metadata.id
+            else {
+                return nil
+            }
+            return target
+        }
+
+        XCTAssertFalse(targets.isEmpty)
+        XCTAssertTrue(targets.allSatisfy(host.hasPluginSettingsSearchTarget))
+        XCTAssertFalse(
+            host.hasPluginSettingsSearchTarget(
+                PluginSettingsSearchTarget(
+                    pluginID: plugin.metadata.id,
+                    entryID: "removed-entry"
+                )
+            )
+        )
+    }
+
+    func testInstalledIncompatiblePluginIsDiscoverableInMarketplace() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "MacToolsSearchTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let defaults = UserDefaults(
+            suiteName: "MacToolsSearchTests-\(UUID().uuidString)"
+        )!
+        let store = PluginPackageStore(
+            rootDirectory: root,
+            userDefaults: defaults,
+            hostVersion: "1.0.0"
+        )
+        let packageURL = store.installedDirectory
+            .appendingPathComponent(
+                "com.example.future.mactoolsplugin",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: packageURL,
+            withIntermediateDirectories: true
+        )
+        let manifest = PluginPackageManifest(
+            id: "com.example.future",
+            displayName: "Future Plugin",
+            version: "2.0.0",
+            minHostVersion: "99.0.0",
+            bundleRelativePath: "Future.bundle"
+        )
+        try JSONEncoder().encode(manifest).write(
+            to: packageURL.appendingPathComponent("plugin.json")
+        )
+
+        let manager = DynamicPluginManager(packageStore: store)
+        let host = makePluginHostForTests(
+            plugins: [],
+            dynamicPluginManager: manager,
+            loadDynamicPluginsOnInit: false
+        )
+        let result = try XCTUnwrap(
+            MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
+                $0.id == "plugin.com.example.future"
+            }
+        )
+
+        XCTAssertEqual(result.title, "Future Plugin")
+        XCTAssertEqual(
+            result.action,
+            .navigate(
+                destination: .plugins(.marketplace),
+                target: .marketplace(
+                    MarketplacePluginSearchTarget(
+                        pluginID: "com.example.future"
+                    )
+                )
+            )
+        )
+        XCTAssertTrue(result.detail.contains("99.0.0"))
     }
 
     func testAppCommandUsesExistingPresentationRouting() {
@@ -310,9 +434,15 @@ final class MacToolsSearchTests: XCTestCase {
         var requests: [AppPresentationRequest] = []
         host.appPresentationHandler = { requests.append($0) }
 
-        host.performAppCommand(.toggleDashboard)
+        XCTAssertTrue(host.performAppCommand(.toggleDashboard))
 
         XCTAssertEqual(requests, [.toggleDashboard])
+    }
+
+    func testAppCommandFailsWithoutPresentationRouting() {
+        let host = makePluginHostForTests(plugins: [])
+
+        XCTAssertFalse(host.performAppCommand(.toggleDashboard))
     }
 
     private func searchResult(
@@ -359,6 +489,7 @@ private final class SearchableTestPlugin:
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var performedCommandIDs: [String] = []
+    var commandTitle = "让显示器休眠"
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
@@ -437,7 +568,7 @@ private final class SearchableTestPlugin:
         [
             PluginCommandDefinition(
                 id: "sleep",
-                title: "让显示器休眠",
+                title: commandTitle,
                 description: "立即让所有屏幕进入休眠。",
                 systemImage: "display"
             )
@@ -486,4 +617,50 @@ private final class SurfaceOnlySearchTestPlugin: MacToolsPlugin, PluginPrimaryPa
     }
 
     func handleAction(_ action: PluginPanelAction) {}
+}
+
+@MainActor
+private final class DeclarativeOnlySearchProviderTestPlugin:
+    MacToolsPlugin,
+    PluginSettingsSearchProviding
+{
+    let metadata = PluginMetadata(
+        id: "declarative-only-search-provider",
+        title: "Declarative Only",
+        iconName: "slider.horizontal.3",
+        iconTint: Color(nsColor: .systemBlue),
+        order: 3,
+        defaultDescription: "Declarative settings only"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    var settingsSections: [PluginSettingsSection] {
+        [
+            PluginSettingsSection(
+                id: "visible",
+                title: "Visible",
+                description: "Rendered by the host.",
+                status: .init(
+                    text: "On",
+                    systemImage: "checkmark",
+                    tone: .positive
+                ),
+                footnote: nil,
+                buttonTitle: nil,
+                actionID: nil
+            )
+        ]
+    }
+
+    var settingsSearchEntries: [PluginSettingsSearchEntry] {
+        [
+            PluginSettingsSearchEntry(
+                id: "unrendered",
+                title: "Unrendered",
+                description: "There is no custom view for this anchor."
+            )
+        ]
+    }
 }

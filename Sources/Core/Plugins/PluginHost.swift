@@ -810,7 +810,11 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    func performCommand(pluginID: String, commandID: String) {
+    @discardableResult
+    func performCommand(
+        pluginID: String,
+        expectedDefinition: PluginCommandDefinition
+    ) -> Bool {
         guard
             let plugin = corePlugin(for: pluginID),
             let commandProvider = plugin as? any PluginCommandProviding,
@@ -818,20 +822,29 @@ final class PluginHost: ObservableObject {
                 for: plugin,
                 operation: "read command definitions",
                 commandProvider.commandDefinitions
-            ) ?? []).contains(where: { $0.id == commandID })
+            ) ?? []).contains(expectedDefinition)
         else {
-            return
+            rebuildDerivedState()
+            return false
         }
 
+        var didPerform = false
         handlePluginAction {
-            guardPluginCall(plugin, operation: "perform command") {
-                commandProvider.handleCommand(id: commandID)
+            didPerform = guardPluginCall(plugin, operation: "perform command") {
+                commandProvider.handleCommand(id: expectedDefinition.id)
             }
         }
+        return didPerform
     }
 
-    func performAppCommand(_ action: AppShortcutAction) {
-        appPresentationHandler?(action.presentationRequest)
+    @discardableResult
+    func performAppCommand(_ action: AppShortcutAction) -> Bool {
+        guard let appPresentationHandler else {
+            return false
+        }
+
+        appPresentationHandler(action.presentationRequest)
+        return true
     }
 
     func performPermissionAction(pluginID: String, permissionID: String) {
@@ -975,6 +988,42 @@ final class PluginHost: ObservableObject {
 
     func hasPluginConfiguration(pluginID: String) -> Bool {
         pluginConfigurationItems.contains(where: { $0.id == pluginID })
+    }
+
+    func hasPluginSettingsSearchTarget(
+        _ target: PluginSettingsSearchTarget
+    ) -> Bool {
+        cancelScheduledPluginStateRebuild()
+        rebuildDerivedState()
+
+        guard let item = pluginConfigurationItems.first(where: {
+            $0.pluginID == target.pluginID
+        }) else {
+            return false
+        }
+
+        if item.settingsCards.contains(where: { $0.id == target.entryID })
+            || item.permissionCards.contains(where: { $0.id == target.entryID }) {
+            return true
+        }
+
+        if item.shortcutItems.allSatisfy({ $0.settingsGroupID != nil }) {
+            if item.shortcutItems.contains(where: {
+                $0.settingsGroupID == target.entryID
+            }) {
+                return true
+            }
+        } else if item.shortcutItems.contains(where: {
+            $0.id == target.entryID
+        }) {
+            return true
+        }
+
+        return item.hasCustomConfiguration
+            && pluginSettingsSearchItems.contains {
+                $0.pluginID == target.pluginID
+                    && $0.entry.id == target.entryID
+            }
     }
 
     func clearShortcutError(for shortcutID: String) {
@@ -2074,20 +2123,22 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    @discardableResult
     private func guardPluginCall(
         _ plugin: any MacToolsPlugin,
         operation: String,
         _ action: () -> Void
-    ) {
+    ) -> Bool {
         guard !isPluginIsolated(plugin) else {
-            return
+            return false
         }
 
         switch PluginInvocationGuard.run(operation: operation, action) {
         case .success:
-            break
+            return true
         case let .failure(failure):
             isolatePlugin(plugin, operation: operation, failure: failure)
+            return false
         }
     }
 

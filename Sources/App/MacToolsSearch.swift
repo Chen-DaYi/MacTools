@@ -34,7 +34,10 @@ enum MacToolsSearchAction: Hashable {
         destination: SettingsNavigationDestination,
         target: SettingsSearchRevealTarget?
     )
-    case pluginCommand(pluginID: String, commandID: String)
+    case pluginCommand(
+        pluginID: String,
+        expectedDefinition: PluginCommandDefinition
+    )
     case appCommand(AppShortcutAction)
 }
 
@@ -382,12 +385,46 @@ enum MacToolsSearchIndexBuilder {
             )
         }
 
+        items += pluginHost.pluginManagementItems.compactMap { item in
+            guard item.canUninstall else {
+                return nil
+            }
+
+            return MacToolsSearchResult(
+                id: "plugin.\(item.id)",
+                kind: .navigation,
+                title: item.title,
+                subtitle: AppL10n.settings(
+                    "plugins.sidebar.marketplace",
+                    defaultValue: "市场"
+                ),
+                detail: item.detailText,
+                keywords: pluginMetadataKeywords(
+                    pluginID: item.id,
+                    category: item.category,
+                    releaseChannel: item.releaseChannel
+                ) + [item.statusText, item.version] + [item.summary].compactMap { $0 },
+                systemImage: "shippingbox",
+                action: .navigate(
+                    destination: .plugins(.marketplace),
+                    target: .marketplace(
+                        MarketplacePluginSearchTarget(pluginID: item.id)
+                    )
+                ),
+                confirmation: nil,
+                suggestionPriority: nil
+            )
+        }
+
         items += pluginHost.pluginConfigurationItems.flatMap { item in
             settingResults(for: item)
         }
 
         items += pluginHost.pluginSettingsSearchItems.compactMap { providedItem in
-            guard let configuration = configurationItemsByID[providedItem.pluginID] else {
+            guard
+                let configuration = configurationItemsByID[providedItem.pluginID],
+                configuration.hasCustomConfiguration
+            else {
                 return nil
             }
 
@@ -425,7 +462,7 @@ enum MacToolsSearchIndexBuilder {
                 systemImage: item.definition.systemImage,
                 action: .pluginCommand(
                     pluginID: item.pluginID,
-                    commandID: item.definition.id
+                    expectedDefinition: item.definition
                 ),
                 confirmation: item.definition.confirmation,
                 suggestionPriority: nil
