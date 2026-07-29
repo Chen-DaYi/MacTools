@@ -1931,7 +1931,8 @@ final class PluginHost: ObservableObject {
             }
         }
 
-        pluginCommandItems = orderedCorePlugins().flatMap { plugin -> [PluginCommandItem] in
+        pluginCommandItems = orderedPluginDescriptors().flatMap { descriptor -> [PluginCommandItem] in
+            let plugin = descriptor.plugin
             guard let provider = plugin as? any PluginCommandProviding else {
                 return []
             }
@@ -1944,7 +1945,7 @@ final class PluginHost: ObservableObject {
             return definitions.map {
                 PluginCommandItem(
                     pluginID: plugin.metadata.id,
-                    pluginTitle: plugin.metadata.title,
+                    pluginTitle: descriptor.metadata.title,
                     definition: $0
                 )
             }

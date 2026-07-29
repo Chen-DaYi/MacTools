@@ -138,6 +138,39 @@ else:
 PY
 }
 
+copy_manifest_for_configuration() {
+    local source="$1"
+    local destination="$2"
+
+    if [[ "$CONFIGURATION" != "Debug" ]]; then
+        ditto "$source" "$destination"
+        return
+    fi
+
+    local development_host_version
+    development_host_version="$(
+        awk '$1 == "MARKETING_VERSION" && $2 == "=" { print $3; exit }' \
+            "$REPO_ROOT/Configs/AppVersion.xcconfig"
+    )"
+    if [[ -z "$development_host_version" ]]; then
+        echo "Unable to determine the local Debug host version." >&2
+        return 1
+    fi
+
+    python3 - "$source" "$destination" "$development_host_version" <<'PY'
+import json
+import sys
+
+source, destination, host_version = sys.argv[1:]
+with open(source, encoding="utf-8") as handle:
+    manifest = json.load(handle)
+manifest["minHostVersion"] = host_version
+with open(destination, "w", encoding="utf-8") as handle:
+    json.dump(manifest, handle, ensure_ascii=False, indent=2)
+    handle.write("\n")
+PY
+}
+
 discover_candidates() {
     if [[ -d "$SOURCE_DIR" && "$SOURCE_DIR" == *.mactoolsplugin ]]; then
         printf '%s\n' "$SOURCE_DIR"
@@ -332,7 +365,7 @@ package_source_dir() {
     local package_path="$PACKAGES_DIR/$plugin_id.mactoolsplugin"
     rm -rf "$package_path"
     mkdir -p "$package_path/$(dirname "$bundle_relative_path")"
-    ditto "$manifest" "$package_path/plugin.json"
+    copy_manifest_for_configuration "$manifest" "$package_path/plugin.json"
     ditto "$bundle_path" "$package_path/$bundle_relative_path"
 
     if [[ -n "$SIGN_IDENTITY" ]]; then

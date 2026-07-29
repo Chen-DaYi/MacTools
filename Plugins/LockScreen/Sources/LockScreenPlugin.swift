@@ -33,8 +33,10 @@ final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCommandP
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "LockScreenPlugin"
     )
+    private let localization: PluginLocalization
 
     init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
         self.metadata = PluginMetadata(
             id: "lock-screen",
             title: localization.string("metadata.title", defaultValue: "锁定屏幕"),
@@ -66,8 +68,14 @@ final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCommandP
         [
             PluginCommandDefinition(
                 id: "execute",
-                title: metadata.title,
-                description: metadata.defaultDescription,
+                title: localization.string(
+                    "metadata.title",
+                    defaultValue: "锁定屏幕"
+                ),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "立即锁定屏幕"
+                ),
                 systemImage: metadata.iconName
             )
         ]

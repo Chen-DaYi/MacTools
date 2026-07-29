@@ -120,6 +120,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
 
     private let pluginSettingsLandingPage: () -> FeatureSettingsPane
     private let isPluginConfigurationAvailable: (String) -> Bool
+    private let isPluginSurfaceAvailable: (SurfaceSettingsSearchTarget) -> Bool
     private let selectPluginSettingsPane: (FeatureSettingsPane) -> Bool
     private var nextSearchFocusRequestID: UInt = 0
     private var nextAboutUpdateActionRequestID: UInt = 0
@@ -130,6 +131,15 @@ final class SettingsNavigationCoordinator: ObservableObject {
         self.init(
             pluginSettingsLandingPage: { pluginHost.pluginSettingsLandingPage() },
             isPluginConfigurationAvailable: { pluginHost.hasPluginConfiguration(pluginID: $0) },
+            isPluginSurfaceAvailable: { target in
+                let items = switch target.surface {
+                case .dashboard:
+                    pluginHost.dashboardLayoutItems + pluginHost.dashboardHiddenLayoutItems
+                case .featurePanel:
+                    pluginHost.featurePanelLayoutItems + pluginHost.featurePanelHiddenLayoutItems
+                }
+                return items.contains { $0.id == target.pluginID }
+            },
             selectPluginSettingsPane: { pluginHost.selectFeatureSettingsPane($0) }
         )
     }
@@ -138,6 +148,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
         initialDestination: SettingsNavigationDestination = .general,
         pluginSettingsLandingPage: @escaping () -> FeatureSettingsPane = { .marketplace },
         isPluginConfigurationAvailable: @escaping (String) -> Bool = { _ in true },
+        isPluginSurfaceAvailable: @escaping (SurfaceSettingsSearchTarget) -> Bool = { _ in true },
         selectPluginSettingsPane: @escaping (FeatureSettingsPane) -> Bool = { _ in true }
     ) {
         self.destination = initialDestination
@@ -145,6 +156,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
         self.historyIndex = 0
         self.pluginSettingsLandingPage = pluginSettingsLandingPage
         self.isPluginConfigurationAvailable = isPluginConfigurationAvailable
+        self.isPluginSurfaceAvailable = isPluginSurfaceAvailable
         self.selectPluginSettingsPane = selectPluginSettingsPane
     }
 
@@ -239,7 +251,10 @@ final class SettingsNavigationCoordinator: ObservableObject {
         to destination: SettingsNavigationDestination,
         target: SettingsSearchRevealTarget?
     ) {
-        guard isAvailable(destination) else {
+        guard
+            isAvailable(destination),
+            target.map(isAvailable) ?? true
+        else {
             searchRevealRequest = nil
             return
         }
@@ -358,6 +373,17 @@ final class SettingsNavigationCoordinator: ObservableObject {
         }
 
         return isPluginConfigurationAvailable(pluginID)
+    }
+
+    private func isAvailable(_ target: SettingsSearchRevealTarget) -> Bool {
+        switch target {
+        case .general:
+            true
+        case let .plugin(target):
+            isPluginConfigurationAvailable(target.pluginID)
+        case let .surface(target):
+            isPluginSurfaceAvailable(target)
+        }
     }
 
     private func activate(_ destination: SettingsNavigationDestination) {

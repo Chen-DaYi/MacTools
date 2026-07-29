@@ -1799,27 +1799,34 @@ private struct PluginConfigurationDetailPane: View {
         Group {
             if let item {
                 if item.prefersFullHeight {
-                    VStack(alignment: .leading, spacing: 0) {
-                        PluginConfigurationHeader(item: item)
-                            .padding(PluginSettingsTheme.Spacing.pagePadding)
+                    ScrollViewReader { proxy in
+                        VStack(alignment: .leading, spacing: 0) {
+                            PluginConfigurationHeader(item: item)
+                                .padding(PluginSettingsTheme.Spacing.pagePadding)
 
-                        if item.hasCustomConfiguration {
-                            pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
-                                .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
-                                .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
-                                .padding(.bottom, PluginSettingsTheme.Spacing.pagePadding)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            if item.hasCustomConfiguration {
+                                pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
+                                    .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
+                                    .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
+                                    .padding(.bottom, PluginSettingsTheme.Spacing.pagePadding)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            }
                         }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .onAppear {
-                        applySearchRevealRequest(
-                            navigationCoordinator.searchRevealRequest,
-                            pluginID: item.pluginID
-                        )
-                    }
-                    .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
-                        applySearchRevealRequest(request, pluginID: item.pluginID)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .onAppear {
+                            applySearchRevealRequest(
+                                navigationCoordinator.searchRevealRequest,
+                                pluginID: item.pluginID,
+                                proxy: proxy
+                            )
+                        }
+                        .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                            applySearchRevealRequest(
+                                request,
+                                pluginID: item.pluginID,
+                                proxy: proxy
+                            )
+                        }
                     }
                 } else {
                     ScrollViewReader { proxy in

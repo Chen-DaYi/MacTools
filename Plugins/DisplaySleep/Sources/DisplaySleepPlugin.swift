@@ -32,8 +32,10 @@ final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComman
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "DisplaySleepPlugin"
     )
+    private let localization: PluginLocalization
 
     init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
         self.metadata = PluginMetadata(
             id: "display-sleep",
             title: localization.string("metadata.title", defaultValue: "显示器休眠"),
@@ -65,8 +67,14 @@ final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComman
         [
             PluginCommandDefinition(
                 id: "execute",
-                title: metadata.title,
-                description: metadata.defaultDescription,
+                title: localization.string(
+                    "metadata.title",
+                    defaultValue: "显示器休眠"
+                ),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "立即让显示器休眠"
+                ),
                 systemImage: metadata.iconName
             )
         ]

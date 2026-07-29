@@ -119,6 +119,33 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
     }
 
+    func testUnifiedSearchPluginProvidersRequireFirstCompatibleHostVersion() throws {
+        let expectedMinimumHostVersion = "1.1.5"
+        let pluginNames = [
+            "DisplayBrightness",
+            "DisplaySleep",
+            "KeepAwake",
+            "LockScreen",
+        ]
+
+        for pluginName in pluginNames {
+            let manifestURL = repositoryRoot
+                .appending(path: "Plugins")
+                .appending(path: pluginName)
+                .appending(path: "plugin.json")
+            let manifest = try jsonObject(at: manifestURL)
+
+            let minimumHostVersion = try XCTUnwrap(manifest["minHostVersion"] as? String)
+            XCTAssertTrue(
+                PluginVersionComparator.isVersion(
+                    minimumHostVersion,
+                    atLeast: expectedMinimumHostVersion
+                ),
+                "\(pluginName) must not be published to hosts that predate unified-search PluginKit symbols"
+            )
+        }
+    }
+
     func testPluginManagementLocalizationKeysCoverAllSupportedLanguages() throws {
         let catalogURL = repositoryRoot
             .appending(path: "Sources")

@@ -301,6 +301,55 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.searchRevealRequest)
     }
 
+    func testSearchNavigationKeepsPaletteOpenForUnavailableSurfacePlugin() {
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginSurfaceAvailable: { _ in false }
+        )
+        let target = SurfaceSettingsSearchTarget(
+            surface: .featurePanel,
+            pluginID: "removed-plugin"
+        )
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        coordinator.navigateFromSearch(
+            to: .plugins(.featurePanelLayout),
+            target: .surface(target)
+        )
+
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+        XCTAssertEqual(coordinator.history, [.general])
+        XCTAssertNil(coordinator.searchRevealRequest)
+    }
+
+    func testSearchNavigationAllowsAvailableSurfacePlugin() throws {
+        let expectedTarget = SurfaceSettingsSearchTarget(
+            surface: .dashboard,
+            pluginID: "hidden-plugin"
+        )
+        var validatedTargets: [SurfaceSettingsSearchTarget] = []
+        let coordinator = SettingsNavigationCoordinator(
+            isPluginSurfaceAvailable: { target in
+                validatedTargets.append(target)
+                return target == expectedTarget
+            }
+        )
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+
+        coordinator.navigateFromSearch(
+            to: .plugins(.dashboardLayout),
+            target: .surface(expectedTarget)
+        )
+
+        XCTAssertEqual(validatedTargets, [expectedTarget])
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .plugins(.dashboardLayout))
+        XCTAssertEqual(
+            try XCTUnwrap(coordinator.searchRevealRequest).target,
+            .surface(expectedTarget)
+        )
+    }
+
     func testSearchNavigationDismissesPaletteAndPublishesExactRevealTarget() throws {
         let coordinator = SettingsNavigationCoordinator(
             isPluginConfigurationAvailable: { $0 == "keep-awake" }
