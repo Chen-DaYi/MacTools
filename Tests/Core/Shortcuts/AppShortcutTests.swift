@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import XCTest
 import MacToolsPluginKit
 @testable import MacTools
@@ -90,6 +91,179 @@ final class AppShortcutTests: XCTestCase {
             ).localizedDescription
         )
         XCTAssertFalse(try item(.toggleDashboard, in: host).canClear)
+    }
+
+    func testFixedMacToolsCommandsAreReservedFromConfigurableShortcuts() {
+        let commandKeyCodes = [
+            kVK_ANSI_Comma,
+            kVK_ANSI_F,
+            kVK_ANSI_K,
+            kVK_ANSI_1,
+            kVK_ANSI_2,
+            kVK_ANSI_3,
+            kVK_ANSI_4,
+            kVK_ANSI_5,
+            kVK_ANSI_6,
+            kVK_ANSI_7,
+            kVK_ANSI_8,
+            kVK_ANSI_9,
+            kVK_ANSI_LeftBracket,
+            kVK_ANSI_RightBracket
+        ]
+
+        for keyCode in commandKeyCodes {
+            XCTAssertNotNil(
+                MacToolsReservedShortcutBindings.validationError(
+                    for: ShortcutBinding(
+                        keyCode: UInt16(keyCode),
+                        modifiers: .command
+                    )
+                )
+            )
+        }
+
+        for keyCode in [kVK_UpArrow, kVK_DownArrow] {
+            XCTAssertNotNil(
+                MacToolsReservedShortcutBindings.validationError(
+                    for: ShortcutBinding(
+                        keyCode: UInt16(keyCode),
+                        modifiers: [.control, .command]
+                    )
+                )
+            )
+        }
+
+        XCTAssertNil(
+            MacToolsReservedShortcutBindings.validationError(
+                for: ShortcutBinding(
+                    keyCode: UInt16(kVK_ANSI_K),
+                    modifiers: [.option, .command]
+                )
+            )
+        )
+        XCTAssertNil(
+            MacToolsReservedShortcutBindings.validationError(
+                for: ShortcutBinding(
+                    keyCode: UInt16(kVK_ANSI_L),
+                    modifiers: .command
+                )
+            )
+        )
+    }
+
+    func testAppAndPluginShortcutRecordersRejectReservedBindings() throws {
+        let reservedBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_K),
+            modifiers: .command
+        )
+        let manager = GlobalShortcutManager()
+        let host = makeHost(
+            defaults: try makeDefaults(),
+            plugins: [AppShortcutTestPlugin(defaultBinding: nil)],
+            manager: manager
+        )
+        let expectedError = ShortcutValidationError.duplicate(
+            ownerDescription: AppMetadata.appName
+        ).localizedDescription
+
+        XCTAssertEqual(
+            host.setAppShortcutBindingAndReturnError(
+                reservedBinding,
+                for: .toggleDashboard
+            ),
+            expectedError
+        )
+        XCTAssertEqual(
+            host.setShortcutBindingAndReturnError(
+                reservedBinding,
+                for: AppShortcutTestPlugin.shortcutItemID
+            ),
+            expectedError
+        )
+        XCTAssertFalse(
+            manager.debugRegistrationsForTests.contains {
+                $0.binding == reservedBinding
+            }
+        )
+    }
+
+    func testStoredReservedBindingsRemainVisibleButDoNotRegisterGlobally() throws {
+        let defaults = try makeDefaults()
+        let reservedBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_K),
+            modifiers: .command
+        )
+        let store = ShortcutStore(userDefaults: defaults)
+        store.setCustomization(
+            .custom(reservedBinding),
+            for: AppShortcutAction.toggleDashboard.rawValue
+        )
+        store.setCustomization(
+            .custom(reservedBinding),
+            for: AppShortcutTestPlugin.shortcutItemID
+        )
+        let manager = GlobalShortcutManager()
+        let host = makeHost(
+            defaults: defaults,
+            plugins: [AppShortcutTestPlugin(defaultBinding: nil)],
+            manager: manager
+        )
+        let expectedError = ShortcutValidationError.duplicate(
+            ownerDescription: AppMetadata.appName
+        ).localizedDescription
+
+        XCTAssertEqual(
+            try item(.toggleDashboard, in: host).errorMessage,
+            expectedError
+        )
+        XCTAssertEqual(
+            host.shortcutItems.first {
+                $0.id == AppShortcutTestPlugin.shortcutItemID
+            }?.errorMessage,
+            expectedError
+        )
+        XCTAssertTrue(
+            manager.debugRegistrationsForTests.allSatisfy {
+                $0.binding != reservedBinding
+            }
+        )
+    }
+
+    func testImportRejectsReservedBindingsAtomically() throws {
+        let plugin = AppShortcutTestPlugin(defaultBinding: nil)
+        let host = makeHost(defaults: try makeDefaults(), plugins: [plugin])
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: [plugin.metadata.id],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [
+                AppShortcutAction.openSettings.rawValue: .custom(
+                    ShortcutBinding(
+                        keyCode: UInt16(kVK_ANSI_K),
+                        modifiers: .command
+                    )
+                ),
+                AppShortcutTestPlugin.shortcutItemID: .custom(
+                    ShortcutBinding(
+                        keyCode: UInt16(kVK_ANSI_4),
+                        modifiers: .command
+                    )
+                )
+            ]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertEqual(
+            Set(result.shortcutErrors.keys),
+            [
+                AppShortcutAction.openSettings.rawValue,
+                AppShortcutTestPlugin.shortcutItemID
+            ]
+        )
+        XCTAssertTrue(host.makePreferencesBackup().shortcutCustomizations.isEmpty)
     }
 
     func testAppAndPluginShortcutsRejectConflictsInBothDirections() throws {

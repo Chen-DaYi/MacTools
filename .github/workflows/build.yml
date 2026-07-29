@@ -49,6 +49,9 @@ jobs:
       - name: Generate Xcode project
         run: make generate
 
+      - name: Run script tests
+        run: /usr/bin/python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
       - name: Build and run tests
         run: |
           xcodebuild \

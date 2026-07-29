@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -z "${PYTHON3:-}" ]]; then
+    if [[ -x /usr/bin/python3 ]]; then
+        PYTHON3=/usr/bin/python3
+    else
+        PYTHON3=python3
+    fi
+fi
+export PYTHON3
+
 usage() {
     cat <<'USAGE'
 Usage:
@@ -136,6 +145,16 @@ if value is None:
 else:
     print(value)
 PY
+}
+
+copy_manifest_for_configuration() {
+    local source="$1"
+    local destination="$2"
+    "$PYTHON3" "$REPO_ROOT/scripts/plugins/copy-plugin-manifest.py" copy \
+        --source "$source" \
+        --destination "$destination" \
+        --configuration "$CONFIGURATION" \
+        --app-version-config "$REPO_ROOT/Configs/AppVersion.xcconfig"
 }
 
 discover_candidates() {
@@ -332,7 +351,7 @@ package_source_dir() {
     local package_path="$PACKAGES_DIR/$plugin_id.mactoolsplugin"
     rm -rf "$package_path"
     mkdir -p "$package_path/$(dirname "$bundle_relative_path")"
-    ditto "$manifest" "$package_path/plugin.json"
+    copy_manifest_for_configuration "$manifest" "$package_path/plugin.json"
     ditto "$bundle_path" "$package_path/$bundle_relative_path"
 
     if [[ -n "$SIGN_IDENTITY" ]]; then

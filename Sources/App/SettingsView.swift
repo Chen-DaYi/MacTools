@@ -13,6 +13,7 @@ enum GeneralSettingsCardLayout {
 }
 
 struct SettingsView: View {
+    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
@@ -31,39 +32,59 @@ struct SettingsView: View {
             configurationIDs: pluginHost.pluginConfigurationItems.map(\.id)
         )
 
-        return TabView(selection: settingsDestinationBinding) {
-            GeneralSettingsView(
-                pluginHost: pluginHost,
-                menuBarIconSettings: menuBarIconSettings,
-                menuBarIconGallery: menuBarIconGallery,
-                launchAtLoginController: launchAtLoginController
-            )
-                .tag(SettingsDestination.general)
-                .tabItem {
-                    Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
-                }
+        return ZStack {
+            TabView(selection: settingsDestinationBinding) {
+                GeneralSettingsView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    menuBarIconSettings: menuBarIconSettings,
+                    menuBarIconGallery: menuBarIconGallery,
+                    launchAtLoginController: launchAtLoginController
+                )
+                    .tag(SettingsDestination.general)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.general", defaultValue: "通用"), systemImage: "gearshape")
+                    }
 
-            FeatureSettingsView(
-                pluginHost: pluginHost,
-                navigationCoordinator: navigationCoordinator,
-                uninstallConfirmationSession: uninstallConfirmationSession,
-                showDashboard: showDashboard,
-                showFeaturePanel: showFeaturePanel,
-                orderedPanes: orderedPluginPanes
-            )
-                .tag(SettingsDestination.pluginConfiguration)
-                .tabItem {
-                    Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
-                }
+                FeatureSettingsView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator,
+                    uninstallConfirmationSession: uninstallConfirmationSession,
+                    showDashboard: showDashboard,
+                    showFeaturePanel: showFeaturePanel,
+                    orderedPanes: orderedPluginPanes
+                )
+                    .tag(SettingsDestination.pluginConfiguration)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.plugins", defaultValue: "插件"), systemImage: "slider.horizontal.3")
+                    }
 
-            AboutSettingsView(
-                appUpdater: appUpdater,
-                navigationCoordinator: navigationCoordinator
+                AboutSettingsView(
+                    appUpdater: appUpdater,
+                    navigationCoordinator: navigationCoordinator
+                )
+                    .tag(SettingsDestination.about)
+                    .tabItem {
+                        Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
+                    }
+            }
+            .blur(
+                radius: navigationCoordinator.isUnifiedSearchPresented
+                    && !accessibilityReduceTransparency
+                    ? 2.5
+                    : 0
             )
-                .tag(SettingsDestination.about)
-                .tabItem {
-                    Label(AppL10n.settings("tab.about", defaultValue: "关于"), systemImage: "info.circle")
-                }
+            .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+            .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+
+            if navigationCoordinator.isUnifiedSearchPresented {
+                UnifiedSearchPresentationView(
+                    pluginHost: pluginHost,
+                    navigationCoordinator: navigationCoordinator
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .zIndex(1)
+            }
         }
         .background {
             SettingsDestinationShortcutButtons(coordinator: navigationCoordinator)
@@ -71,12 +92,16 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 SettingsHistoryNavigationControls(coordinator: navigationCoordinator)
+                    .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
+                    .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
+                    .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
             }
         }
         .id(runtimeLocale.revision)
         .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
+        .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
     }
 
     private var layoutDirection: LayoutDirection {
@@ -113,6 +138,7 @@ struct SettingsDestinationShortcutButtons: View {
         }
         .frame(width: 0, height: 0)
         .opacity(0)
+        .disabled(coordinator.isUnifiedSearchPresented)
         .accessibilityHidden(true)
     }
 
@@ -231,51 +257,103 @@ private struct PermissionSettingsRow: View {
 
 struct GeneralSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
     @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
+    @State private var activeSearchTarget: GeneralSettingsSearchTarget?
+    @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
-        Form {
-            Section {
-                LaunchAtLoginSettingsRow(controller: launchAtLoginController)
-            } header: {
-                Text(AppL10n.settings("general.section.startup", defaultValue: "启动"))
-            }
+        ScrollViewReader { proxy in
+            Form {
+                Section {
+                    LaunchAtLoginSettingsRow(controller: launchAtLoginController)
+                        .generalSettingsSearchAnchor(
+                            target: .launchAtLogin,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.settings("general.section.startup", defaultValue: "启动"))
+                }
 
-            Section {
-                AppearanceSettingsRow(selection: appearancePreferenceBinding)
-                LanguageSettingsRow(selection: languagePreferenceBinding)
-            } header: {
-                Text(AppL10n.settings("general.section.appearance", defaultValue: "外观"))
-            }
+                Section {
+                    AppearanceSettingsRow(selection: appearancePreferenceBinding)
+                        .generalSettingsSearchAnchor(
+                            target: .appearance,
+                            activeTarget: activeSearchTarget
+                        )
+                    LanguageSettingsRow(selection: languagePreferenceBinding)
+                        .generalSettingsSearchAnchor(
+                            target: .language,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.settings("general.section.appearance", defaultValue: "外观"))
+                }
 
-            Section {
-                MenuBarIconSettingsView(
-                    iconSettings: menuBarIconSettings,
-                    gallery: menuBarIconGallery
+                Section {
+                    MenuBarIconSettingsView(
+                        iconSettings: menuBarIconSettings,
+                        gallery: menuBarIconGallery
+                    )
+                    .generalSettingsSearchAnchor(
+                        target: .menuBarIcon,
+                        activeTarget: activeSearchTarget
+                    )
+                    MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
+                        .generalSettingsSearchAnchor(
+                            target: .menuBarClickBehavior,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.settings("general.section.menuBarIcon", defaultValue: "状态栏图标"))
+                }
+
+                Section {
+                    AppShortcutSettingsRows(pluginHost: pluginHost)
+                        .generalSettingsSearchAnchor(
+                            target: .appShortcuts,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"))
+                }
+
+                Section {
+                    PreferencesBackupSettingsRow(pluginHost: pluginHost)
+                        .generalSettingsSearchAnchor(
+                            target: .preferencesBackup,
+                            activeTarget: activeSearchTarget
+                        )
+                } header: {
+                    Text(AppL10n.preferencesBackup("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
+                }
+            }
+            .formStyle(.grouped)
+            .onAppear {
+                applySearchRevealRequest(
+                    navigationCoordinator.searchRevealRequest,
+                    proxy: proxy
                 )
-                MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
-            } header: {
-                Text(AppL10n.settings("general.section.menuBarIcon", defaultValue: "状态栏图标"))
             }
-
-            Section {
-                AppShortcutSettingsRows(pluginHost: pluginHost)
-            } header: {
-                Text(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"))
+            .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                applySearchRevealRequest(request, proxy: proxy)
             }
-
-            Section {
-                PreferencesBackupSettingsRow(pluginHost: pluginHost)
-            } header: {
-                Text(AppL10n.preferencesBackup("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
+            .onDisappear {
+                clearSearchTargetTask?.cancel()
+                clearSearchTargetTask = nil
+                if let activeSearchTarget {
+                    navigationCoordinator.clearSearchRevealRequest(
+                        matching: .general(activeSearchTarget)
+                    )
+                }
+                activeSearchTarget = nil
             }
         }
-        .formStyle(.grouped)
     }
 
     private var appearancePreferenceBinding: Binding<AppAppearancePreference> {
@@ -307,6 +385,90 @@ struct GeneralSettingsView: View {
         } set: { preference in
             clickBehaviorRawValue = preference.rawValue
         }
+    }
+
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        proxy: ScrollViewProxy
+    ) {
+        guard
+            let request,
+            case let .general(target) = request.target
+        else {
+            return
+        }
+
+        clearSearchTargetTask?.cancel()
+        activeSearchTarget = target
+
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(target.scrollID, anchor: .center)
+            }
+        }
+
+        clearSearchTargetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            activeSearchTarget = nil
+            navigationCoordinator.clearSearchRevealRequest(request)
+        }
+    }
+}
+
+private struct GeneralSettingsSearchAnchorModifier: ViewModifier {
+    @AccessibilityFocusState private var isAccessibilityFocused: Bool
+
+    let target: GeneralSettingsSearchTarget
+    let activeTarget: GeneralSettingsSearchTarget?
+
+    func body(content: Content) -> some View {
+        content
+            .id(target.scrollID)
+            .accessibilityFocused($isAccessibilityFocused)
+            .overlay {
+                if activeTarget == target {
+                    RoundedRectangle(
+                        cornerRadius: PluginSettingsTheme.Radius.card,
+                        style: .continuous
+                    )
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
+            .onAppear {
+                focusIfNeeded(activeTarget)
+            }
+            .onChange(of: activeTarget) { _, newValue in
+                focusIfNeeded(newValue)
+            }
+    }
+
+    private func focusIfNeeded(_ activeTarget: GeneralSettingsSearchTarget?) {
+        guard activeTarget == target else {
+            return
+        }
+
+        isAccessibilityFocused = true
+    }
+}
+
+private extension View {
+    func generalSettingsSearchAnchor(
+        target: GeneralSettingsSearchTarget,
+        activeTarget: GeneralSettingsSearchTarget?
+    ) -> some View {
+        modifier(
+            GeneralSettingsSearchAnchorModifier(
+                target: target,
+                activeTarget: activeTarget
+            )
+        )
     }
 }
 
@@ -1001,6 +1163,9 @@ private struct FeatureSettingsView: View {
                 selection: selectionBinding,
                 moveSelection: { direction in
                     navigationCoordinator.movePluginSubpage(direction, in: orderedPanes)
+                },
+                onSearch: {
+                    navigationCoordinator.presentUnifiedSearch(origin: .pluginSidebar)
                 }
             )
             .frame(
@@ -1047,80 +1212,85 @@ private struct FeatureSettingsSidebar: View {
     let orderedPanes: [FeatureSettingsPane]
     @Binding var selection: FeatureSettingsPane
     let moveSelection: (PluginSubpageMoveDirection) -> Void
+    let onSearch: () -> Void
     @FocusState private var isSidebarFocused: Bool
 
     var body: some View {
-        ScrollViewReader { proxy in
-            List(selection: optionalSelectionBinding) {
-                Section {
-                    ForEach(primaryPanes, id: \.self) { pane in
-                        sidebarRow(for: pane)
-                    }
-                } header: {
-                    Text(AppL10n.settings(
-                        "plugins.sidebar.pluginsSection",
-                        defaultValue: "插件"
-                    ))
-                    .accessibilityHidden(true)
-                }
+        VStack(spacing: 0) {
+            searchLauncher
 
-                Section {
-                    if configurationPanes.isEmpty {
-                        Text(emptyConfigurationsText)
-                            .font(PluginSettingsTheme.Typography.secondaryLabel)
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                    } else {
-                        ForEach(configurationPanes, id: \.self) { pane in
+            ScrollViewReader { proxy in
+                List(selection: optionalSelectionBinding) {
+                    Section {
+                        ForEach(primaryPanes, id: \.self) { pane in
                             sidebarRow(for: pane)
                         }
-                    }
-                } header: {
-                    Text(AppL10n.settings(
-                        "plugins.sidebar.configurationSection",
-                        defaultValue: "插件设置"
-                    ))
-                    .accessibilityHidden(true)
-                }
-            }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-            .background {
-                SettingsSidebarMaterialBackground()
-                    .allowsHitTesting(false)
-            }
-            .focusable(interactions: .activate)
-            .focused($isSidebarFocused)
-            .onMoveCommand { direction in
-                switch direction {
-                case .up:
-                    moveSelection(.previous)
-                case .down:
-                    moveSelection(.next)
-                default:
-                    break
-                }
-            }
-            .onChange(of: selection) {
-                withAnimation {
-                    proxy.scrollTo(selection)
-                }
-            }
-            .overlay {
-                if isSidebarFocused {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(Color.accentColor.opacity(0.55), lineWidth: 1)
-                        .padding(2)
-                        .allowsHitTesting(false)
+                    } header: {
+                        Text(AppL10n.settings(
+                            "plugins.sidebar.pluginsSection",
+                            defaultValue: "插件"
+                        ))
                         .accessibilityHidden(true)
+                    }
+
+                    Section {
+                        if configurationPanes.isEmpty {
+                            Text(emptyConfigurationsText)
+                                .font(PluginSettingsTheme.Typography.secondaryLabel)
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                        } else {
+                            ForEach(configurationPanes, id: \.self) { pane in
+                                sidebarRow(for: pane)
+                            }
+                        }
+                    } header: {
+                        Text(AppL10n.settings(
+                            "plugins.sidebar.configurationSection",
+                            defaultValue: "插件设置"
+                        ))
+                        .accessibilityHidden(true)
+                    }
                 }
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .focusable(interactions: .activate)
+                .focused($isSidebarFocused)
+                .onMoveCommand { direction in
+                    switch direction {
+                    case .up:
+                        moveSelection(.previous)
+                    case .down:
+                        moveSelection(.next)
+                    default:
+                        break
+                    }
+                }
+                .onChange(of: selection) {
+                    withAnimation {
+                        proxy.scrollTo(selection)
+                    }
+                }
+                .overlay {
+                    if isSidebarFocused {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.accentColor.opacity(0.55), lineWidth: 1)
+                            .padding(2)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(AppL10n.settings(
+                    "plugins.sidebar.accessibilityLabel",
+                    defaultValue: "插件导航"
+                ))
+                .accessibilityHint(configurationPanes.isEmpty ? emptyConfigurationsText : "")
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(AppL10n.settings(
-                "plugins.sidebar.accessibilityLabel",
-                defaultValue: "插件导航"
-            ))
-            .accessibilityHint(configurationPanes.isEmpty ? emptyConfigurationsText : "")
+        }
+        .background {
+            SettingsSidebarMaterialBackground()
+                .allowsHitTesting(false)
         }
     }
 
@@ -1187,6 +1357,70 @@ private struct FeatureSettingsSidebar: View {
                 .id(pane)
             }
         }
+    }
+
+    private var searchLauncher: some View {
+        Button(action: onSearch) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+
+                Text(
+                    AppL10n.search(
+                        "search.title",
+                        defaultValue: "搜索 MacTools"
+                    )
+                )
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Text("⌘K")
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.12))
+                    )
+                    .accessibilityHidden(true)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .help(
+            AppL10n.search(
+                "search.prompt",
+                defaultValue: "搜索插件、设置和命令"
+            )
+        )
+        .accessibilityLabel(
+            AppL10n.search(
+                "search.title",
+                defaultValue: "搜索 MacTools"
+            )
+        )
+        .accessibilityHint(
+            AppL10n.search(
+                "search.prompt",
+                defaultValue: "搜索插件、设置和命令"
+            )
+        )
+        .accessibilityIdentifier("mactools.unified-search.launcher")
     }
 
     private var optionalSelectionBinding: Binding<FeatureSettingsPane?> {
@@ -1264,6 +1498,7 @@ private struct FeatureSettingsDetailPane: View {
         switch selectedPane {
         case .dashboardLayout:
             SurfaceLayoutSettingsView(
+                navigationCoordinator: navigationCoordinator,
                 surface: .dashboard,
                 title: AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘"),
                 description: AppL10n.settings(
@@ -1298,6 +1533,7 @@ private struct FeatureSettingsDetailPane: View {
             )
         case .featurePanelLayout:
             SurfaceLayoutSettingsView(
+                navigationCoordinator: navigationCoordinator,
                 surface: .featurePanel,
                 title: AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板"),
                 description: AppL10n.settings(
@@ -1339,6 +1575,7 @@ private struct FeatureSettingsDetailPane: View {
         case let .configuration(pluginID):
             PluginConfigurationDetailPane(
                 pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator,
                 item: configurationItem(for: pluginID)
             )
         }
@@ -1350,6 +1587,7 @@ private struct FeatureSettingsDetailPane: View {
 }
 
 private struct SurfaceLayoutSettingsView: View {
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let surface: PluginDisplaySurface
     let title: String
     let description: String
@@ -1371,94 +1609,133 @@ private struct SurfaceLayoutSettingsView: View {
     let onUninstall: (String) throws -> Void
     @State private var pendingUninstallItem: PluginUninstallConfirmation?
     @State private var uninstallErrorMessage: String?
+    @State private var activeSearchTarget: SurfaceSettingsSearchTarget?
+    @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .center, spacing: 12) {
-                    SettingsPageHeader(
-                        title: title,
-                        description: description,
-                        systemImage: systemImage,
-                        iconTint: iconTint
-                    )
-
-                    Button(AppL10n.settings(
-                        "plugins.layout.restoreDefaultOrder",
-                        defaultValue: "恢复默认排列"
-                    ), action: onResetOrder)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(items.count < 2)
-
-                    Button(action: onOpenPanel) {
-                        Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-
-                if uninstallConfirmationSession.isConfirmationPaused {
-                    PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
-                }
-
-                SettingsCardContainer {
-                    if items.isEmpty {
-                        ContentUnavailableView(
-                            emptyTitle,
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .center, spacing: 12) {
+                        SettingsPageHeader(
+                            title: title,
+                            description: description,
                             systemImage: systemImage,
-                            description: Text(emptyDescription)
+                            iconTint: iconTint
                         )
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                    } else {
-                        FeatureManagementTableView(
-                            items: items.map {
-                                FeatureManagementTableItem(
-                                    surfaceItem: $0,
-                                    hasSettings: configurationPluginIDs.contains($0.id)
-                                )
-                            },
-                            mode: .surface(surface),
-                            onMove: onMove,
-                            onSetVisible: onSetVisible,
-                            onOpenSettings: onOpenSettings,
-                            onOpenMarketplace: onOpenMarketplace,
-                            onRequestUninstall: requestUninstall
-                        )
-                        .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
+
+                        Button(AppL10n.settings(
+                            "plugins.layout.restoreDefaultOrder",
+                            defaultValue: "恢复默认排列"
+                        ), action: onResetOrder)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(items.count < 2)
+
+                        Button(action: onOpenPanel) {
+                            Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
                     }
-                }
 
-                if !hiddenItems.isEmpty {
-                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                        Label(hiddenSectionTitle, systemImage: "eye.slash")
-                            .font(PluginSettingsTheme.Typography.sectionTitle)
-                            .foregroundStyle(.secondary)
+                    if uninstallConfirmationSession.isConfirmationPaused {
+                        PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
+                    }
 
-                        SettingsCardContainer {
+                    SettingsCardContainer {
+                        if items.isEmpty {
+                            ContentUnavailableView(
+                                emptyTitle,
+                                systemImage: systemImage,
+                                description: Text(emptyDescription)
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 180)
+                        } else {
                             FeatureManagementTableView(
-                                items: hiddenItems.map {
+                                items: items.map {
                                     FeatureManagementTableItem(
                                         surfaceItem: $0,
                                         hasSettings: configurationPluginIDs.contains($0.id)
                                     )
                                 },
                                 mode: .surface(surface),
-                                isReorderEnabled: false,
+                                highlightedPluginID: highlightedPluginID(in: items),
+                                onMove: onMove,
                                 onSetVisible: onSetVisible,
                                 onOpenSettings: onOpenSettings,
                                 onOpenMarketplace: onOpenMarketplace,
                                 onRequestUninstall: requestUninstall
                             )
-                            .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
+                            .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
+                            .overlay(alignment: .topLeading) {
+                                SurfaceLayoutSearchAnchors(
+                                    surface: surface,
+                                    items: items,
+                                    isHidden: false
+                                )
+                            }
+                        }
+                    }
+
+                    if !hiddenItems.isEmpty {
+                        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                            Label(hiddenSectionTitle, systemImage: "eye.slash")
+                                .font(PluginSettingsTheme.Typography.sectionTitle)
+                                .foregroundStyle(.secondary)
+
+                            SettingsCardContainer {
+                                FeatureManagementTableView(
+                                    items: hiddenItems.map {
+                                        FeatureManagementTableItem(
+                                            surfaceItem: $0,
+                                            hasSettings: configurationPluginIDs.contains($0.id)
+                                        )
+                                    },
+                                    mode: .surface(surface),
+                                    isReorderEnabled: false,
+                                    highlightedPluginID: highlightedPluginID(in: hiddenItems),
+                                    onSetVisible: onSetVisible,
+                                    onOpenSettings: onOpenSettings,
+                                    onOpenMarketplace: onOpenMarketplace,
+                                    onRequestUninstall: requestUninstall
+                                )
+                                .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
+                                .overlay(alignment: .topLeading) {
+                                    SurfaceLayoutSearchAnchors(
+                                        surface: surface,
+                                        items: hiddenItems,
+                                        isHidden: true
+                                    )
+                                }
+                            }
                         }
                     }
                 }
+                .padding(PluginSettingsTheme.Spacing.pagePadding)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(PluginSettingsTheme.Spacing.pagePadding)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .onAppear {
+                applySearchRevealRequest(
+                    navigationCoordinator.searchRevealRequest,
+                    proxy: proxy
+                )
+            }
+            .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                applySearchRevealRequest(request, proxy: proxy)
+            }
         }
         .background(SettingsStyle.contentBackground)
+        .onDisappear {
+            clearSearchTargetTask?.cancel()
+            clearSearchTargetTask = nil
+            if let activeSearchTarget {
+                navigationCoordinator.clearSearchRevealRequest(
+                    matching: .surface(activeSearchTarget)
+                )
+            }
+            activeSearchTarget = nil
+        }
         .sheet(item: $pendingUninstallItem) { item in
             PluginUninstallConfirmationSheet(
                 confirmation: item,
@@ -1480,6 +1757,62 @@ private struct SurfaceLayoutSettingsView: View {
             Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
         } message: {
             Text(uninstallErrorMessage ?? "")
+        }
+    }
+
+    private func highlightedPluginID(
+        in candidates: [PluginSurfaceLayoutItem]
+    ) -> String? {
+        guard
+            let pluginID = activeSearchTarget?.pluginID,
+            candidates.contains(where: { $0.id == pluginID })
+        else {
+            return nil
+        }
+
+        return pluginID
+    }
+
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        proxy: ScrollViewProxy
+    ) {
+        guard
+            let request,
+            case let .surface(target) = request.target,
+            target.surface == surface
+        else {
+            return
+        }
+
+        let isHidden: Bool
+        if items.contains(where: { $0.id == target.pluginID }) {
+            isHidden = false
+        } else if hiddenItems.contains(where: { $0.id == target.pluginID }) {
+            isHidden = true
+        } else {
+            navigationCoordinator.clearSearchRevealRequest(request)
+            return
+        }
+
+        clearSearchTargetTask?.cancel()
+        activeSearchTarget = target
+
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(target.scrollID(isHidden: isHidden), anchor: .center)
+            }
+        }
+
+        clearSearchTargetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            activeSearchTarget = nil
+            navigationCoordinator.clearSearchRevealRequest(request)
         }
     }
 
@@ -1540,57 +1873,120 @@ private struct SettingsCardContainer<Content: View>: View {
     }
 }
 
+private struct SurfaceLayoutSearchAnchors: View {
+    let surface: PluginDisplaySurface
+    let items: [PluginSurfaceLayoutItem]
+    let isHidden: Bool
+
+    var body: some View {
+        VStack(spacing: FeatureManagementTableView.rowSpacing) {
+            ForEach(items) { item in
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: FeatureManagementTableView.rowHeight)
+                    .id(
+                        SurfaceSettingsSearchTarget(
+                            surface: surface,
+                            pluginID: item.id
+                        )
+                        .scrollID(isHidden: isHidden)
+                    )
+            }
+        }
+        .padding(.top, FeatureManagementTableView.verticalContentInset)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct PluginConfigurationDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
+    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let item: PluginConfigurationItem?
+    @State private var activeSearchTarget: PluginSettingsSearchTarget?
+    @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
         Group {
             if let item {
                 if item.prefersFullHeight {
-                    VStack(alignment: .leading, spacing: 0) {
-                        PluginConfigurationHeader(item: item)
-                            .padding(PluginSettingsTheme.Spacing.pagePadding)
-
-                        if item.hasCustomConfiguration {
-                            pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
-                                .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
-                                .padding(.bottom, PluginSettingsTheme.Spacing.pagePadding)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 18) {
+                    ScrollViewReader { proxy in
+                        VStack(alignment: .leading, spacing: 0) {
                             PluginConfigurationHeader(item: item)
-
-                            if !item.settingsCards.isEmpty {
-                                PluginSettingsCardSection(
-                                    pluginHost: pluginHost,
-                                    cards: item.settingsCards
-                                )
-                            }
-
-                            if !item.permissionCards.isEmpty {
-                                PluginPermissionCardSection(
-                                    pluginHost: pluginHost,
-                                    cards: item.permissionCards
-                                )
-                            }
+                                .padding(PluginSettingsTheme.Spacing.pagePadding)
 
                             if item.hasCustomConfiguration {
                                 pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
-                            }
-
-                            if !item.shortcutItems.isEmpty {
-                                PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
+                                    .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
+                                    .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
+                                    .padding(.bottom, PluginSettingsTheme.Spacing.pagePadding)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             }
                         }
-                        .padding(PluginSettingsTheme.Spacing.pagePadding)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .onAppear {
+                            applySearchRevealRequest(
+                                navigationCoordinator.searchRevealRequest,
+                                pluginID: item.pluginID,
+                                proxy: proxy
+                            )
+                        }
+                        .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                            applySearchRevealRequest(
+                                request,
+                                pluginID: item.pluginID,
+                                proxy: proxy
+                            )
+                        }
                     }
-                    .background(SettingsStyle.contentBackground)
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 18) {
+                                PluginConfigurationHeader(item: item)
+
+                                if !item.settingsCards.isEmpty {
+                                    PluginSettingsCardSection(
+                                        pluginHost: pluginHost,
+                                        cards: item.settingsCards
+                                    )
+                                }
+
+                                if !item.permissionCards.isEmpty {
+                                    PluginPermissionCardSection(
+                                        pluginHost: pluginHost,
+                                        cards: item.permissionCards
+                                    )
+                                }
+
+                                if item.hasCustomConfiguration {
+                                    pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
+                                }
+
+                                if !item.shortcutItems.isEmpty {
+                                    PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
+                                }
+                            }
+                            .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
+                            .padding(PluginSettingsTheme.Spacing.pagePadding)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                        .background(SettingsStyle.contentBackground)
+                        .onAppear {
+                            applySearchRevealRequest(
+                                navigationCoordinator.searchRevealRequest,
+                                pluginID: item.pluginID,
+                                proxy: proxy
+                            )
+                        }
+                        .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+                            applySearchRevealRequest(
+                                request,
+                                pluginID: item.pluginID,
+                                proxy: proxy
+                            )
+                        }
+                    }
                 }
             } else {
                 ContentUnavailableView(
@@ -1605,6 +2001,62 @@ private struct PluginConfigurationDetailPane: View {
             }
         }
         .background(SettingsStyle.contentBackground)
+        .onDisappear {
+            clearSearchTargetTask?.cancel()
+            clearSearchTargetTask = nil
+            if let activeSearchTarget {
+                navigationCoordinator.clearSearchRevealRequest(
+                    matching: .plugin(activeSearchTarget)
+                )
+            }
+            activeSearchTarget = nil
+        }
+    }
+
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        pluginID: String,
+        proxy: ScrollViewProxy
+    ) {
+        guard
+            let target = applySearchRevealRequest(request, pluginID: pluginID)
+        else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(target.scrollID, anchor: .center)
+            }
+        }
+    }
+
+    @discardableResult
+    private func applySearchRevealRequest(
+        _ request: SettingsSearchRevealRequest?,
+        pluginID: String
+    ) -> PluginSettingsSearchTarget? {
+        guard
+            let request,
+            case let .plugin(target) = request.target,
+            target.pluginID == pluginID
+        else {
+            return nil
+        }
+
+        clearSearchTargetTask?.cancel()
+        activeSearchTarget = target
+        clearSearchTargetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            activeSearchTarget = nil
+            navigationCoordinator.clearSearchRevealRequest(request)
+        }
+        return target
     }
 }
 
@@ -1671,6 +2123,10 @@ private struct PluginSettingsCardSection: View {
                                 pluginHost.performSettingsAction(pluginID: card.pluginID, actionID: actionID)
                             }
                         }
+                    )
+                    .pluginSettingsSearchAnchor(
+                        pluginID: card.pluginID,
+                        entryID: card.id
                     )
 
                     if index < cards.count - 1 {
@@ -1751,6 +2207,10 @@ private struct PluginPermissionCardSection: View {
                     )
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
+                    .pluginSettingsSearchAnchor(
+                        pluginID: card.pluginID,
+                        entryID: card.id
+                    )
 
                     if index < cards.count - 1 {
                         PluginSettingsListDivider()

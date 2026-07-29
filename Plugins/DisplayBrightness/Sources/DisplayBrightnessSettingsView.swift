@@ -1,6 +1,10 @@
 import SwiftUI
 import MacToolsPluginKit
 
+enum DisplayBrightnessSettingsSearchEntryID {
+    static let shortcutTarget = "shortcut-target"
+}
+
 struct DisplayBrightnessSettingsView: View {
     @ObservedObject var preferences: DisplayBrightnessShortcutPreferences
     let localization: PluginLocalization
@@ -44,6 +48,10 @@ struct DisplayBrightnessSettingsView: View {
                     .fixedSize()
                 }
                 .pluginSettingsListRowPadding(interactive: true)
+                .pluginSettingsSearchAnchor(
+                    pluginID: "display-brightness",
+                    entryID: DisplayBrightnessSettingsSearchEntryID.shortcutTarget
+                )
             }
             .pluginSettingsCardBackground(.host)
         }

@@ -120,6 +120,23 @@ final class FeatureManagementTableViewTests: XCTestCase {
         ))
     }
 
+    func testUpdatePolicyRefreshesWhenSearchHighlightChanges() {
+        let items = [makeItem(id: "activity-bar", isActive: false)]
+
+        XCTAssertTrue(FeatureManagementTableUpdatePolicy.needsUpdate(
+            previousItems: items,
+            currentItems: items,
+            previousMode: .surface(.dashboard),
+            currentMode: .surface(.dashboard),
+            previousIsReorderEnabled: true,
+            currentIsReorderEnabled: true,
+            previousHighlightedPluginID: nil,
+            currentHighlightedPluginID: "activity-bar",
+            previousContentWidth: 480,
+            currentContentWidth: 480
+        ))
+    }
+
     func testCapabilitySummaryCoversEverySurfaceCombination() {
         XCTAssertEqual(
             pluginCapabilitySummary(capabilities(dashboard: true, featurePanel: true)),

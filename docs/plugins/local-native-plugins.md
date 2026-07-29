@@ -90,6 +90,8 @@ Finder Sync, Share, Quick Look, and other macOS app extensions are host-level ta
 
 In Debug development, `make run` builds the main `MacTools` scheme, then synchronizes the freshly built plugin bundles from `build/DerivedData/Build/Products/Debug` into `build/LocalPlugins/Packages`, generates `build/LocalPlugins/catalog.dev.json`, and updates `~/Library/Application Support/MacTools Dev/Plugins/Installed`. This keeps the local marketplace and installed plugins on the latest source code without running a separate plugin build.
 
+Debug package copies normalize `minHostVersion` to the locally built app version because the host and plugin bundles come from the same checkout. Release packages preserve each source manifest's declared minimum host version.
+
 If the plugin needs extra frameworks, private include paths, bundle resources, helper/tool targets, or target dependencies, add only those differences in `Plugins/<PluginName>/project.yml`. If the plugin package contains an extra executable inside the bundle resources, declare it in `plugin.json.package.signPaths` so release packaging signs it before signing the bundle.
 
 Plugin UI copy should be localized by the plugin itself. Put plugin string catalogs under `Plugins/<PluginName>/Resources`, then look them up from the plugin bundle, for example:
@@ -143,6 +145,12 @@ Recommended mapping:
 - Ordinary settings cards should be separated by background color, spacing, and rounded corners rather than borders. Reserve strokes for focused inputs, keycaps, badges, or other control-specific states.
 
 Avoid copying a plugin-local settings style enum. If a token is missing, add it to `PluginSettingsTheme` instead of hard-coding the same value in multiple plugins.
+
+### Unified Search
+
+MacTools automatically indexes a plugin's configuration page, declarative settings cards, permission rows, and shortcut definitions. A custom `PluginConfiguration` can expose individual destinations by conforming to `PluginSettingsSearchProviding`; apply `pluginSettingsSearchAnchor(pluginID:entryID:)` to the matching row so selecting a result scrolls to, highlights, and exposes accessibility focus on that control.
+
+Commands are never inferred from panel buttons. A plugin must explicitly conform to `PluginCommandProviding` and publish only actions that are safe and useful in the global palette. Commands that need an extra user decision should provide confirmation metadata. Destructive actions should remain in their contextual plugin UI unless their complete safety flow can be represented by that confirmation.
 
 ## Install Location
 

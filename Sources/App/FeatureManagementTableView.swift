@@ -75,6 +75,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
     let items: [FeatureManagementTableItem]
     let mode: FeatureManagementTableMode
     var isReorderEnabled: Bool = true
+    var highlightedPluginID: String? = nil
     var onMove: (String, Int) -> Void = { _, _ in }
     var onSetVisible: (String, Bool) -> Void = { _, _ in }
     var onOpenSettings: (String) -> Void = { _ in }
@@ -111,6 +112,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
         let tableView = PluginSettingsReorderTableView(dragType: Self.dragType)
         tableView.rowHeight = Self.rowHeight
         tableView.intercellSpacing = NSSize(width: 0, height: Self.rowSpacing)
+        tableView.selectionHighlightStyle = .none
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("feature"))
         column.isEditable = false
@@ -146,6 +148,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
             items: items,
             mode: mode,
             isReorderEnabled: isReorderEnabled,
+            highlightedPluginID: highlightedPluginID,
             contentWidth: contentWidth
         )
 
@@ -153,14 +156,51 @@ struct FeatureManagementTableView: NSViewRepresentable {
             return
         }
 
+        let shouldMoveAccessibilityFocus =
+            coordinator.lastSignature?.highlightedPluginID != highlightedPluginID
         coordinator.lastSignature = signature
 
         tableView.reloadData()
         tableView.noteNumberOfRowsChanged()
-
         tableView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: contentHeight)
+        updateSearchHighlight(
+            in: tableView,
+            shouldMoveAccessibilityFocus: shouldMoveAccessibilityFocus
+        )
+
         scrollView.contentView.scroll(to: .zero)
         scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    private func updateSearchHighlight(
+        in tableView: NSTableView,
+        shouldMoveAccessibilityFocus: Bool
+    ) {
+        guard
+            let highlightedPluginID,
+            let row = items.firstIndex(where: { $0.id == highlightedPluginID })
+        else {
+            tableView.deselectAll(nil)
+            return
+        }
+
+        tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        guard shouldMoveAccessibilityFocus else {
+            return
+        }
+
+        NSAccessibility.post(
+            element: tableView,
+            notification: .selectedRowsChanged
+        )
+        guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: true) else {
+            return
+        }
+
+        NSAccessibility.post(
+            element: cell,
+            notification: .focusedUIElementChanged
+        )
     }
 
     @MainActor
@@ -200,6 +240,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
                 item: item,
                 mode: parent.mode,
                 showsHandle: parent.mode.supportsReordering && parent.isReorderEnabled,
+                isSearchHighlighted: item.id == parent.highlightedPluginID,
                 onSetVisible: { [weak self] isVisible in
                     self?.parent.onSetVisible(item.id, isVisible)
                 },
@@ -356,12 +397,14 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
     let rows: [Row]
     let mode: FeatureManagementTableMode
     let isReorderEnabled: Bool
+    let highlightedPluginID: String?
     let contentWidth: CGFloat
 
     init(
         items: [FeatureManagementTableItem],
         mode: FeatureManagementTableMode,
         isReorderEnabled: Bool,
+        highlightedPluginID: String?,
         contentWidth: CGFloat
     ) {
         self.rows = items.map {
@@ -381,6 +424,7 @@ fileprivate struct FeatureManagementTableSignature: Equatable {
         }
         self.mode = mode
         self.isReorderEnabled = isReorderEnabled
+        self.highlightedPluginID = highlightedPluginID
         self.contentWidth = contentWidth.rounded(.toNearestOrAwayFromZero)
     }
 }
@@ -394,6 +438,8 @@ enum FeatureManagementTableUpdatePolicy {
         currentMode: FeatureManagementTableMode,
         previousIsReorderEnabled: Bool,
         currentIsReorderEnabled: Bool,
+        previousHighlightedPluginID: String? = nil,
+        currentHighlightedPluginID: String? = nil,
         previousContentWidth: CGFloat,
         currentContentWidth: CGFloat
     ) -> Bool {
@@ -401,11 +447,13 @@ enum FeatureManagementTableUpdatePolicy {
             items: previousItems,
             mode: previousMode,
             isReorderEnabled: previousIsReorderEnabled,
+            highlightedPluginID: previousHighlightedPluginID,
             contentWidth: previousContentWidth
         ) != FeatureManagementTableSignature(
             items: currentItems,
             mode: currentMode,
             isReorderEnabled: currentIsReorderEnabled,
+            highlightedPluginID: currentHighlightedPluginID,
             contentWidth: currentContentWidth
         )
     }
@@ -647,6 +695,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         item: FeatureManagementTableItem,
         mode: FeatureManagementTableMode,
         showsHandle: Bool,
+        isSearchHighlighted: Bool = false,
         onSetVisible: @escaping (Bool) -> Void,
         onOpenSettings: @escaping () -> Void,
         onOpenMarketplace: @escaping () -> Void,
@@ -681,6 +730,10 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         configureActions()
         handleImageView.isHidden = !showsHandle
         containerView.alphaValue = 1
+        containerView.layer?.borderWidth = isSearchHighlighted ? 2 : 0
+        containerView.layer?.borderColor = isSearchHighlighted
+            ? NSColor.controlAccentColor.cgColor
+            : NSColor.clear.cgColor
         toolTip = item.title
         iconActionButton.toolTip = hasSettings
             ? AppL10n.pluginsFormat(

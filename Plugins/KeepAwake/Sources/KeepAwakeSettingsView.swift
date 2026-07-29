@@ -1,6 +1,11 @@
 import SwiftUI
 import MacToolsPluginKit
 
+enum KeepAwakeSettingsSearchEntryID {
+    static let keepDisplayOn = "keep-display-on"
+    static let keepAwakeWithLidClosed = "keep-awake-with-lid-closed"
+}
+
 struct KeepAwakeSettingsView: View {
     @Binding var keepDisplayOn: Bool
     @Binding var keepAwakeWithLidClosed: Bool
@@ -42,6 +47,10 @@ struct KeepAwakeSettingsView: View {
                 .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
                 .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
                 .pluginSettingsCardBackground(.plugin)
+                .pluginSettingsSearchAnchor(
+                    pluginID: "keep-awake",
+                    entryID: KeepAwakeSettingsSearchEntryID.keepDisplayOn
+                )
             }
 
             if powerSourceState.isPortableMac {
@@ -76,6 +85,10 @@ struct KeepAwakeSettingsView: View {
                     .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
                     .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
                     .pluginSettingsCardBackground(.plugin)
+                    .pluginSettingsSearchAnchor(
+                        pluginID: "keep-awake",
+                        entryID: KeepAwakeSettingsSearchEntryID.keepAwakeWithLidClosed
+                    )
                 }
             }
         }

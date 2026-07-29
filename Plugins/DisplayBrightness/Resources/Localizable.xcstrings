@@ -2698,6 +2698,38 @@
           }
         }
       }
+    },
+    "settings.shortcutTarget.searchDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "اختر نطاق الشاشات التي تتحكم بها اختصارات السطوع." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Wähle, welche Displays von den Helligkeitskurzbefehlen gesteuert werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose which displays are controlled by brightness shortcuts." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Elige qué pantallas controlan los atajos de brillo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Choisissez les écrans contrôlés par les raccourcis de luminosité." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "明るさのショートカットで操作するディスプレイを選択します。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "밝기 단축키로 제어할 디스플레이 범위를 선택합니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Escolha quais telas são controladas pelos atalhos de brilho." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Выберите дисплеи, которыми управляют сочетания яркости." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择亮度快捷键控制的显示器范围。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇亮度快速鍵控制的顯示器範圍。" } }
+      }
+    },
+    "settings.shortcutTarget.searchKeyword": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "شاشة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Bildschirm" } },
+        "en": { "stringUnit": { "state": "translated", "value": "screen" } },
+        "es": { "stringUnit": { "state": "translated", "value": "pantalla" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "écran" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "画面" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "화면" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "tela" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "экран" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "屏幕" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "螢幕" } }
+      }
     }
   },
   "version": "1.0"

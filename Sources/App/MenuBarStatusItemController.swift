@@ -104,6 +104,9 @@ final class MenuBarStatusItemController: NSObject {
             onOpenSettings: { [weak self] in
                 self?.windowRouter.showSettings()
             },
+            onOpenUnifiedSearch: { [weak self] in
+                self?.windowRouter.showUnifiedSearch()
+            },
             onPresentDiskCleanConfiguration: { [weak self] in
                 self?.pluginHost.presentPluginConfiguration(pluginID: "disk-clean")
             },
