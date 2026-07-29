@@ -1940,7 +1940,11 @@ final class PluginHost: ObservableObject {
                 isRequired: descriptor.definition.isRequired,
                 canClear: !descriptor.definition.isRequired && binding != nil,
                 usesDefaultValue: customization == .inheritDefault,
-                errorMessage: shortcutErrors[descriptor.itemID],
+                errorMessage: shortcutErrors[descriptor.itemID]
+                    ?? binding.flatMap {
+                        MacToolsReservedShortcutBindings.validationError(for: $0)?
+                            .localizedDescription
+                    },
                 settingsGroupID: descriptor.definition.settingsGroupID,
                 settingsGroupTitle: descriptor.definition.settingsGroupTitle,
                 settingsGroupDescription: descriptor.definition.settingsGroupDescription,
@@ -1958,10 +1962,15 @@ final class PluginHost: ObservableObject {
                 systemImage: action.systemImage,
                 bindingText: ShortcutFormatter.displayString(for: binding),
                 canClear: binding != nil,
-                errorMessage: appShortcutErrors[action] ?? appShortcutConflictError(
-                    for: action,
-                    descriptors: shortcutDescriptors
-                )
+                errorMessage: appShortcutErrors[action]
+                    ?? binding.flatMap {
+                        MacToolsReservedShortcutBindings.validationError(for: $0)?
+                            .localizedDescription
+                    }
+                    ?? appShortcutConflictError(
+                        for: action,
+                        descriptors: shortcutDescriptors
+                    )
             )
         }
 
@@ -2834,6 +2843,10 @@ final class PluginHost: ObservableObject {
                     errors[action.rawValue] = ShortcutValidationError.missingModifier.localizedDescription
                 } else if ShortcutKeyCode.isModifier(binding.keyCode) {
                     errors[action.rawValue] = ShortcutValidationError.modifierOnly.localizedDescription
+                } else if let error = MacToolsReservedShortcutBindings.validationError(
+                    for: binding
+                ) {
+                    errors[action.rawValue] = error.localizedDescription
                 }
             }
         }
@@ -2858,6 +2871,12 @@ final class PluginHost: ObservableObject {
 
                     guard !ShortcutKeyCode.isModifier(binding.keyCode) else {
                         throw ShortcutValidationError.modifierOnly
+                    }
+
+                    if let error = MacToolsReservedShortcutBindings.validationError(
+                        for: binding
+                    ) {
+                        throw error
                     }
                 }
             } catch {
@@ -2978,6 +2997,12 @@ final class PluginHost: ObservableObject {
                 throw ShortcutValidationError.modifierOnly
             }
 
+            if let error = MacToolsReservedShortcutBindings.validationError(
+                for: candidate
+            ) {
+                throw error
+            }
+
             if let conflict = shortcutDescriptors().first(where: {
                 $0.itemID != descriptor.itemID
                     && resolvedBinding(for: $0) == candidate
@@ -3008,6 +3033,12 @@ final class PluginHost: ObservableObject {
 
         guard !ShortcutKeyCode.isModifier(binding.keyCode) else {
             throw ShortcutValidationError.modifierOnly
+        }
+
+        if let error = MacToolsReservedShortcutBindings.validationError(
+            for: binding
+        ) {
+            throw error
         }
 
         if let conflict = pluginShortcutConflict(
@@ -3058,6 +3089,10 @@ final class PluginHost: ObservableObject {
                 return nil
             }
 
+            guard MacToolsReservedShortcutBindings.validationError(for: binding) == nil else {
+                return nil
+            }
+
             return GlobalShortcutManager.Registration(
                 shortcutID: descriptor.itemID,
                 binding: binding
@@ -3066,7 +3101,8 @@ final class PluginHost: ObservableObject {
 
         for action in AppShortcutAction.allCases {
             guard let binding = resolvedAppShortcutBinding(for: action),
-                  pluginShortcutConflict(for: binding, descriptors: descriptors) == nil
+                  pluginShortcutConflict(for: binding, descriptors: descriptors) == nil,
+                  MacToolsReservedShortcutBindings.validationError(for: binding) == nil
             else {
                 continue
             }
