@@ -46,6 +46,23 @@ enum UnifiedSearchPresentationOrigin: Equatable {
     case keyboard
 }
 
+enum PluginSubpageMoveDirection {
+    case previous
+    case next
+}
+
+extension FeatureSettingsPane {
+    static func settingsSidebarOrder(
+        configurationIDs: some Sequence<String>
+    ) -> [FeatureSettingsPane] {
+        [
+            .dashboardLayout,
+            .featurePanelLayout,
+            .marketplace
+        ] + configurationIDs.map(FeatureSettingsPane.configuration)
+    }
+}
+
 struct SettingsSearchFocusRequest: Equatable {
     let id: UInt
     let field: SettingsSearchField
@@ -128,6 +145,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private(set) var focusedSearchField: SettingsSearchField?
 
     private let pluginSettingsLandingPage: () -> FeatureSettingsPane
+    private let pluginSubpageOrder: () -> [FeatureSettingsPane]
     private let isPluginConfigurationAvailable: (String) -> Bool
     private let isPluginSettingsSearchTargetAvailable: (PluginSettingsSearchTarget) -> Bool
     private let isPluginManagementAvailable: (String) -> Bool
@@ -141,6 +159,11 @@ final class SettingsNavigationCoordinator: ObservableObject {
     convenience init(pluginHost: PluginHost) {
         self.init(
             pluginSettingsLandingPage: { pluginHost.pluginSettingsLandingPage() },
+            pluginSubpageOrder: {
+                FeatureSettingsPane.settingsSidebarOrder(
+                    configurationIDs: pluginHost.pluginConfigurationItems.map(\.id)
+                )
+            },
             isPluginConfigurationAvailable: { pluginHost.hasPluginConfiguration(pluginID: $0) },
             isPluginSettingsSearchTargetAvailable: {
                 pluginHost.hasPluginSettingsSearchTarget($0)
@@ -166,6 +189,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     init(
         initialDestination: SettingsNavigationDestination = .general,
         pluginSettingsLandingPage: @escaping () -> FeatureSettingsPane = { .marketplace },
+        pluginSubpageOrder: @escaping () -> [FeatureSettingsPane] = { [] },
         isPluginConfigurationAvailable: @escaping (String) -> Bool = { _ in true },
         isPluginSettingsSearchTargetAvailable: @escaping (PluginSettingsSearchTarget) -> Bool = { _ in true },
         isPluginManagementAvailable: @escaping (String) -> Bool = { _ in true },
@@ -176,6 +200,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
         self.history = [initialDestination]
         self.historyIndex = 0
         self.pluginSettingsLandingPage = pluginSettingsLandingPage
+        self.pluginSubpageOrder = pluginSubpageOrder
         self.isPluginConfigurationAvailable = isPluginConfigurationAvailable
         self.isPluginSettingsSearchTargetAvailable = isPluginSettingsSearchTargetAvailable
         self.isPluginManagementAvailable = isPluginManagementAvailable
@@ -221,6 +246,36 @@ final class SettingsNavigationCoordinator: ObservableObject {
         }
         historyIndex = history.count - 1
         activate(destination)
+    }
+
+    func movePluginSubpage(
+        _ direction: PluginSubpageMoveDirection,
+        in orderedPanes: [FeatureSettingsPane]
+    ) {
+        guard
+            case let .plugins(currentPane) = destination,
+            let currentIndex = orderedPanes.firstIndex(of: currentPane)
+        else {
+            return
+        }
+
+        let adjacentIndex: Int
+        switch direction {
+        case .previous:
+            adjacentIndex = currentIndex - 1
+        case .next:
+            adjacentIndex = currentIndex + 1
+        }
+
+        guard orderedPanes.indices.contains(adjacentIndex) else {
+            return
+        }
+
+        navigate(to: .plugins(orderedPanes[adjacentIndex]))
+    }
+
+    func movePluginSubpage(_ direction: PluginSubpageMoveDirection) {
+        movePluginSubpage(direction, in: pluginSubpageOrder())
     }
 
     func requestAboutUpdateAction(version: String) {

@@ -4,6 +4,142 @@ import MacToolsPluginKit
 
 @MainActor
 final class SettingsNavigationCoordinatorTests: XCTestCase {
+    func testPluginSidebarOrderPlacesBuiltInPanesBeforeDisplayedConfigurations() {
+        XCTAssertEqual(
+            FeatureSettingsPane.settingsSidebarOrder(
+                configurationIDs: ["calendar", "fan-control"]
+            ),
+            [
+                .dashboardLayout,
+                .featurePanelLayout,
+                .marketplace,
+                .configuration("calendar"),
+                .configuration("fan-control")
+            ]
+        )
+    }
+
+    func testMovesPluginSubpageInSuppliedVisibleOrder() {
+        let orderedPanes: [FeatureSettingsPane] = [
+            .configuration("fan-control"),
+            .marketplace,
+            .dashboardLayout
+        ]
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.marketplace),
+            isPluginConfigurationAvailable: { $0 == "fan-control" }
+        )
+
+        coordinator.movePluginSubpage(.previous, in: orderedPanes)
+        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
+
+        coordinator.movePluginSubpage(.next, in: orderedPanes)
+        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+
+        coordinator.movePluginSubpage(.next, in: orderedPanes)
+        XCTAssertEqual(coordinator.destination, .plugins(.dashboardLayout))
+    }
+
+    func testPluginSubpageMovementStopsAtBothBoundaries() {
+        let orderedPanes: [FeatureSettingsPane] = [
+            .dashboardLayout,
+            .featurePanelLayout,
+            .marketplace
+        ]
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.dashboardLayout)
+        )
+
+        coordinator.movePluginSubpage(.previous, in: orderedPanes)
+        XCTAssertEqual(coordinator.destination, .plugins(.dashboardLayout))
+        XCTAssertEqual(coordinator.history, [.plugins(.dashboardLayout)])
+
+        coordinator.navigate(to: .plugins(.marketplace))
+        coordinator.movePluginSubpage(.next, in: orderedPanes)
+        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+        XCTAssertEqual(
+            coordinator.history,
+            [.plugins(.dashboardLayout), .plugins(.marketplace)]
+        )
+    }
+
+    func testPluginSubpageMovementDoesNothingOutsidePlugins() {
+        let coordinator = SettingsNavigationCoordinator(initialDestination: .about)
+
+        coordinator.movePluginSubpage(
+            .next,
+            in: [.dashboardLayout, .featurePanelLayout, .marketplace]
+        )
+
+        XCTAssertEqual(coordinator.destination, .about)
+        XCTAssertEqual(coordinator.history, [.about])
+    }
+
+    func testPluginSubpageMovementRecordsHistoryAndInvalidatesForwardHistory() {
+        let orderedPanes: [FeatureSettingsPane] = [
+            .dashboardLayout,
+            .featurePanelLayout,
+            .marketplace
+        ]
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.dashboardLayout)
+        )
+        coordinator.navigate(to: .plugins(.featurePanelLayout))
+        coordinator.navigate(to: .plugins(.marketplace))
+        coordinator.goBack()
+
+        coordinator.movePluginSubpage(.previous, in: orderedPanes)
+
+        XCTAssertEqual(coordinator.destination, .plugins(.dashboardLayout))
+        XCTAssertEqual(
+            coordinator.history,
+            [
+                .plugins(.dashboardLayout),
+                .plugins(.featurePanelLayout),
+                .plugins(.dashboardLayout)
+            ]
+        )
+        XCTAssertFalse(coordinator.canGoForward)
+    }
+
+    func testPluginSubpageMovementIgnoresRemovedCurrentConfiguration() {
+        var availableConfigurationIDs: Set<String> = ["fan-control"]
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.configuration("fan-control")),
+            isPluginConfigurationAvailable: { availableConfigurationIDs.contains($0) }
+        )
+        availableConfigurationIDs.remove("fan-control")
+
+        coordinator.movePluginSubpage(
+            .previous,
+            in: [.dashboardLayout, .featurePanelLayout, .marketplace]
+        )
+
+        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
+        XCTAssertEqual(coordinator.history, [.plugins(.configuration("fan-control"))])
+    }
+
+    func testPluginSubpageMovementReadsLatestDynamicOrder() {
+        var configurationIDs: [String] = []
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.marketplace),
+            pluginSubpageOrder: {
+                FeatureSettingsPane.settingsSidebarOrder(
+                    configurationIDs: configurationIDs
+                )
+            },
+            isPluginConfigurationAvailable: { configurationIDs.contains($0) }
+        )
+
+        coordinator.movePluginSubpage(.next)
+        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+
+        configurationIDs = ["fan-control"]
+        coordinator.movePluginSubpage(.next)
+
+        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
+    }
+
     func testRecordsCompletePluginDestinationsAndRestoresExactPaneDuringTraversal() {
         let coordinator = SettingsNavigationCoordinator(
             isPluginConfigurationAvailable: { $0 == "fan-control" }
