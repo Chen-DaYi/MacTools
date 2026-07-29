@@ -494,7 +494,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
         if shouldKeepAwakeWithLidClosed,
            keepDesktopAvailableWithLidClosed,
-           powerSourceState.canPreventLidCloseSleep {
+           powerSourceState.canRunVirtualDisplay {
             do {
                 try virtualDisplayManager.start()
                 try session.setPreventDisplaySleep(true)
@@ -551,7 +551,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
             return
         }
 
-        if shouldKeepDesktopAvailable, powerSourceState.canPreventLidCloseSleep {
+        if shouldKeepDesktopAvailable, powerSourceState.canRunVirtualDisplay {
             do {
                 try virtualDisplayManager.start()
                 try session.setPreventDisplaySleep(true)
@@ -596,6 +596,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         let shouldRunVirtualDisplay =
             keepDesktopAvailableWithLidClosed
             && shouldPreventLidCloseSleep
+            && powerSourceState.isLidClosed
         var virtualDisplayError: Error?
 
         if shouldRunVirtualDisplay {
@@ -779,6 +780,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
             return
         }
 
+        let previousState = powerSourceState
         powerSourceState = state
 
         guard keepAwakeWithLidClosed else {
@@ -788,7 +790,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         }
 
         guard let session else {
-            if !state.canPreventLidCloseSleep {
+            if !state.canRunVirtualDisplay {
                 virtualDisplayManager.stop()
             }
             notifyChange()
@@ -796,9 +798,11 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         }
 
         do {
-            try session.setPreventLidCloseSleep(state.canPreventLidCloseSleep)
+            if state.canPreventLidCloseSleep != previousState.canPreventLidCloseSleep {
+                try session.setPreventLidCloseSleep(state.canPreventLidCloseSleep)
+            }
 
-            if keepDesktopAvailableWithLidClosed, state.canPreventLidCloseSleep {
+            if keepDesktopAvailableWithLidClosed, state.canRunVirtualDisplay {
                 do {
                     try virtualDisplayManager.start()
                     try session.setPreventDisplaySleep(true)

@@ -28,7 +28,7 @@
 | Display Sleep | Put all displays to sleep immediately, then wake them with mouse movement or keyboard input. |
 | Dark Mode | Toggle the system light and dark appearances, with live state sync when the system theme changes. |
 | Night Shift | Toggle Night Shift to reduce blue light and warm the screen colors at night. |
-| Prevent Sleep | Keep the system awake while idle, optionally keep the display on, or configure a Mac laptop to stay awake with its lid closed whenever power is connected. An experimental built-in virtual display keeps screen-dependent tools such as Codex Computer Use, desktop automation, screen sharing, and remote control working without external display hardware. Stop automatically after 30 minutes, 1 hour, 2 hours, or 5 hours. |
+| Prevent Sleep | Keep the system awake while idle, optionally keep the display on, or configure a Mac laptop to stay awake with its lid closed whenever power is connected. An experimental built-in virtual display appears only while the lid is closed and keeps screen-dependent tools such as Codex Computer Use, desktop automation, screen sharing, and remote control working without external display hardware. Stop automatically after 30 minutes, 1 hour, 2 hours, or 5 hours. |
 | Clean Mode | Show a full-screen black overlay and temporarily disable input for cleaning the screen, keyboard, or trackpad. |
 | Mouse Enhancer | Enhance mouse and trackpad controls, with separate horizontal and vertical scroll reversing plus trackpad-tap middle-click simulation. |
 | Hide Notch | Mask the top notch area on built-in notch displays without modifying the original wallpaper. |
