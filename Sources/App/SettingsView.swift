@@ -27,6 +27,9 @@ struct SettingsView: View {
     var body: some View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
+        let orderedPluginPanes = FeatureSettingsPane.settingsSidebarOrder(
+            configurationIDs: pluginHost.pluginConfigurationItems.map(\.id)
+        )
 
         return TabView(selection: settingsDestinationBinding) {
             GeneralSettingsView(
@@ -45,7 +48,8 @@ struct SettingsView: View {
                 navigationCoordinator: navigationCoordinator,
                 uninstallConfirmationSession: uninstallConfirmationSession,
                 showDashboard: showDashboard,
-                showFeaturePanel: showFeaturePanel
+                showFeaturePanel: showFeaturePanel,
+                orderedPanes: orderedPluginPanes
             )
                 .tag(SettingsDestination.pluginConfiguration)
                 .tabItem {
@@ -104,6 +108,8 @@ struct SettingsDestinationShortcutButtons: View {
             shortcutButton(for: .about, key: "3")
             historyShortcutButton(key: "[") { coordinator.goBack() }
             historyShortcutButton(key: "]") { coordinator.goForward() }
+            pluginSubpageShortcutButton(key: .upArrow, direction: .previous)
+            pluginSubpageShortcutButton(key: .downArrow, direction: .next)
         }
         .frame(width: 0, height: 0)
         .opacity(0)
@@ -128,6 +134,17 @@ struct SettingsDestinationShortcutButtons: View {
         Button("", action: action)
             .keyboardShortcut(key, modifiers: [.command])
             .focusable(false)
+    }
+
+    private func pluginSubpageShortcutButton(
+        key: KeyEquivalent,
+        direction: PluginSubpageMoveDirection
+    ) -> some View {
+        Button("") {
+            coordinator.movePluginSubpage(direction)
+        }
+        .keyboardShortcut(key, modifiers: [.control, .command])
+        .focusable(false)
     }
 }
 
@@ -974,12 +991,17 @@ private struct FeatureSettingsView: View {
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
     let showDashboard: () -> Void
     let showFeaturePanel: () -> Void
+    let orderedPanes: [FeatureSettingsPane]
 
     var body: some View {
         HSplitView {
             FeatureSettingsSidebar(
                 configurationItems: pluginHost.pluginConfigurationItems,
-                selection: selectionBinding
+                orderedPanes: orderedPanes,
+                selection: selectionBinding,
+                moveSelection: { direction in
+                    navigationCoordinator.movePluginSubpage(direction, in: orderedPanes)
+                }
             )
             .frame(
                 minWidth: Layout.sidebarMinWidth,
@@ -1022,61 +1044,148 @@ private struct FeatureSettingsView: View {
 
 private struct FeatureSettingsSidebar: View {
     let configurationItems: [PluginConfigurationItem]
+    let orderedPanes: [FeatureSettingsPane]
     @Binding var selection: FeatureSettingsPane
+    let moveSelection: (PluginSubpageMoveDirection) -> Void
+    @FocusState private var isSidebarFocused: Bool
 
     var body: some View {
-        List(selection: optionalSelectionBinding) {
-            Section(AppL10n.settings(
-                "plugins.sidebar.pluginsSection",
-                defaultValue: "插件"
-            )) {
-                FeatureSettingsSidebarRow(
-                    title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
-                    systemImage: "square.grid.2x2",
-                    iconTint: .blue
-                )
-                .tag(FeatureSettingsPane.dashboardLayout)
-
-                FeatureSettingsSidebarRow(
-                    title: AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板"),
-                    systemImage: "switch.2",
-                    iconTint: .purple
-                )
-                .tag(FeatureSettingsPane.featurePanelLayout)
-
-                FeatureSettingsSidebarRow(
-                    title: AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场"),
-                    systemImage: "shippingbox",
-                    iconTint: .blue
-                )
-                .tag(FeatureSettingsPane.marketplace)
-            }
-
-            Section(AppL10n.settings(
-                "plugins.sidebar.configurationSection",
-                defaultValue: "插件设置"
-            )) {
-                if configurationItems.isEmpty {
-                    Text(AppL10n.settings("plugins.sidebar.emptyConfigurations", defaultValue: "暂无可设置插件"))
-                        .font(PluginSettingsTheme.Typography.secondaryLabel)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(configurationItems) { item in
-                        FeatureSettingsSidebarRow(
-                            title: item.title,
-                            systemImage: item.iconName,
-                            iconTint: item.iconTint
-                        )
-                        .tag(FeatureSettingsPane.configuration(item.id))
+        ScrollViewReader { proxy in
+            List(selection: optionalSelectionBinding) {
+                Section {
+                    ForEach(primaryPanes, id: \.self) { pane in
+                        sidebarRow(for: pane)
                     }
+                } header: {
+                    Text(AppL10n.settings(
+                        "plugins.sidebar.pluginsSection",
+                        defaultValue: "插件"
+                    ))
+                    .accessibilityHidden(true)
+                }
+
+                Section {
+                    if configurationPanes.isEmpty {
+                        Text(emptyConfigurationsText)
+                            .font(PluginSettingsTheme.Typography.secondaryLabel)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    } else {
+                        ForEach(configurationPanes, id: \.self) { pane in
+                            sidebarRow(for: pane)
+                        }
+                    }
+                } header: {
+                    Text(AppL10n.settings(
+                        "plugins.sidebar.configurationSection",
+                        defaultValue: "插件设置"
+                    ))
+                    .accessibilityHidden(true)
                 }
             }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background {
+                SettingsSidebarMaterialBackground()
+                    .allowsHitTesting(false)
+            }
+            .focusable(interactions: .activate)
+            .focused($isSidebarFocused)
+            .onMoveCommand { direction in
+                switch direction {
+                case .up:
+                    moveSelection(.previous)
+                case .down:
+                    moveSelection(.next)
+                default:
+                    break
+                }
+            }
+            .onChange(of: selection) {
+                withAnimation {
+                    proxy.scrollTo(selection)
+                }
+            }
+            .overlay {
+                if isSidebarFocused {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(Color.accentColor.opacity(0.55), lineWidth: 1)
+                        .padding(2)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(AppL10n.settings(
+                "plugins.sidebar.accessibilityLabel",
+                defaultValue: "插件导航"
+            ))
+            .accessibilityHint(configurationPanes.isEmpty ? emptyConfigurationsText : "")
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .background {
-            SettingsSidebarMaterialBackground()
-                .allowsHitTesting(false)
+    }
+
+    private var emptyConfigurationsText: String {
+        AppL10n.settings(
+            "plugins.sidebar.emptyConfigurations",
+            defaultValue: "暂无可设置插件"
+        )
+    }
+
+    private var primaryPanes: [FeatureSettingsPane] {
+        orderedPanes.filter {
+            guard case .configuration = $0 else {
+                return true
+            }
+            return false
+        }
+    }
+
+    private var configurationPanes: [FeatureSettingsPane] {
+        orderedPanes.filter {
+            if case .configuration = $0 {
+                return true
+            }
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private func sidebarRow(for pane: FeatureSettingsPane) -> some View {
+        switch pane {
+        case .dashboardLayout:
+            FeatureSettingsSidebarRow(
+                title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
+                systemImage: "square.grid.2x2",
+                iconTint: .blue
+            )
+            .tag(pane)
+            .id(pane)
+        case .featurePanelLayout:
+            FeatureSettingsSidebarRow(
+                title: AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板"),
+                systemImage: "switch.2",
+                iconTint: .purple
+            )
+            .tag(pane)
+            .id(pane)
+        case .marketplace:
+            FeatureSettingsSidebarRow(
+                title: AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场"),
+                systemImage: "shippingbox",
+                iconTint: .blue
+            )
+            .tag(pane)
+            .id(pane)
+        case let .configuration(pluginID):
+            if let item = configurationItems.first(where: { $0.id == pluginID }) {
+                FeatureSettingsSidebarRow(
+                    title: item.title,
+                    systemImage: item.iconName,
+                    iconTint: item.iconTint
+                )
+                .tag(pane)
+                .id(pane)
+            }
         }
     }
 
@@ -1087,6 +1196,7 @@ private struct FeatureSettingsSidebar: View {
                 guard let newSelection else {
                     return
                 }
+                isSidebarFocused = true
                 selection = newSelection
             }
         )
@@ -1132,6 +1242,7 @@ private struct FeatureSettingsSidebarRow: View {
                 .frame(width: Layout.iconWidth)
         }
         .font(.body)
+        .focusable(false)
         .help(title)
     }
 }
