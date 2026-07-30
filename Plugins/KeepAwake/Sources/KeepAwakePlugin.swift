@@ -33,7 +33,13 @@ private struct KeepAwakePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPanelCompactIndicatorProviding {
+final class KeepAwakePlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginPrimaryPanelCompactIndicatorProviding,
+    PluginSettingsSearchProviding,
+    DisplayTopologyRefreshing
+{
     typealias SessionFactory = (
         PluginLocalization,
         @escaping (KeepAwakeSession.EndReason) -> Void
@@ -59,6 +65,11 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
     private enum ControlID {
         static let duration = "duration"
+    }
+
+    private enum VirtualDisplayIdentity {
+        static let name = "MacTools Virtual Display"
+        static let vendorNumber: UInt32 = 505
     }
 
     private enum DurationPreset: String {
@@ -108,6 +119,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
     private let sessionFactory: SessionFactory
     private let powerSourceMonitor: any KeepAwakePowerSourceMonitoring
     private let virtualDisplayManager: any KeepAwakeVirtualDisplayManaging
+    private let displayProvider: any DisplayProviding
     private var storage: PluginStorage
     private var lastErrorMessage: String?
     private var session: (any KeepAwakeSessionManaging)?
@@ -116,6 +128,11 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
     private var keepAwakeWithLidClosed = false
     private var keepDesktopAvailableWithLidClosed = false
     private var powerSourceState: KeepAwakePowerSourceState
+    private var hasActiveExternalDisplay: Bool
+    private var virtualDisplayIsDesired = false
+    private var virtualDisplayStartGeneration = 0
+    private var virtualDisplayStartTask: Task<Void, Never>?
+    private var isPreventingDisplaySleep = false
     private var scheduledEndDate: Date?
     private var timedStateRefreshTimer: Timer?
 
@@ -124,6 +141,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         powerSourceMonitor: (any KeepAwakePowerSourceMonitoring)? = nil,
         virtualDisplayManager: (any KeepAwakeVirtualDisplayManaging)? = nil,
+        displayProvider: any DisplayProviding = SystemDisplayService(),
         sessionFactory: @escaping SessionFactory = { localization, onEnd in
             KeepAwakeSession(localization: localization, onEnd: onEnd)
         }
@@ -133,11 +151,15 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         self.storage = context.storage
         self.sessionFactory = sessionFactory
         self.powerSourceMonitor = resolvedPowerSourceMonitor
+        self.displayProvider = displayProvider
         self.virtualDisplayManager = virtualDisplayManager ?? KeepAwakeVirtualDisplayManager(
             helperURL: nil,
             localization: localization
         )
         self.powerSourceState = resolvedPowerSourceMonitor.currentState
+        self.hasActiveExternalDisplay = Self.detectActiveExternalDisplay(
+            using: displayProvider
+        )
         self.keepDisplayOn = context.storage.bool(forKey: StorageKey.keepDisplayOn)
         self.keepAwakeWithLidClosed =
             resolvedPowerSourceMonitor.currentState.isPortableMac
@@ -229,6 +251,71 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var settingsSearchEntries: [PluginSettingsSearchEntry] {
+        var entries = [
+            PluginSettingsSearchEntry(
+                id: KeepAwakeSettingsSearchEntryID.keepDisplayOn,
+                title: localization.string(
+                    "settings.display.keepOn",
+                    defaultValue: "保持屏幕常亮"
+                ),
+                description: localization.string(
+                    "settings.display.keepOn.description",
+                    defaultValue: "阻止休眠运行时，防止屏幕因空闲而关闭。"
+                ),
+                keywords: [
+                    localization.string("settings.display.section", defaultValue: "屏幕")
+                ],
+                systemImage: "display"
+            )
+        ]
+
+        if powerSourceState.isPortableMac {
+            entries.append(
+                PluginSettingsSearchEntry(
+                    id: KeepAwakeSettingsSearchEntryID.keepAwakeWithLidClosed,
+                    title: localization.string(
+                        "settings.lidClose.keepAwake",
+                        defaultValue: "合盖保持唤醒"
+                    ),
+                    description: localization.string(
+                        "settings.lidClose.keepAwake.description",
+                        defaultValue: "使用电池时暂停，重新接通电源后恢复。"
+                    ),
+                    keywords: [
+                        localization.string(
+                            "settings.lidClose.section",
+                            defaultValue: "MacBook"
+                        )
+                    ],
+                    systemImage: "laptopcomputer"
+                )
+            )
+            entries.append(
+                PluginSettingsSearchEntry(
+                    id: KeepAwakeSettingsSearchEntryID.keepScreenBasedToolsWorking,
+                    title: localization.string(
+                        "settings.virtualDisplay.keepDesktopAvailable",
+                        defaultValue: "让屏幕相关工具继续工作"
+                    ),
+                    description: localization.string(
+                        "settings.virtualDisplay.description",
+                        defaultValue: "合盖后支持 Codex Computer Use、桌面自动化、屏幕共享和远程控制。"
+                    ),
+                    keywords: [
+                        localization.string(
+                            "settings.lidClose.section",
+                            defaultValue: "MacBook"
+                        )
+                    ],
+                    systemImage: "display"
+                )
+            )
+        }
+
+        return entries
+    }
+
     var configuration: PluginConfiguration? {
         PluginConfiguration(description: metadata.defaultDescription) { [weak self, localization] _ in
             KeepAwakeSettingsView(
@@ -258,6 +345,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         storage = context.storage
         powerSourceMonitor.start()
         powerSourceState = powerSourceMonitor.currentState
+        hasActiveExternalDisplay = Self.detectActiveExternalDisplay(using: displayProvider)
         keepDisplayOn = storage.bool(forKey: StorageKey.keepDisplayOn)
         let storedKeepAwakeWithLidClosed = storage.bool(
             forKey: StorageKey.keepAwakeWithLidClosed
@@ -293,9 +381,21 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
     func deactivate(reason: PluginDeactivationReason) {
         powerSourceMonitor.stop()
+        cancelVirtualDisplayStart()
         virtualDisplayManager.stop()
         guard reason.requiresStateCleanup else { return }
         session?.requestStop(reason: .userRequested)
+    }
+
+    func refreshDisplayTopology() {
+        let hasExternalDisplay = Self.detectActiveExternalDisplay(using: displayProvider)
+        guard hasExternalDisplay != hasActiveExternalDisplay else {
+            return
+        }
+
+        hasActiveExternalDisplay = hasExternalDisplay
+        reconcileVirtualDisplay()
+        notifyChange()
     }
 
     func handleAction(_ action: PluginPanelAction) {
@@ -438,8 +538,9 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         }
 
         do {
-            try session.setPreventDisplaySleep(
-                shouldKeepDisplayOn || virtualDisplayManager.isActive
+            try updateDisplaySleepAssertion(
+                shouldKeepDisplayOn || virtualDisplayShouldRun,
+                session: session
             )
             keepDisplayOn = shouldKeepDisplayOn
             persistKeepDisplayOnPreference()
@@ -470,9 +571,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         guard let session else {
             keepAwakeWithLidClosed = shouldKeepAwakeWithLidClosed
             persistKeepAwakeWithLidClosedPreference()
-            if !shouldKeepAwakeWithLidClosed {
-                virtualDisplayManager.stop()
-            }
+            reconcileVirtualDisplay()
             notifyChange()
             return
         }
@@ -491,31 +590,7 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
         keepAwakeWithLidClosed = shouldKeepAwakeWithLidClosed
         persistKeepAwakeWithLidClosedPreference()
-
-        if shouldKeepAwakeWithLidClosed,
-           keepDesktopAvailableWithLidClosed,
-           powerSourceState.canRunVirtualDisplay {
-            do {
-                try virtualDisplayManager.start()
-                try session.setPreventDisplaySleep(true)
-            } catch {
-                virtualDisplayManager.stop()
-                keepDesktopAvailableWithLidClosed = false
-                persistKeepDesktopAvailableWithLidClosedPreference()
-                try? session.setPreventDisplaySleep(keepDisplayOn)
-                logger.error("software display resume failed: \(error.localizedDescription, privacy: .public)")
-                lastErrorMessage = error.localizedDescription
-            }
-        } else if !shouldKeepAwakeWithLidClosed, virtualDisplayManager.isActive {
-            do {
-                try session.setPreventDisplaySleep(keepDisplayOn)
-            } catch {
-                logger.error("software display pause failed: \(error.localizedDescription, privacy: .public)")
-                lastErrorMessage = error.localizedDescription
-            }
-            virtualDisplayManager.stop()
-        }
-
+        reconcileVirtualDisplay()
         notifyChange()
     }
 
@@ -544,43 +619,9 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
             return
         }
 
-        guard let session else {
-            keepDesktopAvailableWithLidClosed = shouldKeepDesktopAvailable
-            persistKeepDesktopAvailableWithLidClosedPreference()
-            notifyChange()
-            return
-        }
-
-        if shouldKeepDesktopAvailable, powerSourceState.canRunVirtualDisplay {
-            do {
-                try virtualDisplayManager.start()
-                try session.setPreventDisplaySleep(true)
-                keepDesktopAvailableWithLidClosed = true
-                persistKeepDesktopAvailableWithLidClosedPreference()
-                notifyChange()
-            } catch {
-                virtualDisplayManager.stop()
-                logger.error("software display enable failed: \(error.localizedDescription, privacy: .public)")
-                lastErrorMessage = error.localizedDescription
-                notifyChange()
-            }
-            return
-        }
-
-        if !shouldKeepDesktopAvailable, virtualDisplayManager.isActive {
-            do {
-                try session.setPreventDisplaySleep(keepDisplayOn)
-            } catch {
-                logger.error("software display disable failed: \(error.localizedDescription, privacy: .public)")
-                lastErrorMessage = error.localizedDescription
-                notifyChange()
-                return
-            }
-            virtualDisplayManager.stop()
-        }
-
         keepDesktopAvailableWithLidClosed = shouldKeepDesktopAvailable
         persistKeepDesktopAvailableWithLidClosedPreference()
+        reconcileVirtualDisplay()
         notifyChange()
     }
 
@@ -593,50 +634,184 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         let shouldPreventLidCloseSleep =
             keepAwakeWithLidClosed
             && powerSourceState.canPreventLidCloseSleep
-        let shouldRunVirtualDisplay =
-            keepDesktopAvailableWithLidClosed
-            && shouldPreventLidCloseSleep
-            && powerSourceState.isLidClosed
-        var virtualDisplayError: Error?
-
-        if shouldRunVirtualDisplay {
-            do {
-                try virtualDisplayManager.start()
-            } catch {
-                virtualDisplayError = error
-                keepDesktopAvailableWithLidClosed = false
-                persistKeepDesktopAvailableWithLidClosedPreference()
-                virtualDisplayManager.stop()
-                logger.error("software display start failed: \(error.localizedDescription, privacy: .public)")
-            }
-        } else {
-            virtualDisplayManager.stop()
-        }
+        let shouldPrepareVirtualDisplay = virtualDisplayShouldBePrepared
+        let shouldPreventDisplaySleep = keepDisplayOn || shouldPrepareVirtualDisplay
 
         do {
             try session.start(
                 until: endDate,
-                preventDisplaySleep: keepDisplayOn || virtualDisplayManager.isActive,
+                preventDisplaySleep: shouldPreventDisplaySleep,
                 preventLidCloseSleep: shouldPreventLidCloseSleep
             )
             self.session = session
+            isPreventingDisplaySleep = shouldPreventDisplaySleep
             scheduledEndDate = endDate
             persistCurrentSelectionIfRunning()
             scheduleTimedStateRefreshIfNeeded()
-            lastErrorMessage = virtualDisplayError?.localizedDescription
+            lastErrorMessage = nil
+            reconcileVirtualDisplay()
             notifyChange()
         } catch {
             logger.error("keep-awake session update failed: \(error.localizedDescription, privacy: .public)")
             if !hadRunningSession {
+                cancelVirtualDisplayStart()
                 virtualDisplayManager.stop()
             }
             if shouldPreventLidCloseSleep {
                 keepAwakeWithLidClosed = false
                 persistKeepAwakeWithLidClosedPreference()
+                cancelVirtualDisplayStart()
                 virtualDisplayManager.stop()
             }
             lastErrorMessage = error.localizedDescription
             notifyChange()
+        }
+    }
+
+    private var virtualDisplayShouldBePrepared: Bool {
+        keepDesktopAvailableWithLidClosed
+            && keepAwakeWithLidClosed
+            && powerSourceState.canRunVirtualDisplay
+            && !hasActiveExternalDisplay
+    }
+
+    private var virtualDisplayShouldRun: Bool {
+        session != nil && virtualDisplayShouldBePrepared
+    }
+
+    private func reconcileVirtualDisplay() {
+        guard virtualDisplayShouldRun else {
+            stopVirtualDisplayIfNeeded()
+            return
+        }
+
+        guard !virtualDisplayIsDesired
+                || (!virtualDisplayManager.isActive && virtualDisplayStartTask == nil)
+        else {
+            return
+        }
+
+        virtualDisplayIsDesired = true
+        cancelVirtualDisplayStart()
+
+        guard let session else {
+            return
+        }
+
+        do {
+            try updateDisplaySleepAssertion(true, session: session)
+        } catch {
+            failVirtualDisplayStart(error)
+            return
+        }
+
+        let generation = virtualDisplayStartGeneration
+        virtualDisplayStartTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                try await self.virtualDisplayManager.start()
+                try Task.checkCancellation()
+
+                guard generation == self.virtualDisplayStartGeneration,
+                      self.virtualDisplayIsDesired,
+                      self.virtualDisplayShouldRun
+                else {
+                    self.virtualDisplayManager.stop()
+                    return
+                }
+
+                self.virtualDisplayStartTask = nil
+                self.notifyChange()
+            } catch is CancellationError {
+                guard generation == self.virtualDisplayStartGeneration else {
+                    return
+                }
+                self.virtualDisplayStartTask = nil
+            } catch {
+                guard generation == self.virtualDisplayStartGeneration,
+                      self.virtualDisplayIsDesired
+                else {
+                    return
+                }
+                self.virtualDisplayStartTask = nil
+                self.failVirtualDisplayStart(error)
+            }
+        }
+    }
+
+    private func stopVirtualDisplayIfNeeded() {
+        guard virtualDisplayIsDesired
+                || virtualDisplayStartTask != nil
+                || virtualDisplayManager.isActive
+        else {
+            return
+        }
+
+        virtualDisplayIsDesired = false
+        cancelVirtualDisplayStart()
+        virtualDisplayManager.stop()
+
+        guard let session else {
+            return
+        }
+
+        do {
+            try updateDisplaySleepAssertion(keepDisplayOn, session: session)
+        } catch {
+            logger.error(
+                "software display pause failed: \(error.localizedDescription, privacy: .public)"
+            )
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func failVirtualDisplayStart(_ error: Error) {
+        virtualDisplayIsDesired = false
+        cancelVirtualDisplayStart()
+        virtualDisplayManager.stop()
+        keepDesktopAvailableWithLidClosed = false
+        persistKeepDesktopAvailableWithLidClosedPreference()
+
+        if let session {
+            try? updateDisplaySleepAssertion(keepDisplayOn, session: session)
+        }
+
+        logger.error(
+            "software display start failed: \(error.localizedDescription, privacy: .public)"
+        )
+        lastErrorMessage = error.localizedDescription
+        notifyChange()
+    }
+
+    private func cancelVirtualDisplayStart() {
+        virtualDisplayStartGeneration += 1
+        virtualDisplayStartTask?.cancel()
+        virtualDisplayStartTask = nil
+    }
+
+    private func updateDisplaySleepAssertion(
+        _ shouldPreventDisplaySleep: Bool,
+        session: any KeepAwakeSessionManaging
+    ) throws {
+        guard isPreventingDisplaySleep != shouldPreventDisplaySleep else {
+            return
+        }
+
+        try session.setPreventDisplaySleep(shouldPreventDisplaySleep)
+        isPreventingDisplaySleep = shouldPreventDisplaySleep
+    }
+
+    private static func detectActiveExternalDisplay(
+        using displayProvider: any DisplayProviding
+    ) -> Bool {
+        displayProvider.listConnectedDisplays().contains { display in
+            guard !display.isBuiltin else {
+                return false
+            }
+
+            return display.name != VirtualDisplayIdentity.name
+                || display.vendorNumber != VirtualDisplayIdentity.vendorNumber
         }
     }
 
@@ -727,6 +902,9 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
     private func handleSessionEnd(_ reason: KeepAwakeSession.EndReason) {
         session = nil
+        isPreventingDisplaySleep = false
+        virtualDisplayIsDesired = false
+        cancelVirtualDisplayStart()
         virtualDisplayManager.stop()
         resetSelectionToDefaults()
 
@@ -784,15 +962,13 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
         powerSourceState = state
 
         guard keepAwakeWithLidClosed else {
-            virtualDisplayManager.stop()
+            reconcileVirtualDisplay()
             notifyChange()
             return
         }
 
         guard let session else {
-            if !state.canRunVirtualDisplay {
-                virtualDisplayManager.stop()
-            }
+            reconcileVirtualDisplay()
             notifyChange()
             return
         }
@@ -802,32 +978,16 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
                 try session.setPreventLidCloseSleep(state.canPreventLidCloseSleep)
             }
 
-            if keepDesktopAvailableWithLidClosed, state.canRunVirtualDisplay {
-                do {
-                    try virtualDisplayManager.start()
-                    try session.setPreventDisplaySleep(true)
-                } catch {
-                    virtualDisplayManager.stop()
-                    keepDesktopAvailableWithLidClosed = false
-                    persistKeepDesktopAvailableWithLidClosedPreference()
-                    try? session.setPreventDisplaySleep(keepDisplayOn)
-                    logger.error("software display resume failed: \(error.localizedDescription, privacy: .public)")
-                    lastErrorMessage = error.localizedDescription
-                    notifyChange()
-                    return
-                }
-            } else if virtualDisplayManager.isActive {
-                try session.setPreventDisplaySleep(keepDisplayOn)
-                virtualDisplayManager.stop()
-            }
-
             lastErrorMessage = nil
+            reconcileVirtualDisplay()
             notifyChange()
         } catch {
             let errorMessage = error.localizedDescription
             logger.error("failed to update closed-lid assertion after power change: \(errorMessage, privacy: .public)")
             keepAwakeWithLidClosed = false
             persistKeepAwakeWithLidClosedPreference()
+            virtualDisplayIsDesired = false
+            cancelVirtualDisplayStart()
             virtualDisplayManager.stop()
             if !state.canPreventLidCloseSleep {
                 session.requestStop(reason: .userRequested)
@@ -844,13 +1004,11 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPrimaryPa
 
         keepDesktopAvailableWithLidClosed = false
         persistKeepDesktopAvailableWithLidClosedPreference()
+        virtualDisplayIsDesired = false
+        cancelVirtualDisplayStart()
 
         if let session {
-            do {
-                try session.setPreventDisplaySleep(keepDisplayOn)
-            } catch {
-                logger.error("failed to restore display assertion after helper exit: \(error.localizedDescription, privacy: .public)")
-            }
+            try? updateDisplaySleepAssertion(keepDisplayOn, session: session)
         }
 
         lastErrorMessage = localization.string(

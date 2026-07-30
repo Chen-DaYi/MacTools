@@ -64,6 +64,10 @@ struct ShortcutSettingsRowsView: View {
                         reset(item)
                     }
                 )
+                .pluginSettingsSearchAnchor(
+                    pluginID: item.pluginID,
+                    entryID: item.id
+                )
 
                 if index < items.count - 1 {
                     PluginSettingsListDivider()
@@ -103,6 +107,10 @@ struct GroupedShortcutSettingsRowsView: View {
                     },
                     onClear: clear,
                     onReset: reset
+                )
+                .pluginSettingsSearchAnchor(
+                    pluginID: group.items.first?.pluginID ?? "",
+                    entryID: group.id
                 )
 
                 if index < groups.count - 1 {

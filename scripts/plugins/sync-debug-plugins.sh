@@ -101,6 +101,12 @@ OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
 PACKAGES_DIR="$OUTPUT_DIR/Packages"
 CATALOG_PATH="$OUTPUT_DIR/catalog.dev.json"
 STATE_DIR="$OUTPUT_DIR/.sync-state"
+MANIFEST_COPY_SCRIPT="$REPO_ROOT/scripts/plugins/copy-plugin-manifest.py"
+APP_VERSION_CONFIG="$REPO_ROOT/Configs/AppVersion.xcconfig"
+DEVELOPMENT_HOST_VERSION="$(
+    "$PYTHON3" "$MANIFEST_COPY_SCRIPT" host-version \
+        --app-version-config "$APP_VERSION_CONFIG"
+)"
 
 mkdir -p "$PACKAGES_DIR"
 mkdir -p "$STATE_DIR"
@@ -126,7 +132,7 @@ discover_plugin_records() {
         plugin_filters_serialized+=$'\n'"$plugin_filter"
     done
 
-    "$PYTHON3" - "$SOURCE_DIR" "$PRODUCTS_DIR" "$plugin_filters_serialized" <<'PY'
+    "$PYTHON3" - "$SOURCE_DIR" "$PRODUCTS_DIR" "$plugin_filters_serialized" "$DEVELOPMENT_HOST_VERSION" <<'PY'
 import hashlib
 import json
 import os
@@ -136,6 +142,7 @@ import sys
 source_dir = pathlib.Path(sys.argv[1])
 products_dir = pathlib.Path(sys.argv[2])
 serialized_filters = sys.argv[3] if len(sys.argv) > 3 else ""
+development_host_version = sys.argv[4]
 filters = {item for item in serialized_filters.splitlines() if item}
 
 def emit_error(message: str) -> None:
@@ -164,6 +171,9 @@ def discover_candidates() -> list[pathlib.Path]:
 
 def input_fingerprint(manifest: pathlib.Path, bundle: pathlib.Path) -> str:
     digest = hashlib.sha256()
+    digest.update(b"debug-manifest-v1\0")
+    digest.update(development_host_version.encode("utf-8"))
+    digest.update(b"\0")
 
     def is_ignored(path: pathlib.Path) -> bool:
         relative_parts = path.relative_to(bundle).parts
@@ -286,7 +296,11 @@ while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bund
     if [[ "$fingerprint" != "$previous_fingerprint" ]] || ! package_is_complete "$package_path" "$bundle_relative_path"; then
         rm -rf "$package_path"
         mkdir -p "$package_path/$(dirname "$bundle_relative_path")"
-        ditto "$manifest" "$package_path/plugin.json"
+        "$PYTHON3" "$MANIFEST_COPY_SCRIPT" copy \
+            --source "$manifest" \
+            --destination "$package_path/plugin.json" \
+            --configuration Debug \
+            --app-version-config "$APP_VERSION_CONFIG"
         ditto "$bundle_path" "$package_path/$bundle_relative_path"
         printf '%s\n' "$fingerprint" > "$state_path"
         synced_count=$((synced_count + 1))

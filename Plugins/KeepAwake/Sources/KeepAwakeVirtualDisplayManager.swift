@@ -8,7 +8,7 @@ protocol KeepAwakeVirtualDisplayManaging: AnyObject {
     var isActive: Bool { get }
     var onUnexpectedTermination: (() -> Void)? { get set }
 
-    func start() throws
+    func start() async throws
     func stop()
 }
 
@@ -95,6 +95,15 @@ final class KeepAwakeVirtualDisplayManager: KeepAwakeVirtualDisplayManaging {
             semaphore.signal()
         }
 
+        func cancel() {
+            lock.lock()
+            defer { lock.unlock() }
+
+            guard result == nil else { return }
+            result = .failure(CancellationError())
+            semaphore.signal()
+        }
+
         func wait() -> Result<String, Error>? {
             guard semaphore.wait(timeout: .now() + Timing.startupTimeout) == .success else {
                 return nil
@@ -119,6 +128,7 @@ final class KeepAwakeVirtualDisplayManager: KeepAwakeVirtualDisplayManaging {
         let process: Process
         let standardOutput: Pipe
         let standardError: Pipe
+        let handshake: Handshake
     }
 
     var onUnexpectedTermination: (() -> Void)?
@@ -149,7 +159,9 @@ final class KeepAwakeVirtualDisplayManager: KeepAwakeVirtualDisplayManaging {
         runningHelper?.process.terminate()
     }
 
-    func start() throws {
+    func start() async throws {
+        try Task.checkCancellation()
+
         if isActive {
             return
         }
@@ -198,34 +210,58 @@ final class KeepAwakeVirtualDisplayManager: KeepAwakeVirtualDisplayManaging {
             id: helperID,
             process: process,
             standardOutput: standardOutput,
-            standardError: standardError
+            standardError: standardError,
+            handshake: handshake
         )
 
-        guard let result = handshake.wait() else {
-            stop()
+        let result = await Task.detached(priority: .userInitiated) {
+            handshake.wait()
+        }.value
+
+        if Task.isCancelled {
+            stop(helperID: helperID)
+            throw CancellationError()
+        }
+        guard runningHelper?.id == helperID else {
+            throw CancellationError()
+        }
+
+        guard let result else {
+            stop(helperID: helperID)
             throw ManagerError.startupTimedOut(localization)
         }
 
         switch result {
         case let .success(line):
             guard line.hasPrefix("READY ") else {
-                stop()
+                stop(helperID: helperID)
                 throw ManagerError.startupFailed(line, localization)
             }
             standardOutput.fileHandleForReading.readabilityHandler = nil
             logger.info("software display helper started")
         case let .failure(error):
-            stop()
+            stop(helperID: helperID)
+            if error is CancellationError {
+                throw error
+            }
             throw ManagerError.startupFailed(error.localizedDescription, localization)
         }
     }
 
     func stop() {
+        stop(helperID: nil)
+    }
+
+    private func stop(helperID: UUID?) {
         guard let runningHelper else {
+            return
+        }
+        guard helperID == nil || runningHelper.id == helperID else {
             return
         }
 
         self.runningHelper = nil
+        runningHelper.handshake.cancel()
         clearReadabilityHandlers(
             standardOutput: runningHelper.standardOutput,
             standardError: runningHelper.standardError

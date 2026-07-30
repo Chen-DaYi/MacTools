@@ -1,6 +1,56 @@
 import Carbon
 import MacToolsPluginKit
 
+enum MacToolsReservedShortcutBindings {
+    private static let commandBindings: Set<ShortcutBinding> = [
+        kVK_ANSI_Comma,
+        kVK_ANSI_F,
+        kVK_ANSI_K,
+        kVK_ANSI_1,
+        kVK_ANSI_2,
+        kVK_ANSI_3,
+        kVK_ANSI_4,
+        kVK_ANSI_5,
+        kVK_ANSI_6,
+        kVK_ANSI_7,
+        kVK_ANSI_8,
+        kVK_ANSI_9,
+        kVK_ANSI_LeftBracket,
+        kVK_ANSI_RightBracket
+    ].reduce(into: Set<ShortcutBinding>()) { bindings, keyCode in
+        bindings.insert(
+            ShortcutBinding(
+                keyCode: UInt16(keyCode),
+                modifiers: .command
+            )
+        )
+    }
+
+    private static let pluginNavigationBindings: Set<ShortcutBinding> = [
+        kVK_UpArrow,
+        kVK_DownArrow
+    ].reduce(into: Set<ShortcutBinding>()) { bindings, keyCode in
+        bindings.insert(
+            ShortcutBinding(
+                keyCode: UInt16(keyCode),
+                modifiers: [.control, .command]
+            )
+        )
+    }
+
+    static let all = commandBindings.union(pluginNavigationBindings)
+
+    static func validationError(
+        for binding: ShortcutBinding
+    ) -> ShortcutValidationError? {
+        guard all.contains(binding) else {
+            return nil
+        }
+
+        return .duplicate(ownerDescription: AppMetadata.appName)
+    }
+}
+
 @MainActor
 final class GlobalShortcutManager {
     struct Registration: Equatable {

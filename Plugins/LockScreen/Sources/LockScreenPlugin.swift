@@ -20,7 +20,7 @@ private struct LockScreenPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCommandProviding {
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -33,8 +33,10 @@ final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel {
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "LockScreenPlugin"
     )
+    private let localization: PluginLocalization
 
     init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
         self.metadata = PluginMetadata(
             id: "lock-screen",
             title: localization.string("metadata.title", defaultValue: "锁定屏幕"),
@@ -60,6 +62,31 @@ final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel {
             detail: nil,
             errorMessage: nil
         )
+    }
+
+    var commandDefinitions: [PluginCommandDefinition] {
+        [
+            PluginCommandDefinition(
+                id: "execute",
+                title: localization.string(
+                    "metadata.title",
+                    defaultValue: "锁定屏幕"
+                ),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "立即锁定屏幕"
+                ),
+                systemImage: metadata.iconName
+            )
+        ]
+    }
+
+    func handleCommand(id: String) {
+        guard id == "execute" else {
+            return
+        }
+
+        handleAction(.invokeAction(controlID: "execute"))
     }
 
     func handleAction(_ action: PluginPanelAction) {

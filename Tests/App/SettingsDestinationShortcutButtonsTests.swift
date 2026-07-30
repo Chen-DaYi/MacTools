@@ -7,6 +7,89 @@ import MacToolsPluginKit
 
 @MainActor
 final class SettingsDestinationShortcutButtonsTests: XCTestCase {
+    func testControlCommandArrowShortcutsMoveBetweenPluginSubpages() {
+        let orderedPanes: [FeatureSettingsPane] = [
+            .dashboardLayout,
+            .featurePanelLayout,
+            .marketplace,
+            .configuration("fan-control")
+        ]
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.marketplace),
+            pluginSubpageOrder: { orderedPanes },
+            isPluginConfigurationAvailable: { $0 == "fan-control" }
+        )
+        let window = makeWindow(coordinator: coordinator)
+
+        XCTAssertTrue(performPluginArrowShortcut(up: true, in: window))
+        XCTAssertEqual(coordinator.destination, .plugins(.featurePanelLayout))
+
+        XCTAssertTrue(performPluginArrowShortcut(up: false, in: window))
+        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+
+        XCTAssertTrue(performPluginArrowShortcut(up: false, in: window))
+        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
+    }
+
+    func testControlCommandArrowShortcutsDoNothingOutsidePlugins() {
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .about,
+            pluginSubpageOrder: {
+                [.dashboardLayout, .featurePanelLayout, .marketplace]
+            }
+        )
+        let window = makeWindow(coordinator: coordinator)
+
+        XCTAssertTrue(performPluginArrowShortcut(up: true, in: window))
+        XCTAssertTrue(performPluginArrowShortcut(up: false, in: window))
+        XCTAssertEqual(coordinator.destination, .about)
+        XCTAssertEqual(coordinator.history, [.about])
+    }
+
+    func testControlCommandArrowShortcutsStopAtPluginBoundaries() {
+        let orderedPanes: [FeatureSettingsPane] = [
+            .dashboardLayout,
+            .featurePanelLayout,
+            .marketplace
+        ]
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.dashboardLayout),
+            pluginSubpageOrder: { orderedPanes }
+        )
+        let window = makeWindow(coordinator: coordinator)
+
+        XCTAssertTrue(performPluginArrowShortcut(up: true, in: window))
+        XCTAssertEqual(coordinator.history, [.plugins(.dashboardLayout)])
+
+        coordinator.navigate(to: .plugins(.marketplace))
+        XCTAssertTrue(performPluginArrowShortcut(up: false, in: window))
+        XCTAssertEqual(
+            coordinator.history,
+            [.plugins(.dashboardLayout), .plugins(.marketplace)]
+        )
+    }
+
+    func testControlCommandArrowReadsConfigurationsAddedAfterShortcutRegistration() {
+        var configurationIDs: [String] = []
+        let coordinator = SettingsNavigationCoordinator(
+            initialDestination: .plugins(.marketplace),
+            pluginSubpageOrder: {
+                FeatureSettingsPane.settingsSidebarOrder(
+                    configurationIDs: configurationIDs
+                )
+            },
+            isPluginConfigurationAvailable: { configurationIDs.contains($0) }
+        )
+        let window = makeWindow(coordinator: coordinator)
+
+        XCTAssertTrue(performPluginArrowShortcut(up: false, in: window))
+        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+
+        configurationIDs = ["fan-control"]
+        XCTAssertTrue(performPluginArrowShortcut(up: false, in: window))
+        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
+    }
+
     func testCommandNumberShortcutsSelectMatchingDestinations() {
         let coordinator = SettingsNavigationCoordinator(
             pluginSettingsLandingPage: { .featurePanelLayout }
@@ -66,7 +149,7 @@ final class SettingsDestinationShortcutButtonsTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
-        window.onLocalKeyboardCommand = { _ in }
+        window.onLocalKeyboardCommand = { _ in false }
         window.contentView = NSHostingView(
             rootView: SettingsDestinationShortcutButtons(coordinator: coordinator)
         )
@@ -74,15 +157,38 @@ final class SettingsDestinationShortcutButtonsTests: XCTestCase {
         return window
     }
 
+    private func performPluginArrowShortcut(up: Bool, in window: NSWindow) -> Bool {
+        performShortcut(
+            key: up ? "\u{F700}" : "\u{F701}",
+            keyCode: UInt16(up ? kVK_UpArrow : kVK_DownArrow),
+            modifiers: [.control, .command],
+            in: window
+        )
+    }
+
     private func performCommandShortcut(
         key: String,
         keyCode: UInt16,
         in window: NSWindow
     ) -> Bool {
+        performShortcut(
+            key: key,
+            keyCode: keyCode,
+            modifiers: [.command],
+            in: window
+        )
+    }
+
+    private func performShortcut(
+        key: String,
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags,
+        in window: NSWindow
+    ) -> Bool {
         let event = NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
-            modifierFlags: [.command],
+            modifierFlags: modifiers,
             timestamp: 0,
             windowNumber: window.windowNumber,
             context: nil,

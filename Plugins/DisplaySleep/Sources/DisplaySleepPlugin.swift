@@ -19,7 +19,7 @@ private struct DisplaySleepPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCommandProviding {
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -32,8 +32,10 @@ final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel {
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "DisplaySleepPlugin"
     )
+    private let localization: PluginLocalization
 
     init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
         self.metadata = PluginMetadata(
             id: "display-sleep",
             title: localization.string("metadata.title", defaultValue: "显示器休眠"),
@@ -59,6 +61,31 @@ final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel {
             detail: nil,
             errorMessage: nil
         )
+    }
+
+    var commandDefinitions: [PluginCommandDefinition] {
+        [
+            PluginCommandDefinition(
+                id: "execute",
+                title: localization.string(
+                    "metadata.title",
+                    defaultValue: "显示器休眠"
+                ),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "立即让显示器休眠"
+                ),
+                systemImage: metadata.iconName
+            )
+        ]
+    }
+
+    func handleCommand(id: String) {
+        guard id == "execute" else {
+            return
+        }
+
+        handleAction(.invokeAction(controlID: "execute"))
     }
 
     func handleAction(_ action: PluginPanelAction) {

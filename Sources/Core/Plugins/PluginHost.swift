@@ -150,6 +150,25 @@ struct AppShortcutSettingsItem: Identifiable, Equatable {
     }
 }
 
+struct PluginProvidedSettingsSearchItem: Identifiable, Hashable {
+    let pluginID: String
+    let entry: PluginSettingsSearchEntry
+
+    var id: String {
+        "\(pluginID).settings-search.\(entry.id)"
+    }
+}
+
+struct PluginCommandItem: Identifiable, Hashable {
+    let pluginID: String
+    let pluginTitle: String
+    let definition: PluginCommandDefinition
+
+    var id: String {
+        "\(pluginID).command.\(definition.id)"
+    }
+}
+
 struct PluginAutomaticUpdateStatus: Equatable {
     enum Phase: Equatable {
         case idle
@@ -328,6 +347,8 @@ final class PluginHost: ObservableObject {
     @Published private(set) var settingsCards: [PluginSettingsCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
+    @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
+    @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
@@ -789,6 +810,43 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    @discardableResult
+    func performCommand(
+        pluginID: String,
+        expectedDefinition: PluginCommandDefinition
+    ) -> Bool {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let commandProvider = plugin as? any PluginCommandProviding,
+            (guardedValue(
+                for: plugin,
+                operation: "read command definitions",
+                commandProvider.commandDefinitions
+            ) ?? []).contains(expectedDefinition)
+        else {
+            rebuildDerivedState()
+            return false
+        }
+
+        var didPerform = false
+        handlePluginAction {
+            didPerform = guardPluginCall(plugin, operation: "perform command") {
+                commandProvider.handleCommand(id: expectedDefinition.id)
+            }
+        }
+        return didPerform
+    }
+
+    @discardableResult
+    func performAppCommand(_ action: AppShortcutAction) -> Bool {
+        guard let appPresentationHandler else {
+            return false
+        }
+
+        appPresentationHandler(action.presentationRequest)
+        return true
+    }
+
     func performPermissionAction(pluginID: String, permissionID: String) {
         guard let plugin = corePlugin(for: pluginID) else {
             return
@@ -930,6 +988,42 @@ final class PluginHost: ObservableObject {
 
     func hasPluginConfiguration(pluginID: String) -> Bool {
         pluginConfigurationItems.contains(where: { $0.id == pluginID })
+    }
+
+    func hasPluginSettingsSearchTarget(
+        _ target: PluginSettingsSearchTarget
+    ) -> Bool {
+        cancelScheduledPluginStateRebuild()
+        rebuildDerivedState()
+
+        guard let item = pluginConfigurationItems.first(where: {
+            $0.pluginID == target.pluginID
+        }) else {
+            return false
+        }
+
+        if item.settingsCards.contains(where: { $0.id == target.entryID })
+            || item.permissionCards.contains(where: { $0.id == target.entryID }) {
+            return true
+        }
+
+        if item.shortcutItems.allSatisfy({ $0.settingsGroupID != nil }) {
+            if item.shortcutItems.contains(where: {
+                $0.settingsGroupID == target.entryID
+            }) {
+                return true
+            }
+        } else if item.shortcutItems.contains(where: {
+            $0.id == target.entryID
+        }) {
+            return true
+        }
+
+        return item.hasCustomConfiguration
+            && pluginSettingsSearchItems.contains {
+                $0.pluginID == target.pluginID
+                    && $0.entry.id == target.entryID
+            }
     }
 
     func clearShortcutError(for shortcutID: String) {
@@ -1846,7 +1940,11 @@ final class PluginHost: ObservableObject {
                 isRequired: descriptor.definition.isRequired,
                 canClear: !descriptor.definition.isRequired && binding != nil,
                 usesDefaultValue: customization == .inheritDefault,
-                errorMessage: shortcutErrors[descriptor.itemID],
+                errorMessage: shortcutErrors[descriptor.itemID]
+                    ?? binding.flatMap {
+                        MacToolsReservedShortcutBindings.validationError(for: $0)?
+                            .localizedDescription
+                    },
                 settingsGroupID: descriptor.definition.settingsGroupID,
                 settingsGroupTitle: descriptor.definition.settingsGroupTitle,
                 settingsGroupDescription: descriptor.definition.settingsGroupDescription,
@@ -1864,11 +1962,51 @@ final class PluginHost: ObservableObject {
                 systemImage: action.systemImage,
                 bindingText: ShortcutFormatter.displayString(for: binding),
                 canClear: binding != nil,
-                errorMessage: appShortcutErrors[action] ?? appShortcutConflictError(
-                    for: action,
-                    descriptors: shortcutDescriptors
-                )
+                errorMessage: appShortcutErrors[action]
+                    ?? binding.flatMap {
+                        MacToolsReservedShortcutBindings.validationError(for: $0)?
+                            .localizedDescription
+                    }
+                    ?? appShortcutConflictError(
+                        for: action,
+                        descriptors: shortcutDescriptors
+                    )
             )
+        }
+
+        pluginSettingsSearchItems = orderedCorePlugins().flatMap { plugin -> [PluginProvidedSettingsSearchItem] in
+            guard let provider = plugin as? any PluginSettingsSearchProviding else {
+                return []
+            }
+
+            let entries = guardedValue(
+                for: plugin,
+                operation: "read settings search entries",
+                provider.settingsSearchEntries
+            ) ?? []
+            return entries.map {
+                PluginProvidedSettingsSearchItem(pluginID: plugin.metadata.id, entry: $0)
+            }
+        }
+
+        pluginCommandItems = orderedPluginDescriptors().flatMap { descriptor -> [PluginCommandItem] in
+            let plugin = descriptor.plugin
+            guard let provider = plugin as? any PluginCommandProviding else {
+                return []
+            }
+
+            let definitions = guardedValue(
+                for: plugin,
+                operation: "read command definitions",
+                provider.commandDefinitions
+            ) ?? []
+            return definitions.map {
+                PluginCommandItem(
+                    pluginID: plugin.metadata.id,
+                    pluginTitle: descriptor.metadata.title,
+                    definition: $0
+                )
+            }
         }
 
         pluginConfigurationItems = buildPluginConfigurationItems(
@@ -1994,20 +2132,22 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    @discardableResult
     private func guardPluginCall(
         _ plugin: any MacToolsPlugin,
         operation: String,
         _ action: () -> Void
-    ) {
+    ) -> Bool {
         guard !isPluginIsolated(plugin) else {
-            return
+            return false
         }
 
         switch PluginInvocationGuard.run(operation: operation, action) {
         case .success:
-            break
+            return true
         case let .failure(failure):
             isolatePlugin(plugin, operation: operation, failure: failure)
+            return false
         }
     }
 
@@ -2703,6 +2843,10 @@ final class PluginHost: ObservableObject {
                     errors[action.rawValue] = ShortcutValidationError.missingModifier.localizedDescription
                 } else if ShortcutKeyCode.isModifier(binding.keyCode) {
                     errors[action.rawValue] = ShortcutValidationError.modifierOnly.localizedDescription
+                } else if let error = MacToolsReservedShortcutBindings.validationError(
+                    for: binding
+                ) {
+                    errors[action.rawValue] = error.localizedDescription
                 }
             }
         }
@@ -2727,6 +2871,12 @@ final class PluginHost: ObservableObject {
 
                     guard !ShortcutKeyCode.isModifier(binding.keyCode) else {
                         throw ShortcutValidationError.modifierOnly
+                    }
+
+                    if let error = MacToolsReservedShortcutBindings.validationError(
+                        for: binding
+                    ) {
+                        throw error
                     }
                 }
             } catch {
@@ -2847,6 +2997,12 @@ final class PluginHost: ObservableObject {
                 throw ShortcutValidationError.modifierOnly
             }
 
+            if let error = MacToolsReservedShortcutBindings.validationError(
+                for: candidate
+            ) {
+                throw error
+            }
+
             if let conflict = shortcutDescriptors().first(where: {
                 $0.itemID != descriptor.itemID
                     && resolvedBinding(for: $0) == candidate
@@ -2877,6 +3033,12 @@ final class PluginHost: ObservableObject {
 
         guard !ShortcutKeyCode.isModifier(binding.keyCode) else {
             throw ShortcutValidationError.modifierOnly
+        }
+
+        if let error = MacToolsReservedShortcutBindings.validationError(
+            for: binding
+        ) {
+            throw error
         }
 
         if let conflict = pluginShortcutConflict(
@@ -2927,6 +3089,10 @@ final class PluginHost: ObservableObject {
                 return nil
             }
 
+            guard MacToolsReservedShortcutBindings.validationError(for: binding) == nil else {
+                return nil
+            }
+
             return GlobalShortcutManager.Registration(
                 shortcutID: descriptor.itemID,
                 binding: binding
@@ -2935,7 +3101,8 @@ final class PluginHost: ObservableObject {
 
         for action in AppShortcutAction.allCases {
             guard let binding = resolvedAppShortcutBinding(for: action),
-                  pluginShortcutConflict(for: binding, descriptors: descriptors) == nil
+                  pluginShortcutConflict(for: binding, descriptors: descriptors) == nil,
+                  MacToolsReservedShortcutBindings.validationError(for: binding) == nil
             else {
                 continue
             }

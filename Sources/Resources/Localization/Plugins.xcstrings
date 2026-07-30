@@ -7673,6 +7673,77 @@
         }
       }
     },
+    "plugin.marketplace.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ثبّت إضافات MacTools وحدّثها وأدرها."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installiere, aktualisiere und verwalte MacTools-Plugins."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install, update, and manage MacTools plugins."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instala, actualiza y administra plugins de MacTools."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installez, mettez à jour et gérez les modules MacTools."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacToolsプラグインのインストール、アップデート、管理を行います。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MacTools 플러그인을 설치, 업데이트 및 관리합니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instale, atualize e gerencie plugins do MacTools."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Устанавливайте, обновляйте плагины MacTools и управляйте ими."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装、更新和管理 MacTools 插件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安裝、更新及管理 MacTools 外掛。"
+          }
+        }
+      }
+    },
     "plugin.marketplace.title": {
       "extractionState": "manual",
       "localizations": {

@@ -13,6 +13,29 @@ final class KeepAwakePluginTests: XCTestCase {
         ) == nil ? "laptopcomputer" : "laptopcomputer.and.arrow.down"
     }
 
+    private func settleVirtualDisplayUpdate() async {
+        for _ in 0..<5 {
+            await Task.yield()
+        }
+    }
+
+    private func display(
+        id: CGDirectDisplayID,
+        name: String,
+        isBuiltin: Bool,
+        vendorNumber: UInt32? = nil
+    ) -> DisplayInfo {
+        DisplayInfo(
+            id: id,
+            name: name,
+            isBuiltin: isBuiltin,
+            isMain: isBuiltin,
+            vendorNumber: vendorNumber,
+            modelNumber: nil,
+            serialNumber: nil
+        )
+    }
+
     func testPermanentSessionPersistsAndRestoresAfterHostShutdown() {
         let storage = KeepAwakeMemoryStorage()
         let firstFactory = KeepAwakeSessionFactory()
@@ -333,7 +356,7 @@ final class KeepAwakePluginTests: XCTestCase {
         )
     }
 
-    func testSoftwareDisplayStartsForRunningClosedLidSessionAndStopsWhenDisabled() {
+    func testSoftwareDisplayStartsForRunningClosedLidSessionAndStopsWhenDisabled() async {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: storage)
@@ -341,6 +364,7 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.setKeepAwakeWithLidClosed(true)
         plugin.handleAction(.setSwitch(true))
         plugin.setKeepDesktopAvailableWithLidClosed(true)
+        await settleVirtualDisplayUpdate()
 
         XCTAssertEqual(factory.virtualDisplayManager.startCount, 1)
         XCTAssertTrue(factory.virtualDisplayManager.isActive)
@@ -359,7 +383,7 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 
-    func testSoftwareDisplayRunsOnlyWhileLidIsClosed() {
+    func testSoftwareDisplayRunsOnlyWhileLidIsClosed() async {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory(
             powerSourceState: KeepAwakePowerSourceState(
@@ -387,6 +411,7 @@ final class KeepAwakePluginTests: XCTestCase {
                 isLidClosed: true
             )
         )
+        await settleVirtualDisplayUpdate()
 
         XCTAssertTrue(factory.virtualDisplayManager.isActive)
         XCTAssertEqual(factory.virtualDisplayManager.startCount, 1)
@@ -400,6 +425,7 @@ final class KeepAwakePluginTests: XCTestCase {
                 isLidClosed: false
             )
         )
+        await settleVirtualDisplayUpdate()
 
         XCTAssertFalse(factory.virtualDisplayManager.isActive)
         XCTAssertEqual(factory.virtualDisplayManager.stopCount, 1)
@@ -415,13 +441,14 @@ final class KeepAwakePluginTests: XCTestCase {
                 isLidClosed: true
             )
         )
+        await settleVirtualDisplayUpdate()
 
         XCTAssertTrue(factory.virtualDisplayManager.isActive)
         XCTAssertEqual(factory.virtualDisplayManager.startCount, 2)
         XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, false, true])
     }
 
-    func testSoftwareDisplayPreferencePausesWithParentAndRestoresWhenReenabled() {
+    func testSoftwareDisplayPreferencePausesWithParentAndRestoresWhenReenabled() async {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: storage)
@@ -429,6 +456,7 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.setKeepAwakeWithLidClosed(true)
         plugin.handleAction(.setSwitch(true))
         plugin.setKeepDesktopAvailableWithLidClosed(true)
+        await settleVirtualDisplayUpdate()
 
         plugin.setKeepAwakeWithLidClosed(false)
 
@@ -443,6 +471,7 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, false])
 
         plugin.setKeepAwakeWithLidClosed(true)
+        await settleVirtualDisplayUpdate()
 
         XCTAssertEqual(storage.values["keep-awake-with-lid-closed"] as? Bool, true)
         XCTAssertEqual(
@@ -455,7 +484,7 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, false, true])
     }
 
-    func testSoftwareDisplayPreferenceSurvivesRelaunchWhileParentIsDisabled() {
+    func testSoftwareDisplayPreferenceSurvivesRelaunchWhileParentIsDisabled() async {
         let storage = KeepAwakeMemoryStorage()
         storage.set(true, forKey: "persistent-enabled")
         storage.set(true, forKey: "keep-desktop-available-with-lid-closed")
@@ -480,6 +509,7 @@ final class KeepAwakePluginTests: XCTestCase {
         )
 
         plugin.setKeepAwakeWithLidClosed(true)
+        await settleVirtualDisplayUpdate()
 
         XCTAssertTrue(factory.virtualDisplayManager.isActive)
         XCTAssertEqual(factory.virtualDisplayManager.startCount, 1)
@@ -487,7 +517,7 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true])
     }
 
-    func testSoftwareDisplayKeepsDisplayAssertionWhenDisplayPreferenceTurnsOff() {
+    func testSoftwareDisplayKeepsDisplayAssertionWhenDisplayPreferenceTurnsOff() async {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: storage)
@@ -496,14 +526,15 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.setKeepDisplayOn(true)
         plugin.handleAction(.setSwitch(true))
         plugin.setKeepDesktopAvailableWithLidClosed(true)
+        await settleVirtualDisplayUpdate()
         plugin.setKeepDisplayOn(false)
 
-        XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, true])
+        XCTAssertTrue(factory.sessions[0].displaySleepPreventionUpdates.isEmpty)
         XCTAssertNil(storage.values["keep-display-on"])
         XCTAssertTrue(factory.virtualDisplayManager.isActive)
     }
 
-    func testSoftwareDisplayPausesOnBatteryAndResumesOnExternalPower() {
+    func testSoftwareDisplayPausesOnBatteryAndResumesOnExternalPower() async {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: storage)
@@ -511,6 +542,7 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.setKeepAwakeWithLidClosed(true)
         plugin.handleAction(.setSwitch(true))
         plugin.setKeepDesktopAvailableWithLidClosed(true)
+        await settleVirtualDisplayUpdate()
 
         factory.powerSourceMonitor.send(
             KeepAwakePowerSourceState(
@@ -519,6 +551,7 @@ final class KeepAwakePluginTests: XCTestCase {
                 isLidClosed: true
             )
         )
+        await settleVirtualDisplayUpdate()
 
         XCTAssertFalse(factory.virtualDisplayManager.isActive)
         XCTAssertEqual(factory.virtualDisplayManager.stopCount, 1)
@@ -535,13 +568,14 @@ final class KeepAwakePluginTests: XCTestCase {
                 isLidClosed: true
             )
         )
+        await settleVirtualDisplayUpdate()
 
         XCTAssertTrue(factory.virtualDisplayManager.isActive)
         XCTAssertEqual(factory.virtualDisplayManager.startCount, 2)
         XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, false, true])
     }
 
-    func testSoftwareDisplayFailureClearsOnlySoftwareDisplayPreference() {
+    func testSoftwareDisplayFailureClearsOnlySoftwareDisplayPreference() async {
         let storage = KeepAwakeMemoryStorage()
         storage.set(true, forKey: "persistent-enabled")
         storage.set(true, forKey: "keep-awake-with-lid-closed")
@@ -551,6 +585,7 @@ final class KeepAwakePluginTests: XCTestCase {
         let plugin = factory.makePlugin(storage: storage)
 
         plugin.activate(context: Self.context(storage: storage))
+        await settleVirtualDisplayUpdate()
 
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertEqual(
@@ -559,14 +594,15 @@ final class KeepAwakePluginTests: XCTestCase {
         )
         XCTAssertEqual(
             factory.sessions[0].startedConfigurations.last?.preventDisplaySleep,
-            false
+            true
         )
+        XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [false])
         XCTAssertEqual(storage.values["keep-awake-with-lid-closed"] as? Bool, true)
         XCTAssertNil(storage.values["keep-desktop-available-with-lid-closed"])
         XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法创建软件显示器。")
     }
 
-    func testUnexpectedSoftwareDisplayExitDisablesModeButKeepsSessionRunning() {
+    func testUnexpectedSoftwareDisplayExitDisablesModeButKeepsSessionRunning() async {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: storage)
@@ -574,6 +610,7 @@ final class KeepAwakePluginTests: XCTestCase {
         plugin.setKeepAwakeWithLidClosed(true)
         plugin.handleAction(.setSwitch(true))
         plugin.setKeepDesktopAvailableWithLidClosed(true)
+        await settleVirtualDisplayUpdate()
         factory.virtualDisplayManager.simulateUnexpectedTermination()
 
         XCTAssertTrue(plugin.primaryPanelState.isOn)
@@ -584,6 +621,110 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(
             plugin.primaryPanelState.errorMessage,
             "软件显示器已停止；合盖桌面模式已关闭。"
+        )
+    }
+
+    func testSoftwareDisplayRunsOnlyWhenNoPhysicalExternalDisplayIsActive() async {
+        let storage = KeepAwakeMemoryStorage()
+        let builtInDisplay = display(
+            id: 1,
+            name: "Built-in Display",
+            isBuiltin: true
+        )
+        let externalDisplay = display(
+            id: 2,
+            name: "Studio Display",
+            isBuiltin: false,
+            vendorNumber: 0x610
+        )
+        let factory = KeepAwakeSessionFactory(
+            displays: [builtInDisplay, externalDisplay]
+        )
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.setKeepAwakeWithLidClosed(true)
+        plugin.handleAction(.setSwitch(true))
+        plugin.setKeepDesktopAvailableWithLidClosed(true)
+        await settleVirtualDisplayUpdate()
+
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(factory.virtualDisplayManager.startCount, 0)
+        XCTAssertEqual(
+            storage.values["keep-desktop-available-with-lid-closed"] as? Bool,
+            true
+        )
+
+        factory.displayProvider.displays = [builtInDisplay]
+        plugin.refreshDisplayTopology()
+        await settleVirtualDisplayUpdate()
+
+        XCTAssertTrue(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(factory.virtualDisplayManager.startCount, 1)
+        XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true])
+
+        factory.displayProvider.displays = [
+            builtInDisplay,
+            display(
+                id: 3,
+                name: "MacTools Virtual Display",
+                isBuiltin: false,
+                vendorNumber: 505
+            ),
+        ]
+        plugin.refreshDisplayTopology()
+        await settleVirtualDisplayUpdate()
+
+        XCTAssertTrue(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(factory.virtualDisplayManager.stopCount, 0)
+
+        factory.displayProvider.displays = [builtInDisplay, externalDisplay]
+        plugin.refreshDisplayTopology()
+        await settleVirtualDisplayUpdate()
+
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(factory.virtualDisplayManager.stopCount, 1)
+        XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, false])
+        XCTAssertEqual(
+            storage.values["keep-desktop-available-with-lid-closed"] as? Bool,
+            true
+        )
+    }
+
+    func testSettingsSearchIncludesScreenBasedToolsOptionOnPortableMac() {
+        let portableFactory = KeepAwakeSessionFactory()
+        let portablePlugin = portableFactory.makePlugin(
+            storage: KeepAwakeMemoryStorage()
+        )
+
+        XCTAssertEqual(
+            portablePlugin.settingsSearchEntries.map(\.id),
+            [
+                KeepAwakeSettingsSearchEntryID.keepDisplayOn,
+                KeepAwakeSettingsSearchEntryID.keepAwakeWithLidClosed,
+                KeepAwakeSettingsSearchEntryID.keepScreenBasedToolsWorking,
+            ]
+        )
+
+        let childEntry = portablePlugin.settingsSearchEntries.last
+        XCTAssertEqual(childEntry?.title, "让屏幕相关工具继续工作")
+        XCTAssertEqual(
+            childEntry?.description,
+            "合盖后支持 Codex Computer Use、桌面自动化、屏幕共享和远程控制。"
+        )
+
+        let desktopFactory = KeepAwakeSessionFactory(
+            powerSourceState: KeepAwakePowerSourceState(
+                isPortableMac: false,
+                isOnExternalPower: true
+            )
+        )
+        let desktopPlugin = desktopFactory.makePlugin(
+            storage: KeepAwakeMemoryStorage()
+        )
+
+        XCTAssertEqual(
+            desktopPlugin.settingsSearchEntries.map(\.id),
+            [KeepAwakeSettingsSearchEntryID.keepDisplayOn]
         )
     }
 
@@ -1110,15 +1251,18 @@ private final class KeepAwakeSessionFactory {
     private(set) var sessions: [MockKeepAwakeSession] = []
     let powerSourceMonitor: MockKeepAwakePowerSourceMonitor
     let virtualDisplayManager = MockKeepAwakeVirtualDisplayManager()
+    let displayProvider: MockKeepAwakeDisplayProvider
 
     init(
         powerSourceState: KeepAwakePowerSourceState = KeepAwakePowerSourceState(
             isPortableMac: true,
             isOnExternalPower: true,
             isLidClosed: true
-        )
+        ),
+        displays: [DisplayInfo] = []
     ) {
         powerSourceMonitor = MockKeepAwakePowerSourceMonitor(currentState: powerSourceState)
+        displayProvider = MockKeepAwakeDisplayProvider(displays: displays)
     }
 
     func makePlugin(storage: KeepAwakeMemoryStorage) -> KeepAwakePlugin {
@@ -1126,6 +1270,7 @@ private final class KeepAwakeSessionFactory {
             context: PluginRuntimeContext(pluginID: "keep-awake", storage: storage),
             powerSourceMonitor: powerSourceMonitor,
             virtualDisplayManager: virtualDisplayManager,
+            displayProvider: displayProvider,
             sessionFactory: { [weak self] _, onEnd in
                 let session = MockKeepAwakeSession(onEnd: onEnd)
                 self?.sessions.append(session)
@@ -1144,7 +1289,7 @@ private final class MockKeepAwakeVirtualDisplayManager: KeepAwakeVirtualDisplayM
     private(set) var stopCount = 0
     var startError: Error?
 
-    func start() throws {
+    func start() async throws {
         startCount += 1
         if let startError {
             throw startError
@@ -1161,6 +1306,22 @@ private final class MockKeepAwakeVirtualDisplayManager: KeepAwakeVirtualDisplayM
     func simulateUnexpectedTermination() {
         isActive = false
         onUnexpectedTermination?()
+    }
+}
+
+private final class MockKeepAwakeDisplayProvider: DisplayProviding {
+    var displays: [DisplayInfo]
+
+    init(displays: [DisplayInfo]) {
+        self.displays = displays
+    }
+
+    func listConnectedDisplays() -> [DisplayInfo] {
+        displays
+    }
+
+    func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
+        nil
     }
 }
 

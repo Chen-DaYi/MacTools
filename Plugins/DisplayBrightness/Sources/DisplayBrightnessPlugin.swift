@@ -119,7 +119,13 @@ private struct DisplayBrightnessShortcutSession {
 }
 
 @MainActor
-final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginShortcutEventHandling, DisplayTopologyRefreshing {
+final class DisplayBrightnessPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginShortcutEventHandling,
+    DisplayTopologyRefreshing,
+    PluginSettingsSearchProviding
+{
     private enum Constants {
         static let displayControlPrefix = "display."
         static let brightnessControlSuffix = ".brightness"
@@ -232,6 +238,33 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         [
             shortcutDefinition(direction: .decrease),
             shortcutDefinition(direction: .increase)
+        ]
+    }
+
+    var settingsSearchEntries: [PluginSettingsSearchEntry] {
+        [
+            PluginSettingsSearchEntry(
+                id: DisplayBrightnessSettingsSearchEntryID.shortcutTarget,
+                title: localization.string(
+                    "settings.shortcutTarget.title",
+                    defaultValue: "快捷键目标"
+                ),
+                description: localization.string(
+                    "settings.shortcutTarget.searchDescription",
+                    defaultValue: "选择亮度快捷键控制的显示器范围。"
+                ),
+                keywords: [
+                    localization.string(
+                        "settings.shortcutTarget.sectionTitle",
+                        defaultValue: "作用范围"
+                    ),
+                    localization.string(
+                        "settings.shortcutTarget.searchKeyword",
+                        defaultValue: "屏幕"
+                    )
+                ],
+                systemImage: "display.2"
+            )
         ]
     }
 
