@@ -99,6 +99,16 @@ struct DiskCleanSafetyPolicy: Sendable {
     private func sensitiveProtectionReason(for path: String) -> String? {
         let lower = path.lowercased()
 
+        // 暂存中的对象（设计 §7.6）：宽 glob 与祖先分解都可能扫到孤儿暂存对象——
+        // `directChildren` 连隐藏项一起返回，点开头挡不住它。唯一允许触碰这些对象的是
+        // 启动 reconciliation，它按 journal 直接寻址，不经候选管线。
+        //
+        // 设计写的是"末级组件匹配"，这里放宽到**任意一级**：暂存树内部的路径同样必须挡住，
+        // 而 `.mactools-staged-` 是本插件保留的前缀，误伤的代价只是"少清理一个目录"。
+        if Self.containsStagedComponent(lower) {
+            return "staging in progress"
+        }
+
         if Self.hasPathFragment(lower, "/library/keychains")
             || Self.hasPathFragment(lower, "/.ssh")
             || Self.hasPathFragment(lower, "/.gnupg")
@@ -295,6 +305,12 @@ struct DiskCleanSafetyPolicy: Sendable {
             normalized == root || normalized.hasPrefix(root + "/")
         } || normalized.hasPrefix("/var/db/")
             || normalized.hasPrefix("/private/var/db/")
+    }
+
+    private static func containsStagedComponent(_ lowerPath: String) -> Bool {
+        lowerPath
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .contains { $0.hasPrefix(DiskCleanRemovalPrimitive.stagedNamePrefix) }
     }
 
     private static func hasPathFragment(_ lowerPath: String, _ fragment: String) -> Bool {

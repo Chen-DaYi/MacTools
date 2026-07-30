@@ -38,7 +38,7 @@
 | Stage Manager | Toggle Stage Manager to focus the current window and place other windows on the side. |
 | System Mute | Mute or restore system audio output through CoreAudio on the default output device, with automatic restoration when the plugin is disabled. |
 | Microphone Mute | Mute or restore the default microphone input through CoreAudio without requesting recording permission. |
-| Disk Cleanup | Scan caches, developer caches, and browser caches, with path safety checks and sensitive data protection before deletion. |
+| Disk Cleanup | Scan system caches, developer artifacts (node_modules, build outputs), and leftover installers; move to Trash by default, with path safety checks, Full Disk Access guidance, and sensitive-data protection before deletion. |
 | Xcode Cleanup | Scan DerivedData, device support files, archives, simulators, and preview caches by category; deletion is disabled while Xcode is running and only runs inside allowlisted roots. |
 | Eject Disks | Detect visible ejectable mounts when the panel opens, including external drives, disk images, and network volumes; multiple volumes on one device are ejected once. |
 | Empty Trash | Show the number of Trash items and empty Trash through Finder; the action is disabled when Trash is empty. |

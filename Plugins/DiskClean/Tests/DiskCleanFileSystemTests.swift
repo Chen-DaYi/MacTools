@@ -86,15 +86,48 @@ final class DiskCleanFileSystemTests: XCTestCase {
         )
     }
 
-    func testSizeCalculationIncludesNestedFiles() throws {
-        try createFile("Library/Caches/Foo/a.bin", bytes: 10)
-        try createFile("Library/Caches/Foo/Nested/b.bin", bytes: 25)
+    /// 祖先分解依赖直接子项列表，**必须包含隐藏项**——用 `*` glob 代替会漏掉点开头的条目。
+    func testDirectChildrenIncludeHiddenEntriesAndDoNotRecurse() throws {
+        try createFile("Library/Caches/Foo/visible.bin")
+        try createFile("Library/Caches/Foo/.hidden")
+        try createFile("Library/Caches/Foo/Nested/deep.bin")
 
-        let size = try fileSystem.sizeOfItem(
-            at: tempDirectory.appendingPathComponent("Library/Caches/Foo").path
+        let children = try fileSystem
+            .directChildren(of: tempDirectory.appendingPathComponent("Library/Caches/Foo").path)
+
+        XCTAssertEqual(
+            children.map { ($0.path as NSString).lastPathComponent },
+            [".hidden", "Nested", "visible.bin"]
         )
+        XCTAssertEqual(children.filter(\.isDirectory).map { ($0.path as NSString).lastPathComponent }, ["Nested"])
+    }
 
-        XCTAssertEqual(size, 35)
+    func testDirectChildrenThrowsForMissingDirectory() {
+        XCTAssertThrowsError(
+            try fileSystem.directChildren(of: tempDirectory.appendingPathComponent("nope").path)
+        )
+    }
+
+    /// 末级保留原样、祖先解析：候选本身是 symlink 时绝不能被 realpath 换成它指向的目标。
+    func testPhysicalPathResolvesAncestorsButKeepsLastComponent() throws {
+        try FileManager.default.createDirectory(
+            at: tempDirectory.appendingPathComponent("Real"),
+            withIntermediateDirectories: true
+        )
+        let aliasURL = tempDirectory.appendingPathComponent("Alias")
+        try FileManager.default.createSymbolicLink(atPath: aliasURL.path, withDestinationPath: "Real")
+        let realParent = DiskCleanTempDirectory.physicalPath(of: tempDirectory.appendingPathComponent("Real").path)
+
+        XCTAssertEqual(
+            DiskCleanPhysicalPath.resolve(aliasURL.appendingPathComponent("child").path),
+            realParent + "/child",
+            "中间级 symlink 必须被展开，否则 O_NOFOLLOW_ANY 会直接拒绝整条路径"
+        )
+        XCTAssertEqual(
+            DiskCleanPhysicalPath.resolve(aliasURL.path),
+            DiskCleanTempDirectory.physicalPath(of: tempDirectory.path) + "/Alias",
+            "末级 symlink 保留原样：解析它等于去删别的东西"
+        )
     }
 
     func testSymlinkMetadataReportsTargetWithoutFollowingIt() throws {
