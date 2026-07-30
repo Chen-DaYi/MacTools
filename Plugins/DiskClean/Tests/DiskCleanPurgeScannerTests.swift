@@ -329,7 +329,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.gitState,
-            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("git inspection timed out"))
+            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("git 检查超时"))
         )
         XCTAssertFalse(candidate.isSelectedByDefault)
     }
@@ -344,7 +344,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.gitState,
-            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("git not found"))
+            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("未找到 git"))
         )
     }
 
@@ -356,7 +356,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.gitState,
-            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("status exit code 128"))
+            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("status 退出码 128"))
         )
     }
 
