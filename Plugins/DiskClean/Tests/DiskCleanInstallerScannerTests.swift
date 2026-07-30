@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import XCTest
 @testable import MacTools
@@ -160,6 +161,44 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertEqual(makeScanner().scan(), .scanned(candidates: []))
     }
 
+    /// Mid-stream readdir failure must not look like a successful partial scan.
+    func testEnumerationErrorIsNotReportedAsSuccessfulScan() {
+        let downloads = temporaryDirectory.resolve("Downloads").path
+        let observationDate = observationDate
+        let scanner = DiskCleanInstallerScanner(
+            downloadsPath: downloads,
+            staleAge: DiskCleanInstallerScanner.defaultStaleAge,
+            sourceFactory: ThrowingInstallerSourceFactory(code: EIO),
+            now: { observationDate }
+        )
+
+        let outcome = scanner.scan()
+
+        guard case let .unavailable(path, reason) = outcome else {
+            return XCTFail("expected unavailable, got \(outcome)")
+        }
+        XCTAssertEqual(path, downloads)
+        XCTAssertEqual(reason, .walkError)
+    }
+
+    func testPermissionDeniedEnumerationIsDenied() {
+        let downloads = temporaryDirectory.resolve("Downloads").path
+        let observationDate = observationDate
+        let scanner = DiskCleanInstallerScanner(
+            downloadsPath: downloads,
+            staleAge: DiskCleanInstallerScanner.defaultStaleAge,
+            sourceFactory: ThrowingInstallerSourceFactory(code: EACCES),
+            now: { observationDate }
+        )
+
+        let outcome = scanner.scan()
+
+        guard case let .denied(path) = outcome else {
+            return XCTFail("expected denied, got \(outcome)")
+        }
+        XCTAssertEqual(path, downloads)
+    }
+
     // MARK: - Fixtures
 
     private func makeScanner(
@@ -195,5 +234,35 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
             [.modificationDate: observationDate.addingTimeInterval(-age)],
             ofItemAtPath: file.path
         )
+    }
+}
+
+/// Source factory that owns the fd and fails the first `nextBatch`, simulating mid-stream readdir error.
+private struct ThrowingInstallerSourceFactory: DiskCleanDirectoryEntrySourceFactory {
+    let code: Int32
+
+    func makeSource(fileDescriptor: Int32) throws -> any DiskCleanDirectoryEntrySource {
+        ThrowingInstallerSource(fileDescriptor: fileDescriptor, code: code)
+    }
+}
+
+private final class ThrowingInstallerSource: DiskCleanDirectoryEntrySource {
+    let directoryFileDescriptor: Int32
+    private let code: Int32
+    private var isClosed = false
+
+    init(fileDescriptor: Int32, code: Int32) {
+        self.directoryFileDescriptor = fileDescriptor
+        self.code = code
+    }
+
+    func nextBatch() throws -> [DiskCleanWalkEntry]? {
+        throw DiskCleanPOSIXError(code: code)
+    }
+
+    func close() {
+        guard !isClosed else { return }
+        isClosed = true
+        Darwin.close(directoryFileDescriptor)
     }
 }

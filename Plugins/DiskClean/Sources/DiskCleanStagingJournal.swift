@@ -36,11 +36,14 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
 
     static let fileName = "staging-journal.jsonl"
 
-    private let directory: URL
+    let directory: URL
     private let fileURL: URL
     private let lock = NSLock()
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    /// Entry IDs currently owned by a live cleanup transaction in this process.
+    /// Startup reconciliation must not compact these away between begin and complete.
+    private var activeEntryIDs: Set<String> = []
 
     /// **Do not touch the filesystem in init**: a default-constructed plugin (including
     /// in tests) would create `~/Library/Application Support/...`, a real user directory.
@@ -56,11 +59,22 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
     }
 
     /// Record staging begin. **Must be called and succeed before rename**; fsync after write.
+    /// Marks the entry active so concurrent reconciliation will not compact it away.
     func begin(_ entry: Entry) throws {
-        try append(
-            Line(kind: .begin, entry: entry, entryID: nil, status: nil, timestamp: entry.timestamp),
-            synchronize: true
-        )
+        lock.lock()
+        activeEntryIDs.insert(entry.id)
+        lock.unlock()
+        do {
+            try append(
+                Line(kind: .begin, entry: entry, entryID: nil, status: nil, timestamp: entry.timestamp),
+                synchronize: true
+            )
+        } catch {
+            lock.lock()
+            activeEntryIDs.remove(entry.id)
+            lock.unlock()
+            throw error
+        }
     }
 
     /// Record staging disposition complete (deleted / rolled back / partiallyDeleted, etc.).
@@ -69,13 +83,24 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
             Line(kind: .end, entry: nil, entryID: entryID, status: status, timestamp: timestamp),
             synchronize: true
         )
+        lock.lock()
+        activeEntryIDs.remove(entryID)
+        lock.unlock()
     }
 
-    /// Unfinished entries: have begin, no end. Input for startup reconciliation.
+    /// Unfinished entries: have begin, no end. Includes live in-process transactions.
     func incompleteEntries() -> [Entry] {
         lock.lock()
         defer { lock.unlock() }
         return incompleteEntriesLocked()
+    }
+
+    /// Unfinished entries that are safe for startup reconciliation to touch.
+    /// Excludes IDs owned by a live cleanup transaction so compact cannot erase an in-flight begin.
+    func incompleteEntriesForReconciliation() -> [Entry] {
+        lock.lock()
+        defer { lock.unlock() }
+        return incompleteEntriesLocked().filter { !activeEntryIDs.contains($0.id) }
     }
 
     /// Precondition: `lock` is already held.
@@ -108,7 +133,8 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
             .sorted { $0.timestamp < $1.timestamp }
     }
 
-    /// Compact: keep only still-unfinished entries. Called at reconciliation wrap-up to stop unbounded journal growth.
+    /// Compact: keep unfinished entries (including live in-process transactions).
+    /// Called at reconciliation wrap-up to stop unbounded journal growth.
     func compact() {
         lock.lock()
         defer { lock.unlock() }

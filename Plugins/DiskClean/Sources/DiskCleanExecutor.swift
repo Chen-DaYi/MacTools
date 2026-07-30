@@ -148,16 +148,18 @@ struct DiskCleanExecutor: DiskCleanExecuting {
 
     init(
         storageDirectory: URL = DiskCleanStorageLocation.fallbackDirectory,
+        journal: DiskCleanStagingJournal? = nil,
+        auditLog: DiskCleanAuditLog? = nil,
         safetyPolicy: DiskCleanSafetyPolicy = DiskCleanSafetyPolicy(),
         runningAppLock: any DiskCleanRunningAppSnapshotting = DiskCleanRunningAppLock(),
         now: @escaping @Sendable () -> Date = Date.init
     ) {
-        let journal = DiskCleanStagingJournal(directory: storageDirectory)
+        let sharedJournal = journal ?? DiskCleanStagingJournal(directory: storageDirectory)
         self.init(
-            primitive: DiskCleanRemovalPrimitive(journal: journal, now: now),
+            primitive: DiskCleanRemovalPrimitive(journal: sharedJournal, now: now),
             safetyPolicy: safetyPolicy,
             runningAppLock: runningAppLock,
-            auditLog: DiskCleanAuditLog(directory: storageDirectory),
+            auditLog: auditLog ?? DiskCleanAuditLog(directory: storageDirectory),
             now: now
         )
     }
@@ -198,7 +200,11 @@ struct DiskCleanExecutor: DiskCleanExecuting {
             }
 
             // Second SafetyPolicy check: the whitelist may grow after the scan; staged-name protection also applies here.
-            let safety = safetyPolicy.safetyStatus(for: item.path)
+            // Check physical + logical so a redirected home cache still matches lexical whitelist rules.
+            let safety = safetyPolicy.safetyStatus(
+                for: item.path,
+                alsoChecking: item.safetyCheckPaths
+            )
             guard safety.isCleanable else {
                 itemResults.append(record(item: item, outcome: .skipped(safety), mode: plan.mode))
                 continue
@@ -231,7 +237,10 @@ struct DiskCleanExecutor: DiskCleanExecuting {
             ) {
                 throw DiskCleanExecutionError.lockedDuringPreflight(path: item.path, processName: processName)
             }
-            let safety = safetyPolicy.safetyStatus(for: item.path)
+            let safety = safetyPolicy.safetyStatus(
+                for: item.path,
+                alsoChecking: item.safetyCheckPaths
+            )
             guard safety.isCleanable else {
                 throw DiskCleanExecutionError.safetyRejected(
                     path: item.path,

@@ -78,8 +78,10 @@ enum DiskCleanPlanError: LocalizedError, Equatable {
 struct DiskCleanValidatedPlan: Equatable, Sendable {
     struct PlanItem: Equatable, Sendable {
         let candidateID: DiskCleanCandidate.ID
-        /// Physical path (no symlink ancestors, §13-6).
+        /// Physical path (no symlink ancestors, §13-6). Deletion uses this.
         let path: String
+        /// Pre-physical path preserved for lexical safety rechecks (whitelist / sensitive).
+        let logicalPath: String
         let rootIdentity: DiskCleanRootIdentity
         let observedAt: Date
         let targetID: String
@@ -97,6 +99,10 @@ struct DiskCleanValidatedPlan: Equatable, Sendable {
 
         var name: String {
             (path as NSString).lastPathComponent
+        }
+
+        var safetyCheckPaths: [String] {
+            logicalPath == path ? [] : [logicalPath]
         }
     }
 
@@ -188,6 +194,7 @@ enum DiskCleanPlanner {
                 DiskCleanValidatedPlan.PlanItem(
                     candidateID: candidate.id,
                     path: candidate.path,
+                    logicalPath: candidate.logicalPath,
                     rootIdentity: rootIdentity,
                     observedAt: sizeResult.observedAt,
                     targetID: candidate.targetID,

@@ -150,6 +150,8 @@ final class DiskCleanSizeCache: Sendable {
 /// through to the real sizer so it can report the precise degradation reason.
 struct DiskCleanCachingSizer: DiskCleanDirectorySizing {
     let base: any DiskCleanDirectorySizing
+    /// Used when `base` (normally FastWalker) returns a walk-level failure that SlowWalker can still complete.
+    let fallback: (any DiskCleanDirectorySizing)?
     let cache: DiskCleanSizeCache
     let identityProbe: any DiskCleanRootIdentityProbing
     /// true = bypass cache reads (still write). Rescans after the stale gate must take this path.
@@ -157,11 +159,13 @@ struct DiskCleanCachingSizer: DiskCleanDirectorySizing {
 
     init(
         base: any DiskCleanDirectorySizing,
+        fallback: (any DiskCleanDirectorySizing)? = DiskCleanSlowWalker(),
         cache: DiskCleanSizeCache,
         identityProbe: any DiskCleanRootIdentityProbing = DiskCleanRootIdentityProbe(),
         forceRefresh: Bool = false
     ) {
         self.base = base
+        self.fallback = fallback
         self.cache = cache
         self.identityProbe = identityProbe
         self.forceRefresh = forceRefresh
@@ -175,7 +179,19 @@ struct DiskCleanCachingSizer: DiskCleanDirectorySizing {
         }
 
         let result = base.size(ofItemAt: path, context: context)
+        if shouldFallback(from: result), let fallback {
+            let fallbackResult = fallback.size(ofItemAt: path, context: context)
+            cache.store(path: path, result: fallbackResult, now: context.now())
+            return fallbackResult
+        }
         cache.store(path: path, result: result, now: context.now())
         return result
+    }
+
+    /// FastWalker failures that mean "bulk attributes unusable", not "path really unreadable".
+    /// Permission / timeout / mount-crossing already carry honest completeness and must not be retried.
+    private func shouldFallback(from result: DiskCleanSizeResult) -> Bool {
+        // Only pure walkError (getattrlistbulk/layout) is worth a SlowWalker retry.
+        result.completeness.partialReasons == [.walkError]
     }
 }

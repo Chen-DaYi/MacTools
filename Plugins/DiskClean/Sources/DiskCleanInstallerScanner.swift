@@ -170,29 +170,37 @@ struct DiskCleanInstallerScanner: Sendable {
         let observedAt = now()
         var candidates: [DiskCleanInstallerCandidate] = []
 
-        while let batch = try? source.nextBatch() {
-            for entry in batch {
-                guard case let .resolved(resolved) = entry else { continue }
-                // Regular files only: do not follow symlinks (would delete the link, not the installer),
-                // and do not recurse into directories.
-                guard resolved.fileType == .regularFile else { continue }
-                guard
-                    let name = Self.name(of: resolved),
-                    let kind = DiskCleanInstallerKind.byExtension[(name as NSString).pathExtension.lowercased()],
-                    let status = Self.status(name: name, directoryFileDescriptor: source.directoryFileDescriptor)
-                else { continue }
+        do {
+            while let batch = try source.nextBatch() {
+                for entry in batch {
+                    guard case let .resolved(resolved) = entry else { continue }
+                    // Regular files only: do not follow symlinks (would delete the link, not the installer),
+                    // and do not recurse into directories.
+                    guard resolved.fileType == .regularFile else { continue }
+                    guard
+                        let name = Self.name(of: resolved),
+                        let kind = DiskCleanInstallerKind.byExtension[(name as NSString).pathExtension.lowercased()],
+                        let status = Self.status(name: name, directoryFileDescriptor: source.directoryFileDescriptor)
+                    else { continue }
 
-                let modifiedAt = DiskCleanRootIdentity.date(from: status.st_mtimespec)
-                candidates.append(
-                    makeCandidate(
-                        path: directoryPath + "/" + name,
-                        kind: kind,
-                        byteSize: max(status.st_size, 0),
-                        modifiedAt: modifiedAt,
-                        observedAt: observedAt
+                    let modifiedAt = DiskCleanRootIdentity.date(from: status.st_mtimespec)
+                    candidates.append(
+                        makeCandidate(
+                            path: directoryPath + "/" + name,
+                            kind: kind,
+                            byteSize: max(status.st_size, 0),
+                            modifiedAt: modifiedAt,
+                            observedAt: observedAt
+                        )
                     )
-                )
+                }
             }
+        } catch {
+            // Never treat mid-stream readdir failure as a successful partial scan.
+            let code = (error as? DiskCleanPOSIXError)?.code ?? EIO
+            return code == EPERM || code == EACCES
+                ? .denied(path: directoryPath)
+                : .unavailable(path: directoryPath, reason: .walkError)
         }
 
         // readdir order is filesystem-defined; sorting stabilizes both the list and tests.

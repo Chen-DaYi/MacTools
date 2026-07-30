@@ -235,8 +235,12 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
     /// v1 rule id. Audit, whitelist migration, and panel grouping all depend on it.
     let legacyRuleID: String
     let category: DiskCleanCategoryID
-    /// **Physical path** (no symlink ancestors; design §13-6).
+    /// **Physical path** (no symlink ancestors; design §13-6). Deletion and sizing use this.
     let path: String
+    /// Pre-physical path from rule expansion (may still contain symlink ancestors such as `~/.cache`).
+    /// Whitelist / sensitive checks consult both `path` and `logicalPath` so a redirected home
+    /// cache cannot slip past a lexical allowlist written against the logical location.
+    let logicalPath: String
     /// Default-selection policy looks only here. Rule candidates take target risk; P2 candidates
     /// may be overridden by the expansion source (see `DiskCleanCandidateFacts`).
     let risk: DiskCleanRisk
@@ -252,6 +256,7 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
         legacyRuleID: String,
         category: DiskCleanCategoryID,
         path: String,
+        logicalPath: String? = nil,
         risk: DiskCleanRisk,
         safety: DiskCleanSafetyStatus,
         notes: [DiskCleanCandidateNote] = [],
@@ -262,6 +267,7 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
         self.legacyRuleID = legacyRuleID
         self.category = category
         self.path = path
+        self.logicalPath = logicalPath ?? path
         self.risk = risk
         self.safety = safety
         self.notes = notes
@@ -309,11 +315,17 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
             legacyRuleID: legacyRuleID,
             category: category,
             path: path,
+            logicalPath: logicalPath,
             risk: risk,
             safety: safety,
             notes: notes,
             sizeResult: sizeResult
         )
+    }
+
+    /// Paths that must all be checked against lexical safety rules.
+    var safetyCheckPaths: [String] {
+        logicalPath == path ? [] : [logicalPath]
     }
 }
 

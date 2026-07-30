@@ -54,6 +54,28 @@ struct DiskCleanSafetyPolicy: Sendable {
         isSymlink: Bool = false,
         resolvedSymlinkTarget: String? = nil
     ) -> DiskCleanSafetyStatus {
+        safetyStatus(
+            for: path,
+            alsoChecking: [],
+            isSymlink: isSymlink,
+            resolvedSymlinkTarget: resolvedSymlinkTarget
+        )
+    }
+
+    /// Evaluate safety for a physical path, also consulting any logical aliases.
+    ///
+    /// Whitelist and sensitive-path rules are **lexical** (home expansion + slash normalize only).
+    /// Scan expansion rewrites candidates to physical form for `O_NOFOLLOW_ANY`, so a rule like
+    /// `~/.cache/huggingface/*` would miss `/Volumes/Data/cache/huggingface/*` if we only checked
+    /// the physical path. Checking every alias means either identity matching a rule protects the item.
+    ///
+    /// Path-shape validation still uses the primary path (the deletion target).
+    func safetyStatus(
+        for path: String,
+        alsoChecking alternatePaths: [String],
+        isSymlink: Bool = false,
+        resolvedSymlinkTarget: String? = nil
+    ) -> DiskCleanSafetyStatus {
         let normalizedPath = normalizePath(path)
         let shapeStatus = validatePathShape(
             normalizedPath,
@@ -64,12 +86,23 @@ struct DiskCleanSafetyPolicy: Sendable {
             return shapeStatus
         }
 
-        if let reason = sensitiveProtectionReason(for: normalizedPath) {
-            return .protected(reason: reason)
+        var seen = Set<String>()
+        var pathsToCheck: [String] = []
+        for candidate in [normalizedPath] + alternatePaths.map(normalizePath) {
+            guard seen.insert(candidate).inserted else { continue }
+            pathsToCheck.append(candidate)
         }
 
-        if let rule = whitelistStore.matchingRule(for: normalizedPath) {
-            return .whitelisted(rule: rule.expandedPattern)
+        for candidate in pathsToCheck {
+            if let reason = sensitiveProtectionReason(for: candidate) {
+                return .protected(reason: reason)
+            }
+        }
+
+        for candidate in pathsToCheck {
+            if let rule = whitelistStore.matchingRule(for: candidate) {
+                return .whitelisted(rule: rule.expandedPattern)
+            }
         }
 
         return .allowed

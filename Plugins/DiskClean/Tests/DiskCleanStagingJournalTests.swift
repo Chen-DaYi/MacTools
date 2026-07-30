@@ -51,6 +51,25 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         XCTAssertTrue(journal.incompleteEntries().isEmpty)
     }
 
+    /// Live cleanup transactions must not be offered to reconciliation/compact between begin and complete.
+    func testActiveEntriesAreHiddenFromReconciliationUntilComplete() throws {
+        let entry = makeEntry(id: "live")
+        try journal.begin(entry)
+
+        XCTAssertEqual(journal.incompleteEntries(), [entry])
+        XCTAssertTrue(
+            journal.incompleteEntriesForReconciliation().isEmpty,
+            "live begin must not be reconciled or compacted away"
+        )
+
+        journal.compact()
+        XCTAssertEqual(journal.incompleteEntries(), [entry], "compact must keep active begins")
+
+        journal.complete(entryID: entry.id, status: "removed")
+        XCTAssertTrue(journal.incompleteEntries().isEmpty)
+        XCTAssertTrue(journal.incompleteEntriesForReconciliation().isEmpty)
+    }
+
     func testOnlyUncompletedEntriesRemainAndAreSortedByTimestamp() throws {
         let first = makeEntry(id: "first", timestamp: Date(timeIntervalSince1970: 100))
         let second = makeEntry(id: "second", timestamp: Date(timeIntervalSince1970: 300))

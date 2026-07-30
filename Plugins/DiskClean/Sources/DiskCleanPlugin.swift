@@ -18,9 +18,16 @@ private struct DiskCleanPluginProvider: PluginProvider {
         // provides no support directory.
         let storageDirectory = DiskCleanStorageLocation.resolve(supportDirectory: context.supportDirectory)
         let engine = DiskCleanScanEngine(localization: localization)
-        // All three sections share one executor instance: audit log and staging journal must be
-        // the same store, or crash recovery would only recognize staged objects left by one section.
-        let executor = DiskCleanExecutor(storageDirectory: storageDirectory)
+        // Shared journal + audit across sections and startup reconciliation so live cleanup and
+        // recovery cannot race with separate instance-local locks.
+        let journal = DiskCleanStagingJournal(directory: storageDirectory)
+        let auditLog = DiskCleanAuditLog(directory: storageDirectory)
+        let cleanupReadiness = DiskCleanCleanupReadiness(isReady: false)
+        let executor = DiskCleanExecutor(
+            storageDirectory: storageDirectory,
+            journal: journal,
+            auditLog: auditLog
+        )
 
         func makeController(scope: DiskCleanScanScope) -> DiskCleanController {
             DiskCleanController(
@@ -32,9 +39,11 @@ private struct DiskCleanPluginProvider: PluginProvider {
                     scanResult: nil,
                     executionResult: nil,
                     isResultStale: false,
-                    errorMessage: nil
+                    errorMessage: nil,
+                    isCleanupReady: false
                 ),
-                localization: localization
+                localization: localization,
+                cleanupReadiness: cleanupReadiness
             )
         }
 
@@ -46,7 +55,10 @@ private struct DiskCleanPluginProvider: PluginProvider {
                 installersController: makeController(scope: .installers),
                 purgeRoots: purgeRoots,
                 localization: localization,
-                storageDirectory: storageDirectory
+                storageDirectory: storageDirectory,
+                journal: journal,
+                auditLog: auditLog,
+                cleanupReadiness: cleanupReadiness
             )
         ]
     }
@@ -86,6 +98,9 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
     private let purgeRoots: DiskCleanPurgeRootsModel
     private let localization: PluginLocalization
     private let storageDirectory: URL
+    private let journal: DiskCleanStagingJournal
+    private let auditLog: DiskCleanAuditLog
+    private let cleanupReadiness: DiskCleanCleanupReadiness
     private let reconciler: any DiskCleanStagingReconciling
     private var isExpanded = false
 
@@ -96,6 +111,9 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
         purgeRoots: DiskCleanPurgeRootsModel = DiskCleanPurgeRootsModel(),
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         storageDirectory: URL = DiskCleanStorageLocation.fallbackDirectory,
+        journal: DiskCleanStagingJournal? = nil,
+        auditLog: DiskCleanAuditLog? = nil,
+        cleanupReadiness: DiskCleanCleanupReadiness = DiskCleanCleanupReadiness(isReady: true),
         reconciler: any DiskCleanStagingReconciling = DiskCleanStagingReconciler()
     ) {
         self.controller = controller
@@ -104,6 +122,9 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
         self.purgeRoots = purgeRoots
         self.localization = localization
         self.storageDirectory = storageDirectory
+        self.journal = journal ?? DiskCleanStagingJournal(directory: storageDirectory)
+        self.auditLog = auditLog ?? DiskCleanAuditLog(directory: storageDirectory)
+        self.cleanupReadiness = cleanupReadiness
         self.reconciler = reconciler
         self.metadata = PluginMetadata(
             id: "disk-clean",
@@ -176,12 +197,29 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
     /// If the previous run crashed between "renamed to staging name" and "disposition finished",
     /// only the journal still knows the orphan's original name. Recover it here: SafetyPolicy
     /// protects these objects from every scan, and reconciliation is the only other path that can
-    /// touch them. Filesystem work stays off the main thread.
+    /// touch them. Cleanup stays disabled until this finishes so a live clean cannot race recovery.
     func activate(context: PluginRuntimeContext) {
-        let directory = DiskCleanStorageLocation.resolve(supportDirectory: context.supportDirectory ?? storageDirectory)
+        let journal = journal
+        let auditLog = auditLog
+        let cleanupReadiness = cleanupReadiness
         let reconciler = reconciler
+        let rulesController = controller as? DiskCleanController
+        let developerController = developerArtifactsController
+        let installersController = installersController
         Task.detached(priority: .utility) {
-            await reconciler.reconcile(storageDirectory: directory)
+            // Shared journal instance is required: separate journals have separate locks and can
+            // compact a live begin record while rename is still in flight.
+            if let concrete = reconciler as? DiskCleanStagingReconciler {
+                _ = concrete.reconcile(journal: journal, auditLog: auditLog)
+            } else {
+                await reconciler.reconcile(storageDirectory: journal.directory)
+            }
+            cleanupReadiness.markReady()
+            await MainActor.run {
+                rulesController?.refreshCleanupReadiness()
+                developerController.refreshCleanupReadiness()
+                installersController.refreshCleanupReadiness()
+            }
         }
     }
 

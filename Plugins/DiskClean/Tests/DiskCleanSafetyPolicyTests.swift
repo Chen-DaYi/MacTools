@@ -51,6 +51,28 @@ final class DiskCleanSafetyPolicyTests: XCTestCase {
         XCTAssertEqual(rule, "\(home)/Library/Caches/KeepMe*")
     }
 
+    /// Physical expansion rewrites `~/.cache/...` to `/Volumes/...`. Lexical whitelist rules must
+    /// still match when the logical alias is also checked.
+    func testWhitelistMatchesLogicalAliasWhenPhysicalPathDiverges() {
+        let whitelist = DiskCleanWhitelistStore(
+            homeDirectory: home,
+            includeDefaults: false,
+            customRules: ["\(home)/.cache/huggingface/*"]
+        )
+        let policy = DiskCleanSafetyPolicy(homeDirectory: home, whitelistStore: whitelist)
+        let physical = "/Volumes/Data/cache/huggingface/models"
+        let logical = "\(home)/.cache/huggingface/models"
+
+        XCTAssertEqual(policy.safetyStatus(for: physical), .allowed, "physical alone must not match")
+        guard case let .whitelisted(rule) = policy.safetyStatus(
+            for: physical,
+            alsoChecking: [logical]
+        ) else {
+            return XCTFail("expected whitelist hit via logical alias")
+        }
+        XCTAssertEqual(rule, "\(home)/.cache/huggingface/*")
+    }
+
     func testProtectsSensitiveDataPathsPortedFromMole() {
         let policy = DiskCleanSafetyPolicy(homeDirectory: home)
 

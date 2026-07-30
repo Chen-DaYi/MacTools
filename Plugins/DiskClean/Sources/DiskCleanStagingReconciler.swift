@@ -51,6 +51,8 @@ struct DiskCleanStagingReconciler: DiskCleanStagingReconciling {
     }
 
     func reconcile(storageDirectory: URL) async {
+        // Prefer callers that already hold the shared journal; this path is for tests / recovery
+        // tools that only have a directory.
         _ = reconcile(
             journal: DiskCleanStagingJournal(directory: storageDirectory),
             auditLog: DiskCleanAuditLog(directory: storageDirectory)
@@ -62,7 +64,9 @@ struct DiskCleanStagingReconciler: DiskCleanStagingReconciling {
         journal: DiskCleanStagingJournal,
         auditLog: DiskCleanAuditLog
     ) -> [DiskCleanReconcileOutcome] {
-        let entries = journal.incompleteEntries()
+        // Skip entries owned by a live cleanup in this process so compact cannot erase
+        // a begin that has not yet renamed.
+        let entries = journal.incompleteEntriesForReconciliation()
         guard !entries.isEmpty else { return [] }
 
         var outcomes: [DiskCleanReconcileOutcome] = []

@@ -146,6 +146,7 @@ final class DiskCleanSizeCacheTests: XCTestCase {
         let base = FakeDiskCleanSizer()
         let sizer = DiskCleanCachingSizer(
             base: base,
+            fallback: nil,
             cache: cache,
             identityProbe: FakeDiskCleanRootIdentityProbe(identitiesByPath: [path: identity])
         )
@@ -171,6 +172,7 @@ final class DiskCleanSizeCacheTests: XCTestCase {
         base.setResult(.testComplete(bytes: 42, identity: identity), forPath: path)
         let sizer = DiskCleanCachingSizer(
             base: base,
+            fallback: nil,
             cache: cache,
             identityProbe: FakeDiskCleanRootIdentityProbe(identitiesByPath: [path: identity]),
             forceRefresh: true
@@ -194,6 +196,7 @@ final class DiskCleanSizeCacheTests: XCTestCase {
         base.setResult(.testPartial(reasons: [.walkError]), forPath: path)
         let sizer = DiskCleanCachingSizer(
             base: base,
+            fallback: nil,
             cache: cache,
             identityProbe: FakeDiskCleanRootIdentityProbe(identitiesByPath: [:])
         )
@@ -202,6 +205,49 @@ final class DiskCleanSizeCacheTests: XCTestCase {
 
         XCTAssertEqual(result.completeness, .partial(reasons: [.walkError]))
         XCTAssertEqual(base.calledPaths, [path], "when identity cannot be probed, run the real sizer for an accurate degradation reason")
+    }
+
+    /// getattrlistbulk-style pure walkError should retry through SlowWalker (or any injected fallback).
+    func testCachingSizerFallsBackOnPureWalkError() {
+        let identity = DiskCleanRootIdentity.test()
+        let cache = DiskCleanSizeCache()
+        let base = FakeDiskCleanSizer()
+        base.setResult(.testPartial(reasons: [.walkError]), forPath: path)
+        let fallback = FakeDiskCleanSizer()
+        fallback.setResult(.testComplete(bytes: 99, identity: identity), forPath: path)
+        let sizer = DiskCleanCachingSizer(
+            base: base,
+            fallback: fallback,
+            cache: cache,
+            identityProbe: FakeDiskCleanRootIdentityProbe(identitiesByPath: [path: identity]),
+            forceRefresh: true
+        )
+
+        let result = sizer.size(ofItemAt: path, context: .test())
+
+        XCTAssertEqual(result.estimatedBytes, 99)
+        XCTAssertEqual(base.calledPaths, [path])
+        XCTAssertEqual(fallback.calledPaths, [path])
+    }
+
+    func testCachingSizerDoesNotFallbackOnPermissionDenied() {
+        let cache = DiskCleanSizeCache()
+        let base = FakeDiskCleanSizer()
+        base.setResult(.testPartial(reasons: [.permissionDenied]), forPath: path)
+        let fallback = FakeDiskCleanSizer()
+        fallback.setResult(.testComplete(bytes: 1), forPath: path)
+        let sizer = DiskCleanCachingSizer(
+            base: base,
+            fallback: fallback,
+            cache: cache,
+            identityProbe: FakeDiskCleanRootIdentityProbe(identitiesByPath: [:]),
+            forceRefresh: true
+        )
+
+        let result = sizer.size(ofItemAt: path, context: .test())
+
+        XCTAssertEqual(result.completeness, .partial(reasons: [.permissionDenied]))
+        XCTAssertTrue(fallback.calledPaths.isEmpty)
     }
 }
 

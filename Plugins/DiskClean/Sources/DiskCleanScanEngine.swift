@@ -421,6 +421,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
                         DiskCleanTargetHit(
                             target: target,
                             item: Self.physical(item),
+                            logicalPath: item.path,
                             specificity: specificity
                         )
                     )
@@ -440,7 +441,12 @@ struct DiskCleanScanEngine: DiskCleanScanning {
                     .filter { physical.path == $0 || physical.path.hasPrefix($0 + "/") }
                     .map(\.count)
                     .max() ?? 0
-                return DiskCleanTargetHit(target: target, item: physical, specificity: specificity)
+                return DiskCleanTargetHit(
+                    target: target,
+                    item: physical,
+                    logicalPath: item.path,
+                    specificity: specificity
+                )
             }
         }
     }
@@ -468,6 +474,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         } else {
             safety = safetyPolicy.safetyStatus(
                 for: owned.item.path,
+                alsoChecking: owned.logicalPath == owned.item.path ? [] : [owned.logicalPath],
                 isSymlink: owned.item.isSymlink,
                 resolvedSymlinkTarget: owned.item.resolvedSymlinkTarget
             )
@@ -479,6 +486,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
             legacyRuleID: target.legacyRuleID,
             category: target.category,
             path: owned.item.path,
+            logicalPath: owned.logicalPath,
             // When the expansion source supplies no override, use target risk (rule candidates always take this path).
             risk: owned.facts.risk ?? target.risk,
             safety: safety,
@@ -767,6 +775,8 @@ struct DiskCleanLimitationCollector {
 struct DiskCleanTargetHit: Sendable {
     let target: DiskCleanRuleTarget
     let item: DiskCleanFileItem
+    /// Path before physical conversion. Used only for lexical safety matching.
+    let logicalPath: String
     /// Fixed-prefix length of the hitting glob (reserved root for dynamic targets); longer is more specific.
     /// P2 synthetic targets have no measurable glob and are always 0 — the same path is never hit by two synthetic targets.
     let specificity: Int
@@ -776,11 +786,13 @@ struct DiskCleanTargetHit: Sendable {
     init(
         target: DiskCleanRuleTarget,
         item: DiskCleanFileItem,
+        logicalPath: String? = nil,
         specificity: Int,
         facts: DiskCleanCandidateFacts = .inherited
     ) {
         self.target = target
         self.item = item
+        self.logicalPath = logicalPath ?? item.path
         self.specificity = specificity
         self.facts = facts
     }
@@ -789,16 +801,20 @@ struct DiskCleanTargetHit: Sendable {
 struct DiskCleanOwnedPath: Sendable {
     let target: DiskCleanRuleTarget
     let item: DiskCleanFileItem
+    /// Path before physical conversion for the owning hit (or the child path when decomposed).
+    let logicalPath: String
     /// Children produced by ancestor decomposition inherit the source hit's facts — they are fragments of the same hit, so risk and notes should match.
     let facts: DiskCleanCandidateFacts
 
     init(
         target: DiskCleanRuleTarget,
         item: DiskCleanFileItem,
+        logicalPath: String? = nil,
         facts: DiskCleanCandidateFacts = .inherited
     ) {
         self.target = target
         self.item = item
+        self.logicalPath = logicalPath ?? item.path
         self.facts = facts
     }
 }
@@ -823,13 +839,20 @@ struct DiskCleanCandidateAssembler: Sendable {
             // No descendant candidates → keep an independent identity and accept as-is.
             guard Self.hasStrictDescendant(of: path, in: paths) else {
                 results.append(
-                    DiskCleanOwnedPath(target: hit.target, item: hit.item, facts: hit.facts)
+                    DiskCleanOwnedPath(
+                        target: hit.target,
+                        item: hit.item,
+                        logicalPath: hit.logicalPath,
+                        facts: hit.facts
+                    )
                 )
                 continue
             }
             results += decompose(
                 path: path,
                 target: hit.target,
+                logicalRoot: hit.logicalPath,
+                physicalRoot: hit.item.path,
                 facts: hit.facts,
                 allPaths: pathSet,
                 sortedPaths: paths,
@@ -880,6 +903,8 @@ struct DiskCleanCandidateAssembler: Sendable {
     private func decompose(
         path: String,
         target: DiskCleanRuleTarget,
+        logicalRoot: String,
+        physicalRoot: String,
         facts: DiskCleanCandidateFacts,
         allPaths: Set<String>,
         sortedPaths: [String],
@@ -898,6 +923,8 @@ struct DiskCleanCandidateAssembler: Sendable {
                 results += decompose(
                     path: child.path,
                     target: target,
+                    logicalRoot: logicalRoot,
+                    physicalRoot: physicalRoot,
                     facts: facts,
                     allPaths: allPaths,
                     sortedPaths: sortedPaths,
@@ -905,9 +932,33 @@ struct DiskCleanCandidateAssembler: Sendable {
                 )
                 continue
             }
-            results.append(DiskCleanOwnedPath(target: target, item: child, facts: facts))
+            results.append(
+                DiskCleanOwnedPath(
+                    target: target,
+                    item: child,
+                    logicalPath: Self.logicalChildPath(
+                        physicalChild: child.path,
+                        physicalRoot: physicalRoot,
+                        logicalRoot: logicalRoot
+                    ),
+                    facts: facts
+                )
+            )
         }
         return results
+    }
+
+    /// Map a decomposed physical child back under the hit's logical root when possible.
+    private static func logicalChildPath(
+        physicalChild: String,
+        physicalRoot: String,
+        logicalRoot: String
+    ) -> String {
+        guard physicalChild == physicalRoot || physicalChild.hasPrefix(physicalRoot + "/") else {
+            return physicalChild
+        }
+        let suffix = String(physicalChild.dropFirst(physicalRoot.count))
+        return logicalRoot + suffix
     }
 
     /// `sortedPaths` is sorted, so strict descendants necessarily appear contiguously afterward.

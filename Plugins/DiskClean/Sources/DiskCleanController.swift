@@ -52,6 +52,8 @@ struct DiskCleanControllerSnapshot: Equatable, Sendable {
     let pendingPlan: DiskCleanPendingPlanSummary?
     /// Read-only projection of authoritative selection state (design §8.1). Menu bar and detail page read the same copy.
     let selection: DiskCleanSelectionProjection
+    /// False until startup journal reconciliation finishes.
+    let isCleanupReady: Bool
 
     init(
         phase: DiskCleanControllerPhase,
@@ -64,7 +66,8 @@ struct DiskCleanControllerSnapshot: Equatable, Sendable {
         scanLogEntries: [DiskCleanScanLogEntry] = [],
         removalMode: DiskCleanRemovalMode = .trash,
         pendingPlan: DiskCleanPendingPlanSummary? = nil,
-        selection: DiskCleanSelectionProjection = .empty
+        selection: DiskCleanSelectionProjection = .empty,
+        isCleanupReady: Bool = true
     ) {
         self.phase = phase
         self.scope = scope
@@ -77,6 +80,7 @@ struct DiskCleanControllerSnapshot: Equatable, Sendable {
         self.removalMode = removalMode
         self.pendingPlan = pendingPlan
         self.selection = selection
+        self.isCleanupReady = isCleanupReady
     }
 
     /// Checked groups for the rules segment. Other segments have no group concept and return an empty set.
@@ -127,13 +131,14 @@ struct DiskCleanControllerSnapshot: Equatable, Sendable {
         !isBusy && phase != .confirming && !scope.isEmpty
     }
 
-    /// Can clean = has a result, result is fresh, **and the user currently has a selection**.
+    /// Can clean = has a result, result is fresh, startup recovery finished, **and the user currently has a selection**.
     /// When the selection is empty the button greys out rather than meaning "clean everything"—menu bar and detail page share one selection.
     var canClean: Bool {
         phase == .scanned
             && !isResultStale
             && !isResultExpired
             && !selection.isEmpty
+            && isCleanupReady
     }
 
     static let initial = DiskCleanControllerSnapshot(
@@ -200,6 +205,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     private let removalModeStore: any DiskCleanRemovalModeStoring
     /// Look up target lock declarations when casting a plan. Inject the same catalog as `DiskCleanScanEngine`.
     private let catalog: DiskCleanRuleCatalogV2
+    private let cleanupReadiness: DiskCleanCleanupReadiness
 
     private var currentTask: Task<Void, Never>?
     private var currentOperationID: UUID?
@@ -227,7 +233,8 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         clock: any DiskCleanClock = DiskCleanSystemClock(),
         removalModeStore: any DiskCleanRemovalModeStoring = UserDefaultsDiskCleanRemovalModeStore(),
-        catalog: DiskCleanRuleCatalogV2 = .current
+        catalog: DiskCleanRuleCatalogV2 = .current,
+        cleanupReadiness: DiskCleanCleanupReadiness = DiskCleanCleanupReadiness(isReady: true)
     ) {
         self.engine = engine
         self.executor = executor
@@ -235,6 +242,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         self.clock = clock
         self.removalModeStore = removalModeStore
         self.catalog = catalog
+        self.cleanupReadiness = cleanupReadiness
         self.removalMode = removalModeStore.load()
         snapshot = DiskCleanControllerSnapshot(
             phase: initialSnapshot.phase,
@@ -245,7 +253,22 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
             isResultExpired: initialSnapshot.isResultExpired,
             errorMessage: initialSnapshot.errorMessage,
             scanLogEntries: initialSnapshot.scanLogEntries,
-            removalMode: removalModeStore.load()
+            removalMode: removalModeStore.load(),
+            isCleanupReady: cleanupReadiness.ready
+        )
+    }
+
+    /// Called when startup reconciliation finishes so Clean re-evaluates readiness.
+    func refreshCleanupReadiness() {
+        publish(
+            phase: snapshot.phase,
+            scope: snapshot.scope,
+            scanResult: snapshot.scanResult,
+            executionResult: snapshot.executionResult,
+            isResultStale: snapshot.isResultStale,
+            isResultExpired: snapshot.isResultExpired,
+            errorMessage: snapshot.errorMessage,
+            scanLogEntries: snapshot.scanLogEntries
         )
     }
 
@@ -463,9 +486,6 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     func cancelCurrentOperation() {
         let phase = snapshot.phase
         let scope = snapshot.scope
-        let scanResult = snapshot.scanResult
-        let isResultStale = snapshot.isResultStale
-        let isResultExpired = snapshot.isResultExpired
         let scanLogEntries = snapshot.scanLogEntries
 
         switch phase {
@@ -491,17 +511,11 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
                 ]
             )
         case .cleaning:
+            // Cancellation only takes effect between plan items. `trashItem` / recursive
+            // unlink are synchronous and uncancellable, so keep the UI in `.cleaning` until
+            // the current removal returns. Flipping to `.scanned` early would re-enable Clean
+            // and allow a second executor to run concurrently.
             cancelTaskOnly()
-            publish(
-                phase: .scanned,
-                scope: scope,
-                scanResult: scanResult,
-                executionResult: nil,
-                isResultStale: isResultStale,
-                isResultExpired: isResultExpired,
-                errorMessage: nil,
-                scanLogEntries: scanLogEntries
-            )
         case .idle, .scanned, .completed:
             cancelTaskOnly()
         }
@@ -806,7 +820,8 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
                     mode: $0.mode
                 )
             },
-            selection: selection.projection(for: scanResult?.candidates ?? [])
+            selection: selection.projection(for: scanResult?.candidates ?? []),
+            isCleanupReady: cleanupReadiness.ready
         )
     }
 
