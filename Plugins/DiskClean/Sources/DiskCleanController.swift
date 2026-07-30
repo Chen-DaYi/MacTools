@@ -511,11 +511,11 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
                 ]
             )
         case .cleaning:
-            // Cancellation only takes effect between plan items. `trashItem` / recursive
-            // unlink are synchronous and uncancellable, so keep the UI in `.cleaning` until
-            // the current removal returns. Flipping to `.scanned` early would re-enable Clean
-            // and allow a second executor to run concurrently.
-            cancelTaskOnly()
+            // Request cancel only. Keep `currentTask` / `currentOperationID` so the
+            // execution task can still publish `.scanned` / `.completed` when the current
+            // item finishes. Clearing the operation ID here would leave the UI stuck on
+            // `.cleaning` forever after the task returns.
+            currentTask?.cancel()
         case .idle, .scanned, .completed:
             cancelTaskOnly()
         }

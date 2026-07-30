@@ -20,6 +20,34 @@ final class DiskCleanCandidateAssemblerTests: XCTestCase {
         XCTAssertEqual(owners["/Caches/akd"]?.target.id, "cache.specific")
     }
 
+    /// Losing ownership hits still contribute logical aliases so whitelist rules on either path apply.
+    func testOwnershipMergesLogicalAliasesFromAllHitsOnSamePhysicalPath() {
+        let cacheTarget = DiskCleanRuleTarget.test(id: "cache.pip", risk: .low)
+        let homeCacheTarget = DiskCleanRuleTarget.test(id: "home.cache.pip", risk: .low)
+        let physical = DiskCleanFileItem.testDirectory("/Volumes/Data/cache/pip")
+        let owners = DiskCleanCandidateAssembler.resolveOwnership(hits: [
+            DiskCleanTargetHit(
+                target: homeCacheTarget,
+                item: physical,
+                logicalPath: "/Users/t/.cache/pip",
+                specificity: 5
+            ),
+            DiskCleanTargetHit(
+                target: cacheTarget,
+                item: physical,
+                logicalPath: "/Users/t/Library/Caches/pip",
+                specificity: 12
+            )
+        ])
+
+        let hit = owners[physical.path]
+        XCTAssertEqual(hit?.target.id, "cache.pip")
+        XCTAssertEqual(
+            Set(hit?.logicalPaths ?? []),
+            Set(["/Users/t/.cache/pip", "/Users/t/Library/Caches/pip"])
+        )
+    }
+
     func testEqualSpecificityPrefersHigherRisk() {
         let low = DiskCleanRuleTarget.test(id: "cache.low", risk: .low)
         let medium = DiskCleanRuleTarget.test(id: "cache.medium", risk: .medium)

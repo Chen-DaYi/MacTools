@@ -83,6 +83,15 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
             Line(kind: .end, entry: nil, entryID: entryID, status: status, timestamp: timestamp),
             synchronize: true
         )
+        releaseActive(entryID: entryID)
+    }
+
+    /// Drop the in-process active mark without writing a completion record.
+    ///
+    /// Used when the transaction ends but the journal entry must stay incomplete
+    /// (`rollbackBlocked`): the current process no longer owns the rename, so
+    /// reconciliation (same process or next launch) must be allowed to see it.
+    func releaseActive(entryID: String) {
         lock.lock()
         activeEntryIDs.remove(entryID)
         lock.unlock()

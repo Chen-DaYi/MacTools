@@ -34,6 +34,8 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
         let stagedName = DiskCleanRemovalPrimitive.stagedNamePrefix + "orphan"
         try temporary.makeFile("\(stagedName)/a.bin", bytes: 10)
         try journal.begin(entry(stagedName: stagedName, originalName: "Cache"))
+        // New process: reopen journal so in-process active marks are gone.
+        journal = DiskCleanStagingJournal(directory: storage.url)
 
         let outcomes = DiskCleanStagingReconciler().reconcile(journal: journal, auditLog: auditLog)
 
@@ -46,6 +48,7 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
     /// Crash before rename → no staged object; clear the entry with no permanent backlog.
     func testEntryWithoutStagedObjectIsClosedOut() throws {
         try journal.begin(entry(stagedName: DiskCleanRemovalPrimitive.stagedNamePrefix + "never", originalName: "Cache"))
+        journal = DiskCleanStagingJournal(directory: storage.url)
 
         let outcomes = DiskCleanStagingReconciler().reconcile(journal: journal, auditLog: auditLog)
 
@@ -65,6 +68,7 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
                 mode: DiskCleanRemovalMode.permanent.rawValue
             )
         )
+        journal = DiskCleanStagingJournal(directory: storage.url)
 
         let outcomes = DiskCleanStagingReconciler().reconcile(journal: journal, auditLog: auditLog)
 
@@ -78,6 +82,7 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
         try temporary.makeFile("\(stagedName)/a.bin", bytes: 10)
         try temporary.makeFile("Cache/rebuilt.bin", bytes: 20)
         try journal.begin(entry(stagedName: stagedName, originalName: "Cache"))
+        journal = DiskCleanStagingJournal(directory: storage.url)
 
         let outcomes = DiskCleanStagingReconciler().reconcile(journal: journal, auditLog: auditLog)
 
@@ -106,6 +111,7 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
         try journal.begin(
             entry(id: "two", stagedName: blocked, originalName: "Occupied", timestamp: Date(timeIntervalSince1970: 2))
         )
+        journal = DiskCleanStagingJournal(directory: storage.url)
 
         _ = DiskCleanStagingReconciler().reconcile(journal: journal, auditLog: auditLog)
 

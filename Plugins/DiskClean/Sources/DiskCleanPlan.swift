@@ -80,8 +80,8 @@ struct DiskCleanValidatedPlan: Equatable, Sendable {
         let candidateID: DiskCleanCandidate.ID
         /// Physical path (no symlink ancestors, §13-6). Deletion uses this.
         let path: String
-        /// Pre-physical path preserved for lexical safety rechecks (whitelist / sensitive).
-        let logicalPath: String
+        /// All pre-physical aliases preserved for lexical safety rechecks (whitelist / sensitive).
+        let logicalPaths: [String]
         let rootIdentity: DiskCleanRootIdentity
         let observedAt: Date
         let targetID: String
@@ -102,7 +102,7 @@ struct DiskCleanValidatedPlan: Equatable, Sendable {
         }
 
         var safetyCheckPaths: [String] {
-            logicalPath == path ? [] : [logicalPath]
+            logicalPaths.filter { $0 != path }
         }
     }
 
@@ -194,7 +194,7 @@ enum DiskCleanPlanner {
                 DiskCleanValidatedPlan.PlanItem(
                     candidateID: candidate.id,
                     path: candidate.path,
-                    logicalPath: candidate.logicalPath,
+                    logicalPaths: candidate.logicalPaths,
                     rootIdentity: rootIdentity,
                     observedAt: sizeResult.observedAt,
                     targetID: candidate.targetID,

@@ -237,10 +237,10 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
     let category: DiskCleanCategoryID
     /// **Physical path** (no symlink ancestors; design §13-6). Deletion and sizing use this.
     let path: String
-    /// Pre-physical path from rule expansion (may still contain symlink ancestors such as `~/.cache`).
-    /// Whitelist / sensitive checks consult both `path` and `logicalPath` so a redirected home
-    /// cache cannot slip past a lexical allowlist written against the logical location.
-    let logicalPath: String
+    /// All pre-physical path aliases that resolved to `path` (e.g. both `~/.cache/pip` and
+    /// `~/Library/Caches/pip` when they are the same object). Whitelist / sensitive checks
+    /// consult every alias so a redirected home cache cannot slip past a lexical allowlist.
+    let logicalPaths: [String]
     /// Default-selection policy looks only here. Rule candidates take target risk; P2 candidates
     /// may be overridden by the expansion source (see `DiskCleanCandidateFacts`).
     let risk: DiskCleanRisk
@@ -250,6 +250,9 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
     /// Size result. nil = not sized yet.
     let sizeResult: DiskCleanSizeResult?
 
+    /// Primary logical path (first alias, or the physical path when none differ).
+    var logicalPath: String { logicalPaths.first ?? path }
+
     init(
         id: String,
         targetID: String,
@@ -257,6 +260,7 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
         category: DiskCleanCategoryID,
         path: String,
         logicalPath: String? = nil,
+        logicalPaths: [String]? = nil,
         risk: DiskCleanRisk,
         safety: DiskCleanSafetyStatus,
         notes: [DiskCleanCandidateNote] = [],
@@ -267,11 +271,26 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
         self.legacyRuleID = legacyRuleID
         self.category = category
         self.path = path
-        self.logicalPath = logicalPath ?? path
+        if let logicalPaths {
+            self.logicalPaths = Self.uniquePaths(logicalPaths.isEmpty ? [path] : logicalPaths)
+        } else if let logicalPath {
+            self.logicalPaths = Self.uniquePaths([logicalPath])
+        } else {
+            self.logicalPaths = [path]
+        }
         self.risk = risk
         self.safety = safety
         self.notes = notes
         self.sizeResult = sizeResult
+    }
+
+    private static func uniquePaths(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for path in paths where seen.insert(path).inserted {
+            result.append(path)
+        }
+        return result
     }
 
     static func makeID(targetID: String, path: String) -> String {
@@ -315,7 +334,7 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
             legacyRuleID: legacyRuleID,
             category: category,
             path: path,
-            logicalPath: logicalPath,
+            logicalPaths: logicalPaths,
             risk: risk,
             safety: safety,
             notes: notes,
@@ -323,9 +342,9 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
         )
     }
 
-    /// Paths that must all be checked against lexical safety rules.
+    /// Paths that must all be checked against lexical safety rules (every alias except the physical path itself).
     var safetyCheckPaths: [String] {
-        logicalPath == path ? [] : [logicalPath]
+        logicalPaths.filter { $0 != path }
     }
 }
 

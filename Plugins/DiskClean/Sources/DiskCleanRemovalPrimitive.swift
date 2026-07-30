@@ -311,6 +311,9 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         )
         guard status == 0 else {
             let code = errno
+            // Leave the journal incomplete for recovery, but release the in-process active
+            // mark so same-process reconciliation can still pick the entry up.
+            journal.releaseActive(entryID: staged.entryID)
             return .rollbackBlocked(
                 stagedName: staged.name,
                 reason: "\(reason)；回滚失败：\(Self.describe(code, doing: "改回原名"))"

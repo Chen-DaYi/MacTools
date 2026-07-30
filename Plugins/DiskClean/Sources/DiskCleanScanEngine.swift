@@ -474,7 +474,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         } else {
             safety = safetyPolicy.safetyStatus(
                 for: owned.item.path,
-                alsoChecking: owned.logicalPath == owned.item.path ? [] : [owned.logicalPath],
+                alsoChecking: owned.logicalPaths.filter { $0 != owned.item.path },
                 isSymlink: owned.item.isSymlink,
                 resolvedSymlinkTarget: owned.item.resolvedSymlinkTarget
             )
@@ -486,7 +486,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
             legacyRuleID: target.legacyRuleID,
             category: target.category,
             path: owned.item.path,
-            logicalPath: owned.logicalPath,
+            logicalPaths: owned.logicalPaths,
             // When the expansion source supplies no override, use target risk (rule candidates always take this path).
             risk: owned.facts.risk ?? target.risk,
             safety: safety,
@@ -772,49 +772,89 @@ struct DiskCleanLimitationCollector {
 // MARK: - Ownership attribution and ancestor decomposition
 
 /// One raw hit from the expansion phase.
+enum DiskCleanPathAlias {
+    static func unique(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for path in paths where seen.insert(path).inserted {
+            result.append(path)
+        }
+        return result
+    }
+}
+
 struct DiskCleanTargetHit: Sendable {
     let target: DiskCleanRuleTarget
     let item: DiskCleanFileItem
-    /// Path before physical conversion. Used only for lexical safety matching.
-    let logicalPath: String
+    /// Paths before physical conversion. Multiple aliases can resolve to the same physical item.
+    let logicalPaths: [String]
     /// Fixed-prefix length of the hitting glob (reserved root for dynamic targets); longer is more specific.
     /// P2 synthetic targets have no measurable glob and are always 0 — the same path is never hit by two synthetic targets.
     let specificity: Int
     /// Candidate attributes known only at expansion time (P2 git state, installer age, etc.). Rule hits are always `.inherited`.
     let facts: DiskCleanCandidateFacts
 
+    /// Primary logical path for display / legacy call sites.
+    var logicalPath: String { logicalPaths.first ?? item.path }
+
     init(
         target: DiskCleanRuleTarget,
         item: DiskCleanFileItem,
         logicalPath: String? = nil,
+        logicalPaths: [String]? = nil,
         specificity: Int,
         facts: DiskCleanCandidateFacts = .inherited
     ) {
         self.target = target
         self.item = item
-        self.logicalPath = logicalPath ?? item.path
+        if let logicalPaths {
+            self.logicalPaths = DiskCleanPathAlias.unique(logicalPaths.isEmpty ? [item.path] : logicalPaths)
+        } else if let logicalPath {
+            self.logicalPaths = DiskCleanPathAlias.unique([logicalPath])
+        } else {
+            self.logicalPaths = [item.path]
+        }
         self.specificity = specificity
         self.facts = facts
+    }
+
+    func mergingLogicalPaths(from other: DiskCleanTargetHit) -> DiskCleanTargetHit {
+        DiskCleanTargetHit(
+            target: target,
+            item: item,
+            logicalPaths: logicalPaths + other.logicalPaths,
+            specificity: specificity,
+            facts: facts
+        )
     }
 }
 
 struct DiskCleanOwnedPath: Sendable {
     let target: DiskCleanRuleTarget
     let item: DiskCleanFileItem
-    /// Path before physical conversion for the owning hit (or the child path when decomposed).
-    let logicalPath: String
+    /// All pre-physical aliases that resolve to this physical path.
+    let logicalPaths: [String]
     /// Children produced by ancestor decomposition inherit the source hit's facts — they are fragments of the same hit, so risk and notes should match.
     let facts: DiskCleanCandidateFacts
+
+    var logicalPath: String { logicalPaths.first ?? item.path }
 
     init(
         target: DiskCleanRuleTarget,
         item: DiskCleanFileItem,
         logicalPath: String? = nil,
+        logicalPaths: [String]? = nil,
         facts: DiskCleanCandidateFacts = .inherited
     ) {
         self.target = target
         self.item = item
-        self.logicalPath = logicalPath ?? item.path
+        if let logicalPaths {
+            self.logicalPaths = DiskCleanPathAlias.unique(logicalPaths.isEmpty ? [item.path] : logicalPaths)
+        } else if let logicalPath {
+            self.logicalPaths = DiskCleanPathAlias.unique([logicalPath])
+        } else {
+            self.logicalPaths = [item.path]
+        }
         self.facts = facts
     }
 }
@@ -842,7 +882,7 @@ struct DiskCleanCandidateAssembler: Sendable {
                     DiskCleanOwnedPath(
                         target: hit.target,
                         item: hit.item,
-                        logicalPath: hit.logicalPath,
+                        logicalPaths: hit.logicalPaths,
                         facts: hit.facts
                     )
                 )
@@ -851,7 +891,7 @@ struct DiskCleanCandidateAssembler: Sendable {
             results += decompose(
                 path: path,
                 target: hit.target,
-                logicalRoot: hit.logicalPath,
+                logicalRoots: hit.logicalPaths,
                 physicalRoot: hit.item.path,
                 facts: hit.facts,
                 allPaths: pathSet,
@@ -863,9 +903,9 @@ struct DiskCleanCandidateAssembler: Sendable {
         return results.sorted { $0.item.path < $1.item.path }
     }
 
-    /// Same path hit by multiple targets → attribute to the most specific: longest glob fixed
-    /// prefix, then higher risk on ties (prefer strict over loose), then target id for a
-    /// deterministic, traversal-order-independent result.
+    /// Same physical path hit by multiple targets/aliases → keep the most specific ownership,
+    /// but **merge every logical alias**. Otherwise a more-specific `~/Library/Caches/pip/*`
+    /// hit would discard `~/.cache/pip/*` and its whitelist rule would never be checked.
     static func resolveOwnership(hits: [DiskCleanTargetHit]) -> [String: DiskCleanTargetHit] {
         var owners: [String: DiskCleanTargetHit] = [:]
         for hit in hits {
@@ -874,7 +914,9 @@ struct DiskCleanCandidateAssembler: Sendable {
                 continue
             }
             if isMoreSpecific(hit, than: incumbent) {
-                owners[hit.item.path] = hit
+                owners[hit.item.path] = hit.mergingLogicalPaths(from: incumbent)
+            } else {
+                owners[hit.item.path] = incumbent.mergingLogicalPaths(from: hit)
             }
         }
         return owners
@@ -903,7 +945,7 @@ struct DiskCleanCandidateAssembler: Sendable {
     private func decompose(
         path: String,
         target: DiskCleanRuleTarget,
-        logicalRoot: String,
+        logicalRoots: [String],
         physicalRoot: String,
         facts: DiskCleanCandidateFacts,
         allPaths: Set<String>,
@@ -923,7 +965,7 @@ struct DiskCleanCandidateAssembler: Sendable {
                 results += decompose(
                     path: child.path,
                     target: target,
-                    logicalRoot: logicalRoot,
+                    logicalRoots: logicalRoots,
                     physicalRoot: physicalRoot,
                     facts: facts,
                     allPaths: allPaths,
@@ -936,10 +978,10 @@ struct DiskCleanCandidateAssembler: Sendable {
                 DiskCleanOwnedPath(
                     target: target,
                     item: child,
-                    logicalPath: Self.logicalChildPath(
+                    logicalPaths: Self.logicalChildPaths(
                         physicalChild: child.path,
                         physicalRoot: physicalRoot,
-                        logicalRoot: logicalRoot
+                        logicalRoots: logicalRoots
                     ),
                     facts: facts
                 )
@@ -948,17 +990,17 @@ struct DiskCleanCandidateAssembler: Sendable {
         return results
     }
 
-    /// Map a decomposed physical child back under the hit's logical root when possible.
-    private static func logicalChildPath(
+    /// Map a decomposed physical child under every logical root when possible.
+    private static func logicalChildPaths(
         physicalChild: String,
         physicalRoot: String,
-        logicalRoot: String
-    ) -> String {
+        logicalRoots: [String]
+    ) -> [String] {
         guard physicalChild == physicalRoot || physicalChild.hasPrefix(physicalRoot + "/") else {
-            return physicalChild
+            return [physicalChild]
         }
         let suffix = String(physicalChild.dropFirst(physicalRoot.count))
-        return logicalRoot + suffix
+        return DiskCleanPathAlias.unique(logicalRoots.map { $0 + suffix })
     }
 
     /// `sortedPaths` is sorted, so strict descendants necessarily appear contiguously afterward.

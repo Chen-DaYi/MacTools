@@ -51,8 +51,8 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         XCTAssertTrue(journal.incompleteEntries().isEmpty)
     }
 
-    /// Live cleanup transactions must not be offered to reconciliation/compact between begin and complete.
-    func testActiveEntriesAreHiddenFromReconciliationUntilComplete() throws {
+    /// Live cleanup transactions must not be offered to reconciliation between begin and complete/release.
+    func testActiveEntriesAreHiddenFromReconciliationUntilCompleteOrRelease() throws {
         let entry = makeEntry(id: "live")
         try journal.begin(entry)
 
@@ -65,9 +65,22 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         journal.compact()
         XCTAssertEqual(journal.incompleteEntries(), [entry], "compact must keep active begins")
 
+        // rollbackBlocked path: transaction ended but entry stays incomplete for recovery.
+        journal.releaseActive(entryID: entry.id)
+        XCTAssertEqual(journal.incompleteEntriesForReconciliation(), [entry])
+
         journal.complete(entryID: entry.id, status: "removed")
         XCTAssertTrue(journal.incompleteEntries().isEmpty)
         XCTAssertTrue(journal.incompleteEntriesForReconciliation().isEmpty)
+    }
+
+    /// A reopened journal (new process) has no active marks and can reconcile unfinished entries.
+    func testReopenedJournalSeesIncompleteEntriesForReconciliation() throws {
+        let entry = makeEntry(id: "crash")
+        try journal.begin(entry)
+
+        let reopened = DiskCleanStagingJournal(directory: storage.url)
+        XCTAssertEqual(reopened.incompleteEntriesForReconciliation(), [entry])
     }
 
     func testOnlyUncompletedEntriesRemainAndAreSortedByTimestamp() throws {
