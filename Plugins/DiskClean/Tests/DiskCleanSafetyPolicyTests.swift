@@ -64,8 +64,8 @@ final class DiskCleanSafetyPolicyTests: XCTestCase {
         assertProtected(policy.safetyStatus(for: "\(home)/Library/Application Support/io.github.clash-verge-rev.clash-verge-rev/config.yaml"))
     }
 
-    /// 暂存中的对象只有 reconciliation 能碰（设计 §7.6）。宽 glob 与祖先分解
-    /// （`directChildren` 连隐藏项一起返回）都可能扫到孤儿暂存对象，这里必须拒收。
+    /// Staged objects may only be touched by reconciliation (design §7.6). Wide globs and ancestor expansion
+    /// (`directChildren` returns hidden items too) can discover orphan staged objects; reject them here.
     func testProtectsStagedObjectsFromBeingScannedAsCandidates() {
         let policy = DiskCleanSafetyPolicy(homeDirectory: home)
         let stagedName = DiskCleanRemovalPrimitive.stagedNamePrefix + "1BE2F1D0"
@@ -74,7 +74,7 @@ final class DiskCleanSafetyPolicyTests: XCTestCase {
         assertProtected(policy.safetyStatus(for: "\(home)/Library/Caches/App/\(stagedName)"))
         assertProtected(
             policy.safetyStatus(for: "\(home)/Library/Caches/\(stagedName)/inner/data.bin"),
-            "暂存树内部的路径同样不可触碰"
+            "paths inside a staged tree must also be untouchable"
         )
 
         guard case let .protected(reason) = policy.safetyStatus(for: "\(home)/Library/Caches/\(stagedName)") else {
@@ -83,7 +83,7 @@ final class DiskCleanSafetyPolicyTests: XCTestCase {
         XCTAssertEqual(reason, "staging in progress")
     }
 
-    /// 只保护末级组件命中前缀的对象，普通缓存不受影响。
+    /// Only objects whose final component matches the prefix are protected; ordinary caches are unaffected.
     func testStagedProtectionDoesNotSpillOverToOrdinaryCaches() {
         let policy = DiskCleanSafetyPolicy(homeDirectory: home)
 

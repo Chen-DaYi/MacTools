@@ -1,14 +1,15 @@
 import Foundation
 import MacToolsPluginKit
 
-// MARK: - 面板分组
+// MARK: - Panel groups
 
-/// 菜单栏与详情页的三个扫描范围分组。
+/// The three scan-scope groups for the menu bar and detail page.
 ///
-/// 规则 v2 已按 `DiskCleanCategoryID` 分成十类，但面板仍保留 v1 的三个分组：分类不能承担
-/// "扫描范围"这个职责——`aiTools` 同时收纳 `cache.ai-assistants` 与 `developer.ai-agent-old-versions`，
-/// `developer` 分类里还有一个 legacy 为 `browser.service-worker` 的 target。范围一律按
-/// `legacyRuleID` 前缀判定，扫描覆盖面因此与 v1 逐条等价（M5 再引入按分类选择）。
+/// Rules v2 already split into ten `DiskCleanCategoryID`s, but the panel still keeps v1's three
+/// groups: category cannot own "scan scope"—`aiTools` holds both `cache.ai-assistants` and
+/// `developer.ai-agent-old-versions`, and the `developer` category still has a target whose
+/// legacy id is `browser.service-worker`. Scope is always decided by `legacyRuleID` prefix so
+/// scan coverage stays entry-for-entry equivalent to v1 (M5 will introduce category selection).
 enum DiskCleanChoice: String, CaseIterable, Identifiable, Equatable, Sendable {
     case cache
     case developer
@@ -16,7 +17,7 @@ enum DiskCleanChoice: String, CaseIterable, Identifiable, Equatable, Sendable {
 
     var id: String { rawValue }
 
-    /// v1 规则 id 前缀 → 面板分组。这是 v1/v2 扫描范围等价性的唯一判定点。
+    /// v1 rule-id prefix → panel group. Sole decision point for v1/v2 scan-scope equivalence.
     init?(legacyRuleID: String) {
         switch legacyRuleID.prefix(while: { $0 != "." }) {
         case "cache":
@@ -46,22 +47,25 @@ enum DiskCleanChoice: String, CaseIterable, Identifiable, Equatable, Sendable {
     }
 }
 
-// MARK: - 扫描范围
+// MARK: - Scan scope
 
-/// 一次扫描的范围（设计 §10）。
+/// Scope of one scan (design §10).
 ///
-/// 三个取值对应详情页的三个独立分段。它们共用**同一条管线**——同一个引擎、同一套 sizing、
-/// 同一个 Planner、同一个执行器——区别只在候选从哪里来：规则目录展开，还是专用扫描器发现。
-/// 把这个区别收在一个枚举里，Controller 因此不需要为 P2 再写一套状态机。
+/// The three values map to the detail page's three independent sections. They share **one
+/// pipeline**—same engine, sizing, Planner, and executor—differing only in where candidates come
+/// from: rule-catalog expansion vs a dedicated scanner. Collapsing that difference into one enum
+/// means the Controller does not need a second state machine for P2.
 enum DiskCleanScanScope: Equatable, Sendable {
-    /// 规则目录展开（v1 的三个面板分组）。
+    /// Rule-catalog expansion (v1's three panel groups).
     case rules(choices: Set<DiskCleanChoice>)
-    /// 开发产物清扫（设计 §10.1）。`roots` 是用户配置的扫描根，已规范化为物理路径。
+    /// Developer-artifact purge (design §10.1). `roots` are user-configured scan roots, already
+    /// normalized to physical paths.
     case developerArtifacts(roots: [String])
-    /// 残留安装包（设计 §10.2）。范围固定为 `~/Downloads` 顶层，无参数。
+    /// Leftover installers (design §10.2). Scope is fixed to top-level `~/Downloads`; no parameters.
     case installers
 
-    /// 分段身份（不含参数）。用于选择 UI 分段、日志前缀这类"只关心是哪一段"的地方。
+    /// Section identity (parameters excluded). Used where only "which section" matters—selection UI,
+    /// log prefixes, etc.
     var section: DiskCleanScanSection {
         switch self {
         case .rules:
@@ -73,8 +77,9 @@ enum DiskCleanScanScope: Equatable, Sendable {
         }
     }
 
-    /// 范围为空 = 没有可扫的东西，扫描入口应当禁用。
-    /// 规则段是"一个分组都没勾"，开发产物段是"还没添加任何文件夹"——两者都要引导而不是空转。
+    /// Empty scope = nothing to scan; the scan entry point should be disabled.
+    /// Rules section: no group checked. Developer-artifacts section: no folders added yet.
+    /// Both need guidance rather than a no-op spin.
     var isEmpty: Bool {
         switch self {
         case let .rules(choices):
@@ -86,7 +91,7 @@ enum DiskCleanScanScope: Equatable, Sendable {
         }
     }
 
-    /// 规则段的分组集合。其余分段没有分组概念，返回空集。
+    /// Group set for the rules section. Other sections have no groups; returns empty.
     var choices: Set<DiskCleanChoice> {
         guard case let .rules(choices) = self else { return [] }
         return choices
@@ -128,7 +133,7 @@ enum DiskCleanSafetyStatus: Equatable, Sendable {
     }
 }
 
-// MARK: - 扫描日志
+// MARK: - Scan log
 
 enum DiskCleanScanLogTone: Equatable, Sendable {
     case info
@@ -148,89 +153,97 @@ struct DiskCleanScanLogEntry: Identifiable, Equatable, Sendable {
     let tone: DiskCleanScanLogTone
 }
 
-// MARK: - 扫描级 limitations
+// MARK: - Scan-level limitations
 
-/// 一次扫描的完整性缺口（设计 §4.5）。
+/// Completeness gaps for one scan (design §4.5).
 ///
-/// 菜单栏"（受限）"与详情页横幅一律从这里派生，**不依赖"恰好存在 permissionDenied 候选"**：
-/// 被整体跳过的 target 根本不会产生候选，只有显式 limitation 能把这件事说出来。
+/// Menu-bar "(limited)" and detail banners always derive from this, **not** from "a
+/// permissionDenied candidate happens to exist": wholly skipped targets produce no candidates, so
+/// only an explicit limitation can surface that fact.
 enum DiskCleanScanLimitation: Equatable, Sendable {
-    /// 未授予完全磁盘访问，整体跳过的 target。
+    /// Full Disk Access not granted; targets skipped as a whole.
     case fdaRestricted(skippedTargetIDs: [String])
-    /// 动态 provider 失败（子进程超时、输出畸形）。
+    /// Dynamic provider failed (subprocess timeout, malformed output).
     case dynamicRuleFailed(targetID: String, reason: String)
-    /// glob 展开失败。设计 §4.5 未列此项：路径类 target 的固定前缀同样可能因 EIO/EACCES
-    /// 展开失败，让整次扫描抛错比降级更糟，而复用 `dynamicRuleFailed` 会谎报原因。
+    /// Glob expansion failed. Not listed in design §4.5: fixed prefixes of path-type targets can
+    /// also fail with EIO/EACCES; throwing the whole scan is worse than degrading, and reusing
+    /// `dynamicRuleFailed` would misreport the cause.
     case targetExpansionFailed(targetID: String, reason: String)
-    /// 非本地卷 / 熔断后未 sizing 的候选路径。
+    /// Non-local volume / candidates left unsized after circuit break.
     case volumeSkipped(path: String)
-    /// P2 分段的扫描根整个打不开（设计 §10）：目录已删除、TCC 拒绝、或不是目录。
+    /// An entire P2 scan root could not be opened (design §10): deleted directory, TCC denial, or
+    /// not a directory.
     ///
-    /// **与"扫了但没有候选"必须分开**：`~/Downloads` 被 TCC 拒绝时里面可能躺着几十 GB 安装包，
-    /// 显示"没有可清理项"是在骗用户。`reason` 决定引导文案走授权还是走"文件夹已失效"。
+    /// **Must stay distinct from "scanned but no candidates"**: when TCC denies `~/Downloads` it
+    /// may still hold tens of GB of installers, and showing "nothing to clean" would lie.
+    /// `reason` chooses guidance copy (authorize vs "folder no longer valid").
     case scanRootUnreadable(path: String, reason: DiskCleanScanCompleteness.PartialReason)
-    /// WorkerPool 放弃预算耗尽，本进程不再执行任何 sizing。
+    /// WorkerPool abandon budget exhausted; this process will not run further sizing.
     case walkerCircuitBroken
-    /// 累计被放弃的线程数。
+    /// Cumulative count of abandoned threads.
     case threadsAbandoned(count: Int)
 }
 
-// MARK: - 候选附注
+// MARK: - Candidate notes
 
-/// 候选自身事实产生的提示（设计 §10）。
+/// Hints derived from candidate facts (design §10).
 ///
-/// 与 `safety` 的分工："能不能删"归 `safety`，"删之前该知道什么"归这里。note **不影响可清理性**，
-/// 只驱动徽标与默认勾选——默认勾选走的是 `risk`，由展开来源按同一批事实给出（见
-/// `DiskCleanCandidateFacts`）。两者刻意分开：让徽标去决定能否删除，等于在 `isCleanable`
-/// 之外开第二个判定点。
+/// Split from `safety`: "can it be deleted" belongs to `safety`; "what to know before deleting"
+/// belongs here. A note **does not affect cleanability**; it only drives badges and default
+/// selection—default selection follows `risk`, set by the expansion source from the same facts
+/// (see `DiskCleanCandidateFacts`). Keeping them separate is intentional: letting badges decide
+/// deletability would open a second decision point beyond `isCleanable`.
 enum DiskCleanCandidateNote: Equatable, Sendable {
-    /// 所在 git 仓库有未提交改动 / 未推送提交 / 检查失败（设计 §10.1，失败按"有改动"处理）。
-    /// 携带结构化原因而不是成品文案：本类型会进工件，文案属于视图层。
+    /// Owning git repo has uncommitted changes / unpushed commits / check failure (design §10.1;
+    /// failures treated as dirty). Carries structured reason, not finished copy: this type enters
+    /// the artifact; copy belongs in the view layer.
     case repositoryHasChanges(repositoryPath: String, reason: DiskCleanPurgeGitState.DirtyReason)
-    /// 所属工程根与命中的工程标记文件。`marker == nil` 表示无条件命中（`__pycache__`）。
+    /// Project root and matching project marker. `marker == nil` means unconditional hit (`__pycache__`).
     case developerProject(path: String, marker: String?)
-    /// `.zip` 未必是安装包（设计 §10.2）。
+    /// A `.zip` is not necessarily an installer (design §10.2).
     case mayNotBeInstaller
-    /// 下载不足 7 天，可能还没装。
+    /// Downloaded less than 7 days ago; may not be installed yet.
     case recentlyDownloaded(modifiedAt: Date)
 }
 
-/// 展开阶段才知道的候选属性。
+/// Candidate attributes known only at expansion time.
 ///
-/// 规则 target 的风险写死在目录里，但 P2 合成 target 做不到：同一个 `purge.artifacts` 下，
-/// 仓库干净的 `node_modules` 该默认勾选、有未提交改动的不该，而"仓库脏不脏"要跑完 git 才知道。
-/// 因此风险在这里允许被展开来源覆盖——**这是 `candidate.risk != target.risk` 的唯一来源**，
-/// 且只影响默认勾选（Planner 与执行器都不看 risk）。
+/// Rule-target risk is fixed in the catalog, but P2 synthetic targets cannot do that: under the
+/// same `purge.artifacts`, a clean-repo `node_modules` should default-select while one with
+/// uncommitted changes should not, and dirtiness is only known after git runs. Risk may therefore
+/// be overridden by the expansion source—**this is the only source of `candidate.risk !=
+/// target.risk`**, and it only affects default selection (Planner and executor ignore risk).
 struct DiskCleanCandidateFacts: Equatable, Sendable {
-    /// nil = 沿用 target 风险。
+    /// nil = inherit target risk.
     var risk: DiskCleanRisk?
     var notes: [DiskCleanCandidateNote] = []
 
     static let inherited = DiskCleanCandidateFacts()
 }
 
-// MARK: - 候选
+// MARK: - Candidate
 
-/// 一个清理候选。
+/// One cleanup candidate.
 ///
-/// `sizeResult == nil` 表示"已发现、大小未知"——展开阶段先流式出条目让用户 1-2 秒内看到内容，
-/// 求大小随后异步补齐（设计 §4.2）。未定大小与非 complete 的候选一律不可清理（§3.1 不变量）。
+/// `sizeResult == nil` means "discovered, size unknown"—expansion streams entries first so the
+/// user sees content in 1–2s, with sizing filled in asynchronously (design §4.2). Unsized and
+/// non-complete candidates are never cleanable (§3.1 invariant).
 struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
-    /// `targetID::physicalPath`。同一路径只会归属一个 target（§5.3 所有权归属）。
+    /// `targetID::physicalPath`. A path belongs to at most one target (§5.3 ownership).
     let id: String
     let targetID: String
-    /// v1 规则 id。审计、白名单迁移与面板分组都依赖它。
+    /// v1 rule id. Audit, whitelist migration, and panel grouping all depend on it.
     let legacyRuleID: String
     let category: DiskCleanCategoryID
-    /// **物理路径**（不含符号链接祖先，见设计 §13-6）。
+    /// **Physical path** (no symlink ancestors; design §13-6).
     let path: String
-    /// 默认勾选策略只看这里。规则候选取自 target；P2 候选可被展开来源覆盖
-    /// （见 `DiskCleanCandidateFacts`）。
+    /// Default-selection policy looks only here. Rule candidates take target risk; P2 candidates
+    /// may be overridden by the expansion source (see `DiskCleanCandidateFacts`).
     let risk: DiskCleanRisk
     let safety: DiskCleanSafetyStatus
-    /// 展示用附注。不参与可清理性判定。
+    /// Display notes. Not part of cleanability.
     let notes: [DiskCleanCandidateNote]
-    /// 求大小结果。nil = 尚未求大小。
+    /// Size result. nil = not sized yet.
     let sizeResult: DiskCleanSizeResult?
 
     init(
@@ -259,7 +272,7 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
         "\(targetID)::\(path)"
     }
 
-    /// 面板分组。legacyRuleID 无法识别时归入缓存组——绝不静默丢弃候选。
+    /// Panel group. Unrecognized legacyRuleID falls back to cache—never silently drop a candidate.
     var choice: DiskCleanChoice {
         DiskCleanChoice(legacyRuleID: legacyRuleID) ?? .cache
     }
@@ -268,21 +281,23 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
         (path as NSString).lastPathComponent
     }
 
-    /// 估算逻辑大小。未定大小时为 0，UI 应据 `sizeResult == nil` 显示"计算中"而不是"0 字节"。
+    /// Estimated logical size. 0 when unsized; UI should show "calculating" from
+    /// `sizeResult == nil`, not "0 bytes".
     var estimatedBytes: Int64 {
         max(sizeResult?.estimatedBytes ?? 0, 0)
     }
 
-    /// 是否可清理。
+    /// Whether the candidate is cleanable.
     ///
-    /// 设计 §3.1 的核心不变量落在这里：安全状态放行**且**大小已求出且 completeness 为 complete。
-    /// `crossedMountPoint` 无需单列——它必然出现在 `partial` 的原因集合里，已被 `isComplete` 拦下。
+    /// Design §3.1's core invariant lives here: safety allows **and** size is known **and**
+    /// completeness is complete. `crossedMountPoint` needs no separate check—it always appears in
+    /// the `partial` reason set and is already blocked by `isComplete`.
     var isCleanable: Bool {
         guard safety.isCleanable, let sizeResult else { return false }
         return sizeResult.completeness.isComplete && sizeResult.rootIdentity != nil
     }
 
-    /// 观测时刻。过期门（§4.4）取全体选中项的最小值。
+    /// Observation time. The expiry gate (§4.4) takes the minimum across selected items.
     var observedAt: Date? {
         sizeResult?.observedAt
     }
@@ -302,15 +317,15 @@ struct DiskCleanCandidate: Identifiable, Equatable, Sendable {
     }
 }
 
-// MARK: - 结果新鲜度
+// MARK: - Result freshness
 
-/// 结果过期门（设计 §4.4）。
+/// Result expiry gate (design §4.4).
 ///
-/// **定位声明：这是误操作防护**（防"扫完放半天再点清理"），**不构成 TOCTOU 防护**——
-/// 执行时的防线是身份验证与冻结原语（§7）。任何文档、注释、用户文案都不得声称此门
-/// "防止删除未审查内容"。
+/// **Positioning: misuse protection** (against "scan, leave for hours, then clean"), **not TOCTOU
+/// protection**—execution's real defenses are identity verification and the freeze primitive (§7).
+/// No doc, comment, or user copy may claim this gate "prevents deleting unreviewed content".
 enum DiskCleanScanFreshness {
-    /// 过期窗口。缓存 TTL 必须严格小于此值（见 `DiskCleanSizeCache.timeToLive`）。
+    /// Expiry window. Cache TTL must be strictly smaller (see `DiskCleanSizeCache.timeToLive`).
     static let window: TimeInterval = 300
 
     static func deadline(minObservedAt: Date) -> Date {
@@ -318,28 +333,29 @@ enum DiskCleanScanFreshness {
     }
 }
 
-// MARK: - 扫描事件与工件
+// MARK: - Scan events and artifact
 
 enum DiskCleanScanEvent: Sendable {
     case log(DiskCleanScanLogMessage)
-    /// 大小未知，不可勾选。
+    /// Size unknown; not selectable.
     case candidateFound(DiskCleanCandidate)
     case candidateSized(id: DiskCleanCandidate.ID, result: DiskCleanSizeResult)
     case categoryFinished(DiskCleanCategoryID)
     case finished(DiskCleanScanSummary)
 }
 
-/// 一次扫描的不可变工件，是 M4 `DiskCleanPlanner.makePlan` 的**唯一**输入（设计 §6.1）。
+/// Immutable artifact of one scan; the **only** input to M4 `DiskCleanPlanner.makePlan` (design §6.1).
 ///
-/// Planner 从这里推导排除集与保留前缀，Controller 只能递交 `selectedIDs` 做减法，
-/// 因此无法伪造证据、也无法漏传保留前缀。
+/// Planner derives exclusion set and reserved prefixes from this; the Controller can only pass
+/// `selectedIDs` as subtraction, so it cannot forge evidence or omit reserved prefixes.
 struct DiskCleanScanArtifact: Equatable, Sendable {
     let scope: DiskCleanScanScope
-    /// 全体候选（含不可清理项），携带最终 sizeResult。
+    /// All candidates (including non-cleanable), with final sizeResult.
     let candidates: [DiskCleanCandidate]
-    /// 被跳过 / 失败 target 的保留根（已展开 `~`）。
+    /// Reserved roots of skipped / failed targets (`~` already expanded).
     ///
-    /// 这些子树"存在但未扫描"，Planner 必须禁止删除它们的祖先（§6.1 第 3 条）。
+    /// These subtrees "exist but were not scanned"; Planner must forbid deleting their ancestors
+    /// (§6.1 item 3).
     let reservedRootPaths: [String]
     let limitations: [DiskCleanScanLimitation]
     let startedAt: Date
@@ -349,17 +365,19 @@ struct DiskCleanScanArtifact: Equatable, Sendable {
         candidates.filter(\.isCleanable)
     }
 
-    /// 不可清理候选的路径。
+    /// Paths of non-cleanable candidates.
     ///
-    /// **不是** `Planner` 的排除集：后者是"全体未入计划的候选"，随选中集变化，由 `makePlan`
-    /// 自行推导（§6.1 第 2 条明确不接受调用方传入）。本属性是与选中集无关的那一部分——
-    /// 锁定 / 白名单 / 保护 / partial / 未求大小——扫描引擎测试据此断言"不完整的候选确实进了排除集"。
+    /// **Not** the Planner exclusion set: that is "all candidates not in the plan", which varies
+    /// with selection and is derived inside `makePlan` (§6.1 item 2 explicitly rejects caller-supplied
+    /// exclusions). This property is the selection-independent slice—locked / whitelisted /
+    /// protected / partial / unsized—used by scan-engine tests to assert incomplete candidates
+    /// really entered the exclusion set.
     var exclusionPaths: [String] {
         candidates.filter { !$0.isCleanable }.map(\.path)
     }
 }
 
-/// 扫描汇总（设计 §4.5）。统计口径一律从工件派生，避免两份数字打架。
+/// Scan summary (design §4.5). Stats always derive from the artifact so two number sources cannot disagree.
 struct DiskCleanScanSummary: Equatable, Sendable {
     let artifact: DiskCleanScanArtifact
 
@@ -371,17 +389,18 @@ struct DiskCleanScanSummary: Equatable, Sendable {
     }
 }
 
-// MARK: - 控制器持有的扫描结果投影
+// MARK: - Controller-held scan result projection
 
-/// 扫描结果的 UI 投影。扫描进行中即存在（`artifact == nil`），完成后带上工件。
+/// UI projection of scan results. Exists while scanning (`artifact == nil`); completed scans carry the artifact.
 struct DiskCleanScanResult: Equatable, Sendable {
-    /// 产出本结果的扫描范围。与当前范围不等即"结果已陈旧"（`isResultStale`）——
-    /// 规则段是改了分组，开发产物段是加减了扫描根，两者语义相同。
+    /// Scope that produced this result. Differing from the current scope means "result is stale"
+    /// (`isResultStale`)—rules section: groups changed; developer-artifacts section: roots added/removed;
+    /// same semantics either way.
     let scope: DiskCleanScanScope
     let candidates: [DiskCleanCandidate]
     let scannedAt: Date
     let limitations: [DiskCleanScanLimitation]
-    /// 仅扫描完成后存在。清理入口只接受非 nil 的工件。
+    /// Present only after scan completion. Cleanup entry accepts only non-nil artifacts.
     let artifact: DiskCleanScanArtifact?
 
     init(
@@ -410,7 +429,8 @@ struct DiskCleanScanResult: Equatable, Sendable {
         !limitations.isEmpty
     }
 
-    /// 过期门时刻：全体可清理候选的最早观测时刻 + 300s。无可清理候选时无需过期。
+    /// Expiry deadline: earliest observation among cleanable candidates + 300s. No cleanable
+    /// candidates means no expiry needed.
     var expiryDeadline: Date? {
         cleanableCandidates
             .compactMap(\.observedAt)

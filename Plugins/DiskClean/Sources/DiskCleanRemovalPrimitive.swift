@@ -1,27 +1,31 @@
 import Darwin
 import Foundation
 
-// MARK: - 终态
+// MARK: - Terminal disposition
 
-/// 单项处置的终态（设计 §7.5）。
+/// Terminal disposition for one item (design §7.5).
 ///
-/// 每个 case 都是**如实**记录：删除中途失败不假装成功，回滚被挡不假装回滚。
+/// Every case is an **honest** record: mid-delete failure is not reported as success; blocked
+/// rollback is not reported as rolled back.
 enum DiskCleanRemovalDisposition: Equatable, Sendable {
-    /// 永久删除完成，暂存对象已不存在。
+    /// Permanent delete finished; staged object no longer exists.
     case removed
-    /// 已移入废纸篓。放回时会落在暂存名下，故一并回传（设计 §7.4 的取舍）。
+    /// Moved to Trash. Restoring will land under the staged name, so that name is returned too
+    /// (design §7.4 trade-off).
     case trashed(stagedName: String)
-    /// 身份复核不符：对象在扫描后被替换或改动过。原对象**未被触碰**。
+    /// Identity recheck mismatch: object was replaced or changed after the scan. Original object
+    /// was **not touched**.
     case changedSinceScan
-    /// 冻结之前失败，或冻结后失败且已成功回滚。原路径对象完好。
+    /// Failed before freeze, or failed after freeze and rolled back successfully. Original path object intact.
     case failed(reason: String)
-    /// 删除中途 I/O 失败，树已半删。回滚无意义，残骸留在暂存名下。
+    /// Mid-delete I/O failure; tree already half-deleted. Rollback is meaningless; debris stays under the staged name.
     case partiallyDeleted(stagedName: String, reason: String)
-    /// 冻结后处置失败且回滚被挡（原路径已被重建）。暂存对象保留，交 reconciliation。
+    /// Post-freeze disposition failed and rollback was blocked (original path already rebuilt).
+    /// Staged object retained for reconciliation.
     case rollbackBlocked(stagedName: String, reason: String)
 }
 
-/// 验证-冻结-删除原语的接缝。执行器只依赖本协议，测试据此注入 fake。
+/// Seam for the verify-freeze-delete primitive. Executor depends only on this protocol; tests inject fakes here.
 protocol DiskCleanPlanItemRemoving: Sendable {
     func remove(
         _ item: DiskCleanValidatedPlan.PlanItem,
@@ -29,12 +33,13 @@ protocol DiskCleanPlanItemRemoving: Sendable {
     ) -> DiskCleanRemovalDisposition
 }
 
-// MARK: - 注入接缝
+// MARK: - Injection seams
 
-/// 废纸篓接缝。
+/// Trash seam.
 ///
-/// 独立成协议不只是为了可测：真实实现会把对象放进用户的废纸篓，而仓库硬性要求
-/// "文件系统测试绝不触碰真实用户目录"，测试必须能拦下这一步。
+/// Separate protocol not only for testability: the real implementation puts objects in the user's
+/// Trash, and the repo hard-requires "filesystem tests must never touch real user directories", so
+/// tests must be able to block this step.
 protocol DiskCleanTrashing: Sendable {
     func trashItem(atPath path: String) throws
 }
@@ -45,11 +50,11 @@ struct DiskCleanSystemTrash: DiskCleanTrashing {
     }
 }
 
-/// prewalk 的条目设备号来源（设计 §7.4 的"全体 devid 一致性"）。
+/// Source of entry device IDs for prewalk (design §7.4 "whole-tree devid consistency").
 ///
-/// 挂载穿越无法在真实文件系统的临时目录里构造——挂载需要 root。因此设备号判定必须留一个
-/// 注入点，否则这条安全分支只能靠代码审读，永远测不到。与 M1 给 walker 留 entry source
-/// 接缝是同一个理由。
+/// Mount crossings cannot be constructed in a real-filesystem temp directory—mounting needs root.
+/// Device-ID checks therefore need an injection point; otherwise this safety branch is only
+/// reviewable, never testable. Same reason M1 left an entry-source seam on the walker.
 protocol DiskCleanStagedEntryDeviceResolving: Sendable {
     func deviceID(ofEntry nameBytes: [CChar], statResult: stat) -> UInt64
 }
@@ -60,27 +65,30 @@ struct DiskCleanRealStagedEntryDeviceResolver: DiskCleanStagedEntryDeviceResolvi
     }
 }
 
-// MARK: - 原语
+// MARK: - Primitive
 
-/// 验证-冻结-删除原语（设计 §7.3、§7.4）。安全核心。
+/// Verify-freeze-delete primitive (design §7.3, §7.4). The safety core.
 ///
-/// 顺序不可调换，每一步都在关一扇窗：
-/// 1. 父目录 `O_NOFOLLOW_ANY` 打开 + `fstatfs` 校验本地卷——路径任意一级被换成符号链接都会失败。
-/// 2. `fstatat(AT_SYMLINK_NOFOLLOW)` 复核 `(devid, fileID, fileType, mtime)`（普通文件另比对
-///    大小）——扫描后被替换的对象在这里被拦下，绝不误删。
-/// 3. journal 落盘并 **fsync 成功之后**才 rename——反过来会留下"无记录的暂存对象"，
-///    SafetyPolicy 会保护它不被扫描收走，但没人知道它的原名，用户数据事实上失踪。
-/// 4. `renameatx_np(RENAME_EXCL)` 原子改名到暂存名——此后对象脱离原路径，
-///    路径替换窗口关闭；`RENAME_EXCL` 保证绝不覆盖任何既有对象。
-/// 5. 处置（trash / 递归删除）一律作用于**暂存路径**。
+/// Order is not interchangeable; each step closes a window:
+/// 1. Open parent with `O_NOFOLLOW_ANY` + `fstatfs` local-volume check—any path component replaced
+///    by a symlink fails here.
+/// 2. `fstatat(AT_SYMLINK_NOFOLLOW)` rechecks `(devid, fileID, fileType, mtime)` (regular files also
+///    compare size)—objects replaced after the scan are stopped here; never mis-delete.
+/// 3. Journal is written and **fsync succeeds** before rename—the reverse would leave "unlogged
+///    staged objects" that SafetyPolicy protects from scans while nobody knows their original name,
+///    so user data effectively vanishes.
+/// 4. `renameatx_np(RENAME_EXCL)` atomically renames to the staged name—object leaves the original
+///    path and the path-replacement window closes; `RENAME_EXCL` never overwrites an existing object.
+/// 5. Disposition (trash / recursive delete) always acts on the **staged path**.
 ///
-/// 残余风险（设计 §7.7）：删除目录即删除其**执行时刻**的全部内容。根身份一致 ≠ 深层内容与
-/// 扫描时一致——根 mtime 只反映直接子项的增删。对缓存目录这是可接受语义。
+/// Residual risk (design §7.7): deleting a directory deletes its full contents **at execution time**.
+/// Root identity match ≠ deep contents match the scan—root mtime only reflects direct-child
+/// add/remove. Acceptable semantics for cache directories.
 struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
-    /// 暂存名前缀。SafetyPolicy 据此保护暂存对象不被任何扫描收进候选（§7.6）。
+    /// Staged-name prefix. SafetyPolicy uses it to keep staged objects out of every scan's candidates (§7.6).
     static let stagedNamePrefix = ".mactools-staged-"
-    /// prewalk 与递归删除的深度上限：每层持有一个目录 fd，无上限会撞 EMFILE 或爆栈。
-    /// 触顶按失败处理（fail closed），不冒险继续。
+    /// Depth cap for prewalk and recursive delete: each level holds a directory fd; uncapped would
+    /// hit EMFILE or blow the stack. Hitting the cap fails closed—do not risk continuing.
     static let maximumTreeDepth = 128
 
     private let journal: DiskCleanStagingJournal
@@ -113,14 +121,14 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
             return .failed(reason: "无法解析父目录：\(item.path)")
         }
 
-        // 全链拒符号链接：中间任意一级被换成指向别处的链接都会在这里失败。
+        // Reject symlinks along the whole chain: any intermediate component replaced by a link elsewhere fails here.
         let parentDescriptor = Darwin.open(
             location.parentPath,
             O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY | O_NONBLOCK
         )
         guard parentDescriptor >= 0 else {
             let code = errno
-            // 父目录不见了 → 对象也不可能还在原处，按"已变化"处理而不是失败。
+            // Parent gone → object cannot still be at the original place; treat as changed, not failed.
             return code == ENOENT ? .changedSinceScan : .failed(reason: Self.describe(code, doing: "打开父目录"))
         }
         defer { close(parentDescriptor) }
@@ -146,8 +154,9 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
             staged = object
         }
 
-        // 冻结后复核：暂存名下必须仍是同一个对象。RENAME_EXCL 之下这一步理论上不会失败，
-        // 但"理论上不会"正是安全代码需要显式验证的那一类断言。
+        // Post-freeze recheck: the object under the staged name must still be the same one.
+        // Under RENAME_EXCL this step "should never fail"—and "should never" is exactly the kind
+        // of assertion safety code must verify explicitly.
         guard identityMatches(parentDescriptor: parentDescriptor, name: staged.name, expected: item.rootIdentity) else {
             return rollback(
                 parentDescriptor: parentDescriptor,
@@ -175,7 +184,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         }
     }
 
-    // MARK: - 身份验证（§7.3）
+    // MARK: - Identity verification (§7.3)
 
     private enum IdentityOutcome {
         case match
@@ -194,12 +203,12 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
             return code == ENOENT ? .mismatch : .failure(reason: Self.describe(code, doing: "复核对象身份"))
         }
 
-        // (devid, fileID, fileType) 全等 + mtime 比对。被替换成同名新目录或符号链接
-        // 都会在这里出现 fileID 或 fileType 差异。
+        // (devid, fileID, fileType) exact match + mtime compare. Replacement by a same-named new
+        // directory or symlink shows up here as a fileID or fileType difference.
         guard DiskCleanRootIdentity(stat: status) == item.rootIdentity else {
             return .mismatch
         }
-        // 普通文件另比对大小：内容被改写而 mtime 恰好被保留时，大小是第二道证据。
+        // Regular files also compare size: when content is rewritten but mtime is preserved, size is the second evidence.
         if item.rootIdentity.fileType == .regularFile, status.st_size != item.estimatedBytes {
             return .mismatch
         }
@@ -216,7 +225,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         return DiskCleanRootIdentity(stat: status) == expected
     }
 
-    // MARK: - 冻结（§7.4 第 1、2 步）
+    // MARK: - Freeze (§7.4 steps 1–2)
 
     private struct StagedObject {
         let entryID: String
@@ -233,8 +242,9 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         location: ParentAnchoredPath,
         mode: DiskCleanRemovalMode
     ) -> StageOutcome {
-        // uuid 碰撞概率可忽略，但 RENAME_EXCL 的 EEXIST 也可能来自别的进程恰好占用了这个名字，
-        // 故换名重试一次；仍冲突就放弃，不无限重试。
+        // UUID collision probability is negligible, but RENAME_EXCL EEXIST can also mean another
+        // process happened to take the name—retry once with a new name; if still conflicting, give up
+        // (no infinite retries).
         for attempt in 0..<2 {
             let stagedName = stagedNameFactory()
             let entry = DiskCleanStagingJournal.Entry(
@@ -246,7 +256,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
                 mode: mode.rawValue
             )
 
-            // 顺序铁律：begin + fsync 成功返回之后才允许 rename。写不进 journal 就不动文件。
+            // Hard ordering rule: rename only after begin + fsync returns successfully. If the journal cannot be written, do not touch the file.
             do {
                 try journal.begin(entry)
             } catch {
@@ -265,7 +275,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
             }
 
             let code = errno
-            // rename 未发生 → 没有暂存对象，条目立即销账，不留给 reconciliation 空转。
+            // rename did not happen → no staged object; complete the entry immediately so reconciliation does not spin on it.
             journal.complete(entryID: entry.id, status: "abortedBeforeRename", at: now())
 
             if code == EEXIST, attempt == 0 {
@@ -279,11 +289,12 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         return .failure(.failed(reason: "暂存名连续冲突"))
     }
 
-    /// 回滚：`RENAME_EXCL` 改回原名。
+    /// Rollback: `RENAME_EXCL` rename back to the original name.
     ///
-    /// **原路径被重建是缓存进程的常见行为**（应用一边跑一边重建自己的缓存目录），
-    /// 此时绝不覆盖：保留暂存对象并返回 `rollbackBlocked`，journal 条目**保持未完成**，
-    /// 交由启动 reconciliation 或用户处理。
+    /// **Original path being rebuilt is common for cache processes** (apps rebuild their own cache
+    /// directories while running). Never overwrite in that case: keep the staged object, return
+    /// `rollbackBlocked`, leave the journal entry **incomplete**, and hand off to startup
+    /// reconciliation or the user.
     private func rollback(
         parentDescriptor: Int32,
         staged: StagedObject,
@@ -309,15 +320,15 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         return dispositionAfterRollback
     }
 
-    // MARK: - 废纸篓（§7.4 第 3 步）
+    // MARK: - Trash (§7.4 step 3)
 
     private func moveToTrash(
         parentDescriptor: Int32,
         staged: StagedObject,
         location: ParentAnchoredPath
     ) -> DiskCleanRemovalDisposition {
-        // 作用于**暂存路径**：`trashItem` 会按路径重新解析，对原路径调用它等于把
-        // §7.3 刚关上的替换窗口重新打开。
+        // Act on the **staged path**: `trashItem` re-resolves by path; calling it on the original
+        // path reopens the replacement window §7.3 just closed.
         let stagedPath = Self.join(location.parentPath, staged.name)
         do {
             try trash.trashItem(atPath: stagedPath)
@@ -335,7 +346,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         return .trashed(stagedName: staged.name)
     }
 
-    // MARK: - 永久删除（§7.4 第 3 步）
+    // MARK: - Permanent delete (§7.4 step 3)
 
     private func deletePermanently(
         parentDescriptor: Int32,
@@ -343,7 +354,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         location: ParentAnchoredPath,
         item: DiskCleanValidatedPlan.PlanItem
     ) -> DiskCleanRemovalDisposition {
-        // 非目录：单次 unlinkat，无需 prewalk。symlink 删链接本身，绝不跟随。
+        // Non-directory: single unlinkat, no prewalk. For symlinks, delete the link itself; never follow.
         guard item.rootIdentity.fileType == .directory else {
             guard unlinkat(parentDescriptor, staged.name, 0) == 0 else {
                 let reason = Self.describe(errno, doing: "删除对象")
@@ -359,8 +370,9 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
             return .removed
         }
 
-        // 非破坏性 prewalk：整棵树先只读走一遍，确认没有挂载穿越、没有异常条目。
-        // 通不过就回滚——半路才发现问题时树已经缺了一块，那时回滚已经没有意义。
+        // Non-destructive prewalk: walk the whole tree read-only first to confirm no mount
+        // crossings and no abnormal entries. Fail → rollback. Discovering problems mid-delete
+        // means the tree is already missing a piece, and rollback is then meaningless.
         switch prewalk(
             parentDescriptor: parentDescriptor,
             name: staged.name,
@@ -390,10 +402,11 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         }
 
         if let reason = deleteTree(parentDescriptor: parentDescriptor, name: staged.name, depth: 0) {
-            // **设计偏离**：§7.4 写"partiallyDeleted 时 journal 保留条目"，这里改为显式销账。
-            // 保留条目会让下次启动的 reconciliation 把这棵**半删的损坏树**改名回原路径——
-            // 应用会当它是完好的缓存继续使用。残骸留在暂存名下由审计与清理历史显式呈现，
-            // 比自动"恢复"一个坏掉的目录诚实得多。
+            // **Design deviation**: §7.4 says "keep the journal entry on partiallyDeleted"; here
+            // we complete it explicitly. Keeping the entry would let next startup's reconciliation
+            // rename this **half-deleted broken tree** back to the original path—apps would treat
+            // it as a healthy cache. Leaving debris under the staged name, surfaced by audit and
+            // clean history, is more honest than auto-"restoring" a broken directory.
             journal.complete(entryID: staged.entryID, status: "partiallyDeleted", at: now())
             return .partiallyDeleted(stagedName: staged.name, reason: reason)
         }
@@ -401,7 +414,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         return .removed
     }
 
-    // MARK: - fd 相对的树遍历
+    // MARK: - fd-relative tree walk
 
     private enum TreeOutcome {
         case ok
@@ -409,7 +422,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         case failure(reason: String)
     }
 
-    /// 只读 prewalk：全程 fd 相对寻址，逐条 `fstatat(AT_SYMLINK_NOFOLLOW)` 校验设备号。
+    /// Read-only prewalk: fully fd-relative addressing; per-entry `fstatat(AT_SYMLINK_NOFOLLOW)` device-ID check.
     private func prewalk(
         parentDescriptor: Int32,
         name: String,
@@ -463,10 +476,10 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         return .ok
     }
 
-    /// fd 递归删除。返回 nil 表示整棵树已删干净，否则返回首个失败原因。
+    /// fd recursive delete. Returns nil when the whole tree is gone; otherwise the first failure reason.
     ///
-    /// 条目名一路保存为原始 `[CChar]` 字节、不经 `String` 往返：非法 UTF-8 的文件名转成
-    /// String 再转回去会丢字节，删除时就会指向另一个（或不存在的）对象。
+    /// Entry names stay as raw `[CChar]` bytes with no `String` round-trip: illegal UTF-8 names
+    /// converted to String and back lose bytes and would point at a different (or missing) object on delete.
     private func deleteTree(parentDescriptor: Int32, name: String, depth: Int) -> String? {
         guard depth < Self.maximumTreeDepth else {
             return "目录层级超过 \(Self.maximumTreeDepth) 层"
@@ -475,7 +488,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
             return Self.describe(errno, doing: "打开暂存目录")
         }
 
-        // 先读完整个目录再删：边 readdir 边 unlink 会让目录流的位置语义变得依赖实现。
+        // Read the whole directory before deleting: interleaving readdir and unlink makes stream position semantics implementation-dependent.
         var entries: [(nameBytes: [CChar], isDirectory: Bool)] = []
         while let entry = directory.next() {
             var status = stat()
@@ -520,7 +533,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
             }
         }
 
-        // 目录 fd 必须先释放再 rmdir 自身，否则 unlinkat 在忙碌的挂载点上会更容易失败。
+        // Release the directory fd before rmdir of itself; otherwise unlinkat fails more easily on busy mount points.
         directory.close()
         if let failureReason {
             return failureReason
@@ -531,7 +544,7 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
         return nil
     }
 
-    // MARK: - 工具
+    // MARK: - Utilities
 
     private static func isLocalVolume(fileDescriptor: Int32) -> Bool {
         var fileSystem = statfs()
@@ -548,30 +561,30 @@ struct DiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving {
     }
 }
 
-// MARK: - 目录流
+// MARK: - Directory stream
 
-/// `openat` + `fdopendir` 的 RAII 包装。
+/// RAII wrapper around `openat` + `fdopendir`.
 ///
-/// `closedir` 会连带关闭底层 fd，因此 fd 的所有权全程只有一个归属：本类型。
+/// `closedir` also closes the underlying fd, so fd ownership has exactly one owner throughout: this type.
 private final class OpenDirectory {
     struct Entry {
-        /// NUL 结尾的原始字节名，直接回传给 `fstatat` / `unlinkat`。
+        /// NUL-terminated raw byte name, passed straight back to `fstatat` / `unlinkat`.
         let nameBytes: [CChar]
     }
 
     let descriptor: Int32
     private let stream: UnsafeMutablePointer<DIR>
     private var isClosed = false
-    /// `readdir` 的错误码。nil 表示正常枚举到结尾。
+    /// `readdir` error code. nil means enumeration finished normally.
     private(set) var readError: Int32?
 
     init?(parentDescriptor: Int32, name: String) {
-        // 单级组件 + 父目录已由 fd 锚定，故 O_NOFOLLOW 足够；符号链接一律不跟随。
+        // Single component + parent already fd-anchored, so O_NOFOLLOW is enough; never follow symlinks.
         let descriptor = openat(parentDescriptor, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK)
         guard descriptor >= 0 else { return nil }
         guard let stream = fdopendir(descriptor) else {
             let code = errno
-            // 本类型自己有 close()，不加模块限定会解析成实例方法。
+            // This type has its own close(); without the module qualifier it would resolve to the instance method.
             Darwin.close(descriptor)
             errno = code
             return nil

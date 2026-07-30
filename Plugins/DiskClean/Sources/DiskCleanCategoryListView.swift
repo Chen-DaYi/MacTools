@@ -1,9 +1,9 @@
 import SwiftUI
 import MacToolsPluginKit
 
-// MARK: - 分组
+// MARK: - Grouping
 
-/// 一个分类卡片的数据。视图从候选列表现算，不额外持有状态。
+/// Data for one category card. The view derives it from the candidate list and holds no extra state.
 struct DiskCleanCategoryGroup: Identifiable, Equatable, Sendable {
     let category: DiskCleanCategoryID
     let candidates: [DiskCleanCandidate]
@@ -13,7 +13,7 @@ struct DiskCleanCategoryGroup: Identifiable, Equatable, Sendable {
 
     var id: String { category.rawValue }
 
-    /// 按 `DiskCleanCategoryID.displayOrder`（风险低 → 高）分组。空分类不出现。
+    /// Grouped by `DiskCleanCategoryID.displayOrder` (low risk → high). Empty categories are omitted.
     static func groups(
         candidates: [DiskCleanCandidate],
         selection: DiskCleanSelectionProjection
@@ -33,13 +33,13 @@ struct DiskCleanCategoryGroup: Identifiable, Equatable, Sendable {
     }
 }
 
-// MARK: - 分类卡片列表
+// MARK: - Category card list
 
-/// 详情页的分类卡片列表（设计 §8.3 第 3 项）。
+/// Category card list on the detail page (design §8.3 item 3).
 struct DiskCleanCategoryListView: View {
     let groups: [DiskCleanCategoryGroup]
     let selection: DiskCleanSelectionProjection
-    /// 上一次执行的逐项终态，用于"内容已变化"一类徽标。
+    /// Per-item terminal status from the last run, used for badges such as "content changed".
     let outcomesByCandidateID: [DiskCleanCandidate.ID: DiskCleanExecutionItemResult.Outcome]
     let localization: PluginLocalization
     let isInteractionEnabled: Bool
@@ -74,7 +74,7 @@ struct DiskCleanCategoryListView: View {
     }
 }
 
-// MARK: - 分类卡片
+// MARK: - Category cards
 
 private struct DiskCleanCategoryCard: View {
     let group: DiskCleanCategoryGroup
@@ -103,8 +103,8 @@ private struct DiskCleanCategoryCard: View {
         HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             DiskCleanTriStateCheckbox(
                 state: state,
-                // "全选"= 选中本类所有低风险项；已有选中时点一下就是全部取消。
-                // 三态勾选框最忌讳"点了没反应"，因此两个方向都保证有变化。
+                // "Select all" = select every low-risk item in this category; if anything is already selected, one click clears all.
+                // Tri-state checkboxes must never feel like a no-op click, so both directions always produce a change.
                 onToggle: { onToggleCategory(group.category, !state.isChecked) },
                 help: checkboxHelp
             )
@@ -181,7 +181,7 @@ private struct DiskCleanCategoryCard: View {
     }
 }
 
-// MARK: - 候选行
+// MARK: - Candidate row
 
 private struct DiskCleanCandidateRow: View {
     let candidate: DiskCleanCandidate
@@ -231,7 +231,7 @@ private struct DiskCleanCandidateRow: View {
         .pluginSettingsListRowPadding()
     }
 
-    /// 未定大小显示"计算中"而不是"0 字节"——后者会让用户以为这一项是空的。
+    /// Unresolved sizes show "calculating…" rather than "0 bytes"—the latter would look like an empty item.
     private var sizeText: String {
         guard candidate.sizeResult != nil else {
             return localization.string("detail.candidate.sizing", defaultValue: "计算中…")
@@ -244,7 +244,7 @@ private struct DiskCleanCandidateRow: View {
     }
 }
 
-// MARK: - 徽标
+// MARK: - Badges
 
 struct DiskCleanBadge: Identifiable, Equatable, Sendable {
     enum Tone: Equatable, Sendable {
@@ -256,9 +256,9 @@ struct DiskCleanBadge: Identifiable, Equatable, Sendable {
     let text: String
     let tone: Tone
 
-    /// 逐项徽标（设计 §8.3）：使用中 / 白名单 / 保护 / 部分-原因 / 内容已变化 / 挂载点 / 计算中。
+    /// Per-item badges (design §8.3): in use / whitelist / protected / partial-reason / content changed / mount point / calculating.
     ///
-    /// 顺序即优先级：先说"上次清理时发生了什么"，再说"现在为什么不能选"。
+    /// Order is priority: first "what happened on the last cleanup", then "why it cannot be selected now".
     static func badges(
         for candidate: DiskCleanCandidate,
         outcome: DiskCleanExecutionItemResult.Outcome?,
@@ -270,8 +270,8 @@ struct DiskCleanBadge: Identifiable, Equatable, Sendable {
             badges.append(contentsOf: self.badges(for: outcome, localization: localization))
         }
 
-        // 候选自身的事实（P2 的仓库状态、安装包年龄）排在安全状态之前：
-        // 它们解释的是"为什么这一项没被默认勾选"，用户看到未勾选的第一反应就是找这个理由。
+        // Candidate-local facts (P2 repo status, installer age) come before safety status:
+        // they explain "why this item was not selected by default"—the first question users ask when something is unchecked.
         badges += candidate.notes.compactMap { badge(for: $0, localization: localization) }
 
         switch candidate.safety {
@@ -331,7 +331,7 @@ struct DiskCleanBadge: Identifiable, Equatable, Sendable {
         }
 
         let reasons = sizeResult.completeness.partialReasons
-        // 挂载点单列：它不是"没算完"，而是"这个目录里有别的卷，删它会越界"。
+        // Mount points are listed separately: not "incomplete sizing", but "this directory contains another volume; deleting it would cross boundaries".
         if reasons.contains(.crossedMountPoint) {
             badges.append(
                 DiskCleanBadge(
@@ -359,10 +359,10 @@ struct DiskCleanBadge: Identifiable, Equatable, Sendable {
         return badges
     }
 
-    /// 候选附注徽标（设计 §10 的 P2 徽标体系）。
+    /// Candidate annotation badges (design §10 P2 badge system).
     ///
-    /// "所属工程"不出徽标：它是候选的**定位信息**而非警示，挤在一行胶囊里会把真正需要注意的
-    /// "仓库有未提交改动"淹掉。工程路径由候选行的路径本身表达。
+    /// "Owning project" is not a badge: it is **locating information**, not a warning; packing it into the capsule row would drown the real
+    /// "uncommitted changes" signal. Project path is already expressed by the candidate path itself.
     private static func badge(
         for note: DiskCleanCandidateNote,
         localization: PluginLocalization
@@ -395,8 +395,8 @@ struct DiskCleanBadge: Identifiable, Equatable, Sendable {
         }
     }
 
-    /// 检查失败与真有改动分开说：前者是"没查出来，按有改动处理"，把它写成"有未提交改动"
-    /// 是在编造一个用户去仓库里找不到的事实。
+    /// Treat check failure separately from real dirt: the former is "could not determine; treat as dirty", writing it as "has uncommitted changes"
+    /// would invent a fact the user cannot find in the repo.
     private static func repositoryChangeText(
         _ reason: DiskCleanPurgeGitState.DirtyReason,
         localization: PluginLocalization
@@ -468,13 +468,13 @@ struct DiskCleanBadgeLabel: View {
     }
 }
 
-// MARK: - 三态勾选框
+// MARK: - Tri-state checkbox
 
-/// 三态勾选框。
+/// Tri-state checkbox.
 ///
-/// `Toggle` 只有开/关两态，而分类勾选必须能表达"选了一部分"——含 medium/high 项的分类
-/// 在"全选低风险"之后必然停在 mixed，用两态控件表示会一直显示"未全选"，
-/// 用户会以为自己点错了。
+/// `Toggle` only has on/off, but category selection must express "partially selected"—categories that contain medium/high items
+/// necessarily land in mixed after "select all low-risk"; a two-state control would keep showing "not fully selected"
+/// and users would think they mis-clicked.
 struct DiskCleanTriStateCheckbox: View {
     let state: DiskCleanCategorySelectionState
     let onToggle: () -> Void

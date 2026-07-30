@@ -2,21 +2,21 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 规则 v1 → v2 映射快照（设计 §5.4、§11"规则映射"行）。
+/// Rule v1 → v2 mapping snapshot (design §5.4, §11 "rule mapping").
 ///
-/// 这些断言是迁移的护栏：v2 目录只允许改变归属与元数据，不允许悄悄增删 glob 或丢掉 v1 规则 id。
+/// These assertions guard the migration: the v2 catalog may only change ownership and metadata, never silently add/remove globs or drop v1 rule IDs.
 final class DiskCleanRuleCatalogV2Tests: XCTestCase {
     private let catalog = DiskCleanRuleCatalogV2.current
 
-    /// v1 的伪动态规则只有静态兜底 glob，v2 把它们落为 path target；
-    /// 这是 v2 相对 v1 *目录* 新增的 glob 全集，任何其他新增都应让本测试失败。
+    /// v1 pseudo-dynamic rules only had static fallback globs; v2 lands them as path targets.
+    /// This is the full set of globs v2 adds relative to the v1 *catalog*; any other addition should fail this test.
     private let expectedGlobsAbsentFromFirstVersionCatalog: Set<String> = [
-        // v1 `.xcodeDerivedData` 兜底
+        // v1 `.xcodeDerivedData` fallback
         "~/Library/Developer/Xcode/DerivedData/*",
-        // v1 包管理器动态规则中未被其它规则覆盖的两条
+        // two v1 package-manager dynamic rules not covered by other rules
         "~/.cache/go-build/*",
         "~/Library/Caches/mise/*",
-        // v1 `.serviceWorkerCache` 兜底
+        // v1 `.serviceWorkerCache` fallback
         "~/Library/Application Support/Google/Chrome/*/Service Worker/CacheStorage/*/*",
         "~/Library/Application Support/Arc/*/Service Worker/CacheStorage/*/*",
         "~/Library/Application Support/BraveSoftware/Brave-Browser/*/Service Worker/CacheStorage/*/*",
@@ -25,11 +25,11 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         "~/Library/Application Support/Cursor/Service Worker/CacheStorage/*/*"
     ]
 
-    // MARK: - legacyRuleID 覆盖
+    // MARK: - legacyRuleID coverage
 
     func testLegacyRuleIDsCoverFirstVersionRuleIDsExactly() {
-        // 只看规则 target：P2 合成 target（`purge.*` / `installer.*`）不是 v1 规则的迁移产物，
-        // 它们的候选由专用扫描器发现，legacyRuleID 与自身 id 相同只是为了让审计日志有个稳定名字。
+        // Only rule targets: P2 synthetic targets (`purge.*` / `installer.*`) are not v1 migrations;
+        // dedicated scanners discover their candidates, and legacyRuleID equals id only so audit logs have a stable name.
         let legacyIDs = Set(catalog.ruleTargets.map(\.legacyRuleID))
         let firstVersionIDs = Set(DiskCleanRuleCatalog.moleFirstVersion.rules.map(\.id))
 
@@ -52,7 +52,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         )
     }
 
-    // MARK: - glob 归属
+    // MARK: - Glob ownership
 
     func testEveryFirstVersionGlobHasExactlyOneOwningTarget() {
         var ownersByGlob: [String: [String]] = [:]
@@ -63,18 +63,18 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         }
 
         let duplicated = ownersByGlob.filter { $0.value.count > 1 }
-        XCTAssertTrue(duplicated.isEmpty, "glob 被多个 target 同时拥有：\(duplicated)")
+        XCTAssertTrue(duplicated.isEmpty, "glob owned by multiple targets: \(duplicated)")
 
         let firstVersionGlobs = Self.firstVersionPathGlobs()
         let missing = firstVersionGlobs.subtracting(ownersByGlob.keys)
-        XCTAssertTrue(missing.isEmpty, "v1 glob 在 v2 无归属：\(missing.sorted())")
+        XCTAssertTrue(missing.isEmpty, "v1 glob has no v2 owner: \(missing.sorted())")
 
         let added = Set(ownersByGlob.keys).subtracting(firstVersionGlobs)
         XCTAssertEqual(added, expectedGlobsAbsentFromFirstVersionCatalog)
     }
 
     func testFirstVersionDuplicatedGlobsAreOwnedByTheMoreSpecificCategory() {
-        // v1 里 Codex 五项与 Figma 同时出现在两条规则中；v2 归一到语义更贴切的分类。
+        // In v1, five Codex globs and Figma appeared in two rules; v2 normalizes to the more specific category.
         XCTAssertEqual(
             Self.owner(of: "~/Library/Application Support/Codex/Cache/*", in: catalog)?.id,
             "cache.ai-assistants"
@@ -87,7 +87,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
 
     func testPathTargetsDeclareAtLeastOneGlob() {
         for target in catalog.ruleTargets where !target.isDynamic {
-            XCTAssertFalse(target.pathGlobs.isEmpty, "path target 无 glob：\(target.id)")
+            XCTAssertFalse(target.pathGlobs.isEmpty, "path target has no globs: \(target.id)")
         }
     }
 
@@ -100,57 +100,57 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         }
     }
 
-    // MARK: - 保留根
+    // MARK: - Reserved roots
 
     func testReservedRootPathsAreNonEmptyNormalizedAbsolutePaths() {
         let home = "/Users/diskclean-tests"
         for target in catalog.targets {
             if target.id.hasPrefix("purge.") {
-                // 唯一允许为空的一类：扫描根由用户配置，目录里没有固定前缀可写。
-                // 保留根改由展开来源在运行时给出，见
-                // `DiskCleanScanEngineTests.testDeveloperArtifactScanReservesConfiguredRoots`。
-                XCTAssertTrue(target.reservedRootPaths.isEmpty, "开发产物 target 不应写死保留根：\(target.id)")
+                // Only allowed empty class: scan roots are user-configured; the catalog has no fixed prefix.
+                // Reserved roots come from the expansion source at runtime; see
+                // `DiskCleanScanEngineTests.testDeveloperArtifactScanReservesConfiguredRoots`.
+                XCTAssertTrue(target.reservedRootPaths.isEmpty, "developer-artifact target must not hardcode reserved roots: \(target.id)")
             } else {
-                XCTAssertFalse(target.reservedRootPaths.isEmpty, "target 缺少保留根：\(target.id)")
+                XCTAssertFalse(target.reservedRootPaths.isEmpty, "target missing reserved roots: \(target.id)")
             }
             for path in target.expandedReservedRootPaths(homeDirectory: home) {
-                XCTAssertTrue(path.hasPrefix("/"), "保留根非绝对路径：\(target.id) \(path)")
-                XCTAssertFalse(path.contains { "*?[".contains($0) }, "保留根含 glob：\(target.id) \(path)")
-                XCTAssertFalse(path.contains("//"), "保留根未规范化：\(target.id) \(path)")
-                XCTAssertFalse(path.hasSuffix("/"), "保留根有尾斜杠：\(target.id) \(path)")
+                XCTAssertTrue(path.hasPrefix("/"), "reserved root is not absolute: \(target.id) \(path)")
+                XCTAssertFalse(path.contains { "*?[".contains($0) }, "reserved root contains glob: \(target.id) \(path)")
+                XCTAssertFalse(path.contains("//"), "reserved root not normalized: \(target.id) \(path)")
+                XCTAssertFalse(path.hasSuffix("/"), "reserved root has trailing slash: \(target.id) \(path)")
                 XCTAssertEqual(
                     path,
                     (path as NSString).standardizingPath,
-                    "保留根未规范化：\(target.id) \(path)"
+                    "reserved root not normalized: \(target.id) \(path)"
                 )
             }
         }
     }
 
-    /// 真正的判据是**路径任意一级都不能是符号链接**——sizing 的根 opener 用 `O_NOFOLLOW_ANY`
-    /// （详见 `DiskCleanRootOpener` 类型注释），中间级符号链接同样以 ELOOP 被拒；
-    /// 末级符号链接反而是合法候选（按链接本身计，不跟随）。
+    /// The real criterion is **no path component may be a symlink** — the sizing root opener uses `O_NOFOLLOW_ANY`
+    /// (see `DiskCleanRootOpener` docs); intermediate symlinks also fail with ELOOP.
+    /// A final-component symlink is a legitimate candidate (measured as the link, not followed).
     ///
-    /// 该判据只有运行时 `realpath(3)` 能定论，而目录里的 glob 大多指向本机不一定存在的路径，
-    /// 因此这里静态拦住 macOS 上三个众所周知的符号链接前缀（`/var -> private/var`、
-    /// `/tmp -> private/tmp`、`/etc -> private/etc`）。将来收录系统目录必须写 `/private/...` 物理路径。
-    /// 注意 `resolvingSymlinksInPath()` 帮不上忙：它倾向剥掉 `/private` 而不是补上。
+    /// Only runtime `realpath(3)` can decide that, and catalog globs often point at paths that may not exist on this machine,
+    /// so here we statically block the three well-known macOS symlink prefixes (`/var -> private/var`,
+    /// `/tmp -> private/tmp`, `/etc -> private/etc`). Future system directories must use `/private/...` physical paths.
+    /// Note `resolvingSymlinksInPath()` does not help: it tends to strip `/private` rather than add it.
     func testNoTargetPathStartsWithSymlinkedSystemPrefix() {
         let symlinkedRoots = ["/var", "/tmp", "/etc"]
         for target in catalog.targets {
             for path in target.pathGlobs + target.reservedRootPaths {
                 for root in symlinkedRoots {
-                    XCTAssertNotEqual(path, root, "路径需写 /private 物理路径：\(target.id) \(path)")
+                    XCTAssertNotEqual(path, root, "path must use /private physical path: \(target.id) \(path)")
                     XCTAssertFalse(
                         path.hasPrefix(root + "/"),
-                        "路径经过符号链接目录，应改写为 /private 物理路径：\(target.id) \(path)"
+                        "path traverses a symlinked directory; rewrite to /private physical path: \(target.id) \(path)"
                     )
                 }
             }
         }
     }
 
-    /// 保留根必须等于 glob 固定目录前缀的去重集合——独立重算一次，防止手改 glob 后忘记同步保留根。
+    /// Reserved roots must equal the deduped set of glob fixed-directory prefixes — recompute independently so hand-edited globs cannot drift.
     func testPathTargetReservedRootsEqualGlobFixedPrefixes() {
         for target in catalog.ruleTargets where !target.isDynamic {
             var expected: [String] = []
@@ -160,7 +160,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
                     expected.append(prefix)
                 }
             }
-            XCTAssertEqual(target.reservedRootPaths, expected, "保留根与 glob 固定前缀不一致：\(target.id)")
+            XCTAssertEqual(target.reservedRootPaths, expected, "reserved roots disagree with glob fixed prefixes: \(target.id)")
         }
     }
 
@@ -179,7 +179,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         )
     }
 
-    // MARK: - 风险与分类
+    // MARK: - Risk and category
 
     func testDynamicTargetsAreAtLeastMediumRisk() {
         let dynamicTargets = catalog.targets.filter(\.isDynamic)
@@ -194,7 +194,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
             ]
         )
         for target in dynamicTargets {
-            XCTAssertGreaterThanOrEqual(target.risk, .medium, "动态 target 风险过低：\(target.id)")
+            XCTAssertGreaterThanOrEqual(target.risk, .medium, "dynamic target risk too low: \(target.id)")
         }
     }
 
@@ -215,7 +215,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         let serviceWorkerTargets = catalog.targets.filter { $0.id.contains("service-worker") }
         XCTAssertEqual(serviceWorkerTargets.count, 6)
         for target in serviceWorkerTargets {
-            XCTAssertEqual(target.risk, .medium, "Service Worker target 应为 medium：\(target.id)")
+            XCTAssertEqual(target.risk, .medium, "Service Worker target should be medium: \(target.id)")
         }
     }
 
@@ -229,7 +229,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
 
     func testEveryCategoryOwnsAtLeastOneTarget() {
         for category in DiskCleanCategoryID.allCases {
-            XCTAssertFalse(catalog.targets(in: category).isEmpty, "分类无 target：\(category.rawValue)")
+            XCTAssertFalse(catalog.targets(in: category).isEmpty, "category has no targets: \(category.rawValue)")
         }
     }
 
@@ -250,13 +250,13 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         }
     }
 
-    // MARK: - 锁定与 FDA
+    // MARK: - Locking and FDA
 
     func testProcessLockedTargetsAlsoDeclareBundleIDs() {
         for target in catalog.targets where !target.skipWhenProcessIsRunning.isEmpty {
             XCTAssertFalse(
                 target.lockedByBundleIDs.isEmpty,
-                "声明了进程名却没有 bundle ID：\(target.id)"
+                "declares process names but no bundle IDs: \(target.id)"
             )
         }
     }
@@ -276,15 +276,15 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         )
     }
 
-    /// TCC 保护前缀表（设计 §9）。
+    /// TCC-protected prefix table (design §9).
     ///
-    /// 在测试里**独立声明一次**，标记由它反向推导：目录里手动置了 `requiresFullDiskAccess`
-    /// 却不该置、或该置而漏置，两个方向都会失败。新增 target 时若整组 glob 落在保护范围内
-    /// 却忘了标记，同样在这里被拦下。
+    /// Declared **independently in the test**; marks are reverse-derived from it: a catalog that sets
+    /// `requiresFullDiskAccess` wrongly, or omits it when required, fails either way. New targets whose
+    /// full glob set lands in protected ranges without the mark are also caught here.
     ///
-    /// 依据见 `DiskCleanRuleCatalogV2` 的类型注释；简述：容器类是 macOS 14 起的
-    /// `kTCCServiceSystemPolicyAppData`（会弹窗），Safari 缓存与 Suggestions/Calendars/AddressBook
-    /// 是 FDA / Calendar / Contacts 保护（静默 EPERM）。
+    /// Rationale is in `DiskCleanRuleCatalogV2` docs; briefly: containers use macOS 14+
+    /// `kTCCServiceSystemPolicyAppData` (prompts), Safari caches and Suggestions/Calendars/AddressBook
+    /// are FDA / Calendar / Contacts protected (silent EPERM).
     private static let tccProtectedPrefixes = [
         "~/Library/Containers/",
         "~/Library/Group Containers/",
@@ -304,13 +304,13 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
                 target.requiresFullDiskAccess,
                 allProtected,
                 allProtected
-                    ? "全部 glob 都在 TCC 保护范围内却未标记：\(target.id)"
-                    : "含非保护 glob 却标记了 FDA，会连可清理路径一起跳过：\(target.id)"
+                    ? "all globs are TCC-protected but not marked: \(target.id)"
+                    : "contains non-protected globs yet marked FDA, which would skip cleanable paths too: \(target.id)"
             )
         }
     }
 
-    /// 标记集合快照。防止"拆一个 target 忘了标记"这类改动无声改变未授权用户的扫描覆盖面。
+    /// Mark-set snapshot. Prevents silent coverage changes for unauthorized users when a target is split without carrying the mark.
     func testFullDiskAccessTargetSnapshot() {
         XCTAssertEqual(
             catalog.targets.filter(\.requiresFullDiskAccess).map(\.id).sorted(),
@@ -324,27 +324,27 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         )
     }
 
-    /// 动态与合成 target 永远不标记：前者的 provider 自己会失败降级，后者根本不经规则展开，
-    /// 标记只会让 `fdaRestricted` 报出一个用户找不到对应内容的 target id。
+    /// Dynamic and synthetic targets are never marked: the former degrades via their provider, the latter never goes through rule expansion;
+    /// a mark would only make `fdaRestricted` report a target id the user cannot map to content.
     func testDynamicAndExternalTargetsNeverRequireFullDiskAccess() {
         for target in catalog.targets where target.isDynamic || target.isExternallyDiscovered {
-            XCTAssertFalse(target.requiresFullDiskAccess, "不该标记 FDA：\(target.id)")
+            XCTAssertFalse(target.requiresFullDiskAccess, "must not mark FDA: \(target.id)")
         }
     }
 
-    /// 拆分出来的 FDA target 必须与原 target 同分类同风险——拆分的理由只有 TCC，
-    /// 不该顺手改变用户看到的归类。
+    /// Split-out FDA targets must keep the parent category and risk — the only reason to split is TCC,
+    /// not to change what the user sees.
     func testFullDiskAccessSplitsKeepParentCategoryAndRisk() {
         for target in catalog.targets where target.requiresFullDiskAccess {
             let siblings = catalog.targets(legacyRuleID: target.legacyRuleID)
             for sibling in siblings where sibling.id != target.id {
-                XCTAssertEqual(sibling.category, target.category, "拆分改变了分类：\(target.id)")
-                XCTAssertEqual(sibling.risk, target.risk, "拆分改变了风险：\(target.id)")
+                XCTAssertEqual(sibling.category, target.category, "split changed category: \(target.id)")
+                XCTAssertEqual(sibling.risk, target.risk, "split changed risk: \(target.id)")
             }
         }
     }
 
-    // MARK: - P2 合成 target
+    // MARK: - P2 synthetic targets
 
     func testExternalTargetsCoverEveryPurgeAndInstallerKind() {
         XCTAssertEqual(
@@ -356,21 +356,21 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
             DiskCleanInstallerKind.allCases.map(\.targetID)
         )
         for target in catalog.targets(in: .developerArtifacts) + catalog.targets(in: .installers) {
-            XCTAssertTrue(target.isExternallyDiscovered, "P2 target 应为 external：\(target.id)")
-            XCTAssertTrue(target.pathGlobs.isEmpty, "P2 target 不该有 glob：\(target.id)")
-            // 兜底风险必须 >= medium：展开来源漏给覆盖值时，方向应当是"不默认勾选"。
-            XCTAssertGreaterThanOrEqual(target.risk, .medium, "P2 兜底风险过低：\(target.id)")
+            XCTAssertTrue(target.isExternallyDiscovered, "P2 target should be external: \(target.id)")
+            XCTAssertTrue(target.pathGlobs.isEmpty, "P2 target must not have globs: \(target.id)")
+            // Fallback risk must be >= medium: if the expansion source omits an override, default to not selected.
+            XCTAssertGreaterThanOrEqual(target.risk, .medium, "P2 fallback risk too low: \(target.id)")
         }
     }
 
-    /// 合成 target 必须真实存在于目录里——`DiskCleanPlanner.makePlan` 按 targetID 回查目录，
-    /// 查不到就抛 `unknownTarget`，P2 候选会变成永远清理不掉的死项。
+    /// Synthetic targets must actually exist in the catalog — `DiskCleanPlanner.makePlan` looks up by targetID,
+    /// throws `unknownTarget` if missing, and P2 candidates become permanently uncleansable dead items.
     func testEveryExternalTargetIDResolvesInCatalog() {
         for kind in DiskCleanPurgeKind.allCases {
-            XCTAssertNotNil(catalog.target(id: kind.targetID), "缺少 target：\(kind.targetID)")
+            XCTAssertNotNil(catalog.target(id: kind.targetID), "missing target: \(kind.targetID)")
         }
         for kind in DiskCleanInstallerKind.allCases {
-            XCTAssertNotNil(catalog.target(id: kind.targetID), "缺少 target：\(kind.targetID)")
+            XCTAssertNotNil(catalog.target(id: kind.targetID), "missing target: \(kind.targetID)")
         }
     }
 
@@ -382,7 +382,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         )
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func assertTarget(
         _ id: String,
@@ -392,10 +392,10 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         line: UInt = #line
     ) {
         guard let target = catalog.target(id: id) else {
-            return XCTFail("缺少 target：\(id)", file: file, line: line)
+            return XCTFail("missing target: \(id)", file: file, line: line)
         }
-        XCTAssertEqual(target.category, category, "分类不符：\(id)", file: file, line: line)
-        XCTAssertEqual(target.risk, risk, "风险不符：\(id)", file: file, line: line)
+        XCTAssertEqual(target.category, category, "category mismatch: \(id)", file: file, line: line)
+        XCTAssertEqual(target.risk, risk, "risk mismatch: \(id)", file: file, line: line)
     }
 
     private static func owner(of glob: String, in catalog: DiskCleanRuleCatalogV2) -> DiskCleanRuleTarget? {
@@ -414,7 +414,7 @@ final class DiskCleanRuleCatalogV2Tests: XCTestCase {
         return globs
     }
 
-    /// 首个 glob 元字符之前的最后一个完整路径组件。无元字符时即路径本身。
+    /// Last complete path component before the first glob metacharacter. Without metacharacters, the path itself.
     private static func fixedDirectoryPrefix(of glob: String) -> String {
         guard let metaIndex = glob.firstIndex(where: { "*?[".contains($0) }) else {
             return glob

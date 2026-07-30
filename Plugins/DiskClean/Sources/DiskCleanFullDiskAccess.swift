@@ -2,30 +2,33 @@ import AppKit
 import Foundation
 import os
 
-// MARK: - 探测 seam
+// MARK: - Probe seam
 
-/// 完全磁盘访问探测（设计 §9）。
+/// Full Disk Access probe (design §9).
 ///
-/// 插件本地实现，不经宿主权限卡：PluginKit v3 的 `PluginPermissionKind` 没有 fullDiskAccess，
-/// 加一个新 case 会改变共享 ABI，而 loader 对 `pluginKitVersion` 是严格相等校验。
+/// Implemented locally in the plugin, not via host permission cards: PluginKit v3's
+/// `PluginPermissionKind` has no fullDiskAccess case, and adding one would change the
+/// shared ABI while the loader requires exact `pluginKitVersion` equality.
 protocol DiskCleanFullDiskAccessProbing: Sendable {
     var hasFullDiskAccess: Bool { get }
 }
 
-/// 恒为"已授权"。扫描引擎的测试默认值：不跳过任何 target，扫描覆盖面与 v1 逐条一致。
+/// Always reports authorized. Default for scan-engine tests so no target is skipped and
+/// coverage matches v1 entry-for-entry.
 struct DiskCleanAssumedFullDiskAccess: DiskCleanFullDiskAccessProbing {
     var hasFullDiskAccess: Bool { true }
 }
 
-/// 单个文件能否以只读打开。真实探针与测试替身的分界线。
+/// Whether a single file can be opened read-only. Boundary between the real probe and test doubles.
 protocol DiskCleanFileReadabilityProbing: Sendable {
     func canOpenForReading(atPath path: String) -> Bool
 }
 
-/// `FileHandle(forReadingAtPath:)`：**开即关，不读任何字节**。
+/// `FileHandle(forReadingAtPath:)`: **open then immediately close; read no bytes**.
 ///
-/// 用 `FileHandle` 而不是 `open(2)`：探测目标是 TCC 保护文件，这里要的正是 Foundation
-/// 那套"打不开就返回 nil"的静默失败——不抛错、不写日志、不产生任何用户可见痕迹。
+/// Prefer `FileHandle` over `open(2)`: probe targets are TCC-protected files, and Foundation's
+/// silent failure ("return nil if it cannot open") is exactly what we want—no throw, no log,
+/// no user-visible side effect.
 struct DiskCleanFileHandleReadabilityProbe: DiskCleanFileReadabilityProbing {
     func canOpenForReading(atPath path: String) -> Bool {
         guard let handle = FileHandle(forReadingAtPath: path) else { return false }
@@ -34,27 +37,33 @@ struct DiskCleanFileHandleReadabilityProbe: DiskCleanFileReadabilityProbing {
     }
 }
 
-// MARK: - 能力探针
+// MARK: - Capability probe
 
-/// 完全磁盘访问能力探针（设计 §9）。
+/// Full Disk Access capability probe (design §9).
 ///
-/// **没有查询 FDA 的 API**，只能拿一个已知受保护的文件试开：能开 = 有 FDA。探测本身绝不
-/// 触发弹窗——FDA 类保护是静默 EPERM，只有 Documents/Downloads/Desktop 与沙盒容器
-/// （`kTCCServiceSystemPolicyAppData`）那几类才会弹窗，这里刻意避开它们。
+/// **There is no FDA query API**, so try opening a known protected file: openable = has FDA.
+/// The probe itself must never present a prompt—FDA-class protection is silent EPERM; only
+/// Documents/Downloads/Desktop and sandbox containers (`kTCCServiceSystemPolicyAppData`) prompt,
+/// and those are deliberately avoided here.
 ///
-/// **进程内缓存**：FDA 绑定进程启动，运行期间不会变化——这正是状态卡要提示"退出并重新打开"
-/// 的原因。缓存顺带保证同一次扫描里每个 target 看到的是同一个答案。
+/// **Process-local cache**: FDA is bound at process launch and does not change while running—
+/// which is why the status card tells users to quit and reopen. The cache also ensures every
+/// target in the same scan sees the same answer.
 final class DiskCleanFullDiskAccessProbe: DiskCleanFullDiskAccessProbing, @unchecked Sendable {
-    /// 进程级共享实例。扫描引擎与详情页读同一份结果，不会出现"引擎说没有、界面说有"。
+    /// Process-wide shared instance. Scan engine and detail page read the same result so they
+    /// never disagree ("engine says no, UI says yes").
     static let shared = DiskCleanFullDiskAccessProbe()
 
-    /// 探测目标，按顺序试，先开成功者为准。
+    /// Probe targets, tried in order; first successful open wins.
     ///
-    /// - TCC.db：任何做过一次隐私授权决定的账户都有，覆盖面最广，且是纯 FDA 类保护。
-    /// - Safari 书签：TCC.db 万一缺失时的兜底（例如全新账户）。同属静默 EPERM 类。
+    /// - TCC.db: present on any account that has made a privacy decision; broadest coverage and
+    ///   pure FDA-class protection.
+    /// - Safari bookmarks: fallback if TCC.db is missing (e.g. brand-new account). Same silent
+    ///   EPERM class.
     ///
-    /// 两个都打不开时返回"未授权"。文件不存在与被拒绝在这里同样处理：都无法证明有 FDA，
-    /// 而误报"有"会让引擎照常展开受保护 target，换来一堆 permissionDenied 的空候选。
+    /// If both fail to open, report unauthorized. Missing file and denial are treated the same:
+    /// neither proves FDA. A false positive would let the engine expand protected targets and
+    /// produce a pile of empty permissionDenied candidates.
     static func defaultProbePaths(homeDirectory: String = NSHomeDirectory()) -> [String] {
         [
             homeDirectory + "/Library/Application Support/com.apple.TCC/TCC.db",
@@ -78,26 +87,27 @@ final class DiskCleanFullDiskAccessProbe: DiskCleanFullDiskAccessProbing, @unche
         if let cached = cachedResult.withLock({ $0 }) {
             return cached
         }
-        // 锁外求值：探测是文件系统调用，持锁跑它会让并发的 sizing 线程排队等一次 open。
-        // 并发首访至多多探一次，结果相同，无副作用。
+        // Evaluate outside the lock: probing is a filesystem call; holding the lock would make
+        // concurrent sizing threads queue on a single open. Concurrent first visits may probe
+        // once extra at most; results are identical and side-effect free.
         let result = probePaths.contains { readability.canOpenForReading(atPath: $0) }
         cachedResult.withLock { $0 = result }
         return result
     }
 }
 
-// MARK: - 授权引导
+// MARK: - Authorization guide
 
-/// "前往授权"的落点（设计 §9）。
+/// Destination for "Open Settings" (design §9).
 enum DiskCleanFullDiskAccessGuide {
-    /// 系统设置 → 隐私与安全性 → 完全磁盘访问。
+    /// System Settings → Privacy & Security → Full Disk Access.
     static let settingsURLString = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
 
     static var settingsURL: URL? {
         URL(string: settingsURLString)
     }
 
-    /// 打开系统设置。URL 构造失败时静默返回——按钮点了没反应好过崩溃。
+    /// Open System Settings. Silently return if URL construction fails—a no-op button is better than a crash.
     @MainActor
     static func openSettings() {
         guard let settingsURL else { return }

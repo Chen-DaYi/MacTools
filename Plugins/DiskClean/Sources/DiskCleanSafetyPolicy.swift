@@ -99,12 +99,15 @@ struct DiskCleanSafetyPolicy: Sendable {
     private func sensitiveProtectionReason(for path: String) -> String? {
         let lower = path.lowercased()
 
-        // 暂存中的对象（设计 §7.6）：宽 glob 与祖先分解都可能扫到孤儿暂存对象——
-        // `directChildren` 连隐藏项一起返回，点开头挡不住它。唯一允许触碰这些对象的是
-        // 启动 reconciliation，它按 journal 直接寻址，不经候选管线。
+        // Staged objects (design §7.6): wide globs and ancestor decomposition can both
+        // discover orphan staged objects — `directChildren` returns hidden entries too,
+        // so a leading-dot filter is not enough. The only code allowed to touch these
+        // objects is startup reconciliation, which addresses them via the journal and
+        // never through the candidate pipeline.
         //
-        // 设计写的是"末级组件匹配"，这里放宽到**任意一级**：暂存树内部的路径同样必须挡住，
-        // 而 `.mactools-staged-` 是本插件保留的前缀，误伤的代价只是"少清理一个目录"。
+        // The design says "last-path-component match"; we broaden that to **any** component
+        // so paths inside the staging tree are blocked as well. `.mactools-staged-` is a
+        // plugin-reserved prefix; the cost of over-matching is only "skip cleaning one directory".
         if Self.containsStagedComponent(lower) {
             return "staging in progress"
         }

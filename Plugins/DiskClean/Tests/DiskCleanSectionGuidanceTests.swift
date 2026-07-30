@@ -2,13 +2,13 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// P2 分段的空态判定（设计 §10）。
+/// Empty-state resolution for P2 sections (design §10).
 ///
-/// 这些状态之所以必须分开：它们对用户的要求完全不同——先去加文件夹、先去点扫描、
-/// 先去授权、文件夹已经没了、以及"真的没有"。合成一个"暂无内容"等于让用户自己猜。
+/// These states must stay distinct: they ask the user for completely different next steps — add folders, start a scan,
+/// grant access, roots are gone, or truly empty. Collapsing into one "no content" leaves the user guessing.
 @MainActor
 final class DiskCleanSectionGuidanceTests: XCTestCase {
-    // MARK: - 无根引导
+    // MARK: - Needs-roots guidance
 
     func testDeveloperArtifactsWithoutRootsAsksForFolders() {
         let snapshot = makeSnapshot(scope: .developerArtifacts(roots: []), scanResult: nil)
@@ -16,11 +16,11 @@ final class DiskCleanSectionGuidanceTests: XCTestCase {
         XCTAssertEqual(DiskCleanSectionGuidance.resolve(snapshot), .needsRoots)
     }
 
-    /// 无根优先于"没扫过"：让用户看到"点扫描"而按钮是灰的，是最让人困惑的组合。
+    /// Needs-roots outranks not-scanned: showing "scan" with a disabled button is the most confusing combination.
     func testNeedsRootsOutranksNotScanned() {
         let snapshot = makeSnapshot(scope: .developerArtifacts(roots: []), scanResult: nil)
 
-        XCTAssertFalse(snapshot.canScan, "无根时扫描入口必须是禁用的")
+        XCTAssertFalse(snapshot.canScan, "scan entry must be disabled without roots")
         XCTAssertEqual(DiskCleanSectionGuidance.resolve(snapshot), .needsRoots)
     }
 
@@ -35,13 +35,13 @@ final class DiskCleanSectionGuidanceTests: XCTestCase {
         let snapshot = makeSnapshot(scope: .installers, scanResult: nil)
 
         XCTAssertEqual(DiskCleanSectionGuidance.resolve(snapshot), .notScanned)
-        XCTAssertTrue(snapshot.canScan, "安装包段范围固定，永远可以扫描")
+        XCTAssertTrue(snapshot.canScan, "installer section has fixed scope and is always scannable")
     }
 
-    // MARK: - 授权引导
+    // MARK: - Authorization guidance
 
-    /// `denied` 与"扫过但没有候选"必须分开：`~/Downloads` 里可能正躺着几十 GB 安装包，
-    /// 显示"没有可清理项"是在骗用户。
+    /// `denied` must stay distinct from "scanned with no candidates": `~/Downloads` may hold tens of GB of installers;
+    /// showing "nothing to clean" would mislead the user.
     func testDeniedScanRootShowsAuthorizationGuidanceInsteadOfEmptyState() {
         let snapshot = makeSnapshot(
             scope: .installers,
@@ -71,7 +71,7 @@ final class DiskCleanSectionGuidanceTests: XCTestCase {
         XCTAssertEqual(DiskCleanSectionGuidance.resolve(snapshot), .rootsUnreadable(paths: ["/code"]))
     }
 
-    /// 同时有被拒绝与失效的根时先说授权：那是用户唯一能自己解决的一个。
+    /// When both denied and invalid roots exist, prefer authorization — the one the user can fix themselves.
     func testPermissionDeniedOutranksOtherUnreadableReasons() {
         let snapshot = makeSnapshot(
             scope: .developerArtifacts(roots: ["/a", "/b"]),
@@ -88,9 +88,9 @@ final class DiskCleanSectionGuidanceTests: XCTestCase {
         XCTAssertEqual(DiskCleanSectionGuidance.resolve(snapshot), .accessDenied(path: "/b"))
     }
 
-    // MARK: - 有候选时不抢版面
+    // MARK: - Candidates keep the stage
 
-    /// 一个根被拒、另一个扫出了东西：列表照常展示，根的问题交给受限横幅。
+    /// One root denied, another yields candidates: show the list; root problems go to the limited banner.
     func testCandidatesTakePrecedenceOverRootProblems() {
         let scope = DiskCleanScanScope.developerArtifacts(roots: ["/a", "/b"])
         let snapshot = makeSnapshot(
@@ -114,7 +114,7 @@ final class DiskCleanSectionGuidanceTests: XCTestCase {
         XCTAssertEqual(DiskCleanSectionGuidance.resolve(snapshot), .empty)
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func makeSnapshot(
         scope: DiskCleanScanScope,

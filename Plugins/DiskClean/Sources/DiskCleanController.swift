@@ -6,17 +6,17 @@ enum DiskCleanControllerPhase: Equatable, Sendable {
     case idle
     case scanning
     case scanned
-    /// 永久删除的第二步（设计 §8.4）。计划已铸造并冻结，等待用户确认。
+    /// Second step of permanent delete (design §8.4). The plan is cast and frozen, waiting for user confirmation.
     case confirming
     case cleaning
     case completed
 }
 
-/// 过期门的时间来源（设计 §4.4 的可注入 Clock）。
+/// Time source for the expiry gate (injectable Clock from design §4.4).
 ///
-/// 过期必须是**时间驱动**的：门限到点就要把按钮变灰，而不是等用户下次点击才发现。
-/// 因此除了"现在几点"还需要"睡到某个时刻"，测试才能在不真等 300 秒的前提下驱动这次转换。
-/// 确认窗口（§8.4）复用同一时钟。
+/// Expiry must be **time-driven**: buttons grey out when the threshold hits, not only when the user next clicks.
+/// So besides "what time is it now" we need "sleep until", so tests can drive the transition without really waiting 300s.
+/// The confirmation window (§8.4) reuses the same clock.
 protocol DiskCleanClock: Sendable {
     var now: Date { get }
     func sleep(until deadline: Date) async throws
@@ -28,7 +28,7 @@ struct DiskCleanSystemClock: DiskCleanClock {
     func sleep(until deadline: Date) async throws {
         let interval = deadline.timeIntervalSinceNow
         guard interval > 0 else { return }
-        // 上限只是防御性钳制：过期窗口是 300 秒，不可能接近溢出。
+        // The upper bound is defensive only: the expiry window is 300s and cannot approach overflow.
         let nanoseconds = min(interval, 86_400) * 1_000_000_000
         try await Task.sleep(nanoseconds: UInt64(nanoseconds))
     }
@@ -36,21 +36,21 @@ struct DiskCleanSystemClock: DiskCleanClock {
 
 struct DiskCleanControllerSnapshot: Equatable, Sendable {
     let phase: DiskCleanControllerPhase
-    /// 当前扫描范围。规则段是勾选的分组，开发产物段是配置的扫描根，安装包段无参数。
+    /// Current scan scope. Rules segment uses checked groups; purge segment uses configured roots; installer segment has no parameters.
     let scope: DiskCleanScanScope
     let scanResult: DiskCleanScanResult?
     let executionResult: DiskCleanExecutionResult?
-    /// 选择的扫描范围与结果不一致。
+    /// Selected scan scope no longer matches the result.
     let isResultStale: Bool
-    /// 过期门已到（设计 §4.4）。误操作防护，不是 TOCTOU 防护。
+    /// Expiry gate has fired (design §4.4). Mis-operation protection, not TOCTOU protection.
     let isResultExpired: Bool
     let errorMessage: String?
     let scanLogEntries: [DiskCleanScanLogEntry]
-    /// 当前删除方式。冻结进计划的是铸造时刻的值，改这里会作废待确认计划。
+    /// Current removal mode. The plan freezes the value at cast time; changing this invalidates a pending plan.
     let removalMode: DiskCleanRemovalMode
-    /// 待确认计划的冻结摘要。仅 `confirming` 阶段非 nil；完整计划留在 Controller 私有状态里。
+    /// Frozen summary of the pending plan. Non-nil only in the `confirming` phase; the full plan stays in Controller private state.
     let pendingPlan: DiskCleanPendingPlanSummary?
-    /// 权威选择状态的只读投影（设计 §8.1）。菜单栏与详情页读同一份。
+    /// Read-only projection of authoritative selection state (design §8.1). Menu bar and detail page read the same copy.
     let selection: DiskCleanSelectionProjection
 
     init(
@@ -79,7 +79,7 @@ struct DiskCleanControllerSnapshot: Equatable, Sendable {
         self.selection = selection
     }
 
-    /// 规则段的勾选分组。其余分段没有分组概念，返回空集。
+    /// Checked groups for the rules segment. Other segments have no group concept and return an empty set.
     var selectedChoices: Set<DiskCleanChoice> {
         scope.choices
     }
@@ -121,14 +121,14 @@ struct DiskCleanControllerSnapshot: Equatable, Sendable {
         phase == .scanning || phase == .cleaning
     }
 
-    /// 范围为空即禁用扫描：规则段是一个分组都没勾，开发产物段是还没添加文件夹。
-    /// 两种情况都要在界面上给引导，而不是让用户点一个什么都不会发生的按钮。
+    /// Disable scan when scope is empty: rules segment means no group checked; purge segment means no folder added yet.
+    /// Both cases need UI guidance rather than a button that does nothing.
     var canScan: Bool {
         !isBusy && phase != .confirming && !scope.isEmpty
     }
 
-    /// 可清理 = 有结果、结果新鲜、**且用户当前选中了东西**。
-    /// 选中集空时按钮变灰而不是"清理全部"——菜单栏与详情页读的是同一份选择。
+    /// Can clean = has a result, result is fresh, **and the user currently has a selection**.
+    /// When the selection is empty the button greys out rather than meaning "clean everything"—menu bar and detail page share one selection.
     var canClean: Bool {
         phase == .scanned
             && !isResultStale
@@ -151,38 +151,38 @@ protocol DiskCleanControlling: AnyObject {
     var onStateChange: (() -> Void)? { get set }
     var snapshot: DiskCleanControllerSnapshot { get }
 
-    /// 整体替换扫描范围。开发产物段的扫描根增删走这里。
+    /// Replace the whole scan scope. Purge-segment root add/remove goes through here.
     func setScope(_ scope: DiskCleanScanScope)
-    /// 规则段的分组勾选。非规则范围下为空操作。
+    /// Group checkbox for the rules segment. No-op under non-rules scopes.
     func setChoice(_ choice: DiskCleanChoice, isSelected: Bool)
     func setRemovalMode(_ mode: DiskCleanRemovalMode)
     func setCandidateSelected(_ candidateID: DiskCleanCandidate.ID, isSelected: Bool)
-    /// 分类级全选（`true` = 选中本类所有低风险项）/ 全不选。
+    /// Category-level select all (`true` = all low-risk items in the category) / deselect all.
     func setCategorySelection(_ category: DiskCleanCategoryID, isSelected: Bool)
     func scan()
-    /// 清理当前选中集。不接收 id 参数——选中集只有一处权威（设计 §8.1）。
+    /// Clean the current selection. Takes no id parameter—there is one authoritative selection (design §8.1).
     func clean()
     func confirmPendingClean()
     func cancelPendingClean()
     func cancelCurrentOperation()
 }
 
-/// 状态机 + 事件流消费 + 过期时钟 + 确认窗口。
+/// State machine + event-stream consumption + expiry clock + confirmation window.
 ///
-/// 四个机制原样保留：
-/// - **operationID 世代**：每次操作换一个 UUID，过期操作的事件与收尾一律丢弃，
-///   避免"上一次扫描的尾巴"污染新一轮状态。
-/// - **节流发布**：扫描事件逐条到达但快照按 ~250ms 批量发布（AGENTS.md 高频源例外条款），
-///   否则每个候选都会触发一次宿主重建。
-/// - **日志环形上限**：最多保留 500 条。
-/// - **快照单一出口**：所有状态发布都经 `publish`，`removalMode` 与 `pendingPlan`
-///   一律从 Controller 私有状态派生，不可能出现"某个分支忘了带上待确认计划"。
+/// Four mechanisms kept as-is:
+/// - **operationID generation**: each operation gets a new UUID; events and completion from stale operations are dropped,
+///   so a "tail from the previous scan" cannot pollute the new round.
+/// - **Throttled publish**: scan events arrive one-by-one but snapshots publish in ~250ms batches (AGENTS.md high-frequency-source exception),
+///   otherwise every candidate would force a host rebuild.
+/// - **Ring log cap**: keep at most 500 entries.
+/// - **Single snapshot exit**: every state publish goes through `publish`; `removalMode` and `pendingPlan`
+///   always derive from Controller private state, so no branch can forget a pending plan.
 @MainActor
 final class DiskCleanController: ObservableObject, DiskCleanControlling {
-    /// 扫描期快照发布间隔（设计 §8.2 的 ~250ms 节流）。
+    /// Snapshot publish interval during scans (~250ms throttle from design §8.2).
     private static let scanFlushIntervalNanoseconds: UInt64 = 250_000_000
     private static let maximumLogEntries = 500
-    /// 确认窗口上限（设计 §8.4）。实际窗口取 `min(60s, 过期门剩余时间)`。
+    /// Confirmation window cap (design §8.4). Actual window is `min(60s, remaining expiry time)`.
     static let confirmationWindow: TimeInterval = 60
 
     var onStateChange: (() -> Void)?
@@ -198,7 +198,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     private let localization: PluginLocalization
     private let clock: any DiskCleanClock
     private let removalModeStore: any DiskCleanRemovalModeStoring
-    /// 铸造计划时查 target 的锁定声明。与 `DiskCleanScanEngine` 注入同一份目录。
+    /// Look up target lock declarations when casting a plan. Inject the same catalog as `DiskCleanScanEngine`.
     private let catalog: DiskCleanRuleCatalogV2
 
     private var currentTask: Task<Void, Never>?
@@ -209,12 +209,12 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     private var nextLogEntryID = 1
 
     private var removalMode: DiskCleanRemovalMode
-    /// 冻结的待确认计划。`confirming` 阶段之外必须为 nil。
+    /// Frozen pending plan. Must be nil outside the `confirming` phase.
     private var pendingPlan: DiskCleanValidatedPlan?
-    /// 权威选择状态（设计 §8.1）。视图只拿得到 `publish` 派生的只读投影。
+    /// Authoritative selection state (design §8.1). Views only receive the read-only projection derived in `publish`.
     private var selection = DiskCleanSelectionModel()
 
-    /// 扫描进行中的权威候选集。快照是它的投影，节流只影响发布时机，不影响正确性。
+    /// Authoritative candidate set while scanning. The snapshot is a projection; throttling only affects publish timing, not correctness.
     private var liveCandidates: [DiskCleanCandidate] = []
     private var liveCandidateIndexByID: [DiskCleanCandidate.ID: Int] = [:]
     private var pendingLogMessages: [DiskCleanScanLogMessage] = []
@@ -259,7 +259,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     func setScope(_ scope: DiskCleanScanScope) {
         guard scope != snapshot.scope else { return }
 
-        // 范围一变，冻结的计划就不再对应用户看到的内容——作废，不是悄悄沿用（§8.4）。
+        // When scope changes, a frozen plan no longer matches what the user sees—invalidate it; do not silently keep it (§8.4).
         discardPendingPlan()
 
         publish(
@@ -274,8 +274,8 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         )
     }
 
-    /// 非规则范围下静默忽略：分组这个概念只对规则段成立，为它伪造一个 `.rules` 范围
-    /// 会把整个分段的扫描范围换掉。
+    /// Silently ignore under non-rules scopes: groups only exist for the rules segment; faking a `.rules` scope for them
+    /// would replace the whole segment's scan scope.
     func setChoice(_ choice: DiskCleanChoice, isSelected: Bool) {
         guard case var .rules(nextChoices) = snapshot.scope else { return }
         if isSelected {
@@ -288,7 +288,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
 
     func setCandidateSelected(_ candidateID: DiskCleanCandidate.ID, isSelected: Bool) {
         guard let index = liveCandidateIndexByID[candidateID] else { return }
-        // 不可勾选的候选由模型直接拒绝——UI 禁用只是提示，真正的门在这里。
+        // Unselectable candidates are rejected by the model itself—UI disable is only a hint; the real gate is here.
         guard selection.setCandidate(liveCandidates[index], isSelected: isSelected) else { return }
         publishSelectionChange()
     }
@@ -298,9 +298,9 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         publishSelectionChange()
     }
 
-    /// 选择变更后的统一收尾：作废冻结计划并重新发布快照。
+    /// Shared follow-up after selection changes: invalidate any frozen plan and republish the snapshot.
     ///
-    /// 冻结的计划对应的是用户按下确认那一刻看到的选中集，选择一变它就不再对应任何用户意图（§8.4）。
+    /// A frozen plan matches the selection the user saw at confirm time; once selection changes it no longer matches any user intent (§8.4).
     private func publishSelectionChange() {
         let wasConfirming = snapshot.phase == .confirming
         discardPendingPlan()
@@ -321,7 +321,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         removalMode = mode
         removalModeStore.save(mode)
 
-        // 删除方式是冻结进计划的字段之一，变更必须作废待确认计划（§8.4）。
+        // Removal mode is one of the fields frozen into the plan; changing it must invalidate a pending plan (§8.4).
         let wasConfirming = snapshot.phase == .confirming
         discardPendingPlan()
         publish(
@@ -339,7 +339,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     func scan() {
         guard snapshot.canScan else { return }
 
-        // 过期后的重扫必须绕过缓存，否则"过期 → 重扫 → 命中旧缓存 → 仍过期"会死循环（设计 §4.3）。
+        // Rescans after expiry must bypass the cache, or "expired → rescan → hit old cache → still expired" loops forever (design §4.3).
         let forceRefresh = snapshot.isResultExpired
         cancelTaskOnly()
         discardPendingPlan()
@@ -352,7 +352,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         liveCandidateIndexByID = [:]
         pendingLogMessages = []
         needsScanFlush = false
-        // 候选 ID 跨扫描稳定，不重置会把上一轮的勾选悄悄带进新结果。
+        // Candidate IDs are stable across scans; without reset, previous checks would silently carry into new results.
         selection.reset()
 
         publish(
@@ -400,17 +400,17 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         }
     }
 
-    /// 清理入口。铸造计划 → 废纸篓直执 / 永久进确认（设计 §8.4）。
+    /// Cleanup entry. Cast plan → Trash executes immediately / permanent goes to confirmation (design §8.4).
     ///
-    /// 清理集合直接取自权威选择模型：菜单栏与详情页不各自持有一份"要清理什么"的理解。
+    /// The cleanup set comes straight from the authoritative selection model: menu bar and detail page do not each hold their own idea of "what to clean".
     func clean() {
         guard snapshot.canClean, let scanResult = snapshot.scanResult else { return }
-        // Planner 的唯一输入是扫描工件。没有工件（扫描中断、旧投影）就没有计划，也就没有删除。
+        // The Planner's only input is the scan artifact. No artifact (interrupted scan, stale projection) means no plan and no deletion.
         guard let artifact = scanResult.artifact else { return }
 
-        // §3.1 不变量的第一道防线：未定大小或 partial 的候选**绝不**进入清理集合。
-        // 选择模型本身已拒绝勾选它们，这里的交集是对"投影与候选事实脱节"的兜底。
-        // （Planner 与执行器各自还有一道。）
+        // First line of the §3.1 invariant: candidates with unresolved or partial size must **never** enter the cleanup set.
+        // The selection model already refuses to check them; this intersection is a backstop against projection/candidate drift.
+        // (Planner and executor each have another gate.)
         let cleanableIDs = Set(scanResult.cleanableCandidates.map(\.id))
         let selectedIDs = cleanableIDs.intersection(snapshot.selection.selectedIDs)
         guard !selectedIDs.isEmpty else { return }
@@ -425,7 +425,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
                 catalog: catalog
             )
         } catch {
-            // 铸造失败 = 零删除。原因如实告诉用户，不降级成"部分清理"。
+            // Cast failure = zero deletions. Report the reason honestly; do not degrade it into a partial cleanup.
             publish(
                 phase: .scanned,
                 scope: snapshot.scope,
@@ -441,7 +441,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
 
         switch plan.mode {
         case .trash:
-            // 冻结原语保证可恢复，故单步执行，不设二次确认。
+            // The freeze primitive is recoverable, so Trash runs in one step with no second confirmation.
             startExecution(plan: plan, scanResult: scanResult)
         case .permanent:
             enterConfirming(plan: plan, scanResult: scanResult)
@@ -507,7 +507,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         }
     }
 
-    // MARK: - 确认与执行
+    // MARK: - Confirmation and execution
 
     private func enterConfirming(plan: DiskCleanValidatedPlan, scanResult: DiskCleanScanResult) {
         pendingPlan = plan
@@ -522,7 +522,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
             scanLogEntries: snapshot.scanLogEntries
         )
 
-        // 确认窗口不得越过过期时刻：299 秒时铸造 + 60 秒确认窗口，否则会在门限之外落下。
+        // The confirmation window must not cross the expiry moment: cast at 299s + 60s confirm would land past the gate.
         let deadline = min(clock.now.addingTimeInterval(Self.confirmationWindow), plan.expiryDeadline)
         confirmationTask?.cancel()
         confirmationTask = Task { @MainActor [weak self] in
@@ -542,7 +542,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         }
     }
 
-    /// 作废待确认计划并回到 `scanned`。
+    /// Invalidate the pending plan and return to `scanned`.
     private func invalidatePendingPlan(errorMessage: String?) {
         discardPendingPlan()
         publish(
@@ -605,7 +605,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
                 )
                 finishOperation(operationID)
             } catch {
-                // preflight 失败即零删除，如实报因由（§7.1）。
+                // Preflight failure means zero deletions; report the reason honestly (§7.1).
                 guard isCurrentOperation(operationID) else { return }
                 publishCleaning(
                     phase: .scanned,
@@ -619,7 +619,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         }
     }
 
-    // MARK: - 事件消费
+    // MARK: - Event consumption
 
     private func handle(
         _ event: DiskCleanScanEvent,
@@ -642,8 +642,8 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
             needsScanFlush = true
 
         case .categoryFinished:
-            // 不消费：逐项的"计算中"徽标已经把进度说清楚了，再加一个分类级 spinner
-            // 只是在同一件事上多一种表述。事件本身保留，供 P2 分段（§10）按分类收尾时使用。
+            // Do not consume: per-item "calculating" badges already explain progress; adding a category-level spinner
+            // would only restate the same thing. Keep the event for P2 segments (§10) that finish per category.
             break
 
         case let .finished(summary):
@@ -767,18 +767,18 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
             errorMessage: errorMessage,
             scanLogEntries: snapshot.scanLogEntries
         )
-        // 回到 scanned 意味着结果还能再用一次，过期时钟必须跟着重新挂上。
+        // Returning to scanned means the result can be used again, so the expiry clock must be re-armed.
         if phase == .scanned {
             scheduleExpiry(for: scanResult)
         }
     }
 
-    // MARK: - 快照发布
+    // MARK: - Snapshot publish
 
-    /// 快照的唯一出口。`removalMode`、`pendingPlan` 与 `selection` 一律从私有状态派生。
+    /// Single exit for snapshots. `removalMode`, `pendingPlan`, and `selection` always derive from private state.
     ///
-    /// 选择投影在这里现算（而不是由各调用点传入），因此它与本次发布的候选集必然一致——
-    /// 不存在"某个分支发布了新候选却带着旧选择"的可能。
+    /// The selection projection is computed here (not passed in by callers), so it always matches this publish's candidate set—
+    /// no branch can publish new candidates while carrying an old selection.
     private func publish(
         phase: DiskCleanControllerPhase,
         scope: DiskCleanScanScope,
@@ -810,10 +810,10 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         )
     }
 
-    // MARK: - 过期门
+    // MARK: - Expiry gate
 
-    /// 时间驱动的过期转换（设计 §4.4）：门限到点即发 `onStateChange`，
-    /// 菜单栏按钮与详情页同步变灰，不依赖用户操作才发现过期。
+    /// Time-driven expiry transition (design §4.4): fire `onStateChange` when the threshold hits,
+    /// so menu-bar buttons and the detail page grey out together without waiting for a user action.
     private func scheduleExpiry(for scanResult: DiskCleanScanResult) {
         expiryTask?.cancel()
         expiryTask = nil
@@ -833,7 +833,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
     }
 
     private func markResultExpired() {
-        // 确认窗口不会越过过期时刻，但两者同时到点时次序不定：过期先到就在这里作废计划。
+        // The confirm window never crosses expiry, but if both fire together order is undefined: if expiry wins, invalidate the plan here.
         if snapshot.phase == .confirming {
             discardPendingPlan()
         }
@@ -855,7 +855,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         return clock.now >= deadline
     }
 
-    // MARK: - 收尾与工具
+    // MARK: - Teardown and helpers
 
     private func cancelTaskOnly() {
         currentTask?.cancel()
@@ -906,7 +906,7 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         )
     }
 
-    /// 扫描开始日志里的范围描述。
+    /// Scope description for the scan-started log line.
     private func scopeDescription(_ scope: DiskCleanScanScope) -> String {
         let separator = localization.string("list.separator", defaultValue: "、")
         switch scope {
@@ -926,8 +926,8 @@ final class DiskCleanController: ObservableObject, DiskCleanControlling {
         currentOperationID == operationID
     }
 
-    /// 结果与当前范围不一致。开发产物段因此在用户增删扫描根后同样提示"请重新扫描"——
-    /// 与规则段改分组是同一件事。
+    /// Result no longer matches the current scope. The purge segment therefore also prompts "please rescan" after roots change—
+    /// same idea as changing groups on the rules segment.
     private func isStale(
         scanResult: DiskCleanScanResult?,
         scope: DiskCleanScanScope

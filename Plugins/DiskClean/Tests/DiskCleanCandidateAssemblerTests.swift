@@ -3,9 +3,9 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 所有权归属与祖先分解（设计 §5.3）。
+/// Ownership resolution and ancestor decomposition (design §5.3).
 final class DiskCleanCandidateAssemblerTests: XCTestCase {
-    // MARK: - 路径所有权
+    // MARK: - Path ownership
 
     func testMoreSpecificGlobPrefixWinsOwnership() {
         let generic = DiskCleanRuleTarget.test(id: "cache.generic", risk: .low)
@@ -33,7 +33,7 @@ final class DiskCleanCandidateAssemblerTests: XCTestCase {
         XCTAssertEqual(
             owners["/Caches/x"]?.target.id,
             "cache.medium",
-            "并列时取更高风险：宁严勿宽（更高风险默认不勾选）"
+            "on a tie, prefer higher risk: fail closed (higher risk is unchecked by default)"
         )
     }
 
@@ -52,7 +52,7 @@ final class DiskCleanCandidateAssemblerTests: XCTestCase {
         XCTAssertEqual(forward["/x"]?.target.id, backward["/x"]?.target.id)
     }
 
-    // MARK: - 祖先分解
+    // MARK: - Ancestor decomposition
 
     func testAncestorIsDecomposedIntoDirectChildrenWhileDescendantKeepsIdentity() {
         let fileSystem = FakeDiskCleanFileSystem()
@@ -84,9 +84,9 @@ final class DiskCleanCandidateAssemblerTests: XCTestCase {
                 "/root/child/sibling.bin": "cache.ancestor",
                 "/root/other": "cache.ancestor"
             ],
-            "分解出的子项继承祖先的 target；后代候选保留自己的身份与风险"
+            "decomposed children inherit the ancestor target; descendant candidates keep their own identity and risk"
         )
-        XCTAssertFalse(owned.contains { $0.item.path == "/root" }, "祖先本身不再作为候选")
+        XCTAssertFalse(owned.contains { $0.item.path == "/root" }, "the ancestor itself is no longer a candidate")
     }
 
     func testCandidateWithoutDescendantsIsKeptAsIs() {
@@ -115,7 +115,7 @@ final class DiskCleanCandidateAssemblerTests: XCTestCase {
         XCTAssertEqual(
             owned.map(\.item.path),
             ["/root/cache", "/root/cache-backup"],
-            "同前缀兄弟不是后代，不得触发分解"
+            "prefix siblings are not descendants and must not trigger decomposition"
         )
     }
 
@@ -134,7 +134,7 @@ final class DiskCleanCandidateAssemblerTests: XCTestCase {
         XCTAssertEqual(
             owned.map(\.item.path),
             ["/root/deep"],
-            "列不出目录就整块放弃祖先：保留它会连带删掉后代的独立判定"
+            "if the directory is unlistable, drop the ancestor entirely: keeping it would erase independent descendant decisions"
         )
     }
 
@@ -165,7 +165,7 @@ final class DiskCleanCandidateAssemblerTests: XCTestCase {
         )
     }
 
-    // MARK: - glob 固定前缀
+    // MARK: - Glob fixed prefix
 
     func testFixedPrefixIsLastCompleteComponentBeforeFirstWildcard() {
         XCTAssertEqual(
@@ -183,7 +183,7 @@ final class DiskCleanCandidateAssemblerTests: XCTestCase {
         XCTAssertEqual(
             DiskCleanGlobPrefix.fixedPrefix(of: "~/Library/Caches/com.apple.akd"),
             "~/Library/Caches/com.apple.akd",
-            "无通配符的 glob 本身就是固定前缀，因此最特定"
+            "a glob without wildcards is itself the fixed prefix, and therefore most specific"
         )
     }
 

@@ -1,12 +1,12 @@
 import Foundation
 import MacToolsPluginKit
 
-// MARK: - 展开产物
+// MARK: - Expansion product
 
-/// 一次非规则展开的产物（设计 §10）。
+/// Product of one non-rules expansion (design §10).
 ///
-/// 形状刻意与规则展开阶段的产出对齐——命中 + 保留根 + limitation + 日志——这样引擎后续的
-/// 归属、安全判定、求大小、铸造工件全部照原样跑一遍，P2 候选不存在"绕过某一步"的可能。
+/// Shape deliberately matches the rules-expansion stage—hits + reserved roots + limitations + logs—so the engine's later
+/// ownership, safety, sizing, and artifact cast all run unchanged; P2 candidates cannot skip a step.
 struct DiskCleanExternalExpansion: Sendable {
     var hits: [DiskCleanTargetHit] = []
     var reservedRootPaths: [String] = []
@@ -16,13 +16,13 @@ struct DiskCleanExternalExpansion: Sendable {
     init() {}
 }
 
-/// 专用扫描器 → 统一管线的适配 seam。
+/// Adapter seam from a specialized scanner into the unified pipeline.
 ///
-/// 引擎只认这个协议，因此测试可以在不碰文件系统的前提下把任意候选送进完整管线
-/// （sizing → 完整性 → 工件 → Planner → 执行器），验证的是管线而不是扫描器。
+/// The engine only knows this protocol, so tests can feed arbitrary candidates into the full pipeline without touching the filesystem
+/// (sizing → completeness → artifact → Planner → executor), validating the pipeline rather than the scanner.
 protocol DiskCleanExternalExpanding: Sendable {
-    /// `catalog` 用于按 targetID 取回合成 target。目录里没有的 targetID 一律丢弃并记日志——
-    /// 挂不上 target 的候选后面必然在 `makePlan` 处被拒，早丢早说清楚。
+    /// `catalog` resolves synthetic targets by targetID. Unknown targetIDs are dropped and logged—
+    /// a candidate that cannot attach to a target would be rejected at `makePlan` anyway; drop early and say so.
     func expand(
         scope: DiskCleanScanScope,
         catalog: DiskCleanRuleCatalogV2,
@@ -30,9 +30,9 @@ protocol DiskCleanExternalExpanding: Sendable {
     ) async -> DiskCleanExternalExpansion
 }
 
-// MARK: - 开发产物
+// MARK: - Purge / development products
 
-/// `DiskCleanPurgeScanner` → 统一管线（设计 §10.1）。
+/// `DiskCleanPurgeScanner` → unified pipeline (design §10.1).
 struct DiskCleanDeveloperArtifactExpansion: DiskCleanExternalExpanding {
     private let scanner: DiskCleanPurgeScanner
 
@@ -49,27 +49,27 @@ struct DiskCleanDeveloperArtifactExpansion: DiskCleanExternalExpanding {
         let roots = scope.developerArtifactRoots
         guard !roots.isEmpty else { return expansion }
 
-        // **全体已配置的根都进保留集**，与遍历是否成功无关。
+        // **Every configured root enters the reserved set**, whether or not traversal succeeded.
         //
-        // 语义："根本身不是删除对象，且根下未被候选覆盖的部分从未经过审查"。祖先断言因此
-        // 拒绝任何以某个根为后代的计划路径（例如 `~` 或根的父目录），而根**内部**的候选
-        // 不受影响——它们是根的后代，不是祖先。深度上限 6 与命中即剪枝留下的未扫区域，
-        // 同样被这条覆盖。
+        // Semantics: "the root itself is not a delete target, and any part of the root not covered by a candidate was never reviewed." Ancestor assertions therefore
+        // reject any plan path that has a root as a descendant (e.g. `~` or a root's parent), while candidates **inside** a root
+        // are unaffected—they are descendants of the root, not ancestors. Depth cap 6 and unexplored regions left by hit-and-prune
+        // are covered by the same rule.
         expansion.reservedRootPaths = roots
 
         let result = await scanner.scan(roots: roots)
         for report in result.reports {
             switch report.status {
             case let .unreadable(reason):
-                // 根整个打不开：与"扫过但没有候选"必须分开，否则用户看到的是一个骗人的空列表。
+                // A root that cannot open at all must be distinguished from "scanned with no candidates", or the user sees a dishonest empty list.
                 expansion.limitations.append(
                     .scanRootUnreadable(path: report.root, reason: reason)
                 )
 
             case let .traversed(completeness):
-                // 部分子树被跳过只影响"发现得全不全"，不影响已发现候选的可删性（根已在保留集里）。
-                // 因此只记日志，不升级成 limitation——列表本身就摆在用户眼前，而根不可读时
-                // 用户没有任何别的信号。
+                // Partial subtree skips only affect discovery completeness, not deletability of already-found candidates (the root is already reserved).
+                // So only log; do not escalate to a limitation—the list is already in front of the user, and when a root is unreadable
+                // the user already has a stronger signal.
                 guard case let .partial(reasons) = completeness else { break }
                 expansion.logMessages.append(
                     DiskCleanScanLogMessage(
@@ -108,7 +108,7 @@ struct DiskCleanDeveloperArtifactExpansion: DiskCleanExternalExpanding {
         return expansion
     }
 
-    /// 仓库脏（含检查失败）→ 保持 target 的 medium，不默认勾选；其余降到 low 默认勾选。
+    /// Dirty repo (including check failure) → keep the target's medium risk, not selected by default; everything else drops to low and is selected by default.
     static func facts(for candidate: DiskCleanPurgeCandidate) -> DiskCleanCandidateFacts {
         var notes: [DiskCleanCandidateNote] = [
             .developerProject(path: candidate.projectPath, marker: candidate.projectMarker)
@@ -137,9 +137,9 @@ struct DiskCleanDeveloperArtifactExpansion: DiskCleanExternalExpanding {
     }
 }
 
-// MARK: - 残留安装包
+// MARK: - Leftover installers
 
-/// `DiskCleanInstallerScanner` → 统一管线（设计 §10.2）。
+/// `DiskCleanInstallerScanner` → unified pipeline (design §10.2).
 struct DiskCleanInstallerExpansion: DiskCleanExternalExpanding {
     private let scanner: DiskCleanInstallerScanner
 
@@ -153,8 +153,8 @@ struct DiskCleanInstallerExpansion: DiskCleanExternalExpanding {
         localization: PluginLocalization
     ) async -> DiskCleanExternalExpansion {
         var expansion = DiskCleanExternalExpansion()
-        // 范围固定，保留根取自合成 target 自己的声明，与规则 target 同一来源。
-        // 五个 target 声明的是同一个 `~/Downloads`，去重后只留一条。
+        // Scope is fixed; reserved roots come from the synthetic target's own declaration—same source as rule targets.
+        // Five targets declare the same `~/Downloads`; after dedupe only one remains.
         var seenRoots: Set<String> = []
         expansion.reservedRootPaths = DiskCleanInstallerKind.allCases
             .compactMap { catalog.target(id: $0.targetID) }
@@ -163,8 +163,8 @@ struct DiskCleanInstallerExpansion: DiskCleanExternalExpanding {
 
         switch await scanInBackground() {
         case let .denied(path):
-            // TCC 拒绝（`~/Downloads` 属于会弹窗的那一类）。目录里可能躺着几十 GB，
-            // 报"没有可清理项"是在骗用户。
+            // TCC denial (`~/Downloads` is the kind that prompts). The directory may hold tens of GB;
+            // reporting "nothing to clean" would be lying to the user.
             expansion.limitations.append(.scanRootUnreadable(path: path, reason: .permissionDenied))
 
         case let .unavailable(path, reason):
@@ -204,7 +204,7 @@ struct DiskCleanInstallerExpansion: DiskCleanExternalExpanding {
         return expansion
     }
 
-    /// `.zip` 与"下载不足 7 天"都保持 target 的 medium；其余降到 low 默认勾选。
+    /// `.zip` and "downloaded within 7 days" keep the target's medium risk; everything else drops to low and is selected by default.
     static func facts(for candidate: DiskCleanInstallerCandidate) -> DiskCleanCandidateFacts {
         var notes: [DiskCleanCandidateNote] = []
         switch candidate.note {
@@ -221,8 +221,8 @@ struct DiskCleanInstallerExpansion: DiskCleanExternalExpanding {
         )
     }
 
-    /// 扫描是阻塞的（一次顶层 `readdir` + 逐条 `fstatat`），不能占用 Swift 并发的协作线程池。
-    /// 同一次调用也可能触发 `~/Downloads` 的 TCC 弹窗，那更不该发生在协作线程上。
+    /// The scan is blocking (one top-level `readdir` + per-entry `fstatat`) and must not occupy Swift concurrency's cooperative thread pool.
+    /// The same call may also trigger the `~/Downloads` TCC prompt, which must not happen on a cooperative thread either.
     private func scanInBackground() async -> DiskCleanInstallerScanOutcome {
         let scanner = self.scanner
         return await withCheckedContinuation { continuation in

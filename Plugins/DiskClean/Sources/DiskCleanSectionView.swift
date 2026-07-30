@@ -1,26 +1,27 @@
 import SwiftUI
 import MacToolsPluginKit
 
-// MARK: - 分段引导态
+// MARK: - Section guidance states
 
-/// 一个分段在"没有候选可展示"时该说什么（设计 §10）。
+/// What a section should say when there are "no candidates to show" (design §10).
 ///
-/// 纯派生、无视图依赖，因此可以直接对着快照断言。存在的理由是几个**必须区分开**的空态：
-/// 没配扫描根、没扫过、扫了但被拒绝、根失效、真的没有——它们对用户的下一步动作要求完全不同，
-/// 混成一个"暂无内容"等于让用户自己去猜。
+/// Purely derived, view-free, so it can be asserted directly against snapshots. It exists
+/// because several empty states **must stay distinct**: no scan roots configured, never
+/// scanned, scanned but access denied, roots unreadable, truly empty — each demands a
+/// different next step from the user. Collapsing them into one "nothing here" makes the user guess.
 enum DiskCleanSectionGuidance: Equatable, Sendable {
-    /// 正常展示候选列表。
+    /// Show the candidate list normally.
     case candidates
-    /// 开发产物段还没配置任何扫描根。
+    /// Developer-artifacts section has no scan roots configured yet.
     case needsRoots
-    /// 还没扫过。
+    /// Not scanned yet.
     case notScanned
-    /// 扫描根被拒绝访问（TCC）。**绝不能显示成"没有可清理项"**——
-    /// `~/Downloads` 里可能正躺着几十 GB 安装包。
+    /// Scan root access denied (TCC). **Must never look like "nothing cleanable"** —
+    /// `~/Downloads` may hold tens of GB of installers.
     case accessDenied(path: String)
-    /// 扫描根打不开：已删除、被换成文件、或在非本地卷上。
+    /// Scan root cannot be opened: deleted, replaced by a file, or on a non-local volume.
     case rootsUnreadable(paths: [String])
-    /// 扫过了，确实没有。
+    /// Scanned; truly empty.
     case empty
 
     static func resolve(_ snapshot: DiskCleanControllerSnapshot) -> DiskCleanSectionGuidance {
@@ -28,7 +29,7 @@ enum DiskCleanSectionGuidance: Equatable, Sendable {
             return .needsRoots
         }
         guard let result = snapshot.scanResult else { return .notScanned }
-        // 有候选就正常展示；根的问题由受限横幅如实说明，不必占掉整个列表位置。
+        // With candidates, show them normally; root problems are reported honestly by the limitation banner and need not own the whole list.
         guard result.candidates.isEmpty else { return .candidates }
 
         let unreadable = result.limitations.compactMap { limitation -> (String, DiskCleanScanCompleteness.PartialReason)? in
@@ -45,9 +46,9 @@ enum DiskCleanSectionGuidance: Equatable, Sendable {
     }
 }
 
-// MARK: - 复用片段
+// MARK: - Reusable pieces
 
-/// 横幅（受限、错误、FDA 引导共用）。
+/// Banner (shared by limitation, error, and FDA guidance).
 struct DiskCleanBanner<Trailing: View>: View {
     let symbolName: String
     let tint: Color
@@ -87,8 +88,8 @@ extension DiskCleanBanner where Trailing == EmptyView {
     }
 }
 
-/// 空态。可选一个行动按钮——空态如果只说"没有内容"而用户其实需要先做一步配置，
-/// 那这个空态就是死路。
+/// Empty state. Optional action button — if empty state only says "nothing here" while the
+/// user still needs a configuration step, that empty state is a dead end.
 struct DiskCleanEmptyState<Action: View>: View {
     let symbolName: String
     let text: String
@@ -132,7 +133,7 @@ struct DiskCleanSectionHeader: View {
     }
 }
 
-/// 扫描 / 清理 / 停止 + 选择摘要。三个分段共用一条，行为与文案因此不可能各说各话。
+/// Scan / clean / stop + selection summary. Shared by all three sections so behavior and copy cannot diverge.
 struct DiskCleanActionBar: View {
     let snapshot: DiskCleanControllerSnapshot
     let localization: PluginLocalization
@@ -192,20 +193,21 @@ struct DiskCleanActionBar: View {
     }
 }
 
-// MARK: - P2 分段
+// MARK: - P2 sections
 
-/// 开发产物 / 残留安装包分段（设计 §8.3 第 4 项、§10）。
+/// Developer-artifacts / leftover-installers sections (design §8.3 item 4, §10).
 ///
-/// 与规则分段共用同一个 `DiskCleanController`：候选、选择、计划铸造、执行全部走同一条管线，
-/// 这里只负责把"扫描入口 + 引导态 + 候选列表"摆好。**独立扫描入口**是设计要求——
-/// 开发产物要遍历用户工程目录、安装包会触发 `~/Downloads` 的 TCC 弹窗，
-/// 两者都不该被常规缓存扫描顺手带上。
+/// Shares the same `DiskCleanController` as the rules section: candidates, selection, plan
+/// minting, and execution all use one pipeline; this view only lays out "scan entry + guidance
+/// + candidate list". An **independent scan entry** is a design requirement — developer
+/// artifacts walk user project trees and installers may trigger a `~/Downloads` TCC prompt;
+/// neither should ride along with ordinary cache scans.
 struct DiskCleanCleanupSectionView<Configuration: View>: View {
     @ObservedObject var controller: DiskCleanController
     let title: String
     let symbolName: String
     let localization: PluginLocalization
-    /// 分段特有的配置区（开发产物段的扫描根管理）。
+    /// Section-specific configuration (scan-root management for the developer-artifacts section).
     @ViewBuilder let configuration: () -> Configuration
 
     @State private var expandedCategories: Set<DiskCleanCategoryID> = []
@@ -287,8 +289,8 @@ struct DiskCleanCleanupSectionView<Configuration: View>: View {
             )
 
         case .needsRoots:
-            // 空态本身不带"添加文件夹"按钮：入口在上方的扫描根管理区，两处各放一个
-            // 会让用户以为它们是两件事。
+            // Empty state itself has no "add folder" button: the entry lives in the scan-root
+            // manager above; putting one in both places would look like two different actions.
             DiskCleanEmptyState(
                 symbolName: "folder.badge.plus",
                 text: localization.string(

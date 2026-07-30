@@ -5,46 +5,46 @@ struct DiskCleanPOSIXError: Error, Equatable {
     let code: Int32
 }
 
-/// 一条已完整解析的目录条目。
+/// One fully resolved directory entry.
 struct DiskCleanResolvedEntry: Equatable, Sendable {
-    /// NUL 结尾的原始字节名，直接回传给 `openat`/`fstatat`。
+    /// NUL-terminated raw name bytes, passed straight back to `openat`/`fstatat`.
     let nameBytes: [CChar]
     let fileType: DiskCleanRootIdentity.FileType
     let devid: UInt64
     let fileID: UInt64
     let linkCount: UInt32
-    /// 逻辑大小（等价 `st_size`）。symlink 为链接目标字符串长度。
+    /// Logical size (equivalent to `st_size`). For symlinks, the length of the link target string.
     let dataLength: Int64
 }
 
 enum DiskCleanWalkEntry: Equatable, Sendable {
     case resolved(DiskCleanResolvedEntry)
-    /// 属性缺失且逐条 `fstatat` 回退也失败。
+    /// Attributes missing and the per-entry `fstatat` fallback also failed.
     case unresolved(code: Int32)
 }
 
-/// 目录条目来源。FastWalker 用 `getattrlistbulk`，SlowWalker 用 `readdir` + `fstatat`；
-/// 测试可注入伪造条目流（挂载穿越无法在真实文件系统上构造，只能靠注入）。
+/// Directory entry source. FastWalker uses `getattrlistbulk`; SlowWalker uses `readdir` + `fstatat`;
+/// tests may inject a synthetic entry stream (mount-point crossing cannot be constructed on a real FS).
 protocol DiskCleanDirectoryEntrySource: AnyObject {
-    /// 供 `openat` 下潜使用的目录 fd。
+    /// Directory fd used by `openat` for descent.
     var directoryFileDescriptor: Int32 { get }
-    /// 逐批返回条目；nil 表示本目录枚举结束。
+    /// Return entries in batches; nil means enumeration of this directory is finished.
     func nextBatch() throws -> [DiskCleanWalkEntry]?
-    /// 释放底层 fd / DIR。
+    /// Release the underlying fd / DIR.
     func close()
 }
 
 protocol DiskCleanDirectoryEntrySourceFactory: Sendable {
-    /// 成功时 `fileDescriptor` 所有权移交给返回的 source（由 `source.close()` 释放）；
-    /// **抛错时所有权仍归调用方**，由调用方 close。
+    /// On success, ownership of `fileDescriptor` transfers to the returned source (released by `source.close()`);
+    /// on **throw, ownership stays with the caller**, who must close it.
     func makeSource(fileDescriptor: Int32) throws -> any DiskCleanDirectoryEntrySource
 }
 
-/// 两个 walker 共用的求大小骨架：根 opener 分型（§3.2）+ 显式栈迭代 DFS（§3.3）。
+/// Shared sizing skeleton for both walkers: root opener typing (§3.2) + explicit-stack iterative DFS (§3.3).
 ///
-/// FastWalker 与 SlowWalker 的差异**只在目录条目来源**，其余约束——挂载防护、硬链接去重、
-/// symlink 不跟随、EPERM 跳过、每批检查取消/deadline、根身份——全部由本类型统一实现，
-/// 这正是设计 §3.5 要求"回退 walker 复用 §3.3 全部约束"的落地方式。
+/// The only difference between FastWalker and SlowWalker is the **directory entry source**; every other constraint—mount protection, hard-link dedupe,
+/// no symlink following, EPERM skip, cancel/deadline checks per batch, root identity—is implemented here,
+/// which is how design §3.5's "fallback walker reuses all §3.3 constraints" is realized.
 struct DiskCleanDirectoryTreeWalker: Sendable {
     private let opener: DiskCleanRootOpener
     private let sourceFactory: any DiskCleanDirectoryEntrySourceFactory
@@ -119,14 +119,14 @@ struct DiskCleanDirectoryTreeWalker: Sendable {
         defer { stack.forEach { $0.source.close() } }
 
         while let frame = stack.last {
-            // 每批之间（以及每次下潜之前）检查取消与 deadline。
+            // Check cancel and deadline between batches (and before each descent).
             if context.shouldStop {
                 accumulator.add(.timedOut)
                 break
             }
 
-            // 先消费已发现的子目录，把同时打开的 fd 数量压到"树深度"量级，
-            // 而不是"某一目录的子目录总数"量级（后者会撞 EMFILE）。
+            // Drain already-discovered child directories first so open fd count stays on the order of tree depth,
+            // not the fan-out of one directory (the latter can hit EMFILE).
             if let childName = frame.pendingChildDirectories.popLast() {
                 descend(
                     into: childName,
@@ -165,7 +165,7 @@ struct DiskCleanDirectoryTreeWalker: Sendable {
                     accumulator.add(errno: code)
 
                 case let .resolved(resolved):
-                    // 挂载防护：跨设备条目不下潜、不计数。
+                    // Mount protection: do not descend into or count cross-device entries.
                     guard resolved.devid == identity.devid else {
                         accumulator.add(.crossedMountPoint)
                         continue
@@ -176,7 +176,7 @@ struct DiskCleanDirectoryTreeWalker: Sendable {
                         continue
                     }
 
-                    // 硬链接按 (devid, fileID) 去重——跨挂载 fileID 不唯一，devid 必须参与键。
+                    // Hard links are deduped by (devid, fileID)—fileID is not unique across mounts, so devid must be in the key.
                     if resolved.linkCount > 1 {
                         let key = HardLinkKey(devid: resolved.devid, fileID: resolved.fileID)
                         guard countedHardLinks.insert(key).inserted else { continue }
@@ -196,7 +196,7 @@ struct DiskCleanDirectoryTreeWalker: Sendable {
         stack: inout [Frame],
         accumulator: inout DiskCleanCompletenessAccumulator
     ) {
-        // name 是单级组件且父目录已由 fd 锚定，故 O_NOFOLLOW 足够；symlink 一律不跟随。
+        // name is a single path component and the parent is already fd-anchored, so O_NOFOLLOW is enough; never follow symlinks.
         let childDescriptor = name.withUnsafeBufferPointer { buffer -> Int32 in
             guard let base = buffer.baseAddress else { return -1 }
             return openat(
@@ -223,8 +223,8 @@ struct DiskCleanDirectoryTreeWalker: Sendable {
         let fileID: UInt64
     }
 
-    /// 栈帧。`pendingChildDirectories` 只保存"当前批次"发现的子目录名，
-    /// 因此内存与 fd 占用都有界。
+    /// Stack frame. `pendingChildDirectories` only holds child names discovered in the **current batch**,
+    /// so both memory and fd usage stay bounded.
     private final class Frame {
         let source: any DiskCleanDirectoryEntrySource
         var pendingChildDirectories: [[CChar]] = []

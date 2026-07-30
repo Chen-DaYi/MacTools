@@ -1,18 +1,21 @@
 import Foundation
 import MacToolsPluginKit
 
-// MARK: - 引擎接口
+// MARK: - Engine interface
 
 protocol DiskCleanScanning: Sendable {
-    /// 事件流。消费方取消（`break` 出循环或 task 取消）→ `onTermination` 传导到引擎根任务 →
-    /// 不再派生新的 sizing 任务（设计 §4.1）。
+    /// Event stream. Consumer cancellation (`break` out of the loop or task cancel) →
+    /// `onTermination` reaches the engine root task → no new sizing tasks are spawned
+    /// (design §4.1).
     ///
-    /// 规则段的范围以 `DiskCleanChoice` 表达而非设计 §4.1 写的 `Set<DiskCleanCategoryID>`：
-    /// 分类与 v1 的面板分组不是同构的（见 `DiskCleanChoice` 注释），按分类选择会悄悄改变扫描
-    /// 覆盖面。分类仍是展示与 `categoryFinished` 的单位。
+    /// Rule-section scope is expressed as `DiskCleanChoice`, not the `Set<DiskCleanCategoryID>`
+    /// written in design §4.1: categories are not isomorphic to v1 panel groups (see
+    /// `DiskCleanChoice` comments), and choosing by category would silently change scan
+    /// coverage. Categories remain the unit of display and `categoryFinished`.
     ///
-    /// P2 分段走同一个方法（设计 §10）：**只有展开来源不同**，求大小、完整性、工件铸造全部共用，
-    /// 因此不存在第二条通往执行器的路。
+    /// P2 sections use the same method (design §10): **only the expansion source differs**;
+    /// sizing, completeness, and artifact minting are all shared, so there is no second path
+    /// into the executor.
     func scan(
         scope: DiskCleanScanScope,
         forceRefresh: Bool
@@ -28,10 +31,11 @@ extension DiskCleanScanning {
     }
 }
 
-/// 阻塞式 sizing 的执行 seam（设计 §13-7 的接线点）。
+/// Execution seam for blocking sizing (wiring point for design §13-7).
 ///
-/// 把"在常驻线程上跑 + 超时放弃 + 熔断状态"三件事收在一个协议里：引擎需要的正是这三者，
-/// 而测试需要能在不启真实线程的前提下注入挂起、并伪造熔断状态来验证 limitation 派生。
+/// Folds "run on a resident thread + abandon on timeout + circuit-break state" into one
+/// protocol: that is exactly what the engine needs, and tests need to inject hangs and
+/// fake circuit-break state without starting real threads to verify limitation derivation.
 protocol DiskCleanSizingExecuting: Sendable {
     func size(
         ofItemAt path: String,
@@ -46,25 +50,27 @@ protocol DiskCleanSizingExecuting: Sendable {
 extension DiskCleanWorkerPool: DiskCleanSizingExecuting {}
 
 struct DiskCleanScanEngineConfiguration: Sendable {
-    /// 单项 deadline（设计 §4.2 第 3 条）。超时 → `partial([.timedOut])`。
+    /// Per-item deadline (design §4.2 item 3). Timeout → `partial([.timedOut])`.
     var itemTimeout: TimeInterval = 20
-    /// 全局 deadline。到点后剩余候选一律直接标记超时，不再提交 sizing。
+    /// Global deadline. After it, remaining candidates are marked timed out immediately and sizing is not submitted.
     var globalTimeout: TimeInterval = 300
-    /// 求大小阶段并发上限。与 WorkerPool 的常驻线程数一致，多提交只会排队。
+    /// Concurrency cap for the sizing phase. Matches WorkerPool resident thread count; extra submissions only queue.
     var maximumConcurrentSizing: Int = 3
-    /// 展开阶段一并上报的 `volumeSkipped` 上限。熔断时几乎每个候选都会命中，
-    /// 全量上报会把 limitations 撑成几百条；`walkerCircuitBroken` 已表达同一件事。
+    /// Cap on `volumeSkipped` reports collected during expansion. Under circuit break almost
+    /// every candidate hits it; reporting all would bloat limitations into hundreds of rows;
+    /// `walkerCircuitBroken` already expresses the same fact.
     var maximumVolumeSkippedReports: Int = 10
 
     init() {}
 }
 
-// MARK: - 引擎
+// MARK: - Engine
 
-/// 扫描编排（设计 §4.2）。
+/// Scan orchestration (design §4.2).
 ///
-/// 两阶段：**展开**（串行、快，用户 1-2 秒内看到条目）→ **求大小**（限并发、经 WorkerPool、
-/// 完成即出事件）。引擎自己不碰文件系统的重活，只负责顺序、并发上限、deadline 与如实汇总。
+/// Two phases: **expand** (serial, fast — user sees rows within 1–2s) → **size** (bounded
+/// concurrency via WorkerPool, emit events as they complete). The engine itself never does
+/// heavy filesystem work; it only owns ordering, concurrency caps, deadlines, and honest aggregation.
 struct DiskCleanScanEngine: DiskCleanScanning {
     let catalog: DiskCleanRuleCatalogV2
     let fileSystem: any DiskCleanFileSystemProviding
@@ -75,7 +81,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
     let identityProbe: any DiskCleanRootIdentityProbing
     let runningAppLock: any DiskCleanRunningAppSnapshotting
     let fullDiskAccess: any DiskCleanFullDiskAccessProbing
-    /// P2 分段的展开来源（设计 §10）。
+    /// Expansion sources for P2 sections (design §10).
     let developerArtifactExpansion: any DiskCleanExternalExpanding
     let installerExpansion: any DiskCleanExternalExpanding
     let configuration: DiskCleanScanEngineConfiguration
@@ -128,7 +134,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         }
     }
 
-    // MARK: - 主流程
+    // MARK: - Main flow
 
     private func run(
         scope: DiskCleanScanScope,
@@ -151,7 +157,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
             return
         }
 
-        // 展开阶段：串行，只做展开与归属，不碰大小。
+        // Expansion phase: serial; expand and attribute only, no sizing.
         let expansion = await expand(
             scope: scope,
             targets: scopedTargets,
@@ -177,7 +183,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
             continuation.yield(.categoryFinished(category))
         }
 
-        // 求大小阶段。
+        // Sizing phase.
         let categoryByCandidateID = Dictionary(
             candidates.map { ($0.id, $0.category) },
             uniquingKeysWith: { first, _ in first }
@@ -237,7 +243,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         continuation.finish()
     }
 
-    // MARK: - 展开阶段
+    // MARK: - Expansion phase
 
     private struct ExpansionOutcome {
         var candidates: [DiskCleanCandidate] = []
@@ -245,10 +251,11 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         var scopedCategories: [DiskCleanCategoryID] = []
     }
 
-    /// 本次扫描涉及的 target。
+    /// Targets involved in this scan.
     ///
-    /// 规则段按面板分组过滤；P2 分段取对应的合成 target——它们不参与规则展开（`kind == .external`），
-    /// 但仍需出现在这里，锁定快照与分类顺序都按 target 推导。
+    /// Rule sections filter by panel group; P2 sections take the matching synthetic targets —
+    /// they do not participate in rule expansion (`kind == .external`) but must still appear
+    /// here because lock snapshots and category order are both derived from targets.
     private func scopedTargets(for scope: DiskCleanScanScope) -> [DiskCleanRuleTarget] {
         switch scope {
         case let .rules(choices):
@@ -310,7 +317,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         return outcome
     }
 
-    /// 专用扫描器的展开（设计 §10）。产物形状与规则展开一致，后续步骤共用。
+    /// Expansion via a dedicated scanner (design §10). Product shape matches rule expansion so later steps are shared.
     private func expandExternally(
         using expander: any DiskCleanExternalExpanding,
         scope: DiskCleanScanScope,
@@ -346,7 +353,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         for target in targets {
             guard !Task.isCancelled else { return hits }
 
-            // 未授权时整体跳过，绝不逐目录触发 TCC 弹窗轰炸（设计 §9）。
+            // Without authorization, skip wholesale — never trigger a TCC prompt storm per directory (design §9).
             if target.requiresFullDiskAccess && !hasFullDiskAccess {
                 skippedByFDA.append(target.id)
                 outcome.reservedRootPaths += target.expandedReservedRootPaths()
@@ -370,8 +377,9 @@ struct DiskCleanScanEngine: DiskCleanScanning {
                     )
                 )
             } catch {
-                // 失败的 target 记 limitation + 保留根：其子树"存在但未扫描"，
-                // Planner 据此禁止删除它们的祖先。绝不阻塞整次扫描。
+                // Failed targets record a limitation + reserved roots: their subtrees are
+                // "present but unscanned", so the Planner forbids deleting their ancestors.
+                // Never block the whole scan.
                 collector.add(Self.failureLimitation(for: target, error: error))
                 outcome.reservedRootPaths += target.expandedReservedRootPaths()
                 continuation.yield(
@@ -399,8 +407,9 @@ struct DiskCleanScanEngine: DiskCleanScanning {
     private func expandHits(for target: DiskCleanRuleTarget) async throws -> [DiskCleanTargetHit] {
         switch target.kind {
         case .external:
-            // 合成 target 的候选由专用扫描器发现，规则展开阶段不该走到这里
-            // （`scopedTargets(for:)` 已按 scope 分流）。返回空即可，绝不去猜路径。
+            // Synthetic-target candidates are discovered by a dedicated scanner; rule expansion
+            // should not reach here (`scopedTargets(for:)` already splits by scope). Return empty;
+            // never invent paths.
             return []
 
         case let .path(globs):
@@ -424,8 +433,9 @@ struct DiskCleanScanEngine: DiskCleanScanning {
             let reservedRoots = target.expandedReservedRootPaths()
             return items.map { item in
                 let physical = Self.physical(item)
-                // 动态 target 没有 glob 可衡量特定性，用命中的保留根长度代替：
-                // 保留根就是作者声明的固定前缀，语义与 glob 固定前缀一致。
+                // Dynamic targets have no glob to measure specificity; use the hit reserved-root
+                // length instead: reserved roots are the author-declared fixed prefix, same semantics
+                // as a glob fixed prefix.
                 let specificity = reservedRoots
                     .filter { physical.path == $0 || physical.path.hasPrefix($0 + "/") }
                     .map(\.count)
@@ -435,7 +445,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         }
     }
 
-    /// 路径一律换成物理路径（设计 §13-6）：末级保留原样，祖先解析。
+    /// Always convert paths to physical form (design §13-6): keep the leaf as-is, resolve ancestors.
     private static func physical(_ item: DiskCleanFileItem) -> DiskCleanFileItem {
         let physicalPath = DiskCleanPhysicalPath.resolve(item.path)
         guard physicalPath != item.path else { return item }
@@ -469,7 +479,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
             legacyRuleID: target.legacyRuleID,
             category: target.category,
             path: owned.item.path,
-            // 展开来源没给覆盖值就用 target 风险（规则候选恒走这条）。
+            // When the expansion source supplies no override, use target risk (rule candidates always take this path).
             risk: owned.facts.risk ?? target.risk,
             safety: safety,
             notes: owned.facts.notes,
@@ -477,7 +487,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         )
     }
 
-    // MARK: - 求大小阶段
+    // MARK: - Sizing phase
 
     private func sizeAll(
         candidates: [DiskCleanCandidate],
@@ -500,7 +510,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
             var iterator = candidates.makeIterator()
             var inFlight = 0
 
-            // 取消后**不再派生**新任务：已在飞的任务由 WorkerPool 的取消标志收尾。
+            // After cancel, **spawn no more** tasks: in-flight work is wound down by WorkerPool's cancel flag.
             func submitNext() -> Bool {
                 guard !Task.isCancelled, let candidate = iterator.next() else { return false }
                 group.addTask {
@@ -529,8 +539,8 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         globalDeadline: Date
     ) async -> DiskCleanSizeResult {
         let startedAt = now()
-        // 全局 deadline 已过：直接如实标记超时。不提交任务，但仍要出事件，
-        // 否则 UI 会永远停在"计算中"。
+        // Global deadline already passed: mark timed out honestly. Do not submit work, but
+        // still emit events or the UI stays stuck on "calculating".
         guard startedAt < globalDeadline else {
             return .unavailable(reasons: [.timedOut], observedAt: startedAt)
         }
@@ -546,7 +556,7 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         )
     }
 
-    // MARK: - 日志与 limitation 文案
+    // MARK: - Log and limitation copy
 
     private static func candidateCounts(
         byCategory candidates: [DiskCleanCandidate]
@@ -572,8 +582,8 @@ struct DiskCleanScanEngine: DiskCleanScanning {
         return String(describing: error)
     }
 
-    /// 只为**不可清理**的候选出日志：可清理项在候选列表里一目了然，
-    /// 需要解释的恰恰是"为什么这条不能删"。
+    /// Log only **uncleanable** candidates: cleanable ones are obvious in the list;
+    /// what needs explaining is "why this one cannot be deleted".
     private static func foundLogMessages(
         for candidates: [DiskCleanCandidate],
         localization: PluginLocalization
@@ -712,9 +722,9 @@ struct DiskCleanScanEngine: DiskCleanScanning {
     }
 }
 
-// MARK: - limitation 收集
+// MARK: - Limitation collection
 
-/// 顺序稳定、去重、上报量有界的 limitation 收集器。
+/// Limitation collector with stable order, dedup, and bounded report volume.
 struct DiskCleanLimitationCollector {
     private(set) var limitations: [DiskCleanScanLimitation] = []
     private var volumeSkippedPaths: Set<String> = []
@@ -729,7 +739,7 @@ struct DiskCleanLimitationCollector {
         limitations.append(limitation)
     }
 
-    /// 从 sizing 结果派生卷级 limitation。
+    /// Derive volume-level limitations from sizing results.
     mutating func observe(sizeResult: DiskCleanSizeResult, path: String) {
         guard sizeResult.completeness.partialReasons.contains(.unsupportedVolume) else { return }
         guard volumeSkippedPaths.count < maximumVolumeSkippedReports else { return }
@@ -737,8 +747,9 @@ struct DiskCleanLimitationCollector {
         add(.volumeSkipped(path: path))
     }
 
-    /// 熔断与线程放弃从 WorkerPool 的**进程级**状态派生（设计 §4.5、§13-7）。
-    /// 不依赖"本次扫描恰好产生了某种候选"——上一次扫描烧掉的预算同样必须被看见。
+    /// Circuit break and thread abandons are derived from WorkerPool's **process-wide** state
+    /// (design §4.5, §13-7). Do not depend on "this scan happened to produce certain candidates" —
+    /// budget burned by a prior scan must still be visible.
     mutating func observe(pool: any DiskCleanSizingExecuting) {
         if pool.isCircuitBroken {
             add(.walkerCircuitBroken)
@@ -750,16 +761,16 @@ struct DiskCleanLimitationCollector {
     }
 }
 
-// MARK: - 所有权归属与祖先分解
+// MARK: - Ownership attribution and ancestor decomposition
 
-/// 展开阶段的一条原始命中。
+/// One raw hit from the expansion phase.
 struct DiskCleanTargetHit: Sendable {
     let target: DiskCleanRuleTarget
     let item: DiskCleanFileItem
-    /// 命中它的 glob（动态 target 用保留根）的固定前缀长度，越长越特定。
-    /// P2 合成 target 无 glob 可衡量，恒为 0——同一路径不会被两个合成 target 同时命中。
+    /// Fixed-prefix length of the hitting glob (reserved root for dynamic targets); longer is more specific.
+    /// P2 synthetic targets have no measurable glob and are always 0 — the same path is never hit by two synthetic targets.
     let specificity: Int
-    /// 展开阶段才知道的候选属性（P2 的 git 状态、安装包年龄等）。规则命中一律 `.inherited`。
+    /// Candidate attributes known only at expansion time (P2 git state, installer age, etc.). Rule hits are always `.inherited`.
     let facts: DiskCleanCandidateFacts
 
     init(
@@ -778,7 +789,7 @@ struct DiskCleanTargetHit: Sendable {
 struct DiskCleanOwnedPath: Sendable {
     let target: DiskCleanRuleTarget
     let item: DiskCleanFileItem
-    /// 祖先分解出的子项继承分解源的 facts——它们是同一条命中的碎片，风险与附注理应一致。
+    /// Children produced by ancestor decomposition inherit the source hit's facts — they are fragments of the same hit, so risk and notes should match.
     let facts: DiskCleanCandidateFacts
 
     init(
@@ -792,10 +803,11 @@ struct DiskCleanOwnedPath: Sendable {
     }
 }
 
-/// 所有权归属与祖先分解（设计 §5.3）。纯函数式：输入命中集，输出最终归属表。
+/// Ownership attribution and ancestor decomposition (design §5.3). Purely functional: hit set in, final attribution table out.
 struct DiskCleanCandidateAssembler: Sendable {
-    /// 分解递归深度上限。递归只会沿"存在后代候选"的分支下潜，深度天然有界；
-    /// 上限只是对病态输入（超深路径）的兜底。
+    /// Decomposition recursion depth cap. Recursion only descends branches that still have
+    /// descendant candidates, so depth is naturally bounded; the cap is only a backstop for
+    /// pathological input (extremely deep paths).
     static let maximumDecompositionDepth = 64
 
     let fileSystem: any DiskCleanFileSystemProviding
@@ -808,7 +820,7 @@ struct DiskCleanCandidateAssembler: Sendable {
 
         for path in paths {
             guard let hit = owners[path] else { continue }
-            // 无后代候选 → 保持独立身份，原样收下。
+            // No descendant candidates → keep an independent identity and accept as-is.
             guard Self.hasStrictDescendant(of: path, in: paths) else {
                 results.append(
                     DiskCleanOwnedPath(target: hit.target, item: hit.item, facts: hit.facts)
@@ -828,8 +840,9 @@ struct DiskCleanCandidateAssembler: Sendable {
         return results.sorted { $0.item.path < $1.item.path }
     }
 
-    /// 同一路径被多 target 命中 → 归属最特定者：glob 固定前缀最长，并列取更高风险
-    /// （宁严勿宽），仍并列时按 target id 取定（保证结果可测、与遍历顺序无关）。
+    /// Same path hit by multiple targets → attribute to the most specific: longest glob fixed
+    /// prefix, then higher risk on ties (prefer strict over loose), then target id for a
+    /// deterministic, traversal-order-independent result.
     static func resolveOwnership(hits: [DiskCleanTargetHit]) -> [String: DiskCleanTargetHit] {
         var owners: [String: DiskCleanTargetHit] = [:]
         for hit in hits {
@@ -857,11 +870,13 @@ struct DiskCleanCandidateAssembler: Sendable {
         return candidate.target.id < incumbent.target.id
     }
 
-    /// 祖先分解：A 是 B 的祖先 → A 换成自己的直接子项（继承 A 的 target 与风险），
-    /// 递归至不含任何其它候选；B 保持独立身份（自己的风险、锁定、默认勾选）。
+    /// Ancestor decomposition: if A is an ancestor of B → replace A with its direct children
+    /// (inheriting A's target and risk), recurse until no other candidates remain under it;
+    /// B keeps an independent identity (its own risk, lock, default selection).
     ///
-    /// 目录列不出来时**整块放弃 A**：保留 A 会连带删掉 B 的子树，
-    /// 那等于抹掉 B 独立的风险判定与勾选状态。宁少清理，不越权。
+    /// If the directory cannot be listed, **drop A wholesale**: keeping A would delete B's
+    /// subtree as a side effect, erasing B's independent risk and selection. Prefer cleaning
+    /// less over overreaching.
     private func decompose(
         path: String,
         target: DiskCleanRuleTarget,
@@ -875,7 +890,7 @@ struct DiskCleanCandidateAssembler: Sendable {
 
         var results: [DiskCleanOwnedPath] = []
         for child in children {
-            // 子项本身就是候选 → 它有自己的身份，不吞并。
+            // The child is itself a candidate → it has its own identity; do not absorb it.
             if allPaths.contains(child.path) {
                 continue
             }
@@ -895,7 +910,7 @@ struct DiskCleanCandidateAssembler: Sendable {
         return results
     }
 
-    /// `sortedPaths` 已排序，故严格后代必然紧随其后连续出现。
+    /// `sortedPaths` is sorted, so strict descendants necessarily appear contiguously afterward.
     static func hasStrictDescendant(of path: String, in sortedPaths: [String]) -> Bool {
         let prefix = path.hasSuffix("/") ? path : path + "/"
         guard let index = sortedPaths.firstIndex(where: { $0 > path }) else { return false }

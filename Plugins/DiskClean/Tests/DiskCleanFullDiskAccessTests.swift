@@ -2,25 +2,25 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// FDA 能力探针（设计 §9）。
+/// FDA capability probe (design §9).
 ///
-/// 全部经注入的可读性 seam，**绝不碰真实的 TCC 保护文件**：跑测试的机器可能恰好授予了
-/// 终端 FDA，那样断言就会跟着环境走。
+/// All via an injected readability seam — **never touch real TCC-protected files**:
+/// the machine under test may already have terminal FDA, and assertions would follow the environment.
 final class DiskCleanFullDiskAccessTests: XCTestCase {
     private let tccPath = "/Users/diskclean-tests/Library/Application Support/com.apple.TCC/TCC.db"
     private let safariPath = "/Users/diskclean-tests/Library/Safari/Bookmarks.plist"
 
-    // MARK: - 探测矩阵
+    // MARK: - Probe matrix
 
     func testReportsGrantedWhenFirstProbePathOpens() {
         let readability = FakeDiskCleanFileReadability(openablePaths: [tccPath])
         let probe = makeProbe(readability: readability)
 
         XCTAssertTrue(probe.hasFullDiskAccess)
-        XCTAssertEqual(readability.probedPaths, [tccPath], "首条成功后不该继续试第二条")
+        XCTAssertEqual(readability.probedPaths, [tccPath], "must not try the second path after the first succeeds")
     }
 
-    /// 全新账户可能还没有 TCC.db。第二条能开同样说明有 FDA。
+    /// A brand-new account may not have TCC.db yet. Opening the fallback path still proves FDA.
     func testReportsGrantedWhenOnlyFallbackProbePathOpens() {
         let readability = FakeDiskCleanFileReadability(openablePaths: [safariPath])
         let probe = makeProbe(readability: readability)
@@ -29,14 +29,14 @@ final class DiskCleanFullDiskAccessTests: XCTestCase {
         XCTAssertEqual(readability.probedPaths, [tccPath, safariPath])
     }
 
-    /// 被拒绝与文件不存在在探针里是同一件事：都无法证明有 FDA。
-    /// 方向必须 fail-safe——误报"有"会让引擎照常展开受保护 target，换回一堆读不到的空候选。
+    /// Denial and missing file are the same to the probe: neither proves FDA.
+    /// Must fail safe — a false "granted" would let the engine expand protected targets and get empty unreadable candidates.
     func testReportsDeniedWhenNoProbePathOpens() {
         let readability = FakeDiskCleanFileReadability()
         let probe = makeProbe(readability: readability)
 
         XCTAssertFalse(probe.hasFullDiskAccess)
-        XCTAssertEqual(readability.probedPaths, [tccPath, safariPath], "全部试完才能下结论")
+        XCTAssertEqual(readability.probedPaths, [tccPath, safariPath], "must try all probe paths before concluding")
     }
 
     func testReportsDeniedWhenProbePathListIsEmpty() {
@@ -48,10 +48,10 @@ final class DiskCleanFullDiskAccessTests: XCTestCase {
         XCTAssertFalse(probe.hasFullDiskAccess)
     }
 
-    // MARK: - 进程内缓存
+    // MARK: - In-process cache
 
-    /// FDA 绑定进程启动，运行期间不会变化——这正是状态卡提示"退出并重新打开"的理由。
-    /// 缓存顺带保证同一次扫描里每个 target 看到的是同一个答案。
+    /// FDA is bound at process launch and does not change at runtime — the reason the status card says "quit and reopen".
+    /// Caching also ensures every target in one scan sees the same answer.
     func testCachesResultForTheLifetimeOfTheProcess() {
         let readability = FakeDiskCleanFileReadability(openablePaths: [tccPath])
         let probe = makeProbe(readability: readability)
@@ -60,7 +60,7 @@ final class DiskCleanFullDiskAccessTests: XCTestCase {
         XCTAssertTrue(probe.hasFullDiskAccess)
         XCTAssertTrue(probe.hasFullDiskAccess)
 
-        XCTAssertEqual(readability.probedPaths, [tccPath], "重复读取不该重复探测")
+        XCTAssertEqual(readability.probedPaths, [tccPath], "repeated reads must not re-probe")
     }
 
     func testCachesNegativeResultToo() {
@@ -73,10 +73,10 @@ final class DiskCleanFullDiskAccessTests: XCTestCase {
         XCTAssertEqual(readability.probedPaths, [tccPath, safariPath])
     }
 
-    // MARK: - 默认探测目标
+    // MARK: - Default probe targets
 
-    /// 探测目标必须停留在"静默 EPERM"那一类。Documents / Downloads / Desktop 与沙盒容器
-    /// 会**弹窗**，拿它们探测等于每次启动都骚扰用户一次。
+    /// Probe targets must stay in the "silent EPERM" class. Documents / Downloads / Desktop and sandbox
+    /// containers **prompt**, so probing them would nag the user on every launch.
     func testDefaultProbePathsStayInSilentlyDeniedLocations() {
         let paths = DiskCleanFullDiskAccessProbe.defaultProbePaths(homeDirectory: "/Users/diskclean-tests")
 
@@ -89,7 +89,7 @@ final class DiskCleanFullDiskAccessTests: XCTestCase {
         }
     }
 
-    // MARK: - 授权引导
+    // MARK: - Authorization guidance
 
     func testSettingsURLPointsAtFullDiskAccessPane() {
         XCTAssertEqual(
@@ -99,7 +99,7 @@ final class DiskCleanFullDiskAccessTests: XCTestCase {
         XCTAssertNotNil(DiskCleanFullDiskAccessGuide.settingsURL)
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func makeProbe(readability: FakeDiskCleanFileReadability) -> DiskCleanFullDiskAccessProbe {
         DiskCleanFullDiskAccessProbe(

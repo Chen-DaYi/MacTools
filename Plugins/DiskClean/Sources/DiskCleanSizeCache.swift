@@ -2,11 +2,12 @@ import Darwin
 import Foundation
 import os
 
-/// 根身份探针：不遍历、只取一次身份，供缓存命中判定使用。
+/// Root identity probe: no traversal, one identity sample for cache hit checks.
 ///
-/// 约束与 `DiskCleanRootOpener` 完全一致（设计 §3.2、§13-3）：先以 `O_NOFOLLOW_ANY` 打开父目录
-/// （路径中间级有符号链接就在这一步失败），再 `fstatat(AT_SYMLINK_NOFOLLOW)` 取末级身份。
-/// 直接 `lstat` 是错的——它会跟随中间级符号链接，等于放过"中间目录被换成 symlink"的替换攻击。
+/// Constraints match `DiskCleanRootOpener` exactly (design §3.2, §13-3): open the parent
+/// with `O_NOFOLLOW_ANY` first (any intermediate symlink fails here), then
+/// `fstatat(AT_SYMLINK_NOFOLLOW)` for the leaf identity. Plain `lstat` is wrong — it
+/// follows intermediate symlinks and would miss a "middle directory replaced by symlink" attack.
 protocol DiskCleanRootIdentityProbing: Sendable {
     func identity(ofItemAt path: String) -> DiskCleanRootIdentity?
 }
@@ -32,17 +33,21 @@ struct DiskCleanRootIdentityProbe: DiskCleanRootIdentityProbing {
     }
 }
 
-/// 大小缓存（设计 §4.3）。
+/// Size cache (design §4.3).
 ///
-/// - 键 = 路径；**命中条件 = 根身份三元组 `(devid, fileID, mtime)` 全等**。只比 mtime 不够：
-///   目录被整体替换（删掉重建、或换成另一个目录）时 mtime 可以被保留，fileID 一定变。
-/// - **只缓存 complete**：partial 结果复用等于把一次降级永久化。
-/// - TTL 240s，严格小于过期门 300s——否则会出现"过期 → 重扫 → 命中旧缓存 → 仍过期"的死循环。
-///   `forceRefresh` 绕过缓存是这条链的另一半保险（§4.3）。
-/// - `observedAt` 一律传导缓存条目的原始观测时刻，绝不刷新为读取时刻，否则过期门就被架空了。
+/// - Key = path; **hit requires full root-identity triple equality `(devid, fileID, mtime)`**.
+///   mtime alone is not enough: a directory replaced wholesale (delete/recreate or swap)
+///   can keep mtime while fileID always changes.
+/// - **Cache only complete results**: reusing partial would permanently bake in a degradation.
+/// - TTL is 240s, strictly below the 300s stale gate — otherwise "stale → rescan → hit old
+///   cache → still stale" loops. `forceRefresh` bypassing the cache is the other half of that
+///   insurance (§4.3).
+/// - Always propagate the cache entry's original `observedAt`; never refresh it to read time,
+///   or the stale gate is bypassed.
 ///
-/// 用锁而不用 actor：命中判定跑在 `DiskCleanWorkerPool` 的常驻线程上（与阻塞式 sizer 同一次调用），
-/// 那里不能 await。锁内只做字典操作，身份探测在锁外完成。
+/// Use a lock, not an actor: hit checks run on `DiskCleanWorkerPool` resident threads (same
+/// call as the blocking sizer) where await is not allowed. Only dictionary work runs under
+/// the lock; identity probing happens outside it.
 final class DiskCleanSizeCache: Sendable {
     static let timeToLive: TimeInterval = 240
     static let defaultCapacity = 500
@@ -50,13 +55,13 @@ final class DiskCleanSizeCache: Sendable {
     private struct Entry {
         let identity: DiskCleanRootIdentity
         let result: DiskCleanSizeResult
-        /// 写入时刻。TTL 按写入时刻计算，与 `result.observedAt` 一致但语义独立。
+        /// Write time. TTL is computed from write time; usually matches `result.observedAt` but is a separate concern.
         let storedAt: Date
     }
 
     private struct State {
         var entries: [String: Entry] = [:]
-        /// 写入顺序，用于容量上限淘汰。重复写入会把路径移到队尾。
+        /// Write order for capacity eviction. Rewrites move the path to the tail.
         var insertionOrder: [String] = []
     }
 
@@ -72,7 +77,7 @@ final class DiskCleanSizeCache: Sendable {
         self.timeToLive = max(timeToLive, 0)
     }
 
-    /// 命中则返回缓存结果（保留原 observedAt），未命中返回 nil 并顺手清掉失效条目。
+    /// On hit return the cached result (preserving original observedAt); on miss return nil and drop any stale entry.
     func result(
         forPath path: String,
         identity: DiskCleanRootIdentity,
@@ -122,8 +127,8 @@ final class DiskCleanSizeCache: Sendable {
         }
     }
 
-    /// 身份三元组全等。fileType 也必须相同——目录被换成同 inode 的其它类型不可能，
-    /// 但比较它是零成本的额外确认。
+    /// Full identity-triple equality. fileType must match too — a directory cannot become
+    /// another type at the same inode, but comparing it is a free extra check.
     private static func matches(_ cached: DiskCleanRootIdentity, _ current: DiskCleanRootIdentity) -> Bool {
         cached.devid == current.devid
             && cached.fileID == current.fileID
@@ -137,16 +142,17 @@ final class DiskCleanSizeCache: Sendable {
     }
 }
 
-/// 给任意 sizer 套上缓存的装饰器。
+/// Cache decorator around any sizer.
 ///
-/// 顺序很重要：**先探身份再查缓存**。反过来（先查缓存拿到条目再验身份）会在路径已被替换时
-/// 返回旧结果。身份探测失败（路径消失、中间级变成 symlink）时直接落到真实 sizer，
-/// 由它给出准确的降级原因。
+/// Order matters: **probe identity before consulting the cache**. The reverse
+/// (load a cache entry then validate identity) can return a stale result after path
+/// replacement. When identity probing fails (path gone, intermediate symlink), fall
+/// through to the real sizer so it can report the precise degradation reason.
 struct DiskCleanCachingSizer: DiskCleanDirectorySizing {
     let base: any DiskCleanDirectorySizing
     let cache: DiskCleanSizeCache
     let identityProbe: any DiskCleanRootIdentityProbing
-    /// true = 绕过缓存读取（仍写入）。过期门触发后的重扫必须走这条路径。
+    /// true = bypass cache reads (still write). Rescans after the stale gate must take this path.
     let forceRefresh: Bool
 
     init(

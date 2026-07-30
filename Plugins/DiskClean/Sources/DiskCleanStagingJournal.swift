@@ -1,24 +1,26 @@
 import Darwin
 import Foundation
 
-/// 暂存事务 journal（设计 §7.6）。
+/// Staging transaction journal (design §7.6).
 ///
-/// **写入顺序铁律：`begin` 落盘并 fsync 之后才允许 rename。** 进程若在 rename 后、
-/// 完成记录前崩溃，启动 reconciliation 靠 journal 找回孤儿暂存对象；顺序反过来
-/// 就会出现"无记录的 `.mactools-staged-*`"——SafetyPolicy 会保护它不被扫描收走，
-/// 但没人知道它的原名，用户数据事实上失踪。
+/// **Write-order invariant: rename is allowed only after `begin` is durable and fsynced.**
+/// If the process crashes after rename but before the completion record, startup
+/// reconciliation uses the journal to recover orphan staged objects. Reversing the
+/// order yields "unrecorded `.mactools-staged-*`" — SafetyPolicy would still protect
+/// it from the scan pipeline, but nobody knows the original name, so user data is
+/// effectively lost.
 final class DiskCleanStagingJournal: @unchecked Sendable {
     struct Entry: Codable, Equatable, Sendable {
         let id: String
         let timestamp: Date
-        /// 父目录物理路径。
+        /// Physical path of the parent directory.
         let parentPath: String
         let originalName: String
         let stagedName: String
         let mode: DiskCleanRemovalMode.RawValue
     }
 
-    /// journal 行。begin 与 completion 共用一个文件，按 `kind` 区分。
+    /// Journal line. Begin and completion share one file and are distinguished by `kind`.
     private struct Line: Codable {
         enum Kind: String, Codable {
             case begin
@@ -40,8 +42,9 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    /// **不在 init 里碰文件系统**：默认构造的插件（含测试里的插件）会连带建出
-    /// `~/Library/Application Support/...`，那是真实用户目录。目录改为首次写入时创建。
+    /// **Do not touch the filesystem in init**: a default-constructed plugin (including
+    /// in tests) would create `~/Library/Application Support/...`, a real user directory.
+    /// Create the directory on first write instead.
     init(directory: URL) {
         self.directory = directory
         self.fileURL = directory.appendingPathComponent(Self.fileName)
@@ -52,7 +55,7 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    /// 记录暂存开始。**必须在 rename 之前调用且成功返回**；写入后 fsync。
+    /// Record staging begin. **Must be called and succeed before rename**; fsync after write.
     func begin(_ entry: Entry) throws {
         try append(
             Line(kind: .begin, entry: entry, entryID: nil, status: nil, timestamp: entry.timestamp),
@@ -60,7 +63,7 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
         )
     }
 
-    /// 记录暂存处置完成（删除成功 / 已回滚 / partiallyDeleted 等）。
+    /// Record staging disposition complete (deleted / rolled back / partiallyDeleted, etc.).
     func complete(entryID: String, status: String, at timestamp: Date = Date()) {
         try? append(
             Line(kind: .end, entry: nil, entryID: entryID, status: status, timestamp: timestamp),
@@ -68,14 +71,14 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
         )
     }
 
-    /// 未完成条目：有 begin、无 end。启动 reconciliation 的输入。
+    /// Unfinished entries: have begin, no end. Input for startup reconciliation.
     func incompleteEntries() -> [Entry] {
         lock.lock()
         defer { lock.unlock() }
         return incompleteEntriesLocked()
     }
 
-    /// 前置条件：已持有 `lock`。
+    /// Precondition: `lock` is already held.
     private func incompleteEntriesLocked() -> [Entry] {
         guard let data = try? Data(contentsOf: fileURL) else { return [] }
         var beginsByID: [String: Entry] = [:]
@@ -83,8 +86,8 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
 
         for lineData in data.split(separator: UInt8(ascii: "\n")) {
             guard let line = try? decoder.decode(Line.self, from: Data(lineData)) else {
-                // 半行（崩溃时写到一半）或损坏行：跳过。begin 损坏意味着 rename 尚未发生
-                //（顺序铁律），不会因此漏掉孤儿。
+                // Partial line (crash mid-write) or corrupt line: skip. A corrupt begin means
+                // rename has not happened yet (write-order invariant), so we do not miss orphans.
                 continue
             }
             switch line.kind {
@@ -105,7 +108,7 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
             .sorted { $0.timestamp < $1.timestamp }
     }
 
-    /// 压实：只保留仍未完成的条目。reconciliation 收尾时调用，防 journal 无限增长。
+    /// Compact: keep only still-unfinished entries. Called at reconciliation wrap-up to stop unbounded journal growth.
     func compact() {
         lock.lock()
         defer { lock.unlock() }
@@ -137,11 +140,12 @@ final class DiskCleanStagingJournal: @unchecked Sendable {
         try handle.seekToEnd()
         try handle.write(contentsOf: data)
         if synchronize {
-            // fsync 语义：rename 之前 begin 必须真正在盘上（§7.6 铁律）。
+            // fsync semantics: begin must be durable before rename (§7.6 invariant).
             try handle.synchronize()
             if didCreateFile {
-                // 文件内容落盘不代表**目录项**落盘。第一条 begin 恰好创建 journal 时，
-                // 少了这一步就可能出现"暂存对象在、journal 文件整个不在"的崩溃后状态。
+                // File contents on disk do not imply the **directory entry** is durable.
+                // When the first begin also creates the journal, skipping this step can leave
+                // "staged object present, journal file entirely missing" after a crash.
                 synchronizeDirectory()
             }
         }

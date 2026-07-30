@@ -3,33 +3,33 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 选择模型的语义矩阵（设计 §8.1）。
+/// Selection-model semantic matrix (design §8.1).
 ///
-/// 这里验证的是"用户操作 × 候选事实"的组合结果，不涉及任何 UI：
-/// 详情视图与菜单栏都只是这些结论的两种画法。
+/// Verifies the combination of "user action × candidate facts" with no UI:
+/// detail view and menu bar are just two renderings of these conclusions.
 final class DiskCleanSelectionModelTests: XCTestCase {
     private let observedAt = Date(timeIntervalSince1970: 10_000)
 
-    // MARK: - 可勾选判定
+    // MARK: - Selectability
 
     func testUnselectableCandidatesCoverEverySixReasons() {
         let cases: [(String, DiskCleanCandidate)] = [
-            ("锁定", makeCandidate(id: "inUse", safety: .inUse(processName: "Safari"))),
-            ("白名单", makeCandidate(id: "whitelisted", safety: .whitelisted(rule: "rule"))),
-            ("保护", makeCandidate(id: "protected", safety: .protected(reason: "credentials"))),
-            ("非 complete", makeCandidate(id: "partial", completeness: .partial(reasons: [.timedOut]))),
-            ("未求大小", makeCandidate(id: "unsized", sized: false)),
-            ("含挂载点", makeCandidate(id: "mount", completeness: .partial(reasons: [.crossedMountPoint])))
+            ("in use", makeCandidate(id: "inUse", safety: .inUse(processName: "Safari"))),
+            ("whitelisted", makeCandidate(id: "whitelisted", safety: .whitelisted(rule: "rule"))),
+            ("protected", makeCandidate(id: "protected", safety: .protected(reason: "credentials"))),
+            ("not complete", makeCandidate(id: "partial", completeness: .partial(reasons: [.timedOut]))),
+            ("unsized", makeCandidate(id: "unsized", sized: false)),
+            ("crossed mount point", makeCandidate(id: "mount", completeness: .partial(reasons: [.crossedMountPoint])))
         ]
 
         for (reason, candidate) in cases {
             XCTAssertFalse(
                 DiskCleanSelectionModel.isSelectable(candidate),
-                "\(reason)的候选必须不可勾选"
+                "candidate must be unselectable for: \(reason)"
             )
             XCTAssertFalse(
                 DiskCleanSelectionModel.isSelectedByDefault(candidate),
-                "\(reason)的候选不能被默认策略勾选"
+                "candidate must not be default-selected for: \(reason)"
             )
         }
     }
@@ -38,15 +38,15 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         var model = DiskCleanSelectionModel()
         let locked = makeCandidate(id: "locked", safety: .inUse(processName: "Safari"))
 
-        XCTAssertFalse(model.setCandidate(locked, isSelected: true), "toggle 必须被拒绝，不是仅 UI 禁用")
+        XCTAssertFalse(model.setCandidate(locked, isSelected: true), "toggle must be rejected, not merely UI-disabled")
         XCTAssertFalse(model.isSelected(locked))
 
-        // 拒绝不留记录：即便这一项日后变得可勾选，也该按默认策略走，而不是沿用一次被拒的点击。
+        // Rejection leaves no record: if the item later becomes selectable, default policy applies rather than a rejected click.
         let unlocked = makeCandidate(id: "locked", risk: .medium)
         XCTAssertFalse(model.isSelected(unlocked))
     }
 
-    // MARK: - 默认策略
+    // MARK: - Default policy
 
     func testDefaultSelectionTakesLowRiskOnly() {
         let model = DiskCleanSelectionModel()
@@ -56,21 +56,21 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertFalse(model.isSelected(makeCandidate(id: "high", risk: .high)))
     }
 
-    /// 动态规则产物的 target 风险恒 >= medium（设计 §5.5），因此默认策略自动把它们排除，
-    /// 不需要在选择模型里再认一次"这是不是动态规则"。
+    /// Dynamic-rule product targets always have risk >= medium (design §5.5), so default policy excludes them
+    /// without the selection model re-detecting "is this a dynamic rule".
     func testDynamicRuleProductsAreNotSelectedByDefault() {
         let model = DiskCleanSelectionModel()
         let dynamicTargets = DiskCleanRuleCatalogV2.current.targets.filter(\.isDynamic)
 
-        XCTAssertFalse(dynamicTargets.isEmpty, "目录里应当有动态 target，否则这条断言是空转")
+        XCTAssertFalse(dynamicTargets.isEmpty, "catalog should have dynamic targets or this assertion is vacuous")
         for target in dynamicTargets {
             XCTAssertGreaterThanOrEqual(target.risk, .medium)
             let candidate = makeCandidate(id: target.id, category: target.category, risk: target.risk)
-            XCTAssertFalse(model.isSelected(candidate), "\(target.id) 不该被默认勾选")
+            XCTAssertFalse(model.isSelected(candidate), "\(target.id) must not be default-selected")
         }
     }
 
-    // MARK: - 逐项覆盖
+    // MARK: - Per-item overrides
 
     func testExplicitCandidateSelectionOverridesDefaultInBothDirections() {
         var model = DiskCleanSelectionModel()
@@ -81,10 +81,10 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertTrue(model.setCandidate(medium, isSelected: true))
 
         XCTAssertFalse(model.isSelected(low))
-        XCTAssertTrue(model.isSelected(medium), "用户可以显式选中 medium，只是默认不选")
+        XCTAssertTrue(model.isSelected(medium), "user may explicitly select medium; default simply does not")
     }
 
-    // MARK: - 分类三态
+    // MARK: - Category three-state
 
     func testCategorySelectAllTakesLowRiskOnlyAndClearsPerItemOverrides() {
         var model = DiskCleanSelectionModel()
@@ -95,8 +95,8 @@ final class DiskCleanSelectionModelTests: XCTestCase {
 
         model.setCategory(.appCaches, isSelected: true)
 
-        XCTAssertTrue(model.isSelected(low), "分类全选清掉本类的逐项取消")
-        XCTAssertFalse(model.isSelected(medium), "\"全选\"= 全部低风险项，medium 不被带入")
+        XCTAssertTrue(model.isSelected(low), "category select-all clears per-item deselects in that category")
+        XCTAssertFalse(model.isSelected(medium), "\"select all\" means all low-risk items; medium is not included")
         XCTAssertEqual(model.explicitOperation(for: .appCaches), .selectAllLowRisk)
     }
 
@@ -108,7 +108,7 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         model.setCategory(.appCaches, isSelected: false)
 
         XCTAssertFalse(model.isSelected(cacheItem))
-        XCTAssertTrue(model.isSelected(logItem), "分类操作只作用于本类")
+        XCTAssertTrue(model.isSelected(logItem), "category operations only affect that category")
     }
 
     func testCategoryStateReportsThreeStatesAndUnavailable() {
@@ -124,7 +124,7 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertEqual(
             model.projection(for: [low, medium, locked]).state(of: .logs),
             .unavailable,
-            "全是不可勾选项的分类要能与\"这一类没扫到东西\"区分开"
+            "all-unselectable category must be distinct from \"nothing scanned in this category\""
         )
         XCTAssertEqual(
             model.projection(for: [low]).state(of: .appCaches),
@@ -139,11 +139,11 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertEqual(
             model.projection(for: []).state(of: .browsers),
             .unavailable,
-            "本次扫描没有的分类按不可用处理"
+            "categories absent from this scan are unavailable"
         )
     }
 
-    // MARK: - 流式新增 × 显式覆盖矩阵
+    // MARK: - Streaming arrivals × explicit override matrix
 
     func testNewCandidateFollowsDefaultPolicyWhenCategoryWasNeverTouched() {
         let model = DiskCleanSelectionModel()
@@ -158,11 +158,11 @@ final class DiskCleanSelectionModelTests: XCTestCase {
 
         XCTAssertFalse(
             model.isSelected(makeCandidate(id: "newLow", risk: .low)),
-            "显式\"全不选\"是持续生效的意图，不是一次性操作"
+            "explicit deselect-all is a standing intent, not a one-shot action"
         )
         XCTAssertTrue(
             model.isSelected(makeCandidate(id: "otherCategory", category: .logs)),
-            "另一个分类不受影响"
+            "other categories are unaffected"
         )
     }
 
@@ -173,7 +173,7 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertTrue(model.isSelected(makeCandidate(id: "newLow", risk: .low)))
         XCTAssertFalse(
             model.isSelected(makeCandidate(id: "newMedium", risk: .medium)),
-            "medium 永远不会被\"全选\"带入，新到的也一样"
+            "medium is never pulled in by select-all, including newly arrived items"
         )
     }
 
@@ -196,11 +196,11 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertTrue(model.isSelected(picked))
         XCTAssertFalse(
             model.isSelected(makeCandidate(id: "new", risk: .low)),
-            "逐项重新勾选不会撤销分类级的\"全不选\""
+            "reselecting one item does not revoke category-level deselect-all"
         )
     }
 
-    /// 候选先无大小出现、随后被补齐（设计 §4.1、§4.2）：默认策略必须在"变得可勾选"的那一刻生效。
+    /// Candidate appears unsized first, then size completes (design §4.1, §4.2): default policy must apply the moment it becomes selectable.
     func testCandidateEntersSelectionOnceSizingCompletes() {
         let model = DiskCleanSelectionModel()
         let unsized = makeCandidate(id: "a", sized: false)
@@ -209,7 +209,7 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertTrue(model.isSelected(unsized.applying(.testComplete(bytes: 10, observedAt: observedAt))))
     }
 
-    /// 反方向：已按默认勾选的候选若被重新求大小成 partial，必须立刻掉出选中集。
+    /// Reverse: a default-selected candidate re-sized as partial must leave the selection immediately.
     func testCandidateLeavesSelectionWhenItBecomesIncomplete() {
         let model = DiskCleanSelectionModel()
         let sized = makeCandidate(id: "a")
@@ -220,7 +220,7 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         )
     }
 
-    // MARK: - 派生值与重置
+    // MARK: - Derived values and reset
 
     func testProjectionDerivesCountAndBytesFromSelectedItemsOnly() {
         var model = DiskCleanSelectionModel()
@@ -253,7 +253,7 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertNil(model.explicitOperation(for: .logs))
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func makeCandidate(
         id: String,

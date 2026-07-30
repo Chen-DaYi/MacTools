@@ -3,22 +3,22 @@ import MacToolsPluginKit
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 专用扫描器 → 统一管线的适配（设计 §10）。
+/// Adapter from specialized scanners into the unified pipeline (design §10).
 ///
-/// 关注两件事：候选被挂到**真实存在的合成 target** 上（否则 `makePlan` 会拒绝），
-/// 以及"默认勾不勾"的事实被如实翻译成风险覆盖与附注。
+/// Two concerns: candidates attach to **real synthetic targets** (else `makePlan` rejects them),
+/// and default-selection facts are translated faithfully into risk overrides and notes.
 final class DiskCleanExternalExpansionTests: XCTestCase {
     private let catalog = DiskCleanRuleCatalogV2.current
     private let localization = PluginLocalization(bundle: .main)
 
-    // MARK: - 开发产物：风险覆盖与附注
+    // MARK: - Developer artifacts: risk overrides and notes
 
     func testCleanRepositoryCandidateBecomesLowRiskWithProjectNote() {
         let facts = DiskCleanDeveloperArtifactExpansion.facts(
             for: candidate(gitState: .clean(repositoryPath: "/code/app"))
         )
 
-        XCTAssertEqual(facts.risk, .low, "仓库干净的产物应当默认勾选")
+        XCTAssertEqual(facts.risk, .low, "artifacts from a clean repo should be selected by default")
         XCTAssertEqual(
             facts.notes,
             [.developerProject(path: "/code/app", marker: "package.json")]
@@ -29,10 +29,10 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         let facts = DiskCleanDeveloperArtifactExpansion.facts(for: candidate(gitState: .notInRepository))
 
         XCTAssertEqual(facts.risk, .low)
-        XCTAssertEqual(facts.notes.count, 1, "不在仓库里就没有仓库徽标")
+        XCTAssertEqual(facts.notes.count, 1, "no repo badge when not inside a repository")
     }
 
-    /// 脏仓库不给覆盖值 → 沿用合成 target 的 medium → 不默认勾选（设计 §10.1）。
+    /// Dirty repo yields no override → keep synthetic target medium → not selected by default (design §10.1).
     func testDirtyRepositoryCandidateKeepsTargetRiskAndCarriesBadge() {
         let facts = DiskCleanDeveloperArtifactExpansion.facts(
             for: candidate(
@@ -40,7 +40,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
             )
         )
 
-        XCTAssertNil(facts.risk, "不覆盖即沿用 target 的 medium，方向 fail-safe")
+        XCTAssertNil(facts.risk, "no override keeps target medium; fail-safe direction")
         XCTAssertEqual(
             facts.notes,
             [
@@ -50,7 +50,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         )
     }
 
-    /// git 查不出来同样按"有改动"处理，但徽标要说清楚是"没查出来"而不是"确实有改动"。
+    /// Failed git inspection is also treated as "has changes", but the badge must say "could not check", not "definitely dirty".
     func testGitInspectionFailureIsTreatedAsDirtyWithItsOwnReason() {
         let facts = DiskCleanDeveloperArtifactExpansion.facts(
             for: candidate(
@@ -66,7 +66,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         )
     }
 
-    // MARK: - 开发产物：整体展开
+    // MARK: - Developer artifacts: full expansion
 
     func testExpandsDiscoveredCandidatesOntoCatalogTargets() async throws {
         let root = try makeTemporaryDirectory()
@@ -88,8 +88,9 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         XCTAssertTrue(hit.item.isDirectory)
     }
 
-    /// 保留根语义（设计 §10.1）：根本身不是删除对象，但"根下未被候选覆盖的部分从未审查过"，
-    /// 因此全体已配置的根都进保留集，与遍历成功与否无关。
+    /// Reserved-root semantics (design §10.1): the root itself is not a deletion target, but
+    /// "parts under the root not covered by candidates were never reviewed", so every configured root
+    /// enters the reserved set regardless of walk success.
     func testReservesEveryConfiguredRootRegardlessOfOutcome() async throws {
         let root = try makeTemporaryDirectory()
         let missing = root + "/does-not-exist"
@@ -103,7 +104,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         XCTAssertEqual(expansion.reservedRootPaths, [root, missing])
     }
 
-    /// 根整个打不开必须上报——"扫过但没有候选"与"根本没扫到"对用户是两件事。
+    /// Unreadable roots must be reported — "scanned with no candidates" and "never scanned" are different for the user.
     func testUnreadableRootIsReportedAsLimitation() async throws {
         let root = try makeTemporaryDirectory()
         let missing = root + "/does-not-exist"
@@ -117,7 +118,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         XCTAssertTrue(expansion.hits.isEmpty)
         XCTAssertEqual(expansion.limitations.count, 1)
         guard case let .scanRootUnreadable(path, _) = try XCTUnwrap(expansion.limitations.first) else {
-            return XCTFail("应上报 scanRootUnreadable")
+            return XCTFail("should report scanRootUnreadable")
         }
         XCTAssertEqual(path, missing)
     }
@@ -134,7 +135,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         XCTAssertTrue(expansion.limitations.isEmpty)
     }
 
-    // MARK: - 残留安装包
+    // MARK: - Leftover installers
 
     func testStaleInstallerBecomesLowRiskWithoutNotes() {
         let facts = DiskCleanInstallerExpansion.facts(
@@ -150,7 +151,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
             for: installerCandidate(kind: .zipArchive, isSelectedByDefault: false, note: .mayNotBeInstaller)
         )
 
-        XCTAssertNil(facts.risk, ".zip 永不默认勾选")
+        XCTAssertNil(facts.risk, ".zip is never selected by default")
         XCTAssertEqual(facts.notes, [.mayNotBeInstaller])
     }
 
@@ -185,11 +186,11 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         XCTAssertEqual(
             expansion.reservedRootPaths,
             [DiskCleanRuleTarget.expandHome(in: "~/Downloads", homeDirectory: NSHomeDirectory())],
-            "五个 target 声明的是同一个 ~/Downloads，去重后只留一条"
+            "five targets declare the same ~/Downloads; dedupe keeps one"
         )
     }
 
-    /// TCC 拒绝时目录里可能躺着几十 GB，绝不能降级成"没有可清理项"。
+    /// On TCC denial the directory may hold tens of GB; must not degrade to "nothing cleanable".
     func testDeniedDownloadsIsReportedAsPermissionLimitation() async throws {
         let parent = try makeTemporaryDirectory()
         let downloads = parent + "/Downloads"
@@ -210,7 +211,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         )
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func candidate(gitState: DiskCleanPurgeGitState) -> DiskCleanPurgeCandidate {
         DiskCleanPurgeCandidate(
@@ -241,7 +242,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
         )
     }
 
-    /// 退出码 0 + 空输出 = 工作区干净且没有未推送提交。
+    /// Exit code 0 + empty output = clean worktree and no unpushed commits.
     private func cleanGitRunner() -> FakeDiskCleanSubprocessRunner {
         FakeDiskCleanSubprocessRunner(exitCode: 0, standardOutput: "")
     }
@@ -251,7 +252,7 @@ final class DiskCleanExternalExpansionTests: XCTestCase {
             .appendingPathComponent("diskclean-expansion-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
-        // 临时目录常在 /var（本身是符号链接）下，而扫描根一律以 O_NOFOLLOW_ANY 打开。
+        // Temp dirs often live under /var (itself a symlink), while scan roots always open with O_NOFOLLOW_ANY.
         return DiskCleanPhysicalPath.realpath(of: url.path) ?? url.path
     }
 

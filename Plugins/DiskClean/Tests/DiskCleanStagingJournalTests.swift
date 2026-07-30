@@ -3,7 +3,7 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 暂存 journal 与崩溃点矩阵（设计 §7.6）。
+/// Staging journal and crash-point matrix (design §7.6).
 final class DiskCleanStagingJournalTests: XCTestCase {
     private var storage: DiskCleanTempDirectory!
     private var journal: DiskCleanStagingJournal!
@@ -28,11 +28,11 @@ final class DiskCleanStagingJournalTests: XCTestCase {
 
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: untouched.path),
-            "构造 journal 不得建目录：默认构造的插件会连带在真实用户目录里建出状态目录"
+            "constructing a journal must not create directories: a default-constructed plugin would create state dirs in real user paths"
         )
     }
 
-    /// 崩溃点一：begin 已落盘、rename 尚未发生或已发生但完成记录没写 → 条目未完成。
+    /// Crash point 1: begin is durable, rename not yet done or done without a completion record → entry incomplete.
     func testEntryWithoutCompletionIsIncomplete() throws {
         let entry = makeEntry(id: "one")
 
@@ -41,7 +41,7 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         XCTAssertEqual(journal.incompleteEntries(), [entry])
     }
 
-    /// 崩溃点二：完成记录已落盘 → 条目销账，reconciliation 不会再碰它。
+    /// Crash point 2: completion record is durable → entry is cleared; reconciliation will not touch it.
     func testCompletedEntryIsNotIncomplete() throws {
         let entry = makeEntry(id: "one")
         try journal.begin(entry)
@@ -64,7 +64,7 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         XCTAssertEqual(journal.incompleteEntries().map(\.id), ["first", "third"])
     }
 
-    /// 崩溃时最后一行可能只写了一半。半行必须被跳过，且不影响其它条目。
+    /// On crash the last line may be half-written. Half lines must be skipped without affecting other entries.
     func testTruncatedTrailingLineIsTolerated() throws {
         let entry = makeEntry(id: "one")
         try journal.begin(entry)
@@ -77,7 +77,7 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         XCTAssertEqual(
             journal.incompleteEntries(),
             [entry],
-            "半行只能丢掉它自己。写入顺序铁律保证：begin 没落全 = rename 还没发生 = 没有孤儿"
+            "a half line may only discard itself. Write-order invariant: incomplete begin = rename not yet done = no orphans"
         )
     }
 
@@ -106,7 +106,7 @@ final class DiskCleanStagingJournalTests: XCTestCase {
 
         XCTAssertEqual(journal.incompleteEntries(), [pending])
         let contents = try String(contentsOf: storage.resolve(DiskCleanStagingJournal.fileName), encoding: .utf8)
-        XCTAssertFalse(contents.contains("done"), "压实后已完成的条目不该继续占地方")
+        XCTAssertFalse(contents.contains("done"), "completed entries must not keep space after compaction")
         XCTAssertEqual(contents.split(separator: "\n").count, 1)
     }
 
@@ -132,7 +132,7 @@ final class DiskCleanStagingJournalTests: XCTestCase {
 
         XCTAssertThrowsError(
             try blocked.begin(makeEntry(id: "one")),
-            "写不进 journal 必须抛错——调用方据此放弃改名"
+            "journal write failure must throw so the caller aborts the rename"
         )
     }
 

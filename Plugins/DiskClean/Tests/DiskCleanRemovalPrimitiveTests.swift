@@ -4,17 +4,17 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 验证-冻结-删除原语的行为契约（设计 §7.3、§7.4）。
+/// Behavior contract for the verify-freeze-delete primitive (design §7.3, §7.4).
 ///
-/// **全部使用真实 syscall 与临时目录**：这段代码的正确性完全落在 `renameatx_np` / `fstatat` /
-/// `unlinkat` 的真实语义上，用 fake 文件系统测它等于什么都没测。唯二注入的是废纸篓
-/// （不能碰用户真实废纸篓）与条目设备号（挂载穿越在临时目录里造不出来）。
+/// **All real syscalls and temp directories**: correctness rests on real `renameatx_np` / `fstatat` /
+/// `unlinkat` semantics; a fake filesystem would test nothing. The only injections are trash
+/// (must not touch the user's real Trash) and entry device IDs (mount crossing cannot be fabricated in a temp dir).
 @MainActor
 final class DiskCleanRemovalPrimitiveTests: XCTestCase {
     private var temporary: DiskCleanTempDirectory!
     private var storage: DiskCleanTempDirectory!
     private var journal: DiskCleanStagingJournal!
-    /// 被改成只读的目录，teardown 前必须恢复权限，否则删不掉会留垃圾。
+    /// Directories made read-only must have permissions restored before teardown or cleanup fails.
     private var restrictedDirectories: [String] = []
 
     override func setUpWithError() throws {
@@ -37,7 +37,7 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - 永久删除
+    // MARK: - Permanent delete
 
     func testPermanentModeDeletesDirectoryTreeAndLeavesNoStagedRemnant() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
@@ -50,8 +50,8 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
 
         XCTAssertEqual(disposition, .removed)
         assertPathDoesNotExist(target)
-        XCTAssertEqual(stagedNames(in: temporary.path), [], "删干净后不应留下任何暂存残骸")
-        XCTAssertTrue(journal.incompleteEntries().isEmpty, "成功处置必须销账")
+        XCTAssertEqual(stagedNames(in: temporary.path), [], "successful delete must leave no staged remnants")
+        XCTAssertTrue(journal.incompleteEntries().isEmpty, "successful disposition must clear the journal")
     }
 
     func testPermanentModeDeletesRegularFileWithoutPrewalk() throws {
@@ -65,7 +65,7 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         assertPathDoesNotExist(target)
     }
 
-    /// symlink 候选删链接本身，绝不跟随。
+    /// Symlink candidates remove the link itself and never follow.
     func testSymlinkCandidateRemovesLinkItselfAndKeepsTarget() throws {
         try temporary.makeFile("Outside/precious.bin", bytes: 4_096)
         try temporary.makeSymlink("Link/toOutside", destination: "../Outside")
@@ -76,19 +76,19 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
 
         XCTAssertEqual(disposition, .removed)
         assertPathDoesNotExist(target)
-        assertPathExists(temporary.resolve("Outside/precious.bin").path, "绝不能跟随链接删掉目标")
+        assertPathExists(temporary.resolve("Outside/precious.bin").path, "must not follow the link and delete the target")
     }
 
-    // MARK: - 路径交换（§7.3 的核心竞态）
+    // MARK: - Path swap (core race in §7.3)
 
-    /// 记录身份后把目标换成指向别处的符号链接 → 拒绝，且链接与其目标都无损。
+    /// After identity is recorded, replace the target with a symlink elsewhere → refuse; link and target stay intact.
     func testTargetReplacedWithSymlinkAfterPlanIsRefused() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
         try temporary.makeFile("Precious/data.bin", bytes: 8_192)
         let target = temporary.resolve("Cache").path
         let plan = try DiskCleanPlanFactory.makePlan(paths: [target])
 
-        // 计划铸造之后、执行之前：目标被换成指向用户数据的符号链接。
+        // After plan minting, before execution: target swapped for a symlink into user data.
         try FileManager.default.removeItem(atPath: target)
         try FileManager.default.createSymbolicLink(
             atPath: target,
@@ -98,12 +98,12 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         let disposition = makePrimitive().remove(plan.items[0], mode: .permanent)
 
         XCTAssertEqual(disposition, .changedSinceScan)
-        assertPathExists(target, "被换上的符号链接本身不该被触碰")
-        assertPathExists(temporary.resolve("Precious/data.bin").path, "链接指向的用户数据必须无损")
-        XCTAssertTrue(journal.incompleteEntries().isEmpty, "身份不符时根本没有发生改名")
+        assertPathExists(target, "the replacement symlink itself must not be touched")
+        assertPathExists(temporary.resolve("Precious/data.bin").path, "user data behind the link must remain intact")
+        XCTAssertTrue(journal.incompleteEntries().isEmpty, "identity mismatch must not rename")
     }
 
-    /// 记录身份后换成同名新目录（fileID 不同）→ 拒绝，新目录内容无损。
+    /// After identity is recorded, replace with a same-name directory (different fileID) → refuse; new contents intact.
     func testTargetReplacedWithSameNameDirectoryIsRefused() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
         let target = temporary.resolve("Cache").path
@@ -115,10 +115,10 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         let disposition = makePrimitive().remove(plan.items[0], mode: .permanent)
 
         XCTAssertEqual(disposition, .changedSinceScan)
-        assertPathExists(temporary.resolve("Cache/brand-new.bin").path, "同名新目录的内容必须无损")
+        assertPathExists(temporary.resolve("Cache/brand-new.bin").path, "contents of the same-name replacement must stay intact")
     }
 
-    /// 中间一级被换成符号链接 → `O_NOFOLLOW_ANY` 在打开父目录时就失败，绝不顺着链接删。
+    /// Middle path component swapped for a symlink → `O_NOFOLLOW_ANY` fails when opening the parent; never delete through the link.
     func testMiddleComponentReplacedWithSymlinkIsRefused() throws {
         try temporary.makeDirectory("Parent")
         try temporary.makeFile("Parent/Cache/a.bin", bytes: 10)
@@ -135,12 +135,12 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         let disposition = makePrimitive().remove(plan.items[0], mode: .permanent)
 
         guard case .failed = disposition else {
-            return XCTFail("中间级 symlink 必须以失败告终，实际：\(disposition)")
+            return XCTFail("middle-component symlink must fail, got: \(disposition)")
         }
-        assertPathExists(temporary.resolve("Elsewhere/Cache/precious.bin").path, "链接背后的数据必须无损")
+        assertPathExists(temporary.resolve("Elsewhere/Cache/precious.bin").path, "data behind the link must stay intact")
     }
 
-    /// 目录内容在扫描后发生变化（根 mtime 改变）→ 拒绝并引导重扫。
+    /// Directory contents change after scan (root mtime changes) → refuse and force a rescan.
     func testDirectoryModifiedAfterPlanIsRefused() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
         let target = temporary.resolve("Cache").path
@@ -154,11 +154,11 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         assertPathExists(temporary.resolve("Cache/added-later.bin").path)
     }
 
-    /// 普通文件的大小与计划不符 → 拒绝（mtime 被保留时的第二道证据）。
+    /// Regular-file size mismatches the plan → refuse (second evidence when mtime is preserved).
     func testRegularFileWithDifferentSizeIsRefused() throws {
         try temporary.makeFile("log.txt", bytes: 100)
         let target = temporary.resolve("log.txt").path
-        // 大小对不上，其余身份字段全等——只有 size 比对能拦下它。
+        // Size mismatches while other identity fields match — only size comparison can catch this.
         let candidate = DiskCleanPlanFactory.candidate(
             path: target,
             identity: try XCTUnwrap(DiskCleanPlanFactory.currentIdentity(ofItemAt: target)),
@@ -178,16 +178,16 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         assertPathExists(target)
     }
 
-    // MARK: - 冻结语义
+    // MARK: - Freeze semantics
 
-    /// 冻结之后，原路径上出现什么都与本次处置无关——对象已经脱离那个名字。
+    /// After freeze, anything appearing at the original path is unrelated — the object has left that name.
     func testStagedObjectIsDetachedFromOriginalPath() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
         let target = temporary.resolve("Cache").path
         let plan = try DiskCleanPlanFactory.makePlan(paths: [target], mode: .trash)
         let recreatedMarker = temporary.resolve("Cache/recreated.bin").path
 
-        // 处置进行中，另一个"进程"在原路径上重建了缓存目录。
+        // During disposition, another "process" recreates the cache directory at the original path.
         let trash = FakeDiskCleanTrash(duringTrash: {
             try? FileManager.default.createDirectory(
                 atPath: target,
@@ -199,14 +199,14 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         let disposition = makePrimitive(trash: trash).remove(plan.items[0], mode: .trash)
 
         guard case let .trashed(stagedName) = disposition else {
-            return XCTFail("期望 trashed，实际：\(disposition)")
+            return XCTFail("expected trashed, got: \(disposition)")
         }
         XCTAssertEqual(
             trash.trashedPaths,
             [DiskCleanRemovalPrimitive.join(temporary.path, stagedName)],
-            "废纸篓必须作用于暂存路径，而不是会被重新解析的原路径"
+            "trash must operate on the staged path, not the re-resolvable original path"
         )
-        assertPathExists(recreatedMarker, "重建在原路径上的新对象与本次处置无关，必须无损")
+        assertPathExists(recreatedMarker, "object recreated at the original path is unrelated and must stay intact")
     }
 
     func testTrashOperatesOnStagedNameWithProtectedPrefix() throws {
@@ -217,13 +217,13 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         let disposition = makePrimitive(trash: trash).remove(plan.items[0], mode: .trash)
 
         guard case let .trashed(stagedName) = disposition else {
-            return XCTFail("期望 trashed，实际：\(disposition)")
+            return XCTFail("expected trashed, got: \(disposition)")
         }
         XCTAssertTrue(stagedName.hasPrefix(DiskCleanRemovalPrimitive.stagedNamePrefix))
         XCTAssertTrue(journal.incompleteEntries().isEmpty)
     }
 
-    /// 暂存名冲突 → 换一个 uuid 重试一次，且绝不覆盖占位对象（RENAME_EXCL）。
+    /// Staged-name collision → retry once with a new uuid and never overwrite the placeholder (RENAME_EXCL).
     func testStagedNameCollisionRetriesWithNewNameAndNeverOverwrites() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
         let collidingName = DiskCleanRemovalPrimitive.stagedNamePrefix + "collision"
@@ -236,18 +236,18 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         XCTAssertEqual(disposition, .removed)
         assertPathExists(
             temporary.resolve(collidingName).path,
-            "RENAME_EXCL 必须保证占位对象不被覆盖"
+            "RENAME_EXCL must guarantee the placeholder is not overwritten"
         )
         XCTAssertEqual(DiskCleanPlanFactory.currentSize(ofItemAt: temporary.resolve(collidingName).path), 7)
     }
 
-    /// journal 写不进去就绝不改名——顺序铁律的反向验证。
+    /// If the journal cannot be written, never rename — reverse check of the ordering invariant.
     func testRenameNeverHappensWhenJournalCannotBeWritten() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
         let target = temporary.resolve("Cache").path
         let plan = try DiskCleanPlanFactory.makePlan(paths: [target])
 
-        // 把 journal 目录的位置占成一个普通文件：createDirectory 与写入都会失败。
+        // Occupy the journal directory path with a regular file so createDirectory and writes fail.
         let blocked = try DiskCleanTempDirectory(name: "diskclean-blocked-journal")
         defer { blocked.remove() }
         try blocked.makeFile("state", bytes: 1)
@@ -257,13 +257,13 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
             .remove(plan.items[0], mode: .permanent)
 
         guard case .failed = disposition else {
-            return XCTFail("journal 不可写必须失败，实际：\(disposition)")
+            return XCTFail("unwritable journal must fail, got: \(disposition)")
         }
-        assertPathExists(target, "journal 写不进去时对象必须原封不动")
+        assertPathExists(target, "object must be untouched when journal write fails")
         XCTAssertEqual(stagedNames(in: temporary.path), [])
     }
 
-    // MARK: - 回滚
+    // MARK: - Rollback
 
     func testTrashFailureRollsBackToOriginalPath() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
@@ -274,14 +274,14 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
             .remove(plan.items[0], mode: .trash)
 
         guard case .failed = disposition else {
-            return XCTFail("期望 failed，实际：\(disposition)")
+            return XCTFail("expected failed, got: \(disposition)")
         }
-        assertPathExists(temporary.resolve("Cache/a.bin").path, "回滚后原路径必须完好")
+        assertPathExists(temporary.resolve("Cache/a.bin").path, "original path must be intact after rollback")
         XCTAssertEqual(stagedNames(in: temporary.path), [])
-        XCTAssertTrue(journal.incompleteEntries().isEmpty, "回滚成功即销账")
+        XCTAssertTrue(journal.incompleteEntries().isEmpty, "successful rollback clears the journal")
     }
 
-    /// 回滚时原路径已被重建 → 绝不覆盖：保留暂存对象，条目留给 reconciliation。
+    /// On rollback the original path was recreated → never overwrite: keep the staged object; leave the journal entry for reconciliation.
     func testRollbackBlockedWhenOriginalPathWasRecreated() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
         let target = temporary.resolve("Cache").path
@@ -299,21 +299,21 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         let disposition = makePrimitive(trash: trash).remove(plan.items[0], mode: .trash)
 
         guard case let .rollbackBlocked(stagedName, _) = disposition else {
-            return XCTFail("期望 rollbackBlocked，实际：\(disposition)")
+            return XCTFail("expected rollbackBlocked, got: \(disposition)")
         }
-        assertPathExists(recreatedMarker, "重建的原路径绝不能被覆盖")
+        assertPathExists(recreatedMarker, "recreated original path must never be overwritten")
         assertPathExists(
             DiskCleanRemovalPrimitive.join(temporary.path, stagedName),
-            "暂存对象必须保留，交 reconciliation 处理"
+            "staged object must be retained for reconciliation"
         )
         XCTAssertEqual(
             journal.incompleteEntries().map(\.stagedName),
             [stagedName],
-            "回滚被挡时 journal 条目保持未完成"
+            "journal entry stays incomplete when rollback is blocked"
         )
     }
 
-    /// prewalk 发现挂载穿越 → 一个文件都不删，整棵树改回原路径。
+    /// Prewalk finds mount crossing → delete nothing; rename the whole tree back to the original path.
     func testPrewalkCrossingMountPointRollsBackWithoutDeleting() throws {
         try temporary.makeFile("Cache/a.bin", bytes: 10)
         try temporary.makeFile("Cache/Nested/b.bin", bytes: 20)
@@ -326,27 +326,27 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         let disposition = primitive.remove(plan.items[0], mode: .permanent)
 
         guard case let .failed(reason) = disposition else {
-            return XCTFail("期望 failed，实际：\(disposition)")
+            return XCTFail("expected failed, got: \(disposition)")
         }
-        XCTAssertTrue(reason.contains("挂载点"), "失败原因应说明是挂载穿越，实际：\(reason)")
-        assertPathExists(temporary.resolve("Cache/a.bin").path, "prewalk 是非破坏性的，回滚后整棵树必须完好")
+        XCTAssertTrue(reason.contains("挂载点"), "failure reason should mention mount crossing, got: \(reason)")
+        assertPathExists(temporary.resolve("Cache/a.bin").path, "prewalk is non-destructive; whole tree must be intact after rollback")
         assertPathExists(temporary.resolve("Cache/Nested/b.bin").path)
         XCTAssertEqual(stagedNames(in: temporary.path), [])
     }
 
     // MARK: - partiallyDeleted
 
-    /// 删除中途遇到不可写的子目录 → 诚实报 partiallyDeleted，残骸留在暂存名下。
+    /// Mid-delete unwritable subdirectory → honestly report partiallyDeleted; remnants stay under the staged name.
     ///
-    /// **与设计 §7.4 的偏离**：此处 journal 条目显式销账而非保留。保留会让下次启动的
-    /// reconciliation 把这棵半删的损坏树改名回原路径，应用会当它是完好缓存继续使用。
+    /// **Deviation from design §7.4**: the journal entry is explicitly cleared rather than retained. Retention would let
+    /// next-launch reconciliation rename the half-deleted broken tree back, and the app would treat it as a healthy cache.
     func testPartiallyDeletedWhenSubdirectoryIsNotWritable() throws {
         try temporary.makeFile("Cache/top.bin", bytes: 10)
         try temporary.makeFile("Cache/Locked/inner.bin", bytes: 20)
         let target = temporary.resolve("Cache").path
         let plan = try DiskCleanPlanFactory.makePlan(paths: [target])
 
-        // r-x：可读可进入（prewalk 通得过），但不可写（unlinkat 子项失败）。
+        // r-x: readable/enterable (prewalk succeeds) but not writable (unlinkat of children fails).
         let lockedPath = temporary.resolve("Cache/Locked").path
         restrictedDirectories.append(lockedPath)
         XCTAssertEqual(chmod(lockedPath, 0o555), 0)
@@ -354,23 +354,23 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         let disposition = makePrimitive().remove(plan.items[0], mode: .permanent)
 
         guard case let .partiallyDeleted(stagedName, _) = disposition else {
-            return XCTFail("期望 partiallyDeleted，实际：\(disposition)")
+            return XCTFail("expected partiallyDeleted, got: \(disposition)")
         }
-        assertPathDoesNotExist(target, "对象已经离开原路径，不会被假装恢复")
+        assertPathDoesNotExist(target, "object has left the original path and is not pretend-restored")
         XCTAssertEqual(
             stagedNames(in: temporary.path),
             [stagedName],
-            "半删的残骸留在暂存名下，由审计与清理历史显式呈现"
+            "half-deleted remnants stay under the staged name for audit and clean history"
         )
         XCTAssertTrue(
             journal.incompleteEntries().isEmpty,
-            "partiallyDeleted 必须销账，否则下次启动会把损坏的树改名回原路径"
+            "partiallyDeleted must clear the journal or next launch renames the broken tree back"
         )
-        // 恢复权限，让 teardown 能删掉整棵树。
+        // Restore permissions so teardown can delete the tree.
         chmod(DiskCleanRemovalPrimitive.join(temporary.path, stagedName) + "/Locked", 0o755)
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func makePrimitive(
         trash: any DiskCleanTrashing = FakeDiskCleanTrash(),
@@ -389,7 +389,7 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
     }
 }
 
-/// 按顺序发名字的暂存名工厂，用于构造 RENAME_EXCL 冲突。
+/// Sequential staged-name factory for constructing RENAME_EXCL collisions.
 private final class NameSequence: @unchecked Sendable {
     private let lock = NSLock()
     private var names: [String]

@@ -32,10 +32,11 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertFalse(controls.contains { $0.id == "disk-clean-test-mode" })
     }
 
-    // MARK: - P2 分段接线（设计 §10）
+    // MARK: - P2 section wiring (design §10)
 
-    /// 扫描根一变就得把新范围推给开发产物分段。这条线断了，用户会拿着旧结果去清理
-    /// 刚刚移除的文件夹——Controller 只有拿到新范围才会标记"请重新扫描"。
+    /// When scan roots change, the new scope must be pushed to the developer-artifact section.
+    /// If this wire breaks, users clean with stale results against folders just removed —
+    /// the Controller only marks "rescan needed" after receiving the new scope.
     func testAddingPurgeRootUpdatesDeveloperArtifactScope() {
         let purgeRoots = DiskCleanPurgeRootsModel(
             store: DiskCleanPurgeRootsStore(
@@ -67,7 +68,7 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertTrue(developerArtifacts.snapshot.canScan)
     }
 
-    /// 菜单栏只反映规则分段：P2 的候选流入不该把宿主菜单重建一遍。
+    /// Menu bar only reflects the rules section: P2 candidate inflow must not rebuild the host menu.
     func testMenuBarPanelIgnoresSectionControllers() {
         let controller = FakeDiskCleanPluginController()
         let installers = DiskCleanController(
@@ -92,7 +93,7 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertEqual(controller.scanCallCount, 1)
     }
 
-    /// 面板不再自己算"要清理什么"：它只把命令转给 Controller，选中集是 Controller 的权威状态。
+    /// The panel no longer decides "what to clean": it only forwards commands to the Controller; selection is Controller-owned state.
     func testInvokingCleanForwardsToControllerWithoutComposingItsOwnSelection() {
         let controller = FakeDiskCleanPluginController()
         let plugin = DiskCleanPlugin(controller: controller)
@@ -112,7 +113,7 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertEqual(controller.cleanCallCount, 1)
     }
 
-    /// 按钮文案要说清"会删几项、大约多少"，并按删除方式直说会发生什么（设计 §8.2、§8.4）。
+    /// Button copy must state how many items and roughly how much, and say what the removal mode will do (design §8.2, §8.4).
     func testCleanActionTitleReportsSelectionAndRemovalMode() throws {
         let controller = FakeDiskCleanPluginController()
         let plugin = DiskCleanPlugin(controller: controller)
@@ -130,8 +131,8 @@ final class DiskCleanPluginTests: XCTestCase {
         )
         plugin.handleAction(.setDisclosureExpanded(true))
         let trashTitle = try XCTUnwrap(try cleanControl(of: plugin).actionTitle)
-        XCTAssertTrue(trashTitle.hasPrefix("移到废纸篓 · 1 项 · 约"), "实际：\(trashTitle)")
-        XCTAssertTrue(trashTitle.contains("GB"), "实际：\(trashTitle)")
+        XCTAssertTrue(trashTitle.hasPrefix("移到废纸篓 · 1 项 · 约"), "actual: \(trashTitle)")
+        XCTAssertTrue(trashTitle.contains("GB"), "actual: \(trashTitle)")
 
         controller.snapshot = makeScannedSnapshot(
             candidates: candidates,
@@ -139,7 +140,7 @@ final class DiskCleanPluginTests: XCTestCase {
             selection: makeSelection(selected: ["a"], bytes: 5_368_709_120)
         )
         let permanentTitle = try XCTUnwrap(try cleanControl(of: plugin).actionTitle)
-        XCTAssertTrue(permanentTitle.hasPrefix("清理 · 1 项 · 约"), "实际：\(permanentTitle)")
+        XCTAssertTrue(permanentTitle.hasPrefix("清理 · 1 项 · 约"), "actual: \(permanentTitle)")
     }
 
     func testCleanIsDisabledWhenNothingIsSelected() throws {
@@ -162,7 +163,7 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertEqual(try cleanControl(of: plugin).actionTitle, "移到废纸篓")
     }
 
-    /// "打开详情"必须真的把设置窗口切过去；M4 之前它是个空操作。
+    /// "Open Details" must actually switch the settings window; before M4 it was a no-op.
     func testOpenDetailsRequestsConfigurationPresentation() {
         let plugin = DiskCleanPlugin(controller: FakeDiskCleanPluginController())
         var presentationRequests = 0
@@ -173,7 +174,7 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertEqual(presentationRequests, 1)
     }
 
-    /// "（受限）"后缀一律由 limitations 派生，不依赖恰好扫出了某种被保护候选（设计 §4.5、§8.2）。
+    /// The "(limited)" suffix always derives from limitations, not from happening to scan a protected candidate (design §4.5, §8.2).
     func testPanelSubtitleAppendsLimitedSuffixWhenScanReportsLimitations() {
         let controller = FakeDiskCleanPluginController()
         let plugin = DiskCleanPlugin(controller: controller)
@@ -218,8 +219,8 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertEqual(controls.first { $0.id == DiskCleanPlugin.ControlID.clean }?.isEnabled, false)
     }
 
-    /// 永久删除的确认期：面板换成"确认 / 取消"一对，"清理"必须消失——
-    /// 同一个按钮不该在两种语义之间摇摆。
+    /// Permanent-delete confirmation: panel swaps to Confirm/Cancel, and Clean must disappear —
+    /// the same button must not swing between two meanings.
     func testConfirmingPhaseReplacesCleanActionWithConfirmAndCancel() throws {
         let controller = FakeDiskCleanPluginController()
         let plugin = DiskCleanPlugin(controller: controller)
@@ -239,8 +240,8 @@ final class DiskCleanPluginTests: XCTestCase {
         )
         let confirm = try XCTUnwrap(controls.first { $0.id == DiskCleanPlugin.ControlID.confirmClean })
         let confirmTitle = try XCTUnwrap(confirm.actionTitle)
-        XCTAssertTrue(confirmTitle.hasPrefix("确认永久清理 3 项 · 约"), "实际：\(confirmTitle)")
-        XCTAssertTrue(confirmTitle.contains("GB"), "冻结的字节数要出现在确认文案里")
+        XCTAssertTrue(confirmTitle.hasPrefix("确认永久清理 3 项 · 约"), "actual: \(confirmTitle)")
+        XCTAssertTrue(confirmTitle.contains("GB"), "frozen byte count must appear in the confirmation copy")
     }
 
     func testConfirmAndCancelActionsForwardToController() {
@@ -255,7 +256,7 @@ final class DiskCleanPluginTests: XCTestCase {
         XCTAssertEqual(controller.cancelPendingCallCount, 1)
     }
 
-    /// 废纸篓完成文案不得写"已释放"：对象还在废纸篓里，空间尚未回收（设计 §7.7）。
+    /// Trash completion copy must not say "freed": objects still sit in Trash, space is not reclaimed yet (design §7.7).
     func testTrashCompletionSubtitleDoesNotClaimSpaceWasReclaimed() {
         let controller = FakeDiskCleanPluginController()
         let plugin = DiskCleanPlugin(controller: controller)
@@ -278,12 +279,12 @@ final class DiskCleanPluginTests: XCTestCase {
         )
 
         let subtitle = plugin.primaryPanelState.subtitle
-        XCTAssertTrue(subtitle.hasPrefix("已移到废纸篓约"), "实际：\(subtitle)")
-        XCTAssertFalse(subtitle.contains("已释放"), "废纸篓里的对象尚未真正释放空间")
-        XCTAssertTrue(subtitle.contains("KB"), "实际：\(subtitle)")
+        XCTAssertTrue(subtitle.hasPrefix("已移到废纸篓约"), "actual: \(subtitle)")
+        XCTAssertFalse(subtitle.contains("已释放"), "objects in Trash have not truly freed space")
+        XCTAssertTrue(subtitle.contains("KB"), "actual: \(subtitle)")
     }
 
-    /// 启动 reconciliation 必须在 activate 时触发，否则孤儿暂存对象没有第二条被发现的路径。
+    /// Startup reconciliation must run on activate, or orphan staged objects have no second discovery path.
     func testActivateTriggersStagingReconciliation() async {
         let reconciler = SpyDiskCleanStagingReconciler()
         let storage = URL(fileURLWithPath: "/tmp/diskclean-plugin-activate-test")
@@ -295,7 +296,7 @@ final class DiskCleanPluginTests: XCTestCase {
 
         plugin.activate(context: PluginRuntimeContext(pluginID: "disk-clean"))
 
-        await waitUntil("reconciliation 已触发") { !reconciler.reconciledDirectories.isEmpty }
+        await waitUntil("reconciliation was triggered") { !reconciler.reconciledDirectories.isEmpty }
         XCTAssertEqual(reconciler.reconciledDirectories, [storage])
     }
 
@@ -324,7 +325,7 @@ final class DiskCleanPluginTests: XCTestCase {
         return try XCTUnwrap(controls.first { $0.id == DiskCleanPlugin.ControlID.clean })
     }
 
-    /// 默认让全部可清理候选处于选中态，这样"清理"按钮的可用性由被测条件决定，而不是被空选中集掩盖。
+    /// Default-select all cleanable candidates so Clean-button availability is decided by the condition under test, not masked by an empty selection.
     private func makeScannedSnapshot(
         candidates: [DiskCleanCandidate],
         limitations: [DiskCleanScanLimitation] = [],

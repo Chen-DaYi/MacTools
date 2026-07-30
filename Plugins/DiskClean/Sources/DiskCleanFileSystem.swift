@@ -11,8 +11,8 @@ struct DiskCleanFileItem: Equatable, Sendable {
 protocol DiskCleanFileSystemProviding: Sendable {
     func expandPathPattern(_ pattern: String) throws -> [DiskCleanFileItem]
     func itemInfo(at path: String) throws -> DiskCleanFileItem?
-    /// 直接子项（**含隐藏项**）。祖先分解（设计 §5.3）用它，因此绝不能用 `*` glob 代替——
-    /// glob 会漏掉点开头的条目，分解后就少了一块，等于悄悄缩小扫描范围。
+    /// Direct children (**including hidden**). Ancestor decomposition (design §5.3) uses this, so a `*` glob must never replace it—
+    /// glob skips dot entries, so decomposition would miss a piece and silently shrink the scan scope.
     func directChildren(of path: String) throws -> [DiskCleanFileItem]
     func removeItem(at path: String) throws
     func deduplicatedParentChildPaths(_ paths: [String]) -> [String]
@@ -178,14 +178,14 @@ struct LocalDiskCleanFileSystem: DiskCleanFileSystemProviding, @unchecked Sendab
     }
 }
 
-/// 物理路径规范化（设计 §13-6）。
+/// Physical path normalization (design §13-6).
 ///
-/// 喂给 sizing 与执行的路径必须不含符号链接祖先，否则 `O_NOFOLLOW_ANY` 会直接 ELOOP
-/// 拒绝（`/var`、`/tmp` 本身就是符号链接）。
+/// Paths fed to sizing and execution must not contain symlink ancestors, or `O_NOFOLLOW_ANY` fails with ELOOP
+/// (`/var` and `/tmp` are themselves symlinks).
 ///
-/// **只解析父目录，末级组件原样保留**：末级本身可能就是候选 symlink，用 `realpath` 整条解析
-/// 会把它换成指向的目标——那意味着去删别的东西。`URL.resolvingSymlinksInPath()` 也不行，
-/// 它不展开 `/var`，语义正好相反。
+/// **Only resolve the parent; keep the last component as-is**: the leaf may itself be a candidate symlink; `realpath` on the whole path
+/// would replace it with its target—which means deleting something else. `URL.resolvingSymlinksInPath()` is also wrong;
+/// it does not expand `/var`, the opposite semantics.
 enum DiskCleanPhysicalPath {
     static func resolve(_ path: String) -> String {
         guard let location = ParentAnchoredPath(path: path) else { return path }
@@ -201,10 +201,10 @@ enum DiskCleanPhysicalPath {
     }
 }
 
-/// glob 的固定目录前缀：首个通配符之前的最后一个完整路径组件。
+/// Fixed directory prefix of a glob: the last complete path component before the first wildcard.
 ///
-/// 所有权归属（设计 §5.3 第 1 条）用它的长度衡量"哪个 target 更特定"：
-/// `~/Library/Caches/com.apple.akd` 比 `~/Library/Caches/*` 更特定，因此同一路径归前者。
+/// Ownership (design §5.3 rule 1) uses its length to measure "which target is more specific":
+/// `~/Library/Caches/com.apple.akd` is more specific than `~/Library/Caches/*`, so the same path belongs to the former.
 enum DiskCleanGlobPrefix {
     static func fixedPrefix(of glob: String) -> String {
         guard let wildcardIndex = glob.firstIndex(where: { "*?[".contains($0) }) else {

@@ -14,11 +14,12 @@ private struct DiskCleanPluginProvider: PluginProvider {
 
     func makePlugins() -> [any MacToolsPlugin] {
         let localization = PluginLocalization(bundle: context.resourceBundle)
-        // journal 与审计日志都落在这里；宿主未提供支持目录时回退到同一约定位置。
+        // Journal and audit logs both land here; fall back to the same convention when the host
+        // provides no support directory.
         let storageDirectory = DiskCleanStorageLocation.resolve(supportDirectory: context.supportDirectory)
         let engine = DiskCleanScanEngine(localization: localization)
-        // 三个分段共用同一个执行器实例：审计日志与暂存 journal 必须是同一份，
-        // 否则崩溃恢复只认得其中一个分段留下的暂存对象。
+        // All three sections share one executor instance: audit log and staging journal must be
+        // the same store, or crash recovery would only recognize staged objects left by one section.
         let executor = DiskCleanExecutor(storageDirectory: storageDirectory)
 
         func makeController(scope: DiskCleanScanScope) -> DiskCleanController {
@@ -71,14 +72,15 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    /// 宿主注入：把设置窗口切到本插件的配置页（"打开详情"的落点）。
+    /// Host injection: switch Settings to this plugin's configuration page (destination of "Open Details").
     var requestConfigurationPresentation: (() -> Void)?
 
     private let controller: DiskCleanControlling
-    /// 详情页两个 P2 分段的 Controller（设计 §10）。
+    /// Controllers for the two P2 sections on the detail page (design §10).
     ///
-    /// 它们只出现在设置页里，**不接 `onStateChange`**：菜单栏面板只反映规则分段，
-    /// 让 P2 的每次候选流入都去重建宿主菜单是没有收益的开销。
+    /// They only appear in Settings and **do not wire `onStateChange`**: the menu-bar panel reflects
+    /// the rules section only, so rebuilding the host menu on every P2 candidate stream would be
+    /// pure overhead.
     private let developerArtifactsController: DiskCleanController
     private let installersController: DiskCleanController
     private let purgeRoots: DiskCleanPurgeRootsModel
@@ -117,8 +119,9 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
         self.controller.onStateChange = { [weak self] in
             self?.onStateChange?()
         }
-        // 扫描根一变就把新范围推给开发产物分段：范围与结果不一致时 Controller 会标记
-        // "请重新扫描"，这条线断了用户会拿旧结果去清理刚移除的文件夹。
+        // When scan roots change, push the new scope to the developer-artifacts section: if scope
+        // and result diverge the Controller marks "rescan required". If this wire breaks, users
+        // can clean with stale results against a folder they just removed.
         self.purgeRoots.onRootsChange = { [weak developerArtifactsController] roots in
             developerArtifactsController?.setScope(.developerArtifacts(roots: roots))
         }
@@ -168,11 +171,12 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
 
     func refresh() {}
 
-    /// 启动 reconciliation（设计 §7.6）。
+    /// Startup reconciliation (design §7.6).
     ///
-    /// 上次运行若在"已改名到暂存名、尚未完成处置"之间崩溃，孤儿暂存对象只有 journal 知道它的原名。
-    /// 必须在这里找回来：SafetyPolicy 会保护这些对象不被任何扫描收走，除了 reconciliation
-    /// 没有第二条路径能碰到它们。文件系统操作不占主线程。
+    /// If the previous run crashed between "renamed to staging name" and "disposition finished",
+    /// only the journal still knows the orphan's original name. Recover it here: SafetyPolicy
+    /// protects these objects from every scan, and reconciliation is the only other path that can
+    /// touch them. Filesystem work stays off the main thread.
     func activate(context: PluginRuntimeContext) {
         let directory = DiskCleanStorageLocation.resolve(supportDirectory: context.supportDirectory ?? storageDirectory)
         let reconciler = reconciler
@@ -277,8 +281,9 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
             isEnabled: true
         )
 
-        // 永久删除是双步：确认期把"清理"换成"确认 / 取消"一对，避免同一个按钮承担两种语义。
-        // 完整样式（详情页 confirmationDialog、风险配色）留给 M5。
+        // Permanent delete is two-step: during confirmation swap "Clean" for a Confirm/Cancel pair
+        // so one button does not carry two meanings. Full styling (detail confirmationDialog, risk
+        // colors) is left to M5.
         let actionControls = snapshot.phase == .confirming
             ? confirmationControls(for: snapshot)
             : [cleanControl]
@@ -289,8 +294,9 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
         )
     }
 
-    /// 清理按钮文案。带上选中项数与估算字节，并按删除方式直说会发生什么——
-    /// 废纸篓模式是单步执行，按钮本身就是最后一道说明（设计 §8.4）。
+    /// Clean-button title. Include selection count and estimated bytes, and state plainly what will
+    /// happen for the chosen removal mode—trash mode is single-step, so the button itself is the
+    /// last explanation (design §8.4).
     private func cleanActionTitle(for snapshot: DiskCleanControllerSnapshot) -> String {
         let count = snapshot.selection.selectedCount
         guard count > 0 else {
@@ -363,7 +369,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
     }
 
     private func subtitle(for snapshot: DiskCleanControllerSnapshot) -> String {
-        // 扫描中实时累加可回收估算（宿主已按 ~250ms 节流发布快照）。
+        // While scanning, accumulate reclaimable estimate live (host publishes snapshots ~250ms-throttled).
         if snapshot.phase == .scanning, let result = snapshot.scanResult, !result.candidates.isEmpty {
             return localization.format(
                 "panel.subtitle.scanning",
@@ -377,8 +383,8 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
            !snapshot.isResultStale,
            !snapshot.isResultExpired,
            let result = snapshot.scanResult {
-            // "（受限）"一律从 limitations 派生（设计 §4.5、§8.2），
-            // 不依赖"恰好扫出了某种被保护候选"。
+            // "(limited)" always derives from limitations (design §4.5, §8.2), not from "some
+            // protected candidate happened to be scanned".
             let base = localization.format(
                 "panel.subtitle.scanned",
                 defaultValue: "%d 项，约 %@",
@@ -400,7 +406,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
 
         if snapshot.phase == .completed,
            let result = snapshot.executionResult {
-            // 废纸篓模式不写"已释放"：对象还在废纸篓里，空间尚未真正回收（设计 §7.7）。
+            // Trash mode never says "reclaimed": objects still sit in Trash, so space is not truly freed (design §7.7).
             let defaultValue = result.mode == .trash ? "已移到废纸篓约 %@" : "已清理约 %@"
             return localization.format(
                 result.mode == .trash ? "panel.subtitle.trashed" : "panel.subtitle.completed",

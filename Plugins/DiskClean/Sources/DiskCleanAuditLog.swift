@@ -1,15 +1,15 @@
 import Foundation
 
-/// 删除审计日志（设计 §7.8）。
+/// Deletion audit log (design §7.8).
 ///
-/// 追加式 JSONL；单文件上限 5MB，满则轮转为 `.1`，保留 2 代（当前 + 1）。
-/// 日志路径位于插件支持目录，受 SafetyPolicy "cleanup tool state" 分支保护。
+/// Append-only JSONL; rotate to `.1` at 5MB, keep 2 generations (current + one rotated).
+/// Log path lives under the plugin support directory, protected by the SafetyPolicy "cleanup tool state" branch.
 final class DiskCleanAuditLog: @unchecked Sendable {
     struct Record: Codable, Equatable, Sendable {
         enum Action: String, Codable, Sendable {
             case trash
             case delete
-            /// 扫描级事件：熔断、线程放弃、reconciliation 结果。
+            /// Scan-level events: circuit breakers, thread abandonment, reconciliation results.
             case scanEvent
         }
 
@@ -55,7 +55,7 @@ final class DiskCleanAuditLog: @unchecked Sendable {
 
     static let fileName = "audit.jsonl"
     static let rotatedFileName = "audit.jsonl.1"
-    /// 轮转阈值。测试可注入更小的值。
+    /// Rotation threshold. Tests may inject a smaller value.
     let maximumFileSizeBytes: Int
 
     private let directory: URL
@@ -65,7 +65,7 @@ final class DiskCleanAuditLog: @unchecked Sendable {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    /// 与 `DiskCleanStagingJournal` 同理：init 不碰文件系统，目录首次写入时才创建。
+    /// Same as `DiskCleanStagingJournal`: init does not touch the filesystem; the directory is created on first write.
     init(directory: URL, maximumFileSizeBytes: Int = 5 * 1024 * 1024) {
         self.directory = directory
         self.fileURL = directory.appendingPathComponent(Self.fileName)
@@ -78,7 +78,7 @@ final class DiskCleanAuditLog: @unchecked Sendable {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    /// 追加一条记录。审计失败不阻塞删除流程（best effort），但轮转判定在追加前完成。
+    /// Append one record. Audit failure must not block deletion (best effort), but rotation is decided before the append.
     func append(_ record: Record) {
         lock.lock()
         defer { lock.unlock() }
@@ -95,11 +95,11 @@ final class DiskCleanAuditLog: @unchecked Sendable {
             try handle.seekToEnd()
             try handle.write(contentsOf: data + Data([UInt8(ascii: "\n")]))
         } catch {
-            // 审计是可观测性，不是安全防线；失败不阻塞删除。
+            // Audit is observability, not a safety barrier; failure must not block deletion.
         }
     }
 
-    /// 倒序读取最近记录（清理历史 UI 用）。跨当前文件与 `.1` 一代。
+    /// Read recent records newest-first (cleanup history UI). Spans the current file and one rotated `.1` generation.
     func recentRecords(limit: Int) -> [Record] {
         lock.lock()
         defer { lock.unlock() }

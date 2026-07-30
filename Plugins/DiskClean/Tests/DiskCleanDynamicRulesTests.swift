@@ -2,15 +2,15 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 动态规则 provider 测试（设计 §5.5、§11"动态规则"行）。
-/// 文件系统一律使用临时目录，绝不触碰真实用户目录。
+/// Dynamic rule provider tests (design §5.5, §11 "dynamic rules" row).
+/// Always use temporary directories; never touch real user directories.
 final class DiskCleanDynamicRulesTests: XCTestCase {
     private var root: URL!
 
-    /// **夹具根一律取 `realpath(3)` 物理路径**：`NSTemporaryDirectory()` 在 `/var/folders/...` 下，
-    /// 而 `/var` 是指向 `private/var` 的符号链接。`resolvingSymlinksInPath()` 修不了这件事
-    /// （它倾向剥掉 `/private` 而不是补上），只有 realpath 能给出稳定可比对的路径。
-    /// 复用 `DiskCleanTempDirectory.physicalPath(of:)`，避免两份 realpath 逻辑各自漂移。
+    /// **Fixture roots always use `realpath(3)` physical paths**: `NSTemporaryDirectory()` lives under `/var/folders/...`,
+    /// and `/var` is a symlink to `private/var`. `resolvingSymlinksInPath()` does not fix this
+    /// (it tends to strip `/private` rather than add it); only realpath yields stable comparable paths.
+    /// Reuse `DiskCleanTempDirectory.physicalPath(of:)` so two realpath implementations cannot drift.
     override func setUpWithError() throws {
         try super.setUpWithError()
         let created = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
@@ -27,7 +27,7 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - 版本号解析
+    // MARK: - Version parsing
 
     func testVersionNumberAcceptsNumericDottedNamesOnly() {
         XCTAssertEqual(DiskCleanVersionNumber("152.0.7933.0")?.components, [152, 0, 7933, 0])
@@ -54,7 +54,7 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         )
     }
 
-    // MARK: - 版本目录 provider
+    // MARK: - Version directory provider
 
     func testVersionProviderKeepsNewestAndReturnsOlderVersions() async throws {
         let container = try makeDirectory("versions")
@@ -63,9 +63,9 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         let items = try await expand(containerGlobs: [container.path])
 
         XCTAssertEqual(names(of: items), ["2.1.215", "2.1.10", "2.1.9"])
-        // 候选路径必须落在容器物理路径下：全路径比对是 realpath 规范化真正兜住的场景。
+        // Candidate paths must stay under the container physical path: full-path compare is where realpath normalization matters.
         for item in items {
-            XCTAssertTrue(item.path.hasPrefix(container.path + "/"), "候选逃出容器：\(item.path)")
+            XCTAssertTrue(item.path.hasPrefix(container.path + "/"), "candidate escaped container: \(item.path)")
         }
     }
 
@@ -98,7 +98,7 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         XCTAssertEqual(names(of: items), ["149.0.7814.0"])
     }
 
-    /// `Current -> <version>` 指向的版本视为在用，即使它不是最新版也不能作为候选。
+    /// The version pointed to by `Current -> <version>` is in use and must not be a candidate even if it is not the newest.
     func testVersionProviderNeverReturnsVersionPinnedBySiblingSymlink() async throws {
         let container = try makeDirectory("GoogleUpdater")
         try makeDirectories(["149.0.7814.0", "150.0.7863.0", "151.0.7910.0"], in: container)
@@ -112,7 +112,7 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         XCTAssertEqual(names(of: items), ["150.0.7863.0"])
     }
 
-    /// 名字像版本号的符号链接本身永不作为候选——删链接不释放空间，还可能破坏调用方期望。
+    /// Symlinks whose names look like versions are never candidates — deleting the link frees no space and may break callers.
     func testVersionProviderIgnoresSymlinkedVersionDirectories() async throws {
         let container = try makeDirectory("versions")
         try makeDirectories(["1.0.0", "1.1.0", "1.2.0", "shared"], in: container)
@@ -146,13 +146,13 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         XCTAssertTrue(items.isEmpty)
     }
 
-    // MARK: - 不可用模拟器 provider
+    // MARK: - Unavailable simulator provider
 
     func testUnavailableSimulatorProviderReturnsOnlyUnavailableExistingDeviceDirectories() async throws {
         let devices = try makeDirectory("Devices")
         let unavailable = "3A6B1C2D-0000-4000-8000-000000000001"
         let available = "3A6B1C2D-0000-4000-8000-000000000002"
-        // 第三个设备在 JSON 里不可用，但目录已被用户手动删除，不应出现在候选中。
+        // Third device is unavailable in JSON, and its directory was already deleted by the user; it must not appear as a candidate.
         let missing = "3A6B1C2D-0000-4000-8000-000000000003"
         try makeDirectories([unavailable, available], in: devices)
 
@@ -188,7 +188,7 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         for payload in ["not json at all", "{}", #"{"devices":42}"#] {
             do {
                 _ = try await expandSimulators(devicesRoot: devices, outcome: .success(Data(payload.utf8)))
-                XCTFail("畸形输出应抛错：\(payload)")
+                XCTFail("malformed output should throw: \(payload)")
             } catch let error as DiskCleanDynamicRuleError {
                 XCTAssertEqual(error, .malformedOutput(command: "simctl list devices -j"))
             }
@@ -203,7 +203,7 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
                 devicesRoot: devices,
                 outcome: .failure(.timedOut(path: "/usr/bin/xcrun"))
             )
-            XCTFail("超时应抛错")
+            XCTFail("timeout should throw")
         } catch let error as DiskCleanSubprocessError {
             XCTAssertEqual(error, .timedOut(path: "/usr/bin/xcrun"))
         }
@@ -225,7 +225,7 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         XCTAssertTrue(nonZeroExit.isEmpty)
     }
 
-    // MARK: - 真实子进程执行器
+    // MARK: - Real subprocess executor
 
     func testLocalSubprocessRunnerCapturesStandardOutput() async throws {
         let result = try await LocalDiskCleanSubprocessRunner().run(
@@ -245,10 +245,10 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
                 arguments: [],
                 timeout: .seconds(1)
             )
-            XCTFail("缺失可执行文件应抛错")
+            XCTFail("missing executable should throw")
         } catch let error as DiskCleanSubprocessError {
             guard case .executableUnavailable = error else {
-                return XCTFail("错误类型不符：\(error)")
+                return XCTFail("unexpected error type: \(error)")
             }
         }
     }
@@ -261,16 +261,16 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
                 arguments: ["30"],
                 timeout: .milliseconds(300)
             )
-            XCTFail("超时应抛错")
+            XCTFail("timeout should throw")
         } catch let error as DiskCleanSubprocessError {
             guard case .timedOut = error else {
-                return XCTFail("错误类型不符：\(error)")
+                return XCTFail("unexpected error type: \(error)")
             }
         }
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
     }
 
-    /// 输出超过管道缓冲区（64KB）时不能死锁：读取与等待退出必须并行。
+    /// Output larger than the pipe buffer (64KB) must not deadlock: read and wait-for-exit must run in parallel.
     func testLocalSubprocessRunnerHandlesOutputLargerThanPipeBuffer() async throws {
         let result = try await LocalDiskCleanSubprocessRunner().run(
             executablePath: "/usr/bin/head",
@@ -282,7 +282,7 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         XCTAssertEqual(result.standardOutput.count, 400_000)
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private struct FakeSubprocessRunner: DiskCleanSubprocessRunning {
         enum Outcome: Sendable {

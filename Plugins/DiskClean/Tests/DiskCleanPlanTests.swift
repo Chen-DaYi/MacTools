@@ -3,15 +3,15 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 计划铸造的校验矩阵（设计 §6.1）。
+/// Plan minting validation matrix (design §6.1).
 ///
-/// 任一条不过关都必须 `throw`——不产出计划就等于零删除，这是执行链上最省事也最可靠的一道闸。
+/// Any failed check must `throw` — no plan means no deletes; the cheapest reliable gate on the execution path.
 @MainActor
 final class DiskCleanPlanTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 10_000)
     private let targetID = DiskCleanPlanFactory.targetID
 
-    // MARK: - 通过路径
+    // MARK: - Happy path
 
     func testMintsPlanWithFrozenModeTotalsAndEvidence() throws {
         let first = candidate(path: "/cache/a", bytes: 100)
@@ -24,7 +24,7 @@ final class DiskCleanPlanTests: XCTestCase {
             reservedRootPaths: ["/reserved/root"]
         )
 
-        XCTAssertEqual(plan.items.map(\.path), ["/cache/a", "/cache/b"], "执行顺序沿用工件顺序，可复现")
+        XCTAssertEqual(plan.items.map(\.path), ["/cache/a", "/cache/b"], "execution order follows artifact order and is reproducible")
         XCTAssertEqual(plan.totalEstimatedBytes, 350)
         XCTAssertEqual(plan.itemCount, 2)
         XCTAssertEqual(plan.mode, .permanent)
@@ -33,8 +33,8 @@ final class DiskCleanPlanTests: XCTestCase {
             plan.expiryDeadline,
             DiskCleanPlanFactory.observedAt.addingTimeInterval(DiskCleanScanFreshness.window)
         )
-        XCTAssertEqual(plan.exclusionPaths, ["/cache/locked"], "未入计划的候选全部进排除集")
-        XCTAssertEqual(plan.reservedPrefixes, ["/reserved/root"], "保留前缀由工件推导，调用方无法漏传")
+        XCTAssertEqual(plan.exclusionPaths, ["/cache/locked"], "candidates not in the plan all go into the exclusion set")
+        XCTAssertEqual(plan.reservedPrefixes, ["/reserved/root"], "reserved prefixes are derived from the artifact so callers cannot omit them")
     }
 
     func testPlanItemCarriesTargetLockDeclarations() throws {
@@ -59,10 +59,10 @@ final class DiskCleanPlanTests: XCTestCase {
 
         let plan = try makePlan(candidates: [older, newer], selectedIDs: [older.id, newer.id])
 
-        XCTAssertEqual(plan.minObservedAt, now.addingTimeInterval(-100), "过期门取最早观测时刻")
+        XCTAssertEqual(plan.minObservedAt, now.addingTimeInterval(-100), "expiry gate uses the earliest observation time")
     }
 
-    // MARK: - 拒绝矩阵
+    // MARK: - Rejection matrix
 
     func testEmptySelectionIsRejected() {
         let candidate = candidate(path: "/cache/a")
@@ -72,7 +72,7 @@ final class DiskCleanPlanTests: XCTestCase {
         }
     }
 
-    /// 越权选择：递进来的 id 不在工件里。
+    /// Unauthorized selection: the provided id is not in the artifact.
     func testSelectionOutsideArtifactIsRejected() {
         let candidate = candidate(path: "/cache/a")
 
@@ -81,7 +81,7 @@ final class DiskCleanPlanTests: XCTestCase {
         }
     }
 
-    /// 越权选择：候选存在但不可清理（锁定 / 保护 / 白名单）。
+    /// Unauthorized selection: candidate exists but is not cleanable (locked / protected / allowlisted).
     func testSelectingNonCleanableCandidateIsRejected() {
         let locked = candidate(path: "/cache/locked", safety: .inUse(processName: "App"))
 
@@ -90,7 +90,7 @@ final class DiskCleanPlanTests: XCTestCase {
         }
     }
 
-    /// 越权选择：completeness 非 complete，即便安全策略放行。
+    /// Unauthorized selection: completeness is not complete, even if safety allows it.
     func testSelectingPartialCandidateIsRejected() {
         let partial = DiskCleanPlanFactory.candidate(
             path: "/cache/partial",
@@ -102,7 +102,7 @@ final class DiskCleanPlanTests: XCTestCase {
         }
     }
 
-    /// 大小已求出但没有根身份 → 执行侧无从复核，拒绝。
+    /// Size is known but root identity is missing → executor cannot re-verify; reject.
     func testSelectingCandidateWithoutRootIdentityIsRejected() {
         let noIdentity = DiskCleanPlanFactory.candidate(
             path: "/cache/no-identity",
@@ -137,7 +137,7 @@ final class DiskCleanPlanTests: XCTestCase {
         }
     }
 
-    /// 祖先冲突：计划路径覆盖了一个未入计划的候选。
+    /// Ancestor conflict: planned path covers a candidate not in the plan.
     func testPlannedPathCoveringExcludedCandidateIsRejected() {
         let parent = candidate(path: "/cache/app")
         let lockedChild = candidate(path: "/cache/app/inner", safety: .inUse(processName: "App"))
@@ -147,7 +147,7 @@ final class DiskCleanPlanTests: XCTestCase {
         }
     }
 
-    /// 祖先冲突：计划路径覆盖了被跳过 target 的保留根（那片子树从未被扫描）。
+    /// Ancestor conflict: planned path covers a reserved root of a skipped target (that subtree was never scanned).
     func testPlannedPathCoveringReservedPrefixIsRejected() {
         let parent = candidate(path: "/cache/app")
 
@@ -160,7 +160,7 @@ final class DiskCleanPlanTests: XCTestCase {
         }
     }
 
-    /// 路径相等也算冲突：同一路径既在计划里又被保留，说明证据矛盾。
+    /// Equal paths also conflict: the same path both planned and reserved means contradictory evidence.
     func testPlannedPathEqualToReservedPrefixIsRejected() {
         let parent = candidate(path: "/cache/app")
 
@@ -169,7 +169,7 @@ final class DiskCleanPlanTests: XCTestCase {
         }
     }
 
-    /// 同名前缀不是祖先：`/cache/app-extra` 不在 `/cache/app` 之下。
+    /// Shared name prefix is not ancestry: `/cache/app-extra` is not under `/cache/app`.
     func testSiblingWithSharedNamePrefixIsNotAnAncestorViolation() throws {
         let parent = candidate(path: "/cache/app")
         let sibling = candidate(path: "/cache/app-extra", safety: .inUse(processName: "App"))
@@ -203,7 +203,7 @@ final class DiskCleanPlanTests: XCTestCase {
         XCTAssertEqual(plan.itemCount, 1)
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func candidate(
         path: String,
@@ -250,11 +250,11 @@ final class DiskCleanPlanTests: XCTestCase {
     ) {
         do {
             _ = try body()
-            XCTFail("期望抛出 \(expected)，但铸造成功了", file: file, line: line)
+            XCTFail("expected throw \(expected), but plan minting succeeded", file: file, line: line)
         } catch let error as DiskCleanPlanError {
             XCTAssertEqual(error, expected, file: file, line: line)
         } catch {
-            XCTFail("期望 DiskCleanPlanError，实际：\(error)", file: file, line: line)
+            XCTFail("expected DiskCleanPlanError, got: \(error)", file: file, line: line)
         }
     }
 }

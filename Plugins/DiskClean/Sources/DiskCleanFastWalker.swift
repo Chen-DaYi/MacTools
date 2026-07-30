@@ -1,10 +1,10 @@
 import Darwin
 import Foundation
 
-/// 主力 sizer：`getattrlistbulk` 批量读目录属性（设计 §3.3）。
+/// Primary sizer: bulk directory attributes via `getattrlistbulk` (design §3.3).
 ///
-/// 遍历骨架与全部安全约束由 `DiskCleanDirectoryTreeWalker` 提供，本类型只负责
-/// "如何批量拿到一批条目属性"。
+/// Traversal skeleton and all safety constraints come from `DiskCleanDirectoryTreeWalker`; this type only owns
+/// "how to fetch a batch of entry attributes".
 struct DiskCleanFastWalker: DiskCleanDirectorySizing {
     private let core: DiskCleanDirectoryTreeWalker
 
@@ -27,7 +27,7 @@ struct DiskCleanBulkEntrySourceFactory: DiskCleanDirectoryEntrySourceFactory {
     let bufferSize: Int
 
     init(bufferSize: Int = 64 * 1024) {
-        // 一条目录项最坏也就几百字节，4KB 下限保证单条永远放得下。
+        // A directory entry is a few hundred bytes at worst; the 4KB floor guarantees a single entry always fits.
         self.bufferSize = max(bufferSize, 4 * 1024)
     }
 
@@ -36,7 +36,7 @@ struct DiskCleanBulkEntrySourceFactory: DiskCleanDirectoryEntrySourceFactory {
     }
 }
 
-/// `getattrlistbulk` 条目来源。
+/// `getattrlistbulk` entry source.
 final class DiskCleanBulkEntrySource: DiskCleanDirectoryEntrySource {
     let directoryFileDescriptor: Int32
 
@@ -84,7 +84,7 @@ final class DiskCleanBulkEntrySource: DiskCleanDirectoryEntrySource {
 
         var entries = parsed.entries.map(resolve(entry:))
         if parsed.isTruncated {
-            // 缓冲区结构异常：如实上报，由上层记为 walkError，绝不假装遍历完整。
+            // Abnormal buffer structure: report honestly so the upper layer records walkError—never pretend the walk was complete.
             entries.append(.unresolved(code: EIO))
         }
         return entries
@@ -97,10 +97,10 @@ final class DiskCleanBulkEntrySource: DiskCleanDirectoryEntrySource {
         Darwin.close(directoryFileDescriptor)
     }
 
-    /// 单条缺关键属性（含布局错位）→ `fstatat(AT_SYMLINK_NOFOLLOW)` 逐条回退（设计 §3.3）。
+    /// Missing required attributes on one entry (including layout mismatch) → per-entry `fstatat(AT_SYMLINK_NOFOLLOW)` fallback (design §3.3).
     private func resolve(entry: DiskCleanBulkAttributeEntry) -> DiskCleanWalkEntry {
         guard let nameBytes = entry.nameBytes else {
-            // 连名字都没有，无法回退也无法下潜。
+            // Without even a name there is no fallback and no descent.
             return .unresolved(code: EIO)
         }
 
@@ -111,7 +111,7 @@ final class DiskCleanBulkEntrySource: DiskCleanDirectoryEntrySource {
                     fileType: fileType,
                     devid: devid,
                     fileID: fileID,
-                    // 目录不携带 ATTR_FILE_*，其 linkCount/dataLength 不参与计数。
+                    // Directories omit ATTR_FILE_*; their linkCount/dataLength do not participate in counting.
                     linkCount: entry.linkCount ?? 1,
                     dataLength: entry.dataLength ?? 0
                 )
@@ -125,7 +125,7 @@ final class DiskCleanBulkEntrySource: DiskCleanDirectoryEntrySource {
     }
 }
 
-/// `fstatat` 逐条解析。Fast 的回退路径与 Slow 的主路径共用，保证两者语义完全一致。
+/// Per-entry `fstatat` resolution. Shared by Fast's fallback and Slow's main path so both stay semantically identical.
 enum DiskCleanEntryStatFallback {
     static func resolve(nameBytes: [CChar], directoryFileDescriptor: Int32) -> DiskCleanWalkEntry {
         var status = stat()

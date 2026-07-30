@@ -86,7 +86,7 @@ final class DiskCleanFileSystemTests: XCTestCase {
         )
     }
 
-    /// 祖先分解依赖直接子项列表，**必须包含隐藏项**——用 `*` glob 代替会漏掉点开头的条目。
+    /// Ancestor decomposition depends on direct children and **must include hidden entries** — a `*` glob would miss dotfiles.
     func testDirectChildrenIncludeHiddenEntriesAndDoNotRecurse() throws {
         try createFile("Library/Caches/Foo/visible.bin")
         try createFile("Library/Caches/Foo/.hidden")
@@ -108,7 +108,7 @@ final class DiskCleanFileSystemTests: XCTestCase {
         )
     }
 
-    /// 末级保留原样、祖先解析：候选本身是 symlink 时绝不能被 realpath 换成它指向的目标。
+    /// Resolve ancestors, keep the leaf as-is: if the candidate itself is a symlink, realpath must not replace it with its target.
     func testPhysicalPathResolvesAncestorsButKeepsLastComponent() throws {
         try FileManager.default.createDirectory(
             at: tempDirectory.appendingPathComponent("Real"),
@@ -121,12 +121,12 @@ final class DiskCleanFileSystemTests: XCTestCase {
         XCTAssertEqual(
             DiskCleanPhysicalPath.resolve(aliasURL.appendingPathComponent("child").path),
             realParent + "/child",
-            "中间级 symlink 必须被展开，否则 O_NOFOLLOW_ANY 会直接拒绝整条路径"
+            "intermediate symlinks must be expanded, or O_NOFOLLOW_ANY will reject the whole path"
         )
         XCTAssertEqual(
             DiskCleanPhysicalPath.resolve(aliasURL.path),
             DiskCleanTempDirectory.physicalPath(of: tempDirectory.path) + "/Alias",
-            "末级 symlink 保留原样：解析它等于去删别的东西"
+            "keep the leaf symlink as-is: resolving it would delete something else"
         )
     }
 

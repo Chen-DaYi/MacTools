@@ -1,32 +1,36 @@
 import Foundation
 
-// MARK: - 规范化结果
+// MARK: - Normalization result
 
-/// 一个扫描根被拒收的原因。UI 据此给出具体提示，而不是静默丢弃用户刚选的文件夹。
+/// Why a scan root was rejected. UI surfaces a concrete hint instead of silently dropping the folder just chosen.
 enum DiskCleanPurgeRootRejection: Equatable, Sendable {
-    /// 不是绝对路径，或 `realpath(3)` 解析失败（不存在、无权限、路径过长）。
+    /// Not an absolute path, or `realpath(3)` failed (missing, no permission, path too long).
     case unresolvable(path: String)
-    /// 规范化后与已有根重复（例如经由不同 symlink 指向同一目录）。
+    /// Normalized form duplicates an existing root (e.g. different symlinks to the same directory).
     case duplicate(path: String)
-    /// 被列表中另一个根覆盖：扫描祖先必然覆盖后代，留着后代只会让同一候选出现两次。
+    /// Covered by another root in the list: scanning an ancestor always covers descendants, so
+    /// keeping the descendant would report the same candidates twice.
     case coveredByAncestor(path: String, ancestor: String)
 }
 
 struct DiskCleanPurgeRootsUpdate: Equatable, Sendable {
-    /// 规范化后的物理路径列表，保持用户添加顺序。
+    /// Normalized physical paths, preserving user add order.
     let roots: [String]
     let rejections: [DiskCleanPurgeRootRejection]
 }
 
-/// 扫描根规范化（设计 §10.1 + §13-6）。
+/// Scan-root normalization (design §10.1 + §13-6).
 ///
-/// 三件事，纯函数、无副作用（`realpath` 经 `resolvePhysicalPath` 注入）：
-/// 1. **物理路径化**：喂给 sizing / 执行原语的路径不得含符号链接祖先，否则 `O_NOFOLLOW_ANY`
-///    会以 ELOOP 拒绝整棵树（`/var`、`/tmp` 本身就是 symlink）。规范化只能用 `realpath(3)`。
-/// 2. **去重**：两个不同写法可能指向同一目录，规范化后才看得出来。
-/// 3. **祖先裁决——保留祖先、弃后代**：两者都扫等于把后代里的候选报两遍；反过来"保留后代弃
-///    祖先"会缩小用户明确要求的扫描范围，是静默失效。裁决只看规范化后的完整集合，与添加顺序
-///    无关：先加 `~/Code/app` 再加 `~/Code`，结果同样是只保留 `~/Code`。
+/// Three pure, side-effect-free jobs (`realpath` injected via `resolvePhysicalPath`):
+/// 1. **Physical-path conversion**: paths fed to sizing / removal primitives must not contain
+///    symlink ancestors, or `O_NOFOLLOW_ANY` rejects the whole tree with ELOOP (`/var` and `/tmp`
+///    are themselves symlinks). Normalization must use `realpath(3)`.
+/// 2. **Dedup**: two spellings may point at the same directory; only post-normalization shows that.
+/// 3. **Ancestor adjudication—keep ancestor, drop descendant**: scanning both would report
+///    descendant candidates twice; the reverse ("keep descendant, drop ancestor") would silently
+///    shrink a scan range the user explicitly asked for. Adjudication looks at the full normalized
+///    set only and is independent of add order: adding `~/Code/app` then `~/Code` still keeps only
+///    `~/Code`.
 enum DiskCleanPurgeRootNormalizer {
     static func normalize(
         _ paths: [String],
@@ -62,8 +66,8 @@ enum DiskCleanPurgeRootNormalizer {
         return DiskCleanPurgeRootsUpdate(roots: roots, rejections: rejections)
     }
 
-    /// 严格祖先：`/a` 是 `/a/b` 的祖先，但不是 `/a` 自身、也不是 `/ab` 的祖先。
-    /// 两侧都已去掉尾部斜杠，`/` 单独处理（拼接会得到 `//`）。
+    /// Strict ancestor: `/a` is an ancestor of `/a/b`, but not of `/a` itself or of `/ab`.
+    /// Both sides already have trailing slashes stripped; `/` is special-cased (join would yield `//`).
     static func isStrictAncestor(_ ancestor: String, of path: String) -> Bool {
         guard ancestor != path else { return false }
         if ancestor == "/" { return path.hasPrefix("/") }
@@ -84,16 +88,16 @@ enum DiskCleanPurgeRootNormalizer {
     }
 }
 
-// MARK: - 持久化 seam
+// MARK: - Persistence seam
 
-/// 扫描根的原始持久化。与 `DiskCleanRemovalModeStoring` 同一形态：只管存取，不含语义。
+/// Raw persistence for scan roots. Same shape as `DiskCleanRemovalModeStoring`: store/load only, no semantics.
 protocol DiskCleanPurgeRootsPersisting: Sendable {
     func loadRoots() -> [String]
     func saveRoots(_ roots: [String])
 }
 
-/// `UserDefaults` 本身线程安全但未标注 Sendable，与既有
-/// `UserDefaultsDiskCleanRemovalModeStore` 同一处理方式。
+/// `UserDefaults` is thread-safe but not marked Sendable; same treatment as existing
+/// `UserDefaultsDiskCleanRemovalModeStore`.
 struct UserDefaultsDiskCleanPurgeRootsPersistence: DiskCleanPurgeRootsPersisting, @unchecked Sendable {
     static let defaultsKey = "DiskClean.purgeRoots"
 
@@ -112,13 +116,15 @@ struct UserDefaultsDiskCleanPurgeRootsPersistence: DiskCleanPurgeRootsPersisting
     }
 }
 
-// MARK: - 存储
+// MARK: - Storage
 
-/// 用户配置的开发产物扫描根（设计 §10.1）。默认空——不全盘扫描，只扫用户明确指定的目录。
+/// User-configured developer-artifact scan roots (design §10.1). Empty by default—never whole-disk
+/// scan; only directories the user explicitly names.
 ///
-/// 写入前一律经 `DiskCleanPurgeRootNormalizer` 规范化，因此**存储里的路径必然是物理路径**。
-/// 读取不再规范化：目录可能已被删除或替换，此时 `realpath` 失败会让根凭空消失，用户看不到
-/// 自己加过什么。让扫描器用 `O_NOFOLLOW_ANY` 打开时失败并如实上报，是更诚实的降级。
+/// Writes always pass through `DiskCleanPurgeRootNormalizer`, so **stored paths are always physical**.
+/// Reads do not re-normalize: a directory may have been deleted or replaced, and a failed
+/// `realpath` would make the root vanish so the user cannot see what they added. Letting the
+/// scanner fail on `O_NOFOLLOW_ANY` open and report honestly is the more truthful degradation.
 struct DiskCleanPurgeRootsStore: Sendable {
     private let persistence: any DiskCleanPurgeRootsPersisting
     private let resolvePhysicalPath: @Sendable (String) -> String?
@@ -135,14 +141,15 @@ struct DiskCleanPurgeRootsStore: Sendable {
         persistence.loadRoots()
     }
 
-    /// 追加一个根并落盘。返回值含被拒收项，供 UI 说明原因。
+    /// Append a root and persist. Return value includes rejections for the UI to explain.
     @discardableResult
     func add(_ path: String) -> DiskCleanPurgeRootsUpdate {
         replaceAll(with: persistence.loadRoots() + [path])
     }
 
-    /// 移除一个根。同时匹配原始写法与规范化写法：目录已不存在时 `realpath` 会失败，
-    /// 只按规范化匹配会让用户永远删不掉这一条。
+    /// Remove a root. Match both the original spelling and the normalized form: if the directory
+    /// no longer exists `realpath` fails, and matching only the normalized form would leave the
+    /// user unable to delete the entry forever.
     @discardableResult
     func remove(_ path: String) -> [String] {
         let physical = resolvePhysicalPath(path)
@@ -151,7 +158,7 @@ struct DiskCleanPurgeRootsStore: Sendable {
         return remaining
     }
 
-    /// 整表重写（设置页批量编辑、迁移旧存储）。
+    /// Replace the whole table (settings bulk edit, migrating old storage).
     @discardableResult
     func replaceAll(with paths: [String]) -> DiskCleanPurgeRootsUpdate {
         let update = DiskCleanPurgeRootNormalizer.normalize(paths, resolvePhysicalPath: resolvePhysicalPath)

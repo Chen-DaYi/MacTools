@@ -1,44 +1,52 @@
 import Foundation
 
-/// 规则目录 v2（设计 §5.4 权威映射表）。
+/// Rule catalog v2 (design §5.4 authoritative mapping).
 ///
-/// 与 v1 `DiskCleanRuleCatalog` 的关系：
-/// - **glob 本身逐字保留**——白名单存储与用户认知都依赖这些字符串，迁移只改变归属与元数据。
-/// - v1 的 43 条规则全部有归属；`legacyRuleID` 覆盖 v1 规则 id 全集（`DiskCleanRuleCatalogV2Tests` 快照断言）。
-/// - v1 中同一 glob 出现在两条规则里的 6 处重复（Codex 五项、`com.figma.Desktop`）在 v2 归一到单一 target，
-///   因此"每条 glob 恰有一个归属 target"成立。
-/// - v1 的伪动态规则（`.xcodeDerivedData`、包管理器七项、`.serviceWorkerCache`）实际只用静态兜底 glob，
-///   v2 直接落为 path target；真正需要运行时判断的四条走 `DiskCleanDynamicRules` 的 provider。
+/// Relation to v1 `DiskCleanRuleCatalog`:
+/// - **Globs are kept verbatim**—whitelist storage and user mental models depend on these strings;
+///   migration only changes ownership and metadata.
+/// - All 43 v1 rules have an owner; `legacyRuleID` covers the full v1 rule-id set
+///   (`DiskCleanRuleCatalogV2Tests` snapshot asserts this).
+/// - Six places where the same glob appeared in two v1 rules (Codex five + `com.figma.Desktop`)
+///   collapse to a single target in v2, so "each glob has exactly one owning target" holds.
+/// - v1 pseudo-dynamic rules (`.xcodeDerivedData`, seven package-manager items, `.serviceWorkerCache`)
+///   only ever used static fallback globs; v2 records them as path targets. The four rules that
+///   truly need runtime decisions use `DiskCleanDynamicRules` providers.
 ///
-/// `reservedRootPaths` 一律写死为字面量，取值 = 该 target 每条 glob 的**固定目录前缀**
-/// （首个 glob 元字符之前的最后一个完整路径组件），去重后按 glob 顺序排列。
-/// 家目录下的裸文件 glob（`~/.zcompdump*`、`~/.gitconfig.bak*`）因此推导出 `~` 本身——
-/// 它只保护 `~` 的祖先（`/Users`、`/`），是弱但正确的保留根，不要"顺手改深"：
-/// 保留根必须是 glob 真正的固定前缀，改深会漏保护同前缀下未扫描的兄弟路径。
+/// `reservedRootPaths` are always hard-coded literals: value = each glob's **fixed directory prefix**
+/// (last complete path component before the first glob metacharacter), deduped, in glob order.
+/// Home-directory bare-file globs (`~/.zcompdump*`, `~/.gitconfig.bak*`) therefore derive `~`
+/// itself—it only protects ancestors of `~` (`/Users`, `/`), a weak but correct reserved root.
+/// Do not "helpfully deepen" it: reserved roots must be the glob's true fixed prefix; deepening
+/// would leave unscanned sibling paths under the same prefix unprotected.
 ///
-/// ## `requiresFullDiskAccess` 的判定（设计 §9）
+/// ## `requiresFullDiskAccess` decision (design §9)
 ///
-/// **判定式：target 的每一条 glob 都落在 TCC 保护前缀内才置 true。** 只要有一条不在，就整体
-/// 不标记，让被保护的那几条以 `permissionDenied` 单独降级——标记会让同 target 内**可清理**的
-/// 路径一起被跳过，代价大于收益。混合 target 因此一律拆成两个（拆分保持 `legacyRuleID` 不变，
-/// v1 映射快照不受影响）。
+/// **Predicate: mark true only when every glob of the target falls under a TCC-protected prefix.**
+/// If any glob does not, leave the target unmarked so protected paths degrade individually as
+/// `permissionDenied`—marking would skip **cleanable** paths in the same target too, costing more
+/// than it saves. Mixed targets are therefore always split in two (split keeps `legacyRuleID`
+/// unchanged so the v1 mapping snapshot is unaffected).
 ///
-/// 认定的保护前缀，以及为什么各自都必须跳过：
-/// - `~/Library/Containers/`、`~/Library/Group Containers/`：macOS 14 起的
-///   `kTCCServiceSystemPolicyAppData`。**这一类会弹窗**（且授权只在本次运行有效），逐目录展开
-///   十几条 glob 就是十几次弹窗——设计 §9 要避免的正是这个。
-/// - `~/Library/Caches/com.apple.Safari`、`~/Library/Safari`：与 `~/Library/Safari` 同属
-///   平台沙盒策略的 Safari 存储类，纯 FDA 保护，无弹窗，静默 EPERM。
-/// - `~/Library/Suggestions`、`~/Library/Calendars`、`~/Library/Application Support/AddressBook`：
-///   FDA / Calendar / Contacts 服务保护，同样静默 EPERM。不跳过只会得到一堆读不到的空候选。
+/// Recognized protected prefixes, and why each must be skipped:
+/// - `~/Library/Containers/`, `~/Library/Group Containers/`: macOS 14+
+///   `kTCCServiceSystemPolicyAppData`. **This class prompts** (and the grant is process-lifetime only);
+///   expanding a dozen globs would mean a dozen prompts—exactly what design §9 avoids.
+/// - `~/Library/Caches/com.apple.Safari`, `~/Library/Safari`: Safari storage under the platform
+///   sandbox policy, pure FDA protection, no prompt, silent EPERM.
+/// - `~/Library/Suggestions`, `~/Library/Calendars`, `~/Library/Application Support/AddressBook`:
+///   FDA / Calendar / Contacts service protection, also silent EPERM. Not skipping only yields
+///   unreadable empty candidates.
 ///
-/// 刻意**不**认定的几条（读得到，标记会白白少清理）：`~/Library/Caches` 本身、
-/// `~/Library/Saved Application State`、`~/Library/Caches/com.apple.helpd`、
-/// `~/Library/Caches/GeoServices`、`~/Library/DiagnosticReports`。
-/// `~/Library/Autosave Information` 与 `~/Library/IdentityCaches` 证据不足，按不保护处理——
-/// 猜错的代价只是这两条降级为 `permissionDenied`，不影响同 target 其余路径。
+/// Deliberately **not** recognized (readable; marking would drop cleanup for free):
+/// `~/Library/Caches` itself, `~/Library/Saved Application State`, `~/Library/Caches/com.apple.helpd`,
+/// `~/Library/Caches/GeoServices`, `~/Library/DiagnosticReports`.
+/// `~/Library/Autosave Information` and `~/Library/IdentityCaches` lack evidence and are treated as
+/// unprotected—a wrong guess only degrades those two to `permissionDenied` and does not affect
+/// other paths in the same target.
 ///
-/// `DiskCleanRuleCatalogV2Tests` 用同一张前缀表反向推导标记并逐条比对，两个方向的漂移都会失败。
+/// `DiskCleanRuleCatalogV2Tests` reverse-derives flags from the same prefix table and compares
+/// entry-by-entry; drift in either direction fails.
 struct DiskCleanRuleCatalogV2: Sendable {
     let targets: [DiskCleanRuleTarget]
 
@@ -47,7 +55,7 @@ struct DiskCleanRuleCatalogV2: Sendable {
             + developerArtifactTargets + installerTargets
     )
 
-    /// 规则展开阶段的 target。P2 合成 target 不在其中——它们的候选由专用扫描器发现。
+    /// Targets for the rule-expansion phase. P2 synthetic targets are excluded—their candidates come from dedicated scanners.
     var ruleTargets: [DiskCleanRuleTarget] {
         targets.filter { !$0.isExternallyDiscovered }
     }
@@ -60,12 +68,12 @@ struct DiskCleanRuleCatalogV2: Sendable {
         targets.first { $0.id == id }
     }
 
-    /// 同一条 v1 规则拆出的全部 target。审计与白名单迁移按 legacyRuleID 归集。
+    /// All targets split from one v1 rule. Audit and whitelist migration group by legacyRuleID.
     func targets(legacyRuleID: String) -> [DiskCleanRuleTarget] {
         targets.filter { $0.legacyRuleID == legacyRuleID }
     }
 
-    /// 展示顺序：分类按 `DiskCleanCategoryID.displayOrder`（风险低 → 高），分类内按 target 风险再按 id。
+    /// Display order: categories by `DiskCleanCategoryID.displayOrder` (risk low → high); within a category by target risk then id.
     var targetsInDisplayOrder: [DiskCleanRuleTarget] {
         DiskCleanCategoryID.displayOrder.flatMap { category in
             targets(in: category).sorted {
@@ -74,7 +82,7 @@ struct DiskCleanRuleCatalogV2: Sendable {
         }
     }
 
-    // MARK: - 用户与应用缓存（v1 `cache.*` 规则）
+    // MARK: - User and app caches (v1 `cache.*` rules)
 
     private static let userAndAppTargets: [DiskCleanRuleTarget] = [
         DiskCleanRuleTarget(
@@ -662,7 +670,7 @@ struct DiskCleanRuleCatalogV2: Sendable {
         )
     ]
 
-    // MARK: - 开发者产物与工具缓存（v1 `developer.*` 规则）
+    // MARK: - Developer artifacts and tool caches (v1 `developer.*` rules)
 
     private static let developerTargets: [DiskCleanRuleTarget] = [
         DiskCleanRuleTarget(
@@ -1252,7 +1260,7 @@ struct DiskCleanRuleCatalogV2: Sendable {
         )
     ]
 
-    // MARK: - 浏览器缓存（v1 `browser.*` 规则）
+    // MARK: - Browser caches (v1 `browser.*` rules)
 
     private static let browserTargets: [DiskCleanRuleTarget] = [
         DiskCleanRuleTarget(
@@ -1591,20 +1599,23 @@ struct DiskCleanRuleCatalogV2: Sendable {
         )
     ]
 
-    // MARK: - P2 开发产物清扫（设计 §10.1）
+    // MARK: - P2 developer-artifact purge (design §10.1)
 
-    /// 合成 target，一个种类一条。
+    /// Synthetic targets, one per kind.
     ///
-    /// 拆到种类粒度而不是合并成一条 `purge.artifacts`：`targetID` 会原样写进审计日志（§7.8），
-    /// 事后翻日志时"删了哪一类产物"必须一眼看得出来。
+    /// Split to kind granularity rather than one `purge.artifacts`: `targetID` is written as-is
+    /// into audit logs (§7.8), so "which artifact class was deleted" must be obvious when reading
+    /// history.
     ///
-    /// **风险一律 medium**：真实风险取决于候选自身的事实（所在仓库脏不脏），由展开来源经
-    /// `DiskCleanCandidateFacts.risk` 覆盖成 low。目录里给的是覆盖缺失时的兜底值，方向
-    /// fail-safe——漏了覆盖只会导致不默认勾选，不会把脏仓库的产物默认选上。
+    /// **Risk is always medium**: true risk depends on candidate facts (whether the repo is dirty)
+    /// and is overridden to low by the expansion source via `DiskCleanCandidateFacts.risk`. The
+    /// catalog value is the fail-safe fallback when override is missing—missing override only
+    /// means not default-selected, never default-selecting dirty-repo artifacts.
     ///
-    /// **`reservedRootPaths` 为空**是本文件唯一的例外：扫描根由用户配置，目录里没有任何固定
-    /// 前缀可写。保留根改由展开来源在运行时给出（全体已配置的根都进工件保留集），
-    /// `DiskCleanScanEngineTests` 断言这一点。
+    /// **Empty `reservedRootPaths`** is the only exception in this file: scan roots are user-
+    /// configured, so the catalog has no fixed prefix to write. Reserved roots are supplied at
+    /// runtime by the expansion source (all configured roots enter the artifact reserved set);
+    /// `DiskCleanScanEngineTests` asserts this.
     private static let developerArtifactTargets: [DiskCleanRuleTarget] = DiskCleanPurgeKind.allCases.map { kind in
         DiskCleanRuleTarget(
             id: kind.targetID,
@@ -1616,10 +1627,11 @@ struct DiskCleanRuleCatalogV2: Sendable {
         )
     }
 
-    // MARK: - P2 残留安装包（设计 §10.2）
+    // MARK: - P2 leftover installers (design §10.2)
 
-    /// 合成 target，一个扩展名一条。风险与保留根的处理同开发产物，区别是范围固定为
-    /// `~/Downloads` 顶层，因此保留根可以静态写死。
+    /// Synthetic targets, one per extension. Risk and reserved-root handling match developer
+    /// artifacts; the difference is a fixed top-level `~/Downloads` scope, so reserved roots can
+    /// be hard-coded.
     private static let installerTargets: [DiskCleanRuleTarget] = DiskCleanInstallerKind.allCases.map { kind in
         DiskCleanRuleTarget(
             id: kind.targetID,

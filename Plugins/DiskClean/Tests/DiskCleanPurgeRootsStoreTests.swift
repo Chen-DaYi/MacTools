@@ -22,9 +22,9 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - 规范化
+    // MARK: - Normalization
 
-    /// 用户可能选中一个符号链接文件夹；存进去的必须是物理路径，否则 `O_NOFOLLOW_ANY` 会拒绝整棵树。
+    /// Users may pick a symlinked folder; store the physical path or `O_NOFOLLOW_ANY` rejects the whole tree.
     func testStoresPhysicalPathForSymlinkedRoot() throws {
         let real = try temporaryDirectory.makeDirectory("Projects")
         let link = try temporaryDirectory.makeSymlink("ProjectsLink", destination: "Projects")
@@ -35,7 +35,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(persistence.storedRoots, [real.path])
     }
 
-    /// 同一目录的两种写法只保留一条。
+    /// Two spellings of the same directory keep only one root.
     func testRejectsDuplicateAfterNormalization() throws {
         let real = try temporaryDirectory.makeDirectory("Code")
         try temporaryDirectory.makeSymlink("CodeLink", destination: "Code")
@@ -46,11 +46,11 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(update.roots, [real.path])
         XCTAssertEqual(update.rejections.count, 1)
         guard case .duplicate = update.rejections[0] else {
-            return XCTFail("重复根应报 duplicate，实际 \(update.rejections[0])")
+            return XCTFail("duplicate root should report .duplicate, got \(update.rejections[0])")
         }
     }
 
-    /// 尾部斜杠不该制造出第二条根。
+    /// A trailing slash must not create a second root.
     func testTrailingSlashIsNotADistinctRoot() throws {
         let real = try temporaryDirectory.makeDirectory("Work")
 
@@ -60,7 +60,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(update.roots, [real.path])
     }
 
-    // MARK: - 祖先裁决
+    // MARK: - Ancestor adjudication
 
     func testDropsDescendantWhenAncestorIsAdded() throws {
         let ancestor = try temporaryDirectory.makeDirectory("Repos")
@@ -72,7 +72,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(update.rejections, [.coveredByAncestor(path: descendant.path, ancestor: ancestor.path)])
     }
 
-    /// 裁决与添加顺序无关：先加后代再加祖先，同样是留祖先。缩小用户明确要求的范围才是更糟的失效。
+    /// Adjudication is order-independent: descendant then ancestor still keeps the ancestor. Shrinking the user's explicit scope is the worse failure.
     func testDropsDescendantEvenWhenItWasAddedFirst() throws {
         let ancestor = try temporaryDirectory.makeDirectory("Repos")
         let descendant = try temporaryDirectory.makeDirectory("Repos/app")
@@ -84,7 +84,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(persistence.storedRoots, [ancestor.path])
     }
 
-    /// 前缀相同但不是祖先：`/tmp/x/Repos` 不覆盖 `/tmp/x/ReposBackup`。
+    /// Shared prefix is not ancestry: `/tmp/x/Repos` does not cover `/tmp/x/ReposBackup`.
     func testKeepsSiblingWithSharedPrefix() throws {
         let first = try temporaryDirectory.makeDirectory("Repos")
         let second = try temporaryDirectory.makeDirectory("ReposBackup")
@@ -102,7 +102,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertTrue(DiskCleanPurgeRootNormalizer.isStrictAncestor("/", of: "/a"))
     }
 
-    // MARK: - 不可解析
+    // MARK: - Unresolvable
 
     func testRejectsMissingPath() {
         let missing = temporaryDirectory.resolve("NotThere").path
@@ -113,7 +113,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(update.rejections, [.unresolvable(path: missing)])
     }
 
-    /// 相对路径会被 `realpath` 按当前工作目录解析成一个用户根本没选的目录，必须直接拒收。
+    /// Relative paths would be resolved by `realpath` against cwd into a directory the user never chose; reject them outright.
     func testRejectsRelativePath() {
         let update = store.add("Documents/Code")
 
@@ -129,7 +129,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(resolved.roots, [NSHomeDirectory() + "/Anywhere"])
     }
 
-    // MARK: - 增删
+    // MARK: - Add/remove
 
     func testRemoveMatchesOriginalSpellingWhenPathIsGone() throws {
         let directory = try temporaryDirectory.makeDirectory("Gone")
@@ -158,7 +158,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(store.roots(), ["/tmp/one", "/tmp/two"])
     }
 
-    // MARK: - UserDefaults 实现
+    // MARK: - UserDefaults implementation
 
     func testUserDefaultsPersistenceRoundTrip() throws {
         let suiteName = "DiskCleanPurgeRootsStoreTests-\(UUID().uuidString)"
@@ -177,7 +177,7 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
     }
 }
 
-/// 内存持久化：扫描根测试绝不触碰 `UserDefaults.standard`。
+/// In-memory persistence: purge-root tests never touch `UserDefaults.standard`.
 final class InMemoryDiskCleanPurgeRootsPersistence: DiskCleanPurgeRootsPersisting, @unchecked Sendable {
     private let lock = NSLock()
     private var roots: [String] = []

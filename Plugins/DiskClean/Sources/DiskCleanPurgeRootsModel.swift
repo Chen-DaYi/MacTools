@@ -1,19 +1,21 @@
 import Foundation
 
-/// 开发产物扫描根的界面状态（设计 §10.1 设置区）。
+/// UI state for developer-artifact scan roots (design §10.1 settings area).
 ///
-/// 把"存储 + 拒收反馈 + 通知扫描范围变化"三件事收在一处：视图只发命令读状态，
-/// 而拒收原因（不可解析 / 重复 / 被祖先覆盖）必须有个地方留到下一次渲染——
-/// `DiskCleanPurgeRootsStore.add` 返回后就没人记得它了，用户会以为自己刚选的文件夹凭空消失。
+/// Collapses "storage + rejection feedback + scan-scope change notification" into one place:
+/// the view only issues commands and reads state, while rejection reasons (unresolvable /
+/// duplicate / covered by ancestor) need somewhere to live until the next render—
+/// after `DiskCleanPurgeRootsStore.add` returns nobody remembers them, and users would think the
+/// folder they just chose vanished.
 @MainActor
 final class DiskCleanPurgeRootsModel: ObservableObject {
-    /// 规范化后的物理路径，保持添加顺序。
+    /// Normalized physical paths, in add order.
     @Published private(set) var roots: [String]
-    /// 最近一次增删被拒收的条目。任何一次成功操作都会清空它。
+    /// Entries rejected by the most recent add/remove. Cleared by any successful operation.
     @Published private(set) var rejections: [DiskCleanPurgeRootRejection]
 
-    /// 根集合变化时的回调。用于把新范围推给开发产物分段的 Controller——
-    /// 范围一变结果就该标记为陈旧，这条线不能断。
+    /// Callback when the root set changes. Used to push the new scope to the developer-artifacts
+    /// Controller—once scope changes the result must be marked stale; this wire must not break.
     var onRootsChange: (([String]) -> Void)?
 
     private let store: DiskCleanPurgeRootsStore
@@ -35,12 +37,13 @@ final class DiskCleanPurgeRootsModel: ObservableObject {
     }
 
     func remove(_ path: String) {
-        // 移除不会产生拒收：路径不在表里时结果就是原样，没有需要解释的东西。
+        // Remove never produces rejections: if the path is not in the table the result is unchanged,
+        // with nothing to explain.
         update(roots: store.remove(path), rejections: [])
     }
 
-    /// 用户看过原因后手动收起。不自动超时消失——拒收说明用户的意图没被满足，
-    /// 得由用户确认自己读到了。
+    /// User dismisses the reason after reading it. Do not auto-timeout—rejection means the user's
+    /// intent was not met, so they must confirm they saw the message.
     func dismissRejections() {
         guard !rejections.isEmpty else { return }
         rejections = []

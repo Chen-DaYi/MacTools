@@ -7,25 +7,25 @@ import XCTest
 final class DiskCleanControllerTests: XCTestCase {
     private let observedAt = Date(timeIntervalSince1970: 10_000)
 
-    // MARK: - 事件流消费
+    // MARK: - Event stream consumption
 
     func testConsumesStreamAndPublishesScannedResult() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
 
         let candidate = makeCandidate(id: "a", path: "/cache/a")
         engine.emit(.candidateFound(candidate))
         engine.emit(.candidateSized(id: candidate.id, result: .testComplete(bytes: 2_048, observedAt: observedAt)))
         engine.emit(.finished(makeSummary(candidates: [candidate.applying(.testComplete(bytes: 2_048, observedAt: observedAt))])))
 
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         let result = try XCTUnwrap(controller.snapshot.scanResult)
         XCTAssertEqual(result.cleanableCandidates.map(\.id), ["a"])
         XCTAssertEqual(result.cleanableSizeBytes, 2_048)
-        XCTAssertNotNil(result.artifact, "完成后必须带上工件——M4 的清理入口只接受工件")
+        XCTAssertNotNil(result.artifact, "finished scan must carry an artifact — M4 clean entry only accepts artifacts")
         XCTAssertTrue(controller.snapshot.canClean)
     }
 
@@ -34,13 +34,13 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.candidateFound(makeCandidate(id: "a", path: "/cache/a")))
 
-        // 节流发布：~250ms 内出现即符合预期，不要求同步可见。
-        await waitUntil("流式候选可见") { controller.snapshot.scanResult?.candidates.count == 1 }
+        // Throttled publish: appearing within ~250ms is expected; not required to be immediately visible.
+        await waitUntil("streaming candidates visible") { controller.snapshot.scanResult?.candidates.count == 1 }
         XCTAssertEqual(controller.snapshot.phase, .scanning)
-        XCTAssertFalse(controller.snapshot.canClean, "扫描中不可清理")
+        XCTAssertFalse(controller.snapshot.canClean, "cannot clean while scanning")
     }
 
     func testPropagatesLimitationsFromSummary() async throws {
@@ -48,14 +48,14 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(
             .finished(
                 makeSummary(candidates: [], limitations: [.walkerCircuitBroken, .threadsAbandoned(count: 2)])
             )
         )
 
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         let result = try XCTUnwrap(controller.snapshot.scanResult)
         XCTAssertEqual(result.limitations, [.walkerCircuitBroken, .threadsAbandoned(count: 2)])
         XCTAssertTrue(result.isLimited)
@@ -66,27 +66,27 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.fail(with: FakeDiskCleanExpansionError(message: "engine exploded"))
 
-        await waitUntil("失败已发布") { controller.snapshot.errorMessage != nil }
+        await waitUntil("failure published") { controller.snapshot.errorMessage != nil }
         XCTAssertEqual(controller.snapshot.phase, .idle)
         XCTAssertEqual(controller.snapshot.errorMessage, "engine exploded")
     }
 
-    // MARK: - operationID 世代
+    // MARK: - operationID generations
 
     func testEventsFromSupersededOperationAreDiscarded() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
-        // 停止扫描 → 上一代 operationID 作废。
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
+        // Cancel scan → previous operationID is invalidated.
         controller.cancelCurrentOperation()
         XCTAssertEqual(controller.snapshot.phase, .idle)
 
-        // 过期操作的尾巴：绝不能把状态推回 scanned。
+        // Tail events from a superseded operation must never push state back to scanned.
         engine.emit(.candidateFound(makeCandidate(id: "a", path: "/cache/a")))
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
         try await Task.sleep(nanoseconds: 400_000_000)
@@ -100,10 +100,10 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         controller.cancelCurrentOperation()
 
-        await waitUntil("引擎流已终止") { engine.didTerminate }
+        await waitUntil("engine stream terminated") { engine.didTerminate }
     }
 
     func testRescanUsesFreshOperationAndResetsLog() async throws {
@@ -111,18 +111,18 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("首轮完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("first round finished") { controller.snapshot.phase == .scanned }
 
         controller.scan()
 
         XCTAssertEqual(engine.scanCallCount, 2)
-        XCTAssertEqual(controller.snapshot.scanLogEntries.count, 1, "新一轮扫描从干净日志开始")
+        XCTAssertEqual(controller.snapshot.scanLogEntries.count, 1, "a new scan starts with a clean log")
         XCTAssertNil(controller.snapshot.scanResult)
     }
 
-    // MARK: - 过期门
+    // MARK: - Expiry gate
 
     func testExpiryClockFlipsCanCleanAndNotifiesStateChange() async throws {
         let clock = TestDiskCleanClock(now: observedAt)
@@ -132,20 +132,20 @@ final class DiskCleanControllerTests: XCTestCase {
         controller.onStateChange = { stateChangeCount += 1 }
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         XCTAssertTrue(controller.snapshot.canClean)
 
         let changesBeforeExpiry = stateChangeCount
         clock.advance(by: DiskCleanScanFreshness.window)
 
-        await waitUntil("过期门到点") { controller.snapshot.isResultExpired }
-        XCTAssertFalse(controller.snapshot.canClean, "过期后不可清理")
+        await waitUntil("expiry gate fired") { controller.snapshot.isResultExpired }
+        XCTAssertFalse(controller.snapshot.canClean, "cannot clean after expiry")
         XCTAssertGreaterThan(
             stateChangeCount,
             changesBeforeExpiry,
-            "过期是时间驱动的：到点即通知宿主刷新，不等用户点击"
+            "expiry is time-driven: notify host to refresh when due, without waiting for a user click"
         )
         XCTAssertEqual(controller.snapshot.subtitle, "结果已过期，请重新扫描")
     }
@@ -156,7 +156,7 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine, clock: clock)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(
             .finished(
                 makeSummary(candidates: [
@@ -165,7 +165,7 @@ final class DiskCleanControllerTests: XCTestCase {
                 ])
             )
         )
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         XCTAssertEqual(
             controller.snapshot.scanResult?.expiryDeadline,
@@ -179,19 +179,19 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine, clock: clock)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         XCTAssertEqual(engine.lastForceRefresh, false)
 
         clock.advance(by: DiskCleanScanFreshness.window)
-        await waitUntil("过期门到点") { controller.snapshot.isResultExpired }
+        await waitUntil("expiry gate fired") { controller.snapshot.isResultExpired }
         controller.scan()
 
         XCTAssertEqual(
             engine.lastForceRefresh,
             true,
-            "过期后的重扫必须绕过缓存，否则会陷入'过期 → 重扫 → 命中旧缓存 → 仍过期'"
+            "rescan after expiry must bypass cache, or it loops: expired → rescan → hit stale cache → still expired"
         )
     }
 
@@ -201,15 +201,15 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine, clock: clock)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
 
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
-        XCTAssertTrue(controller.snapshot.isResultExpired, "缓存命中的旧 observedAt 可能一出生就过期")
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
+        XCTAssertTrue(controller.snapshot.isResultExpired, "a cache hit with old observedAt may already be expired at birth")
         XCTAssertFalse(controller.snapshot.canClean)
     }
 
-    // MARK: - 清理集合的不变量
+    // MARK: - Clean-set invariants
 
     func testCleanDropsCandidatesWithIncompleteSize() async throws {
         let engine = ControlledDiskCleanScanEngine()
@@ -217,21 +217,21 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine, executor: executor)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         let complete = makeSizedCandidate(id: "complete", path: "/cache/complete")
         let partial = makeCandidate(id: "partial", path: "/cache/partial")
             .applying(.testPartial(reasons: [.timedOut], observedAt: observedAt))
         let unsized = makeCandidate(id: "unsized", path: "/cache/unsized")
         engine.emit(.finished(makeSummary(candidates: [complete, partial, unsized])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         controller.clean()
-        await waitUntil("清理完成") { controller.snapshot.phase == .completed }
+        await waitUntil("clean finished") { controller.snapshot.phase == .completed }
 
         XCTAssertEqual(
             executor.lastSelectedIDs,
             ["complete"],
-            "未定大小与 partial 的候选绝不进入清理集合（§3.1 不变量的第一道防线）"
+            "unknown-size and partial candidates never enter the clean set (first line of §3.1 invariants)"
         )
     }
 
@@ -241,11 +241,11 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine, executor: executor)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         let partial = makeCandidate(id: "partial", path: "/cache/partial")
             .applying(.testPartial(reasons: [.permissionDenied], observedAt: observedAt))
         engine.emit(.finished(makeSummary(candidates: [partial])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         controller.clean()
 
@@ -261,25 +261,25 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine, executor: executor, clock: clock)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         clock.advance(by: DiskCleanScanFreshness.window)
-        await waitUntil("过期门到点") { controller.snapshot.isResultExpired }
+        await waitUntil("expiry gate fired") { controller.snapshot.isResultExpired }
 
         controller.clean()
 
         XCTAssertEqual(executor.callCount, 0)
     }
 
-    // MARK: - 选择命令（§8.1）
+    // MARK: - Selection commands (§8.1)
 
     func testDefaultSelectionCoversLowRiskCandidatesOnly() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(
             .finished(
                 makeSummary(candidates: [
@@ -289,7 +289,7 @@ final class DiskCleanControllerTests: XCTestCase {
                 ])
             )
         )
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         XCTAssertEqual(controller.snapshot.selection.selectedIDs, ["low"])
         XCTAssertEqual(controller.snapshot.selection.selectableIDs, ["low", "medium"])
@@ -301,19 +301,19 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         let candidate = makeCandidate(id: "a", path: "/cache/a")
         engine.emit(.candidateFound(candidate))
-        await waitUntil("候选可见") { controller.snapshot.scanResult?.candidates.count == 1 }
+        await waitUntil("candidates visible") { controller.snapshot.scanResult?.candidates.count == 1 }
 
         XCTAssertTrue(
             controller.snapshot.selection.isEmpty,
-            "大小未知的候选不可勾选，默认策略也不能把它带进来"
+            "unknown-size candidates cannot be selected; default policy must not pull them in"
         )
 
         engine.emit(.candidateSized(id: candidate.id, result: .testComplete(bytes: 512, observedAt: observedAt)))
 
-        await waitUntil("求大小完成后自动按默认策略勾选") { controller.snapshot.selection.selectedIDs == ["a"] }
+        await waitUntil("auto-selected by default policy after sizing") { controller.snapshot.selection.selectedIDs == ["a"] }
     }
 
     func testTogglingUnselectableCandidateIsRejected() async throws {
@@ -321,15 +321,15 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         let locked = makeCandidate(id: "locked", path: "/cache/locked", safety: .inUse(processName: "App"))
             .applying(.testComplete(bytes: 1_024, observedAt: observedAt))
         engine.emit(.finished(makeSummary(candidates: [locked])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         controller.setCandidateSelected("locked", isSelected: true)
 
-        XCTAssertTrue(controller.snapshot.selection.isEmpty, "锁定候选不可勾选，命令必须被拒绝而不是仅在 UI 上禁用")
+        XCTAssertTrue(controller.snapshot.selection.isEmpty, "locked candidates cannot be selected; the command must be rejected, not only disabled in UI")
         XCTAssertFalse(controller.snapshot.canClean)
     }
 
@@ -338,7 +338,7 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(
             .finished(
                 makeSummary(candidates: [
@@ -347,7 +347,7 @@ final class DiskCleanControllerTests: XCTestCase {
                 ])
             )
         )
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         controller.setCategorySelection(.appCaches, isSelected: false)
         XCTAssertTrue(controller.snapshot.selection.isEmpty)
@@ -357,7 +357,7 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.snapshot.selection.selectedIDs,
             ["low"],
-            "\"全选\"= 选中本类所有低风险项，medium/high 永不被带入"
+            "\"select all\" selects every low-risk item in the class; medium/high are never pulled in"
         )
         XCTAssertEqual(controller.snapshot.selection.state(of: .appCaches), .partiallySelected)
     }
@@ -368,7 +368,7 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine, executor: executor)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(
             .finished(
                 makeSummary(candidates: [
@@ -377,13 +377,13 @@ final class DiskCleanControllerTests: XCTestCase {
                 ])
             )
         )
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         controller.setCandidateSelected("drop", isSelected: false)
         controller.clean()
-        await waitUntil("清理完成") { controller.snapshot.phase == .completed }
+        await waitUntil("clean finished") { controller.snapshot.phase == .completed }
 
-        XCTAssertEqual(executor.lastSelectedIDs, ["keep"], "菜单栏与详情页共享同一份选中集")
+        XCTAssertEqual(executor.lastSelectedIDs, ["keep"], "menu bar and detail page share the same selection set")
     }
 
     func testCleanIsDisabledWhenSelectionIsEmpty() async throws {
@@ -392,14 +392,14 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine, executor: executor)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         XCTAssertTrue(controller.snapshot.canClean)
 
         controller.setCandidateSelected("a", isSelected: false)
 
-        XCTAssertFalse(controller.snapshot.canClean, "选中集为空时按钮变灰，而不是回退成\"清理全部\"")
+        XCTAssertFalse(controller.snapshot.canClean, "with empty selection the button grays out; it does not fall back to \"clean all\"")
         controller.clean()
         XCTAssertEqual(executor.callCount, 0)
     }
@@ -415,7 +415,7 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(controller.snapshot.phase, .scanned)
         XCTAssertNil(controller.snapshot.pendingPlan)
         controller.confirmPendingClean()
-        XCTAssertEqual(executor.callCount, 0, "选择一变，冻结的计划就不再对应任何用户意图")
+        XCTAssertEqual(executor.callCount, 0, "once selection changes, the frozen plan no longer matches any user intent")
     }
 
     func testCategorySelectionChangeInvalidatesPendingPlan() async throws {
@@ -436,34 +436,34 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         controller.setCandidateSelected("a", isSelected: false)
         XCTAssertTrue(controller.snapshot.selection.isEmpty)
 
         controller.scan()
-        await waitUntil("第二轮开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("second round started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("第二轮完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("second round finished") { controller.snapshot.phase == .scanned }
 
         XCTAssertEqual(
             controller.snapshot.selection.selectedIDs,
             ["a"],
-            "候选 ID 跨扫描稳定，上一轮的取消勾选不该悄悄带进新结果"
+            "candidate IDs are stable across scans; previous unchecks must not silently reappear in new results"
         )
     }
 
-    // MARK: - 范围选择
+    // MARK: - Scope selection
 
     func testChangingScopeMarksResultStale() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         controller.setChoice(.browser, isSelected: false)
 
@@ -478,7 +478,7 @@ final class DiskCleanControllerTests: XCTestCase {
 
         controller.setChoice(.developer, isSelected: false)
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
 
         XCTAssertEqual(engine.lastChoices, [.cache, .browser])
     }
@@ -496,28 +496,28 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(controller.snapshot.phase, .idle)
     }
 
-    // MARK: - P2 分段范围（设计 §10）
+    // MARK: - P2 section scope (design §10)
 
-    /// 同一个 Controller 类型服务三个分段，扫描范围整体替换即可——P2 不需要另一套状态机。
+    /// One Controller type serves three sections; replace the whole scan scope — P2 needs no separate state machine.
     func testScanForwardsDeveloperArtifactRootsToEngine() async {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
 
         controller.setScope(.developerArtifacts(roots: ["/code"]))
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
 
         XCTAssertEqual(engine.lastScope, .developerArtifacts(roots: ["/code"]))
     }
 
-    /// 增删扫描根与改分组是同一件事：结果不再对应当前范围，就该提示重新扫描。
+    /// Adding/removing scan roots is the same as changing groups: when results no longer match current scope, prompt for rescan.
     func testChangingDeveloperArtifactRootsMarksResultStale() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
         controller.setScope(.developerArtifacts(roots: ["/code"]))
 
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(
             .finished(
                 makeSummary(
@@ -526,7 +526,7 @@ final class DiskCleanControllerTests: XCTestCase {
                 )
             )
         )
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         XCTAssertTrue(controller.snapshot.canClean)
 
         controller.setScope(.developerArtifacts(roots: ["/code", "/work"]))
@@ -535,7 +535,7 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertFalse(controller.snapshot.canClean)
     }
 
-    /// 还没配置扫描根时扫描入口必须是禁用的，否则用户点了什么都不会发生。
+    /// With no scan roots configured, scan entry must be disabled, or the user would click and nothing happens.
     func testScanIsRejectedWhenDeveloperArtifactRootsAreEmpty() {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
@@ -547,7 +547,7 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(engine.scanCallCount, 0)
     }
 
-    /// 安装包段范围固定，永远可扫。
+    /// Installer section scope is fixed and always scannable.
     func testInstallerScopeIsAlwaysScannable() {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
@@ -555,11 +555,11 @@ final class DiskCleanControllerTests: XCTestCase {
         controller.setScope(.installers)
 
         XCTAssertTrue(controller.snapshot.canScan)
-        XCTAssertTrue(controller.snapshot.selectedChoices.isEmpty, "非规则范围没有分组概念")
+        XCTAssertTrue(controller.snapshot.selectedChoices.isEmpty, "non-rules scopes have no group concept")
     }
 
-    /// 分组这个概念只对规则段成立。给 P2 段发 `setChoice` 会把整个分段的范围换掉，
-    /// 因此必须是空操作。
+    /// Grouping only applies to the rules section. Sending `setChoice` to a P2 section would replace the whole section scope,
+    /// so it must be a no-op.
     func testSetChoiceIsIgnoredOutsideRuleScope() {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
@@ -577,9 +577,9 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = try await makeScannedController(executor: executor, mode: .trash)
 
         controller.clean()
-        await waitUntil("清理完成") { controller.snapshot.phase == .completed }
+        await waitUntil("clean finished") { controller.snapshot.phase == .completed }
 
-        XCTAssertEqual(executor.callCount, 1, "废纸篓可恢复，故单步执行")
+        XCTAssertEqual(executor.callCount, 1, "Trash is recoverable, so execute in one step")
         XCTAssertEqual(executor.lastMode, .trash)
     }
 
@@ -590,12 +590,12 @@ final class DiskCleanControllerTests: XCTestCase {
         controller.clean()
 
         XCTAssertEqual(controller.snapshot.phase, .confirming)
-        XCTAssertEqual(executor.callCount, 0, "确认之前一个字节都不能删")
+        XCTAssertEqual(executor.callCount, 0, "not a single byte may be deleted before confirmation")
         let pending = try XCTUnwrap(controller.snapshot.pendingPlan)
         XCTAssertEqual(pending.itemCount, 1)
         XCTAssertEqual(pending.totalEstimatedBytes, 1_024)
         XCTAssertEqual(pending.mode, .permanent)
-        XCTAssertFalse(controller.snapshot.canScan, "确认期间不接受新扫描")
+        XCTAssertFalse(controller.snapshot.canScan, "no new scans accepted during confirmation")
     }
 
     func testConfirmingExecutesTheFrozenPlan() async throws {
@@ -604,12 +604,12 @@ final class DiskCleanControllerTests: XCTestCase {
         controller.clean()
 
         controller.confirmPendingClean()
-        await waitUntil("清理完成") { controller.snapshot.phase == .completed }
+        await waitUntil("clean finished") { controller.snapshot.phase == .completed }
 
         XCTAssertEqual(executor.callCount, 1)
         XCTAssertEqual(executor.lastMode, .permanent)
         XCTAssertEqual(executor.lastSelectedIDs, ["a"])
-        XCTAssertNil(controller.snapshot.pendingPlan, "计划执行后不再挂在快照上")
+        XCTAssertNil(controller.snapshot.pendingPlan, "plan is no longer attached to the snapshot after execution")
     }
 
     func testCancellingConfirmationDiscardsPlanAndReturnsToScanned() async throws {
@@ -624,7 +624,7 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(executor.callCount, 0)
 
         controller.confirmPendingClean()
-        XCTAssertEqual(executor.callCount, 0, "计划已作废，确认不该再生效")
+        XCTAssertEqual(executor.callCount, 0, "plan is voided; confirmation must not take effect again")
     }
 
     func testChangingScopeInvalidatesPendingPlan() async throws {
@@ -651,7 +651,7 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertNil(controller.snapshot.pendingPlan)
         XCTAssertEqual(controller.snapshot.removalMode, .trash)
         controller.confirmPendingClean()
-        XCTAssertEqual(executor.callCount, 0, "删除方式是冻结字段，改了就必须重新铸造")
+        XCTAssertEqual(executor.callCount, 0, "removal mode is a frozen field; changing it requires reminting")
     }
 
     func testConfirmationWindowExpiresAfterSixtySeconds() async throws {
@@ -663,13 +663,13 @@ final class DiskCleanControllerTests: XCTestCase {
 
         clock.advance(by: DiskCleanController.confirmationWindow)
 
-        await waitUntil("确认窗口到期") { controller.snapshot.phase == .scanned }
+        await waitUntil("confirmation window expired") { controller.snapshot.phase == .scanned }
         XCTAssertNil(controller.snapshot.pendingPlan)
         XCTAssertEqual(controller.snapshot.errorMessage, "确认已超时，请重新发起清理")
         XCTAssertEqual(executor.callCount, 0)
     }
 
-    /// 确认窗口不得越过过期时刻：在门限前 10 秒进入确认，窗口只剩 10 秒而不是 60 秒。
+    /// Confirmation window must not cross expiry: enter confirmation 10s before the gate, window is 10s not 60s.
     func testConfirmationWindowNeverOutlivesTheExpiryGate() async throws {
         let clock = TestDiskCleanClock(now: observedAt)
         let executor = FakeDiskCleanExecutor()
@@ -680,9 +680,9 @@ final class DiskCleanControllerTests: XCTestCase {
 
         clock.advance(by: 10)
 
-        await waitUntil("过期门到点即作废") { controller.snapshot.phase == .scanned }
+        await waitUntil("voided when expiry gate fires") { controller.snapshot.phase == .scanned }
         XCTAssertNil(controller.snapshot.pendingPlan)
-        XCTAssertEqual(executor.callCount, 0, "确认窗口绝不能把执行推到过期门之外")
+        XCTAssertEqual(executor.callCount, 0, "confirmation window must never push execution past the expiry gate")
     }
 
     func testCancelCurrentOperationDiscardsPendingPlan() async throws {
@@ -696,13 +696,13 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertNil(controller.snapshot.pendingPlan)
     }
 
-    // MARK: - 计划铸造失败
+    // MARK: - Plan minting failure
 
-    /// 铸造失败 = 零删除。原因如实上报，不降级成"部分清理"。
+    /// Minting failure = zero deletes. Report the reason as-is; do not degrade to "partial clean".
     func testPlanMintingFailureSurfacesErrorAndSkipsExecution() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let executor = FakeDiskCleanExecutor()
-        // 计划路径覆盖了一个锁定候选 → 祖先断言拒绝。
+        // Planned path covers a locked candidate → ancestor assertion rejects.
         let parent = DiskCleanPlanFactory.candidate(path: "/cache/app", bytes: 1_024)
         let lockedChild = DiskCleanPlanFactory.candidate(
             path: "/cache/app/inner",
@@ -710,9 +710,9 @@ final class DiskCleanControllerTests: XCTestCase {
         )
         let controller = makeController(engine: engine, executor: executor)
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [parent, lockedChild])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
 
         controller.clean()
 
@@ -729,7 +729,7 @@ final class DiskCleanControllerTests: XCTestCase {
         let controller = try await makeScannedController(executor: executor, mode: .trash)
 
         controller.clean()
-        await waitUntil("执行失败已发布") { controller.snapshot.errorMessage != nil }
+        await waitUntil("execution failure published") { controller.snapshot.errorMessage != nil }
 
         XCTAssertEqual(controller.snapshot.phase, .scanned)
         XCTAssertEqual(controller.snapshot.errorMessage, "扫描结果已过期，请重新扫描")
@@ -744,7 +744,7 @@ final class DiskCleanControllerTests: XCTestCase {
             removalModeStore: store
         )
 
-        XCTAssertEqual(controller.snapshot.removalMode, .permanent, "启动时沿用上次的选择")
+        XCTAssertEqual(controller.snapshot.removalMode, .permanent, "load previous choice at startup")
 
         controller.setRemovalMode(.trash)
 
@@ -752,7 +752,7 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(controller.snapshot.removalMode, .trash)
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func makeController(
         engine: any DiskCleanScanning,
@@ -769,7 +769,7 @@ final class DiskCleanControllerTests: XCTestCase {
         )
     }
 
-    /// 扫完一轮、只有一个可清理候选（1024 字节）的控制器。
+    /// Controller after one finished scan with a single cleanable candidate (1024 bytes).
     private func makeScannedController(
         executor: any DiskCleanExecuting,
         mode: DiskCleanRemovalMode,
@@ -778,9 +778,9 @@ final class DiskCleanControllerTests: XCTestCase {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine, executor: executor, clock: clock, mode: mode)
         controller.scan()
-        await waitUntil("扫描开始") { controller.snapshot.phase == .scanning }
+        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
         engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("扫描完成") { controller.snapshot.phase == .scanned }
+        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
         return controller
     }
 

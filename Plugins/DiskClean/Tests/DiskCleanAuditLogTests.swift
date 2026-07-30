@@ -3,7 +3,7 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 审计日志字段完整性与轮转（设计 §7.8）。
+/// Audit log field completeness and rotation (design §7.8).
 final class DiskCleanAuditLogTests: XCTestCase {
     private var storage: DiskCleanTempDirectory!
 
@@ -42,7 +42,7 @@ final class DiskCleanAuditLogTests: XCTestCase {
                 estimatedBytes: 4_096,
                 status: "partiallyDeleted",
                 skipReason: nil,
-                error: "删除文件失败（Permission denied）"
+                error: "Failed to delete file (Permission denied)"
             )
         )
 
@@ -57,7 +57,7 @@ final class DiskCleanAuditLogTests: XCTestCase {
         XCTAssertEqual(record.estimatedBytes, 4_096)
         XCTAssertEqual(record.status, "partiallyDeleted")
         XCTAssertNil(record.skipReason)
-        XCTAssertEqual(record.error, "删除文件失败（Permission denied）")
+        XCTAssertEqual(record.error, "Failed to delete file (Permission denied)")
     }
 
     func testRecentRecordsAreNewestFirstAndRespectLimit() {
@@ -71,7 +71,7 @@ final class DiskCleanAuditLogTests: XCTestCase {
         XCTAssertEqual(records.map(\.status), ["ok-4", "ok-3", "ok-2"])
     }
 
-    /// 5MB 阈值（测试注入小值）到达即轮转为 `.1`，保留 2 代。
+    /// Rotate to `.1` when the threshold is hit (tests inject a small value); keep 2 generations.
     func testRotatesAtThresholdAndKeepsTwoGenerations() throws {
         let log = DiskCleanAuditLog(directory: storage.url, maximumFileSizeBytes: 400)
 
@@ -86,18 +86,20 @@ final class DiskCleanAuditLogTests: XCTestCase {
             atPath: storage.resolve(DiskCleanAuditLog.rotatedFileName).path
         )
         XCTAssertTrue(currentExists)
-        XCTAssertTrue(rotatedExists, "超过阈值必须轮转出 .1")
+        XCTAssertTrue(rotatedExists, "must rotate to .1 once the threshold is exceeded")
         XCTAssertEqual(
             try FileManager.default.contentsOfDirectory(atPath: storage.path).sorted(),
             [DiskCleanAuditLog.fileName, DiskCleanAuditLog.rotatedFileName].sorted(),
-            "只保留 2 代，不得堆出 .2 / .3"
+            "keep only 2 generations; must not pile up .2 / .3"
         )
     }
 
-    /// 轮转之后"最近记录"仍要跨两代读取，否则清理历史会在轮转瞬间集体失忆。
+    /// After rotation, "recent records" must still read across both generations,
+    /// otherwise cleanup history would go blank at the rotation boundary.
     ///
-    /// 保留 2 代意味着更早的记录**本就该**被丢弃，所以断言的是"读到的内容超出当前文件"，
-    /// 而不是"最早那条还在"。
+    /// Keeping 2 generations means older records are **supposed** to be discarded,
+    /// so the assertion is "read content spans beyond the current file",
+    /// not "the earliest record is still present".
     func testRecentRecordsSpanRotatedGeneration() throws {
         let log = DiskCleanAuditLog(directory: storage.url, maximumFileSizeBytes: 400)
         for index in 0..<12 {
@@ -110,13 +112,13 @@ final class DiskCleanAuditLogTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertEqual(statuses.first, "gen-11", "最新一条排在最前")
+        XCTAssertEqual(statuses.first, "gen-11", "newest record comes first")
         XCTAssertTrue(
             statuses.contains { !currentGeneration.contains("\"status\":\"\($0)\"") },
-            "已轮转到 .1 的那一代仍须可读，否则历史会在轮转瞬间集体失忆"
+            "the generation rotated to .1 must still be readable, or history would go blank at rotation"
         )
         let indices = statuses.compactMap { Int($0.dropFirst("gen-".count)) }
-        XCTAssertEqual(indices, indices.sorted(by: >), "跨代合并后仍按时间倒序")
+        XCTAssertEqual(indices, indices.sorted(by: >), "merged generations must remain reverse-chronological")
     }
 
     private func record(status: String, secondsSinceEpoch: Double) -> DiskCleanAuditLog.Record {

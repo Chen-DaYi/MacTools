@@ -1,12 +1,13 @@
 import Darwin
 import Foundation
 
-/// 回退 sizer：`fdopendir` / `readdir` + 逐条 `fstatat(AT_SYMLINK_NOFOLLOW)`（设计 §3.5）。
+/// Fallback sizer: `fdopendir` / `readdir` + per-entry `fstatat(AT_SYMLINK_NOFOLLOW)` (design §3.5).
 ///
-/// 用于 `getattrlistbulk` 对个别卷（部分 FUSE）直接返回错误的场景。**不使用 `FileManager`**：
-/// 那会丢掉 no-follow 与设备约束，并可能跨挂载点仍报 complete。本 walker 与 FastWalker
-/// 共用同一遍历骨架，因此挂载防护、硬链接去重、EPERM 跳过、deadline/取消、根身份语义完全一致；
-/// 同样跑在 WorkerPool 内，受同一放弃预算管辖。
+/// Used when `getattrlistbulk` fails outright on some volumes (certain FUSE mounts).
+/// **Does not use `FileManager`**: that would drop no-follow and device constraints and
+/// could still report complete across mount points. Shares FastWalker's traversal skeleton,
+/// so mount guards, hard-link dedup, EPERM skips, deadline/cancel, and root-identity
+/// semantics stay identical; also runs inside WorkerPool under the same abandon budget.
 struct DiskCleanSlowWalker: DiskCleanDirectorySizing {
     private let core: DiskCleanDirectoryTreeWalker
 
@@ -26,7 +27,7 @@ struct DiskCleanSlowWalker: DiskCleanDirectorySizing {
 }
 
 struct DiskCleanDirectoryStreamEntrySourceFactory: DiskCleanDirectoryEntrySourceFactory {
-    /// 分批只为让上层能按批检查取消与 deadline；readdir 本身是逐条的。
+    /// Batching only so the caller can check cancel and deadline per batch; readdir itself is per-entry.
     let batchSize: Int
 
     init(batchSize: Int = 128) {
@@ -34,7 +35,7 @@ struct DiskCleanDirectoryStreamEntrySourceFactory: DiskCleanDirectoryEntrySource
     }
 
     func makeSource(fileDescriptor: Int32) throws -> any DiskCleanDirectoryEntrySource {
-        // fdopendir 失败时不消费 fd，按协议约定由调用方 close。
+        // On fdopendir failure we do not consume the fd; the caller closes it per the protocol.
         guard let stream = fdopendir(fileDescriptor) else {
             throw DiskCleanPOSIXError(code: errno)
         }
@@ -59,7 +60,7 @@ final class DiskCleanDirectoryStreamEntrySource: DiskCleanDirectoryEntrySource {
         }
     }
 
-    /// `closedir` 会连带关闭底层 fd，故 `close()` 不额外 close 这个 fd。
+    /// `closedir` also closes the underlying fd, so `close()` must not close it again.
     var directoryFileDescriptor: Int32 {
         dirfd(stream)
     }

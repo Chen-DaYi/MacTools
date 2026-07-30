@@ -3,10 +3,10 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 通过注入伪造条目流测试遍历骨架的约束。
+/// Tests walk-skeleton constraints via injected fake entry streams.
 ///
-/// 挂载穿越无法在真实文件系统上构造（测试进程不能 mount），因此设计 §11 明确要求
-/// "devid 注入 fake 测挂载不下潜"——本文件即该要求的落地。
+/// Mount crossings cannot be built on a real FS (the test process cannot mount), so design §11 requires
+/// "inject devid fakes to prove no descent across mounts" — this file implements that requirement.
 final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
     private var temporaryDirectory: DiskCleanTempDirectory!
 
@@ -21,9 +21,9 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - 挂载防护
+    // MARK: - Mount protection
 
-    /// 子目录条目的 devid 与根不同（= 该位置挂载了别的卷）→ 不下潜、不计数、加 crossedMountPoint。
+    /// Child directory devid differs from root (= another volume mounted there) → no descent, no count, add crossedMountPoint.
     func testDoesNotDescendIntoDirectoryOnAnotherDevice() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         try temporaryDirectory.makeFile("Root/Mounted/should-not-be-counted.bin", bytes: 5000)
@@ -41,10 +41,10 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         XCTAssertEqual(result.completeness, .partial(reasons: [.crossedMountPoint]))
         XCTAssertEqual(result.estimatedBytes, 0)
         XCTAssertEqual(result.fileCount, 0)
-        XCTAssertEqual(factory.createdSourceCount, 1, "跨设备目录不得被 openat 下潜")
+        XCTAssertEqual(factory.createdSourceCount, 1, "must not openat-descend into a cross-device directory")
     }
 
-    /// 跨设备的普通文件同样不计入。
+    /// Cross-device regular files are likewise not counted.
     func testDoesNotCountFileOnAnotherDevice() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         let rootDevice = try deviceID(of: root.path)
@@ -64,7 +64,7 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         XCTAssertEqual(result.fileCount, 1)
     }
 
-    // MARK: - 条目级失败映射
+    // MARK: - Entry-level failure mapping
 
     func testUnresolvedEntryWithPermissionErrorReportsPermissionDenied() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
@@ -100,10 +100,10 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
             .size(ofItemAt: root.path, context: .test())
 
         XCTAssertEqual(result.completeness, .partial(reasons: [.permissionDenied]))
-        XCTAssertEqual(result.estimatedBytes, 42, "失败前已累加的部分必须如实保留")
+        XCTAssertEqual(result.estimatedBytes, 42, "bytes already accumulated before failure must be kept as-is")
     }
 
-    /// 多个降级原因必须并存，不能相互覆盖。
+    /// Multiple degradation reasons must coexist and must not overwrite each other.
     func testAccumulatesMultiplePartialReasons() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         let rootDevice = try deviceID(of: root.path)
@@ -122,7 +122,7 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         )
     }
 
-    // MARK: - 硬链接去重
+    // MARK: - Hard-link dedupe
 
     func testDeduplicatesHardLinksByDeviceAndFileID() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
@@ -141,8 +141,8 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         XCTAssertEqual(result.fileCount, 1)
     }
 
-    /// linkCount == 1 的文件不参与去重：即使 fileID 相同也各自计入
-    /// （去重键只在 linkCount > 1 时才有意义）。
+    /// Files with linkCount == 1 do not participate in dedupe: even identical fileIDs count separately
+    /// (the dedupe key is only meaningful when linkCount > 1).
     func testDoesNotDeduplicateWhenLinkCountIsOne() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         let rootDevice = try deviceID(of: root.path)
@@ -158,9 +158,9 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         XCTAssertEqual(result.fileCount, 2)
     }
 
-    // MARK: - 每批检查 deadline
+    // MARK: - Deadline checked each batch
 
-    /// deadline 必须在**每批之间**生效：第一批已计入，第二批不得再读。
+    /// deadline must apply **between batches**: first batch counted, second batch must not be read.
     func testChecksDeadlineBetweenBatches() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         let rootDevice = try deviceID(of: root.path)
@@ -182,13 +182,13 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         )
 
         XCTAssertEqual(result.completeness, .partial(reasons: [.timedOut]))
-        XCTAssertEqual(result.estimatedBytes, 11, "只应计入到期前读到的那一批")
+        XCTAssertEqual(result.estimatedBytes, 11, "only the batch read before deadline should count")
         XCTAssertEqual(result.observedAt, start)
     }
 
-    // MARK: - 下潜与 fd 生命周期
+    // MARK: - Descent and fd lifecycle
 
-    /// 同设备的目录条目要真的经 openat 下潜，并为子目录新建一个 source。
+    /// Same-device directory entries must truly openat-descend and create a new source for the child.
     func testDescendsIntoSameDeviceDirectory() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         try temporaryDirectory.makeDirectory("Root/Child")
@@ -204,11 +204,11 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
 
         XCTAssertEqual(result.completeness, .complete)
         XCTAssertEqual(result.estimatedBytes, 64)
-        XCTAssertEqual(factory.createdSourceCount, 2, "根与子目录各一个 source")
-        XCTAssertTrue(factory.allSourcesClosed, "所有 source 必须被关闭，不得泄漏 fd")
+        XCTAssertEqual(factory.createdSourceCount, 2, "one source each for root and child directory")
+        XCTAssertTrue(factory.allSourcesClosed, "all sources must be closed; no fd leaks")
     }
 
-    /// 下潜目标已不存在（扫描期间被删）→ 记 walkError，不崩。
+    /// Descent target already gone (deleted mid-scan) → record walkError, do not crash.
     func testMissingChildDirectoryIsReportedAsWalkError() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         let rootDevice = try deviceID(of: root.path)
@@ -223,11 +223,11 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         XCTAssertEqual(factory.createdSourceCount, 1)
     }
 
-    /// 同时打开的目录数必须是"树深度"量级，而非"某目录的子目录总数"量级。
+    /// Concurrently open directories must be O(tree depth), not O(children of one directory).
     ///
-    /// 若实现在处理一批条目时就把全部子目录 openat 出来压栈，宽目录（数万子目录）会直接
-    /// 撞 EMFILE。真实文件系统测不出这条——测试进程 RLIMIT_NOFILE 有百万——只能靠
-    /// source 工厂这个接缝观测"同时存活的 source 数"。
+    /// If the implementation openat-stacks every child while processing one batch, a wide directory
+    /// (tens of thousands of children) hits EMFILE. A real FS cannot test this — RLIMIT_NOFILE is millions —
+    /// so the source-factory seam observes "concurrent live source count".
     func testKeepsOpenDirectoryCountBoundedByDepth() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         let rootDevice = try deviceID(of: root.path)
@@ -242,18 +242,18 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
             )
         }
 
-        // 根一批报出全部 20 个子目录；每个子目录自身为空。
+        // Root batch reports all 20 children; each child is empty.
         let factory = ScriptedSourceFactory(scripts: [[rootBatch]])
 
         let result = DiskCleanDirectoryTreeWalker(sourceFactory: factory)
             .size(ofItemAt: root.path, context: .test())
 
         XCTAssertEqual(result.completeness, .complete)
-        XCTAssertEqual(factory.createdSourceCount, 1 + siblingCount, "每个子目录都应被下潜")
+        XCTAssertEqual(factory.createdSourceCount, 1 + siblingCount, "every child directory should be descended into")
         XCTAssertEqual(
             factory.peakConcurrentlyOpenSourceCount,
             2,
-            "同时最多只应持有根 + 一个子目录，而不是根 + \(siblingCount) 个子目录"
+            "at most root + one child open at once, not root + \(siblingCount) children"
         )
         XCTAssertTrue(factory.allSourcesClosed)
     }
@@ -268,7 +268,7 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
         XCTAssertTrue(factory.allSourcesClosed)
     }
 
-    /// source 创建失败（真实场景：fdopendir 失败）→ walkError，且根 fd 由调用方关闭。
+    /// Source creation failure (real case: fdopendir fails) → walkError, and the root fd is closed by the caller.
     func testFailingSourceFactoryReportsWalkError() throws {
         let root = try temporaryDirectory.makeDirectory("Root")
         let factory = FailingSourceFactory()
@@ -277,10 +277,10 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
             .size(ofItemAt: root.path, context: .test())
 
         XCTAssertEqual(result.completeness, .partial(reasons: [.walkError]))
-        XCTAssertNotNil(result.rootIdentity, "根已成功打开，身份可知")
+        XCTAssertNotNil(result.rootIdentity, "root opened successfully so identity is known")
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func deviceID(of path: String) throws -> UInt64 {
         var status = stat()
@@ -307,7 +307,7 @@ final class DiskCleanDirectoryTreeWalkerTests: XCTestCase {
     }
 }
 
-/// 每次调用都前进固定步长的时钟。
+/// Clock that advances a fixed step on each call.
 private final class SteppingClock: @unchecked Sendable {
     private let start: Date
     private let step: TimeInterval
@@ -328,7 +328,7 @@ private final class SteppingClock: @unchecked Sendable {
     }
 }
 
-/// 按脚本回放条目批次的伪造 source 工厂。第 n 个被创建的 source 使用 scripts[n]。
+/// Fake source factory that replays entry batches from scripts. The n-th created source uses scripts[n].
 private final class ScriptedSourceFactory: DiskCleanDirectoryEntrySourceFactory, @unchecked Sendable {
     private let scripts: [[[DiskCleanWalkEntry]]]
     private let throwAfterScriptedBatches: DiskCleanPOSIXError?
@@ -356,7 +356,7 @@ private final class ScriptedSourceFactory: DiskCleanDirectoryEntrySourceFactory,
         return sources.allSatisfy(\.isClosed)
     }
 
-    /// 同时处于"已创建且未关闭"状态的 source 峰值。
+    /// Peak concurrent sources in the "created and not yet closed" state.
     var peakConcurrentlyOpenSourceCount: Int {
         lock.lock()
         defer { lock.unlock() }
@@ -406,7 +406,7 @@ private final class ScriptedSource: DiskCleanDirectoryEntrySource {
     func close() {
         guard !isClosed else { return }
         isClosed = true
-        // 遵守协议：source 持有 fd 所有权。
+        // Honor the protocol: source owns the fd.
         Darwin.close(directoryFileDescriptor)
     }
 }

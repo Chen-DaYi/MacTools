@@ -5,7 +5,7 @@ import MacToolsPluginKit
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-// MARK: - 结果与身份工厂
+// MARK: - Result and identity factories
 
 extension DiskCleanRootIdentity {
     static func test(
@@ -61,7 +61,7 @@ extension DiskCleanFileItem {
 }
 
 extension DiskCleanRuleTarget {
-    /// P2 合成 target。`external` 与 glob/provider 互斥，因此单独一个工厂而不是再加一个参数。
+    /// P2 synthetic target. `external` is mutually exclusive with glob/provider, so a dedicated factory rather than another parameter.
     static func testExternal(
         id: String,
         category: DiskCleanCategoryID = .developerArtifacts,
@@ -104,9 +104,9 @@ extension DiskCleanRuleTarget {
     }
 }
 
-// MARK: - 可编程文件系统
+// MARK: - Programmable filesystem
 
-/// 纯内存文件系统。引擎的展开阶段只需要"glob → 命中项"与"路径 → 直接子项"两张表。
+/// Pure in-memory filesystem. Engine expansion only needs "glob → hits" and "path → direct children" tables.
 final class FakeDiskCleanFileSystem: DiskCleanFileSystemProviding, @unchecked Sendable {
     private let lock = NSLock()
     private var itemsByPattern: [String: [DiskCleanFileItem]] = [:]
@@ -185,11 +185,11 @@ struct FakeStaticDynamicRuleProvider: DiskCleanDynamicRuleProviding {
     }
 }
 
-// MARK: - sizing 执行 seam
+// MARK: - Sizing execution seam
 
-/// 可编程 sizing 执行器：记录并发峰值、请求顺序与 deadline，可注入延迟与熔断状态。
+/// Programmable sizing executor: records concurrency peak, request order, and deadlines; can inject delay and circuit-break state.
 ///
-/// 不启真实线程，因此并发上限测的是**引擎 TaskGroup 的滑动窗口**，与 WorkerPool 的线程数无关。
+/// No real threads, so concurrency limits test the **engine TaskGroup sliding window**, not WorkerPool thread count.
 final class FakeDiskCleanSizingExecutor: DiskCleanSizingExecuting, @unchecked Sendable {
     private struct State {
         var resultsByPath: [String: DiskCleanSizeResult] = [:]
@@ -204,7 +204,7 @@ final class FakeDiskCleanSizingExecutor: DiskCleanSizingExecuting, @unchecked Se
 
     private let lock = NSLock()
     private var state = State()
-    /// 每次调用的人为延迟，用于让多个任务真正重叠。
+    /// Artificial per-call delay so concurrent tasks actually overlap.
     let delay: Duration?
 
     init(delay: Duration? = nil) {
@@ -253,10 +253,10 @@ final class FakeDiskCleanSizingExecutor: DiskCleanSizingExecuting, @unchecked Se
     }
 }
 
-/// 直接在调用方线程上跑 sizer，不经线程池。用于验证引擎与缓存装饰器的接线。
+/// Runs the sizer on the caller thread, not a pool. Used to verify engine and cache-decorator wiring.
 ///
-/// `now` 单独注入：真实的 sizing 上下文时钟归 WorkerPool 所有（引擎无法把自己的时钟塞进去），
-/// 因此测试缓存 TTL 时必须由这里给出与缓存写入时刻同一坐标系的时间。
+/// `now` is injected separately: the real sizing-context clock belongs to WorkerPool (the engine cannot pass its own),
+/// so TTL tests must supply time in the same coordinate system as the cache write.
 struct DirectDiskCleanSizingExecutor: DiskCleanSizingExecuting {
     let now: @Sendable () -> Date
 
@@ -279,12 +279,12 @@ struct DirectDiskCleanSizingExecutor: DiskCleanSizingExecuting {
     }
 }
 
-/// 按路径返回预置结果的 sizer，并记录被真正调用的路径（缓存命中时不应被调用）。
+/// Path-keyed sizer that returns preset results and records paths actually invoked (cache hits should not call it).
 final class FakeDiskCleanSizer: DiskCleanDirectorySizing, @unchecked Sendable {
     private let lock = NSLock()
     private var resultsByPath: [String: DiskCleanSizeResult] = [:]
     private var invokedPaths: [String] = []
-    /// 阻塞时长。用于验证"单项 deadline 到期 → partial([.timedOut])"的真实超时路径。
+    /// Blocking duration. Verifies the real timeout path "item deadline expires → partial([.timedOut])".
     let blockingDuration: TimeInterval
 
     init(blockingDuration: TimeInterval = 0) {
@@ -314,7 +314,7 @@ struct FakeDiskCleanRootIdentityProbe: DiskCleanRootIdentityProbing {
     }
 }
 
-// MARK: - 运行应用快照
+// MARK: - Running-app snapshot
 
 struct FakeDiskCleanRunningAppLock: DiskCleanRunningAppSnapshotting {
     let snapshot: DiskCleanRunningAppSnapshot
@@ -332,12 +332,12 @@ struct FakeDiskCleanFullDiskAccess: DiskCleanFullDiskAccessProbing {
     let hasFullDiskAccess: Bool
 }
 
-/// 可编程文件可读性探针。测试授权矩阵时不碰真实 TCC 保护文件。
+/// Programmable file-readability probe. Authorization-matrix tests never touch real TCC-protected files.
 struct FakeDiskCleanFileReadability: DiskCleanFileReadabilityProbing {
-    /// 可打开的路径集合。不在集合里的一律"打不开"，涵盖被拒绝与文件不存在两种情形——
-    /// 探针本身也不区分它们（都无法证明有 FDA）。
+    /// Set of openable paths. Anything outside is "cannot open", covering both denied and missing files —
+    /// the probe itself does not distinguish (neither proves FDA).
     let openablePaths: Set<String>
-    /// 记录探测顺序，用于断言"先成功的那条之后不再继续试"。
+    /// Records probe order to assert "stop after the first success".
     private let probed = OSAllocatedUnfairLock<[String]>(initialState: [])
 
     init(openablePaths: Set<String> = []) {
@@ -352,9 +352,9 @@ struct FakeDiskCleanFileReadability: DiskCleanFileReadabilityProbing {
     }
 }
 
-// MARK: - P2 展开 seam
+// MARK: - P2 expansion seam
 
-/// 可编程的非规则展开来源。让 P2 候选在不碰文件系统的前提下走完整条管线。
+/// Programmable non-rule expansion source. Lets P2 candidates run the full pipeline without touching the filesystem.
 struct FakeDiskCleanExternalExpansion: DiskCleanExternalExpanding {
     var hits: [DiskCleanTargetHit] = []
     var reservedRootPaths: [String] = []
@@ -375,9 +375,9 @@ struct FakeDiskCleanExternalExpansion: DiskCleanExternalExpanding {
     }
 }
 
-// MARK: - 子进程 seam
+// MARK: - Subprocess seam
 
-/// 可编程子进程：记录调用参数，按需返回输出或抛错。
+/// Programmable subprocess: records call args and returns output or throws on demand.
 final class FakeDiskCleanSubprocessRunner: DiskCleanSubprocessRunning, @unchecked Sendable {
     struct Invocation: Equatable {
         let executablePath: String
@@ -415,9 +415,9 @@ final class FakeDiskCleanSubprocessRunner: DiskCleanSubprocessRunning, @unchecke
     }
 }
 
-// MARK: - 测试时钟
+// MARK: - Test clock
 
-/// 手动推进的时钟。过期门是时间驱动的，测试必须能在不真等 300 秒的前提下驱动那次转换。
+/// Manually advanced clock. Expiry gates are time-driven; tests must drive the transition without waiting 300s.
 final class TestDiskCleanClock: DiskCleanClock, @unchecked Sendable {
     private struct Waiter {
         let deadline: Date
@@ -464,10 +464,10 @@ final class TestDiskCleanClock: DiskCleanClock, @unchecked Sendable {
     }
 }
 
-// MARK: - 受控引擎
+// MARK: - Controlled engine
 
-/// 由测试逐条驱动的事件流。用于验证 operationID 世代、节流发布与过期时钟——
-/// 这些行为都依赖"在某个精确时刻还没结束"的状态。
+/// Test-driven event stream for operationID generations, throttled publish, and expiry clocks —
+/// behaviors that depend on still being unfinished at a precise moment.
 final class ControlledDiskCleanScanEngine: DiskCleanScanning, @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: AsyncThrowingStream<DiskCleanScanEvent, Error>.Continuation?
@@ -509,7 +509,7 @@ final class ControlledDiskCleanScanEngine: DiskCleanScanning, @unchecked Sendabl
     }
 }
 
-/// 记录调用的执行器 fake。执行器只接受 `ValidatedPlan`，故 fake 记录的是收到的计划。
+/// Call-recording executor fake. The executor only accepts `ValidatedPlan`, so the fake records received plans.
 final class FakeDiskCleanExecutor: DiskCleanExecuting, @unchecked Sendable {
     private let lock = NSLock()
     private var plans: [DiskCleanValidatedPlan] = []
@@ -547,7 +547,7 @@ final class FakeDiskCleanExecutor: DiskCleanExecuting, @unchecked Sendable {
     }
 }
 
-/// 内存删除方式存储。真实实现写 `UserDefaults`，测试绝不碰用户偏好。
+/// In-memory removal-mode store. Real implementation writes `UserDefaults`; tests never touch user prefs.
 final class InMemoryDiskCleanRemovalModeStore: DiskCleanRemovalModeStoring, @unchecked Sendable {
     private let lock = NSLock()
     private var mode: DiskCleanRemovalMode
@@ -565,7 +565,7 @@ final class InMemoryDiskCleanRemovalModeStore: DiskCleanRemovalModeStoring, @unc
     }
 }
 
-/// 内存扫描根存储。同上：绝不碰 `UserDefaults.standard` 里用户真实配置的文件夹。
+/// In-memory purge-root store. Same rule: never touch real user folders in `UserDefaults.standard`.
 final class EphemeralPurgeRootsPersistence: DiskCleanPurgeRootsPersisting, @unchecked Sendable {
     private let lock = NSLock()
     private var roots: [String]
@@ -581,9 +581,9 @@ final class EphemeralPurgeRootsPersistence: DiskCleanPurgeRootsPersisting, @unch
     }
 }
 
-// MARK: - 异步断言工具
+// MARK: - Async assertion helpers
 
-/// 轮询等待条件成立。异步状态转换（节流发布、过期任务）无法靠固定 sleep 稳定断言。
+/// Poll until a condition holds. Async state transitions (throttled publish, expiry tasks) cannot be asserted with fixed sleeps.
 @MainActor
 func waitUntil(
     timeout: TimeInterval = 3,
@@ -599,5 +599,5 @@ func waitUntil(
         }
         try? await Task.sleep(nanoseconds: 5_000_000)
     }
-    XCTFail("等待超时：\(description)", file: file, line: line)
+    XCTFail("wait timed out: \(description)", file: file, line: line)
 }

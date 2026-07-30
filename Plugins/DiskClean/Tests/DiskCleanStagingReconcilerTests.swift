@@ -4,7 +4,7 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 启动 reconciliation（设计 §7.6）。真实临时目录 + 真实改名。
+/// Startup reconciliation (design §7.6). Real temp directories + real renames.
 final class DiskCleanStagingReconcilerTests: XCTestCase {
     private var temporary: DiskCleanTempDirectory!
     private var storage: DiskCleanTempDirectory!
@@ -29,7 +29,7 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
         super.tearDown()
     }
 
-    /// 崩溃在 rename 之后、完成记录之前 → 孤儿暂存对象改回原名。
+    /// Crash after rename, before completion record → orphan staged object renamed back.
     func testOrphanStagedObjectIsRolledBackToOriginalPath() throws {
         let stagedName = DiskCleanRemovalPrimitive.stagedNamePrefix + "orphan"
         try temporary.makeFile("\(stagedName)/a.bin", bytes: 10)
@@ -40,10 +40,10 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
         XCTAssertEqual(outcomes, [.rolledBack(originalPath: temporary.resolve("Cache").path)])
         assertExists(temporary.resolve("Cache/a.bin").path)
         assertMissing(temporary.resolve(stagedName).path)
-        XCTAssertTrue(journal.incompleteEntries().isEmpty, "恢复完成即销账")
+        XCTAssertTrue(journal.incompleteEntries().isEmpty, "successful restore clears the journal")
     }
 
-    /// 崩溃在 rename 之前 → 没有暂存对象，条目直接销账，不留下永久待办。
+    /// Crash before rename → no staged object; clear the entry with no permanent backlog.
     func testEntryWithoutStagedObjectIsClosedOut() throws {
         try journal.begin(entry(stagedName: DiskCleanRemovalPrimitive.stagedNamePrefix + "never", originalName: "Cache"))
 
@@ -72,7 +72,7 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
         XCTAssertTrue(journal.incompleteEntries().isEmpty)
     }
 
-    /// 原路径已被重建 → 绝不覆盖：暂存对象保留，条目保持未完成以便持续提示。
+    /// Original path was recreated → never overwrite: keep the staged object and leave the entry incomplete for continued prompting.
     func testRollbackIsBlockedWhenOriginalPathWasRecreated() throws {
         let stagedName = DiskCleanRemovalPrimitive.stagedNamePrefix + "blocked"
         try temporary.makeFile("\(stagedName)/a.bin", bytes: 10)
@@ -85,12 +85,12 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
             outcomes,
             [.blocked(stagedName: stagedName, originalPath: temporary.resolve("Cache").path)]
         )
-        assertExists(temporary.resolve("Cache/rebuilt.bin").path, "重建的原路径必须完好")
-        assertExists(temporary.resolve("\(stagedName)/a.bin").path, "暂存对象必须保留")
+        assertExists(temporary.resolve("Cache/rebuilt.bin").path, "recreated original path must stay intact")
+        assertExists(temporary.resolve("\(stagedName)/a.bin").path, "staged object must be retained")
         XCTAssertEqual(
             journal.incompleteEntries().map(\.stagedName),
             [stagedName],
-            "未解决的条目要留着，下次启动继续提示"
+            "unresolved entries must remain so the next launch keeps prompting"
         )
     }
 
@@ -120,7 +120,7 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
         XCTAssertTrue(auditLog.recentRecords(limit: 10).isEmpty)
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func entry(
         id: String = "one",

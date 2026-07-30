@@ -1,13 +1,15 @@
 import Darwin
 import Foundation
 
-// MARK: - 目标种类
+// MARK: - Target kinds
 
-/// 开发产物种类（设计 §10.1）。
+/// Developer-artifact kind (design §10.1).
 ///
-/// 每种都绑定一组**工程标记**：只有目录的同级出现标记文件才算命中。这是防误报的唯一手段——
-/// `~/Documents/build` 很可能是照片目录，`~/Pictures/dist` 也一样，误删代价远大于漏删。
-/// `__pycache__` 是唯一无条件命中的种类：这个名字由 CPython 独占产生，不存在歧义。
+/// Each kind binds a set of **project markers**: only a same-level marker file counts as a hit.
+/// That is the only false-positive defense—`~/Documents/build` may well be a photo folder, and
+/// so may `~/Pictures/dist`; a wrong delete costs far more than a miss.
+/// `__pycache__` is the only unconditional kind: CPython owns that name exclusively, so there is
+/// no ambiguity.
 enum DiskCleanPurgeKind: String, CaseIterable, Equatable, Sendable {
     case nodeModules
     case rustTarget
@@ -15,7 +17,7 @@ enum DiskCleanPurgeKind: String, CaseIterable, Equatable, Sendable {
     case distOutput
     case pythonCache
 
-    /// 目录名。判定只看这个名字，不看路径其余部分。
+    /// Directory name. Classification looks only at this name, not the rest of the path.
     var directoryName: String {
         switch self {
         case .nodeModules:
@@ -31,7 +33,7 @@ enum DiskCleanPurgeKind: String, CaseIterable, Equatable, Sendable {
         }
     }
 
-    /// 同级工程标记候选：命中任一即可。空数组表示无条件命中。
+    /// Sibling project-marker candidates: any one match is enough. Empty array means unconditional.
     var projectMarkers: [String] {
         switch self {
         case .nodeModules:
@@ -60,36 +62,37 @@ enum DiskCleanPurgeKind: String, CaseIterable, Equatable, Sendable {
         }
     }
 
-    /// 合成 target 的稳定 ID（`DiskCleanRuleCatalogV2` 据此建 target）。
-    /// 会原样写进审计日志，改动等于改动历史记录的语义。
+    /// Stable synthetic target ID (`DiskCleanRuleCatalogV2` builds targets from this).
+    /// Written as-is into audit logs; changing it changes historical record semantics.
     var targetID: String {
         "purge." + directoryName
     }
 
-    /// 目录名 → 种类。名字唯一，故用字典而不是逐个比较。
+    /// Directory name → kind. Names are unique, so use a dictionary rather than sequential compares.
     static let byDirectoryName: [String: DiskCleanPurgeKind] = Dictionary(
         uniqueKeysWithValues: DiskCleanPurgeKind.allCases.map { ($0.directoryName, $0) }
     )
 }
 
-// MARK: - git 状态
+// MARK: - Git state
 
-/// 候选所在仓库的 git 状态（设计 §10.1 git 警示）。
+/// Git state of the repository containing the candidate (design §10.1 git warning).
 ///
-/// **fail-safe 方向固定**：查不出来就当有改动。误判为"脏"只是少默认勾选一项，用户可手动勾选；
-/// 误判为"干净"则可能让用户在不知情下删掉尚未提交的构建产物依赖的工作区状态。
+/// **Fail-safe direction is fixed**: if inspection fails, treat as dirty. A false "dirty" only
+/// skips default selection (user can still check); a false "clean" may let users unknowingly
+/// delete workspace state that uncommitted build artifacts depend on.
 enum DiskCleanPurgeGitState: Equatable, Sendable {
-    /// 根目录边界内没有找到 `.git`。不显示徽标，按普通候选处理。
+    /// No `.git` found within the root boundary. No badge; treat as a normal candidate.
     case notInRepository
     case clean(repositoryPath: String)
     case dirty(repositoryPath: String, reason: DirtyReason)
 
     enum DirtyReason: Equatable, Sendable {
-        /// `git status --porcelain -unormal` 有输出。
+        /// `git status --porcelain -unormal` produced output.
         case uncommittedChanges
-        /// `git log --branches --not --remotes` 有输出。
+        /// `git log --branches --not --remotes` produced output.
         case unpushedCommits
-        /// git 缺失、超时（2s）或非零退出——按有改动处理。
+        /// git missing, timed out (2s), or non-zero exit—treat as dirty.
         case inspectionFailed(String)
     }
 
@@ -110,27 +113,31 @@ enum DiskCleanPurgeGitState: Equatable, Sendable {
     }
 }
 
-// MARK: - 发现结果
+// MARK: - Discovery results
 
-/// 遍历阶段产出的一条命中。尚未做 git 检查，也未求大小——两者都在后续阶段补齐。
+/// One hit from the traversal phase. Git check and sizing are not done yet—both are filled in later.
 struct DiskCleanPurgeDiscoveredItem: Equatable, Sendable {
-    /// **物理路径**：根经 `realpath` 规范化，途中每一级都以 no-follow 打开，因此拼接结果不含
-    /// 任何符号链接祖先，可直接交给 sizing 与执行原语（设计 §13-6）。
+    /// **Physical path**: root is `realpath`-normalized and each level is opened no-follow, so the
+    /// joined result has no symlink ancestors and can go straight to sizing and removal primitives
+    /// (design §13-6).
     let path: String
     let kind: DiskCleanPurgeKind
-    /// 实际命中的工程标记文件名。`__pycache__` 无条件命中，故为 nil。
+    /// Project-marker filename that matched. `__pycache__` is unconditional, so nil.
     let projectMarker: String?
-    /// 标记所在目录，即工程根。
+    /// Directory containing the marker—the project root.
     let projectPath: String
-    /// 最近的 `.git` 祖先（含扫描根自身，不越过根边界）。nil = 不在仓库中。
+    /// Nearest `.git` ancestor (including the scan root itself; never past the root boundary).
+    /// nil = not in a repository.
     let repositoryPath: String?
 }
 
-/// 单个扫描根的遍历状态。
+/// Traversal status of a single scan root.
 enum DiskCleanPurgeRootStatus: Equatable, Sendable {
-    /// 根本没打开——目录已删除、TCC 拒绝、或非本地卷。UI 必须与"扫过但没有候选"区分开。
+    /// Never opened—directory deleted, TCC denied, or non-local volume. UI must distinguish this
+    /// from "scanned but no candidates".
     case unreadable(reason: DiskCleanScanCompleteness.PartialReason)
-    /// 已遍历。`completeness` 记录途中被跳过的子树（权限、挂载点、深度截断不算）。
+    /// Traversed. `completeness` records subtrees skipped along the way (permission, mount point;
+    /// depth truncation is not counted).
     case traversed(completeness: DiskCleanScanCompleteness)
 }
 
@@ -140,7 +147,7 @@ struct DiskCleanPurgeDiscoveryReport: Equatable, Sendable {
     let items: [DiskCleanPurgeDiscoveredItem]
 }
 
-/// 带 git 状态的完整候选描述。第二阶段据此铸造统一管线的 `DiskCleanCandidate`。
+/// Full candidate description with git state. Stage two mints a unified-pipeline `DiskCleanCandidate` from this.
 struct DiskCleanPurgeCandidate: Identifiable, Equatable, Sendable {
     let item: DiskCleanPurgeDiscoveredItem
     let gitState: DiskCleanPurgeGitState
@@ -151,7 +158,7 @@ struct DiskCleanPurgeCandidate: Identifiable, Equatable, Sendable {
     var projectMarker: String? { item.projectMarker }
     var projectPath: String { item.projectPath }
 
-    /// 默认勾选策略：仓库脏（含检查失败）时不默认勾选，其余默认勾选。
+    /// Default-selection policy: not selected when the repo is dirty (including inspection failure); otherwise selected.
     var isSelectedByDefault: Bool { !gitState.isDirty }
 }
 
@@ -168,7 +175,7 @@ struct DiskCleanPurgeScanResult: Equatable, Sendable {
         reports.flatMap(\.candidates)
     }
 
-    /// 完全没能打开的根。UI 据此提示"文件夹已移除或无访问权限"，而不是显示空列表。
+    /// Roots that could not be opened at all. UI uses this for "folder removed or no access" rather than an empty list.
     var unreadableRoots: [String] {
         reports.compactMap { report in
             if case .unreadable = report.status { return report.root }
@@ -177,20 +184,23 @@ struct DiskCleanPurgeScanResult: Equatable, Sendable {
     }
 }
 
-// MARK: - 遍历
+// MARK: - Traversal
 
-/// 开发产物发现遍历（设计 §10.1）。**阻塞式**，由 `DiskCleanPurgeScanner` 在后台队列调用。
+/// Developer-artifact discovery walk (design §10.1). **Blocking**; called by `DiskCleanPurgeScanner`
+/// on a background queue.
 ///
-/// 用 fd-relative `readdir`（复用 SlowWalker 的条目来源）而不是 `FileManager.enumerator`：
-/// 后者没有 no-follow 与设备约束，会跟随符号链接走出扫描根、并静默穿越挂载点。这里虽然只是
-/// 发现、不删任何东西，但产出的路径要直接交给删除原语，路径本身必须是可信的物理路径。
+/// Uses fd-relative `readdir` (reuses SlowWalker's entry source) rather than `FileManager.enumerator`:
+/// the latter has no no-follow or device constraints and will follow symlinks out of the scan root
+/// and silently cross mount points. This is discovery only and deletes nothing, but produced paths
+/// go straight to removal primitives, so they must be trustworthy physical paths.
 ///
-/// 深度上限 6 层，命中即剪枝：`node_modules` 内部还有成千上万个嵌套 `node_modules`，报第二层
-/// 起的任何一个都毫无意义——删外层已经连它们一起删了。
+/// Depth cap is 6 levels; prune on hit: `node_modules` contains thousands of nested `node_modules`,
+/// and reporting any from the second level on is pointless—deleting the outer one already deletes them.
 struct DiskCleanPurgeDiscovery: Sendable {
     static let defaultMaximumDepth = 6
 
-    /// 可命中候选的最大深度（根为 0）。深度等于上限的目录仍参与判定，但不再向下枚举。
+    /// Maximum depth at which candidates can match (root is 0). Directories at the cap still
+    /// participate in matching but are not enumerated further.
     let maximumDepth: Int
     private let opener: DiskCleanRootOpener
     private let sourceFactory: any DiskCleanDirectoryEntrySourceFactory
@@ -211,7 +221,7 @@ struct DiskCleanPurgeDiscovery: Sendable {
             return DiskCleanPurgeDiscoveryReport(root: root, status: .unreadable(reason: reason), items: [])
 
         case .resolved:
-            // 根不是目录（文件 / symlink / socket）。没有可遍历的内容，如实报不可读。
+            // Root is not a directory (file / symlink / socket). Nothing to traverse; report unreadable honestly.
             return DiskCleanPurgeDiscoveryReport(root: root, status: .unreadable(reason: .walkError), items: [])
 
         case let .directory(fileDescriptor, identity):
@@ -225,7 +235,7 @@ struct DiskCleanPurgeDiscovery: Sendable {
                 isCancelled: isCancelled,
                 state: &state
             )
-            // readdir 顺序由文件系统决定，排序让列表与测试都稳定。
+            // readdir order is filesystem-defined; sorting stabilizes both the list and tests.
             return DiskCleanPurgeDiscoveryReport(
                 root: root,
                 status: .traversed(completeness: state.accumulator.completeness),
@@ -234,7 +244,7 @@ struct DiskCleanPurgeDiscovery: Sendable {
         }
     }
 
-    // MARK: 内部
+    // MARK: Internals
 
     private struct TraversalState {
         let rootDevice: UInt64
@@ -242,10 +252,11 @@ struct DiskCleanPurgeDiscovery: Sendable {
         var accumulator = DiskCleanCompletenessAccumulator()
     }
 
-    /// 递归而非显式栈：深度上限 6，栈与 fd 占用都是常数级，换来的可读性值这个代价
-    /// （执行器的删除 prewalk 深度上限是 128，那里必须用显式栈）。
+    /// Recursion rather than an explicit stack: with depth cap 6, stack and fd use stay constant-
+    /// scale and the readability is worth it (executor delete prewalk caps at 128 and must use an
+    /// explicit stack there).
     ///
-    /// `fileDescriptor` 所有权移交本方法。
+    /// Takes ownership of `fileDescriptor`.
     private func visit(
         fileDescriptor: Int32,
         path: String,
@@ -258,7 +269,7 @@ struct DiskCleanPurgeDiscovery: Sendable {
         do {
             source = try sourceFactory.makeSource(fileDescriptor: fileDescriptor)
         } catch {
-            // 协议约定：makeSource 抛错时 fd 所有权仍归调用方。
+            // Protocol contract: on makeSource throw, fd ownership remains with the caller.
             close(fileDescriptor)
             state.accumulator.add(errno: (error as? DiskCleanPOSIXError)?.code ?? EIO)
             return
@@ -267,7 +278,7 @@ struct DiskCleanPurgeDiscovery: Sendable {
 
         while true {
             guard !isCancelled() else {
-                // 取消与 sizing 侧同一出口：结果标记为不完整，调用方据此知道这不是"扫完了没有"。
+                // Same cancel exit as sizing: mark result incomplete so the caller knows this is not "finished empty".
                 state.accumulator.add(.timedOut)
                 return
             }
@@ -286,10 +297,10 @@ struct DiskCleanPurgeDiscovery: Sendable {
                     state.accumulator.add(.walkError)
                     continue
                 }
-                // symlink 一律不跟随、不上报：跟随会走出扫描根，上报又会让用户以为删的是目标。
+                // Never follow or report symlinks: following leaves the scan root; reporting would make users think the target is deleted.
                 guard resolved.fileType == .directory else { continue }
                 guard let name = Self.name(of: resolved) else {
-                    // 文件名不是合法 UTF-8，无法安全地表达成候选路径。少扫一棵树，方向 fail-safe。
+                    // Filename is not valid UTF-8 and cannot safely become a candidate path. Skip one tree; fail-safe.
                     state.accumulator.add(.walkError)
                     continue
                 }
@@ -308,12 +319,12 @@ struct DiskCleanPurgeDiscovery: Sendable {
                             repositoryPath: repositoryPath
                         )
                     )
-                    continue  // 命中即剪枝
+                    continue  // prune on hit
                 }
 
                 guard childDepth < maximumDepth else { continue }
                 guard resolved.devid == state.rootDevice else {
-                    // 挂载点不下潜：另一个卷有自己的可用空间与权限模型，扫描根的授权不覆盖它。
+                    // Do not descend into mount points: another volume has its own free space and permission model; scan-root authorization does not cover it.
                     state.accumulator.add(.crossedMountPoint)
                     continue
                 }
@@ -340,7 +351,7 @@ struct DiskCleanPurgeDiscovery: Sendable {
         isCancelled: () -> Bool,
         state: inout TraversalState
     ) {
-        // 单组件 `openat` + `O_NOFOLLOW`：条目在 readdir 与 open 之间被换成 symlink 时以 ELOOP 失败。
+        // Single-component `openat` + `O_NOFOLLOW`: if the entry becomes a symlink between readdir and open, fail with ELOOP.
         let childDescriptor = name.withUnsafeBufferPointer { buffer -> Int32 in
             guard let base = buffer.baseAddress else { return -1 }
             return openat(parentFileDescriptor, base, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK)
@@ -350,7 +361,7 @@ struct DiskCleanPurgeDiscovery: Sendable {
             return
         }
 
-        // 最近的 `.git` 覆盖继承值：嵌套仓库（子模块、monorepo 内独立仓库）以最近的为准。
+        // Nearest `.git` overrides the inherited value: nested repos (submodules, independent monorepo repos) use the nearest.
         let repositoryPath = Self.containsGitEntry(directoryFileDescriptor: childDescriptor)
             ? childPath
             : inheritedRepositoryPath
@@ -365,8 +376,8 @@ struct DiskCleanPurgeDiscovery: Sendable {
         )
     }
 
-    /// 工程标记判定结果。`unconditional` 与"匹配到某个标记"必须能区分：前者的候选描述里
-    /// 没有标记依据可展示，而不是"标记为空字符串"。
+    /// Project-marker match result. `unconditional` must be distinct from "matched a marker":
+    /// the former has no marker basis to show in the candidate description, not "marker is empty string".
     private enum MarkerMatch {
         case unconditional
         case matched(String)
@@ -377,7 +388,7 @@ struct DiskCleanPurgeDiscovery: Sendable {
         }
     }
 
-    /// 返回 nil = 未命中，不是候选。
+    /// Returns nil = no match, not a candidate.
     private static func projectMarker(
         for kind: DiskCleanPurgeKind,
         directoryFileDescriptor: Int32
@@ -390,15 +401,15 @@ struct DiskCleanPurgeDiscovery: Sendable {
         return nil
     }
 
-    /// 标记必须是文件或符号链接，不能是目录：monorepo 里 `package.json` 可能是符号链接，
-    /// 但名为 `package.json` 的**目录**只说明这是个巧合，不是工程根。
+    /// Marker must be a file or symlink, not a directory: in monorepos `package.json` may be a
+    /// symlink, but a **directory** named `package.json` is only a coincidence, not a project root.
     private static func existsAsFile(name: String, directoryFileDescriptor: Int32) -> Bool {
         var status = stat()
         guard fstatat(directoryFileDescriptor, name, &status, AT_SYMLINK_NOFOLLOW) == 0 else { return false }
         return DiskCleanRootIdentity.FileType(mode: status.st_mode) != .directory
     }
 
-    /// `.git` 可能是目录（普通仓库），也可能是文件（worktree / submodule 的 gitdir 指针），两者都算。
+    /// `.git` may be a directory (normal repo) or a file (worktree / submodule gitdir pointer); both count.
     private static func containsGitEntry(directoryFileDescriptor: Int32) -> Bool {
         var status = stat()
         return fstatat(directoryFileDescriptor, ".git", &status, AT_SYMLINK_NOFOLLOW) == 0
@@ -406,15 +417,15 @@ struct DiskCleanPurgeDiscovery: Sendable {
 
     private static func name(of entry: DiskCleanResolvedEntry) -> String? {
         let bytes = entry.nameBytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
-        // 用 String(bytes:encoding:) 而不是 String(decoding:)：后者会把非法字节替换成 U+FFFD，
-        // 拼出来的路径指向一个不存在的文件，交给删除原语毫无意义。
+        // Prefer String(bytes:encoding:) over String(decoding:): the latter replaces invalid bytes
+        // with U+FFFD, producing a path to a non-existent file that is useless to removal primitives.
         return String(bytes: bytes, encoding: .utf8)
     }
 }
 
-// MARK: - git 检查
+// MARK: - Git inspection
 
-/// 仓库脏状态检查。两条命令都走 `DiskCleanSubprocessRunning` seam，超时 2 秒（设计 §10.1）。
+/// Repository dirty-state check. Both commands use the `DiskCleanSubprocessRunning` seam with a 2s timeout (design §10.1).
 struct DiskCleanGitStatusInspector: Sendable {
     static let executablePath = "/usr/bin/git"
     static let timeout = Duration.seconds(2)
@@ -437,7 +448,7 @@ struct DiskCleanGitStatusInspector: Sendable {
                 return .dirty(repositoryPath: repositoryPath, reason: .uncommittedChanges)
             }
 
-            // 未推送提交：本地分支上、任何远程分支都没有的提交。有一条就够，故 -n 1。
+            // Unpushed commits: commits on local branches not on any remote. One is enough, hence -n 1.
             let unpushed = try await run(
                 arguments: ["-C", repositoryPath, "log", "--branches", "--not", "--remotes", "-n", "1"]
             )
@@ -461,7 +472,7 @@ struct DiskCleanGitStatusInspector: Sendable {
         )
     }
 
-    /// 只有空白输出才算干净：git 在无改动时输出空串，被 shell 包装过的路径可能带一个换行。
+    /// Only blank output counts as clean: git emits empty string with no changes; shell-wrapped paths may add a newline.
     private static func isBlank(_ output: Data) -> Bool {
         String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -480,12 +491,13 @@ struct DiskCleanGitStatusInspector: Sendable {
     }
 }
 
-// MARK: - 扫描器
+// MARK: - Scanner
 
-/// 开发产物清扫扫描器（设计 §10.1）。
+/// Developer-artifact purge scanner (design §10.1).
 ///
-/// 编排两件事：后台线程上的阻塞遍历，以及每个仓库一次的 git 检查（同一仓库下常有几十个
-/// `node_modules`，逐个 spawn 会把 2 秒超时乘上几十倍）。
+/// Orchestrates two jobs: blocking traversal on a background thread, and one git inspection per
+/// repository (a single repo often has dozens of `node_modules`; spawning per item would multiply
+/// the 2s timeout by dozens).
 struct DiskCleanPurgeScanner: Sendable {
     private let discovery: DiskCleanPurgeDiscovery
     private let inspector: DiskCleanGitStatusInspector
@@ -530,11 +542,12 @@ struct DiskCleanPurgeScanner: Sendable {
         return DiskCleanPurgeScanResult(reports: reports)
     }
 
-    /// 遍历滞留在 `readdir`/`openat` 里，不能占用 Swift 并发的协作线程池。深度上限 6 让耗时有界，
-    /// 因此无需 WorkerPool 的放弃预算——那套机制是为可能永久挂住的 sizing 准备的。
+    /// Traversal blocks in `readdir`/`openat` and must not occupy Swift concurrency's cooperative
+    /// thread pool. Depth cap 6 bounds the cost, so WorkerPool abandon budgets are unnecessary—
+    /// that machinery is for sizing that can hang forever.
     ///
-    /// 阻塞遍历不响应 `Task.isCancelled`，取消经 `DiskCleanCancellationFlag`（与 WorkerPool 同一个）
-    /// 置位后由遍历逐批轮询。
+    /// Blocking traversal does not observe `Task.isCancelled`; cancel sets `DiskCleanCancellationFlag`
+    /// (same as WorkerPool) and traversal polls it per batch.
     private func discoverInBackground(root: String) async -> DiskCleanPurgeDiscoveryReport {
         let flag = DiskCleanCancellationFlag()
         let discovery = self.discovery

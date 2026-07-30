@@ -1,20 +1,20 @@
 import Darwin
 import Foundation
 
-// MARK: - 种类
+// MARK: - Kind
 
-/// 残留安装包种类（设计 §10.2）。原始值即小写扩展名，判定只看扩展名。
+/// Leftover installer kind (design §10.2). Raw value is the lowercase extension; classification is extension-only.
 enum DiskCleanInstallerKind: String, CaseIterable, Equatable, Sendable {
     case diskImage = "dmg"
     case installerPackage = "pkg"
     case discImage = "iso"
     case signedArchive = "xip"
-    /// `.zip` 里可能是安装包，也可能是用户自己打的资料包。默认永不勾选。
+    /// A `.zip` may be an installer or a user archive. Never selected by default.
     case zipArchive = "zip"
 
     var fileExtension: String { rawValue }
 
-    /// 是否是"几乎只可能是安装包"的格式。`.zip` 是唯一的例外。
+    /// Whether this format is almost certainly an installer. `.zip` is the only exception.
     var isLikelyInstaller: Bool { self != .zipArchive }
 
     var displayName: String {
@@ -32,8 +32,8 @@ enum DiskCleanInstallerKind: String, CaseIterable, Equatable, Sendable {
         }
     }
 
-    /// 合成 target 的稳定 ID（`DiskCleanRuleCatalogV2` 据此建 target）。
-    /// 会原样写进审计日志，改动等于改动历史记录的语义。
+    /// Stable synthetic target ID (`DiskCleanRuleCatalogV2` builds targets from this).
+    /// Written as-is into audit logs; changing it changes historical record semantics.
     var targetID: String {
         "installer." + rawValue
     }
@@ -43,22 +43,22 @@ enum DiskCleanInstallerKind: String, CaseIterable, Equatable, Sendable {
     )
 }
 
-// MARK: - 候选
+// MARK: - Candidate
 
 struct DiskCleanInstallerCandidate: Identifiable, Equatable, Sendable {
-    /// 不默认勾选的原因。勾选了的候选没有 note。
+    /// Why the item is not selected by default. Selected candidates have no note.
     enum Note: Equatable, Sendable {
-        /// 修改时间在 7 天内，可能还在用（刚下载、待安装）。
+        /// Modified within 7 days; may still be in use (just downloaded, pending install).
         case recentlyModified
-        /// `.zip` 不一定是安装包。
+        /// A `.zip` is not necessarily an installer.
         case mayNotBeInstaller
     }
 
-    /// 物理路径（Downloads 目录经 `realpath` 规范化后拼接文件名，末级不解析）。
+    /// Physical path (Downloads directory realpath-normalized, then filename appended; leaf not resolved).
     let path: String
     let kind: DiskCleanInstallerKind
-    /// 预览用逻辑大小。**权威大小仍由统一管线的 sizing 给出**（设计 §3.2 分型路径），
-    /// 这里只是发现阶段顺手取到的 `st_size`，用于列表即时展示。
+    /// Logical size for preview. **Authoritative size still comes from the unified sizing pipeline**
+    /// (design §3.2 typed path); this is only `st_size` captured at discovery for immediate list display.
     let byteSize: Int64
     let modifiedAt: Date
     let isSelectedByDefault: Bool
@@ -69,17 +69,18 @@ struct DiskCleanInstallerCandidate: Identifiable, Equatable, Sendable {
     var displayName: String { (path as NSString).lastPathComponent }
 }
 
-// MARK: - 扫描结果
+// MARK: - Scan result
 
-/// `~/Downloads` 的扫描结果。
+/// Result of scanning `~/Downloads`.
 ///
-/// `denied` 与 `scanned(candidates: [])` **必须分开**：TCC 拒绝时目录里可能有几十 GB 安装包，
-/// 显示"没有可清理项"是在骗用户。前者要引导授权，后者才是真的没有。
+/// `denied` and `scanned(candidates: [])` **must stay distinct**: when TCC denies access the
+/// directory may still hold tens of GB of installers, and showing "nothing to clean" would lie.
+/// The former should guide authorization; the latter is truly empty.
 enum DiskCleanInstallerScanOutcome: Equatable, Sendable {
     case scanned(candidates: [DiskCleanInstallerCandidate])
-    /// 权限被拒（TCC 未授权或目录权限）。
+    /// Permission denied (TCC not granted or directory permissions).
     case denied(path: String)
-    /// 其它不可用：目录不存在、不是目录、非本地卷。
+    /// Otherwise unavailable: missing path, not a directory, non-local volume.
     case unavailable(path: String, reason: DiskCleanScanCompleteness.PartialReason)
 
     var candidates: [DiskCleanInstallerCandidate] {
@@ -88,21 +89,22 @@ enum DiskCleanInstallerScanOutcome: Equatable, Sendable {
     }
 }
 
-// MARK: - 扫描器
+// MARK: - Scanner
 
-/// 残留安装包扫描（设计 §10.2）。
+/// Leftover-installer scan (design §10.2).
 ///
-/// `~/Downloads` **顶层不递归**：下载目录里的子目录通常是用户自己整理的资料，递归进去找 `.dmg`
-/// 只会把归档好的东西也报出来。
+/// `~/Downloads` is **top-level only, no recursion**: subdirectories are usually user-organized
+/// material, and recursing for `.dmg` would surface already-archived content.
 ///
-/// 阻塞式，但只做一次顶层 `readdir` + 每条一次 `fstatat`，耗时与目录条目数成正比且没有下潜，
-/// 因此不需要 WorkerPool 的放弃预算——那套机制是为可能永久挂住的递归 sizing 准备的。
+/// Blocking, but only one top-level `readdir` plus one `fstatat` per entry; cost scales with
+/// entry count and never descends, so WorkerPool abandon budgets are unnecessary—that machinery
+/// is for recursive sizing that can hang forever.
 struct DiskCleanInstallerScanner: Sendable {
-    /// 超过这个年龄的安装包才默认勾选。刚下载的可能还没装。
+    /// Installers older than this age are selected by default. Fresh downloads may not be installed yet.
     static let defaultStaleAge: TimeInterval = 7 * 24 * 60 * 60
 
-    /// 扫描范围。带 `~` 前缀，供规则目录写进 `reservedRootPaths`
-    /// （`expandedReservedRootPaths()` 负责展开）。
+    /// Scan scope. Tilde-prefixed so the rule catalog can write it into `reservedRootPaths`
+    /// (`expandedReservedRootPaths()` expands it).
     static let defaultDownloadsPath = "~/Downloads"
 
     private let downloadsPath: String
@@ -111,7 +113,7 @@ struct DiskCleanInstallerScanner: Sendable {
     private let sourceFactory: any DiskCleanDirectoryEntrySourceFactory
     private let now: @Sendable () -> Date
 
-    /// `downloadsPath` 是注入点：测试传临时目录，绝不碰真实 `~/Downloads`。
+    /// `downloadsPath` is the injection point: tests pass a temp directory and never touch real `~/Downloads`.
     init(
         downloadsPath: String = DiskCleanRuleTarget.expandHome(
             in: DiskCleanInstallerScanner.defaultDownloadsPath,
@@ -130,8 +132,9 @@ struct DiskCleanInstallerScanner: Sendable {
     }
 
     func scan() -> DiskCleanInstallerScanOutcome {
-        // 目录本身用 realpath 全解析（用户的 Downloads 可能是指向外置卷的符号链接）；解析失败时
-        // 原样交给 opener，让它给出确切的失败原因，而不是在这里猜。
+        // Fully resolve the directory with realpath (user Downloads may be a symlink to an
+        // external volume). On failure, pass the original path to the opener so it reports the
+        // precise failure reason instead of guessing here.
         let path = DiskCleanPhysicalPath.realpath(of: downloadsPath) ?? downloadsPath
 
         switch opener.open(path: path) {
@@ -139,7 +142,7 @@ struct DiskCleanInstallerScanner: Sendable {
             return reason == .permissionDenied ? .denied(path: path) : .unavailable(path: path, reason: reason)
 
         case .resolved:
-            // 不是目录：Downloads 被换成了文件或符号链接。
+            // Not a directory: Downloads was replaced by a file or symlink.
             return .unavailable(path: path, reason: .walkError)
 
         case let .directory(fileDescriptor, _):
@@ -147,15 +150,15 @@ struct DiskCleanInstallerScanner: Sendable {
         }
     }
 
-    // MARK: 内部
+    // MARK: Internals
 
-    /// `fileDescriptor` 所有权移交本方法。
+    /// Takes ownership of `fileDescriptor`.
     private func collect(fileDescriptor: Int32, directoryPath: String) -> DiskCleanInstallerScanOutcome {
         let source: any DiskCleanDirectoryEntrySource
         do {
             source = try sourceFactory.makeSource(fileDescriptor: fileDescriptor)
         } catch {
-            // 协议约定：makeSource 抛错时 fd 所有权仍归调用方。
+            // Protocol contract: on makeSource throw, fd ownership remains with the caller.
             close(fileDescriptor)
             let code = (error as? DiskCleanPOSIXError)?.code ?? EIO
             return code == EPERM || code == EACCES
@@ -170,7 +173,8 @@ struct DiskCleanInstallerScanner: Sendable {
         while let batch = try? source.nextBatch() {
             for entry in batch {
                 guard case let .resolved(resolved) = entry else { continue }
-                // 只收普通文件：符号链接不跟随（删的是链接不是安装包），目录不递归。
+                // Regular files only: do not follow symlinks (would delete the link, not the installer),
+                // and do not recurse into directories.
                 guard resolved.fileType == .regularFile else { continue }
                 guard
                     let name = Self.name(of: resolved),
@@ -191,7 +195,7 @@ struct DiskCleanInstallerScanner: Sendable {
             }
         }
 
-        // readdir 顺序由文件系统决定，排序让列表与测试都稳定。
+        // readdir order is filesystem-defined; sorting stabilizes both the list and tests.
         return .scanned(candidates: candidates.sorted { $0.path < $1.path })
     }
 
@@ -222,8 +226,8 @@ struct DiskCleanInstallerScanner: Sendable {
         )
     }
 
-    /// 单独 `fstatat` 取 mtime——目录条目只带类型与大小，没有时间。顺带用同一次调用的 `st_size`，
-    /// 保证大小与时间来自同一时刻的观测。
+    /// Separate `fstatat` for mtime—directory entries carry type and size only, not timestamps.
+    /// Reuse the same call's `st_size` so size and time come from one observation.
     private static func status(name: String, directoryFileDescriptor: Int32) -> stat? {
         var status = stat()
         guard fstatat(directoryFileDescriptor, name, &status, AT_SYMLINK_NOFOLLOW) == 0 else { return nil }
@@ -232,7 +236,7 @@ struct DiskCleanInstallerScanner: Sendable {
 
     private static func name(of entry: DiskCleanResolvedEntry) -> String? {
         let bytes = entry.nameBytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
-        // 非法 UTF-8 文件名无法安全地表达成候选路径，宁可漏报。
+        // Invalid UTF-8 names cannot safely become candidate paths; prefer under-reporting.
         return String(bytes: bytes, encoding: .utf8)
     }
 }

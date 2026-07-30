@@ -5,7 +5,7 @@ import XCTest
 final class DiskCleanScanEngineTests: XCTestCase {
     private let home = "/Users/diskclean-tester"
 
-    // MARK: - 事件流
+    // MARK: - Event stream
 
     func testEmitsEveryCandidateFoundBeforeAnyCandidateSized() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
@@ -25,7 +25,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertLessThan(
             lastFoundIndex,
             firstSizedIndex,
-            "展开阶段必须先把全部条目流式发出，用户才能在 1-2 秒内看到内容"
+            "expansion must stream every entry first so the user sees content within 1-2 seconds"
         )
         XCTAssertEqual(events.filter(\.isCandidateFound).count, 2)
         XCTAssertEqual(events.filter(\.isCandidateSized).count, 2)
@@ -43,7 +43,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         let found = try XCTUnwrap(events.compactMap(\.candidateFound).first)
 
         XCTAssertNil(found.sizeResult)
-        XCTAssertFalse(found.isCleanable, "大小未知的候选不可勾选（§3.1 不变量）")
+        XCTAssertFalse(found.isCleanable, "unsized candidates are not cleanable (§3.1 invariant)")
         XCTAssertEqual(found.id, "cache.a::\(home)/Library/Caches/A")
         XCTAssertEqual(found.legacyRuleID, "cache.a")
         XCTAssertEqual(found.choice, .cache)
@@ -78,7 +78,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(
             summary.artifact.exclusionPaths,
             ["\(home)/Library/Caches/Partial"],
-            "非 complete 的候选必须进排除集，供 M4 Planner 做祖先断言"
+            "non-complete candidates must enter the exclusion set for M4 Planner ancestor assertions"
         )
     }
 
@@ -89,7 +89,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
             fileSystem: fileSystem,
             targets: [
                 .test(id: "cache.a", category: .appCaches, globs: ["\(home)/Library/Caches/*"]),
-                // 一条命中为空的 target：分类同样要收尾，否则 UI 会永远停在"扫描中"。
+                // A target with zero hits: the category must still finish or the UI stays stuck on "scanning".
                 .test(id: "cache.b", category: .logs, globs: ["\(home)/Library/Logs/*"])
             ]
         )
@@ -100,7 +100,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(Set(finishedCategories), [.appCaches, .logs])
     }
 
-    // MARK: - 并发与超时
+    // MARK: - Concurrency and timeouts
 
     func testLimitsConcurrentSizingToConfiguredMaximum() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
@@ -120,7 +120,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
 
         XCTAssertEqual(executor.requestedPaths.count, 12)
         XCTAssertLessThanOrEqual(executor.peakConcurrency, 3)
-        XCTAssertGreaterThan(executor.peakConcurrency, 1, "并发窗口必须真的滑动，不能退化成串行")
+        XCTAssertGreaterThan(executor.peakConcurrency, 1, "concurrency window must actually slide, not serialize")
     }
 
     func testPassesItemDeadlineClampedByGlobalDeadline() async throws {
@@ -144,7 +144,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(
             executor.deadlines,
             [startedAt.addingTimeInterval(5)],
-            "单项 deadline 不得越过全局 deadline"
+            "item deadline must not exceed the global deadline"
         )
     }
 
@@ -163,19 +163,19 @@ final class DiskCleanScanEngineTests: XCTestCase {
 
         let summary = try await finish(engine)
 
-        XCTAssertTrue(executor.requestedPaths.isEmpty, "全局超时后不再提交 sizing")
+        XCTAssertTrue(executor.requestedPaths.isEmpty, "no sizing submitted after global timeout")
         XCTAssertEqual(
             summary.artifact.candidates.first?.sizeResult?.completeness,
             .partial(reasons: [.timedOut]),
-            "仍必须出事件，否则 UI 永远停在计算中"
+            "must still emit events or the UI stays stuck on calculating"
         )
     }
 
-    /// 真实 WorkerPool + 阻塞 sizer：单项 deadline 到期必须降级为 partial([.timedOut])。
+    /// Real WorkerPool + blocking sizer: item deadline expiry must degrade to partial([.timedOut]).
     func testItemTimeoutProducesPartialResultThroughRealWorkerPool() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
         fileSystem.setItems([.testDirectory("\(home)/Library/Caches/Slow")], forPattern: "\(home)/Library/Caches/*")
-        // 放弃预算给足：这里要测的是超时降级，不是熔断。
+        // Give plenty of abandon budget: this tests timeout degradation, not circuit break.
         let pool = DiskCleanWorkerPool(maxThreadCount: 3, abandonBudget: 1_000)
         defer { pool.shutDown() }
         var configuration = DiskCleanScanEngineConfiguration()
@@ -194,10 +194,10 @@ final class DiskCleanScanEngineTests: XCTestCase {
             summary.artifact.candidates.first?.sizeResult?.completeness,
             .partial(reasons: [.timedOut])
         )
-        XCTAssertEqual(summary.cleanableCount, 0, "超时候选不可清理")
+        XCTAssertEqual(summary.cleanableCount, 0, "timed-out candidates are not cleanable")
     }
 
-    // MARK: - 取消
+    // MARK: - Cancellation
 
     func testCancellingConsumerStopsDerivingNewSizingTasks() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
@@ -210,7 +210,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
             targets: [.test(id: "cache.a", globs: ["\(home)/Library/Caches/*"])]
         )
 
-        // 消费方在收到第一个 sized 后就退出循环 → onTermination → 引擎根任务取消。
+        // Consumer exits after the first sized event → onTermination → engine root task cancels.
         var sizedCount = 0
         do {
             for try await event in engine.scan(choices: [.cache], forceRefresh: false) {
@@ -220,16 +220,16 @@ final class DiskCleanScanEngineTests: XCTestCase {
                 }
             }
         } catch is CancellationError {
-            // 取消传导本身就是预期行为。
+            // Cancellation propagation itself is expected.
         }
         XCTAssertEqual(sizedCount, 1)
 
-        // 给已在飞的任务留出收尾时间，再确认没有继续派生。
+        // Allow in-flight tasks to finish, then confirm no further spawning.
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertLessThan(
             executor.requestedPaths.count,
             items.count,
-            "取消后不得继续派生新的 sizing 任务"
+            "must not spawn new sizing tasks after cancellation"
         )
     }
 
@@ -259,7 +259,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertTrue(error is CancellationError)
     }
 
-    // MARK: - 扫描范围（面板等价）
+    // MARK: - Scan scope (panel equivalence)
 
     func testScopeFiltersTargetsByLegacyRuleIDPrefix() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
@@ -270,8 +270,8 @@ final class DiskCleanScanEngineTests: XCTestCase {
             fileSystem: fileSystem,
             targets: [
                 .test(id: "cache.x", legacyRuleID: "cache.x", globs: ["/cache/*"]),
-                // 分类是 developer，但 legacy 前缀是 browser——面板归属必须跟 legacy 前缀走，
-                // 这正是"按分类选择"会改变扫描覆盖面的那类 target。
+                // Category is developer but legacy prefix is browser — panel membership must follow the legacy prefix;
+                // this is the kind of target where "select by category" changes scan coverage.
                 .test(
                     id: "browser.service-worker.editors",
                     legacyRuleID: "browser.service-worker",
@@ -309,7 +309,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(
             summary.artifact.reservedRootPaths,
             ["/private/var/log"],
-            "被跳过 target 的保留根必须进工件：未扫描子树的祖先绝不可被删"
+            "reserved roots of skipped targets must enter the artifact: ancestors of unscanned subtrees must never be deleted"
         )
     }
 
@@ -335,7 +335,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
             [.dynamicRuleFailed(targetID: "cache.dynamic", reason: "provider exploded")]
         )
         XCTAssertEqual(summary.artifact.reservedRootPaths, ["/dynamic/root"])
-        XCTAssertEqual(summary.artifact.candidates.map(\.path), ["/cache/item"], "一条规则失败不阻塞其它规则")
+        XCTAssertEqual(summary.artifact.candidates.map(\.path), ["/cache/item"], "one rule failure must not block other rules")
     }
 
     func testReportsPathExpansionFailureSeparatelyFromDynamicFailure() async throws {
@@ -408,7 +408,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(summary.limitations.count, 4)
     }
 
-    // MARK: - 锁定判定
+    // MARK: - Lock detection
 
     func testLockedTargetProducesInUseCandidatesThatAreNotCleanable() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
@@ -459,11 +459,11 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(
             lock.recordedRequests,
             [["Docker", "Xcode"]],
-            "一次快照查全部进程名，替换 v1 的每规则一次 pgrep"
+            "one snapshot queries all process names, replacing v1 per-rule pgrep"
         )
     }
 
-    // MARK: - 缓存接线
+    // MARK: - Cache wiring
 
     func testSizeCacheHitSkipsSizerAndPreservesObservedAt() async throws {
         let path = "/cache/item"
@@ -491,12 +491,12 @@ final class DiskCleanScanEngineTests: XCTestCase {
 
         let summary = try await finish(engine)
 
-        XCTAssertTrue(sizer.calledPaths.isEmpty, "命中缓存不得再遍历目录")
+        XCTAssertTrue(sizer.calledPaths.isEmpty, "cache hit must not re-walk the directory")
         XCTAssertEqual(summary.artifact.candidates.first?.sizeResult?.estimatedBytes, 4_096)
         XCTAssertEqual(
             summary.artifact.candidates.first?.sizeResult?.observedAt,
             observedAt,
-            "observedAt 必须传导缓存条目的原始观测时刻，否则过期门被架空"
+            "observedAt must carry the cache entry original observation time or the expiry gate is bypassed"
         )
     }
 
@@ -524,11 +524,11 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(summary.artifact.candidates.first?.sizeResult?.estimatedBytes, 8_192)
     }
 
-    // MARK: - P2 分段接入统一管线（设计 §10）
+    // MARK: - P2 sections join the unified pipeline (design §10)
 
-    /// 核心断言：专用扫描器发现的候选与规则候选**走的是同一条管线**——
-    /// 同样求大小、同样判定完整性、同样进工件，因此同样能被 `makePlan` 铸造成计划。
-    /// 任何绕开这条管线的删除路径都会让这个测试失去意义。
+    /// Core assertion: candidates from dedicated scanners and rule candidates share **the same pipeline** —
+    /// same sizing, same completeness, same artifact entry, so both can be minted into plans by `makePlan`.
+    /// Any delete path that bypasses this pipeline makes this test meaningless.
     func testDeveloperArtifactCandidatesFlowThroughSizingIntoTheArtifact() async throws {
         let target = DiskCleanRuleTarget.testExternal(id: DiskCleanPurgeKind.nodeModules.targetID)
         let executor = FakeDiskCleanSizingExecutor()
@@ -557,7 +557,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         let summary = try await finish(engine, scope: .developerArtifacts(roots: ["/code"]))
         let candidate = try XCTUnwrap(summary.artifact.candidates.first)
 
-        XCTAssertEqual(executor.requestedPaths, ["/code/app/node_modules"], "P2 候选必须经统一 sizing")
+        XCTAssertEqual(executor.requestedPaths, ["/code/app/node_modules"], "P2 candidates must go through unified sizing")
         XCTAssertEqual(candidate.path, "/code/app/node_modules")
         XCTAssertEqual(candidate.targetID, DiskCleanPurgeKind.nodeModules.targetID)
         XCTAssertEqual(candidate.category, .developerArtifacts)
@@ -566,7 +566,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(candidate.notes, [.developerProject(path: "/code/app", marker: "package.json")])
     }
 
-    /// 展开来源给的风险覆盖 target 的兜底值；不给就沿用 target（fail-safe 到"不默认勾选"）。
+    /// Expansion-source risk overrides the target fallback; when omitted, keep the target (fail-safe to not default-selected).
     func testExpansionFactsOverrideTargetRiskPerCandidate() async throws {
         let target = DiskCleanRuleTarget.testExternal(id: DiskCleanPurgeKind.nodeModules.targetID, risk: .medium)
         let engine = makeEngine(
@@ -604,7 +604,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(
             DiskCleanSelectionModel().projection(for: summary.artifact.candidates).selectedIDs.count,
             1,
-            "只有低风险那条默认勾选"
+            "only the low-risk item is default-selected"
         )
     }
 
@@ -631,8 +631,8 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(summary.artifact.scope, .developerArtifacts(roots: ["/code", "/work"]))
     }
 
-    /// 保留的扫描根让 Planner 的祖先断言覆盖到 P2：候选在根**之内**照常可删，
-    /// 而任何以根为后代的路径（例如根的父目录）一律拒绝。
+    /// Reserved scan roots extend Planner ancestor assertions to P2: candidates **inside** a root remain deletable,
+    /// while any path that would make the root a descendant (e.g. the root's parent) is refused.
     func testPlannerAcceptsCandidatesInsideReservedRootsButRejectsTheirAncestors() async throws {
         let target = DiskCleanRuleTarget.testExternal(id: DiskCleanPurgeKind.nodeModules.targetID)
         let engine = makeEngine(
@@ -666,7 +666,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(plan.items.map(\.path), ["/code/app/node_modules"])
         XCTAssertEqual(plan.reservedPrefixes, ["/code"])
 
-        // 同一份证据下，"删掉扫描根的父目录"必须被祖先断言拒绝。
+        // Under the same evidence, "delete the scan root parent" must be refused by ancestor assertion.
         XCTAssertThrowsError(
             try DiskCleanPlanner.assertNoAncestorViolation(
                 plannedPaths: ["/"],
@@ -710,8 +710,8 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(summary.artifact.candidates.first?.category, .installers)
     }
 
-    /// 常规三分组扫描**绝不**顺手带上 P2：开发产物要遍历用户工程目录、安装包会触发
-    /// `~/Downloads` 的 TCC 弹窗，两者都必须由用户在各自分段里显式发起。
+    /// Ordinary three-group scans **never** piggyback P2: developer artifacts walk user project trees and installers trigger
+    /// the `~/Downloads` TCC prompt; both must be started explicitly in their own sections.
     func testRuleScanNeverInvokesExternalExpansionOrExternalTargets() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
         fileSystem.setItems([.testDirectory("/cache/item")], forPattern: "/cache/*")
@@ -740,8 +740,8 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertFalse(summary.artifact.reservedRootPaths.contains("/code"))
     }
 
-    /// 扫描根不可读要如实上报：`~/Downloads` 被 TCC 拒绝时里面可能有几十 GB，
-    /// 报"没有可清理项"是在骗用户。
+    /// Unreadable scan roots must be reported honestly: when TCC denies `~/Downloads` it may hold tens of GB;
+    /// reporting "nothing to clean" would mislead the user.
     func testExternalExpansionLimitationsReachTheSummary() async throws {
         let engine = makeEngine(
             fileSystem: FakeDiskCleanFileSystem(),
@@ -768,7 +768,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertEqual(summary.artifact.reservedRootPaths, ["/downloads"])
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func makeEngine(
         fileSystem: any DiskCleanFileSystemProviding,
@@ -842,7 +842,7 @@ final class DiskCleanScanEngineTests: XCTestCase {
     }
 }
 
-// MARK: - 事件投影
+// MARK: - Event projection
 
 extension DiskCleanScanEvent {
     var isCandidateFound: Bool {

@@ -1,18 +1,19 @@
 import AppKit
 import Foundation
 
-/// 运行中应用/进程快照（设计 §4.2 第 4 条）。
+/// Snapshot of running apps/processes (design §4.2 item 4).
 ///
-/// v1 对**每条规则**各 spawn 一次 `pgrep`（43 条规则 = 43 个子进程）。这里改成一次快照：
-/// 一次 `NSWorkspace.runningApplications` + 一次批量 `pgrep`，之后全部 target 的锁定判定
-/// 都在内存里完成。
+/// v1 spawned `pgrep` **once per rule** (43 rules = 43 subprocesses). Here we take one
+/// snapshot: one `NSWorkspace.runningApplications` plus one batched `pgrep`, then every
+/// target's lock check runs in memory.
 ///
-/// 快照是值类型且不自动刷新——这正是设计想要的语义：扫描期间用同一时点的判定，
-/// 执行前（§7.1 preflight、§7.2 逐项复核）再取新快照，形成"双时点锁"。
+/// The snapshot is a value type and does not auto-refresh — that is intentional: use one
+/// point-in-time decision for the whole scan, then take a fresh snapshot before execution
+/// (§7.1 preflight, §7.2 per-item recheck) for a dual-time lock.
 struct DiskCleanRunningAppSnapshot: Equatable, Sendable {
-    /// 运行中应用的 bundle ID（小写归一，bundle ID 大小写不敏感）。
+    /// Bundle IDs of running apps (lowercased; bundle IDs are case-insensitive).
     let runningBundleIDs: Set<String>
-    /// 运行中的进程名（`pgrep -x` 精确匹配结果，大小写敏感）。
+    /// Running process names (`pgrep -x` exact matches; case-sensitive).
     let runningProcessNames: Set<String>
     let observedAt: Date
 
@@ -26,10 +27,11 @@ struct DiskCleanRunningAppSnapshot: Equatable, Sendable {
         self.observedAt = observedAt
     }
 
-    /// 锁定该 target 的进程名，未锁定时为 nil。
+    /// Process name that locks this target, or nil when unlocked.
     ///
-    /// bundle ID 命中时返回 bundle ID 本身作为展示名——用户看到的是"正在使用(com.google.Chrome)"，
-    /// 比返回一个猜测的中文应用名更诚实，且不需要额外查询。
+    /// On a bundle-ID hit, return the bundle ID itself as the display name — the user sees
+    /// something like "in use (com.google.Chrome)", which is more honest than a guessed
+    /// localized app name and needs no extra lookup.
     func lockingProcessName(for target: DiskCleanRuleTarget) -> String? {
         lockingProcessName(
             bundleIDs: target.lockedByBundleIDs,
@@ -37,7 +39,7 @@ struct DiskCleanRunningAppSnapshot: Equatable, Sendable {
         )
     }
 
-    /// 执行侧入口：计划项自带锁定声明（铸造时从目录复制），无需再查规则目录。
+    /// Execution-side entry: plan items carry their own lock declarations (copied from the catalog at mint time), so no catalog lookup is needed.
     func lockingProcessName(bundleIDs: [String], processNames: [String]) -> String? {
         for bundleID in bundleIDs where runningBundleIDs.contains(bundleID.lowercased()) {
             return bundleID
@@ -48,7 +50,7 @@ struct DiskCleanRunningAppSnapshot: Equatable, Sendable {
         return nil
     }
 
-    /// 换一批 bundle ID，其余不变。执行侧逐项刷新锁定判定时用。
+    /// Replace the bundle-ID set, keep everything else. Used when the executor refreshes lock checks per item.
     func replacingBundleIDs(_ bundleIDs: Set<String>, observedAt: Date) -> DiskCleanRunningAppSnapshot {
         DiskCleanRunningAppSnapshot(
             runningBundleIDs: bundleIDs,
@@ -57,7 +59,7 @@ struct DiskCleanRunningAppSnapshot: Equatable, Sendable {
         )
     }
 
-    /// 全体 target 声明的进程名去重集合。批量 pgrep 的查询集就是它。
+    /// Deduplicated process names declared by all targets. That set is the batch pgrep query.
     static func processNames(in targets: [DiskCleanRuleTarget]) -> [String] {
         var seen: Set<String> = []
         var ordered: [String] = []
@@ -70,16 +72,18 @@ struct DiskCleanRunningAppSnapshot: Equatable, Sendable {
     }
 }
 
-/// 快照来源 seam。扫描侧与执行侧共用同一接口，判定矩阵只需测一次。
+/// Snapshot source seam. Scan and execution share one interface so the decision matrix is tested once.
 protocol DiskCleanRunningAppSnapshotting: Sendable {
     func makeSnapshot(processNames: [String]) async -> DiskCleanRunningAppSnapshot
 
-    /// 只刷新 bundle ID 部分，进程名沿用传入快照。
+    /// Refresh only the bundle-ID half; keep process names from the provided snapshot.
     ///
-    /// 执行器逐项复核锁定（§7.2）时用它：`NSWorkspace.runningApplications` 是便宜的内存读取，
-    /// 每项刷新没有负担；`pgrep` 要 spawn 子进程，逐项跑会把一次清理拖成几十次 fork，
-    /// 故进程名沿用 preflight 那一次的结果。取舍是"进程名维度的锁定判定最多滞后一次清理的时长"，
-    /// 而真正的防线是删除原语的身份验证与冻结（§7.3、§7.4），不是这里。
+    /// Used by the executor's per-item lock recheck (§7.2): `NSWorkspace.runningApplications`
+    /// is a cheap in-memory read, so refreshing per item is fine; `pgrep` spawns a subprocess,
+    /// and per-item runs would turn one cleanup into dozens of forks, so process names reuse
+    /// the preflight snapshot. The trade-off is that process-name lock decisions can lag by
+    /// at most one cleanup duration; the real defenses are the removal primitive's identity
+    /// checks and freeze (§7.3, §7.4), not this layer.
     func refreshingBundleIDs(in snapshot: DiskCleanRunningAppSnapshot) async -> DiskCleanRunningAppSnapshot
 }
 
@@ -89,10 +93,11 @@ extension DiskCleanRunningAppSnapshotting {
     }
 }
 
-/// 真实实现：`NSWorkspace` + 一次批量 `pgrep`。
+/// Real implementation: `NSWorkspace` plus one batched `pgrep`.
 ///
-/// 两个来源都只做"加法"：任一来源失败只会让锁定判定漏报（候选仍会被删），因此
-/// **执行侧必须重取快照并逐项复核**（§7.2），不能把这里当唯一防线。
+/// Both sources are additive only: either source failing only under-reports locks
+/// (candidates may still be deleted), so **execution must retake a snapshot and recheck
+/// per item** (§7.2). This layer is not the sole defense.
 struct DiskCleanRunningAppLock: DiskCleanRunningAppSnapshotting {
     static let defaultExecutablePath = "/usr/bin/pgrep"
 
@@ -125,7 +130,7 @@ struct DiskCleanRunningAppLock: DiskCleanRunningAppSnapshotting {
         snapshot.replacingBundleIDs(await Self.runningBundleIDs(), observedAt: now())
     }
 
-    /// `NSWorkspace` 只保证主线程安全，故显式跳到主 actor 读取。
+    /// `NSWorkspace` is only guaranteed main-thread safe, so hop to the main actor to read it.
     private static func runningBundleIDs() async -> Set<String> {
         await MainActor.run {
             Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
@@ -143,24 +148,24 @@ struct DiskCleanRunningAppLock: DiskCleanRunningAppSnapshotting {
                 timeout: timeout
             )
         } catch {
-            // pgrep 缺失或超时 → 判定漏报，执行侧复核兜底。
+            // pgrep missing or timed out → under-report locks; execution-side recheck covers it.
             return []
         }
-        // pgrep 无匹配时退出码为 1，输出为空——不是失败。
+        // pgrep exits 1 with empty output when nothing matches — not a failure.
         guard result.exitCode == 0 || result.exitCode == 1 else { return [] }
 
-        // 只采信本次查询集合内的名字：pattern 是正则，输出理论上可能包含意外匹配。
+        // Trust only names in this query set: the pattern is a regex, so output could theoretically include surprises.
         let requested = Set(names)
         return Set(Self.processNames(fromPgrepOutput: result.standardOutput).filter(requested.contains))
     }
 
-    /// 一次查全部名字：`pgrep -x` 的 pattern 是扩展正则，`-x` 要求整名匹配，
-    /// 因此 `(a|b|c)` 的语义正好是"名字精确等于其中之一"。
+    /// Query all names at once: `pgrep -x` pattern is ERE and `-x` requires a full-name match,
+    /// so `(a|b|c)` means "name exactly equals one of these".
     static func pattern(for names: [String]) -> String {
         "(" + names.map(escapeForExtendedRegex).joined(separator: "|") + ")"
     }
 
-    /// 进程名里出现 `.`、`+`、`(` 等正则元字符是常态（`com.docker.backend`），必须逐字转义。
+    /// Process names routinely contain regex metacharacters such as `.`, `+`, `(` (`com.docker.backend`); escape every character.
     static func escapeForExtendedRegex(_ name: String) -> String {
         let metacharacters: Set<Character> = ["\\", ".", "^", "$", "*", "+", "?", "(", ")", "[", "]", "{", "}", "|"]
         var escaped = ""
@@ -174,7 +179,7 @@ struct DiskCleanRunningAppLock: DiskCleanRunningAppSnapshotting {
         return escaped
     }
 
-    /// `pgrep -l` 每行是 `<pid> <进程名>`；进程名可含空格，故只切掉第一个空格前的 pid。
+    /// Each `pgrep -l` line is `<pid> <process name>`; names may contain spaces, so only strip the pid before the first space.
     static func processNames(fromPgrepOutput output: Data) -> [String] {
         String(decoding: output, as: UTF8.self)
             .split(separator: "\n", omittingEmptySubsequences: true)

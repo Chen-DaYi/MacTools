@@ -1,21 +1,21 @@
 import SwiftUI
 import MacToolsPluginKit
 
-/// 详情视图（设计 §8.3）。
+/// Detail view (design §8.3).
 ///
-/// 布局自上而下：FDA 状态卡 → 受限横幅 → 扫描范围与操作 → 分类卡片 → 执行结果 →
-/// 开发产物分段 → 残留安装包分段 → 设置区（删除方式、清理历史）→ 扫描日志。
-/// 全部走 `PluginSettingsTheme`，视觉基线是 `FanControlPresetManagerView`。
+/// Top-to-bottom layout: FDA status card → limited-scan banner → scan scope & actions → category cards → execution result →
+/// purge segment → leftover installers segment → settings (removal mode, cleanup history) → scan log.
+/// Everything uses `PluginSettingsTheme`; visual baseline is `FanControlPresetManagerView`.
 ///
-/// 视图不持有任何业务状态：勾选、删除方式、确认都发命令给 Controller，读回来的只有快照。
-/// 唯一的本地状态是"哪些卡片展开着"与历史分段的读取缓存，它们纯属展示。
+/// The view holds no business state: checks, removal mode, and confirm all command the Controller; only the snapshot is read back.
+/// The only local state is "which cards are expanded" and the history section's load cache—purely presentational.
 ///
-/// 三个分段各有一个 `DiskCleanController`，扫描范围不同、状态互不干扰，但**共用同一个类型、
-/// 同一条管线**（设计 §10）：P2 的候选一样要经 sizing、完整性、Planner 铸造与执行原语，
-/// 不存在第二条删除路径。
+/// Each of the three segments has its own `DiskCleanController` with distinct scope and non-interfering state, but they **share the same type
+/// and the same pipeline** (design §10): P2 candidates still go through sizing, completeness, Planner cast, and execution primitives—
+/// there is no second deletion path.
 struct DiskCleanDetailView: View {
     @ObservedObject var controller: DiskCleanController
-    /// 开发产物分段。nil 表示宿主没有接线（例如测试里只关心规则分段）。
+    /// Purge segment. nil means the host did not wire it (e.g. tests that only care about the rules segment).
     @ObservedObject private var developerArtifactsController: DiskCleanController
     @ObservedObject private var installersController: DiskCleanController
     @ObservedObject private var purgeRoots: DiskCleanPurgeRootsModel
@@ -100,7 +100,7 @@ struct DiskCleanDetailView: View {
         controller.snapshot
     }
 
-    // MARK: - 页头
+    // MARK: - Page header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
@@ -112,15 +112,15 @@ struct DiskCleanDetailView: View {
         }
     }
 
-    // MARK: - 横幅
+    // MARK: - Banners
 
-    /// FDA 状态卡（设计 §8.3 第 1 项、§9）。
+    /// FDA status card (design §8.3 item 1, §9).
     ///
-    /// 只在未授权时出现，且**与是否扫描过无关**——授权是扫描之前就该处理的前提，
-    /// 等用户扫完发现少了一堆系统缓存再解释就晚了。
+    /// Shown only when unauthorized, and **independent of whether a scan has run**—authorization is a pre-scan prerequisite;
+    /// explaining after the user has already scanned and missed a pile of system caches is too late.
     ///
-    /// 脚注写"退出并重新打开"而不是"稍后生效"：FDA 绑定进程启动，运行中的进程改不了，
-    /// 探测结果也因此在进程内缓存。
+    /// The footnote says "quit and reopen" rather than "takes effect later": FDA is bound at process launch and cannot be changed mid-run,
+    /// and the probe result is therefore cached for the process lifetime.
     @ViewBuilder
     private var fullDiskAccessCard: some View {
         if !fullDiskAccess.hasFullDiskAccess {
@@ -175,7 +175,7 @@ struct DiskCleanDetailView: View {
         }
     }
 
-    // MARK: - 扫描范围与操作
+    // MARK: - Scan scope and actions
 
     private var scopeSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
@@ -213,7 +213,7 @@ struct DiskCleanDetailView: View {
         }
     }
 
-    // MARK: - 分类卡片
+    // MARK: - Category cards
 
     @ViewBuilder
     private var categorySection: some View {
@@ -258,7 +258,7 @@ struct DiskCleanDetailView: View {
         )
     }
 
-    // MARK: - 执行结果
+    // MARK: - Execution result
 
     @ViewBuilder
     private var executionResultSection: some View {
@@ -270,8 +270,8 @@ struct DiskCleanDetailView: View {
                 )
 
                 VStack(spacing: 0) {
-                    // 需要关注的终态置顶（设计 §7.5、§13-M4-6）：它们在磁盘上留下了暂存对象，
-                    // 排在几十条成功记录后面等于没说。
+                    // Pin attention-needed terminal statuses (design §7.5, §13-M4-6): they leave staged objects on disk;
+                    // burying them under dozens of successes is the same as not saying it.
                     ForEach(executionResult.attentionResults, id: \.candidateID) { item in
                         attentionRow(item)
                         PluginSettingsListDivider()
@@ -343,7 +343,7 @@ struct DiskCleanDetailView: View {
                 value: DiskCleanFormat.itemCount(result.failedCount, localization: localization)
             )
             metric(
-                // 废纸篓模式不写"已释放"：对象还在废纸篓里，空间尚未真正回收（设计 §7.7）。
+                // Trash mode must not say "reclaimed": objects are still in Trash, so space is not truly free yet (design §7.7).
                 title: result.mode == .trash
                     ? localization.string("detail.result.trashedBytes", defaultValue: "已移到废纸篓")
                     : localization.string("detail.result.reclaimedBytes", defaultValue: "已释放"),
@@ -365,10 +365,10 @@ struct DiskCleanDetailView: View {
         .frame(minWidth: 96, alignment: .leading)
     }
 
-    // MARK: - P2 分段
+    // MARK: - P2 segments
 
-    /// 开发产物清扫（设计 §10.1）。扫描根管理直接嵌在分段里——"扫哪里"是这个分段的前提，
-    /// 放进下面的通用设置区会让用户在两处之间来回找。
+    /// Purge sweep (design §10.1). Root management sits inside the segment—"what to scan" is a prerequisite of this segment;
+    /// burying it under generic settings would make users hunt between two places.
     private var developerArtifactsSection: some View {
         DiskCleanCleanupSectionView(
             controller: developerArtifactsController,
@@ -389,7 +389,7 @@ struct DiskCleanDetailView: View {
         )
     }
 
-    // MARK: - 设置区
+    // MARK: - Settings section
 
     private var settingsSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
@@ -461,7 +461,7 @@ struct DiskCleanDetailView: View {
         }
     }
 
-    // MARK: - 扫描日志
+    // MARK: - Scan log
 
     private var scanLogSection: some View {
         DisclosureGroup(isExpanded: $isScanLogExpanded) {
@@ -526,14 +526,14 @@ struct DiskCleanDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - 确认对话框
+    // MARK: - Confirmation dialog
 
     private var confirmationTitle: String {
         DiskCleanFormat.confirmationTitle(snapshot, localization: localization)
     }
 
-    /// 对话框关闭即取消。确认按钮先把状态推到 `cleaning`，随后的 setter 回调命中
-    /// `cancelPendingClean` 的 `phase == .confirming` 守卫，不会把刚提交的执行撤回。
+    /// Closing the dialog cancels. The confirm button first advances state to `cleaning`, so the later setter callback hits
+    /// the `phase == .confirming` guard in `cancelPendingClean` and will not undo the just-submitted execution.
     private var confirmationBinding: Binding<Bool> {
         Binding(
             get: { snapshot.phase == .confirming },
@@ -545,13 +545,13 @@ struct DiskCleanDetailView: View {
     }
 }
 
-// MARK: - 文案与格式
+// MARK: - Copy and formatting
 
-/// 详情页与历史分段共用的格式化。
+/// Formatting shared by the detail page and the history section.
 ///
-/// 字节一律带"约"（估算逻辑大小 ≠ 实际释放空间，设计 §7.7），数字列定宽避免刷新时抖动。
+/// Bytes always carry "about" (estimated logical size ≠ actual free space, design §7.7); fixed-width numeric columns avoid layout jitter on refresh.
 enum DiskCleanFormat {
-    /// 字节列宽度。定宽让"约 1.2 GB"与"约 812 KB"上下对齐，刷新时不会左右跳。
+    /// Byte-column width. Fixed width keeps "about 1.2 GB" and "about 812 KB" aligned so refreshes do not jump sideways.
     static let byteColumnWidth: CGFloat = 92
 
     static func bytes(_ value: Int64) -> String {
@@ -575,9 +575,9 @@ enum DiskCleanFormat {
         return formatter.string(from: date)
     }
 
-    // MARK: 操作文案（三个分段共用）
+    // MARK: Action copy (shared by all three segments)
 
-    /// 清理按钮文案。按钮直说会发生什么：废纸篓是单步执行，按钮本身就是最后一道说明（设计 §8.4）。
+    /// Cleanup button copy. The button states what will happen: Trash is one-step, so the button itself is the last explanation (design §8.4).
     static func cleanActionTitle(
         _ snapshot: DiskCleanControllerSnapshot,
         localization: PluginLocalization
@@ -674,7 +674,7 @@ enum DiskCleanFormat {
             .joined(separator: localization.string("list.separator", defaultValue: "、"))
     }
 
-    /// 受限横幅的逐条文案（设计 §4.5）。
+    /// Per-line copy for the limited-scan banner (design §4.5).
     static func limitation(
         _ limitation: DiskCleanScanLimitation,
         localization: PluginLocalization
@@ -759,7 +759,7 @@ enum DiskCleanFormat {
         }
     }
 
-    /// 指引必须说清"磁盘上现在是什么样"以及"用户能做什么"，不能只报一个状态名。
+    /// Guidance must say "what the disk looks like now" and "what the user can do", not only a status name.
     static func attentionGuidance(
         _ outcome: DiskCleanExecutionItemResult.Outcome,
         localization: PluginLocalization

@@ -1,18 +1,18 @@
 import Foundation
 
-// MARK: - 执行接口
+// MARK: - Execution interface
 
-/// 执行器只接受 `DiskCleanValidatedPlan`（设计 §6.1、§7）。
+/// The executor only accepts `DiskCleanValidatedPlan` (design §6.1, §7).
 ///
-/// 类型系统在这里承担安全职责：`ValidatedPlan.init` 是 fileprivate，唯一铸造点是
-/// `DiskCleanPlanner.makePlan`。没有"传一组路径进来删掉"的入口，也就没有绕过校验的路径。
+/// The type system carries a safety duty here: `ValidatedPlan.init` is fileprivate; the only cast site is
+/// `DiskCleanPlanner.makePlan`. There is no "pass a list of paths and delete them" entry, so no path around validation.
 protocol DiskCleanExecuting: Sendable {
     func execute(plan: DiskCleanValidatedPlan) async throws -> DiskCleanExecutionResult
 }
 
-// MARK: - 计划级失败
+// MARK: - Plan-level failure
 
-/// preflight 失败（设计 §7.1）。任一条成立即**整次中止，零删除**。
+/// Preflight failure (design §7.1). Any case aborts the **whole run with zero deletions**.
 enum DiskCleanExecutionError: LocalizedError, Equatable {
     case planExpired
     case lockedDuringPreflight(path: String, processName: String)
@@ -30,11 +30,11 @@ enum DiskCleanExecutionError: LocalizedError, Equatable {
     }
 }
 
-// MARK: - 执行结果
+// MARK: - Execution result
 
 struct DiskCleanExecutionItemResult: Equatable, Sendable {
-    /// 终态（设计 §7.5）。`changedSinceScan` 与 `rollbackBlocked` 单列，不并进 skipped/failed：
-    /// 前者要引导用户重扫，后者要在清理历史里置顶提示，两者的用户动作完全不同。
+    /// Terminal status (design §7.5). `changedSinceScan` and `rollbackBlocked` are separate, not folded into skipped/failed:
+    /// the former should prompt a rescan; the latter needs a pinned alert in cleanup history—user actions differ entirely.
     enum Outcome: Equatable, Sendable {
         case removed(reclaimedBytes: Int64)
         case trashed(reclaimedBytes: Int64, stagedName: String)
@@ -49,8 +49,8 @@ struct DiskCleanExecutionItemResult: Equatable, Sendable {
     let path: String
     let outcome: Outcome
 
-    /// 估算回收字节。**不是实际释放空间**（APFS clone / 稀疏文件 / 目录外硬链接），
-    /// 文案一律"约 X"，废纸篓模式不得写"已释放"（设计 §7.7）。
+    /// Estimated reclaimed bytes. **Not actual free space** (APFS clones / sparse files / hard links outside the tree).
+    /// Copy always says "about X"; Trash mode must not say "reclaimed" (design §7.7).
     var reclaimedBytes: Int64 {
         switch outcome {
         case let .removed(reclaimedBytes):
@@ -62,7 +62,7 @@ struct DiskCleanExecutionItemResult: Equatable, Sendable {
         }
     }
 
-    /// 需要在清理历史里置顶提示的诚实终态。
+    /// Honest terminal statuses that need a pinned alert in cleanup history.
     var needsAttention: Bool {
         switch outcome {
         case .partiallyDeleted, .rollbackBlocked:
@@ -82,7 +82,7 @@ struct DiskCleanExecutionResult: Equatable, Sendable {
         self.mode = mode
     }
 
-    /// 已处置项数：永久删除与移入废纸篓都算成功。
+    /// Disposed item count: permanent delete and move-to-Trash both count as success.
     var removedCount: Int {
         itemResults.filter {
             switch $0.outcome {
@@ -94,7 +94,7 @@ struct DiskCleanExecutionResult: Equatable, Sendable {
         }.count
     }
 
-    /// 跳过项数：安全策略拒绝，以及扫描后内容已变化。两者都未触碰对象。
+    /// Skipped item count: safety-policy rejection and content changed since scan. Neither touches the object.
     var skippedCount: Int {
         itemResults.filter {
             switch $0.outcome {
@@ -106,8 +106,8 @@ struct DiskCleanExecutionResult: Equatable, Sendable {
         }.count
     }
 
-    /// 未能干净收场的项数。`partiallyDeleted` / `rollbackBlocked` 计入这里——
-    /// 它们不是成功，把它们藏进"已清理"才是不诚实。
+    /// Items that did not finish cleanly. `partiallyDeleted` / `rollbackBlocked` count here—
+    /// they are not success; burying them under "cleaned" would be dishonest.
     var failedCount: Int {
         itemResults.filter {
             switch $0.outcome {
@@ -132,13 +132,13 @@ struct DiskCleanExecutionResult: Equatable, Sendable {
     }
 }
 
-// MARK: - 执行器
+// MARK: - Executor
 
-/// 计划执行器（设计 §7.1、§7.2）。
+/// Plan executor (design §7.1, §7.2).
 ///
-/// 职责边界：本类型负责**顺序与复核**，真正动文件的只有 `DiskCleanPlanItemRemoving`。
-/// 三层防线各自独立：Planner 铸造时校验一次、这里 preflight 与逐项各复核一次、
-/// 原语在 fd 上做身份验证。它们不共用判断点，任一层有缺陷都不会让整条链失守。
+/// Responsibility: this type owns **ordering and revalidation**; only `DiskCleanPlanItemRemoving` actually mutates files.
+/// Three independent defenses: Planner validates at cast time; preflight and per-item revalidation run here;
+/// the primitive authenticates identity on the fd. They do not share decision points, so a defect in one layer cannot collapse the whole chain.
 struct DiskCleanExecutor: DiskCleanExecuting {
     private let primitive: any DiskCleanPlanItemRemoving
     private let safetyPolicy: DiskCleanSafetyPolicy
@@ -185,7 +185,7 @@ struct DiskCleanExecutor: DiskCleanExecuting {
         for item in plan.items {
             try Task.checkCancellation()
 
-            // 逐项复核锁定：bundle ID 刷新，进程名沿用 preflight 快照（取舍见协议注释）。
+            // Per-item lock recheck: refresh bundle IDs; keep process names from the preflight snapshot (trade-off noted on the protocol).
             snapshot = await runningAppLock.refreshingBundleIDs(in: snapshot)
             if let processName = snapshot.lockingProcessName(
                 bundleIDs: item.lockedByBundleIDs,
@@ -197,7 +197,7 @@ struct DiskCleanExecutor: DiskCleanExecuting {
                 continue
             }
 
-            // SafetyPolicy 二次校验：白名单可能在扫描后新增，暂存名保护也在这里生效。
+            // Second SafetyPolicy check: the whitelist may grow after the scan; staged-name protection also applies here.
             let safety = safetyPolicy.safetyStatus(for: item.path)
             guard safety.isCleanable else {
                 itemResults.append(record(item: item, outcome: .skipped(safety), mode: plan.mode))
@@ -216,12 +216,12 @@ struct DiskCleanExecutor: DiskCleanExecuting {
     // MARK: - preflight（§7.1）
 
     private func preflight(plan: DiskCleanValidatedPlan) async throws -> DiskCleanRunningAppSnapshot {
-        // 1. 过期复核。确认窗口不得越过过期时刻，但时钟仍以执行时刻为准。
+        // 1. Expiry recheck. The confirm window must not cross expiry, but the clock is still evaluated at execution time.
         guard now() < plan.expiryDeadline else {
             throw DiskCleanExecutionError.planExpired
         }
 
-        // 2. 新快照 + 全体计划项的锁定 / 安全预检。任一项不过关，整次中止。
+        // 2. Fresh snapshot + lock/safety precheck of every plan item. Any failure aborts the whole run.
         let processNames = Array(Set(plan.items.flatMap(\.skipWhenProcessIsRunning)))
         let snapshot = await runningAppLock.makeSnapshot(processNames: processNames)
         for item in plan.items {
@@ -240,8 +240,8 @@ struct DiskCleanExecutor: DiskCleanExecuting {
             }
         }
 
-        // 3. 用计划自带的证据重跑祖先断言。证据在计划内，可独立复核——这道防线防的是
-        //    Planner 自身的缺陷，纯内存比对，代价可忽略。
+        // 3. Re-run ancestor assertions with the plan's own evidence. Evidence is in-plan and independently recheckable—this layer guards against
+        //    defects in the Planner itself; pure in-memory compare, negligible cost.
         try DiskCleanPlanner.assertNoAncestorViolation(
             plannedPaths: plan.items.map(\.path),
             exclusionPaths: plan.exclusionPaths,
@@ -251,7 +251,7 @@ struct DiskCleanExecutor: DiskCleanExecuting {
         return snapshot
     }
 
-    // MARK: - 终态映射与审计
+    // MARK: - Terminal-status mapping and audit
 
     private static func outcome(
         for disposition: DiskCleanRemovalDisposition,

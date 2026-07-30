@@ -1,24 +1,24 @@
 import Darwin
 import Foundation
 
-/// `getattrlistbulk` 返回的单条原始属性。缺失字段为 nil——非 APFS 卷会缺属性，
-/// 解析器不得假设固定布局（设计 §3.3）。
+/// One raw attribute entry returned by `getattrlistbulk`. Missing fields are nil—non-APFS volumes may omit attributes,
+/// so the parser must not assume a fixed layout (design §3.3).
 struct DiskCleanBulkAttributeEntry: Equatable, Sendable {
-    /// 条目名，以 NUL 结尾的**原始字节**。
+    /// Entry name as **raw NUL-terminated bytes**.
     ///
-    /// 文件名不保证是合法 UTF-8（HFS+ / 外置卷 / FUSE 都可能出现非法序列）。
-    /// 先转 String 再传回 `openat`/`fstatat` 会丢字节导致下潜失败并被误记为 walkError，
-    /// 因此按字节保存，只在展示时才做有损转换。
+    /// File names are not guaranteed to be valid UTF-8 (HFS+ / external volumes / FUSE may produce illegal sequences).
+    /// Converting to String then back for `openat`/`fstatat` can drop bytes, fail descent, and be misreported as walkError,
+    /// so keep raw bytes and only lossily convert for display.
     var nameBytes: [CChar]?
     var fileType: DiskCleanRootIdentity.FileType?
     var devid: UInt64?
     var fileID: UInt64?
     var linkCount: UInt32?
     var dataLength: Int64?
-    /// true = 固定段实际边界与 `ATTR_CMN_NAME` 的 `attr_dataoffset` 不符。
+    /// true = fixed-section end does not match `ATTR_CMN_NAME`'s `attr_dataoffset`.
     ///
-    /// 说明见 `DiskCleanBulkAttributeParser` 的布局校验注释。此时除 `nameBytes` 外
-    /// 的所有属性都不可信，调用方必须走 `fstatat` 逐条回退。
+    /// See the layout-check notes on `DiskCleanBulkAttributeParser`. When set, every attribute except `nameBytes`
+    /// is untrustworthy; the caller must fall back to per-entry `fstatat`.
     var hasLayoutMismatch: Bool = false
 
     var displayName: String? {
@@ -27,7 +27,7 @@ struct DiskCleanBulkAttributeEntry: Equatable, Sendable {
         return String(decoding: bytes, as: UTF8.self)
     }
 
-    /// 关键属性是否齐备。目录不携带 `ATTR_FILE_*`，故其 linkCount/dataLength 允许缺失。
+    /// Whether required attributes are present. Directories omit `ATTR_FILE_*`, so missing linkCount/dataLength is allowed for them.
     var isFullyResolved: Bool {
         guard !hasLayoutMismatch, nameBytes != nil, let fileType, devid != nil, fileID != nil else {
             return false
@@ -41,22 +41,22 @@ struct DiskCleanBulkAttributeEntry: Equatable, Sendable {
 
 struct DiskCleanBulkAttributeParseResult: Equatable, Sendable {
     let entries: [DiskCleanBulkAttributeEntry]
-    /// 缓冲区结构异常导致提前终止：实际解析出的条目少于内核声明的条数。
+    /// Buffer structure was abnormal and parsing stopped early: fewer entries than the kernel declared.
     let isTruncated: Bool
 }
 
-/// `getattrlistbulk` 缓冲区解析器。
+/// `getattrlistbulk` buffer parser.
 ///
-/// **布局事实（已对内核实测验证，勿凭 man page 推测）**：
-/// 1. 条目内固定段按属性位值升序紧密排列，无对齐填充，故必须用非对齐读取。
-/// 2. `RETURNED_ATTRS` 恒为首个字段（紧随 4 字节条目长度之后）。
-/// 3. 请求了但未返回的属性**不一定**从缓冲区消失：目录条目的 `ATTR_FILE_*` 确实缺席，
-///    而 `ATTR_CMN_ERROR` 即使 returned 位为 0 也仍占 4 字节。因此本解析器
-///    **不请求 `ATTR_CMN_ERROR`**——按位图跳过它会让其后所有字段错位。
-///    逐条失败的检测改由调用方的 `fstatat` 回退承担（信息量严格更大）。
-/// 4. 为防御同类未知的"保留但不置位"行为，解析完固定段后用 `ATTR_CMN_NAME` 的
-///    `attr_dataoffset`（变长段起点，独立于位图）复核边界；不符即置
-///    `hasLayoutMismatch`，把静默错位转成可检测的安全回退。
+/// **Layout facts (verified against the kernel; do not infer from the man page alone):**
+/// 1. Fixed fields inside an entry are packed in ascending attribute-bit order with no alignment padding, so reads must be unaligned.
+/// 2. `RETURNED_ATTRS` is always the first field (immediately after the 4-byte entry length).
+/// 3. Requested-but-not-returned attributes do **not** always vanish from the buffer: directory entries truly omit `ATTR_FILE_*`,
+///    but `ATTR_CMN_ERROR` still occupies 4 bytes even when its returned bit is 0. This parser therefore
+///    **does not request `ATTR_CMN_ERROR`**—skipping it via the bitmap would misalign every following field.
+///    Per-entry failure detection is left to the caller's `fstatat` fallback (strictly more informative).
+/// 4. To defend against similar unknown "reserved but not flagged" behavior, after the fixed section we re-check bounds using `ATTR_CMN_NAME`'s
+///    `attr_dataoffset` (start of the variable section, independent of the bitmap); on mismatch set
+///    `hasLayoutMismatch`, turning silent misalignment into a detectable safe fallback.
 enum DiskCleanBulkAttributeParser {
     static let requestedCommonAttributes: attrgroup_t =
         attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
@@ -68,7 +68,7 @@ enum DiskCleanBulkAttributeParser {
     static let requestedFileAttributes: attrgroup_t =
         attrgroup_t(ATTR_FILE_LINKCOUNT) | attrgroup_t(ATTR_FILE_DATALENGTH)
 
-    /// 内核返回的属性位图在 `attribute_set_t` 中的下标：common/vol/dir/file/fork。
+    /// Indexes of the kernel-returned attribute bitmaps in `attribute_set_t`: common/vol/dir/file/fork.
     private static let commonGroupIndex = 0
     private static let fileGroupIndex = 3
     private static let returnedAttributesSize = 20
@@ -116,7 +116,7 @@ enum DiskCleanBulkAttributeParser {
     private static func parseEntry(buffer: UnsafeRawBufferPointer) -> DiskCleanBulkAttributeEntry {
         var entry = DiskCleanBulkAttributeEntry()
 
-        // 4 字节条目长度 + 20 字节 RETURNED_ATTRS 是解析一切的前提。
+        // The 4-byte entry length + 20-byte RETURNED_ATTRS are prerequisites for any further parsing.
         guard buffer.count >= 4 + returnedAttributesSize else {
             entry.hasLayoutMismatch = true
             return entry
@@ -185,8 +185,8 @@ enum DiskCleanBulkAttributeParser {
             entry.dataLength = value
         }
 
-        // 固定段终点必须正好是变长段（唯一变长字段 NAME）的起点，否则说明存在
-        // 位图未声明却仍占位的属性，其后字段全部错位。
+        // The fixed-section end must be exactly the start of the variable section (NAME is the only variable field); otherwise there are
+        // attributes that occupy space without being declared in the bitmap, and every later field is misaligned.
         if let expectedNameDataOffset, reader.offset != expectedNameDataOffset {
             entry.hasLayoutMismatch = true
             entry.fileType = nil
@@ -227,7 +227,7 @@ enum DiskCleanBulkAttributeParser {
         }
     }
 
-    /// 带边界检查的非对齐游标：越界一律返回 nil，交由调用方置 `hasLayoutMismatch`。
+    /// Bounds-checked unaligned cursor: out-of-range reads return nil so the caller can set `hasLayoutMismatch`.
     private struct Reader {
         let buffer: UnsafeRawBufferPointer
         var offset: Int

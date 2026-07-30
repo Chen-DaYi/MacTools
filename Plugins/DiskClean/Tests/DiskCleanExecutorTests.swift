@@ -3,10 +3,10 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 执行器的 preflight 与逐项复核链（设计 §7.1、§7.2）。
+/// Executor preflight and per-item recheck chain (design §7.1, §7.2).
 ///
-/// 原语在这里是 fake：本类测的是**顺序与闸门**，原语自身的真实 syscall 行为由
-/// `DiskCleanRemovalPrimitiveTests` 用真实文件系统覆盖。
+/// Primitives are fakes here: this class tests **ordering and gates**. Real syscall behavior of primitives is covered by
+/// `DiskCleanRemovalPrimitiveTests` against a real filesystem.
 @MainActor
 final class DiskCleanExecutorTests: XCTestCase {
     private let home = "/Users/tester"
@@ -26,7 +26,7 @@ final class DiskCleanExecutorTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - preflight：任一失败零删除
+    // MARK: - preflight: any failure means zero deletes
 
     func testPreflightRejectsExpiredPlanWithoutTouchingAnything() async throws {
         let plan = try makePlan(paths: ["\(home)/Library/Caches/A"])
@@ -35,7 +35,7 @@ final class DiskCleanExecutorTests: XCTestCase {
 
         await assertThrows(.planExpired) { try await executor.execute(plan: plan) }
 
-        XCTAssertEqual(primitive.callCount, 0, "preflight 失败必须零删除")
+        XCTAssertEqual(primitive.callCount, 0, "preflight failure must mean zero deletes")
     }
 
     func testPreflightRejectsWholePlanWhenAnyItemIsLockedByRunningApp() async throws {
@@ -55,11 +55,11 @@ final class DiskCleanExecutorTests: XCTestCase {
             .lockedDuringPreflight(path: "\(home)/Library/Caches/A", processName: "com.example.app")
         ) { try await executor.execute(plan: plan) }
 
-        XCTAssertEqual(primitive.callCount, 0, "一项被锁 → 整次中止，不是跳过那一项")
+        XCTAssertEqual(primitive.callCount, 0, "one locked item aborts the whole run; it does not skip just that item")
     }
 
     func testPreflightRejectsPlanWhenSafetyPolicyNowRefusesAPath() async throws {
-        // 计划铸造后才被加进白名单的路径：preflight 必须拦下整次执行。
+        // Path added to the allowlist only after plan minting: preflight must stop the whole run.
         let plan = try makePlan(paths: ["\(home)/Library/Caches/A", "\(home)/.ssh"])
         let primitive = FakeDiskCleanRemovalPrimitive()
         let executor = makeExecutor(primitive: primitive)
@@ -69,14 +69,14 @@ final class DiskCleanExecutorTests: XCTestCase {
         XCTAssertEqual(primitive.callCount, 0)
     }
 
-    /// 计划自带的证据要能独立复核出祖先冲突——这道闸防的是 Planner 自身的缺陷。
+    /// Plan-carried evidence must independently re-detect ancestor conflicts — this gate catches Planner bugs.
     func testPreflightRerunsAncestorAssertionFromPlanEvidence() async throws {
         let parent = DiskCleanPlanFactory.candidate(path: "\(home)/Library/Caches/App")
         let lockedChild = DiskCleanPlanFactory.candidate(
             path: "\(home)/Library/Caches/App/inner",
             safety: .inUse(processName: "App")
         )
-        // 先铸造一个合法计划，再用同一份证据验证断言本身会抓到冲突。
+        // Mint a valid plan first, then use the same evidence to prove the assertion itself catches conflicts.
         let plan = try DiskCleanPlanner.makePlan(
             artifact: DiskCleanPlanFactory.artifact(candidates: [parent]),
             selectedIDs: [parent.id],
@@ -102,7 +102,7 @@ final class DiskCleanExecutorTests: XCTestCase {
         }
     }
 
-    // MARK: - 逐项链
+    // MARK: - Per-item chain
 
     func testExecutesEveryItemInPlanOrderAndCountsTerminalStates() async throws {
         let paths = (0..<6).map { "\(home)/Library/Caches/Item\($0)" }
@@ -117,21 +117,21 @@ final class DiskCleanExecutorTests: XCTestCase {
 
         let result = try await executor.execute(plan: plan)
 
-        XCTAssertEqual(primitive.removedPaths, paths, "逐项按计划顺序执行")
-        XCTAssertEqual(result.removedCount, 2, "removed + trashed 都算已处置")
-        XCTAssertEqual(result.skippedCount, 1, "changedSinceScan 归入跳过：对象未被触碰")
-        XCTAssertEqual(result.failedCount, 3, "failed / partiallyDeleted / rollbackBlocked 都不是成功")
+        XCTAssertEqual(primitive.removedPaths, paths, "items execute in plan order")
+        XCTAssertEqual(result.removedCount, 2, "removed + trashed both count as disposed")
+        XCTAssertEqual(result.skippedCount, 1, "changedSinceScan counts as skip: object was not touched")
+        XCTAssertEqual(result.failedCount, 3, "failed / partiallyDeleted / rollbackBlocked are not success")
         XCTAssertEqual(result.changedSinceScanCount, 1)
-        XCTAssertEqual(result.reclaimedBytes, 200, "只有成功处置的项计入估算回收")
+        XCTAssertEqual(result.reclaimedBytes, 200, "only successfully disposed items count toward estimated reclaimed bytes")
         XCTAssertEqual(
             result.attentionResults.map(\.path),
             [paths[4], paths[5]],
-            "半删与回滚被挡要在清理历史里置顶"
+            "partial delete and blocked rollback must be pinned in cleanup history"
         )
         XCTAssertEqual(result.mode, .permanent)
     }
 
-    /// 逐项复核锁定：preflight 之后才启动的应用必须能拦下后续项。
+    /// Per-item lock recheck: an app started after preflight must still block later items.
     func testItemIsSkippedWhenBundleIDBecomesRunningAfterPreflight() async throws {
         let plan = try makePlan(
             paths: ["\(home)/Library/Caches/A"],
@@ -146,16 +146,16 @@ final class DiskCleanExecutorTests: XCTestCase {
 
         let result = try await executor.execute(plan: plan)
 
-        XCTAssertEqual(primitive.callCount, 0, "逐项复核发现锁定 → 跳过该项，不交给原语")
+        XCTAssertEqual(primitive.callCount, 0, "per-item recheck finds lock → skip item; do not hand to primitive")
         XCTAssertEqual(result.skippedCount, 1)
         XCTAssertEqual(
             result.itemResults.first?.outcome,
             .skipped(.inUse(processName: "com.example.app"))
         )
-        XCTAssertGreaterThan(runningAppLock.refreshCallCount, 0, "bundle ID 必须逐项刷新")
+        XCTAssertGreaterThan(runningAppLock.refreshCallCount, 0, "bundle IDs must be refreshed per item")
     }
 
-    /// 进程名快照来自 preflight 那一次，不逐项重跑 pgrep。
+    /// Process-name snapshot comes from the preflight pass; do not re-run pgrep per item.
     func testProcessNamesAreQueriedOnceDuringPreflight() async throws {
         let plan = try makePlan(
             paths: ["\(home)/Library/Caches/A", "\(home)/Library/Caches/B"],
@@ -167,7 +167,7 @@ final class DiskCleanExecutorTests: XCTestCase {
         _ = try await executor.execute(plan: plan)
 
         XCTAssertEqual(runningAppLock.lastRequestedProcessNames, ["exampled"])
-        XCTAssertEqual(runningAppLock.refreshCallCount, 2, "两个计划项各刷新一次 bundle ID")
+        XCTAssertEqual(runningAppLock.refreshCallCount, 2, "each of the two plan items refreshes bundle IDs once")
     }
 
     func testTrashModeIsForwardedToPrimitive() async throws {
@@ -187,7 +187,7 @@ final class DiskCleanExecutorTests: XCTestCase {
         )
     }
 
-    // MARK: - 审计
+    // MARK: - Audit
 
     func testWritesOneAuditRecordPerItemWithTerminalStatus() async throws {
         let paths = ["\(home)/Library/Caches/A", "\(home)/Library/Caches/B"]
@@ -232,7 +232,7 @@ final class DiskCleanExecutorTests: XCTestCase {
         XCTAssertEqual(record.skipReason, "inUse(com.example.app)")
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func makePlan(
         paths: [String],
@@ -274,11 +274,11 @@ final class DiskCleanExecutorTests: XCTestCase {
     ) async {
         do {
             _ = try await body()
-            XCTFail("期望抛出 \(expected)，但执行成功了", file: file, line: line)
+            XCTFail("expected throw \(expected), but execution succeeded", file: file, line: line)
         } catch let error as DiskCleanExecutionError {
             XCTAssertEqual(error, expected, file: file, line: line)
         } catch {
-            XCTFail("期望 DiskCleanExecutionError，实际：\(error)", file: file, line: line)
+            XCTFail("expected DiskCleanExecutionError, got: \(error)", file: file, line: line)
         }
     }
 
@@ -290,11 +290,11 @@ final class DiskCleanExecutorTests: XCTestCase {
     ) async {
         do {
             _ = try await body()
-            XCTFail("期望安全校验拒绝 \(path)", file: file, line: line)
+            XCTFail("expected safety rejection for \(path)", file: file, line: line)
         } catch let DiskCleanExecutionError.safetyRejected(rejectedPath, _) {
             XCTAssertEqual(rejectedPath, path, file: file, line: line)
         } catch {
-            XCTFail("期望 safetyRejected，实际：\(error)", file: file, line: line)
+            XCTFail("expected safetyRejected, got: \(error)", file: file, line: line)
         }
     }
 }

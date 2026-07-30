@@ -2,7 +2,7 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 扫描根管理的界面状态（设计 §10.1 设置区）。
+/// UI state for purge-root management (design §10.1 settings).
 @MainActor
 final class DiskCleanPurgeRootsModelTests: XCTestCase {
     func testLoadsPersistedRootsOnInit() {
@@ -20,9 +20,9 @@ final class DiskCleanPurgeRootsModelTests: XCTestCase {
         XCTAssertEqual(model.scope, .developerArtifacts(roots: []))
     }
 
-    // MARK: - 范围联动
+    // MARK: - Scope linkage
 
-    /// 根一变就得把新范围推给分段 Controller，否则用户会拿着旧结果去清理刚移除的文件夹。
+    /// Any root change must push the new scope to the section controller, or users may clean with stale results against a just-removed folder.
     func testAddingRootNotifiesScopeChange() {
         let model = makeModel()
         var observed: [[String]] = []
@@ -45,7 +45,7 @@ final class DiskCleanPurgeRootsModelTests: XCTestCase {
         XCTAssertEqual(observed, [["/work"]])
     }
 
-    /// 被拒收时根集合没变，不该假装范围变了——否则界面会白白提示一次"请重新扫描"。
+    /// Rejected additions leave the root set unchanged; do not fake a scope change or the UI will spuriously prompt to rescan.
     func testRejectedAdditionDoesNotNotifyScopeChange() {
         let model = makeModel(persisted: ["/code"])
         var observed: [[String]] = []
@@ -57,7 +57,7 @@ final class DiskCleanPurgeRootsModelTests: XCTestCase {
         XCTAssertTrue(observed.isEmpty)
     }
 
-    // MARK: - 拒收反馈
+    // MARK: - Rejection feedback
 
     func testDuplicateAdditionSurfacesReason() {
         let model = makeModel(persisted: ["/code"])
@@ -67,8 +67,8 @@ final class DiskCleanPurgeRootsModelTests: XCTestCase {
         XCTAssertEqual(model.rejections, [.duplicate(path: "/code")])
     }
 
-    /// 祖先裁决保留祖先、弃后代——被弃的那一条必须给出可读理由，
-    /// 静默丢弃会让用户以为自己点错了然后再选一次。
+    /// Ancestor adjudication keeps the ancestor and drops the descendant; the dropped path needs a readable reason.
+    /// Silent discard makes users think they mis-clicked and try again.
     func testDescendantAdditionSurfacesCoveringAncestor() {
         let model = makeModel(persisted: ["/code"])
 
@@ -107,7 +107,7 @@ final class DiskCleanPurgeRootsModelTests: XCTestCase {
         XCTAssertTrue(model.rejections.isEmpty)
     }
 
-    // MARK: - 持久化
+    // MARK: - Persistence
 
     func testAdditionsAndRemovalsArePersisted() {
         let persistence = InMemoryPurgeRootsPersistence(roots: [])
@@ -120,7 +120,7 @@ final class DiskCleanPurgeRootsModelTests: XCTestCase {
         XCTAssertEqual(persistence.loadRoots(), ["/work"])
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func makeModel(
         persisted: [String] = [],
@@ -145,7 +145,7 @@ final class DiskCleanPurgeRootsModelTests: XCTestCase {
     }
 }
 
-/// 内存持久化。绝不碰 `UserDefaults.standard`——那是用户的真实配置。
+/// In-memory persistence. Never touch `UserDefaults.standard` — that is the user's real config.
 private final class InMemoryPurgeRootsPersistence: DiskCleanPurgeRootsPersisting, @unchecked Sendable {
     private let lock = NSLock()
     private var storedRoots: [String]

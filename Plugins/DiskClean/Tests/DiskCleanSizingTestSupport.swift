@@ -4,17 +4,17 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// Sizing 子系统文件系统测试的临时目录夹具。
+/// Temp-directory fixture for sizing-subsystem filesystem tests.
 ///
-/// **必须取物理路径**：`FileManager.temporaryDirectory` 位于 `/var/folders/...`，而 `/var`
-/// 本身是指向 `private/var` 的符号链接，`O_NOFOLLOW_ANY` 会直接以 ELOOP 拒绝这类路径。
-/// 且 `resolvingSymlinksInPath()` 修不了这件事（它不展开 `/var`），只有 `realpath(3)` 可以。
+/// **Must use physical paths**: `FileManager.temporaryDirectory` lives under `/var/folders/...`, and `/var`
+/// itself is a symlink to `private/var`, so `O_NOFOLLOW_ANY` rejects such paths with ELOOP.
+/// `resolvingSymlinksInPath()` does not fix this (it does not expand `/var`); only `realpath(3)` does.
 ///
-/// 一切都建在 `FileManager.temporaryDirectory` 下的独立子目录内，teardown 整体删除，
-/// 绝不触碰真实用户目录（仓库硬性要求）。
+/// Everything is under an isolated subdirectory of `FileManager.temporaryDirectory`, deleted wholesale on teardown,
+/// and never touches real user directories (repo hard requirement).
 final class DiskCleanTempDirectory {
     let url: URL
-    /// 被改成 000 的目录，teardown 前必须恢复权限，否则删不掉会留垃圾。
+    /// Directories set to 000 must have permissions restored before teardown or cleanup fails.
     private var restrictedDirectories: [URL] = []
 
     var path: String { url.path }
@@ -41,7 +41,7 @@ final class DiskCleanTempDirectory {
         return String(decoding: bytes, as: UTF8.self)
     }
 
-    // MARK: - 构造布局
+    // MARK: - Layout construction
 
     func resolve(_ relativePath: String) -> URL {
         url.appendingPathComponent(relativePath)
@@ -54,7 +54,7 @@ final class DiskCleanTempDirectory {
         return target
     }
 
-    /// 写入 `bytes` 个字节的文件，返回其 URL。逻辑大小恰好等于 `bytes`。
+    /// Write a file of `bytes` bytes and return its URL. Logical size equals `bytes` exactly.
     @discardableResult
     func makeFile(_ relativePath: String, bytes: Int) throws -> URL {
         let target = resolve(relativePath)
@@ -88,7 +88,7 @@ final class DiskCleanTempDirectory {
         return target
     }
 
-    /// 把目录权限改成 000 制造 EPERM 子树，并登记以便 teardown 恢复。
+    /// Set directory mode to 000 to create an EPERM subtree and register it for teardown restore.
     func denyAccess(to relativePath: String) throws {
         let target = resolve(relativePath)
         restrictedDirectories.append(target)
@@ -102,7 +102,7 @@ enum DiskCleanTestError: Error {
     case chmodFailed(path: String, code: Int32)
 }
 
-/// 已知目录树夹具：跨目录硬链接、symlink、深层嵌套齐备，两个 walker 的期望值完全相同。
+/// Known directory-tree fixture: cross-directory hard links, symlinks, and deep nesting; both walkers share identical expectations.
 enum DiskCleanKnownTree {
     static let plainFileBytes = 100
     static let nestedFileBytes = 250
@@ -111,16 +111,16 @@ enum DiskCleanKnownTree {
     static let symlinkDestination = "../a.bin"
     static let deepDirectoryDepth = 40
 
-    /// symlink 的逻辑大小是目标字符串长度。
+    /// Symlink logical size is the target string length.
     static var symlinkBytes: Int { symlinkDestination.utf8.count }
 
-    /// 硬链接只计一次：`original.bin` / `HardLinks/copy.bin` / `OtherDir/cross.bin`
-    /// 共享同一 (devid, fileID)。
+    /// Hard links counted once: `original.bin` / `HardLinks/copy.bin` / `OtherDir/cross.bin`
+    /// share the same (devid, fileID).
     static var expectedBytes: Int64 {
         Int64(plainFileBytes + nestedFileBytes + deepFileBytes + symlinkBytes + hardLinkedFileBytes)
     }
 
-    /// a.bin / Nested/b.bin / 深层 deep.bin / Links/toA / 硬链接组（计 1）。目录不计数。
+    /// a.bin / Nested/b.bin / deep deep.bin / Links/toA / hard-link group (count 1). Directories not counted.
     static let expectedFileCount = 5
 
     @discardableResult
@@ -146,15 +146,15 @@ enum DiskCleanKnownTree {
             to: "\(relativeRoot)/HardLinks/original.bin"
         )
 
-        // 空目录必须被正常处理（0 字节、不计数、不报错）。
+        // Empty directories must be handled normally (0 bytes, no count, no error).
         try temporary.makeDirectory("\(relativeRoot)/Empty")
 
         return temporary.resolve(relativeRoot).path
     }
 }
 
-/// 两个 walker 必须满足的同一份行为契约（设计 §3.5：回退 walker 复用 §3.3 全部约束）。
-/// 由 FastWalker / SlowWalker 各自的测试类逐条调用，避免断言重复又保持用例粒度。
+/// Shared behavior contract both walkers must satisfy (design §3.5: fallback walker reuses all §3.3 constraints).
+/// Invoked case-by-case from FastWalker / SlowWalker test classes to avoid duplicated asserts while keeping granularity.
 enum DiskCleanWalkerContract {
     static func assertSumsKnownTree(
         _ sizer: any DiskCleanDirectorySizing,
@@ -170,7 +170,7 @@ enum DiskCleanWalkerContract {
         XCTAssertEqual(
             result.estimatedBytes,
             DiskCleanKnownTree.expectedBytes,
-            "跨目录硬链接必须只计一次，symlink 按链接本身计",
+            "cross-directory hard links must count once; symlinks are measured as the link itself",
             file: file,
             line: line
         )
@@ -178,7 +178,7 @@ enum DiskCleanWalkerContract {
         XCTAssertEqual(result.rootIdentity?.fileType, .directory, file: file, line: line)
     }
 
-    /// symlink 指向的目录内容绝不能被计入。
+    /// Contents of a directory targeted by a symlink must never be counted.
     static func assertDoesNotFollowDirectorySymlink(
         _ sizer: any DiskCleanDirectorySizing,
         in temporary: DiskCleanTempDirectory,
@@ -195,14 +195,14 @@ enum DiskCleanWalkerContract {
         XCTAssertEqual(
             result.estimatedBytes,
             Int64("../Outside".utf8.count),
-            "只应计入链接自身长度，绝不能跟随进 100KB 的目标目录",
+            "only the link length should count; never follow into the 100KB target directory",
             file: file,
             line: line
         )
         XCTAssertEqual(result.fileCount, 1, file: file, line: line)
     }
 
-    /// EPERM 子树跳过，但可访问部分仍要如实累加，且完整性降级为 permissionDenied。
+    /// Skip EPERM subtrees but still accumulate accessible parts and degrade completeness to permissionDenied.
     static func assertReportsPermissionDenied(
         _ sizer: any DiskCleanDirectorySizing,
         in temporary: DiskCleanTempDirectory,
@@ -239,7 +239,7 @@ enum DiskCleanWalkerContract {
         XCTAssertEqual(result.fileCount, 0, file: file, line: line)
     }
 
-    /// deadline 已过 → partial([.timedOut])，绝不能报 complete。
+    /// Past deadline → partial([.timedOut]); never report complete.
     static func assertExpiredDeadlineReportsTimeout(
         _ sizer: any DiskCleanDirectorySizing,
         in temporary: DiskCleanTempDirectory,
@@ -269,7 +269,7 @@ enum DiskCleanWalkerContract {
         XCTAssertEqual(result.completeness, .partial(reasons: [.timedOut]), file: file, line: line)
     }
 
-    /// 设备在熔断黑名单内 → 立即放弃，fail closed。
+    /// Device on the circuit-break blacklist → abandon immediately, fail closed.
     static func assertBlockedDeviceIsRefused(
         _ sizer: any DiskCleanDirectorySizing,
         in temporary: DiskCleanTempDirectory,
@@ -298,10 +298,10 @@ enum DiskCleanWalkerContract {
         let result = sizer.size(ofItemAt: temporary.resolve("nope").path, context: .test())
 
         XCTAssertEqual(result.completeness, .partial(reasons: [.walkError]), file: file, line: line)
-        XCTAssertNil(result.rootIdentity, "打不开根对象时没有身份可言", file: file, line: line)
+        XCTAssertNil(result.rootIdentity, "no identity when the root object cannot be opened", file: file, line: line)
     }
 
-    /// 普通文件根：直接定大小，无需遍历。
+    /// Regular-file root: size directly without walking.
     static func assertSizesRegularFileRoot(
         _ sizer: any DiskCleanDirectorySizing,
         in temporary: DiskCleanTempDirectory,
@@ -320,7 +320,7 @@ enum DiskCleanWalkerContract {
 }
 
 extension DiskCleanSizingContext {
-    /// 无取消、无设备限制、给足时间的上下文。
+    /// Context with no cancellation, no device limits, and plenty of time.
     static func test(
         deadline: Date = Date().addingTimeInterval(60),
         isCancelled: @escaping @Sendable () -> Bool = { false },

@@ -20,7 +20,7 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - 分型
+    // MARK: - Type branching
 
     func testOpensDirectoryAndReportsIdentity() throws {
         let directory = try temporaryDirectory.makeDirectory("Caches")
@@ -28,7 +28,7 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         let outcome = opener.open(path: directory.path)
 
         guard case let .directory(fileDescriptor, identity) = outcome else {
-            return XCTFail("目录应走 walker 分支，实际 \(outcome)")
+            return XCTFail("directory should take the walker branch, got \(outcome)")
         }
         defer { close(fileDescriptor) }
 
@@ -37,21 +37,21 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         XCTAssertEqual(identity, expectedIdentity(of: directory.path))
     }
 
-    /// 普通文件（安装包、日志）直接从同一 fd 取 st_size，不进 walker。
+    /// Regular files (installers, logs) take st_size from the same fd and skip the walker.
     func testResolvesRegularFileDirectlyFromDescriptor() throws {
         let file = try temporaryDirectory.makeFile("installer.dmg", bytes: 4096)
 
         let outcome = opener.open(path: file.path)
 
         guard case let .resolved(bytes, identity) = outcome else {
-            return XCTFail("普通文件应直接定大小，实际 \(outcome)")
+            return XCTFail("regular file should resolve size directly, got \(outcome)")
         }
         XCTAssertEqual(bytes, 4096)
         XCTAssertEqual(identity.fileType, .regularFile)
         XCTAssertEqual(identity, expectedIdentity(of: file.path))
     }
 
-    /// symlink 按**链接本身**计（大小 = 目标字符串长度），绝不跟随。
+    /// Symlinks are measured as the **link itself** (size = target string length) and never followed.
     func testResolvesSymlinkAsLinkItself() throws {
         try temporaryDirectory.makeFile("target.bin", bytes: 9999)
         let link = try temporaryDirectory.makeSymlink("link", destination: "target.bin")
@@ -59,14 +59,14 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         let outcome = opener.open(path: link.path)
 
         guard case let .resolved(bytes, identity) = outcome else {
-            return XCTFail("symlink 应按链接本身解析，实际 \(outcome)")
+            return XCTFail("symlink should resolve as the link itself, got \(outcome)")
         }
         XCTAssertEqual(identity.fileType, .symlink)
-        XCTAssertEqual(bytes, Int64("target.bin".utf8.count), "绝不能跟随到 9999 字节的目标")
+        XCTAssertEqual(bytes, Int64("target.bin".utf8.count), "must not follow to the 9999-byte target")
         XCTAssertEqual(identity, expectedIdentity(of: link.path))
     }
 
-    /// 指向目录的 symlink 同样按链接本身计，不得下潜进目标目录。
+    /// A symlink to a directory is also measured as the link; never descend into the target.
     func testSymlinkToDirectoryIsNotFollowed() throws {
         try temporaryDirectory.makeFile("RealDir/huge.bin", bytes: 8192)
         let link = try temporaryDirectory.makeSymlink("DirLink", destination: "RealDir")
@@ -74,16 +74,16 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         let outcome = opener.open(path: link.path)
 
         guard case let .resolved(bytes, identity) = outcome else {
-            return XCTFail("目录 symlink 应按链接本身解析，实际 \(outcome)")
+            return XCTFail("directory symlink should resolve as the link itself, got \(outcome)")
         }
         XCTAssertEqual(identity.fileType, .symlink)
         XCTAssertEqual(bytes, Int64("RealDir".utf8.count))
     }
 
-    // MARK: - O_NOFOLLOW_ANY：拒绝路径任意一级的符号链接
+    // MARK: - O_NOFOLLOW_ANY: reject symlinks at any path component
 
-    /// 中间级目录被换成 symlink → 必须拒绝。这是"把中间目录换成指向 Documents 的 symlink"
-    /// 这类攻击的防线。
+    /// Intermediate directory swapped for a symlink → must refuse. Defense against attacks that
+    /// replace a middle directory with a symlink into Documents.
     func testRejectsSymlinkInIntermediateComponent() throws {
         try temporaryDirectory.makeFile("RealDir/payload.bin", bytes: 128)
         try temporaryDirectory.makeSymlink("DirLink", destination: "RealDir")
@@ -93,10 +93,10 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         XCTAssertEqual(outcome, .failed(reason: .walkError))
     }
 
-    /// 关键回归：中间级是 symlink **且**末级也是 symlink。
+    /// Critical regression: intermediate is a symlink **and** the final component is also a symlink.
     ///
-    /// 朴素 `lstat` 在这种布局下会成功并报告"末级是 symlink"，于是中间级替换被放过。
-    /// 父目录 fd 锚定（先用 O_NOFOLLOW_ANY 打开父目录）才能识破。
+    /// Naive `lstat` succeeds and reports "final is symlink", letting the intermediate swap through.
+    /// Parent-directory fd anchoring (open parent with O_NOFOLLOW_ANY first) is what catches it.
     func testRejectsSymlinkChainWhereFinalComponentIsAlsoSymlink() throws {
         try temporaryDirectory.makeFile("RealDir/target.bin", bytes: 128)
         try temporaryDirectory.makeSymlink("RealDir/inner", destination: "target.bin")
@@ -104,10 +104,10 @@ final class DiskCleanRootOpenerTests: XCTestCase {
 
         let victimPath = temporaryDirectory.resolve("DirLink/inner").path
 
-        // 前提确认：朴素 lstat 确实会被这套布局骗过。
+        // Prerequisite: naive lstat is indeed fooled by this layout.
         var status = stat()
         XCTAssertEqual(lstat(victimPath, &status), 0)
-        XCTAssertEqual(status.st_mode & S_IFMT, S_IFLNK, "lstat 会把它报成合法 symlink 候选")
+        XCTAssertEqual(status.st_mode & S_IFMT, S_IFLNK, "lstat reports it as a legitimate symlink candidate")
 
         XCTAssertEqual(opener.open(path: victimPath), .failed(reason: .walkError))
     }
@@ -121,7 +121,7 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         XCTAssertEqual(outcome, .failed(reason: .walkError))
     }
 
-    // MARK: - 错误映射
+    // MARK: - Error mapping
 
     func testMissingPathMapsToWalkError() {
         let outcome = opener.open(path: temporaryDirectory.resolve("does-not-exist").path)
@@ -133,8 +133,8 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         try temporaryDirectory.makeDirectory("Locked")
         try temporaryDirectory.denyAccess(to: "Locked")
 
-        // root 会无视权限位，此时该断言无意义。
-        try XCTSkipIf(getuid() == 0, "以 root 运行时无法构造 EACCES")
+        // root ignores permission bits, making this assertion meaningless.
+        try XCTSkipIf(getuid() == 0, "cannot construct EACCES when running as root")
 
         let outcome = opener.open(path: temporaryDirectory.resolve("Locked").path)
 
@@ -142,7 +142,7 @@ final class DiskCleanRootOpenerTests: XCTestCase {
     }
 
     func testRootPathIsRejectedRatherThanTreatedAsCandidate() {
-        // "/" 没有父目录，也不可能是候选；此处只要求不崩、不误判为可清理。
+        // "/" has no parent and cannot be a candidate; only require no crash and no false cleanable.
         let outcome = opener.open(path: "/")
 
         if case let .directory(fileDescriptor, identity) = outcome {
@@ -171,11 +171,11 @@ final class DiskCleanRootOpenerTests: XCTestCase {
         XCTAssertNil(ParentAnchoredPath(path: "/a/.."))
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func expectedIdentity(of path: String) -> DiskCleanRootIdentity {
         var status = stat()
-        XCTAssertEqual(lstat(path, &status), 0, "无法 lstat \(path)")
+        XCTAssertEqual(lstat(path, &status), 0, "failed to lstat \(path)")
         return DiskCleanRootIdentity(stat: status)
     }
 }

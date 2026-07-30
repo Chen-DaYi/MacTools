@@ -1,30 +1,30 @@
 import Darwin
 import Foundation
 
-/// 根对象打开结果（设计 §3.2 分型）。
+/// Root open result (design §3.2 typing).
 enum DiskCleanRootOpenOutcome: Equatable {
-    /// 目录：需交给 walker 遍历。**fd 所有权移交调用方**，必须 close。
+    /// Directory: must be walked. **fd ownership transfers to the caller**; must close.
     case directory(fileDescriptor: Int32, identity: DiskCleanRootIdentity)
-    /// 普通文件 / symlink / 其它非目录：大小与身份已确定，无需遍历。
+    /// Regular file / symlink / other non-directory: size and identity already known; no walk needed.
     case resolved(bytes: Int64, identity: DiskCleanRootIdentity)
-    /// 无法打开或不予受理。
+    /// Could not open or not accepted.
     case failed(reason: DiskCleanScanCompleteness.PartialReason)
 }
 
-/// 所有 sizing 与执行的统一入口。
+/// Unified entry for all sizing and execution.
 ///
-/// **调用方必须传物理路径**（不含任何符号链接祖先）。因为 `O_NOFOLLOW_ANY` 拒绝路径中
-/// 任意一级的 symlink，而 macOS 上 `/var -> private/var`、`/tmp -> private/tmp` 本身就是
-/// 符号链接：`/var/folders/...` 会直接以 ELOOP 失败并降级为 `partial([.walkError])`，
-/// 候选因而不可清理。规则 glob 涉及这类位置时必须写 `/private/var/...`。
-/// 需要规范化时用 `realpath(3)`——`URL.resolvingSymlinksInPath()` **不会**展开 `/var`。
+/// **Callers must pass a physical path** (no symlink ancestors). `O_NOFOLLOW_ANY` rejects a symlink
+/// at any path component, and on macOS `/var -> private/var` and `/tmp -> private/tmp` are themselves
+/// symlinks: `/var/folders/...` fails with ELOOP and degrades to `partial([.walkError])`, so the
+/// candidate is not cleanable. Rule globs that touch these locations must write `/private/var/...`.
+/// Normalize with `realpath(3)`—`URL.resolvingSymlinksInPath()` **does not** expand `/var`.
 ///
-/// 关键约束（设计 §3.2）：
-/// - `O_NOFOLLOW_ANY` 拒绝**路径任意一级**的符号链接，而不只是末级——防"中间目录被换成
-///   指向 Documents 的 symlink"。
-/// - `O_NONBLOCK` 是必需的而非可选：`O_RDONLY` 打开一个没有写端的 FIFO 会永久阻塞，
-///   而缓存目录里出现 FIFO/socket 完全可能，一旦挂住就会烧掉 WorkerPool 的放弃预算。
-/// - 打开后 `fstatfs` 校验 `MNT_LOCAL`；非本地卷不予受理。
+/// Key constraints (design §3.2):
+/// - `O_NOFOLLOW_ANY` rejects a symlink at **any path component**, not just the leaf—blocks
+///   "middle directory replaced by a symlink into Documents".
+/// - `O_NONBLOCK` is required, not optional: `O_RDONLY` on a FIFO with no writer blocks forever,
+///   and FIFOs/sockets can appear in cache directories; a hang would burn the WorkerPool abandon budget.
+/// - After open, `fstatfs` checks `MNT_LOCAL`; non-local volumes are rejected.
 struct DiskCleanRootOpener: Sendable {
     init() {}
 
@@ -32,8 +32,8 @@ struct DiskCleanRootOpener: Sendable {
         let descriptor = Darwin.open(path, O_RDONLY | O_NOFOLLOW_ANY | O_NONBLOCK)
         guard descriptor >= 0 else {
             let code = errno
-            // ELOOP 有两种成因：末级是 symlink（合法候选，按链接本身计），
-            // 或路径中间某级是 symlink（必须拒绝）。二者必须区分，见 resolveLink。
+            // ELOOP has two causes: leaf is a symlink (legitimate candidate; count the link itself),
+            // or some intermediate component is a symlink (must reject). Must distinguish; see resolveLink.
             if code == ELOOP {
                 return resolveLink(path: path)
             }
@@ -60,14 +60,15 @@ struct DiskCleanRootOpener: Sendable {
         return .directory(fileDescriptor: descriptor, identity: identity)
     }
 
-    /// 处理 open 返回 ELOOP 的情况。
+    /// Handle open returning ELOOP.
     ///
-    /// 设计 §3.2 写的是"改 lstat 路径取链接本身"，但朴素 `lstat` 会跟随中间级 symlink：
-    /// 布局 `dirlink -> realdir` + `realdir/link -> target` 时，`lstat("dirlink/link")`
-    /// 成功且报告 symlink，于是中间级替换攻击被放过——正是 `O_NOFOLLOW_ANY` 要防的事。
-    /// 因此这里改为**父目录 fd 锚定**：先用 `O_NOFOLLOW_ANY` 打开父目录（中间级有 symlink
-    /// 就会在这一步失败），再 `fstatat(AT_SYMLINK_NOFOLLOW)` 确认末级确实是链接本身。
-    /// 语义与设计一致，但真正兑现了"拒绝任意一级 symlink"的承诺。
+    /// Design §3.2 says "switch to the lstat path and take the link itself", but a naive `lstat`
+    /// follows intermediate symlinks: with layout `dirlink -> realdir` + `realdir/link -> target`,
+    /// `lstat("dirlink/link")` succeeds and reports symlink, so intermediate-replacement attacks
+    /// slip through—exactly what `O_NOFOLLOW_ANY` is meant to stop. Therefore use **parent-directory
+    /// fd anchoring**: open the parent with `O_NOFOLLOW_ANY` (any intermediate symlink fails there),
+    /// then `fstatat(AT_SYMLINK_NOFOLLOW)` to confirm the leaf is the link itself. Semantics match
+    /// the design while truly delivering "reject symlink at any component".
     private func resolveLink(path: String) -> DiskCleanRootOpenOutcome {
         guard let location = ParentAnchoredPath(path: path) else {
             return .failed(reason: .walkError)
@@ -94,7 +95,7 @@ struct DiskCleanRootOpener: Sendable {
         }
 
         let identity = DiskCleanRootIdentity(stat: status)
-        // 末级不是 symlink，却打不开 → ELOOP 只能来自路径中间级，拒绝。
+        // Leaf is not a symlink yet open failed → ELOOP can only come from an intermediate component; reject.
         guard identity.fileType == .symlink else {
             return .failed(reason: .walkError)
         }
@@ -108,7 +109,7 @@ struct DiskCleanRootOpener: Sendable {
     }
 }
 
-/// 把绝对路径拆成"父目录 + 末级组件"，用于 fd 锚定寻址。
+/// Split an absolute path into "parent directory + leaf component" for fd-anchored addressing.
 struct ParentAnchoredPath: Equatable {
     let parentPath: String
     let name: String
@@ -118,7 +119,7 @@ struct ParentAnchoredPath: Equatable {
         while trimmed.count > 1, trimmed.hasSuffix("/") {
             trimmed.removeLast()
         }
-        // 根目录没有父目录，也不可能是候选。
+        // Root has no parent and can never be a candidate.
         guard trimmed != "/", !trimmed.isEmpty else { return nil }
 
         guard let separatorIndex = trimmed.lastIndex(of: "/") else { return nil }

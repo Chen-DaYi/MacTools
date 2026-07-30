@@ -1,13 +1,13 @@
 import SwiftUI
 import MacToolsPluginKit
 
-// MARK: - 历史条目
+// MARK: - History entry
 
-/// 清理历史条目的状态。
+/// Status of a cleanup history entry.
 ///
-/// 取值域与审计日志写入的 `status` 字符串一一对应（`DiskCleanExecutor.status(of:)` 与
-/// `DiskCleanStagingReconciler.record(for:)`）。解析而不是直接展示原始字符串，是因为
-/// "哪些状态需要置顶提示"是一条产品判断，必须有唯一的落点。
+/// Domain matches the `status` strings written to the audit log (`DiskCleanExecutor.status(of:)` and
+/// `DiskCleanStagingReconciler.record(for:)`). Parse rather than display the raw string because
+/// "which statuses need a pinned alert" is a product decision that needs a single home.
 enum DiskCleanCleanupHistoryStatus: Equatable, Sendable {
     case ok
     case skipped
@@ -36,7 +36,7 @@ enum DiskCleanCleanupHistoryStatus: Equatable, Sendable {
             self = .rollbackBlocked
         case "reconciledRolledBack":
             self = .reconciledRolledBack
-        // 父目录整个消失与暂存对象消失是同一个结论：没有需要恢复的东西。
+        // A missing parent directory and a missing staged object reach the same conclusion: nothing left to restore.
         case "reconciledAbsent", "reconciledParentMissing":
             self = .reconciledAbsent
         case "reconcileFailed":
@@ -46,10 +46,10 @@ enum DiskCleanCleanupHistoryStatus: Equatable, Sendable {
         }
     }
 
-    /// 需要置顶提示的诚实终态（设计 §7.5、§13-M4-6）。
+    /// Honest terminal statuses that need a pinned alert (design §7.5, §13-M4-6).
     ///
-    /// 三者的共同点：磁盘上留下了一个用户不知道的暂存对象，或者一次删除只做了一半。
-    /// 普通的 `failed`/`skipped` 没有留下残骸，不需要打扰用户。
+    /// What they share: the disk still holds a staged object the user may not know about, or a deletion only finished halfway.
+    /// Ordinary `failed`/`skipped` leave no residue and need not interrupt the user.
     var needsAttention: Bool {
         switch self {
         case .partiallyDeleted, .rollbackBlocked, .reconcileFailed:
@@ -105,23 +105,23 @@ enum DiskCleanCleanupHistoryStatus: Equatable, Sendable {
     }
 }
 
-/// 一条清理历史。审计记录的展示投影。
+/// One cleanup history row. A display projection of an audit record.
 struct DiskCleanCleanupHistoryEntry: Identifiable, Equatable, Sendable {
     let id: Int
     let timestamp: Date
     let status: DiskCleanCleanupHistoryStatus
     let path: String?
-    /// 暂存名。废纸篓模式下"放回"会落在这个名字上，需要展示给用户（设计 §7.4）。
+    /// Staged name. In Trash mode, "Put Back" lands under this name, so it must be shown (design §7.4).
     let stagedName: String?
     let estimatedBytes: Int64?
     let errorMessage: String?
 
     var needsAttention: Bool { status.needsAttention }
 
-    /// 审计记录 → 展示条目。**需要关注的条目置顶**（设计 §13-M4-6），其余保持时间倒序。
+    /// Audit record → display entry. **Attention-needed rows are pinned** (design §13-M4-6); the rest stay reverse-chronological.
     ///
-    /// 置顶而不是只标红：`partiallyDeleted` / `rollbackBlocked` 意味着磁盘上有残骸，
-    /// 埋在 200 条历史中间等于没说。
+    /// Pin rather than only tint red: `partiallyDeleted` / `rollbackBlocked` mean residue remains on disk;
+    /// burying them among 200 history rows is the same as not saying it.
     static func entries(from records: [DiskCleanAuditLog.Record]) -> [DiskCleanCleanupHistoryEntry] {
         let entries = records.enumerated().map { index, record in
             DiskCleanCleanupHistoryEntry(
@@ -138,9 +138,9 @@ struct DiskCleanCleanupHistoryEntry: Identifiable, Equatable, Sendable {
     }
 }
 
-// MARK: - 读取
+// MARK: - Loading
 
-/// 清理历史的读取 seam。审计日志在磁盘上，读取不占主线程。
+/// Read seam for cleanup history. The audit log is on disk; loading must not block the main thread.
 protocol DiskCleanCleanupHistoryProviding: Sendable {
     func recentEntries(limit: Int) async -> [DiskCleanCleanupHistoryEntry]
 }
@@ -157,9 +157,9 @@ struct DiskCleanAuditLogHistoryProvider: DiskCleanCleanupHistoryProviding {
     }
 }
 
-// MARK: - 视图
+// MARK: - View
 
-/// 清理历史分段。展开时才读盘——设置页每次出现都扫一遍日志文件没有必要。
+/// Cleanup history section. Load from disk only when expanded—rescanning the log every time settings appear is unnecessary.
 struct DiskCleanCleanupHistorySection: View {
     let provider: any DiskCleanCleanupHistoryProviding
     let localization: PluginLocalization
@@ -188,8 +188,8 @@ struct DiskCleanCleanupHistorySection: View {
         }
     }
 
-    /// 刷新按钮放在内容区而不是 DisclosureGroup 的 label 里：
-    /// label 的点击区域属于展开/收起，塞一个按钮进去两者会互相抢。
+    /// Place the reload button in the content area, not the DisclosureGroup label:
+    /// the label's hit target belongs to expand/collapse; a button there would fight for clicks.
     private var reloadButton: some View {
         Button {
             Task { entries = await provider.recentEntries(limit: Self.recordLimit) }
@@ -317,7 +317,7 @@ private struct DiskCleanCleanupHistoryRow: View {
                         .textSelection(.enabled)
                 }
 
-                // 废纸篓里的对象落在暂存名下，不展示它用户就找不回来（设计 §7.4）。
+                // Objects in Trash land under the staged name; without showing it the user cannot find them (design §7.4).
                 if let stagedName = entry.stagedName {
                     Text(
                         localization.format(

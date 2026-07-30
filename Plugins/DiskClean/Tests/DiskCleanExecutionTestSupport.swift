@@ -4,10 +4,10 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-// MARK: - 计划铸造
+// MARK: - Plan minting
 
-/// 计划只有一个铸造点（`ValidatedPlan.init` 是 fileprivate），测试也不例外——
-/// 这里走的是和产品代码完全相同的 `makePlan`，因此夹具本身就在复核铸造校验。
+/// Plans have a single minting point (`ValidatedPlan.init` is fileprivate); tests are no exception —
+/// this uses the same product `makePlan`, so fixtures themselves re-check minting validation.
 @MainActor
 enum DiskCleanPlanFactory {
     static let observedAt = Date(timeIntervalSince1970: 10_000)
@@ -77,7 +77,7 @@ enum DiskCleanPlanFactory {
         )
     }
 
-    /// 由真实文件系统对象铸造计划：身份取自对象当下的 `lstat`，与扫描器所见一致。
+    /// Mint a plan from real filesystem objects: identity comes from current `lstat`, matching the scanner.
     static func makePlan(
         paths: [String],
         mode: DiskCleanRemovalMode = .permanent,
@@ -88,7 +88,7 @@ enum DiskCleanPlanFactory {
         let candidates = try paths.map { path -> DiskCleanCandidate in
             let identity = try XCTUnwrap(
                 currentIdentity(ofItemAt: path),
-                "无法读取 \(path) 的身份"
+                "could not read identity of \(path)"
             )
             return candidate(
                 path: path,
@@ -108,7 +108,7 @@ enum DiskCleanPlanFactory {
         )
     }
 
-    /// 由内存身份铸造计划（不需要真实对象的执行器测试用）。
+    /// Mint a plan from in-memory identities (for executor tests that do not need real objects).
     static func makePlan(
         items: [Item],
         mode: DiskCleanRemovalMode = .permanent,
@@ -144,9 +144,9 @@ enum DiskCleanPlanFactory {
     }
 }
 
-// MARK: - 原语接缝的 fake
+// MARK: - Primitive seam fakes
 
-/// 记录调用的原语 fake。执行器测试断言"preflight 失败时零调用"靠的就是它。
+/// Call-recording primitive fake. Executor tests assert "zero calls on preflight failure" with it.
 final class FakeDiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving, @unchecked Sendable {
     private let lock = NSLock()
     private var calls: [(path: String, mode: DiskCleanRemovalMode)] = []
@@ -176,7 +176,7 @@ final class FakeDiskCleanRemovalPrimitive: DiskCleanPlanItemRemoving, @unchecked
     }
 }
 
-/// 废纸篓 fake：记录路径并把对象真删掉（模拟"已离开原处"），绝不碰用户的真实废纸篓。
+/// Trash fake: records paths and really deletes the object (simulates "left original location"); never touches the real Trash.
 final class FakeDiskCleanTrash: DiskCleanTrashing, @unchecked Sendable {
     struct TrashFailure: LocalizedError {
         var errorDescription: String? { "trash unavailable" }
@@ -185,7 +185,7 @@ final class FakeDiskCleanTrash: DiskCleanTrashing, @unchecked Sendable {
     private let lock = NSLock()
     private var paths: [String] = []
     private let shouldFail: Bool
-    /// 处置进行中触发的副作用，用来模拟"另一个进程此刻重建了原路径"。
+    /// Side effect while trashing, to simulate "another process recreates the original path".
     private let duringTrash: (@Sendable () -> Void)?
 
     init(shouldFail: Bool = false, duringTrash: (@Sendable () -> Void)? = nil) {
@@ -205,9 +205,9 @@ final class FakeDiskCleanTrash: DiskCleanTrashing, @unchecked Sendable {
     }
 }
 
-/// 设备号 fake：按条目名伪造设备号，用来构造真实文件系统上造不出来的挂载穿越。
+/// Device-id fake: forges device ids by entry name to construct mount crossings impossible on a real FS.
 struct FakeDiskCleanStagedEntryDeviceResolver: DiskCleanStagedEntryDeviceResolving {
-    /// 命中这些名字的条目会被报成另一个设备。
+    /// Entries with these names are reported on a different device.
     let crossedMountEntryNames: Set<String>
 
     func deviceID(ofEntry nameBytes: [CChar], statResult: stat) -> UInt64 {
@@ -219,7 +219,7 @@ struct FakeDiskCleanStagedEntryDeviceResolver: DiskCleanStagedEntryDeviceResolvi
     }
 }
 
-/// 记录 reconciliation 是否被触发。
+/// Records whether reconciliation was triggered.
 final class SpyDiskCleanStagingReconciler: DiskCleanStagingReconciling, @unchecked Sendable {
     private let lock = NSLock()
     private var directories: [URL] = []
@@ -231,11 +231,11 @@ final class SpyDiskCleanStagingReconciler: DiskCleanStagingReconciling, @uncheck
     }
 }
 
-// MARK: - 运行应用快照 fake
+// MARK: - Running-app snapshot fake
 
-/// 可分别设定 preflight 快照与"逐项刷新"结果的快照来源。
+/// Snapshot source that can set preflight snapshot and "per-item refresh" results separately.
 ///
-/// 双时点锁的关键行为是"preflight 一次、逐项再刷 bundle ID"，只有把两者分开才测得出来。
+/// Dual-time locking means "preflight once, then refresh bundle IDs per item"; only separating them makes that testable.
 final class ProgrammableDiskCleanRunningAppLock: DiskCleanRunningAppSnapshotting, @unchecked Sendable {
     private let lock = NSLock()
     private let initialSnapshot: DiskCleanRunningAppSnapshot
@@ -266,7 +266,7 @@ final class ProgrammableDiskCleanRunningAppLock: DiskCleanRunningAppSnapshotting
     }
 }
 
-// MARK: - 断言工具
+// MARK: - Assertion helpers
 
 extension XCTestCase {
     func assertPathExists(
@@ -289,7 +289,7 @@ extension XCTestCase {
         XCTAssertNotEqual(lstat(path, &status), 0, message, file: file, line: line)
     }
 
-    /// 目录内的暂存残骸名。`rollbackBlocked` / `partiallyDeleted` 都以它们的存在为证。
+    /// Staged leftover names in a directory. `rollbackBlocked` / `partiallyDeleted` are proven by their presence.
     func stagedNames(in directoryPath: String) -> [String] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directoryPath)) ?? []
         return names.filter { $0.hasPrefix(DiskCleanRemovalPrimitive.stagedNamePrefix) }.sorted()

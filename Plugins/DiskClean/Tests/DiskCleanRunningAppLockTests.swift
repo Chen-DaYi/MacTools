@@ -4,7 +4,7 @@ import XCTest
 @testable import DiskCleanPlugin
 
 final class DiskCleanRunningAppLockTests: XCTestCase {
-    // MARK: - 判定矩阵
+    // MARK: - Decision matrix
 
     func testBundleIDMatchIsCaseInsensitive() {
         let snapshot = DiskCleanRunningAppSnapshot(runningBundleIDs: ["COM.Google.Chrome"])
@@ -22,7 +22,7 @@ final class DiskCleanRunningAppLockTests: XCTestCase {
         )
         XCTAssertNil(
             snapshot.lockingProcessName(for: .test(id: "b", skipWhenProcessIsRunning: ["docker"])),
-            "进程名是精确匹配，不做大小写归一"
+            "process names are exact matches without case folding"
         )
     }
 
@@ -64,7 +64,7 @@ final class DiskCleanRunningAppLockTests: XCTestCase {
         XCTAssertEqual(names, ["Docker", "Xcode", "Simulator"])
     }
 
-    // MARK: - 批量 pgrep
+    // MARK: - Batched pgrep
 
     func testQueriesAllProcessNamesInASingleSubprocess() async {
         let runner = FakeDiskCleanSubprocessRunner(exitCode: 0, standardOutput: "421 Docker\n99 Xcode\n")
@@ -72,7 +72,7 @@ final class DiskCleanRunningAppLockTests: XCTestCase {
 
         let snapshot = await lock.makeSnapshot(processNames: ["Docker", "Xcode", "Simulator"])
 
-        XCTAssertEqual(runner.invocations.count, 1, "一次子进程查全部名字，替换 v1 的每规则一次 pgrep")
+        XCTAssertEqual(runner.invocations.count, 1, "one subprocess for all names, replacing v1 per-rule pgrep")
         XCTAssertEqual(
             runner.invocations.first?.arguments,
             ["-x", "-l", "(Docker|Xcode|Simulator)"]
@@ -109,7 +109,7 @@ final class DiskCleanRunningAppLockTests: XCTestCase {
 
         XCTAssertTrue(
             snapshot.runningProcessNames.isEmpty,
-            "pgrep 失败只会漏报锁定，执行侧的双时点复核兜底；绝不因此中断扫描"
+            "pgrep failure only under-reports locks; execution dual-point recheck covers it; never abort the scan"
         )
     }
 
@@ -125,7 +125,7 @@ final class DiskCleanRunningAppLockTests: XCTestCase {
         XCTAssertEqual(snapshot.runningProcessNames, ["Docker"])
     }
 
-    // MARK: - 解析与转义
+    // MARK: - Parsing and escaping
 
     func testEscapesRegexMetacharactersInProcessNames() {
         XCTAssertEqual(

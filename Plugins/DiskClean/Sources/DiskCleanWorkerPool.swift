@@ -2,11 +2,13 @@ import Darwin
 import Foundation
 import os
 
-/// exactly-once resume 门（设计 §3.4）。
+/// Exactly-once resume gate (design §3.4).
 ///
-/// 超时计时与 worker 完成**双向竞争**：谁先到谁 resume continuation；后到者只得知自己输了，
-/// 既不 resume 也不触碰对方内存（worker 的结果由 worker 自己持有，输了就地丢弃）。
-/// 这是把"阻塞 syscall 无法被取消"与"continuation 只能 resume 一次"两个硬约束缝合起来的唯一安全方式。
+/// Timeout and worker completion **race both ways**: whoever arrives first resumes the
+/// continuation; the loser only learns it lost — no resume, no touch of the other side's
+/// memory (the worker keeps its own result and drops it on loss). This is the only safe way
+/// to join the hard constraints "blocking syscalls cannot be cancelled" and
+/// "a continuation may be resumed only once".
 final class DiskCleanResumeGate<Value: Sendable>: Sendable {
     private let isResolvedLock = OSAllocatedUnfairLock(initialState: false)
     private let resumeHandler: @Sendable (Value) -> Void
@@ -15,10 +17,11 @@ final class DiskCleanResumeGate<Value: Sendable>: Sendable {
         self.resumeHandler = resume
     }
 
-    /// 抢占 resume 权。true = 本次调用赢得竞争，**必须**随后恰好调用一次 `deliver`。
+    /// Claim resume rights. true = this call won the race and **must** call `deliver` exactly once afterward.
     ///
-    /// 与 `resolve` 分开是为了让赢家能在 resume **之前**先把自己的账做完
-    /// （超时方需要先记放弃预算、拉黑设备），否则等待方可能先看到结果、再看到状态更新。
+    /// Separated from `resolve` so the winner can finish its own bookkeeping **before** resume
+    /// (the timeout side must record abandon budget and blacklist the device first); otherwise
+    /// the waiter could observe the result before the state update.
     func claim() -> Bool {
         isResolvedLock.withLock { isResolved -> Bool in
             if isResolved { return false }
@@ -27,12 +30,12 @@ final class DiskCleanResumeGate<Value: Sendable>: Sendable {
         }
     }
 
-    /// 交付结果并 resume。只允许由 `claim()` 返回 true 的调用方调用一次。
+    /// Deliver the value and resume. May be called only once by the side whose `claim()` returned true.
     func deliver(_ value: Value) {
         resumeHandler(value)
     }
 
-    /// 返回 true = 本次调用赢得竞争并已 resume；false = 对方已先行，调用方必须丢弃 `value`。
+    /// true = this call won and already resumed; false = the other side won first and the caller must drop `value`.
     @discardableResult
     func resolve(with value: Value) -> Bool {
         guard claim() else { return false }
@@ -45,19 +48,21 @@ final class DiskCleanResumeGate<Value: Sendable>: Sendable {
     }
 }
 
-/// 一次阻塞式 sizing 作业。
+/// One blocking sizing job.
 typealias DiskCleanSizingJob = @Sendable (DiskCleanSizingContext) -> DiskCleanSizeResult
 
-/// 常驻线程池（设计 §3.4）。
+/// Resident thread pool (design §3.4).
 ///
-/// 为什么不用 GCD / Swift 并发：Swift task 取消无法中断阻塞 syscall，GCD 并发队列也没有
-/// "放弃某条线程并补充新线程"的接口。病态文件系统上 `getattrlistbulk` 可能永不返回，
-/// 必须能把那条线程连同它滞留的调用一起放弃掉，因此自持 `Thread` 池。
+/// Why not GCD / Swift concurrency: task cancellation cannot interrupt blocking syscalls,
+/// and GCD concurrent queues have no "abandon this thread and replace it" API. On a pathological
+/// filesystem `getattrlistbulk` may never return, so we must abandon that thread together with
+/// the stuck call — hence a self-owned `Thread` pool.
 ///
-/// 放弃预算与熔断是**进程级**的：`shared` 单例跨扫描累计放弃次数，耗尽后 fail closed
-/// ——本进程不再执行任何 sizing（Fast/Slow 一律停），后续候选全部 `partial([.unsupportedVolume])`
-/// 因而不可清理。不自动恢复：病态文件系统重试只会继续烧预算；也不换回退 sizer 续跑
-/// ——它同样会阻塞，与"泄漏上限"矛盾。
+/// Abandon budget and circuit break are **process-wide**: the `shared` singleton accumulates
+/// abandons across scans and fail-closes when exhausted — this process runs no more sizing
+/// (Fast/Slow both stop), and later candidates become `partial([.unsupportedVolume])` and thus
+/// uncleanable. No auto-recovery: retrying a pathological FS only burns more budget; nor do we
+/// switch to the fallback sizer — it can block too and would break the leak ceiling.
 final class DiskCleanWorkerPool: @unchecked Sendable {
     static let shared = DiskCleanWorkerPool()
 
@@ -65,7 +70,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
     private let abandonBudget: Int
     private let timeoutQueue: DispatchQueue
 
-    /// 保护以下全部可变状态，同时用于 worker 线程的取活等待。
+    /// Protects all mutable state below and is used by worker threads waiting for work.
     private let condition = NSCondition()
     private var pendingItems: [WorkItem] = []
     private var liveThreadCount = 0
@@ -85,14 +90,14 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
         self.timeoutQueue = timeoutQueue
     }
 
-    /// 熔断状态。扫描引擎据此上报 `walkerCircuitBroken` limitation。
+    /// Circuit-break state. The scan engine reports a `walkerCircuitBroken` limitation from this.
     var isCircuitBroken: Bool {
         condition.lock()
         defer { condition.unlock() }
         return circuitBroken
     }
 
-    /// 累计放弃线程数。扫描引擎据此上报 `threadsAbandoned` limitation。
+    /// Cumulative abandoned-thread count. The scan engine reports a `threadsAbandoned` limitation from this.
     var abandonedThreads: Int {
         condition.lock()
         defer { condition.unlock() }
@@ -129,7 +134,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
         }
     }
 
-    /// 仅供测试：让常驻线程退出，避免测试进程里堆积空转线程。
+    /// Tests only: let resident threads exit so idle threads do not pile up in the test process.
     func shutDown() {
         condition.lock()
         isShutDown = true
@@ -143,7 +148,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
         }
     }
 
-    // MARK: - 派发
+    // MARK: - Dispatch
 
     private func submit(_ item: WorkItem) {
         condition.lock()
@@ -187,7 +192,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
         thread.start()
     }
 
-    // MARK: - worker 线程
+    // MARK: - Worker threads
 
     private func runWorkerLoop(_ worker: WorkerThread) {
         while true {
@@ -208,7 +213,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
                 continue
             }
             let item = pendingItems.removeFirst()
-            // 熔断可能发生在入队与取活之间：fail closed。
+            // Circuit break may land between enqueue and pickup: fail closed.
             if circuitBroken {
                 condition.unlock()
                 item.cancelTimeout()
@@ -220,7 +225,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
 
             let result = item.job(makeContext(for: item))
 
-            // 结果自持有：门若已被超时抢占，resolve 返回 false，result 就地丢弃。
+            // Result is self-owned: if the timeout already claimed the gate, resolve returns false and the result is dropped.
             item.gate.resolve(with: result)
             item.cancelTimeout()
 
@@ -229,7 +234,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
             let wasAbandoned = worker.isAbandoned
             condition.unlock()
 
-            // 被放弃的线程完成滞留调用后直接退出，不再取新活（liveThreadCount 已在放弃时扣减）。
+            // An abandoned thread exits after its stuck call finishes and does not take more work (liveThreadCount was already decremented on abandon).
             if wasAbandoned {
                 return
             }
@@ -250,21 +255,21 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
     private func admit(device: UInt64, for item: WorkItem) -> Bool {
         condition.lock()
         defer { condition.unlock() }
-        // 上报设备号，供超时放弃时把病态设备拉黑。
+        // Report the device id so a timeout abandon can blacklist a pathological device.
         item.reportedDevice = device
         return !circuitBroken && !blockedDevices.contains(device)
     }
 
-    // MARK: - 超时、放弃与熔断
+    // MARK: - Timeout, abandon, and circuit break
 
     private func handleTimeout(_ item: WorkItem) {
-        // 先争夺 resume 权：只有真正赢下竞争的超时才需要做放弃线程的账。
-        // 账必须在 deliver 之前做完，等待方才不会先看到结果、后看到熔断状态。
+        // Claim resume rights first: only a timeout that truly wins does abandon bookkeeping.
+        // Bookkeeping must finish before deliver so the waiter never sees the result before circuit-break state.
         guard item.gate.claim() else { return }
 
         condition.lock()
 
-        // 任务还在队列里没轮到执行 → 没有线程被卡住，只摘除，不消耗预算。
+        // Job still queued and not yet running → no stuck thread; dequeue only, no budget cost.
         if let index = pendingItems.firstIndex(where: { $0 === item }) {
             pendingItems.remove(at: index)
             condition.unlock()
@@ -278,7 +283,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
             return
         }
 
-        // 线程滞留在无法中断的 syscall 里：放弃它，补充新线程。
+        // Thread is stuck in an uninterruptible syscall: abandon it and spawn a replacement.
         thread.markAbandoned()
         item.runningThread = nil
         liveThreadCount -= 1
@@ -290,7 +295,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
         var drained: [WorkItem] = []
         if abandonedThreadCount >= abandonBudget {
             circuitBroken = true
-            // fail closed：连排队中的任务也不再执行。
+            // Fail closed: even queued jobs stop running.
             drained = pendingItems
             pendingItems.removeAll()
         }
@@ -303,7 +308,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
         }
         condition.unlock()
 
-        // 状态已落定，现在才交付结果。
+        // State is settled; only now deliver the result.
         item.gate.deliver(Self.timedOutResult())
 
         for pending in drained {
@@ -323,9 +328,9 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
         .unavailable(reasons: [.unsupportedVolume], observedAt: Date())
     }
 
-    // MARK: - 内部类型
+    // MARK: - Internal types
 
-    /// 可变字段由 `condition` 保护。
+    /// Mutable fields are protected by `condition`.
     private final class WorkItem: @unchecked Sendable {
         let gate: DiskCleanResumeGate<DiskCleanSizeResult>
         let job: DiskCleanSizingJob
@@ -334,7 +339,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
 
         var runningThread: WorkerThread?
         var reportedDevice: UInt64?
-        /// `DispatchWorkItem` 不是 Sendable，故用独立 NSLock 保护，不占用池的 condition。
+        /// `DispatchWorkItem` is not Sendable, so protect it with a separate NSLock instead of the pool condition.
         private let timeoutLock = NSLock()
         private var timeoutWork: DispatchWorkItem?
 
@@ -366,7 +371,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
     }
 
     private final class WorkerThread: @unchecked Sendable {
-        /// 由 `condition` 保护。
+        /// Protected by `condition`.
         private(set) var isAbandoned = false
 
         func markAbandoned() {
@@ -375,7 +380,7 @@ final class DiskCleanWorkerPool: @unchecked Sendable {
     }
 }
 
-/// 取消标志。`withTaskCancellationHandler` 在任意线程置位，worker 线程按批读取。
+/// Cancellation flag. `withTaskCancellationHandler` sets it on any thread; workers read it per batch.
 final class DiskCleanCancellationFlag: Sendable {
     private let flag = OSAllocatedUnfairLock(initialState: false)
 

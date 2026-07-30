@@ -21,7 +21,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - 工程标记判定矩阵
+    // MARK: - Project-marker decision matrix
 
     func testFindsNodeModulesWithSiblingPackageManifest() throws {
         try temporaryDirectory.makeFile("root/app/package.json", bytes: 10)
@@ -35,7 +35,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(items[0].projectPath, path("root/app"))
     }
 
-    /// 没有工程标记就不是工程产物：`~/Documents/build` 这类照片目录必须零命中。
+    /// Without a project marker it is not a build artifact: photo folders like `~/Documents/build` must yield zero hits.
     func testIgnoresBuildDirectoryWithoutProjectMarker() throws {
         try temporaryDirectory.makeFile("root/Documents/build/photo.jpg", bytes: 8)
         try temporaryDirectory.makeFile("root/Documents/dist/poster.png", bytes: 8)
@@ -44,7 +44,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         let items = try discoverItems()
 
-        XCTAssertTrue(items.isEmpty, "无标记目录不得命中，实际 \(items.map(\.path))")
+        XCTAssertTrue(items.isEmpty, "unmarked directories must not match, got \(items.map(\.path))")
     }
 
     func testMatchesEachKindWithItsMarker() throws {
@@ -70,7 +70,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         )
     }
 
-    /// `target` 只认 `Cargo.toml`：Xcode 工程里的 `target` 目录不该被当成 Rust 产物。
+    /// `target` only counts with `Cargo.toml`: an Xcode `target` directory must not look like a Rust artifact.
     func testTargetRequiresCargoManifest() throws {
         try temporaryDirectory.makeFile("root/xcode/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("root/xcode/target")
@@ -87,10 +87,10 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         XCTAssertEqual(items.map(\.path), [path("root/scripts/__pycache__")])
         XCTAssertEqual(items[0].kind, .pythonCache)
-        XCTAssertNil(items[0].projectMarker, "无条件命中没有标记依据可展示")
+        XCTAssertNil(items[0].projectMarker, "unconditional hits have no marker to display")
     }
 
-    /// 名为 `package.json` 的**目录**只是巧合，不能算工程根。
+    /// A **directory** named `package.json` is coincidence, not a project root.
     func testMarkerMustNotBeADirectory() throws {
         try temporaryDirectory.makeDirectory("root/app/package.json")
         try temporaryDirectory.makeDirectory("root/app/node_modules")
@@ -100,7 +100,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertTrue(items.isEmpty)
     }
 
-    /// monorepo 里 `package.json` 可能是指向共享清单的符号链接，仍算工程根。
+    /// In a monorepo, `package.json` may be a symlink to a shared manifest and still counts as a project root.
     func testMarkerMayBeSymlink() throws {
         try temporaryDirectory.makeFile("root/shared.json", bytes: 10)
         try temporaryDirectory.makeSymlink("root/app/package.json", destination: "../shared.json")
@@ -111,9 +111,9 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(items.map(\.path), [path("root/app/node_modules")])
     }
 
-    // MARK: - 剪枝与深度
+    // MARK: - Pruning and depth
 
-    /// 命中即剪枝：`node_modules` 内部还有成百上千个嵌套依赖目录，报第二层起的任何一个都无意义。
+    /// Hit-and-prune: nested dependency trees inside `node_modules` make reporting deeper hits meaningless.
     func testPrunesNestedCandidatesInsideAHit() throws {
         try temporaryDirectory.makeFile("root/app/package.json", bytes: 10)
         try temporaryDirectory.makeFile("root/app/node_modules/lib/package.json", bytes: 10)
@@ -125,7 +125,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(items.map(\.path), [path("root/app/node_modules")])
     }
 
-    /// 深度上限 6：根为 0，第 6 层仍参与判定，第 7 层不再枚举。
+    /// Depth cap 6: root is 0, depth 6 still participates, depth 7 is not enumerated.
     func testHonorsDepthLimit() throws {
         try temporaryDirectory.makeFile("root/a/b/c/d/e/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("root/a/b/c/d/e/node_modules")
@@ -144,12 +144,12 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         let items = try discoverItems()
 
-        XCTAssertTrue(items.isEmpty, "深度 3 的候选在上限 2 下不该被发现")
+        XCTAssertTrue(items.isEmpty, "depth-3 candidates must not be found under max depth 2")
     }
 
-    // MARK: - 符号链接
+    // MARK: - Symlinks
 
-    /// 目录符号链接一律不跟随：跟随会走出扫描根，把用户没授权的目录也扫进来。
+    /// Never follow directory symlinks: following leaves the scan root and pulls in unauthorized directories.
     func testDoesNotFollowDirectorySymlink() throws {
         try temporaryDirectory.makeFile("outside/app/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("outside/app/node_modules")
@@ -161,7 +161,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertTrue(items.isEmpty)
     }
 
-    /// 名为 `node_modules` 的符号链接不是候选：删它删掉的是链接，不是依赖目录。
+    /// A symlink named `node_modules` is not a candidate: deleting it removes the link, not the dependency tree.
     func testDoesNotReportSymlinkNamedLikeATarget() throws {
         try temporaryDirectory.makeFile("root/app/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("outside/real_modules")
@@ -172,7 +172,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertTrue(items.isEmpty)
     }
 
-    // MARK: - 根状态
+    // MARK: - Root status
 
     func testReportsUnreadableRootForMissingDirectory() {
         let report = discovery.discover(root: path("root"))
@@ -198,7 +198,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(report.status, .unreadable(reason: .walkError))
     }
 
-    /// 子树不可读只降级完整性，不影响其它子树的候选。
+    /// An unreadable subtree only degrades completeness; other subtrees still yield candidates.
     func testUnreadableSubtreeDegradesCompleteness() throws {
         try temporaryDirectory.makeFile("root/app/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("root/app/node_modules")
@@ -211,7 +211,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(report.status, .traversed(completeness: .partial(reasons: [.permissionDenied])))
     }
 
-    /// 取消不能伪装成"扫完了"：结果必须带 timedOut。
+    /// Cancellation must not masquerade as a finished scan: the result must carry timedOut.
     func testCancellationMarksResultIncomplete() throws {
         try temporaryDirectory.makeDirectory("root/a")
 
@@ -221,7 +221,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertTrue(report.items.isEmpty)
     }
 
-    // MARK: - 仓库归属
+    // MARK: - Repository attribution
 
     func testAttributesCandidateToNearestRepository() throws {
         try temporaryDirectory.makeDirectory("root/repo/.git")
@@ -239,7 +239,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         )
     }
 
-    /// worktree / submodule 的 `.git` 是文件而不是目录，同样算仓库。
+    /// Worktree/submodule `.git` is a file, not a directory, and still counts as a repository.
     func testTreatsGitFileAsRepository() throws {
         try temporaryDirectory.makeFile("root/repo/.git", bytes: 20)
         try temporaryDirectory.makeFile("root/repo/package.json", bytes: 10)
@@ -270,7 +270,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(items.map(\.repositoryPath), [nil])
     }
 
-    // MARK: - git 三态
+    // MARK: - Git three-state
 
     func testMarksRepositoryCleanWhenBothChecksAreEmpty() async throws {
         try makeSingleRepositoryLayout()
@@ -302,7 +302,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
             .dirty(repositoryPath: path("root/repo"), reason: .uncommittedChanges)
         )
         XCTAssertFalse(candidate.isSelectedByDefault)
-        XCTAssertEqual(runner.invocations.count, 1, "status 已判定为脏，不必再查未推送提交")
+        XCTAssertEqual(runner.invocations.count, 1, "status already dirty; skip unpushed-commit check")
     }
 
     func testMarksRepositoryDirtyOnUnpushedCommits() async throws {
@@ -318,7 +318,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertFalse(candidate.isSelectedByDefault)
     }
 
-    /// 超时按有改动处理（fail-safe）：查不出来时误判为"干净"可能让用户删掉还需要的东西。
+    /// Timeouts are treated as dirty (fail-safe): mistaking unknown state for "clean" risks deleting needed files.
     func testTimeoutIsTreatedAsDirty() async throws {
         try makeSingleRepositoryLayout()
         let runner = ScriptedDiskCleanSubprocessRunner(
@@ -329,7 +329,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.gitState,
-            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("git 检查超时"))
+            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("git inspection timed out"))
         )
         XCTAssertFalse(candidate.isSelectedByDefault)
     }
@@ -344,7 +344,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.gitState,
-            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("未找到 git"))
+            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("git not found"))
         )
     }
 
@@ -356,11 +356,11 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.gitState,
-            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("status 退出码 128"))
+            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("status exit code 128"))
         )
     }
 
-    /// 不在仓库里的候选不该 spawn 任何子进程。
+    /// Candidates outside a repository must not spawn any subprocess.
     func testSkipsGitInspectionOutsideRepositories() async throws {
         try temporaryDirectory.makeFile("root/app/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("root/app/node_modules")
@@ -373,7 +373,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertTrue(runner.invocations.isEmpty)
     }
 
-    /// 一个仓库下常有几十个 `node_modules`，逐个查会把 2 秒超时乘上几十倍。
+    /// A repo often has dozens of `node_modules`; inspecting each multiplies the 2s timeout.
     func testInspectsEachRepositoryOnlyOnce() async throws {
         try temporaryDirectory.makeDirectory("root/repo/.git")
         try temporaryDirectory.makeFile("root/repo/a/package.json", bytes: 10)
@@ -385,10 +385,10 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         let result = await makeScanner(runner: runner).scan(roots: [path("root")])
 
         XCTAssertEqual(result.candidates.count, 2)
-        XCTAssertEqual(runner.invocations.count, 2, "两条命令各一次，与候选数无关")
+        XCTAssertEqual(runner.invocations.count, 2, "one call per command, independent of candidate count")
     }
 
-    // MARK: - 扫描器汇总
+    // MARK: - Scanner aggregation
 
     func testReportsUnreadableRootsSeparatelyFromEmptyResults() async throws {
         try temporaryDirectory.makeDirectory("present")
@@ -402,16 +402,16 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(result.unreadableRoots, [path("missing")])
     }
 
-    // MARK: - 挂载防护
+    // MARK: - Mount protection
 
-    /// 子目录 devid 与根不同（= 该位置挂载了别的卷）→ 不下潜、不命中、完整性记 crossedMountPoint。
-    /// 真实文件系统上无法 mount，只能靠注入条目源（与 DirectoryTreeWalker 同套路）。
+    /// Child devid differs from the root (another volume is mounted there) → no descent, no hits, completeness records crossedMountPoint.
+    /// Real FS mounts are not available in tests, so inject a scripted entry source (same pattern as DirectoryTreeWalker).
     ///
-    /// 真实 FS 上 `Mounted/` 下故意放可命中的 `node_modules`：脚本源不会读到它，
-    /// 所以断言靠 `createdSourceCount`——错误下潜会多一次 `makeSource`。
+    /// On the real FS under `Mounted/` we deliberately place a matchable `node_modules`: the scripted source will not see it,
+    /// so assertions rely on `createdSourceCount` — a bad descent creates an extra `makeSource`.
     func testDoesNotDescendIntoDirectoryOnAnotherDevice() throws {
-        // 真实目录必须存在：脚本源只控制"看到什么"，下潜仍走真实 openat。
-        // `Mounted` 下故意放可命中的 node_modules——若错误下潜，会在真实 FS 上被发现。
+        // Real directories must exist: the scripted source only controls what is seen; descent still uses real openat.
+        // Under `Mounted` we place a matchable node_modules — a bad descent would discover it on the real FS.
         let root = try temporaryDirectory.makeDirectory("root")
         try temporaryDirectory.makeFile("root/Mounted/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("root/Mounted/node_modules")
@@ -433,7 +433,7 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
                     fileID: 78
                 )),
             ]],
-            // 仅当同设备的 `local` 被下潜时才会创建第二个 source。
+            // The second source is created only if same-device `local` is descended into.
             [[
                 .resolved(entry(
                     name: "__pycache__",
@@ -454,12 +454,12 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(report.items.map(\.path), [root.path + "/local/__pycache__"])
         XCTAssertFalse(
             report.items.contains { $0.path.contains("/Mounted/") },
-            "跨设备子树内的候选不得被发现"
+            "candidates inside a cross-device subtree must not be discovered"
         )
-        XCTAssertEqual(factory.createdSourceCount, 2, "跨设备目录不得被 openat 下潜")
+        XCTAssertEqual(factory.createdSourceCount, 2, "cross-device directories must not be openat-descended")
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func path(_ relativePath: String) -> String {
         temporaryDirectory.resolve(relativePath).path
@@ -514,8 +514,8 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
     }
 }
 
-/// 按脚本回放条目批次的伪造 source 工厂。第 n 个被创建的 source 使用 scripts[n]。
-/// 与 `DiskCleanDirectoryTreeWalkerTests` 同套路，刻意不共享——两边各测各的约束。
+/// Fake source factory that replays scripted entry batches. The n-th created source uses scripts[n].
+/// Same pattern as `DiskCleanDirectoryTreeWalkerTests`, intentionally not shared — each suite owns its constraints.
 private final class ScriptedPurgeSourceFactory: DiskCleanDirectoryEntrySourceFactory, @unchecked Sendable {
     private let scripts: [[[DiskCleanWalkEntry]]]
     private let lock = NSLock()
@@ -569,8 +569,8 @@ private final class ScriptedPurgeSource: DiskCleanDirectoryEntrySource {
     }
 }
 
-/// 可按命令分别编程的子进程 fake。既有的 `FakeDiskCleanSubprocessRunner` 对所有调用返回同一
-/// 结果，无法覆盖"status 干净但 log 有输出"这一格。
+/// Subprocess fake programmable per command. Existing `FakeDiskCleanSubprocessRunner` returns one result for all
+/// calls and cannot cover "status clean but log has output".
 final class ScriptedDiskCleanSubprocessRunner: DiskCleanSubprocessRunning, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [[String]] = []

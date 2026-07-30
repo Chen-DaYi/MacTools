@@ -1,9 +1,9 @@
 import Foundation
 import MacToolsPluginKit
 
-// MARK: - 风险排序
+// MARK: - Risk ordering
 
-/// 风险等级可比较，供分类展示排序（低 → 高）与"动态规则至少 medium"一类断言使用。
+/// Comparable risk levels for category display order (low → high) and assertions such as "dynamic rules are at least medium".
 extension DiskCleanRisk: Comparable {
     static func < (lhs: DiskCleanRisk, rhs: DiskCleanRisk) -> Bool {
         lhs.severity < rhs.severity
@@ -21,13 +21,14 @@ extension DiskCleanRisk: Comparable {
     }
 }
 
-// MARK: - 分类
+// MARK: - Categories
 
-/// 规则 v2 的十个清理分类（设计 §5.1）。
+/// The ten cleanup categories in rules v2 (design §5.1).
 ///
-/// 每个分类携带 `risk`（仅用于展示排序与文案语气）、一句诚实的 `consequence` 后果文案，以及 SF Symbol。
-/// 单个候选是否默认勾选由 **target 级** `risk` 决定，不看分类 risk——分类内允许混合风险
-/// （例如 `developer` 分类下 `developer.docker` 是 medium，其余多为 low）。
+/// Each category carries `risk` (display order and copy tone only), an honest `consequence`
+/// string, and an SF Symbol. Whether a candidate is selected by default is decided by
+/// **target-level** `risk`, not category risk — a category may mix risks (e.g. under
+/// `developer`, `developer.docker` is medium while most others are low).
 enum DiskCleanCategoryID: String, CaseIterable, Identifiable, Hashable, Sendable {
     case userEssentials
     case appCaches
@@ -39,18 +40,21 @@ enum DiskCleanCategoryID: String, CaseIterable, Identifiable, Hashable, Sendable
     case communication
     case aiTools
     case virtualization
-    /// P2 开发产物清扫（设计 §10.1）。候选来自用户配置的扫描根，不由规则 glob 展开。
+    /// P2 developer-artifact cleanup (design §10.1). Candidates come from user-configured scan roots, not rule-glob expansion.
     case developerArtifacts
-    /// P2 残留安装包（设计 §10.2）。
+    /// P2 leftover installers (design §10.2).
     case installers
 
     var id: String { rawValue }
 
-    /// 详情页与面板的展示顺序：风险低 → 高（设计 §5.1）。
-    /// `DiskCleanRisk` 只有三级而分类有十几个，故顺序由本表给出，`risk` 仅保证本表单调不减。
+    /// Detail-page and panel display order: low risk → high (design §5.1).
+    /// `DiskCleanRisk` has only three levels while there are a dozen-plus categories, so this
+    /// table owns the order; `risk` only guarantees the table is non-decreasing.
     ///
-    /// 两个 P2 分类排在末尾，但它们实际不与规则分类同框——各自渲染在详情页的独立分段里，
-    /// 顺序只在分段内部生效。放进本表是因为分组一律按本表过滤，缺席等于分组被静默丢弃。
+    /// The two P2 categories sit at the end but do not share a frame with rule categories —
+    /// each renders in its own detail-page section, and order only matters inside a section.
+    /// They still live in this table because grouping always filters by it; absence would
+    /// silently drop the group.
     static let displayOrder: [DiskCleanCategoryID] = [
         .userEssentials,
         .appCaches,
@@ -70,8 +74,8 @@ enum DiskCleanCategoryID: String, CaseIterable, Identifiable, Hashable, Sendable
         switch self {
         case .userEssentials, .appCaches, .logs, .browsers, .cloudOffice, .communication, .aiTools:
             return .low
-        // 安装包不是缓存而是用户自己的文件，删错了没有"自动重建"这回事，
-        // 只能重新下载——展示上与开发产物同级。
+        // Installers are the user's own files, not caches: a mistaken delete has no
+        // "auto-rebuild" path, only re-download — shown at the same level as developer artifacts.
         case .developer, .systemCaches, .virtualization, .developerArtifacts, .installers:
             return .medium
         }
@@ -114,7 +118,7 @@ enum DiskCleanCategoryID: String, CaseIterable, Identifiable, Hashable, Sendable
         localization.string(titleKey, defaultValue: defaultTitle)
     }
 
-    /// 一句诚实的后果文案。不承诺"无影响"，也不夸大风险。
+    /// One honest consequence string. Does not promise "no impact" or overstate risk.
     func consequence(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         localization.string(consequenceKey, defaultValue: defaultConsequence)
     }
@@ -178,47 +182,53 @@ enum DiskCleanCategoryID: String, CaseIterable, Identifiable, Hashable, Sendable
     }
 }
 
-// MARK: - target 级规则
+// MARK: - Target-level rules
 
-/// 规则 v2 的清理目标（设计 §5.2）。
+/// Cleanup targets in rules v2 (design §5.2).
 ///
-/// v1 以"规则"为粒度携带风险，v2 下沉到 target：同一条 v1 规则可拆成多个 target
-/// （例如 `cache.user-essentials` 拆成用户缓存与用户日志两个分类），拆分后各自带自己的分类与风险。
-/// `legacyRuleID` 保留 v1 规则 id，供审计日志、白名单迁移与映射快照测试使用。
+/// v1 carried risk at "rule" granularity; v2 pushes it down to targets so one v1 rule can
+/// split into several targets (e.g. `cache.user-essentials` becomes user-cache and user-log
+/// categories), each with its own category and risk. `legacyRuleID` keeps the v1 rule id for
+/// audit logs, whitelist migration, and mapping-snapshot tests.
 struct DiskCleanRuleTarget: Identifiable, Sendable {
     enum Kind: Sendable {
-        /// 静态 glob 组。同一 target 内的 glob 共享分类、风险与锁定条件。
+        /// Static glob group. Globs in one target share category, risk, and lock conditions.
         case path(globs: [String])
-        /// 动态展开（simctl、版本目录比较等，见 `DiskCleanDynamicRules`）。
+        /// Dynamic expansion (simctl, version-directory comparison, etc.; see `DiskCleanDynamicRules`).
         case dynamic(provider: any DiskCleanDynamicRuleProviding)
-        /// 候选由专用扫描器发现，引擎不展开本 target（设计 §10 的 P2 合成 target）。
+        /// Candidates are discovered by a dedicated scanner; the engine does not expand this
+        /// target (design §10 P2 synthetic targets).
         ///
-        /// 存在的理由只有一个：**删除必须经 Planner 铸造的计划**，而 Planner 用 `targetID`
-        /// 回查目录取锁定声明。P2 候选因此必须挂在真实存在的 target 上，否则就得给它们开
-        /// 第二条铸造路径——那正是这套设计要杜绝的。
+        /// The only reason this exists: **deletes must go through a plan minted by the Planner**,
+        /// and the Planner looks up lock declarations by `targetID` in the catalog. P2 candidates
+        /// must therefore hang on a real target; otherwise they would need a second minting path —
+        /// exactly what this design forbids.
         case external
     }
 
-    /// 稳定 target ID。单 target 规则沿用 v1 规则 id，拆分出的 target 追加后缀。
+    /// Stable target ID. Single-target rules reuse the v1 rule id; split targets append a suffix.
     let id: String
-    /// v1 规则 id。多个 target 可共享同一个 legacyRuleID。
+    /// v1 rule id. Multiple targets may share one legacyRuleID.
     let legacyRuleID: String
     let category: DiskCleanCategoryID
-    /// target 级风险。默认勾选策略只看这里（`.low` 才默认勾选）。
+    /// Target-level risk. Default-selection policy looks only here (only `.low` is selected by default).
     let risk: DiskCleanRisk
     let kind: Kind
-    /// 规范化的绝对保留根（可含 `~` 前缀，使用前经 `expandedReservedRootPaths` 展开）。
+    /// Normalized absolute reserved roots (may use a `~` prefix; expand via `expandedReservedRootPaths` before use).
     ///
-    /// **必填，且与 target 是否成功运行无关**（设计 §5.2、§6.1）：target 被 FDA 跳过或动态 provider
-    /// 失败时，这些路径下的内容被视为"存在但未扫描"，Planner 据此禁止删除它们的祖先，
-    /// 避免顺带删掉从未审查过的子树。path 类由 glob 的固定目录前缀推导后写死为字面量。
+    /// **Required, regardless of whether the target ran successfully** (design §5.2, §6.1): when a
+    /// target is skipped for FDA or a dynamic provider fails, content under these paths is treated
+    /// as "present but unscanned", and the Planner refuses to delete their ancestors so an unreviewed
+    /// subtree is never deleted as a side effect. Path targets derive these as literals from fixed
+    /// directory prefixes of their globs.
     let reservedRootPaths: [String]
-    /// 未授予完全磁盘访问时是否整体跳过（设计 §9）。仅当 target 的全部 glob 都在 TCC 保护范围内才置 true，
-    /// 否则宁可让个别路径以 `permissionDenied` 降级，也不牺牲同 target 内其他可清理路径。
+    /// Whether to skip the whole target without Full Disk Access (design §9). Set true only when
+    /// every glob is under TCC protection; otherwise prefer degrading individual paths as
+    /// `permissionDenied` over sacrificing other cleanable paths in the same target.
     let requiresFullDiskAccess: Bool
-    /// 运行中即锁定的应用 bundle ID（`NSWorkspace.runningApplications` 快照判定）。
+    /// App bundle IDs that lock the target while running (`NSWorkspace.runningApplications` snapshot).
     let lockedByBundleIDs: [String]
-    /// 运行中即锁定的进程名（批量 pgrep 快照判定，覆盖非 App 进程）。
+    /// Process names that lock the target while running (batched pgrep snapshot; covers non-app processes).
     let skipWhenProcessIsRunning: [String]
 
     init(
@@ -255,13 +265,13 @@ struct DiskCleanRuleTarget: Identifiable, Sendable {
 
     var isDynamic: Bool { dynamicProvider != nil }
 
-    /// 引擎的规则展开阶段是否跳过本 target。
+    /// Whether the engine skips this target during rule expansion.
     var isExternallyDiscovered: Bool {
         if case .external = kind { return true }
         return false
     }
 
-    /// 展开 `~` 前缀后的保留根。祖先断言与保留集一律使用展开结果，避免 `~` 与绝对路径混比。
+    /// Reserved roots with `~` expanded. Ancestor assertions and reserved sets always use the expanded form so `~` is never compared against absolute paths.
     func expandedReservedRootPaths(homeDirectory: String = NSHomeDirectory()) -> [String] {
         reservedRootPaths.map { Self.expandHome(in: $0, homeDirectory: homeDirectory) }
     }

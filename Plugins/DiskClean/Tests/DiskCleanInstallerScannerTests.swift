@@ -4,7 +4,7 @@ import XCTest
 @testable import DiskCleanPlugin
 
 final class DiskCleanInstallerScannerTests: XCTestCase {
-    /// 固定观测时刻，让"7 天"判定与真实时间无关。
+    /// Fixed observation time so the "7 days" check is independent of wall-clock time.
     private let observationDate = Date(timeIntervalSince1970: 1_800_000_000)
     private var temporaryDirectory: DiskCleanTempDirectory!
 
@@ -20,7 +20,7 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - 扩展名
+    // MARK: - Extensions
 
     func testSelectsStaleInstallerPackagesByDefault() throws {
         try makeDownload("Xcode.xip", bytes: 40, ageDays: 30)
@@ -33,13 +33,13 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertEqual(
             candidates.map(\.kind),
             [.diskImage, .installerPackage, .discImage, .signedArchive],
-            "结果按路径排序：App.dmg / Driver.pkg / Ubuntu.iso / Xcode.xip"
+            "results are sorted by path: App.dmg / Driver.pkg / Ubuntu.iso / Xcode.xip"
         )
         XCTAssertTrue(candidates.allSatisfy(\.isSelectedByDefault))
         XCTAssertTrue(candidates.allSatisfy { $0.note == nil })
     }
 
-    /// `.zip` 可能是用户自己打的资料包，任何年龄都不默认勾选。
+    /// `.zip` may be a user archive; never selected by default at any age.
     func testZipIsListedButNeverSelectedByDefault() throws {
         try makeDownload("Tool.zip", bytes: 12, ageDays: 400)
 
@@ -66,9 +66,9 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertTrue(try scanCandidates().isEmpty)
     }
 
-    // MARK: - 年龄边界
+    // MARK: - Age boundary
 
-    /// 严格大于 7 天才默认勾选：刚下载的可能还没装。
+    /// Default-selected only when strictly older than 7 days: a fresh download may not be installed yet.
     func testRecentInstallerIsListedWithoutDefaultSelection() throws {
         try makeDownload("Fresh.dmg", bytes: 8, ageDays: 3)
 
@@ -99,9 +99,9 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertTrue(candidates[0].isSelectedByDefault)
     }
 
-    // MARK: - 顶层与类型约束
+    // MARK: - Top-level and type constraints
 
-    /// 顶层不递归：子目录多半是用户自己整理的资料。
+    /// Top-level only, no recursion: subdirectories are often user-organized material.
     func testDoesNotRecurseIntoSubdirectories() throws {
         try makeDownload("Archive/Old.dmg", bytes: 8, ageDays: 100)
 
@@ -118,7 +118,7 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertEqual(candidates.map(\.displayName), ["real.dmg"])
     }
 
-    // MARK: - 元数据
+    // MARK: - Metadata
 
     func testReportsSizeModificationTimeAndPath() throws {
         try makeDownload("App.dmg", bytes: 2048, ageDays: 10)
@@ -135,9 +135,9 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         )
     }
 
-    // MARK: - 不可达
+    // MARK: - Unreachable
 
-    /// TCC 拒绝与"目录里没有安装包"是两回事：前者要引导授权，后者才是真的没有。
+    /// TCC denial is not the same as "no installers in the directory": the former needs authorization guidance.
     func testPermissionDeniedIsDistinctFromEmptyResult() throws {
         try makeDownload("App.dmg", bytes: 8, ageDays: 100)
         try temporaryDirectory.denyAccess(to: "Downloads")
@@ -160,7 +160,7 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertEqual(makeScanner().scan(), .scanned(candidates: []))
     }
 
-    // MARK: - 夹具
+    // MARK: - Fixtures
 
     private func makeScanner(
         downloadsPath: String? = nil,
@@ -179,7 +179,7 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
     ) throws -> [DiskCleanInstallerCandidate] {
         let outcome = makeScanner(staleAge: staleAge).scan()
         guard case let .scanned(candidates) = outcome else {
-            XCTFail("期望 scanned，实际 \(outcome)")
+            XCTFail("expected scanned, got \(outcome)")
             return []
         }
         return candidates

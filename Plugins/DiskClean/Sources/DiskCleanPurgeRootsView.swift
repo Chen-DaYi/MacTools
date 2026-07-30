@@ -2,12 +2,14 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
-/// 开发产物扫描根管理（设计 §10.1 设置区）。
+/// Developer-artifact scan-root management (design §10.1 settings area).
 ///
-/// 默认空、只扫用户明确指定的目录——不全盘扫描是这个功能的前提，不是性能优化。
+/// Empty by default; only scans directories the user explicitly names—never whole-disk scanning
+/// is a product premise, not a performance optimization.
 ///
-/// 添加走 `NSOpenPanel` 而不是文本框：路径要交给删除原语，手打的字符串既容易出错，
-/// 也拿不到系统对 Documents / Desktop 这类目录的用户意图授权（面板选择本身就是授权）。
+/// Adding uses `NSOpenPanel`, not a text field: paths are handed to removal primitives; hand-typed
+/// strings are error-prone and cannot obtain the system’s user-intent authorization for directories
+/// like Documents / Desktop (panel selection is itself that authorization).
 struct DiskCleanPurgeRootsView: View {
     @ObservedObject var model: DiskCleanPurgeRootsModel
     let localization: PluginLocalization
@@ -91,8 +93,8 @@ struct DiskCleanPurgeRootsView: View {
         }
     }
 
-    /// 拒收原因逐条展示。静默丢弃用户刚选的文件夹是最糟的处理方式——
-    /// 用户会以为自己点错了，然后再选一次。
+    /// Show rejection reasons one by one. Silently dropping a just-chosen folder is the worst
+    /// outcome—users think they mis-clicked and choose again.
     private var rejectionRow: some View {
         HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Image(systemName: "exclamationmark.triangle.fill")

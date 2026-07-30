@@ -17,7 +17,7 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - RETURNED_ATTRS 缺失组合矩阵
+    // MARK: - RETURNED_ATTRS missing-attribute matrix
 
     func testParsesAllRequestedAttributes() throws {
         let buffer = EntryEncoder.encode([
@@ -43,7 +43,7 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         XCTAssertTrue(entry.isFullyResolved)
     }
 
-    /// 目录条目不携带 ATTR_FILE_*，这是内核的正常行为而非异常，必须视为"已完整解析"。
+    /// Directory entries omit ATTR_FILE_*; that is normal kernel behavior, not an error, and must count as fully resolved.
     func testDirectoryEntryWithoutFileAttributesIsFullyResolved() throws {
         let buffer = EntryEncoder.encode([
             EntryEncoder.Entry(
@@ -65,11 +65,11 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         XCTAssertTrue(entry.isFullyResolved)
     }
 
-    /// 逐个抽掉一项关键属性：其余字段仍必须解析正确（证明按位图跳过的偏移计算无误），
-    /// 且 isFullyResolved 必须转 false 以触发 fstatat 回退。
+    /// Drop one critical attribute at a time: remaining fields must still parse correctly
+    /// (proving bitmap-skip offset math), and isFullyResolved must become false to trigger fstatat fallback.
     func testMissingAttributeCombinationsShiftRemainingFieldsCorrectly() throws {
         let cases: [(String, EntryEncoder.Entry, (DiskCleanBulkAttributeEntry) -> Void)] = [
-            ("缺 DEVID", EntryEncoder.Entry(
+            ("missing DEVID", EntryEncoder.Entry(
                 name: "a", devid: nil, objectType: UInt32(VREG.rawValue),
                 fileID: 11, linkCount: 2, dataLength: 64
             ), { entry in
@@ -79,7 +79,7 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
                 XCTAssertEqual(entry.linkCount, 2)
                 XCTAssertEqual(entry.dataLength, 64)
             }),
-            ("缺 OBJTYPE", EntryEncoder.Entry(
+            ("missing OBJTYPE", EntryEncoder.Entry(
                 name: "b", devid: 5, objectType: nil,
                 fileID: 12, linkCount: 1, dataLength: 128
             ), { entry in
@@ -88,7 +88,7 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
                 XCTAssertEqual(entry.fileID, 12)
                 XCTAssertEqual(entry.dataLength, 128)
             }),
-            ("缺 FILEID", EntryEncoder.Entry(
+            ("missing FILEID", EntryEncoder.Entry(
                 name: "c", devid: 5, objectType: UInt32(VLNK.rawValue),
                 fileID: nil, linkCount: 1, dataLength: 9
             ), { entry in
@@ -96,14 +96,14 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
                 XCTAssertNil(entry.fileID)
                 XCTAssertEqual(entry.dataLength, 9)
             }),
-            ("缺 LINKCOUNT", EntryEncoder.Entry(
+            ("missing LINKCOUNT", EntryEncoder.Entry(
                 name: "d", devid: 5, objectType: UInt32(VREG.rawValue),
                 fileID: 13, linkCount: nil, dataLength: 256
             ), { entry in
                 XCTAssertNil(entry.linkCount)
                 XCTAssertEqual(entry.dataLength, 256)
             }),
-            ("缺 DATALENGTH", EntryEncoder.Entry(
+            ("missing DATALENGTH", EntryEncoder.Entry(
                 name: "e", devid: 5, objectType: UInt32(VREG.rawValue),
                 fileID: 14, linkCount: 1, dataLength: nil
             ), { entry in
@@ -158,11 +158,11 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         }
     }
 
-    // MARK: - 布局错位检测
+    // MARK: - Layout mismatch detection
 
-    /// 复刻内核对 `ATTR_CMN_ERROR` 的实测行为：请求了但 returned 位为 0，字段却仍占 4 字节。
-    /// 朴素的"按位图跳过"解析器会从此错位，把 linkCount 读成 dataLength 的高半部分等等。
-    /// 解析器必须借 NAME 的 attr_dataoffset 发现边界不符，置 hasLayoutMismatch 并放弃这批属性值。
+    /// Reproduces observed kernel behavior for `ATTR_CMN_ERROR`: requested but returned bit is 0, yet the field still occupies 4 bytes.
+    /// A naive "skip by bitmap" parser misaligns from here, reading linkCount as the high half of dataLength, etc.
+    /// The parser must use NAME's attr_dataoffset to detect the boundary mismatch, set hasLayoutMismatch, and discard attribute values.
     func testDetectsReservedButUnreturnedAttributeAsLayoutMismatch() throws {
         let buffer = EntryEncoder.encode([
             EntryEncoder.Entry(
@@ -175,8 +175,8 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         let entry = try XCTUnwrap(parse(buffer, entryCount: 1).entries.first)
 
         XCTAssertTrue(entry.hasLayoutMismatch)
-        XCTAssertFalse(entry.isFullyResolved, "错位后属性不可信，必须触发 fstatat 回退")
-        // 名字靠 attr_dataoffset 定位，仍然可用——回退需要它。
+        XCTAssertFalse(entry.isFullyResolved, "attributes are untrustworthy after mismatch; must trigger fstatat fallback")
+        // Name is located via attr_dataoffset and remains usable — fallback needs it.
         XCTAssertEqual(entry.displayName, "shifted")
         XCTAssertNil(entry.devid)
         XCTAssertNil(entry.fileType)
@@ -185,7 +185,7 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         XCTAssertNil(entry.dataLength)
     }
 
-    // MARK: - 多条与截断
+    // MARK: - Multiple entries and truncation
 
     func testParsesMultipleEntriesInOneBuffer() {
         let buffer = EntryEncoder.encode([
@@ -218,7 +218,7 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
             )
         ])
 
-        // 内核声称 3 条，缓冲区只装得下 1 条。
+        // Kernel claims 3 entries; buffer only fits 1.
         let result = parse(buffer, entryCount: 3)
 
         XCTAssertTrue(result.isTruncated)
@@ -241,10 +241,10 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         XCTAssertTrue(result.entries.isEmpty)
     }
 
-    // MARK: - 与真实内核缓冲区交叉验证
+    // MARK: - Cross-check against real kernel buffer
 
-    /// 最重要的一条：不验证"解析器与本测试的编码器是否自洽"，而是验证
-    /// **解析器与真实内核输出是否一致**。编码器写错了也骗不过这条。
+    /// Most important case: do not only check "parser agrees with this test's encoder";
+    /// verify the **parser matches real kernel output**. A buggy encoder cannot pass this.
     func testParsesRealKernelBuffer() throws {
         try temporaryDirectory.makeFile("payload.bin", bytes: 10)
         try temporaryDirectory.makeDirectory("subdir")
@@ -263,16 +263,16 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         var byName: [String: DiskCleanBulkAttributeEntry] = [:]
         while true {
             let returnedCount = getattrlistbulk(descriptor, &attributeList, raw, capacity, 0)
-            XCTAssertGreaterThanOrEqual(returnedCount, 0, "getattrlistbulk 失败 errno=\(errno)")
+            XCTAssertGreaterThanOrEqual(returnedCount, 0, "getattrlistbulk failed errno=\(errno)")
             if returnedCount <= 0 { break }
 
             let result = DiskCleanBulkAttributeParser.parse(
                 buffer: UnsafeRawBufferPointer(start: raw, count: capacity),
                 entryCount: Int(returnedCount)
             )
-            XCTAssertFalse(result.isTruncated, "真实内核缓冲区不应被判为截断")
+            XCTAssertFalse(result.isTruncated, "real kernel buffer must not be treated as truncated")
             for entry in result.entries {
-                XCTAssertFalse(entry.hasLayoutMismatch, "真实内核缓冲区不应错位：\(entry.displayName ?? "?")")
+                XCTAssertFalse(entry.hasLayoutMismatch, "real kernel buffer must not report layout mismatch: \(entry.displayName ?? "?")")
                 byName[try XCTUnwrap(entry.displayName)] = entry
             }
         }
@@ -282,24 +282,24 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         let payload = try XCTUnwrap(byName["payload.bin"])
         XCTAssertEqual(payload.fileType, .regularFile)
         XCTAssertEqual(payload.dataLength, 10)
-        XCTAssertEqual(payload.linkCount, 2, "payload.bin 与 hard.bin 互为硬链接")
+        XCTAssertEqual(payload.linkCount, 2, "payload.bin and hard.bin are hard links of each other")
         XCTAssertTrue(payload.isFullyResolved)
 
         let hard = try XCTUnwrap(byName["hard.bin"])
-        XCTAssertEqual(hard.fileID, payload.fileID, "硬链接共享 fileID，去重键据此成立")
+        XCTAssertEqual(hard.fileID, payload.fileID, "hard links share fileID; the dedupe key depends on that")
         XCTAssertEqual(hard.devid, payload.devid)
 
         let directory = try XCTUnwrap(byName["subdir"])
         XCTAssertEqual(directory.fileType, .directory)
-        XCTAssertNil(directory.dataLength, "内核不为目录返回 ATTR_FILE_*")
+        XCTAssertNil(directory.dataLength, "kernel does not return ATTR_FILE_* for directories")
         XCTAssertTrue(directory.isFullyResolved)
 
         let link = try XCTUnwrap(byName["link"])
         XCTAssertEqual(link.fileType, .symlink)
-        XCTAssertEqual(link.dataLength, Int64("payload.bin".utf8.count), "symlink 的逻辑大小是目标字符串长度")
+        XCTAssertEqual(link.dataLength, Int64("payload.bin".utf8.count), "symlink logical size is the target string length")
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func parse(_ bytes: [UInt8], entryCount: Int) -> DiskCleanBulkAttributeParseResult {
         bytes.withUnsafeBytes { buffer in
@@ -307,8 +307,8 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
         }
     }
 
-    /// 按内核实测布局编码条目：4 字节长度 + 20 字节 RETURNED_ATTRS + 固定段（属性位值升序、
-    /// 紧密无对齐填充）+ 变长段（唯一变长字段 NAME）。
+    /// Encode entries in the observed kernel layout: 4-byte length + 20-byte RETURNED_ATTRS + fixed section
+    /// (attributes in ascending bit order, packed without alignment padding) + variable section (NAME only).
     private enum EntryEncoder {
         struct Entry {
             var name: String?
@@ -317,7 +317,7 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
             var fileID: UInt64?
             var linkCount: UInt32?
             var dataLength: Int64?
-            /// 模拟"请求了但 returned 位为 0 却仍占位"的字节数，插在固定段末尾。
+            /// Simulated bytes for "requested but returned bit is 0 yet still occupies space", inserted at end of fixed section.
             var reservedPaddingBytes: Int = 0
         }
 
@@ -355,7 +355,7 @@ final class DiskCleanBulkAttributeParserTests: XCTestCase {
             if entry.linkCount != nil { fileReturned |= UInt32(ATTR_FILE_LINKCOUNT) }
             if entry.dataLength != nil { fileReturned |= UInt32(ATTR_FILE_DATALENGTH) }
 
-            // attribute_set_t 顺序：common / vol / dir / file / fork
+            // attribute_set_t order: common / vol / dir / file / fork
             append(commonReturned, to: &bytes)
             append(UInt32(0), to: &bytes)
             append(UInt32(0), to: &bytes)

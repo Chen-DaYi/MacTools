@@ -3,7 +3,7 @@ import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 清理历史的分类与置顶规则（设计 §7.5、§13-M4-6）。
+/// Cleanup history classification and pin rules (design §7.5, §13-M4-6).
 final class DiskCleanCleanupHistoryTests: XCTestCase {
     private let timestamp = Date(timeIntervalSince1970: 1_000)
 
@@ -17,7 +17,7 @@ final class DiskCleanCleanupHistoryTests: XCTestCase {
             "rollbackBlocked": .rollbackBlocked,
             "reconciledRolledBack": .reconciledRolledBack,
             "reconciledAbsent": .reconciledAbsent,
-            // 父目录整个消失与暂存对象消失是同一个结论：没有需要恢复的东西。
+            // Missing parent directory and missing staged object share the same conclusion: nothing to restore.
             "reconciledParentMissing": .reconciledAbsent,
             "reconcileFailed": .reconcileFailed
         ]
@@ -28,7 +28,7 @@ final class DiskCleanCleanupHistoryTests: XCTestCase {
         XCTAssertEqual(DiskCleanCleanupHistoryStatus(rawValue: "brandNew"), .unknown("brandNew"))
     }
 
-    /// 需要关注的只有"磁盘上留了残骸"的三种。普通失败与跳过没有留下任何东西，不该打扰用户。
+    /// Only the three "leftovers remain on disk" states need attention. Ordinary failures and skips leave nothing and should not interrupt the user.
     func testOnlyLeftoverStatesNeedAttention() {
         let needsAttention: [DiskCleanCleanupHistoryStatus] = [
             .partiallyDeleted, .rollbackBlocked, .reconcileFailed
@@ -39,10 +39,10 @@ final class DiskCleanCleanupHistoryTests: XCTestCase {
         ]
 
         for status in needsAttention {
-            XCTAssertTrue(status.needsAttention, "\(status) 必须置顶提示")
+            XCTAssertTrue(status.needsAttention, "\(status) must be pinned for attention")
         }
         for status in quiet {
-            XCTAssertFalse(status.needsAttention, "\(status) 不该置顶")
+            XCTAssertFalse(status.needsAttention, "\(status) must not be pinned")
         }
     }
 
@@ -60,12 +60,12 @@ final class DiskCleanCleanupHistoryTests: XCTestCase {
         XCTAssertEqual(
             entries.map(\.path),
             ["/cache/c", "/cache/e", "/cache/a", "/cache/b", "/cache/d"],
-            "残骸条目置顶，其余保持原有的时间倒序"
+            "leftover entries are pinned first; the rest keep reverse chronological order"
         )
         XCTAssertEqual(entries.prefix(2).filter(\.needsAttention).count, 2)
     }
 
-    /// 废纸篓里的对象落在暂存名下，不带出这个字段用户就找不回来（设计 §7.4）。
+    /// Trash objects land under the staged name; without this field the user cannot recover them (design §7.4).
     func testEntryCarriesStagedNameAndOriginalPath() throws {
         let entries = DiskCleanCleanupHistoryEntry.entries(
             from: [record(status: "trashedPlaceholder", path: "/cache/a", stagedName: ".mactools-staged-a")]
@@ -81,7 +81,7 @@ final class DiskCleanCleanupHistoryTests: XCTestCase {
             from: [record(status: "ok", path: "/a"), record(status: "ok", path: "/b")]
         )
 
-        XCTAssertEqual(Set(entries.map(\.id)).count, entries.count, "同一次读取内 id 不得重复")
+        XCTAssertEqual(Set(entries.map(\.id)).count, entries.count, "ids must be unique within a single load")
     }
 
     private func record(

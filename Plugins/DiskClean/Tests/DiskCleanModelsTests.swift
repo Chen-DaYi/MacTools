@@ -10,9 +10,9 @@ final class DiskCleanModelsTests: XCTestCase {
         XCTAssertEqual(DiskCleanChoice.allCases, [.cache, .developer, .browser])
     }
 
-    // MARK: - 面板等价映射
+    // MARK: - Panel equivalence mapping
 
-    /// v1 的三个面板分组由 legacyRuleID 前缀判定，这是 v1/v2 扫描范围等价性的唯一判定点。
+    /// The three v1 panel groups are decided by legacyRuleID prefix — the only equivalence check for v1/v2 scan scope.
     func testChoiceIsDerivedFromLegacyRuleIDPrefix() {
         XCTAssertEqual(DiskCleanChoice(legacyRuleID: "cache.user-essentials"), .cache)
         XCTAssertEqual(DiskCleanChoice(legacyRuleID: "developer.homebrew"), .developer)
@@ -20,32 +20,34 @@ final class DiskCleanModelsTests: XCTestCase {
         XCTAssertNil(DiskCleanChoice(legacyRuleID: "unknown.thing"))
     }
 
-    /// 每条 v2 target 都必须能落到某个面板分组，否则它会静默从扫描范围里消失。
+    /// Every v2 target must map to a panel group, or it would silently drop out of scan scope.
     func testEveryRuleTargetMapsToAPanelChoice() {
         for target in DiskCleanRuleCatalogV2.current.ruleTargets {
             XCTAssertNotNil(
                 DiskCleanChoice(legacyRuleID: target.legacyRuleID),
-                "target \(target.id) 的 legacyRuleID \(target.legacyRuleID) 没有面板归属"
+                "target \(target.id) legacyRuleID \(target.legacyRuleID) has no panel mapping"
             )
         }
     }
 
-    /// P2 合成 target 反过来**必须**没有面板归属：常规三分组扫描按 `DiskCleanChoice`
-    /// 过滤 target，这是"开发产物与安装包不会被顺手带上"的第二道保险
-    /// （第一道是 `ScanEngine.scopedTargets(for:)` 按 scope 分流）。
+    /// P2 synthetic targets **must not** have a panel mapping: regular three-group scans
+    /// filter targets by `DiskCleanChoice`, which is the second safeguard against
+    /// accidentally including developer artifacts and installers
+    /// (the first is `ScanEngine.scopedTargets(for:)` splitting by scope).
     func testExternalTargetsHaveNoPanelChoice() {
         let external = DiskCleanRuleCatalogV2.current.targets.filter(\.isExternallyDiscovered)
         XCTAssertFalse(external.isEmpty)
         for target in external {
             XCTAssertNil(
                 DiskCleanChoice(legacyRuleID: target.legacyRuleID),
-                "P2 target \(target.id) 不该有面板归属，否则会被常规扫描带上"
+                "P2 target \(target.id) must not have a panel mapping, or regular scans would include it"
             )
         }
     }
 
-    /// 分类不能代替 legacy 前缀做范围判定：确实存在"分类与面板分组不同源"的 target
-    /// （`browser.service-worker.editors` 属 developer 分类，`aiTools` 同时收 cache.* 与 developer.*）。
+    /// Category cannot replace legacy prefix for scope: some targets have category and panel
+    /// from different sources (`browser.service-worker.editors` is developer category;
+    /// `aiTools` spans both cache.* and developer.*).
     func testCategoryIsNotIsomorphicToPanelChoice() {
         func choices(in category: DiskCleanCategoryID) -> Set<DiskCleanChoice> {
             Set(
@@ -59,7 +61,7 @@ final class DiskCleanModelsTests: XCTestCase {
         XCTAssertEqual(choices(in: .aiTools), [.cache, .developer])
     }
 
-    // MARK: - 候选不变量（§3.1）
+    // MARK: - Candidate invariants (§3.1)
 
     func testCandidateWithoutSizeResultIsNotCleanable() {
         XCTAssertFalse(makeCandidate(sizeResult: nil).isCleanable)
@@ -72,7 +74,7 @@ final class DiskCleanModelsTests: XCTestCase {
         for reason in reasons {
             XCTAssertFalse(
                 makeCandidate(sizeResult: .testPartial(reasons: [reason], identity: .test())).isCleanable,
-                "partial(\(reason)) 的候选不可清理"
+                "partial(\(reason)) candidates are not cleanable"
             )
         }
     }
@@ -99,7 +101,7 @@ final class DiskCleanModelsTests: XCTestCase {
         XCTAssertTrue(makeCandidate(sizeResult: .testComplete()).isCleanable)
     }
 
-    // MARK: - 扫描结果投影
+    // MARK: - Scan result projection
 
     func testScanResultTotalsOnlyCleanableCandidates() {
         let result = DiskCleanScanResult(

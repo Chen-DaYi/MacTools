@@ -3,13 +3,13 @@ import MacToolsPluginKit
 @testable import MacTools
 @testable import DiskCleanPlugin
 
-/// 逐项徽标（设计 §8.3、§10）。
+/// Per-item badges (design §8.3, §10).
 final class DiskCleanBadgeTests: XCTestCase {
     private let localization = PluginLocalization(bundle: .main)
 
-    // MARK: - P2 附注徽标
+    // MARK: - P2 note badges
 
-    /// 未提交改动与未推送提交是两件事，用户要去仓库里做的处理也不同。
+    /// Uncommitted changes and unpushed commits are different; the user acts differently in the repo.
     func testRepositoryBadgeDistinguishesDirtyReasons() {
         XCTAssertEqual(
             badgeTexts(notes: [.repositoryHasChanges(repositoryPath: "/code", reason: .uncommittedChanges)]),
@@ -21,8 +21,8 @@ final class DiskCleanBadgeTests: XCTestCase {
         )
     }
 
-    /// git 查不出来按"有改动"处理，但**不能写成"有未提交改动"**——那是在编造一个用户
-    /// 去仓库里找不到的事实。
+    /// When git inspection fails, treat as "has changes", but **must not** say
+    /// "has uncommitted changes" — that invents a fact the user cannot find in the repo.
     func testInspectionFailureSaysItCouldNotCheckRatherThanClaimingChanges() {
         let texts = badgeTexts(
             notes: [.repositoryHasChanges(repositoryPath: "/code", reason: .inspectionFailed("git 检查超时"))]
@@ -39,7 +39,7 @@ final class DiskCleanBadgeTests: XCTestCase {
         )
     }
 
-    /// 所属工程是定位信息不是警示，出徽标会把真正需要注意的"仓库有改动"挤没。
+    /// Project affiliation is location info, not a warning; badging it would bury the real "repo has changes" signal.
     func testProjectNoteDoesNotProduceABadge() {
         XCTAssertTrue(badgeTexts(notes: [.developerProject(path: "/code/app", marker: "package.json")]).isEmpty)
     }
@@ -57,7 +57,7 @@ final class DiskCleanBadgeTests: XCTestCase {
         XCTAssertEqual(badges.map(\.id), ["repositoryHasChanges", "inUse"])
     }
 
-    // MARK: - 与既有徽标共存
+    // MARK: - Coexistence with existing badges
 
     func testCandidateWithoutNotesIsUnchanged() {
         let badges = DiskCleanBadge.badges(
@@ -79,7 +79,7 @@ final class DiskCleanBadgeTests: XCTestCase {
         XCTAssertEqual(badges.map(\.id), ["mayNotBeInstaller", "sizing"])
     }
 
-    // MARK: - 辅助
+    // MARK: - Helpers
 
     private func badgeTexts(notes: [DiskCleanCandidateNote]) -> [String] {
         DiskCleanBadge.badges(
