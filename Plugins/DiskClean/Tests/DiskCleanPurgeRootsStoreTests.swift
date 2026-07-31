@@ -160,18 +160,18 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertTrue(allowed.rejections.isEmpty)
     }
 
-    func testSanitizeDropsPersistedTooBroadRoots() {
+    func testSanitizeDropsPersistedTooBroadRoots() throws {
         let home = NSHomeDirectory()
-        let project = temporaryDirectory.resolve("Code").path
+        let project = try temporaryDirectory.makeDirectory("Code").path
         persistence.storedRoots = [home, "/Applications", project, "/"]
 
         XCTAssertEqual(store.roots(), [project])
         XCTAssertEqual(persistence.storedRoots, [project])
     }
 
-    func testAddingValidRootDoesNotResurfaceSanitizedTooBroadEntries() {
+    func testAddingValidRootDoesNotResurfaceSanitizedTooBroadEntries() throws {
         let home = NSHomeDirectory()
-        let project = temporaryDirectory.resolve("App").path
+        let project = try temporaryDirectory.makeDirectory("App").path
         persistence.storedRoots = [home]
 
         let update = store.add(project)
