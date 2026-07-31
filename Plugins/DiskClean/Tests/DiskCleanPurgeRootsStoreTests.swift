@@ -160,6 +160,20 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertTrue(allowed.rejections.isEmpty)
     }
 
+    /// Denylist covers any account's home, not just the current user's: `/Users/<name>/Documents`
+    /// is exactly as broad as the current user's own Documents folder.
+    func testRejectsOtherUsersTopLevelPersonalFoldersButAllowsSubfolders() {
+        let rejectedHome = DiskCleanPurgeRootNormalizer.normalize(["/Users/alice"]) { $0 }
+        XCTAssertEqual(rejectedHome.rejections, [.tooBroad(path: "/Users/alice")])
+
+        let rejectedDocuments = DiskCleanPurgeRootNormalizer.normalize(["/Users/alice/Documents"]) { $0 }
+        XCTAssertEqual(rejectedDocuments.rejections, [.tooBroad(path: "/Users/alice/Documents")])
+
+        let allowedProject = DiskCleanPurgeRootNormalizer.normalize(["/Users/alice/Documents/MyApp"]) { $0 }
+        XCTAssertEqual(allowedProject.roots, ["/Users/alice/Documents/MyApp"])
+        XCTAssertTrue(allowedProject.rejections.isEmpty)
+    }
+
     func testSanitizeDropsPersistedTooBroadRoots() throws {
         let home = NSHomeDirectory()
         let project = try temporaryDirectory.makeDirectory("Code").path

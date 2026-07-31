@@ -67,9 +67,15 @@ enum DiskCleanPurgeRootPolicy {
             return true
         }
 
-        // Another user’s home (`/Users/name`) is equally too broad.
+        // Another user’s home (`/Users/name`) — and its top-level personal folders — is equally too broad.
         let components = path.split(separator: "/", omittingEmptySubsequences: true)
-        if components.count == 2, components[0] == "Users" || components[0] == "home" {
+        guard components.count >= 2, components[0] == "Users" || components[0] == "home" else {
+            return false
+        }
+        if components.count == 2 {
+            return true
+        }
+        if components.count == 3, restrictedHomeFolderNames.contains(String(components[2])) {
             return true
         }
 
@@ -222,7 +228,7 @@ struct DiskCleanPurgeRootsStore: Sendable {
     @discardableResult
     func sanitizePersistedRoots() -> [String] {
         let loaded = persistence.loadRoots()
-        let allowed = loaded.filter { !DiskCleanPurgeRootPolicy.isTooBroad($0) }
+        let allowed = allowedRoots(from: loaded)
         if allowed != loaded {
             persistence.saveRoots(allowed)
         }
@@ -230,11 +236,16 @@ struct DiskCleanPurgeRootsStore: Sendable {
     }
 
     /// Append a root and persist. Return value includes rejections for the UI to explain.
+    ///
+    /// Filters denylisted entries out of the existing table without writing them back—`replaceAll`
+    /// below is the single write for this call, so a rejected addition never persists twice.
     @discardableResult
     func add(_ path: String) -> DiskCleanPurgeRootsUpdate {
-        // Re-normalize only allowed existing roots so a newly rejected path does not surface
-        // stale denylist noise for entries already removed by `sanitizePersistedRoots()`.
-        replaceAll(with: sanitizePersistedRoots() + [path])
+        replaceAll(with: allowedRoots(from: persistence.loadRoots()) + [path])
+    }
+
+    private func allowedRoots(from paths: [String]) -> [String] {
+        paths.filter { !DiskCleanPurgeRootPolicy.isTooBroad($0) }
     }
 
     /// Remove a root. Match both the original spelling and the normalized form: if the directory
