@@ -87,6 +87,18 @@ final class DiskCleanPurgeRootsModelTests: XCTestCase {
         XCTAssertEqual(model.rejections, [.unresolvable(path: "/nowhere")])
     }
 
+    func testTooBroadRootSurfacesReasonWithoutChangingScope() {
+        let model = makeModel(persisted: ["/code"])
+        var observed: [[String]] = []
+        model.onRootsChange = { observed.append($0) }
+
+        model.add(NSHomeDirectory())
+
+        XCTAssertEqual(model.roots, ["/code"])
+        XCTAssertEqual(model.rejections, [.tooBroad(path: NSHomeDirectory())])
+        XCTAssertTrue(observed.isEmpty)
+    }
+
     func testSuccessfulAdditionClearsPreviousRejections() {
         let model = makeModel(persisted: ["/code"])
         model.add("/code")

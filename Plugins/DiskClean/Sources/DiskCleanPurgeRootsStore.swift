@@ -11,6 +11,78 @@ enum DiskCleanPurgeRootRejection: Equatable, Sendable {
     /// Covered by another root in the list: scanning an ancestor always covers descendants, so
     /// keeping the descendant would report the same candidates twice.
     case coveredByAncestor(path: String, ancestor: String)
+    /// Home, system, or other top-level locations are too broad for developer-artifact discovery.
+    case tooBroad(path: String)
+}
+
+/// Hard denylist for developer-artifact scan roots.
+///
+/// Purge discovery walks up to 6 levels and may default-select marker matches. Using Home,
+/// `/Applications`, or other top-level locations as a root makes accidental mass selection too easy.
+/// Project subfolders under Documents/Desktop remain allowed.
+enum DiskCleanPurgeRootPolicy {
+    /// Exact system / volume roots that must never be scan roots.
+    private static let exactRestrictedRoots: Set<String> = [
+        "/",
+        "/Applications",
+        "/System",
+        "/Library",
+        "/Users",
+        "/home",
+        "/Volumes",
+        "/Network",
+        "/private",
+        "/var",
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/etc",
+        "/opt",
+        "/cores",
+    ]
+
+    /// Well-known top-level folders under the user’s home that are too broad as roots.
+    private static let restrictedHomeFolderNames: Set<String> = [
+        "Desktop",
+        "Documents",
+        "Downloads",
+        "Library",
+        "Movies",
+        "Music",
+        "Pictures",
+        "Public",
+    ]
+
+    /// `path` must already be a physical, trailing-slash-trimmed absolute path.
+    static func isTooBroad(_ path: String) -> Bool {
+        if exactRestrictedRoots.contains(path) {
+            return true
+        }
+
+        let home = trimTrailingSlashes(NSHomeDirectory())
+        if path == home {
+            return true
+        }
+        if restrictedHomeFolderNames.contains(where: { path == home + "/" + $0 }) {
+            return true
+        }
+
+        // Another user’s home (`/Users/name`) is equally too broad.
+        let components = path.split(separator: "/", omittingEmptySubsequences: true)
+        if components.count == 2, components[0] == "Users" || components[0] == "home" {
+            return true
+        }
+
+        return false
+    }
+
+    private static func trimTrailingSlashes(_ path: String) -> String {
+        var trimmed = path
+        while trimmed.count > 1, trimmed.hasSuffix("/") {
+            trimmed.removeLast()
+        }
+        return trimmed
+    }
 }
 
 struct DiskCleanPurgeRootsUpdate: Equatable, Sendable {
@@ -47,6 +119,10 @@ enum DiskCleanPurgeRootNormalizer {
                 continue
             }
             let trimmed = trimTrailingSlashes(physical)
+            if DiskCleanPurgeRootPolicy.isTooBroad(trimmed) {
+                rejections.append(.tooBroad(path: path))
+                continue
+            }
             guard seen.insert(trimmed).inserted else {
                 rejections.append(.duplicate(path: path))
                 continue
@@ -122,9 +198,9 @@ struct UserDefaultsDiskCleanPurgeRootsPersistence: DiskCleanPurgeRootsPersisting
 /// scan; only directories the user explicitly names.
 ///
 /// Writes always pass through `DiskCleanPurgeRootNormalizer`, so **stored paths are always physical**.
-/// Reads do not re-normalize: a directory may have been deleted or replaced, and a failed
-/// `realpath` would make the root vanish so the user cannot see what they added. Letting the
-/// scanner fail on `O_NOFOLLOW_ANY` open and report honestly is the more truthful degradation.
+/// Reads drop denylisted roots but do not re-run `realpath`: a directory may have been deleted or
+/// replaced, and a failed `realpath` would make a still-valid entry vanish. Letting the scanner
+/// fail on `O_NOFOLLOW_ANY` open and report honestly is the more truthful degradation.
 struct DiskCleanPurgeRootsStore: Sendable {
     private let persistence: any DiskCleanPurgeRootsPersisting
     private let resolvePhysicalPath: @Sendable (String) -> String?
@@ -138,13 +214,27 @@ struct DiskCleanPurgeRootsStore: Sendable {
     }
 
     func roots() -> [String] {
-        persistence.loadRoots()
+        sanitizePersistedRoots()
+    }
+
+    /// Drop any persisted roots that are now denylisted, then return the allowed set.
+    /// Keeps older installs / injected UserDefaults values from becoming scan roots.
+    @discardableResult
+    func sanitizePersistedRoots() -> [String] {
+        let loaded = persistence.loadRoots()
+        let allowed = loaded.filter { !DiskCleanPurgeRootPolicy.isTooBroad($0) }
+        if allowed != loaded {
+            persistence.saveRoots(allowed)
+        }
+        return allowed
     }
 
     /// Append a root and persist. Return value includes rejections for the UI to explain.
     @discardableResult
     func add(_ path: String) -> DiskCleanPurgeRootsUpdate {
-        replaceAll(with: persistence.loadRoots() + [path])
+        // Re-normalize only allowed existing roots so a newly rejected path does not surface
+        // stale denylist noise for entries already removed by `sanitizePersistedRoots()`.
+        replaceAll(with: sanitizePersistedRoots() + [path])
     }
 
     /// Remove a root. Match both the original spelling and the normalized form: if the directory

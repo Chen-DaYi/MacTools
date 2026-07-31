@@ -11225,67 +11225,67 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "只扫描这些文件夹，最多向下 6 层。添加工程所在目录即可。"
+            "value": "只扫描这些文件夹，最多向下 6 层。请添加具体工程目录，不要选择个人文件夹或系统目录。"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only these folders are scanned, up to 6 levels deep. Add the directories that contain your projects."
+            "value": "Only these folders are scanned, up to 6 levels deep. Add specific project directories—not your home folder or system locations."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "只掃描這些文件夾，最多向下 6 層。添加工程所在目錄即可。"
+            "value": "只掃描這些資料夾，最多向下 6 層。請新增具體專案目錄，不要選擇個人資料夾或系統目錄。"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "これらのフォルダのみを最大 6 階層までスキャンします。プロジェクトのあるディレクトリを追加してください。"
+            "value": "これらのフォルダのみを最大 6 階層までスキャンします。ホームやシステムではなく、具体的なプロジェクトディレクトリを追加してください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이 폴더만 최대 6단계 깊이까지 스캔합니다. 프로젝트가 있는 디렉터리를 추가하세요."
+            "value": "이 폴더만 최대 6단계 깊이까지 스캔합니다. 홈이나 시스템 위치가 아닌 구체적인 프로젝트 디렉터리를 추가하세요."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nur diese Ordner werden gescannt, maximal 6 Ebenen tief. Füge die Verzeichnisse deiner Projekte hinzu."
+            "value": "Nur diese Ordner werden gescannt, maximal 6 Ebenen tief. Füge konkrete Projektordner hinzu – nicht deinen persönlichen Ordner oder Systemorte."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Solo se escanean estas carpetas, hasta 6 niveles. Añade los directorios de tus proyectos."
+            "value": "Solo se escanean estas carpetas, hasta 6 niveles. Añade directorios de proyecto concretos, no tu carpeta de inicio ni ubicaciones del sistema."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Seuls ces dossiers sont analysés, jusqu’à 6 niveaux. Ajoutez les répertoires de vos projets."
+            "value": "Seuls ces dossiers sont analysés, jusqu’à 6 niveaux. Ajoutez des répertoires de projet précis, pas votre dossier personnel ni des emplacements système."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Só estas pastas são analisadas, até 6 níveis. Adicione os diretórios dos seus projetos."
+            "value": "Só estas pastas são analisadas, até 6 níveis. Adicione diretórios de projeto específicos — não a pasta pessoal nem locais do sistema."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Сканируются только эти папки, максимум 6 уровней вглубь. Добавьте каталоги проектов."
+            "value": "Сканируются только эти папки, максимум 6 уровней. Добавляйте конкретные каталоги проектов, а не домашнюю папку или системные пути."
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يُمسح فقط هذه المجلدات حتى عمق 6 مستويات. أضف مجلدات مشاريعك."
+            "value": "يُمسح فقط هذه المجلدات حتى عمق 6 مستويات. أضف مجلدات مشاريع محددة، وليس مجلد المنزل أو مواقع النظام."
           }
         }
       }
@@ -11793,67 +11793,67 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选择要扫描开发产物的文件夹"
+            "value": "选择具体的工程文件夹（不要选个人文件夹或系统目录）"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose folders to scan for developer artifacts"
+            "value": "Choose a specific project folder (not your home folder or a system location)"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "選擇要掃描開發產物的文件夾"
+            "value": "選擇具體的專案資料夾（不要選個人資料夾或系統目錄）"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "開発成果物をスキャンするフォルダを選択"
+            "value": "具体的なプロジェクトフォルダを選択してください（ホームやシステム場所は不可）"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "개발 산출물을 스캔할 폴더 선택"
+            "value": "구체적인 프로젝트 폴더를 선택하세요(홈이나 시스템 위치는 안 됨)"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ordner für die Suche nach Entwicklerartefakten wählen"
+            "value": "Wähle einen konkreten Projektordner (nicht persönlichen Ordner oder Systemorte)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Elige carpetas para escanear artefactos de desarrollo"
+            "value": "Elige una carpeta de proyecto concreta (no tu inicio ni una ubicación del sistema)"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choisissez les dossiers à analyser pour les artefacts de développement"
+            "value": "Choisissez un dossier de projet précis (pas votre dossier personnel ni un emplacement système)"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escolha pastas para procurar artefactos de desenvolvimento"
+            "value": "Escolha uma pasta de projeto específica (não a pasta pessoal nem um local do sistema)"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Выберите папки для поиска артефактов разработки"
+            "value": "Выберите конкретную папку проекта (не домашнюю и не системную)"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "اختر مجلدات لمسح مخرجات التطوير"
+            "value": "اختر مجلد مشروع محددًا (وليس مجلد المنزل أو موقعًا نظاميًا)"
           }
         }
       }
@@ -13194,6 +13194,77 @@
           "stringUnit": {
             "state": "translated",
             "value": "已移到废纸篓约 %@"
+          }
+        }
+      }
+    },
+    "detail.purgeRoots.rejected.tooBroad": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 范围过大，请选择具体的工程目录。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is too broad. Choose a specific project directory."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 範圍過大，請選擇具體的專案目錄。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ の範囲が広すぎます。具体的なプロジェクトディレクトリを選択してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 범위가 너무 큽니다. 구체적인 프로젝트 디렉터리를 선택하세요."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ist zu weit gefasst. Wähle ein konkretes Projektverzeichnis."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ es demasiado amplio. Elige un directorio de proyecto concreto."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ est trop large. Choisissez un répertoire de projet précis."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ é abrangente demais. Escolha um diretório de projeto específico."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ слишком широкий путь. Выберите конкретный каталог проекта."
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ نطاقه واسع جدًا. اختر مجلد مشروع محددًا."
           }
         }
       }

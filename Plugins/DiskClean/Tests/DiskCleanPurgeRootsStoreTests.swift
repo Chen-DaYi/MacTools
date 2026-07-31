@@ -129,6 +129,58 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(resolved.roots, [NSHomeDirectory() + "/Anywhere"])
     }
 
+    // MARK: - Too-broad denylist
+
+    func testRejectsHomeDirectoryAsRoot() {
+        let home = NSHomeDirectory()
+        let update = DiskCleanPurgeRootNormalizer.normalize([home]) { $0 }
+
+        XCTAssertTrue(update.roots.isEmpty)
+        XCTAssertEqual(update.rejections, [.tooBroad(path: home)])
+    }
+
+    func testRejectsSystemAndApplicationsRoots() {
+        for path in ["/", "/Applications", "/System", "/Users", "/Library", "/Volumes"] {
+            let update = DiskCleanPurgeRootNormalizer.normalize([path]) { $0 }
+            XCTAssertEqual(update.rejections, [.tooBroad(path: path)], path)
+            XCTAssertTrue(update.roots.isEmpty, path)
+        }
+    }
+
+    func testRejectsTopLevelHomeFoldersButAllowsProjectSubfolders() {
+        let home = NSHomeDirectory()
+        let documents = home + "/Documents"
+        let project = documents + "/MyApp"
+
+        let rejected = DiskCleanPurgeRootNormalizer.normalize([documents]) { $0 }
+        XCTAssertEqual(rejected.rejections, [.tooBroad(path: documents)])
+
+        let allowed = DiskCleanPurgeRootNormalizer.normalize([project]) { $0 }
+        XCTAssertEqual(allowed.roots, [project])
+        XCTAssertTrue(allowed.rejections.isEmpty)
+    }
+
+    func testSanitizeDropsPersistedTooBroadRoots() {
+        let home = NSHomeDirectory()
+        let project = temporaryDirectory.resolve("Code").path
+        persistence.storedRoots = [home, "/Applications", project, "/"]
+
+        XCTAssertEqual(store.roots(), [project])
+        XCTAssertEqual(persistence.storedRoots, [project])
+    }
+
+    func testAddingValidRootDoesNotResurfaceSanitizedTooBroadEntries() {
+        let home = NSHomeDirectory()
+        let project = temporaryDirectory.resolve("App").path
+        persistence.storedRoots = [home]
+
+        let update = store.add(project)
+
+        XCTAssertEqual(update.roots, [project])
+        XCTAssertTrue(update.rejections.isEmpty)
+        XCTAssertEqual(persistence.storedRoots, [project])
+    }
+
     // MARK: - Add/remove
 
     func testRemoveMatchesOriginalSpellingWhenPathIsGone() throws {

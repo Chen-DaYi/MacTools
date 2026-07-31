@@ -37,7 +37,7 @@ struct DiskCleanPurgeRootsView: View {
                 Text(
                     localization.string(
                         "detail.purgeRoots.description",
-                        defaultValue: "只扫描这些文件夹，最多向下 6 层。添加工程所在目录即可。"
+                        defaultValue: "只扫描这些文件夹，最多向下 6 层。请添加具体工程目录，不要选择个人文件夹或系统目录。"
                     )
                 )
                 .font(PluginSettingsTheme.Typography.rowDescription)
@@ -147,6 +147,12 @@ struct DiskCleanPurgeRootsView: View {
                 path,
                 ancestor
             )
+        case let .tooBroad(path):
+            return localization.format(
+                "detail.purgeRoots.rejected.tooBroad",
+                defaultValue: "%@ 范围过大，请选择具体的工程目录。",
+                path
+            )
         }
     }
 
@@ -158,7 +164,7 @@ struct DiskCleanPurgeRootsView: View {
         panel.prompt = localization.string("detail.purgeRoots.choose", defaultValue: "选择")
         panel.message = localization.string(
             "detail.purgeRoots.chooseMessage",
-            defaultValue: "选择要扫描开发产物的文件夹"
+            defaultValue: "选择具体的工程文件夹（不要选个人文件夹或系统目录）"
         )
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
