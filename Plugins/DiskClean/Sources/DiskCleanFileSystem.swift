@@ -11,7 +11,9 @@ struct DiskCleanFileItem: Equatable, Sendable {
 protocol DiskCleanFileSystemProviding: Sendable {
     func expandPathPattern(_ pattern: String) throws -> [DiskCleanFileItem]
     func itemInfo(at path: String) throws -> DiskCleanFileItem?
-    func sizeOfItem(at path: String) throws -> Int64
+    /// Direct children (**including hidden**). Ancestor decomposition (design §5.3) uses this, so a `*` glob must never replace it—
+    /// glob skips dot entries, so decomposition would miss a piece and silently shrink the scan scope.
+    func directChildren(of path: String) throws -> [DiskCleanFileItem]
     func removeItem(at path: String) throws
     func deduplicatedParentChildPaths(_ paths: [String]) -> [String]
 }
@@ -59,31 +61,12 @@ struct LocalDiskCleanFileSystem: DiskCleanFileSystemProviding, @unchecked Sendab
         )
     }
 
-    func sizeOfItem(at path: String) throws -> Int64 {
+    func directChildren(of path: String) throws -> [DiskCleanFileItem] {
         let expandedPath = Self.normalizeSlashes(expandHome(in: path))
-        let attributes = try fileManager.attributesOfItem(atPath: expandedPath)
-        let fileType = attributes[.type] as? FileAttributeType
-
-        if fileType != .typeDirectory || fileType == .typeSymbolicLink {
-            return Int64((attributes[.size] as? NSNumber)?.int64Value ?? 0)
+        let names = try fileManager.contentsOfDirectory(atPath: expandedPath)
+        return names.sorted().compactMap { name in
+            try? itemInfo(at: expandedPath + "/" + name)
         }
-
-        var total: Int64 = 0
-        if let enumerator = fileManager.enumerator(
-            at: URL(fileURLWithPath: expandedPath),
-            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey, .totalFileAllocatedSizeKey],
-            options: [.skipsPackageDescendants]
-        ) {
-            for case let url as URL in enumerator {
-                let itemAttributes = try fileManager.attributesOfItem(atPath: url.path)
-                guard (itemAttributes[.type] as? FileAttributeType) != .typeDirectory else {
-                    continue
-                }
-                total += Int64((itemAttributes[.size] as? NSNumber)?.int64Value ?? 0)
-            }
-        }
-
-        return total
     }
 
     func removeItem(at path: String) throws {
@@ -192,5 +175,43 @@ struct LocalDiskCleanFileSystem: DiskCleanFileSystemProviding, @unchecked Sendab
             normalized = normalized.replacingOccurrences(of: "//", with: "/")
         }
         return normalized
+    }
+}
+
+/// Physical path normalization (design §13-6).
+///
+/// Paths fed to sizing and execution must not contain symlink ancestors, or `O_NOFOLLOW_ANY` fails with ELOOP
+/// (`/var` and `/tmp` are themselves symlinks).
+///
+/// **Only resolve the parent; keep the last component as-is**: the leaf may itself be a candidate symlink; `realpath` on the whole path
+/// would replace it with its target—which means deleting something else. `URL.resolvingSymlinksInPath()` is also wrong;
+/// it does not expand `/var`, the opposite semantics.
+enum DiskCleanPhysicalPath {
+    static func resolve(_ path: String) -> String {
+        guard let location = ParentAnchoredPath(path: path) else { return path }
+        guard let physicalParent = realpath(of: location.parentPath) else { return path }
+        return physicalParent == "/" ? "/" + location.name : physicalParent + "/" + location.name
+    }
+
+    static func realpath(of path: String) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        guard Darwin.realpath(path, &buffer) != nil else { return nil }
+        let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+}
+
+/// Fixed directory prefix of a glob: the last complete path component before the first wildcard.
+///
+/// Ownership (design §5.3 rule 1) uses its length to measure "which target is more specific":
+/// `~/Library/Caches/com.apple.akd` is more specific than `~/Library/Caches/*`, so the same path belongs to the former.
+enum DiskCleanGlobPrefix {
+    static func fixedPrefix(of glob: String) -> String {
+        guard let wildcardIndex = glob.firstIndex(where: { "*?[".contains($0) }) else {
+            return glob
+        }
+        let head = glob[glob.startIndex..<wildcardIndex]
+        guard let separatorIndex = head.lastIndex(of: "/") else { return "" }
+        return String(head[head.startIndex..<separatorIndex])
     }
 }

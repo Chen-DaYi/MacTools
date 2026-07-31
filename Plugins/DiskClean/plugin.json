@@ -1,54 +1,54 @@
 {
   "id": "disk-clean",
   "displayName": "磁盘清理",
-  "summary": "缓存、开发者缓存和浏览器缓存清理",
+  "summary": "扫描系统缓存、开发产物与残留安装包，默认移到废纸篓，执行前校验路径安全",
   "localizedMetadata": {
     "ar": {
       "displayName": "تنظيف القرص",
-      "summary": "تنظيف ذاكرة التخزين المؤقت، وذاكرة التخزين المؤقت للمطورين، وذاكرة التخزين المؤقت للمتصفح."
+      "summary": "يمسح ذاكرات التخزين المؤقت للنظام ومخرجات التطوير وبرامج التثبيت المتبقية؛ ينقل افتراضيًا إلى سلة المهملات مع فحوصات أمان المسار قبل الحذف."
     },
     "de": {
       "displayName": "Datenträgerbereinigung",
-      "summary": "Caches, Entwickler-Caches und Browser-Caches bereinigen."
+      "summary": "System-Caches, Entwicklerartefakte und übrig gebliebene Installer scannen; standardmäßig in den Papierkorb, mit Pfadsicherheitsprüfung vor dem Löschen."
     },
     "en": {
       "displayName": "Disk Cleanup",
-      "summary": "Clean caches, developer caches, and browser caches."
+      "summary": "Scan system caches, developer artifacts, and leftover installers; move to Trash by default with path safety checks before deletion"
     },
     "es": {
       "displayName": "Limpieza de disco",
-      "summary": "Limpiar cachés, cachés de desarrolladores y cachés de navegador."
+      "summary": "Escanea cachés del sistema, artefactos de desarrollo e instaladores residuales; por defecto mueve a la Papelera, con comprobaciones de seguridad de ruta antes de borrar."
     },
     "fr": {
       "displayName": "Nettoyage du disque",
-      "summary": "Nettoyer les caches, les caches des développeurs et les caches du navigateur."
+      "summary": "Analyse les caches système, les artefacts de développement et les installateurs restants ; met à la corbeille par défaut, avec contrôles de sécurité des chemins avant suppression."
     },
     "ja": {
       "displayName": "ディスククリーンアップ",
-      "summary": "キャッシュ、開発者キャッシュ、ブラウザ キャッシュをクリーンアップします。"
+      "summary": "システムキャッシュ、開発成果物、残留インストーラをスキャン。既定でゴミ箱へ移動し、削除前にパス安全性を確認します。"
     },
     "ko": {
       "displayName": "디스크 정리",
-      "summary": "캐시, 개발자 캐시 및 브라우저 캐시를 정리합니다."
+      "summary": "시스템 캐시, 개발 산출물, 잔여 설치 패키지를 스캔합니다. 기본적으로 휴지통으로 옮기며 삭제 전 경로 안전성을 검사합니다."
     },
     "pt": {
       "displayName": "Limpeza de disco",
-      "summary": "Limpe caches, caches de desenvolvedores e caches de navegador."
+      "summary": "Analisa caches do sistema, artefactos de desenvolvimento e instaladores residuais; por predefinição move para o Lixo, com verificações de segurança do caminho antes de apagar."
     },
     "ru": {
       "displayName": "Очистка диска",
-      "summary": "Очистка кеша, кеша разработчика и кеша браузера."
+      "summary": "Сканирует системные кэши, артефакты разработки и оставшиеся установщики; по умолчанию перемещает в Корзину с проверкой безопасности пути перед удалением."
     },
     "zh-Hans": {
       "displayName": "磁盘清理",
-      "summary": "缓存、开发者缓存和浏览器缓存清理"
+      "summary": "扫描系统缓存、开发产物与残留安装包，默认移到废纸篓，执行前校验路径安全"
     },
     "zh-Hant": {
       "displayName": "磁碟清理",
-      "summary": "緩存、開發者緩存和瀏覽器緩存清理"
+      "summary": "掃描系統快取、開發產物與殘留安裝包，預設移到廢紙簍，執行前校驗路徑安全"
     }
   },
-  "version": "1.0.8",
+  "version": "2.0.0",
   "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "DiskClean.bundle",

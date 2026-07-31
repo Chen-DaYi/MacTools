@@ -54,6 +54,28 @@ struct DiskCleanSafetyPolicy: Sendable {
         isSymlink: Bool = false,
         resolvedSymlinkTarget: String? = nil
     ) -> DiskCleanSafetyStatus {
+        safetyStatus(
+            for: path,
+            alsoChecking: [],
+            isSymlink: isSymlink,
+            resolvedSymlinkTarget: resolvedSymlinkTarget
+        )
+    }
+
+    /// Evaluate safety for a physical path, also consulting any logical aliases.
+    ///
+    /// Whitelist and sensitive-path rules are **lexical** (home expansion + slash normalize only).
+    /// Scan expansion rewrites candidates to physical form for `O_NOFOLLOW_ANY`, so a rule like
+    /// `~/.cache/huggingface/*` would miss `/Volumes/Data/cache/huggingface/*` if we only checked
+    /// the physical path. Checking every alias means either identity matching a rule protects the item.
+    ///
+    /// Path-shape validation still uses the primary path (the deletion target).
+    func safetyStatus(
+        for path: String,
+        alsoChecking alternatePaths: [String],
+        isSymlink: Bool = false,
+        resolvedSymlinkTarget: String? = nil
+    ) -> DiskCleanSafetyStatus {
         let normalizedPath = normalizePath(path)
         let shapeStatus = validatePathShape(
             normalizedPath,
@@ -64,12 +86,23 @@ struct DiskCleanSafetyPolicy: Sendable {
             return shapeStatus
         }
 
-        if let reason = sensitiveProtectionReason(for: normalizedPath) {
-            return .protected(reason: reason)
+        var seen = Set<String>()
+        var pathsToCheck: [String] = []
+        for candidate in [normalizedPath] + alternatePaths.map(normalizePath) {
+            guard seen.insert(candidate).inserted else { continue }
+            pathsToCheck.append(candidate)
         }
 
-        if let rule = whitelistStore.matchingRule(for: normalizedPath) {
-            return .whitelisted(rule: rule.expandedPattern)
+        for candidate in pathsToCheck {
+            if let reason = sensitiveProtectionReason(for: candidate) {
+                return .protected(reason: reason)
+            }
+        }
+
+        for candidate in pathsToCheck {
+            if let rule = whitelistStore.matchingRule(for: candidate) {
+                return .whitelisted(rule: rule.expandedPattern)
+            }
         }
 
         return .allowed
@@ -98,6 +131,19 @@ struct DiskCleanSafetyPolicy: Sendable {
 
     private func sensitiveProtectionReason(for path: String) -> String? {
         let lower = path.lowercased()
+
+        // Staged objects (design §7.6): wide globs and ancestor decomposition can both
+        // discover orphan staged objects — `directChildren` returns hidden entries too,
+        // so a leading-dot filter is not enough. The only code allowed to touch these
+        // objects is startup reconciliation, which addresses them via the journal and
+        // never through the candidate pipeline.
+        //
+        // The design says "last-path-component match"; we broaden that to **any** component
+        // so paths inside the staging tree are blocked as well. `.mactools-staged-` is a
+        // plugin-reserved prefix; the cost of over-matching is only "skip cleaning one directory".
+        if Self.containsStagedComponent(lower) {
+            return "staging in progress"
+        }
 
         if Self.hasPathFragment(lower, "/library/keychains")
             || Self.hasPathFragment(lower, "/.ssh")
@@ -295,6 +341,12 @@ struct DiskCleanSafetyPolicy: Sendable {
             normalized == root || normalized.hasPrefix(root + "/")
         } || normalized.hasPrefix("/var/db/")
             || normalized.hasPrefix("/private/var/db/")
+    }
+
+    private static func containsStagedComponent(_ lowerPath: String) -> Bool {
+        lowerPath
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .contains { $0.hasPrefix(DiskCleanRemovalPrimitive.stagedNamePrefix) }
     }
 
     private static func hasPathFragment(_ lowerPath: String, _ fragment: String) -> Bool {

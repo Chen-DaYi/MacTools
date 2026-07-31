@@ -1,53 +1,130 @@
 import Foundation
 
+// MARK: - Execution interface
+
+/// The executor only accepts `DiskCleanValidatedPlan` (design §6.1, §7).
+///
+/// The type system carries a safety duty here: `ValidatedPlan.init` is fileprivate; the only cast site is
+/// `DiskCleanPlanner.makePlan`. There is no "pass a list of paths and delete them" entry, so no path around validation.
 protocol DiskCleanExecuting: Sendable {
-    func clean(
-        candidates: [DiskCleanCandidate],
-        selectedCandidateIDs: Set<DiskCleanCandidate.ID>
-    ) async throws -> DiskCleanExecutionResult
+    func execute(plan: DiskCleanValidatedPlan) async throws -> DiskCleanExecutionResult
 }
 
+// MARK: - Plan-level failure
+
+/// Preflight failure (design §7.1). Any case aborts the **whole run with zero deletions**.
+enum DiskCleanExecutionError: LocalizedError, Equatable {
+    case planExpired
+    case lockedDuringPreflight(path: String, processName: String)
+    case safetyRejected(path: String, reason: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .planExpired:
+            return "扫描结果已过期，请重新扫描"
+        case let .lockedDuringPreflight(path, processName):
+            return "\(processName) 正在使用 \(path)，已取消本次清理"
+        case let .safetyRejected(path, reason):
+            return "\(path) 未通过安全校验（\(reason)），已取消本次清理"
+        }
+    }
+}
+
+// MARK: - Execution result
+
 struct DiskCleanExecutionItemResult: Equatable, Sendable {
+    /// Terminal status (design §7.5). `changedSinceScan` and `rollbackBlocked` are separate, not folded into skipped/failed:
+    /// the former should prompt a rescan; the latter needs a pinned alert in cleanup history—user actions differ entirely.
     enum Outcome: Equatable, Sendable {
         case removed(reclaimedBytes: Int64)
+        case trashed(reclaimedBytes: Int64, stagedName: String)
         case skipped(DiskCleanSafetyStatus)
+        case changedSinceScan
         case failed(message: String)
+        case partiallyDeleted(stagedName: String, message: String)
+        case rollbackBlocked(stagedName: String, message: String)
     }
 
     let candidateID: DiskCleanCandidate.ID
     let path: String
     let outcome: Outcome
 
+    /// Estimated reclaimed bytes. **Not actual free space** (APFS clones / sparse files / hard links outside the tree).
+    /// Copy always says "about X"; Trash mode must not say "reclaimed" (design §7.7).
     var reclaimedBytes: Int64 {
-        if case let .removed(reclaimedBytes) = outcome {
+        switch outcome {
+        case let .removed(reclaimedBytes):
             return max(reclaimedBytes, 0)
+        case let .trashed(reclaimedBytes, _):
+            return max(reclaimedBytes, 0)
+        case .skipped, .changedSinceScan, .failed, .partiallyDeleted, .rollbackBlocked:
+            return 0
         }
-        return 0
+    }
+
+    /// Honest terminal statuses that need a pinned alert in cleanup history.
+    var needsAttention: Bool {
+        switch outcome {
+        case .partiallyDeleted, .rollbackBlocked:
+            return true
+        case .removed, .trashed, .skipped, .changedSinceScan, .failed:
+            return false
+        }
     }
 }
 
 struct DiskCleanExecutionResult: Equatable, Sendable {
     let itemResults: [DiskCleanExecutionItemResult]
+    let mode: DiskCleanRemovalMode
 
+    init(itemResults: [DiskCleanExecutionItemResult], mode: DiskCleanRemovalMode = .trash) {
+        self.itemResults = itemResults
+        self.mode = mode
+    }
+
+    /// Disposed item count: permanent delete and move-to-Trash both count as success.
     var removedCount: Int {
         itemResults.filter {
-            if case .removed = $0.outcome { return true }
-            return false
+            switch $0.outcome {
+            case .removed, .trashed:
+                return true
+            case .skipped, .changedSinceScan, .failed, .partiallyDeleted, .rollbackBlocked:
+                return false
+            }
         }.count
     }
 
+    /// Skipped item count: safety-policy rejection and content changed since scan. Neither touches the object.
     var skippedCount: Int {
         itemResults.filter {
-            if case .skipped = $0.outcome { return true }
-            return false
+            switch $0.outcome {
+            case .skipped, .changedSinceScan:
+                return true
+            case .removed, .trashed, .failed, .partiallyDeleted, .rollbackBlocked:
+                return false
+            }
         }.count
     }
 
+    /// Items that did not finish cleanly. `partiallyDeleted` / `rollbackBlocked` count here—
+    /// they are not success; burying them under "cleaned" would be dishonest.
     var failedCount: Int {
         itemResults.filter {
-            if case .failed = $0.outcome { return true }
-            return false
+            switch $0.outcome {
+            case .failed, .partiallyDeleted, .rollbackBlocked:
+                return true
+            case .removed, .trashed, .skipped, .changedSinceScan:
+                return false
+            }
         }.count
+    }
+
+    var changedSinceScanCount: Int {
+        itemResults.filter { $0.outcome == .changedSinceScan }.count
+    }
+
+    var attentionResults: [DiskCleanExecutionItemResult] {
+        itemResults.filter(\.needsAttention)
     }
 
     var reclaimedBytes: Int64 {
@@ -55,75 +132,241 @@ struct DiskCleanExecutionResult: Equatable, Sendable {
     }
 }
 
+// MARK: - Executor
+
+/// Plan executor (design §7.1, §7.2).
+///
+/// Responsibility: this type owns **ordering and revalidation**; only `DiskCleanPlanItemRemoving` actually mutates files.
+/// Three independent defenses: Planner validates at cast time; preflight and per-item revalidation run here;
+/// the primitive authenticates identity on the fd. They do not share decision points, so a defect in one layer cannot collapse the whole chain.
 struct DiskCleanExecutor: DiskCleanExecuting {
-    let fileSystem: DiskCleanFileSystemProviding
-    let safetyPolicy: DiskCleanSafetyPolicy
+    private let primitive: any DiskCleanPlanItemRemoving
+    private let safetyPolicy: DiskCleanSafetyPolicy
+    private let runningAppLock: any DiskCleanRunningAppSnapshotting
+    private let auditLog: DiskCleanAuditLog
+    private let now: @Sendable () -> Date
 
     init(
-        fileSystem: DiskCleanFileSystemProviding = LocalDiskCleanFileSystem(),
-        safetyPolicy: DiskCleanSafetyPolicy = DiskCleanSafetyPolicy()
+        storageDirectory: URL = DiskCleanStorageLocation.fallbackDirectory,
+        journal: DiskCleanStagingJournal? = nil,
+        auditLog: DiskCleanAuditLog? = nil,
+        safetyPolicy: DiskCleanSafetyPolicy = DiskCleanSafetyPolicy(),
+        runningAppLock: any DiskCleanRunningAppSnapshotting = DiskCleanRunningAppLock(),
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
-        self.fileSystem = fileSystem
-        self.safetyPolicy = safetyPolicy
-    }
-
-    func clean(
-        candidates: [DiskCleanCandidate],
-        selectedCandidateIDs: Set<DiskCleanCandidate.ID>
-    ) async throws -> DiskCleanExecutionResult {
-        var itemResults: [DiskCleanExecutionItemResult] = []
-
-        for candidate in candidates where selectedCandidateIDs.contains(candidate.id) {
-            try Task.checkCancellation()
-            itemResults.append(try clean(candidate))
-        }
-
-        return DiskCleanExecutionResult(itemResults: itemResults)
-    }
-
-    private func clean(_ candidate: DiskCleanCandidate) throws -> DiskCleanExecutionItemResult {
-        guard candidate.safety.isCleanable else {
-            return itemResult(for: candidate, outcome: .skipped(candidate.safety))
-        }
-
-        guard let item = try fileSystem.itemInfo(at: candidate.path) else {
-            return itemResult(
-                for: candidate,
-                outcome: .skipped(.invalid(reason: "path no longer exists"))
-            )
-        }
-
-        let finalSafety = safetyPolicy.safetyStatus(
-            for: item.path,
-            isSymlink: item.isSymlink,
-            resolvedSymlinkTarget: item.resolvedSymlinkTarget
+        let sharedJournal = journal ?? DiskCleanStagingJournal(directory: storageDirectory)
+        self.init(
+            primitive: DiskCleanRemovalPrimitive(journal: sharedJournal, now: now),
+            safetyPolicy: safetyPolicy,
+            runningAppLock: runningAppLock,
+            auditLog: auditLog ?? DiskCleanAuditLog(directory: storageDirectory),
+            now: now
         )
-        guard finalSafety.isCleanable else {
-            return itemResult(for: candidate, outcome: .skipped(finalSafety))
+    }
+
+    init(
+        primitive: any DiskCleanPlanItemRemoving,
+        safetyPolicy: DiskCleanSafetyPolicy,
+        runningAppLock: any DiskCleanRunningAppSnapshotting,
+        auditLog: DiskCleanAuditLog,
+        now: @escaping @Sendable () -> Date = Date.init
+    ) {
+        self.primitive = primitive
+        self.safetyPolicy = safetyPolicy
+        self.runningAppLock = runningAppLock
+        self.auditLog = auditLog
+        self.now = now
+    }
+
+    func execute(plan: DiskCleanValidatedPlan) async throws -> DiskCleanExecutionResult {
+        var snapshot = try await preflight(plan: plan)
+
+        var itemResults: [DiskCleanExecutionItemResult] = []
+        itemResults.reserveCapacity(plan.items.count)
+
+        for item in plan.items {
+            try Task.checkCancellation()
+
+            // Per-item lock recheck: refresh bundle IDs; keep process names from the preflight snapshot (trade-off noted on the protocol).
+            snapshot = await runningAppLock.refreshingBundleIDs(in: snapshot)
+            if let processName = snapshot.lockingProcessName(
+                bundleIDs: item.lockedByBundleIDs,
+                processNames: item.skipWhenProcessIsRunning
+            ) {
+                itemResults.append(
+                    record(item: item, outcome: .skipped(.inUse(processName: processName)), mode: plan.mode)
+                )
+                continue
+            }
+
+            // Second SafetyPolicy check: the whitelist may grow after the scan; staged-name protection also applies here.
+            // Check physical + logical so a redirected home cache still matches lexical whitelist rules.
+            let safety = safetyPolicy.safetyStatus(
+                for: item.path,
+                alsoChecking: item.safetyCheckPaths
+            )
+            guard safety.isCleanable else {
+                itemResults.append(record(item: item, outcome: .skipped(safety), mode: plan.mode))
+                continue
+            }
+
+            let disposition = primitive.remove(item, mode: plan.mode)
+            itemResults.append(
+                record(item: item, outcome: Self.outcome(for: disposition, item: item), mode: plan.mode)
+            )
         }
 
-        do {
-            try fileSystem.removeItem(at: item.path)
-            return itemResult(
-                for: candidate,
-                outcome: .removed(reclaimedBytes: candidate.sizeBytes)
+        return DiskCleanExecutionResult(itemResults: itemResults, mode: plan.mode)
+    }
+
+    // MARK: - preflight（§7.1）
+
+    private func preflight(plan: DiskCleanValidatedPlan) async throws -> DiskCleanRunningAppSnapshot {
+        // 1. Expiry recheck. The confirm window must not cross expiry, but the clock is still evaluated at execution time.
+        guard now() < plan.expiryDeadline else {
+            throw DiskCleanExecutionError.planExpired
+        }
+
+        // 2. Fresh snapshot + lock/safety precheck of every plan item. Any failure aborts the whole run.
+        let processNames = Array(Set(plan.items.flatMap(\.skipWhenProcessIsRunning)))
+        let snapshot = await runningAppLock.makeSnapshot(processNames: processNames)
+        for item in plan.items {
+            if let processName = snapshot.lockingProcessName(
+                bundleIDs: item.lockedByBundleIDs,
+                processNames: item.skipWhenProcessIsRunning
+            ) {
+                throw DiskCleanExecutionError.lockedDuringPreflight(path: item.path, processName: processName)
+            }
+            let safety = safetyPolicy.safetyStatus(
+                for: item.path,
+                alsoChecking: item.safetyCheckPaths
             )
-        } catch {
-            return itemResult(
-                for: candidate,
-                outcome: .failed(message: error.localizedDescription)
-            )
+            guard safety.isCleanable else {
+                throw DiskCleanExecutionError.safetyRejected(
+                    path: item.path,
+                    reason: Self.describe(safety)
+                )
+            }
+        }
+
+        // 3. Re-run ancestor assertions with the plan's own evidence. Evidence is in-plan and independently recheckable—this layer guards against
+        //    defects in the Planner itself; pure in-memory compare, negligible cost.
+        try DiskCleanPlanner.assertNoAncestorViolation(
+            plannedPaths: plan.items.map(\.path),
+            exclusionPaths: plan.exclusionPaths,
+            reservedPrefixes: plan.reservedPrefixes
+        )
+
+        return snapshot
+    }
+
+    // MARK: - Terminal-status mapping and audit
+
+    private static func outcome(
+        for disposition: DiskCleanRemovalDisposition,
+        item: DiskCleanValidatedPlan.PlanItem
+    ) -> DiskCleanExecutionItemResult.Outcome {
+        switch disposition {
+        case .removed:
+            return .removed(reclaimedBytes: item.estimatedBytes)
+        case let .trashed(stagedName):
+            return .trashed(reclaimedBytes: item.estimatedBytes, stagedName: stagedName)
+        case .changedSinceScan:
+            return .changedSinceScan
+        case let .failed(reason):
+            return .failed(message: reason)
+        case let .partiallyDeleted(stagedName, reason):
+            return .partiallyDeleted(stagedName: stagedName, message: reason)
+        case let .rollbackBlocked(stagedName, reason):
+            return .rollbackBlocked(stagedName: stagedName, message: reason)
         }
     }
 
-    private func itemResult(
-        for candidate: DiskCleanCandidate,
-        outcome: DiskCleanExecutionItemResult.Outcome
+    private func record(
+        item: DiskCleanValidatedPlan.PlanItem,
+        outcome: DiskCleanExecutionItemResult.Outcome,
+        mode: DiskCleanRemovalMode
     ) -> DiskCleanExecutionItemResult {
-        DiskCleanExecutionItemResult(
-            candidateID: candidate.id,
-            path: candidate.path,
+        auditLog.append(
+            DiskCleanAuditLog.Record(
+                timestamp: now(),
+                action: mode == .trash ? .trash : .delete,
+                targetID: item.targetID,
+                legacyRuleID: item.legacyRuleID,
+                category: item.category.rawValue,
+                path: item.path,
+                stagedName: Self.stagedName(of: outcome),
+                estimatedBytes: item.estimatedBytes,
+                status: Self.status(of: outcome),
+                skipReason: Self.skipReason(of: outcome),
+                error: Self.errorMessage(of: outcome)
+            )
+        )
+        return DiskCleanExecutionItemResult(
+            candidateID: item.candidateID,
+            path: item.path,
             outcome: outcome
         )
+    }
+
+    private static func stagedName(of outcome: DiskCleanExecutionItemResult.Outcome) -> String? {
+        switch outcome {
+        case let .trashed(_, stagedName),
+             let .partiallyDeleted(stagedName, _),
+             let .rollbackBlocked(stagedName, _):
+            return stagedName
+        case .removed, .skipped, .changedSinceScan, .failed:
+            return nil
+        }
+    }
+
+    private static func status(of outcome: DiskCleanExecutionItemResult.Outcome) -> String {
+        switch outcome {
+        case .removed, .trashed:
+            return "ok"
+        case .skipped:
+            return "skipped"
+        case .changedSinceScan:
+            return "changedSinceScan"
+        case .failed:
+            return "failed"
+        case .partiallyDeleted:
+            return "partiallyDeleted"
+        case .rollbackBlocked:
+            return "rollbackBlocked"
+        }
+    }
+
+    private static func skipReason(of outcome: DiskCleanExecutionItemResult.Outcome) -> String? {
+        guard case let .skipped(safety) = outcome else { return nil }
+        return describe(safety)
+    }
+
+    private static func errorMessage(of outcome: DiskCleanExecutionItemResult.Outcome) -> String? {
+        switch outcome {
+        case let .failed(message),
+             let .partiallyDeleted(_, message),
+             let .rollbackBlocked(_, message):
+            return message
+        case .removed, .trashed, .skipped, .changedSinceScan:
+            return nil
+        }
+    }
+
+    private static func describe(_ safety: DiskCleanSafetyStatus) -> String {
+        switch safety {
+        case .allowed:
+            return "allowed"
+        case let .whitelisted(rule):
+            return "whitelisted(\(rule))"
+        case let .protected(reason):
+            return "protected(\(reason))"
+        case let .invalid(reason):
+            return "invalid(\(reason))"
+        case let .requiresAdmin(reason):
+            return "requiresAdmin(\(reason))"
+        case let .inUse(processName):
+            return "inUse(\(processName))"
+        }
     }
 }
