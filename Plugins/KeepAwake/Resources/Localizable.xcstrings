@@ -1,6 +1,198 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "settings.virtualDisplay.keepDesktopAvailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إبقاء الأدوات المعتمدة على الشاشة قيد التشغيل" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Bildschirmbasierte Tools weiter ausführen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Keep screen-based tools working" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Mantener activas las herramientas de pantalla" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Maintenir les outils liés à l’écran opérationnels" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "画面を使うツールを動作させる" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "화면 기반 도구 계속 작동" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Manter ferramentas de tela funcionando" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Сохранять работу экранных инструментов" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "让屏幕相关工具继续工作" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "讓螢幕相關工具繼續運作" } }
+      }
+    },
+    "settings.virtualDisplay.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "يدعم Codex Computer Use وأتمتة سطح المكتب ومشاركة الشاشة والتحكم عن بُعد بعد إغلاق الغطاء." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Unterstützt Codex Computer Use, Desktop-Automatisierung, Bildschirmfreigabe und Fernsteuerung bei geschlossenem Deckel." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Supports Codex Computer Use, desktop automation, screen sharing, and remote control after the lid closes." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Permite usar Codex Computer Use, automatización del escritorio, pantalla compartida y control remoto tras cerrar la tapa." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Prend en charge Codex Computer Use, l’automatisation du bureau, le partage d’écran et le contrôle à distance après la fermeture du couvercle." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "蓋を閉じた後も、Codex Computer Use、デスクトップ自動化、画面共有、リモート操作を利用できます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "덮개를 닫은 뒤에도 Codex Computer Use, 데스크탑 자동화, 화면 공유 및 원격 제어를 지원합니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Permite usar Codex Computer Use, automação do desktop, compartilhamento de tela e controle remoto após fechar a tampa." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Поддерживает Codex Computer Use, автоматизацию рабочего стола, демонстрацию экрана и удалённое управление после закрытия крышки." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "合盖后支持 Codex Computer Use、桌面自动化、屏幕共享和远程控制。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "闔蓋後支援 Codex Computer Use、桌面自動化、螢幕共享和遠端控制。" } }
+      }
+    },
+    "settings.virtualDisplay.warning.enableBeforeClosing": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فعّله قبل إغلاق الغطاء." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Vor dem Schließen des Deckels aktivieren." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Enable before closing the lid." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Actívala antes de cerrar la tapa." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Activez-le avant de fermer le couvercle." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "蓋を閉じる前に有効にしてください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "덮개를 닫기 전에 켜세요." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ative antes de fechar a tampa." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Включите до закрытия крышки." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "请在合盖前启用。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "請在闔蓋前啟用。" } }
+      }
+    },
+    "settings.virtualDisplay.warning.lockScreen": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لا يفعّل الوصول عن بُعد ولا يتجاوز شاشة القفل." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Aktiviert keinen Fernzugriff und umgeht den Sperrbildschirm nicht." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Does not enable remote access or bypass the lock screen." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No activa el acceso remoto ni elude la pantalla bloqueada." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "N’active pas l’accès distant et ne contourne pas l’écran verrouillé." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リモートアクセスを有効にしたり、ロック画面を回避したりするものではありません。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "원격 접근을 활성화하거나 잠금 화면을 우회하지 않습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não ativa o acesso remoto nem ignora a tela bloqueada." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не включает удалённый доступ и не обходит экран блокировки." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "不会启用远程访问或绕过锁定屏幕。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "不會啟用遠端存取或略過鎖定畫面。" } }
+      }
+    },
+    "settings.virtualDisplay.warning.systemUpdates": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تجريبي؛ قد يتوقف عن العمل بعد تحديثات macOS." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Experimentell; kann nach macOS-Updates ausfallen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Experimental; may stop working after macOS updates." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Experimental; puede dejar de funcionar tras actualizar macOS." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Expérimental ; peut cesser de fonctionner après une mise à jour de macOS." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "試験的機能です。macOSのアップデート後は動作しない場合があります。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "실험적 기능입니다. macOS 업데이트 후 작동하지 않을 수 있습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Experimental; pode parar de funcionar após atualizações do macOS." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Экспериментальная функция; после обновления macOS может не работать." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "实验性功能；macOS 更新后可能失效。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "實驗性功能；macOS 更新後可能失效。" } }
+      }
+    },
+    "settings.virtualDisplay.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لا تتضمن حزمة المكوّن الحالية مكوّن الشاشة البرمجية." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dieses Plug-in-Paket enthält keine Softwarebildschirm-Komponente." } },
+        "en": { "stringUnit": { "state": "translated", "value": "This plugin package does not include the software display component." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Este paquete del plugin no incluye el componente de pantalla por software." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ce paquet d’extension ne contient pas le composant d’écran logiciel." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "現在のプラグインパッケージにはソフトウェアディスプレイ機能が含まれていません。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "현재 플러그인 패키지에 소프트웨어 디스플레이 구성요소가 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Este pacote do plugin não inclui o componente de tela de software." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "В этом пакете плагина нет компонента программного дисплея." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前插件包不包含软件显示器组件。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "目前外掛套件不包含軟體顯示器元件。" } }
+      }
+    },
+    "error.virtualDisplay.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "هذا الإصدار من مكوّن منع السكون لا يدعم شاشة برمجية." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Diese Version des Wach-halten-Plug-ins unterstützt keinen Softwarebildschirm." } },
+        "en": { "stringUnit": { "state": "translated", "value": "This version of the Keep Awake plugin does not support a software display." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Esta versión del plugin Mantener activo no admite una pantalla por software." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Cette version de l’extension Empêcher la suspension ne prend pas en charge l’écran logiciel." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このバージョンのスリープ防止プラグインはソフトウェアディスプレイに対応していません。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 버전의 잠자기 방지 플러그인은 소프트웨어 디스플레이를 지원하지 않습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Esta versão do plugin Manter ativo não oferece uma tela de software." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Эта версия плагина «Не давать уснуть» не поддерживает программный дисплей." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此版本的阻止休眠插件不支持软件显示器。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此版本的防止睡眠外掛不支援軟體顯示器。" } }
+      }
+    },
+    "error.virtualDisplay.requiresLidCloseMode": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فعّل «إبقاء Mac مستيقظًا والغطاء مغلق» أولاً." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Aktiviere zuerst „Bei geschlossenem Deckel wach halten“." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Turn on “Keep awake with lid closed” first." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Activa primero «Mantener activo con la tapa cerrada»." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Activez d’abord « Maintenir éveillé couvercle fermé »." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "先に「蓋を閉じてもスリープさせない」を有効にしてください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "먼저 ‘덮개를 닫아도 깨우기’를 켜세요." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Ative primeiro “Manter ativo com a tampa fechada”." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Сначала включите «Не давать уснуть при закрытой крышке»." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "请先启用“合盖保持唤醒”。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "請先啟用「闔蓋保持喚醒」。" } }
+      }
+    },
+    "error.virtualDisplay.launchFailedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذّر تشغيل الشاشة البرمجية: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Softwarebildschirm konnte nicht gestartet werden: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Could not start the software display: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudo iniciar la pantalla por software: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de démarrer l’écran logiciel : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ソフトウェアディスプレイを起動できませんでした：%@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "소프트웨어 디스플레이를 시작할 수 없습니다: %@" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível iniciar a tela de software: %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось запустить программный дисплей: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法启动软件显示器：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法啟動軟體顯示器：%@" } }
+      }
+    },
+    "error.virtualDisplay.startupFailedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذّر إنشاء الشاشة البرمجية: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Softwarebildschirm konnte nicht erstellt werden: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Could not create the software display: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudo crear la pantalla por software: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de créer l’écran logiciel : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ソフトウェアディスプレイを作成できませんでした：%@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "소프트웨어 디스플레이를 만들 수 없습니다: %@" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível criar a tela de software: %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось создать программный дисплей: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法创建软件显示器：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法建立軟體顯示器：%@" } }
+      }
+    },
+    "error.virtualDisplay.startupTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "انتهت مهلة إنشاء الشاشة البرمجية." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Zeitüberschreitung beim Erstellen des Softwarebildschirms." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Creating the software display timed out." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Se agotó el tiempo para crear la pantalla por software." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "La création de l’écran logiciel a expiré." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ソフトウェアディスプレイの作成がタイムアウトしました。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "소프트웨어 디스플레이 생성 시간이 초과되었습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "A criação da tela de software excedeu o tempo limite." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Истекло время ожидания создания программного дисплея." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "创建软件显示器超时。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "建立軟體顯示器逾時。" } }
+      }
+    },
+    "error.virtualDisplay.terminated": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "توقفت الشاشة البرمجية؛ تم إيقاف وضع سطح المكتب مع الغطاء المغلق." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der Softwarebildschirm wurde beendet; der Schreibtischmodus bei geschlossenem Deckel ist aus." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The software display stopped; closed-lid desktop mode was turned off." } },
+        "es": { "stringUnit": { "state": "translated", "value": "La pantalla por software se detuvo; se desactivó el modo de escritorio con tapa cerrada." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "L’écran logiciel s’est arrêté ; le mode bureau couvercle fermé a été désactivé." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ソフトウェアディスプレイが停止したため、閉じた状態のデスクトップモードをオフにしました。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "소프트웨어 디스플레이가 중지되어 덮개 닫힘 데스크탑 모드를 껐습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "A tela de software parou; o modo de mesa com a tampa fechada foi desativado." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Программный дисплей остановлен; режим рабочего стола при закрытой крышке выключен." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "软件显示器已停止；合盖桌面模式已关闭。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "軟體顯示器已停止；闔蓋桌面模式已關閉。" } }
+      }
+    },
     "panel.lidClose.indicator": {
       "extractionState": "manual",
       "localizations": {
@@ -1569,67 +1761,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "لا يدخل الـ Mac ولا الشاشة سكون الخمول؛ ولا يتجاوز القفل"
+            "value": "يمنع Mac والشاشة من الدخول في وضع السكون بسبب الخمول. ولا يتجاوز شاشة القفل."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Weder Mac noch Display im Leerlauf; sperrt die Sperre nicht aus"
+            "value": "Verhindert den Ruhezustand von Mac und Display bei Inaktivität. Umgeht den Sperrbildschirm nicht."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Neither Mac nor display idle-sleep; does not bypass lock"
+            "value": "Prevents idle sleep for the Mac and display. Does not bypass the lock screen."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ni el Mac ni la pantalla duermen por inactividad; no evita el bloqueo"
+            "value": "Evita que el Mac y la pantalla entren en reposo por inactividad. No elude la pantalla bloqueada."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ni le Mac ni l’écran ne s’endorment en inactivité ; n’empêche pas le verrouillage"
+            "value": "Empêche la mise en veille du Mac et de l’écran en cas d’inactivité. Ne contourne pas l’écran verrouillé."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac もディスプレイもアイドルスリープしません。ロックは回避しません"
+            "value": "Macとディスプレイのアイドルスリープを防ぎます。ロック画面は回避しません。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac과 디스플레이 모두 유휴 절전하지 않음. 잠금은 우회하지 않음"
+            "value": "Mac과 디스플레이가 유휴 상태에서 잠자기 모드로 전환되지 않게 합니다. 잠금 화면은 우회하지 않습니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nem o Mac nem a tela hibernam por ociosidade; não ignora o bloqueio"
+            "value": "Evita que o Mac e a tela entrem em repouso por inatividade. Não ignora a tela bloqueada."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ни Mac, ни экран не засыпают от бездействия; блокировку не отключает"
+            "value": "Предотвращает переход Mac и экрана в режим сна при бездействии. Не обходит экран блокировки."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "系统与屏幕均不因空闲关闭；不会解除锁屏"
+            "value": "防止 Mac 和屏幕因空闲而休眠。不会绕过锁定屏幕。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "系統與螢幕均不因空閒關閉；不會解除鎖定畫面"
+            "value": "防止 Mac 和螢幕因閒置而進入睡眠。不會略過鎖定畫面。"
           }
         }
       }

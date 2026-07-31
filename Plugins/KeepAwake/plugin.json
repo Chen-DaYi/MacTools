@@ -48,7 +48,7 @@
       "summary": "阻止系統空閒休眠；可選保持螢幕常亮，或接通電源時闔蓋運作"
     }
   },
-  "version": "1.0.10",
+  "version": "1.1.0",
   "minHostVersion": "1.1.5",
   "pluginKitVersion": 3,
   "bundleRelativePath": "KeepAwake.bundle",
@@ -56,6 +56,11 @@
   "build": {
     "project": "../../MacTools.xcodeproj",
     "scheme": "KeepAwakePlugin"
+  },
+  "package": {
+    "signPaths": [
+      "KeepAwake.bundle/Contents/Resources/VirtualDisplayHelper/mactools-keep-awake-virtual-display-helper"
+    ]
   },
   "capabilities": {
     "primaryPanel": true,

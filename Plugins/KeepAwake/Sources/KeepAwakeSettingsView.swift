@@ -1,14 +1,18 @@
+import Foundation
 import SwiftUI
 import MacToolsPluginKit
 
 enum KeepAwakeSettingsSearchEntryID {
     static let keepDisplayOn = "keep-display-on"
     static let keepAwakeWithLidClosed = "keep-awake-with-lid-closed"
+    static let keepScreenBasedToolsWorking = "keep-screen-based-tools-working"
 }
 
 struct KeepAwakeSettingsView: View {
     @Binding var keepDisplayOn: Bool
     @Binding var keepAwakeWithLidClosed: Bool
+    @Binding var keepDesktopAvailableWithLidClosed: Bool
+    let isVirtualDisplayAvailable: Bool
     let powerSourceState: KeepAwakePowerSourceState
     let localization: PluginLocalization
 
@@ -32,7 +36,7 @@ struct KeepAwakeSettingsView: View {
 
                         Text(localization.string(
                             "settings.display.keepOn.description",
-                            defaultValue: "阻止休眠运行时，防止屏幕因空闲而关闭。"
+                            defaultValue: "防止 Mac 和屏幕因空闲而休眠。不会绕过锁定屏幕。"
                         ))
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
@@ -62,28 +66,94 @@ struct KeepAwakeSettingsView: View {
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.secondary)
 
-                    HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                            Text(localization.string(
-                                "settings.lidClose.keepAwake",
-                                defaultValue: "合盖保持唤醒"
-                            ))
-                            .font(PluginSettingsTheme.Typography.rowTitle)
+                    VStack(spacing: 0) {
+                        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                                Text(localization.string(
+                                    "settings.lidClose.keepAwake",
+                                    defaultValue: "合盖保持唤醒"
+                                ))
+                                .font(PluginSettingsTheme.Typography.rowTitle)
 
-                            Text(lidCloseDescription)
-                                .font(PluginSettingsTheme.Typography.rowDescription)
-                                .foregroundStyle(lidCloseDescriptionColor)
-                                .fixedSize(horizontal: false, vertical: true)
+                                if lidCloseWarningItems.isEmpty {
+                                    Text(lidCloseDescription)
+                                        .font(PluginSettingsTheme.Typography.rowDescription)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                } else {
+                                    KeepAwakeWarningList(
+                                        items: lidCloseWarningItems,
+                                        color: keepAwakeWithLidClosed ? .orange : .secondary
+                                    )
+                                }
+                            }
+
+                            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                            Toggle("", isOn: $keepAwakeWithLidClosed)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
                         }
+                        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+                        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
 
-                        Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+                        Divider()
+                            .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
 
-                        Toggle("", isOn: $keepAwakeWithLidClosed)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
+                        HStack(
+                            alignment: .top,
+                            spacing: PluginSettingsTheme.Spacing.rowContentControl
+                        ) {
+                            HStack(
+                                alignment: .top,
+                                spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+                            ) {
+                                Image(systemName: "arrow.turn.down.right")
+                                    .font(PluginSettingsTheme.Typography.rowDescription)
+                                    .foregroundStyle(.tertiary)
+                                    .accessibilityHidden(true)
+
+                                VStack(
+                                    alignment: .leading,
+                                    spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+                                ) {
+                                    Text(localization.string(
+                                        "settings.virtualDisplay.keepDesktopAvailable",
+                                        defaultValue: "让屏幕相关工具继续工作"
+                                    ))
+                                    .font(PluginSettingsTheme.Typography.rowTitle)
+
+                                    Text(virtualDisplayDescription)
+                                        .font(PluginSettingsTheme.Typography.rowDescription)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+
+                                    if isVirtualDisplayAvailable {
+                                        KeepAwakeWarningList(
+                                            items: virtualDisplayWarningItems,
+                                            color: keepAwakeWithLidClosed
+                                                && keepDesktopAvailableWithLidClosed
+                                                ? .orange
+                                                : .secondary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                            Toggle("", isOn: $keepDesktopAvailableWithLidClosed)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
+                        .disabled(!isVirtualDisplayControlEnabled)
+                        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+                        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+                        .pluginSettingsSearchAnchor(
+                            pluginID: "keep-awake",
+                            entryID: KeepAwakeSettingsSearchEntryID.keepScreenBasedToolsWorking
+                        )
                     }
-                    .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                    .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
                     .pluginSettingsCardBackground(.plugin)
                     .pluginSettingsSearchAnchor(
                         pluginID: "keep-awake",
@@ -122,7 +192,80 @@ struct KeepAwakeSettingsView: View {
         )
     }
 
-    private var lidCloseDescriptionColor: Color {
-        keepAwakeWithLidClosed ? .orange : .secondary
+    var isVirtualDisplayControlEnabled: Bool {
+        keepAwakeWithLidClosed && isVirtualDisplayAvailable
+    }
+
+    private var lidCloseWarningItems: [String] {
+        guard powerSourceState.isOnExternalPower || keepAwakeWithLidClosed else {
+            return []
+        }
+        return warningItems(from: lidCloseDescription)
+    }
+
+    private var virtualDisplayDescription: String {
+        guard isVirtualDisplayAvailable else {
+            return localization.string(
+                "settings.virtualDisplay.unavailable",
+                defaultValue: "当前插件包不包含软件显示器组件。"
+            )
+        }
+
+        return localization.string(
+            "settings.virtualDisplay.description",
+            defaultValue: "合盖后支持 Codex Computer Use、桌面自动化、屏幕共享和远程控制。"
+        )
+    }
+
+    private var virtualDisplayWarningItems: [String] {
+        [
+            localization.string(
+                "settings.virtualDisplay.warning.enableBeforeClosing",
+                defaultValue: "请在合盖前启用。"
+            ),
+            localization.string(
+                "settings.virtualDisplay.warning.lockScreen",
+                defaultValue: "不会启用远程访问或绕过锁定屏幕。"
+            ),
+            localization.string(
+                "settings.virtualDisplay.warning.systemUpdates",
+                defaultValue: "实验性功能；macOS 更新后可能失效。"
+            ),
+        ]
+    }
+
+    private func warningItems(from value: String) -> [String] {
+        value
+            .split(separator: "\n")
+            .map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: #"^•\s*"#, with: "", options: .regularExpression)
+            }
+            .filter { !$0.isEmpty }
+    }
+}
+
+private struct KeepAwakeWarningList: View {
+    let items: [String]
+    let color: Color
+
+    var body: some View {
+        VStack(
+            alignment: .leading,
+            spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+        ) {
+            ForEach(items, id: \.self) { item in
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text("•")
+                        .accessibilityHidden(true)
+
+                    Text(item)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .font(PluginSettingsTheme.Typography.rowDescription)
+        .foregroundStyle(color)
+        .accessibilityElement(children: .combine)
     }
 }
