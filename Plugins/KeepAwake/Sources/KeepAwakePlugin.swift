@@ -644,7 +644,7 @@ final class KeepAwakePlugin:
                 preventLidCloseSleep: shouldPreventLidCloseSleep
             )
             self.session = session
-            isPreventingDisplaySleep = shouldPreventDisplaySleep
+            isPreventingDisplaySleep = session.isPreventingDisplaySleep
             scheduledEndDate = endDate
             persistCurrentSelectionIfRunning()
             scheduleTimedStateRefreshIfNeeded()

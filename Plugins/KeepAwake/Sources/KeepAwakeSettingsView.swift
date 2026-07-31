@@ -97,63 +97,62 @@ struct KeepAwakeSettingsView: View {
                         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
                         .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
 
-                        if keepAwakeWithLidClosed {
-                            Divider()
-                                .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
+                        Divider()
+                            .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
 
+                        HStack(
+                            alignment: .top,
+                            spacing: PluginSettingsTheme.Spacing.rowContentControl
+                        ) {
                             HStack(
                                 alignment: .top,
-                                spacing: PluginSettingsTheme.Spacing.rowContentControl
+                                spacing: PluginSettingsTheme.Spacing.rowTitleDescription
                             ) {
-                                HStack(
-                                    alignment: .top,
+                                Image(systemName: "arrow.turn.down.right")
+                                    .font(PluginSettingsTheme.Typography.rowDescription)
+                                    .foregroundStyle(.tertiary)
+                                    .accessibilityHidden(true)
+
+                                VStack(
+                                    alignment: .leading,
                                     spacing: PluginSettingsTheme.Spacing.rowTitleDescription
                                 ) {
-                                    Image(systemName: "arrow.turn.down.right")
+                                    Text(localization.string(
+                                        "settings.virtualDisplay.keepDesktopAvailable",
+                                        defaultValue: "让屏幕相关工具继续工作"
+                                    ))
+                                    .font(PluginSettingsTheme.Typography.rowTitle)
+
+                                    Text(virtualDisplayDescription)
                                         .font(PluginSettingsTheme.Typography.rowDescription)
-                                        .foregroundStyle(.tertiary)
-                                        .accessibilityHidden(true)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
 
-                                    VStack(
-                                        alignment: .leading,
-                                        spacing: PluginSettingsTheme.Spacing.rowTitleDescription
-                                    ) {
-                                        Text(localization.string(
-                                            "settings.virtualDisplay.keepDesktopAvailable",
-                                            defaultValue: "让屏幕相关工具继续工作"
-                                        ))
-                                        .font(PluginSettingsTheme.Typography.rowTitle)
-
-                                        Text(virtualDisplayDescription)
-                                            .font(PluginSettingsTheme.Typography.rowDescription)
-                                            .foregroundStyle(.secondary)
-                                            .fixedSize(horizontal: false, vertical: true)
-
-                                        if isVirtualDisplayAvailable {
-                                            KeepAwakeWarningList(
-                                                items: virtualDisplayWarningItems,
-                                                color: keepDesktopAvailableWithLidClosed
-                                                    ? .orange
-                                                    : .secondary
-                                            )
-                                        }
+                                    if isVirtualDisplayAvailable {
+                                        KeepAwakeWarningList(
+                                            items: virtualDisplayWarningItems,
+                                            color: keepAwakeWithLidClosed
+                                                && keepDesktopAvailableWithLidClosed
+                                                ? .orange
+                                                : .secondary
+                                        )
                                     }
                                 }
-
-                                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-
-                                Toggle("", isOn: $keepDesktopAvailableWithLidClosed)
-                                    .labelsHidden()
-                                    .toggleStyle(.switch)
-                                    .disabled(!isVirtualDisplayAvailable)
                             }
-                            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                            .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
-                            .pluginSettingsSearchAnchor(
-                                pluginID: "keep-awake",
-                                entryID: KeepAwakeSettingsSearchEntryID.keepScreenBasedToolsWorking
-                            )
+
+                            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                            Toggle("", isOn: $keepDesktopAvailableWithLidClosed)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
                         }
+                        .disabled(!isVirtualDisplayControlEnabled)
+                        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+                        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+                        .pluginSettingsSearchAnchor(
+                            pluginID: "keep-awake",
+                            entryID: KeepAwakeSettingsSearchEntryID.keepScreenBasedToolsWorking
+                        )
                     }
                     .pluginSettingsCardBackground(.plugin)
                     .pluginSettingsSearchAnchor(
@@ -191,6 +190,10 @@ struct KeepAwakeSettingsView: View {
             "settings.lidClose.keepAwake.description",
             defaultValue: "• 使用电池时暂停，重新接通电源后恢复。\n• 请保持 Mac 通风。\n• 切勿将其放入包中。"
         )
+    }
+
+    var isVirtualDisplayControlEnabled: Bool {
+        keepAwakeWithLidClosed && isVirtualDisplayAvailable
     }
 
     private var lidCloseWarningItems: [String] {

@@ -6,6 +6,8 @@ import MacToolsPluginKit
 
 @MainActor
 protocol KeepAwakeSessionManaging: AnyObject {
+    var isPreventingDisplaySleep: Bool { get }
+
     func start(
         until endDate: Date?,
         preventDisplaySleep: Bool,
@@ -135,6 +137,10 @@ final class KeepAwakeSession: KeepAwakeSessionManaging {
     private var autoStopTask: Task<Void, Never>?
     private var isStopping = false
     private var isObservingTermination = false
+
+    var isPreventingDisplaySleep: Bool {
+        displayAssertionID != IOPMAssertionID(0)
+    }
 
     init(
         localization: PluginLocalization = PluginLocalization(bundle: .main),
