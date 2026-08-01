@@ -6,14 +6,12 @@ final class AutoInputStore: ObservableObject {
     private enum Keys {
         static let isEnabled = "isEnabled"
         static let remembersLastInputSource = "remembersLastInputSource"
-        static let showsSwitchHUD = "showsSwitchHUD"
         static let rules = "rules"
         static let memories = "memories"
     }
 
     @Published private(set) var isEnabled: Bool
     @Published private(set) var remembersLastInputSource: Bool
-    @Published private(set) var showsSwitchHUD: Bool
     @Published private(set) var rules: [AutoInputRule]
 
     private(set) var memories: [String: String]
@@ -29,9 +27,6 @@ final class AutoInputStore: ObservableObject {
         self.remembersLastInputSource = storage.object(forKey: Keys.remembersLastInputSource) == nil
             ? true
             : storage.bool(forKey: Keys.remembersLastInputSource)
-        self.showsSwitchHUD = storage.object(forKey: Keys.showsSwitchHUD) == nil
-            ? false
-            : storage.bool(forKey: Keys.showsSwitchHUD)
         let decodedRules = Self.decode([AutoInputRule].self, from: storage.data(forKey: Keys.rules)) ?? []
         self.rules = Self.normalizedRules(decodedRules)
         let decodedMemories = Self.decode([String: String].self, from: storage.data(forKey: Keys.memories)) ?? [:]
@@ -48,12 +43,6 @@ final class AutoInputStore: ObservableObject {
         guard remembersLastInputSource != value else { return }
         remembersLastInputSource = value
         storage.set(value, forKey: Keys.remembersLastInputSource)
-    }
-
-    func setShowsSwitchHUD(_ value: Bool) {
-        guard showsSwitchHUD != value else { return }
-        showsSwitchHUD = value
-        storage.set(value, forKey: Keys.showsSwitchHUD)
     }
 
     func upsertRule(_ rule: AutoInputRule) {

@@ -81,22 +81,6 @@
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切回應用程式時恢復上次使用的輸入法。" } }
       }
     },
-    "settings.hud.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switching Indicator" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换提示" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切換提示" } }
-      }
-    },
-    "settings.hud.description" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Briefly show the input source after an automatic switch." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动切换后短暂显示输入法名称。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動切換後短暫顯示輸入法名稱。" } }
-      }
-    },
     "settings.rules.title" : {
       "extractionState" : "manual",
       "localizations" : {

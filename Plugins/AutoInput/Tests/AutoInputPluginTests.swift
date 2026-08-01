@@ -10,18 +10,15 @@ final class AutoInputStoreTests: XCTestCase {
         let store = AutoInputStore(storage: storage)
         XCTAssertTrue(store.isEnabled)
         XCTAssertTrue(store.remembersLastInputSource)
-        XCTAssertFalse(store.showsSwitchHUD)
 
         store.setEnabled(false)
         store.setRemembersLastInputSource(false)
-        store.setShowsSwitchHUD(true)
         store.upsertRule(makeRule(bundleID: "com.example.editor", sourceID: "zh"))
         store.remember(inputSourceID: "en", for: "com.example.terminal")
 
         let reloaded = AutoInputStore(storage: storage)
         XCTAssertFalse(reloaded.isEnabled)
         XCTAssertFalse(reloaded.remembersLastInputSource)
-        XCTAssertTrue(reloaded.showsSwitchHUD)
         XCTAssertEqual(reloaded.rule(for: "com.example.editor")?.inputSourceID, "zh")
         XCTAssertEqual(reloaded.rememberedInputSourceID(for: "com.example.terminal"), "en")
     }
@@ -33,86 +30,6 @@ final class AutoInputStoreTests: XCTestCase {
 
         XCTAssertEqual(store.rules.count, 1)
         XCTAssertEqual(store.rules[0].inputSourceID, "zh")
-    }
-}
-
-final class AutoInputIndicatorTests: XCTestCase {
-    func testShortLabelUsesFirstVisibleCharacter() {
-        XCTAssertEqual(AutoInputIndicatorFormatter.shortLabel(for: "ABC输入法"), "A")
-        XCTAssertEqual(AutoInputIndicatorFormatter.shortLabel(for: " 微信输入法 "), "微")
-        XCTAssertEqual(AutoInputIndicatorFormatter.shortLabel(for: "🀄️输入法"), "🀄️")
-        XCTAssertEqual(AutoInputIndicatorFormatter.shortLabel(for: "  \n"), "?")
-    }
-
-    func testAnchorPrefersValidCaretFrame() {
-        let caret = NSRect(x: 80, y: 120, width: 2, height: 18)
-
-        XCTAssertEqual(
-            AutoInputIndicatorAnchorResolver.anchor(
-                caretFrame: caret,
-                mouseLocation: NSPoint(x: 300, y: 400)
-            ),
-            caret
-        )
-    }
-
-    func testAnchorFallsBackToMouseForMissingOrInvalidCaret() {
-        let mouse = NSPoint(x: 300, y: 400)
-        let expected = NSRect(x: 300, y: 400, width: 1, height: 1)
-
-        XCTAssertEqual(
-            AutoInputIndicatorAnchorResolver.anchor(caretFrame: nil, mouseLocation: mouse),
-            expected
-        )
-        XCTAssertEqual(
-            AutoInputIndicatorAnchorResolver.anchor(caretFrame: .zero, mouseLocation: mouse),
-            expected
-        )
-    }
-
-    func testPresentationRetriesCaretBeforeUsingMouseFallback() {
-        XCTAssertEqual(AutoInputIndicatorPresentationPolicy.initialDelay, 0.08)
-        XCTAssertEqual(AutoInputIndicatorPresentationPolicy.retryDelay, 0.08)
-        XCTAssertTrue(AutoInputIndicatorPresentationPolicy.shouldRetryCaret(after: 0))
-        XCTAssertTrue(AutoInputIndicatorPresentationPolicy.shouldRetryCaret(after: 2))
-        XCTAssertFalse(AutoInputIndicatorPresentationPolicy.shouldRetryCaret(after: 3))
-    }
-
-    func testPreferredPositionIsCaretBottomRight() {
-        let origin = AutoInputIndicatorGeometry.origin(
-            anchor: NSRect(x: 100, y: 100, width: 2, height: 18),
-            panelSize: NSSize(width: 32, height: 32),
-            visibleFrame: NSRect(x: 0, y: 0, width: 500, height: 500)
-        )
-
-        XCTAssertEqual(origin, NSPoint(x: 108, y: 62))
-    }
-
-    func testPositionFlipsAtBottomRightScreenEdge() {
-        let panelSize = NSSize(width: 32, height: 32)
-        let visibleFrame = NSRect(x: 0, y: 0, width: 200, height: 200)
-        let origin = AutoInputIndicatorGeometry.origin(
-            anchor: NSRect(x: 190, y: 2, width: 2, height: 18),
-            panelSize: panelSize,
-            visibleFrame: visibleFrame
-        )
-
-        XCTAssertTrue(visibleFrame.contains(NSRect(origin: origin, size: panelSize)))
-        XCTAssertLessThan(origin.x, 190)
-        XCTAssertGreaterThan(origin.y, 2)
-    }
-
-    func testOversizedSpacingResultIsClampedIntoVisibleFrame() {
-        let panelSize = NSSize(width: 32, height: 32)
-        let visibleFrame = NSRect(x: 10, y: 20, width: 100, height: 100)
-        let origin = AutoInputIndicatorGeometry.origin(
-            anchor: NSRect(x: 55, y: 65, width: 1, height: 1),
-            panelSize: panelSize,
-            visibleFrame: visibleFrame,
-            spacing: 500
-        )
-
-        XCTAssertTrue(visibleFrame.contains(NSRect(origin: origin, size: panelSize)))
     }
 }
 
@@ -160,7 +77,6 @@ final class AutoInputControllerTests: XCTestCase {
 
         XCTAssertTrue(fixture.sources.selectedIDs.isEmpty)
         XCTAssertNil(fixture.store.rememberedInputSourceID(for: fixture.app.bundleIdentifier))
-        XCTAssertTrue(fixture.hud.names.isEmpty)
     }
 
     func testSourceChangeRemembersCurrentInputSourceForFrontmostApp() {
@@ -188,36 +104,23 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.store.rememberedInputSourceID(for: fixture.app.bundleIdentifier), "zh")
     }
 
-    func testSelectionFailurePublishesErrorWithoutHUD() {
+    func testSelectionFailurePublishesError() {
         let fixture = makeFixture(currentSourceID: "en")
         fixture.sources.selectionError = AutoInputSourceError.selectionFailed(-1)
-        fixture.store.setShowsSwitchHUD(true)
         fixture.store.upsertRule(makeRule(bundleID: fixture.app.bundleIdentifier, sourceID: "zh"))
 
         fixture.controller.start()
 
         XCTAssertEqual(fixture.controller.errorMessage, "无法切换输入法")
-        XCTAssertTrue(fixture.hud.names.isEmpty)
     }
 
-    func testSuccessfulSwitchShowsHUDOnlyWhenEnabled() {
-        let fixture = makeFixture(currentSourceID: "en")
-        fixture.store.setShowsSwitchHUD(true)
-        fixture.store.upsertRule(makeRule(bundleID: fixture.app.bundleIdentifier, sourceID: "zh"))
-
-        fixture.controller.start()
-
-        XCTAssertEqual(fixture.hud.names, ["中文"])
-    }
-
-    func testStopRemovesObserversAndHidesHUD() {
+    func testStopRemovesObservers() {
         let fixture = makeFixture(currentSourceID: "en")
         fixture.controller.start()
         fixture.controller.stop()
 
         XCTAssertEqual(fixture.sources.stopCount, 1)
         XCTAssertEqual(fixture.applications.stopCount, 1)
-        XCTAssertEqual(fixture.hud.hideCount, 1)
     }
 
     private func makeFixture(currentSourceID: String) -> AutoInputFixture {
@@ -236,18 +139,15 @@ final class AutoInputControllerTests: XCTestCase {
             bundleURL: URL(fileURLWithPath: "/Applications/Editor.app")
         )
         let applications = FakeAutoInputApplicationMonitor(frontmostApplication: app)
-        let hud = FakeAutoInputHUDPresenter()
         let controller = AutoInputController(
             store: store,
             sourceController: sources,
-            applicationMonitor: applications,
-            hudPresenter: hud
+            applicationMonitor: applications
         )
         return AutoInputFixture(
             store: store,
             sources: sources,
             applications: applications,
-            hud: hud,
             controller: controller,
             app: app
         )
@@ -263,8 +163,7 @@ final class AutoInputPluginPanelTests: XCTestCase {
         let plugin = AutoInputPlugin(
             context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
             sourceController: sourceController,
-            applicationMonitor: appMonitor,
-            hudPresenter: FakeAutoInputHUDPresenter()
+            applicationMonitor: appMonitor
         )
 
         XCTAssertEqual(plugin.metadata.id, "auto-input")
@@ -277,8 +176,7 @@ final class AutoInputPluginPanelTests: XCTestCase {
         let pluginWithRule = AutoInputPlugin(
             context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
             sourceController: sourceController,
-            applicationMonitor: appMonitor,
-            hudPresenter: FakeAutoInputHUDPresenter()
+            applicationMonitor: appMonitor
         )
         XCTAssertEqual(pluginWithRule.primaryPanelState.subtitle, "1 条固定规则")
 
@@ -302,7 +200,6 @@ private struct AutoInputFixture {
     let store: AutoInputStore
     let sources: FakeAutoInputSourceController
     let applications: FakeAutoInputApplicationMonitor
-    let hud: FakeAutoInputHUDPresenter
     let controller: AutoInputController
     let app: AutoInputApplication
 }
@@ -352,20 +249,6 @@ private final class FakeAutoInputApplicationMonitor: AutoInputApplicationMonitor
     func activate(_ application: AutoInputApplication) {
         frontmostApplication = application
         onApplicationActivated?(application)
-    }
-}
-
-@MainActor
-private final class FakeAutoInputHUDPresenter: AutoInputHUDPresenting {
-    var names: [String] = []
-    var hideCount = 0
-
-    func show(inputSourceName: String) {
-        names.append(inputSourceName)
-    }
-
-    func hide() {
-        hideCount += 1
     }
 }
 

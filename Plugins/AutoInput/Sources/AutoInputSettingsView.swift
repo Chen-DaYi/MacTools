@@ -39,24 +39,6 @@ struct AutoInputSettingsView: View {
                         }
                     )
                 )
-
-                PluginSettingsListDivider()
-
-                settingToggle(
-                    icon: "text.bubble",
-                    title: localization.string("settings.hud.title", defaultValue: "切换提示"),
-                    description: localization.string(
-                        "settings.hud.description",
-                        defaultValue: "自动切换后短暂显示输入法名称。"
-                    ),
-                    isOn: Binding(
-                        get: { store.showsSwitchHUD },
-                        set: { value in
-                            store.setShowsSwitchHUD(value)
-                            onChange()
-                        }
-                    )
-                )
             }
             .pluginSettingsCardBackground(.host)
         }

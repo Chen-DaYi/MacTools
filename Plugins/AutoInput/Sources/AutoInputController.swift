@@ -2,12 +2,6 @@ import Foundation
 import OSLog
 
 @MainActor
-protocol AutoInputHUDPresenting: AnyObject {
-    func show(inputSourceName: String)
-    func hide()
-}
-
-@MainActor
 final class AutoInputController: ObservableObject {
     @Published private(set) var sources: [AutoInputSource] = []
     @Published private(set) var errorMessage: String?
@@ -17,7 +11,6 @@ final class AutoInputController: ObservableObject {
     private let store: AutoInputStore
     private let sourceController: AutoInputSourceControlling
     private let applicationMonitor: AutoInputApplicationMonitoring
-    private let hudPresenter: AutoInputHUDPresenting
     private let switchErrorMessage: () -> String
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -37,13 +30,11 @@ final class AutoInputController: ObservableObject {
         store: AutoInputStore,
         sourceController: AutoInputSourceControlling,
         applicationMonitor: AutoInputApplicationMonitoring,
-        hudPresenter: AutoInputHUDPresenting,
         switchErrorMessage: @escaping () -> String = { "无法切换输入法" }
     ) {
         self.store = store
         self.sourceController = sourceController
         self.applicationMonitor = applicationMonitor
-        self.hudPresenter = hudPresenter
         self.switchErrorMessage = switchErrorMessage
         self.sources = sourceController.sources
     }
@@ -74,7 +65,6 @@ final class AutoInputController: ObservableObject {
         applicationMonitor.stop()
         sourceController.onSourcesChanged = nil
         applicationMonitor.onApplicationActivated = nil
-        hudPresenter.hide()
         isStarted = false
     }
 
@@ -89,14 +79,12 @@ final class AutoInputController: ObservableObject {
             }
         } else {
             operationGeneration += 1
-            hudPresenter.hide()
         }
     }
 
     func configurationDidChange() {
         if !store.isEnabled {
             operationGeneration += 1
-            hudPresenter.hide()
             errorMessage = nil
             onStateChange?()
             return
@@ -165,9 +153,6 @@ final class AutoInputController: ObservableObject {
             errorMessage = nil
             if store.remembersLastInputSource {
                 store.remember(inputSourceID: target.source.id, for: application.bundleIdentifier)
-            }
-            if store.showsSwitchHUD {
-                hudPresenter.show(inputSourceName: target.source.name)
             }
             onStateChange?()
         } catch {

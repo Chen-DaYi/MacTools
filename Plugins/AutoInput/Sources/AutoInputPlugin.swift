@@ -37,8 +37,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "auto-input"),
         sourceController: AutoInputSourceControlling? = nil,
-        applicationMonitor: AutoInputApplicationMonitoring? = nil,
-        hudPresenter: AutoInputHUDPresenting? = nil
+        applicationMonitor: AutoInputApplicationMonitoring? = nil
     ) {
         let localization = PluginLocalization(bundle: context.resourceBundle)
         let store = AutoInputStore(storage: context.storage)
@@ -46,7 +45,6 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             store: store,
             sourceController: sourceController ?? CarbonAutoInputSourceCatalog(),
             applicationMonitor: applicationMonitor ?? WorkspaceAutoInputApplicationMonitor(),
-            hudPresenter: hudPresenter ?? AutoInputHUDController(),
             switchErrorMessage: {
                 localization.string("error.switchFailed", defaultValue: "无法切换输入法")
             }
