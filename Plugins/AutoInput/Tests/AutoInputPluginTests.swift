@@ -70,6 +70,14 @@ final class AutoInputIndicatorTests: XCTestCase {
         )
     }
 
+    func testPresentationRetriesCaretBeforeUsingMouseFallback() {
+        XCTAssertEqual(AutoInputIndicatorPresentationPolicy.initialDelay, 0.08)
+        XCTAssertEqual(AutoInputIndicatorPresentationPolicy.retryDelay, 0.08)
+        XCTAssertTrue(AutoInputIndicatorPresentationPolicy.shouldRetryCaret(after: 0))
+        XCTAssertTrue(AutoInputIndicatorPresentationPolicy.shouldRetryCaret(after: 2))
+        XCTAssertFalse(AutoInputIndicatorPresentationPolicy.shouldRetryCaret(after: 3))
+    }
+
     func testPreferredPositionIsCaretBottomRight() {
         let origin = AutoInputIndicatorGeometry.origin(
             anchor: NSRect(x: 100, y: 100, width: 2, height: 18),

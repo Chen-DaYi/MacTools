@@ -24,6 +24,16 @@ struct AutoInputIndicatorAnchorResolver {
     }
 }
 
+struct AutoInputIndicatorPresentationPolicy {
+    static let initialDelay: TimeInterval = 0.08
+    static let retryDelay: TimeInterval = 0.08
+    static let maxCaretRetries = 3
+
+    static func shouldRetryCaret(after attempt: Int) -> Bool {
+        attempt < maxCaretRetries
+    }
+}
+
 struct AutoInputIndicatorGeometry {
     static func origin(
         anchor: NSRect,
@@ -169,6 +179,8 @@ final class AutoInputHUDController: AutoInputHUDPresenting {
     private let caretLocator: AutoInputCaretLocating
     private var panel: NSPanel?
     private var label: NSTextField?
+    private var presentationWorkItem: DispatchWorkItem?
+    private var presentationGeneration = 0
     private var hideWorkItem: DispatchWorkItem?
 
     init(caretLocator: AutoInputCaretLocating = AccessibilityAutoInputCaretLocator()) {
@@ -176,11 +188,74 @@ final class AutoInputHUDController: AutoInputHUDPresenting {
     }
 
     func show(inputSourceName: String) {
+        presentationGeneration += 1
+        let generation = presentationGeneration
+        presentationWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.present(
+                    inputSourceName: inputSourceName,
+                    attempt: 0,
+                    generation: generation
+                )
+            }
+        }
+        presentationWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + AutoInputIndicatorPresentationPolicy.initialDelay,
+            execute: workItem
+        )
+    }
+
+    func hide() {
+        presentationGeneration += 1
+        presentationWorkItem?.cancel()
+        presentationWorkItem = nil
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+        panel?.orderOut(nil)
+    }
+
+    private func present(
+        inputSourceName: String,
+        attempt: Int,
+        generation: Int
+    ) {
+        guard generation == presentationGeneration else { return }
+
+        if let caretFrame = caretLocator.caretFrame() {
+            showPanel(inputSourceName: inputSourceName, caretFrame: caretFrame)
+            return
+        }
+
+        guard AutoInputIndicatorPresentationPolicy.shouldRetryCaret(after: attempt) else {
+            showPanel(inputSourceName: inputSourceName, caretFrame: nil)
+            return
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.present(
+                    inputSourceName: inputSourceName,
+                    attempt: attempt + 1,
+                    generation: generation
+                )
+            }
+        }
+        presentationWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + AutoInputIndicatorPresentationPolicy.retryDelay,
+            execute: workItem
+        )
+    }
+
+    private func showPanel(inputSourceName: String, caretFrame: NSRect?) {
         let panel = panel ?? makePanel()
         self.panel = panel
         label?.stringValue = AutoInputIndicatorFormatter.shortLabel(for: inputSourceName)
-        position(panel)
+        position(panel, caretFrame: caretFrame)
 
+        presentationWorkItem = nil
         hideWorkItem?.cancel()
         panel.alphaValue = 1
         panel.orderFrontRegardless()
@@ -192,12 +267,6 @@ final class AutoInputHUDController: AutoInputHUDPresenting {
         }
         hideWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: workItem)
-    }
-
-    func hide() {
-        hideWorkItem?.cancel()
-        hideWorkItem = nil
-        panel?.orderOut(nil)
     }
 
     private func makePanel() -> NSPanel {
@@ -239,9 +308,9 @@ final class AutoInputHUDController: AutoInputHUDPresenting {
         return panel
     }
 
-    private func position(_ panel: NSPanel) {
+    private func position(_ panel: NSPanel, caretFrame: NSRect?) {
         let anchor = AutoInputIndicatorAnchorResolver.anchor(
-            caretFrame: caretLocator.caretFrame(),
+            caretFrame: caretFrame,
             mouseLocation: NSEvent.mouseLocation
         )
         let screen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(anchor) })
