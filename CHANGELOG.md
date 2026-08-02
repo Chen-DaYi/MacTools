@@ -7,6 +7,21 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.1.5] - 2026-08-03
+
+### Added
+
+- Press Command-K or use the Plugins sidebar to search app destinations, settings, plugins, and supported commands in one accessible palette. Results support number-key selection, exact navigation, and protected shortcuts.
+
+### Changed
+
+- MacTools now explains its local-only System Audio Recording use when an installed plugin provides per-app volume controls.
+- Plugin settings now use an adaptive, resizable native sidebar with focused keyboard navigation and no extra focus outlines. Settings keeps a usable window size and adds Back and Forward toolbar controls.
+
+### Fixed
+
+- The Settings sidebar search field now opens search when clicking anywhere inside its visible bounds.
+
 ## [plugins-1.1.5] - 2026-08-03
 
 ### Added
