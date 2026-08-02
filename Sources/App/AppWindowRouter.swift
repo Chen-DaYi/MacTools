@@ -217,6 +217,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     func presentSettings(_ request: SettingsPresentationRequest) {
         let window = settingsWindow ?? makeSettingsWindow()
+        let wasVisible = window.isVisible
         let pendingAppUpdateVersion: String?
 
         switch request {
@@ -247,6 +248,30 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             settingsNavigationCoordinator?.requestAboutUpdateAction(
                 version: pendingAppUpdateVersion
             )
+        }
+
+        if !wasVisible {
+            clearAutomaticInitialFocusAfterPresentation(in: window)
+        }
+    }
+
+    private func clearAutomaticInitialFocusAfterPresentation(in window: NSWindow) {
+        // SwiftUI assigns an initial responder after installing the visible hierarchy.
+        // Wait for that pass, then leave focus entry to Tab or an explicit search request.
+        Task { @MainActor [weak self, weak window] in
+            await Task.yield()
+            guard
+                let self,
+                let window,
+                settingsWindow === window,
+                window.isVisible,
+                settingsNavigationCoordinator?.isUnifiedSearchPresented != true,
+                settingsNavigationCoordinator?.focusedSearchField == nil
+            else {
+                return
+            }
+
+            window.makeFirstResponder(nil)
         }
     }
 

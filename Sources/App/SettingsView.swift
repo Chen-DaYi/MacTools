@@ -1161,9 +1161,6 @@ private struct FeatureSettingsView: View {
                 configurationItems: pluginHost.pluginConfigurationItems,
                 orderedPanes: orderedPanes,
                 selection: selectionBinding,
-                moveSelection: { direction in
-                    navigationCoordinator.movePluginSubpage(direction, in: orderedPanes)
-                },
                 onSearch: {
                     navigationCoordinator.presentUnifiedSearch(origin: .pluginSidebar)
                 }
@@ -1211,9 +1208,7 @@ private struct FeatureSettingsSidebar: View {
     let configurationItems: [PluginConfigurationItem]
     let orderedPanes: [FeatureSettingsPane]
     @Binding var selection: FeatureSettingsPane
-    let moveSelection: (PluginSubpageMoveDirection) -> Void
     let onSearch: () -> Void
-    @FocusState private var isSidebarFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1254,30 +1249,9 @@ private struct FeatureSettingsSidebar: View {
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
-                .focusable(interactions: .activate)
-                .focused($isSidebarFocused)
-                .onMoveCommand { direction in
-                    switch direction {
-                    case .up:
-                        moveSelection(.previous)
-                    case .down:
-                        moveSelection(.next)
-                    default:
-                        break
-                    }
-                }
                 .onChange(of: selection) {
                     withAnimation {
                         proxy.scrollTo(selection)
-                    }
-                }
-                .overlay {
-                    if isSidebarFocused {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color.accentColor.opacity(0.55), lineWidth: 1)
-                            .padding(2)
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -1433,7 +1407,6 @@ private struct FeatureSettingsSidebar: View {
                 guard let newSelection else {
                     return
                 }
-                isSidebarFocused = true
                 selection = newSelection
             }
         )

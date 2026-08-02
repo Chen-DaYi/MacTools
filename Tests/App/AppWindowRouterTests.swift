@@ -87,6 +87,31 @@ final class AppWindowRouterTests: XCTestCase {
         window.close()
     }
 
+    func testSettingsWindowOpensWithoutAutomaticInitialFocus() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.presentSettings(.pluginMarketplace)
+
+        let window = try XCTUnwrap(router.settingsWindow)
+        await settleWindowLayout(window)
+        for _ in 0..<5 {
+            guard window.firstResponder !== window else {
+                break
+            }
+            await Task.yield()
+        }
+
+        XCTAssertTrue(
+            window.firstResponder === window,
+            "Expected the window to own initial focus, got \(String(describing: window.firstResponder))"
+        )
+
+        window.close()
+    }
+
     private func settleWindowLayout(_ window: NSWindow) async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async {
