@@ -48,7 +48,7 @@
       "summary": "設定電池充電上限，達到上限後停止充電；不自動恢復，由用戶決定何時繼續充電"
     }
   },
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "BatteryChargeLimit.bundle",

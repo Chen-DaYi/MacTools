@@ -3,21 +3,42 @@
   "displayName": "窗口切换",
   "summary": "用可配置快捷键快速切换正在运行的窗口",
   "localizedMetadata": {
-    "ar": { "displayName": "مبدّل النوافذ", "summary": "يمكنك التبديل سريعًا بين النوافذ المفتوحة باستخدام اختصار قابل للتخصيص." },
-    "de": { "displayName": "Fensterwechsel", "summary": "Schnell zwischen geöffneten Fenstern mit einem anpassbaren Kurzbefehl wechseln." },
+    "ar": {
+      "displayName": "مبدّل النوافذ",
+      "summary": "يمكنك التبديل سريعًا بين النوافذ المفتوحة باستخدام اختصار قابل للتخصيص."
+    },
+    "de": {
+      "displayName": "Fensterwechsel",
+      "summary": "Schnell zwischen geöffneten Fenstern mit einem anpassbaren Kurzbefehl wechseln."
+    },
     "en": {
       "displayName": "Window Switcher",
       "summary": "Quickly switch between running windows with a configurable shortcut."
     },
-    "es": { "displayName": "Cambiador de ventanas", "summary": "Cambia rápidamente entre ventanas abiertas con un atajo configurable." },
-    "fr": { "displayName": "Sélecteur de fenêtres", "summary": "Basculez rapidement entre les fenêtres ouvertes avec un raccourci configurable." },
+    "es": {
+      "displayName": "Cambiador de ventanas",
+      "summary": "Cambia rápidamente entre ventanas abiertas con un atajo configurable."
+    },
+    "fr": {
+      "displayName": "Sélecteur de fenêtres",
+      "summary": "Basculez rapidement entre les fenêtres ouvertes avec un raccourci configurable."
+    },
     "ja": {
       "displayName": "ウインドウ切り替え",
       "summary": "設定可能なショートカットで実行中のウインドウをすばやく切り替えます。"
     },
-    "ko": { "displayName": "윈도우 전환기", "summary": "사용자 설정 단축키로 실행 중인 윈도우를 빠르게 전환합니다." },
-    "pt": { "displayName": "Alternador de janelas", "summary": "Alterne rapidamente entre janelas abertas com um atalho configurável." },
-    "ru": { "displayName": "Переключатель окон", "summary": "Быстро переключайтесь между открытыми окнами с помощью настраиваемого сочетания клавиш." },
+    "ko": {
+      "displayName": "윈도우 전환기",
+      "summary": "사용자 설정 단축키로 실행 중인 윈도우를 빠르게 전환합니다."
+    },
+    "pt": {
+      "displayName": "Alternador de janelas",
+      "summary": "Alterne rapidamente entre janelas abertas com um atalho configurável."
+    },
+    "ru": {
+      "displayName": "Переключатель окон",
+      "summary": "Быстро переключайтесь между открытыми окнами с помощью настраиваемого сочетания клавиш."
+    },
     "zh-Hans": {
       "displayName": "窗口切换",
       "summary": "用可配置快捷键快速切换正在运行的窗口"
@@ -27,7 +48,7 @@
       "summary": "用可設定快速鍵快速切換正在執行的視窗"
     }
   },
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "WindowSwitcher.bundle",

@@ -48,7 +48,7 @@
       "summary": "一鍵讓所有顯示器立即進入休眠"
     }
   },
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minHostVersion": "1.1.5",
   "pluginKitVersion": 3,
   "bundleRelativePath": "DisplaySleep.bundle",

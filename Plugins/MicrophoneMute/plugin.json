@@ -48,7 +48,7 @@
       "summary": "快速靜音或恢復預設麥克風輸入"
     }
   },
-  "version": "1.0.7",
+  "version": "1.0.8",
   "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "MicrophoneMute.bundle",

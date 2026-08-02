@@ -3,18 +3,42 @@
   "displayName": "鼠标增强",
   "summary": "增强鼠标与触控板控制",
   "localizedMetadata": {
-    "ar": { "displayName": "محسّن الماوس", "summary": "تحسين عناصر التحكم بالماوس ولوحة التتبع." },
-    "de": { "displayName": "Maus-Erweiterung", "summary": "Maus- und Trackpad-Steuerung erweitern." },
+    "ar": {
+      "displayName": "محسّن الماوس",
+      "summary": "تحسين عناصر التحكم بالماوس ولوحة التتبع."
+    },
+    "de": {
+      "displayName": "Maus-Erweiterung",
+      "summary": "Maus- und Trackpad-Steuerung erweitern."
+    },
     "en": {
       "displayName": "Mouse Enhancer",
       "summary": "Enhance mouse and trackpad controls."
     },
-    "es": { "displayName": "Mejoras para el ratón", "summary": "Mejora los controles del ratón y del trackpad." },
-    "fr": { "displayName": "Amélioration de la souris", "summary": "Améliore les commandes de la souris et du trackpad." },
-    "ja": { "displayName": "マウス機能拡張", "summary": "マウスとトラックパッドの操作を拡張します。" },
-    "ko": { "displayName": "마우스 기능 향상", "summary": "마우스와 트랙패드 제어 기능을 확장합니다." },
-    "pt": { "displayName": "Aprimoramento do mouse", "summary": "Aprimora os controles do mouse e do trackpad." },
-    "ru": { "displayName": "Расширение мыши", "summary": "Расширяет возможности управления мышью и трекпадом." },
+    "es": {
+      "displayName": "Mejoras para el ratón",
+      "summary": "Mejora los controles del ratón y del trackpad."
+    },
+    "fr": {
+      "displayName": "Amélioration de la souris",
+      "summary": "Améliore les commandes de la souris et du trackpad."
+    },
+    "ja": {
+      "displayName": "マウス機能拡張",
+      "summary": "マウスとトラックパッドの操作を拡張します。"
+    },
+    "ko": {
+      "displayName": "마우스 기능 향상",
+      "summary": "마우스와 트랙패드 제어 기능을 확장합니다."
+    },
+    "pt": {
+      "displayName": "Aprimoramento do mouse",
+      "summary": "Aprimora os controles do mouse e do trackpad."
+    },
+    "ru": {
+      "displayName": "Расширение мыши",
+      "summary": "Расширяет возможности управления мышью и трекпадом."
+    },
     "zh-Hans": {
       "displayName": "鼠标增强",
       "summary": "增强鼠标与触控板控制"
@@ -24,7 +48,7 @@
       "summary": "增強滑鼠與觸控板控制"
     }
   },
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "MouseEnhancer.bundle",

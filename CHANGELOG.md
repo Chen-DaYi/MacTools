@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [plugins-1.1.5] - 2026-08-03
+
+### Added
+
+- Added App Volume controls for adjusting and remembering the volume of each app currently playing audio on macOS 15 or later.
+- Added Auto Input to remember the last input source used in each app and apply fixed per-app input sources.
+- Keep Awake can create a built-in virtual display while a powered MacBook's lid is closed, allowing screen sharing, remote control, and desktop automation without an external display.
+- Display Brightness and Prevent Sleep expose direct setting destinations, while Display Sleep and Lock Screen opt in to safe command discovery.
+
+### Changed
+
+- Disk Cleanup now scans system caches, developer artifacts, and leftover installers faster. Cleanup moves items to Trash by default and blocks protected, incomplete, locked, or overly broad targets.
+
+### Fixed
+
+- Device Battery command sampling no longer stalls when a spawned helper leaves output pipes open, and preserves partial output when a command times out.
+
 ## [v1.1.4] - 2026-07-25
 
 ### Added

@@ -48,7 +48,7 @@
       "summary": "實時查看系統狀態"
     }
   },
-  "version": "1.0.17",
+  "version": "1.0.18",
   "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "SystemStatus.bundle",

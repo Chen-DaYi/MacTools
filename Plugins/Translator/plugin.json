@@ -48,7 +48,7 @@
       "summary": "透過快速鍵翻譯選取文字或截圖區域。"
     }
   },
-  "version": "0.1.9",
+  "version": "0.1.10",
   "minHostVersion": "1.1.3",
   "pluginKitVersion": 3,
   "bundleRelativePath": "Translator.bundle",
