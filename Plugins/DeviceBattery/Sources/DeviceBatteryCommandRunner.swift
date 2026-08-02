@@ -101,6 +101,11 @@ private final class DeviceBatteryCommandExecution: @unchecked Sendable {
             return
         }
 
+        guard configureNonblockingReads() else {
+            completeWithoutLaunching()
+            return
+        }
+
         outputPipe.fileHandleForReading.readabilityHandler = { [weak self] _ in
             self?.scheduleDrain(.standardOutput)
         }
@@ -220,26 +225,67 @@ private final class DeviceBatteryCommandExecution: @unchecked Sendable {
             return
         }
 
-        let data: Data
-        switch stream {
-        case .standardOutput:
-            data = outputPipe.fileHandleForReading.availableData
-            if data.isEmpty {
-                outputReachedEOF = true
-                outputPipe.fileHandleForReading.readabilityHandler = nil
-            } else {
-                outputAccumulator.append(data)
-            }
-        case .standardError:
-            data = errorPipe.fileHandleForReading.availableData
-            if data.isEmpty {
-                errorReachedEOF = true
-                errorPipe.fileHandleForReading.readabilityHandler = nil
-            }
+        if drainAvailableBytes(from: stream) {
+            markReachedEOF(stream)
         }
 
         clearDrainScheduled(stream)
         completeIfReady()
+    }
+
+    private func configureNonblockingReads() -> Bool {
+        [outputPipe.fileHandleForReading, errorPipe.fileHandleForReading].allSatisfy { handle in
+            let descriptor = handle.fileDescriptor
+            let flags = fcntl(descriptor, F_GETFL)
+            guard flags >= 0 else { return false }
+            return fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) >= 0
+        }
+    }
+
+    /// Returns true when the stream reached EOF or an unrecoverable read error.
+    private func drainAvailableBytes(from stream: Stream) -> Bool {
+        let descriptor: Int32
+        switch stream {
+        case .standardOutput:
+            descriptor = outputPipe.fileHandleForReading.fileDescriptor
+        case .standardError:
+            descriptor = errorPipe.fileHandleForReading.fileDescriptor
+        }
+
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let byteCount = buffer.withUnsafeMutableBytes { bytes in
+                Darwin.read(descriptor, bytes.baseAddress, bytes.count)
+            }
+
+            if byteCount > 0 {
+                switch stream {
+                case .standardOutput:
+                    outputAccumulator.append(Data(buffer.prefix(byteCount)))
+                case .standardError:
+                    break
+                }
+                continue
+            }
+            if byteCount == 0 {
+                return true
+            }
+            if errno == EINTR {
+                continue
+            }
+            return errno != EAGAIN && errno != EWOULDBLOCK
+        }
+    }
+
+    private func markReachedEOF(_ stream: Stream) {
+        switch stream {
+        case .standardOutput:
+            outputReachedEOF = true
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+        case .standardError:
+            errorReachedEOF = true
+            errorPipe.fileHandleForReading.readabilityHandler = nil
+        }
     }
 
     private func clearDrainScheduled(_ stream: Stream) {
@@ -273,6 +319,8 @@ private final class DeviceBatteryCommandExecution: @unchecked Sendable {
 
     private func forceClosePipesAfterProcessExit() {
         guard processExited, !pipesClosed else { return }
+        _ = drainAvailableBytes(from: .standardOutput)
+        _ = drainAvailableBytes(from: .standardError)
         outputReachedEOF = true
         errorReachedEOF = true
         finishAfterProcessExit()
