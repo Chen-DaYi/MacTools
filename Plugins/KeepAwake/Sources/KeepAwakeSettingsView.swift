@@ -1,247 +1,177 @@
-import Foundation
 import SwiftUI
 import MacToolsPluginKit
 
 enum KeepAwakeSettingsSearchEntryID {
-    static let keepDisplayOn = "keep-display-on"
-    static let keepAwakeWithLidClosed = "keep-awake-with-lid-closed"
-    static let keepScreenBasedToolsWorking = "keep-screen-based-tools-working"
+    static let behavior = "behavior"
 }
 
 struct KeepAwakeSettingsView: View {
-    @Binding var keepDisplayOn: Bool
-    @Binding var keepAwakeWithLidClosed: Bool
-    @Binding var keepDesktopAvailableWithLidClosed: Bool
+    @Binding var behavior: KeepAwakeBehavior
     let isVirtualDisplayAvailable: Bool
     let powerSourceState: KeepAwakePowerSourceState
     let localization: PluginLocalization
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            VStack(
+                alignment: .leading,
+                spacing: PluginSettingsTheme.Spacing.sectionHeaderContent
+            ) {
                 Label(
-                    localization.string("settings.display.section", defaultValue: "屏幕"),
-                    systemImage: "display"
+                    localization.string(
+                        "settings.mode.section",
+                        defaultValue: "行为"
+                    ),
+                    systemImage: "slider.horizontal.3"
                 )
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
 
-                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                        Text(localization.string(
-                            "settings.display.keepOn",
-                            defaultValue: "保持屏幕常亮"
-                        ))
-                        .font(PluginSettingsTheme.Typography.rowTitle)
+                VStack(
+                    alignment: .leading,
+                    spacing: PluginSettingsTheme.Spacing.rowContentControl
+                ) {
+                    behaviorSelector
 
-                        Text(localization.string(
-                            "settings.display.keepOn.description",
-                            defaultValue: "防止 Mac 和屏幕因空闲而休眠。不会绕过锁定屏幕。"
-                        ))
+                    Text(behaviorDescription)
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+
+                    if behavior == .keepScreenBasedToolsWorking {
+                        KeepAwakeWarningList(items: screenToolsWarningItems, color: .orange)
+                            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
                     }
-
-                    Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-
-                    Toggle("", isOn: $keepDisplayOn)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
                 }
-                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
                 .pluginSettingsCardBackground(.plugin)
                 .pluginSettingsSearchAnchor(
                     pluginID: "keep-awake",
-                    entryID: KeepAwakeSettingsSearchEntryID.keepDisplayOn
+                    entryID: KeepAwakeSettingsSearchEntryID.behavior
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-            if powerSourceState.isPortableMac {
-                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                    Label(
-                        localization.string("settings.lidClose.section", defaultValue: "MacBook"),
-                        systemImage: "laptopcomputer"
-                    )
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(.secondary)
+    private var behaviorSelector: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            ForEach(KeepAwakeBehavior.allCases, id: \.self) { option in
+                let isSelected = behavior == option
 
-                    VStack(spacing: 0) {
-                        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                                Text(localization.string(
-                                    "settings.lidClose.keepAwake",
-                                    defaultValue: "合盖保持唤醒"
-                                ))
-                                .font(PluginSettingsTheme.Typography.rowTitle)
-
-                                if lidCloseWarningItems.isEmpty {
-                                    Text(lidCloseDescription)
-                                        .font(PluginSettingsTheme.Typography.rowDescription)
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                } else {
-                                    KeepAwakeWarningList(
-                                        items: lidCloseWarningItems,
-                                        color: keepAwakeWithLidClosed ? .orange : .secondary
-                                    )
-                                }
-                            }
-
-                            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-
-                            Toggle("", isOn: $keepAwakeWithLidClosed)
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-                        }
-                        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
-
-                        Divider()
-                            .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
-
-                        HStack(
-                            alignment: .top,
-                            spacing: PluginSettingsTheme.Spacing.rowContentControl
-                        ) {
-                            HStack(
-                                alignment: .top,
-                                spacing: PluginSettingsTheme.Spacing.rowTitleDescription
-                            ) {
-                                Image(systemName: "arrow.turn.down.right")
-                                    .font(PluginSettingsTheme.Typography.rowDescription)
-                                    .foregroundStyle(.tertiary)
-                                    .accessibilityHidden(true)
-
-                                VStack(
-                                    alignment: .leading,
-                                    spacing: PluginSettingsTheme.Spacing.rowTitleDescription
-                                ) {
-                                    Text(localization.string(
-                                        "settings.virtualDisplay.keepDesktopAvailable",
-                                        defaultValue: "让屏幕相关工具继续工作"
-                                    ))
-                                    .font(PluginSettingsTheme.Typography.rowTitle)
-
-                                    Text(virtualDisplayDescription)
-                                        .font(PluginSettingsTheme.Typography.rowDescription)
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-
-                                    if isVirtualDisplayAvailable {
-                                        KeepAwakeWarningList(
-                                            items: virtualDisplayWarningItems,
-                                            color: keepAwakeWithLidClosed
-                                                && keepDesktopAvailableWithLidClosed
-                                                ? .orange
-                                                : .secondary
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-
-                            Toggle("", isOn: $keepDesktopAvailableWithLidClosed)
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-                        }
-                        .disabled(!isVirtualDisplayControlEnabled)
-                        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
-                        .pluginSettingsSearchAnchor(
-                            pluginID: "keep-awake",
-                            entryID: KeepAwakeSettingsSearchEntryID.keepScreenBasedToolsWorking
-                        )
-                    }
-                    .pluginSettingsCardBackground(.plugin)
-                    .pluginSettingsSearchAnchor(
-                        pluginID: "keep-awake",
-                        entryID: KeepAwakeSettingsSearchEntryID.keepAwakeWithLidClosed
-                    )
+                Button {
+                    behavior = option
+                } label: {
+                    Text(behaviorTitle(option))
+                        .font(PluginSettingsTheme.Typography.rowTitle.weight(.medium))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: PluginSettingsTheme.Size.controlHeight + 8)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .background(
+                    RoundedRectangle(
+                        cornerRadius: PluginSettingsTheme.Radius.control,
+                        style: .continuous
+                    )
+                    .fill(
+                        isSelected
+                            ? Color.accentColor
+                            : PluginSettingsTheme.Palette.recessedControlBackground
+                    )
+                )
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, PluginSettingsTheme.Spacing.controlCluster)
+    }
+
+    private func behaviorTitle(_ option: KeepAwakeBehavior) -> String {
+        switch option {
+        case .allowDisplayToTurnOff:
+            localization.string(
+                "settings.mode.keepMacAwake.title",
+                defaultValue: "允许屏幕关闭"
+            )
+        case .keepDisplayOn:
+            localization.string(
+                "settings.display.keepOn",
+                defaultValue: "保持常亮"
+            )
+        case .keepScreenBasedToolsWorking:
+            localization.string(
+                "settings.mode.screenTools.shortTitle",
+                defaultValue: "屏幕工具"
+            )
         }
     }
 
-    private var lidCloseDescription: String {
-        if !powerSourceState.isPortableMac {
-            return localization.string(
-                "settings.lidClose.unavailable.notebook",
-                defaultValue: "仅适用于 Mac 笔记本电脑。"
+    private var behaviorDescription: String {
+        switch behavior {
+        case .allowDisplayToTurnOff:
+            localization.string(
+                "settings.mode.keepMacAwake.description",
+                defaultValue: "保持 Mac 唤醒；屏幕关闭与锁定仍遵循 macOS 设置。"
+            )
+        case .keepDisplayOn:
+            localization.string(
+                "settings.display.keepOn.description",
+                defaultValue: "保持屏幕常亮。自动锁定仍遵循 macOS 设置。"
+            )
+        case .keepScreenBasedToolsWorking:
+            localization.string(
+                "settings.mode.screenTools.description",
+                defaultValue: "保持屏幕可用并防止自动锁定，适用于 Codex Computer Use、桌面自动化、屏幕共享和远程控制。"
             )
         }
+    }
 
-        if !powerSourceState.isOnExternalPower {
-            if keepAwakeWithLidClosed {
-                return localization.string(
-                    "settings.lidClose.paused.power",
-                    defaultValue: "• 正在等待电源，接通后自动启用。\n• 请保持 Mac 通风。\n• 切勿将其放入包中。"
+    private var screenToolsWarningItems: [String] {
+        var items: [String] = []
+
+        if powerSourceState.isPortableMac {
+            items.append(
+                localization.string(
+                    "settings.automaticLock.warning.closedLidPower",
+                    defaultValue: "合盖运行要求 MacBook 连接电源。"
+                )
+            )
+            items.append(
+                localization.string(
+                    "settings.mode.screenTools.warning.ventilation",
+                    defaultValue: "保持 Mac 通风，切勿将其放入包中。"
+                )
+            )
+            if isVirtualDisplayAvailable {
+                items.append(
+                    localization.string(
+                        "settings.mode.screenTools.warning.experimental",
+                        defaultValue: "合盖软件显示器为实验性功能，macOS 更新后可能失效。"
+                    )
+                )
+            } else {
+                items.append(
+                    localization.string(
+                        "settings.mode.screenTools.warning.unavailable",
+                        defaultValue: "当前插件包不包含合盖软件显示器组件。"
+                    )
                 )
             }
+        }
 
-            return localization.string(
-                "settings.lidClose.unavailable.power",
-                defaultValue: "仅在接通电源时生效。可随时启用。"
+        items.append(
+            localization.string(
+                "settings.mode.screenTools.warning.manualLock",
+                defaultValue: "手动锁定仍然有效；不会解锁已锁定的会话。"
             )
-        }
-
-        return localization.string(
-            "settings.lidClose.keepAwake.description",
-            defaultValue: "• 使用电池时暂停，重新接通电源后恢复。\n• 请保持 Mac 通风。\n• 切勿将其放入包中。"
         )
-    }
-
-    var isVirtualDisplayControlEnabled: Bool {
-        keepAwakeWithLidClosed && isVirtualDisplayAvailable
-    }
-
-    private var lidCloseWarningItems: [String] {
-        guard powerSourceState.isOnExternalPower || keepAwakeWithLidClosed else {
-            return []
-        }
-        return warningItems(from: lidCloseDescription)
-    }
-
-    private var virtualDisplayDescription: String {
-        guard isVirtualDisplayAvailable else {
-            return localization.string(
-                "settings.virtualDisplay.unavailable",
-                defaultValue: "当前插件包不包含软件显示器组件。"
-            )
-        }
-
-        return localization.string(
-            "settings.virtualDisplay.description",
-            defaultValue: "合盖后支持 Codex Computer Use、桌面自动化、屏幕共享和远程控制。"
-        )
-    }
-
-    private var virtualDisplayWarningItems: [String] {
-        [
-            localization.string(
-                "settings.virtualDisplay.warning.enableBeforeClosing",
-                defaultValue: "请在合盖前启用。"
-            ),
-            localization.string(
-                "settings.virtualDisplay.warning.lockScreen",
-                defaultValue: "不会启用远程访问或绕过锁定屏幕。"
-            ),
-            localization.string(
-                "settings.virtualDisplay.warning.systemUpdates",
-                defaultValue: "实验性功能；macOS 更新后可能失效。"
-            ),
-        ]
-    }
-
-    private func warningItems(from value: String) -> [String] {
-        value
-            .split(separator: "\n")
-            .map {
-                $0.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: #"^•\s*"#, with: "", options: .regularExpression)
-            }
-            .filter { !$0.isEmpty }
+        return items
     }
 }
 
