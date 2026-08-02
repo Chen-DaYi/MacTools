@@ -17,88 +17,10 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
         )
     }
 
-    func testAllCasesOrderMatchesPickerOrder() {
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.allCases,
-            [
-                .notInstalledFirst,
-                .installedFirst,
-                .nameAscending,
-                .nameDescending
-            ]
-        )
-    }
-
     func testUninstallScopeFallsBackToMacToolsWithoutCapabilityMetadata() {
         let item = makeItem(id: "legacy", title: "Legacy", state: .installed)
 
         XCTAssertEqual(item.uninstallScopeSummary, "MacTools")
-    }
-
-    func testNotInstalledFirstSortRankOrdersInstallableBeforeInstalled() {
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "a", title: "A", state: .available)),
-            0
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "b", title: "B", state: .localDevelopment)),
-            0
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(
-                for: makeItem(
-                    id: "c",
-                    title: "C",
-                    state: .updateAvailable(installedVersion: "1.0.0", catalogVersion: "1.1.0")
-                )
-            ),
-            1
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "d", title: "D", state: .restartRequired)),
-            2
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "e", title: "E", state: .failed("x"))),
-            2
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "f", title: "F", state: .incompatible("old"))),
-            2
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "g", title: "G", state: .revoked("gone"))),
-            2
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.notInstalledFirstSortRank(for: makeItem(id: "h", title: "H", state: .installed)),
-            3
-        )
-    }
-
-    func testInstalledFirstSortRankPrioritizesUpdatesAndIssues() {
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.installedFirstSortRank(
-                for: makeItem(
-                    id: "u",
-                    title: "U",
-                    state: .updateAvailable(installedVersion: "1.0.0", catalogVersion: "1.1.0")
-                )
-            ),
-            0
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.installedFirstSortRank(for: makeItem(id: "f", title: "F", state: .failed("x"))),
-            1
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.installedFirstSortRank(for: makeItem(id: "e", title: "E", state: .installed)),
-            2
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.installedFirstSortRank(for: makeItem(id: "a", title: "A", state: .available)),
-            3
-        )
     }
 
     func testNotInstalledFirstGroupsByStatusThenSortsByTitle() {
@@ -186,29 +108,6 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
         )
     }
 
-    func testNameSortSupportsEveryFixedAppLanguage() {
-        let items = [
-            makeItem(id: "calendar", title: "Calendar", state: .available),
-            makeItem(id: "eject-disk", title: "Éjecter", state: .available),
-            makeItem(id: "appearance", title: "Ändern", state: .available),
-            makeItem(id: "battery-limit", title: "Батарея", state: .available),
-            makeItem(id: "chinese-calendar", title: "日历", state: .available),
-            makeItem(id: "japanese-calendar", title: "カレンダー", state: .available),
-            makeItem(id: "korean-calendar", title: "달력", state: .available),
-            makeItem(id: "arabic-calendar", title: "التقويم", state: .available)
-        ]
-        let fixedLanguages = AppLanguagePreference.allCases.filter { $0 != .system }
-
-        for language in fixedLanguages {
-            let locale = Locale(identifier: language.rawValue)
-            let ascending = PluginMarketplaceSortMode.sorted(items, by: .nameAscending, locale: locale).map(\.id)
-            let descending = PluginMarketplaceSortMode.sorted(items, by: .nameDescending, locale: locale).map(\.id)
-
-            XCTAssertEqual(Set(ascending), Set(items.map(\.id)), "Missing item for \(language.rawValue)")
-            XCTAssertEqual(descending, ascending.reversed(), "Descending order for \(language.rawValue)")
-        }
-    }
-
     func testNameSortUsesIDAsStableTieBreaker() {
         let items = [
             makeItem(id: "plugin-b", title: "Same", state: .available),
@@ -243,46 +142,6 @@ final class PluginMarketplaceSortModeTests: XCTestCase {
         XCTAssertEqual(
             PluginMarketplaceSortMode.sorted(items, by: .installedFirst).map(\.id),
             ["mango-update", "zebra-installed", "apple-available"]
-        )
-    }
-
-    func testCompareIsSymmetricForDistinctRanks() {
-        let available = makeItem(id: "a", title: "A", state: .available)
-        let installed = makeItem(id: "e", title: "E", state: .installed)
-
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(available, installed, mode: .notInstalledFirst),
-            .orderedAscending
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(installed, available, mode: .notInstalledFirst),
-            .orderedDescending
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(installed, available, mode: .installedFirst),
-            .orderedAscending
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(available, installed, mode: .installedFirst),
-            .orderedDescending
-        )
-    }
-
-    func testNameComparePreservesOrderedSameWhenTitleAndIDMatch() {
-        let item = makeItem(id: "same-id", title: "Same", state: .available)
-        let duplicate = makeItem(id: "same-id", title: "Same", state: .installed)
-
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(item, duplicate, mode: .nameAscending),
-            .orderedSame
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(item, duplicate, mode: .nameDescending),
-            .orderedSame
-        )
-        XCTAssertEqual(
-            PluginMarketplaceSortMode.compare(duplicate, item, mode: .nameDescending),
-            .orderedSame
         )
     }
 

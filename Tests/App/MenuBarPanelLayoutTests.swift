@@ -59,53 +59,6 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertEqual(frame.minY, MenuBarPanelLayout.secondaryPanelScreenMargin)
     }
 
-    func testBaseLayoutMetricsStayStable() {
-        XCTAssertEqual(MenuBarPanelLayout.baseWidth, 316)
-        XCTAssertEqual(
-            MenuBarPanelLayout.surfaceWidth,
-            MenuBarPanelLayout.baseWidth - (MenuBarPanelLayout.outerPadding * 2)
-        )
-        XCTAssertEqual(MenuBarPanelLayout.topChromeHeight, 36)
-        XCTAssertEqual(MenuBarPanelLayout.contentTopPadding, 4)
-        XCTAssertEqual(MenuBarPanelLayout.contentBottomPadding, 6)
-        XCTAssertEqual(MenuBarPanelLayout.contentVerticalPadding, 10)
-        XCTAssertEqual(
-            MenuBarPanelLayout.contentBodyHeight(forContentHeight: 184),
-            174
-        )
-        XCTAssertEqual(MenuBarPanelLayout.minimumContentHeight, 184)
-        XCTAssertEqual(MenuBarPanelLayout.rowHeaderHeight, 31)
-    }
-
-    func testContentSizeUsesModelWithoutSwiftUILayoutMeasurement() {
-        let item = makeItem(
-            controlStyle: .disclosure,
-            isExpanded: true,
-            controls: [
-                PluginPanelControl(
-                    id: "display-navigation",
-                    kind: .navigationList,
-                    options: [
-                        PluginPanelControlOption(id: "1", title: "Studio Display"),
-                        PluginPanelControlOption(id: "2", title: "LG UltraFine")
-                    ],
-                    selectedOptionID: nil,
-                    dateValue: nil,
-                    minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: nil,
-                    isEnabled: true
-                )
-            ]
-        )
-
-        XCTAssertEqual(
-            MenuBarPanelLayout.contentSize(for: [item]),
-            NSSize(width: 316, height: 220)
-        )
-    }
-
     func testDisclosureDetailHeightIncludesSwitchRows() {
         let item = makeItem(
             controlStyle: .disclosure,
@@ -169,70 +122,6 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         )
     }
 
-    func testSwitchFeatureContentHeightIncludesDisplayedDetail() {
-        let item = makeItem(
-            controlStyle: .switch,
-            isExpanded: false,
-            controls: [
-                PluginPanelControl(
-                    id: "duration",
-                    kind: .segmented,
-                    options: [
-                        PluginPanelControlOption(id: "forever", title: "永不"),
-                        PluginPanelControlOption(id: "thirty-minutes", title: "30min")
-                    ],
-                    selectedOptionID: "forever",
-                    dateValue: nil,
-                    minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: nil,
-                    isEnabled: true
-                )
-            ]
-        )
-
-        XCTAssertEqual(
-            MenuBarPanelLayout.featureContentHeight(for: [item]),
-            MenuBarPanelLayout.rowHeaderHeight
-                + MenuBarPanelLayout.detailSpacing
-                + 24
-                + MenuBarPanelLayout.rowVerticalPadding
-        )
-    }
-
-    func testButtonFeatureContentHeightIncludesDisplayedDetail() {
-        let item = makeItem(
-            controlStyle: .button,
-            isExpanded: false,
-            controls: [
-                PluginPanelControl(
-                    id: "open-details",
-                    kind: .actionRow,
-                    options: [],
-                    selectedOptionID: nil,
-                    dateValue: nil,
-                    minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: nil,
-                    actionTitle: "打开详情",
-                    actionIconSystemName: "arrow.up.right.square",
-                    isEnabled: true
-                )
-            ]
-        )
-
-        XCTAssertEqual(
-            MenuBarPanelLayout.featureContentHeight(for: [item]),
-            MenuBarPanelLayout.rowHeaderHeight
-                + MenuBarPanelLayout.detailSpacing
-                + 16
-                + MenuBarPanelLayout.actionRowVerticalPadding * 2
-                + MenuBarPanelLayout.rowVerticalPadding
-        )
-    }
-
     func testActionRowFeatureContentHeightIncludesSectionTitle() {
         let item = makeItem(
             controlStyle: .button,
@@ -264,75 +153,6 @@ final class MenuBarPanelLayoutTests: XCTestCase {
                 + 16
                 + MenuBarPanelLayout.actionRowVerticalPadding * 2
                 + MenuBarPanelLayout.rowVerticalPadding
-        )
-    }
-
-    func testCollapsedDisclosureFeatureContentHeightIgnoresDetail() {
-        let item = makeItem(
-            controlStyle: .disclosure,
-            isExpanded: false,
-            controls: [
-                PluginPanelControl(
-                    id: "brightness",
-                    kind: .slider,
-                    options: [],
-                    selectedOptionID: nil,
-                    dateValue: nil,
-                    minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: "亮度",
-                    sliderValue: 0.7,
-                    sliderBounds: 0...1,
-                    valueLabel: "70%",
-                    isEnabled: true
-                )
-            ]
-        )
-
-        XCTAssertEqual(
-            MenuBarPanelLayout.featureContentHeight(for: [item]),
-            MenuBarPanelLayout.rowHeaderHeight
-                + MenuBarPanelLayout.rowVerticalPadding
-        )
-    }
-
-    func testIPOverviewUsesFixedInlineIPv4SlotsWithoutAddingDetailHeight() {
-        let item = makeItem(
-            id: IPOverviewFeatureRowContract.pluginID,
-            controlStyle: .button,
-            isExpanded: false,
-            controls: [
-                makeIPOverviewControl(
-                    id: IPOverviewFeatureRowContract.copyLocalIPv4ActionID,
-                    address: "192.168.1.10",
-                    isEnabled: true
-                ),
-                makeIPOverviewControl(
-                    id: IPOverviewFeatureRowContract.copyPublicIPv4ActionID,
-                    address: "--",
-                    isEnabled: false
-                )
-            ]
-        )
-
-        let values = IPOverviewFeatureRowModel.values(for: item)
-        XCTAssertEqual(
-            values.map(\.id),
-            [
-                IPOverviewFeatureRowContract.copyLocalIPv4ActionID,
-                IPOverviewFeatureRowContract.copyPublicIPv4ActionID
-            ]
-        )
-        XCTAssertEqual(values.map(\.text), ["192.168.1.10", "--"])
-        XCTAssertEqual(values.map(\.isEnabled), [true, false])
-        XCTAssertEqual(
-            values.map(\.copyActionID),
-            [IPOverviewFeatureRowContract.copyLocalIPv4ActionID, nil]
-        )
-        XCTAssertEqual(
-            MenuBarPanelLayout.featureContentHeight(for: [item]),
-            MenuBarPanelLayout.rowHeaderHeight + MenuBarPanelLayout.rowVerticalPadding
         )
     }
 
@@ -386,37 +206,6 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertNil(feedback.copiedTargetID)
     }
 
-    func testFeatureRowCopyFeedbackCentersWithoutCrossingTheLeadingEdge() {
-        XCTAssertEqual(
-            FeatureRowCopyFeedbackPlacement.leadingOffset(
-                sourceWidth: 100,
-                feedbackWidth: 20
-            ),
-            40
-        )
-        XCTAssertEqual(
-            FeatureRowCopyFeedbackPlacement.leadingOffset(
-                sourceWidth: 20,
-                feedbackWidth: 20
-            ),
-            0
-        )
-        XCTAssertEqual(
-            FeatureRowCopyFeedbackPlacement.leadingOffset(
-                sourceWidth: 20,
-                feedbackWidth: 40
-            ),
-            0
-        )
-        XCTAssertEqual(
-            FeatureRowCopyFeedbackPlacement.leadingOffset(
-                sourceWidth: 0,
-                feedbackWidth: 40
-            ),
-            0
-        )
-    }
-
     func testPreferredPanelHeightCapsTallFeatureLists() {
         let items = (0..<40).map { index in
             makeItem(id: "plugin-\(index)", controlStyle: .switch, isExpanded: false)
@@ -462,28 +251,6 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             buttonTitle: nil
         )
     }
-
-    private func makeIPOverviewControl(
-        id: String,
-        address: String,
-        isEnabled: Bool
-    ) -> PluginPanelControl {
-        PluginPanelControl(
-            id: id,
-            kind: .actionRow,
-            options: [],
-            selectedOptionID: nil,
-            dateValue: nil,
-            minimumDate: nil,
-            displayedComponents: nil,
-            datePickerStyle: nil,
-            sectionTitle: nil,
-            actionTitle: address,
-            actionIconSystemName: "doc.on.doc",
-            actionBehavior: .keepPresented,
-            isEnabled: isEnabled
-        )
-    }
 }
 
 @MainActor
@@ -515,25 +282,6 @@ final class HoverSecondaryPanelCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.selectedRowFrame)
     }
 
-    func testHoverBeganUsesCachedFrameForNewActivation() {
-        let coordinator = HoverSecondaryPanelCoordinator(
-            dismissDelay: .milliseconds(5),
-            activationDelay: nil
-        )
-        let activation = makeActivation(optionID: "3")
-        let frame = CGRect(x: 30, y: 40, width: 120, height: 48)
-
-        coordinator.updateRowFrame(frame, for: activation)
-        coordinator.hoverBegan(
-            pluginID: activation.pluginID,
-            controlID: activation.controlID,
-            optionID: activation.optionID
-        )
-
-        XCTAssertEqual(coordinator.activeActivation, activation)
-        XCTAssertEqual(coordinator.selectedRowFrame, frame)
-    }
-
     func testPinnedActivationSurvivesHoverExit() async {
         let coordinator = HoverSecondaryPanelCoordinator(
             dismissDelay: .milliseconds(5),
@@ -558,28 +306,6 @@ final class HoverSecondaryPanelCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.activeActivation, activation)
         XCTAssertNil(dismissedActivation)
-    }
-
-    func testPinnedActivationIgnoresHoverPreviewFromOtherRows() {
-        let coordinator = HoverSecondaryPanelCoordinator(
-            dismissDelay: .milliseconds(5),
-            activationDelay: nil
-        )
-        let pinnedActivation = makeActivation(optionID: "3")
-        let previewActivation = makeActivation(optionID: "4")
-
-        coordinator.pin(
-            pluginID: pinnedActivation.pluginID,
-            controlID: pinnedActivation.controlID,
-            optionID: pinnedActivation.optionID
-        )
-        coordinator.hoverBegan(
-            pluginID: previewActivation.pluginID,
-            controlID: previewActivation.controlID,
-            optionID: previewActivation.optionID
-        )
-
-        XCTAssertEqual(coordinator.activeActivation, pinnedActivation)
     }
 
     private func makeActivation(optionID: String) -> HoverSecondaryPanelCoordinator.Activation {

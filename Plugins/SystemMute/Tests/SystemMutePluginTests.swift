@@ -1,82 +1,42 @@
 import XCTest
-@testable import MacTools
 @testable import SystemMutePlugin
 
 @MainActor
 final class SystemMutePluginTests: XCTestCase {
     private struct MockController: SystemAudioControlling {
         var muteState: Bool
-        var setMuteResult: Bool = true
+        var setMuteResult = true
 
         func readMuteState() -> Bool { muteState }
         func setMuteState(_ muted: Bool) -> Bool { setMuteResult }
     }
 
-    func testMetadataIdentifiesSystemMutePlugin() {
+    func testPanelStateReflectsMuteState() {
+        let unmuted = SystemMutePlugin(controller: MockController(muteState: false))
+        let muted = SystemMutePlugin(controller: MockController(muteState: true))
+
+        XCTAssertFalse(unmuted.primaryPanelState.isOn)
+        XCTAssertEqual(unmuted.primaryPanelState.subtitle, "未静音")
+        XCTAssertTrue(muted.primaryPanelState.isOn)
+        XCTAssertEqual(muted.primaryPanelState.subtitle, "已静音")
+    }
+
+    func testSwitchUpdatesStateAndNotifiesHost() {
         let plugin = SystemMutePlugin(controller: MockController(muteState: false))
-
-        XCTAssertEqual(plugin.metadata.id, "system-mute")
-        XCTAssertEqual(plugin.metadata.title, "系统静音")
-    }
-
-    func testControlStyleIsSwitch() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: false))
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .switch)
-    }
-
-    func testPanelStateReflectsUnmutedStatus() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: false))
-
-        XCTAssertFalse(plugin.primaryPanelState.isOn)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "未静音")
-    }
-
-    func testPanelStateReflectsMutedStatus() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: true))
-
-        XCTAssertTrue(plugin.primaryPanelState.isOn)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已静音")
-    }
-
-    func testPanelStateIsAlwaysEnabled() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: false))
-
-        XCTAssertTrue(plugin.primaryPanelState.isEnabled)
-    }
-
-    func testPermissionRequirementsIsEmpty() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: false))
-
-        XCTAssertTrue(plugin.permissionRequirements.isEmpty)
-    }
-
-    func testPluginHostIncludesSystemMuteWhenProvided() {
-        let host = makePluginHostForTests(plugins: [SystemMutePlugin(controller: MockController(muteState: false))])
-
-        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "system-mute" })
-    }
-
-    func testHandleActionMutesWhenSwitchedOn() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: false))
+        var notificationCount = 0
+        plugin.onStateChange = { notificationCount += 1 }
 
         plugin.handleAction(.setSwitch(true))
 
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertEqual(notificationCount, 1)
     }
 
-    func testHandleActionUnmutesWhenSwitchedOff() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: true))
-
-        plugin.handleAction(.setSwitch(false))
-
-        XCTAssertFalse(plugin.primaryPanelState.isOn)
-        XCTAssertNil(plugin.primaryPanelState.errorMessage)
-    }
-
-    func testHandleActionOnFailureSetsErrorMessage() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: false, setMuteResult: false))
+    func testSwitchFailureKeepsStateAndReportsError() {
+        let plugin = SystemMutePlugin(
+            controller: MockController(muteState: false, setMuteResult: false)
+        )
 
         plugin.handleAction(.setSwitch(true))
 
@@ -84,23 +44,13 @@ final class SystemMutePluginTests: XCTestCase {
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
     }
 
-    func testRefreshDoesNotCallOnStateChangeWhenStateUnchanged() {
+    func testRefreshDoesNotNotifyWhenStateIsUnchanged() {
         let plugin = SystemMutePlugin(controller: MockController(muteState: false))
-        var callCount = 0
-        plugin.onStateChange = { callCount += 1 }
+        var notificationCount = 0
+        plugin.onStateChange = { notificationCount += 1 }
 
         plugin.refresh()
 
-        XCTAssertEqual(callCount, 0)
-    }
-
-    func testHandleActionCallsOnStateChange() {
-        let plugin = SystemMutePlugin(controller: MockController(muteState: false))
-        var callCount = 0
-        plugin.onStateChange = { callCount += 1 }
-
-        plugin.handleAction(.setSwitch(true))
-
-        XCTAssertEqual(callCount, 1)
+        XCTAssertEqual(notificationCount, 0)
     }
 }

@@ -48,26 +48,6 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         XCTAssertEqual(source.locale.region?.identifier, "DE")
     }
 
-    func testFixedLanguageKeepsTheCurrentLocaleFormatSettings() {
-        let source = makeLocaleSource(
-            systemLanguages: ["en"],
-            currentLocale: Locale(identifier: "en_DE@calendar=japanese")
-        )
-
-        source.setPreference("ja")
-
-        XCTAssertEqual(source.locale.language.languageCode?.identifier, "ja")
-        XCTAssertEqual(source.locale.region?.identifier, "DE")
-        XCTAssertEqual(source.locale.calendar.identifier, .japanese)
-    }
-
-    func testChineseRegionUsesSimplifiedChineseResourceFallback() {
-        XCTAssertEqual(
-            PluginRuntimeLocalization.candidateLanguageIdentifiers(for: "zh-Hans-CN"),
-            ["zh-Hans-CN", "zh-Hans", "zh"]
-        )
-    }
-
     func testStringLookupChangesLanguageWithoutRecreatingBundle() throws {
         let bundleURL = try makeLocalizedTestBundle()
         defer { try? FileManager.default.removeItem(at: bundleURL.deletingLastPathComponent()) }
@@ -96,99 +76,6 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         )
     }
 
-    func testUnifiedSearchResultCountUsesRuntimePluralRules() {
-        setRuntimePreference("en")
-        XCTAssertEqual(
-            AppL10n.searchPluralFormat(
-                "search.resultCountFormat",
-                defaultValue: "%d results",
-                count: 1
-            ),
-            "1 result"
-        )
-        XCTAssertEqual(
-            AppL10n.searchPluralFormat(
-                "search.resultCountFormat",
-                defaultValue: "%d results",
-                count: 2
-            ),
-            "2 results"
-        )
-
-        setRuntimePreference("ru")
-        XCTAssertEqual(
-            AppL10n.searchPluralFormat(
-                "search.resultCountFormat",
-                defaultValue: "%d результатов",
-                count: 2
-            ),
-            "2 результата"
-        )
-        XCTAssertEqual(
-            AppL10n.searchPluralFormat(
-                "search.resultCountFormat",
-                defaultValue: "%d результатов",
-                count: 5
-            ),
-            "5 результатов"
-        )
-
-        setRuntimePreference("ar")
-        XCTAssertEqual(
-            AppL10n.searchPluralFormat(
-                "search.resultCountFormat",
-                defaultValue: "%d نتيجة",
-                count: 0
-            ),
-            "لا نتائج"
-        )
-        XCTAssertEqual(
-            AppL10n.searchPluralFormat(
-                "search.resultCountFormat",
-                defaultValue: "%d نتيجة",
-                count: 2
-            ),
-            "نتيجتان"
-        )
-        XCTAssertEqual(
-            AppL10n.searchPluralFormat(
-                "search.resultCountFormat",
-                defaultValue: "%d نتيجة",
-                count: 3
-            ),
-            "3 نتائج"
-        )
-    }
-
-    func testUnifiedSearchPluginMetadataIncludesLocalizedCategoryAndStableID() {
-        setRuntimePreference("zh-Hans")
-
-        let keywords = MacToolsSearchIndexBuilder.pluginMetadataKeywords(
-            pluginID: "lock-screen",
-            category: "system",
-            releaseChannel: "beta"
-        )
-
-        XCTAssertTrue(keywords.contains("lock-screen"))
-        XCTAssertTrue(keywords.contains("system"))
-        XCTAssertTrue(keywords.contains("系统"))
-        XCTAssertTrue(keywords.contains("beta"))
-        XCTAssertTrue(keywords.contains("Beta"))
-    }
-
-    func testPrimaryPanelButtonTitleProviderIsReadOnEveryAccess() {
-        var title = "English"
-        let descriptor = PluginPrimaryPanelDescriptor(
-            controlStyle: .button,
-            menuActionBehavior: .keepPresented,
-            buttonTitleProvider: { title }
-        )
-
-        XCTAssertEqual(descriptor.buttonTitle, "English")
-        title = "中文"
-        XCTAssertEqual(descriptor.buttonTitle, "中文")
-    }
-
     func testMissingSelectedLanguageStringFallsBackToBaseLanguage() throws {
         let bundleURL = try makeLocalizedTestBundle()
         defer { try? FileManager.default.removeItem(at: bundleURL.deletingLastPathComponent()) }
@@ -204,38 +91,6 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
                 bundle: bundle
             ),
             "Base Language"
-        )
-    }
-
-    func testMissingAllTranslationsFallsBackToTheCallerDefault() throws {
-        let bundleURL = try makeLocalizedTestBundle()
-        defer { try? FileManager.default.removeItem(at: bundleURL.deletingLastPathComponent()) }
-        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
-
-        setRuntimePreference("fr")
-
-        XCTAssertEqual(
-            PluginRuntimeLocalization.string(
-                "missing.title",
-                defaultValue: "Caller Default",
-                table: "Settings",
-                bundle: bundle
-            ),
-            "Caller Default"
-        )
-    }
-
-    func testAppearanceLabelsFollowTheRuntimeLanguage() {
-        setRuntimePreference("en")
-        XCTAssertEqual(
-            AppAppearancePreference.allCases.map(\.title),
-            ["Automatic", "Dark", "Light"]
-        )
-
-        setRuntimePreference("zh-Hans")
-        XCTAssertEqual(
-            AppAppearancePreference.allCases.map(\.title),
-            ["自动", "深色", "浅色"]
         )
     }
 

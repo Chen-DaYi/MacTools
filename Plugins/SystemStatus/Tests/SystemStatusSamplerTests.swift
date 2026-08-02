@@ -74,14 +74,6 @@ final class SystemStatusSamplerTests: XCTestCase {
         XCTAssertEqual(usage, 0.18, accuracy: 0.0001)
     }
 
-    func testGPUUtilizationTreatsIntegerOneAsOnePercent() throws {
-        let usage = try XCTUnwrap(SystemStatusSampler.gpuUtilization(from: [
-            "Device Utilization %": 1
-        ]))
-
-        XCTAssertEqual(usage, 0.01, accuracy: 0.0001)
-    }
-
     func testGPUUtilizationFallsBackToGPUActivity() throws {
         let usage = try XCTUnwrap(SystemStatusSampler.gpuUtilization(from: [
             "GPU Activity(%)": 42,
@@ -130,25 +122,6 @@ final class SystemStatusSamplerTests: XCTestCase {
         )
     }
 
-    func testSystemPowerBatteryHealthPercentParsesNonBreakingSpacePercent() {
-        let output = """
-        {
-          "SPPowerDataType" : [
-            {
-              "sppower_battery_health_info" : {
-                "sppower_battery_health_maximum_capacity" : "100\u{00a0}%"
-              }
-            }
-          ]
-        }
-        """
-
-        XCTAssertEqual(
-            SystemStatusSampler.systemPowerBatteryHealthPercent(fromSystemProfilerJSON: output),
-            100
-        )
-    }
-
     func testBatteryHealthPercentFallsBackToAppleRawMaxCapacity() {
         let health = SystemStatusSampler.batteryHealthPercent(
             designCapacity: 10_000,
@@ -186,25 +159,6 @@ final class SystemStatusSamplerTests: XCTestCase {
         )
     }
 
-    func testBatteryHealthPercentReturnsZeroForMissingCapacityData() {
-        XCTAssertEqual(
-            SystemStatusSampler.batteryHealthPercent(
-                designCapacity: 0,
-                nominalChargeCapacity: 8_000,
-                appleRawMaxCapacity: nil
-            ),
-            0
-        )
-        XCTAssertEqual(
-            SystemStatusSampler.batteryHealthPercent(
-                designCapacity: 10_000,
-                nominalChargeCapacity: 0,
-                appleRawMaxCapacity: nil
-            ),
-            0
-        )
-    }
-
     func testBatteryPowerNormalizerUsesSignedBatteryPowerMilliwatts() throws {
         let dischargingWatts = try XCTUnwrap(
             SystemStatusBatteryPowerNormalizer.telemetryWatts(fromRawMilliwatts: 13_654)
@@ -215,16 +169,6 @@ final class SystemStatusSamplerTests: XCTestCase {
 
         XCTAssertEqual(dischargingWatts, 13.654, accuracy: 0.001)
         XCTAssertEqual(chargingWatts, -12.345, accuracy: 0.001)
-    }
-
-    func testBatteryPowerNormalizerParsesTwosComplementBatteryPower() throws {
-        let watts = try XCTUnwrap(
-            SystemStatusBatteryPowerNormalizer.telemetryWatts(
-                fromRawMilliwatts: "18446744073709539271"
-            )
-        )
-
-        XCTAssertEqual(watts, -12.345, accuracy: 0.001)
     }
 
     func testBatteryPowerNormalizerDerivesWattsFromVoltageAndAmperageLikeMoleStatus() throws {

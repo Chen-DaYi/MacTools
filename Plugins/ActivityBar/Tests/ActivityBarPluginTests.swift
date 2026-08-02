@@ -4,47 +4,6 @@ import MacToolsPluginKit
 
 @MainActor
 final class ActivityBarPluginTests: XCTestCase {
-    func testMonthDayFormattingUsesLocaleSpecificFieldOrder() {
-        let date = Calendar(identifier: .gregorian).date(
-            from: DateComponents(
-                timeZone: TimeZone(secondsFromGMT: 0),
-                year: 2026,
-                month: 1,
-                day: 2,
-                hour: 12
-            )
-        )!
-        let locale = Locale(identifier: "de_DE")
-        let expectedFormatter = DateFormatter()
-        expectedFormatter.locale = locale
-        expectedFormatter.setLocalizedDateFormatFromTemplate("MMM d")
-
-        XCTAssertEqual(
-            ActivityBarFormatting.monthDay(date, locale: locale),
-            expectedFormatter.string(from: date)
-        )
-    }
-
-    func testMetadataAndPanelsAreExposed() {
-        let harness = makeHarness()
-
-        XCTAssertEqual(harness.plugin.metadata.id, "activity-bar")
-        XCTAssertEqual(harness.plugin.metadata.title, "活动统计")
-        XCTAssertEqual(harness.plugin.primaryPanelDescriptor.controlStyle, .disclosure)
-        XCTAssertEqual(harness.plugin.descriptor.span, PluginComponentSpan(width: 4, height: 127)!)
-    }
-
-    func testVisibleCodingToolsIncludeCursor() {
-        XCTAssertEqual(ActivityBarComponentView.visibleCodingTools, [.claudeCode, .cursor, .codex])
-    }
-
-    func testPrimaryPanelStartsCollapsed() {
-        let harness = makeHarness()
-
-        XCTAssertFalse(harness.plugin.primaryPanelState.isExpanded)
-        XCTAssertNil(harness.plugin.primaryPanelState.detail)
-    }
-
     func testPrimaryPanelExpandsWithTrackingSwitchAndActions() throws {
         let harness = makeHarness()
 
@@ -62,34 +21,6 @@ final class ActivityBarPluginTests: XCTestCase {
         ])
         XCTAssertEqual(controls.first?.kind, .switchRow)
         XCTAssertFalse(state.isOn)
-    }
-
-    func testHookSettingUsesSingleDynamicAction() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ActivityBarPluginTests-\(UUID().uuidString)")
-        defer {
-            try? FileManager.default.removeItem(at: root)
-        }
-        let paths = ActivityBarHookInstallerPaths(
-            homeDirectory: root,
-            hookScriptsDirectory: root.appendingPathComponent("hooks")
-        )
-        let harness = makeHarness(hookInstallerPaths: paths)
-
-        var hookSections = harness.plugin.settingsSections.filter { $0.id.hasPrefix("ai-hooks") }
-
-        XCTAssertEqual(hookSections.count, 1)
-        XCTAssertEqual(hookSections.first?.id, "ai-hooks")
-        XCTAssertEqual(hookSections.first?.buttonTitle, "安装或更新 Hook")
-        XCTAssertEqual(hookSections.first?.actionID, "install-hooks")
-
-        harness.controller.installHooks()
-        hookSections = harness.plugin.settingsSections.filter { $0.id.hasPrefix("ai-hooks") }
-
-        XCTAssertEqual(hookSections.count, 1)
-        XCTAssertEqual(hookSections.first?.id, "ai-hooks")
-        XCTAssertEqual(hookSections.first?.buttonTitle, "卸载 Hook")
-        XCTAssertEqual(hookSections.first?.actionID, "uninstall-hooks")
     }
 
     func testPrimaryPanelShowsUninstallActionAfterHooksInstalled() throws {

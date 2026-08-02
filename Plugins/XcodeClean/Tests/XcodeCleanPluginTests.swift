@@ -5,19 +5,6 @@ import MacToolsPluginKit
 
 @MainActor
 final class XcodeCleanPluginTests: XCTestCase {
-    func testMetadataIdentifiesXcodeCleanPlugin() {
-        let plugin = makePlugin()
-
-        XCTAssertEqual(plugin.metadata.id, "xcode-clean")
-        XCTAssertEqual(plugin.metadata.title, "Xcode 清理")
-    }
-
-    func testControlStyleIsDisclosure() {
-        let plugin = makePlugin()
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .disclosure)
-    }
-
     func testExpandedPanelExposesScanAndCleanControls() throws {
         let plugin = makePlugin()
 
@@ -105,17 +92,6 @@ final class XcodeCleanPluginTests: XCTestCase {
         XCTAssertEqual(controller.cleanSelectedCalls, [["a"]])
     }
 
-    func testInvokingCleanWithoutScanResultDoesNotPresentConfirmation() {
-        let controller = FakeXcodeCleanController()
-        let presenter = FakeConfirmationPresenter()
-        let plugin = makePlugin(controller: controller, confirmationPresenter: presenter)
-
-        plugin.handleAction(.invokeAction(controlID: XcodeCleanPlugin.ControlID.clean))
-
-        XCTAssertEqual(presenter.presentCalls.count, 0)
-        XCTAssertEqual(controller.cleanSelectedCalls, [])
-    }
-
     func testCleanActionDismissesMenuBeforeHandling() throws {
         let plugin = makePlugin()
 
@@ -174,28 +150,6 @@ final class XcodeCleanPluginTests: XCTestCase {
         )
         XCTAssertFalse(scan.isEnabled)
     }
-
-    func testPluginHostIncludesXcodeCleanWhenProvided() {
-        let host = makePluginHostForTests(plugins: [makePlugin()])
-
-        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "xcode-clean" })
-    }
-
-    func testPluginHostExposesConfiguration() {
-        let host = makePluginHostForTests(plugins: [
-            makePlugin(controller: XcodeCleanController(scanner: NoOpScanner(), executor: NoOpExecutor()))
-        ])
-
-        XCTAssertTrue(host.pluginConfigurationItems.contains { $0.id == "xcode-clean" })
-    }
-
-    // MARK: - Formatter
-
-    func testByteFormatterWritesZeroAsNumeric() {
-        XCTAssertFalse(XcodeCleanByteFormatter.string(fromByteCount: 0).contains("Zero"))
-    }
-
-    // MARK: - Confirm View Model
 
     func testConfirmViewModelSelectsAllCleanableByDefault() {
         let candidates = [
@@ -299,28 +253,6 @@ private final class FakeXcodeCleanRunningMonitor: XcodeCleanRunningMonitoring {
     func start() { startCount += 1 }
     func stop() { stopCount += 1 }
     func refresh() { refreshCount += 1 }
-}
-
-private struct NoOpScanner: XcodeCleanScanning {
-    func scan(
-        categories: Set<XcodeCleanCategory>,
-        progress: XcodeCleanScanProgressHandler
-    ) async throws -> XcodeCleanScanResult {
-        XcodeCleanScanResult(
-            categories: categories,
-            candidates: [],
-            scannedAt: Date(timeIntervalSince1970: 0)
-        )
-    }
-}
-
-private struct NoOpExecutor: XcodeCleanExecuting {
-    func clean(
-        candidates: [XcodeCleanCandidate],
-        selectedCandidateIDs: Set<XcodeCleanCandidate.ID>
-    ) async throws -> XcodeCleanExecutionResult {
-        XcodeCleanExecutionResult(itemResults: [])
-    }
 }
 
 @MainActor

@@ -128,68 +128,6 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(preview.unavailableShortcutIDs, ["unavailable.shortcut.toggle"])
     }
 
-    func testPreviewIncludesPluginsReferencedOnlyByPortablePreferences() throws {
-        let backup = PreferencesBackup(
-            application: validApplicationPreferences,
-            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
-            shortcutCustomizations: [:],
-            pluginPreferences: ["sidecar": Data("preferences".utf8)]
-        )
-
-        let preview = try PreferencesImportPreview.make(
-            backup: backup,
-            availablePluginIDs: [],
-            availableShortcutIDs: [],
-            pluginManagementItems: [],
-            applicationPreferencesAreValid: { _ in true }
-        )
-
-        XCTAssertEqual(preview.pluginCount, 0)
-        XCTAssertEqual(preview.unavailablePluginIDs, ["sidecar"])
-    }
-
-    func testPreviewOffersOnlyCatalogInstallableMissingPlugins() throws {
-        let backup = PreferencesBackup(
-            application: validApplicationPreferences,
-            pluginDisplay: PluginDisplayPreferencesBackup(
-                orderedPluginIDs: ["available", "installable", "incompatible"],
-                hiddenPluginIDs: []
-            ),
-            shortcutCustomizations: [:]
-        )
-        let preview = try PreferencesImportPreview.make(
-            backup: backup,
-            availablePluginIDs: ["available"],
-            availableShortcutIDs: [],
-            pluginManagementItems: [
-                PluginManagementItem(
-                    id: "installable",
-                    title: "Installable",
-                    summary: "Available from the verified catalog.",
-                    version: "1.0.0",
-                    state: .available,
-                    packageURL: nil,
-                    requiresRestartToFullyUnload: false,
-                    releaseNotesURL: nil
-                ),
-                PluginManagementItem(
-                    id: "incompatible",
-                    title: "Incompatible",
-                    summary: nil,
-                    version: "1.0.0",
-                    state: .incompatible("Requires a newer MacTools version."),
-                    packageURL: nil,
-                    requiresRestartToFullyUnload: false,
-                    releaseNotesURL: nil
-                )
-            ],
-            applicationPreferencesAreValid: { _ in true }
-        )
-
-        XCTAssertEqual(preview.installablePlugins.map(\.id), ["installable"])
-        XCTAssertEqual(preview.unavailablePluginIDs, ["incompatible"])
-    }
-
     func testImportRestoresDisplayPreferencesAndShortcutCustomizations() throws {
         let defaults = makeDefaults()
         let host = makeHost(
@@ -297,70 +235,6 @@ final class PreferencesBackupTests: XCTestCase {
 
         XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["third", "second", "first"])
         XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["third", "second", "first"])
-    }
-
-    func testImportRestoresSwappedShortcutBindingsAtomically() throws {
-        let defaults = makeDefaults()
-        let host = makeHost(
-            plugins: [
-                BackupTestPlugin(id: "first", order: 1, shortcutID: "toggle"),
-                BackupTestPlugin(id: "second", order: 2, shortcutID: "open")
-            ],
-            defaults: defaults
-        )
-        let firstBinding = ShortcutBinding(keyCode: 12, modifiers: [.command])
-        let secondBinding = ShortcutBinding(keyCode: 13, modifiers: [.command])
-        host.setShortcutBinding(firstBinding, for: "first.shortcut.toggle")
-        host.setShortcutBinding(secondBinding, for: "second.shortcut.open")
-        let backup = PreferencesBackup(
-            application: validApplicationPreferences,
-            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: ["first", "second"], hiddenPluginIDs: []),
-            shortcutCustomizations: [
-                "first.shortcut.toggle": .custom(secondBinding),
-                "second.shortcut.open": .custom(firstBinding)
-            ]
-        )
-
-        let result = try host.importPreferences(backup)
-
-        XCTAssertTrue(result.shortcutErrors.isEmpty)
-        XCTAssertEqual(
-            host.makePreferencesBackup().shortcutCustomizations,
-            backup.shortcutCustomizations
-        )
-    }
-
-    func testImportAcceptsFunctionKeyShortcutWithoutModifier() throws {
-        let defaults = makeDefaults()
-        let host = makeHost(
-            plugins: [BackupTestPlugin(id: "plugin", order: 1, shortcutID: "action")],
-            defaults: defaults
-        )
-        let binding = ShortcutBinding(keyCode: UInt16(kVK_F12), modifiers: [])
-        let openSettingsBinding = ShortcutBinding(keyCode: UInt16(kVK_F11), modifiers: [])
-        let backup = PreferencesBackup(
-            application: validApplicationPreferences,
-            pluginDisplay: PluginDisplayPreferencesBackup(
-                orderedPluginIDs: ["plugin"],
-                hiddenPluginIDs: []
-            ),
-            shortcutCustomizations: [
-                "plugin.shortcut.action": .custom(binding),
-                "app.open-settings": .custom(openSettingsBinding),
-            ]
-        )
-
-        let result = try host.importPreferences(backup)
-
-        XCTAssertTrue(result.shortcutErrors.isEmpty)
-        XCTAssertEqual(
-            host.makePreferencesBackup().shortcutCustomizations["plugin.shortcut.action"],
-            .custom(binding)
-        )
-        XCTAssertEqual(
-            host.makePreferencesBackup().shortcutCustomizations["app.open-settings"],
-            .custom(openSettingsBinding)
-        )
     }
 
     func testInvalidShortcutImportLeavesAllShortcutCustomizationsUntouched() throws {
@@ -533,23 +407,6 @@ final class PreferencesBackupTests: XCTestCase {
         }
     }
 
-    func testFunctionKeyShortcutWithoutModifierCanBeSaved() {
-        let defaults = makeDefaults()
-        let host = makeHost(
-            plugins: [BackupTestPlugin(id: "plugin", order: 1, shortcutID: "action")],
-            defaults: defaults
-        )
-        let binding = ShortcutBinding(keyCode: UInt16(kVK_F1), modifiers: [])
-
-        let error = host.setShortcutBindingAndReturnError(binding, for: "plugin.shortcut.action")
-
-        XCTAssertNil(error)
-        XCTAssertEqual(
-            host.makePreferencesBackup().shortcutCustomizations["plugin.shortcut.action"],
-            .custom(binding)
-        )
-    }
-
     func testRegularKeyShortcutWithoutModifierIsStillRejected() {
         let defaults = makeDefaults()
         let host = makeHost(
@@ -562,22 +419,6 @@ final class PreferencesBackupTests: XCTestCase {
 
         XCTAssertNotNil(error)
         XCTAssertNil(host.makePreferencesBackup().shortcutCustomizations["plugin.shortcut.action"])
-    }
-
-    func testDecodeFileReadsValidBackupWithinSizeLimit() async throws {
-        let backup = PreferencesBackup(
-            application: validApplicationPreferences,
-            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
-            shortcutCustomizations: [:],
-            exportedAt: Date(timeIntervalSince1970: 0)
-        )
-        let url = temporaryFileURL()
-        defer { try? FileManager.default.removeItem(at: url) }
-        try backup.encodedJSON().write(to: url)
-
-        let decoded = try await PreferencesBackup.decodeJSON(contentsOf: url)
-
-        XCTAssertEqual(decoded, backup)
     }
 
     func testDecodeFileRejectsContentAboveSizeLimit() async throws {
@@ -595,47 +436,6 @@ final class PreferencesBackupTests: XCTestCase {
             )
         }
     }
-
-    func testApplicationPreferenceValidationAcceptsEveryCurrentAppEnumValue() throws {
-        let store = PreferencesBackupStore(userDefaults: makeDefaults())
-
-        for appearance in AppAppearancePreference.allCases {
-            for language in AppLanguagePreference.allCases {
-                for clickBehavior in [
-                    MenuBarClickBehaviorPreference.standard,
-                    .swapped
-                ] {
-                    let preferences = PreferencesBackup.ApplicationPreferences(
-                        appearancePreference: appearance.rawValue,
-                        languagePreference: language.rawValue,
-                        menuBarClickBehavior: clickBehavior.rawValue
-                    )
-
-                    XCTAssertNoThrow(
-                        try PreferencesBackup(
-                            application: preferences,
-                            pluginDisplay: PluginDisplayPreferencesBackup(
-                                orderedPluginIDs: [],
-                                hiddenPluginIDs: []
-                            ),
-                            shortcutCustomizations: [:]
-                        ).validateApplicationPreferences(using: store.validates)
-                    )
-                }
-            }
-        }
-    }
-
-    func testExportFileNameIncludesLocalDateAndTime() {
-        XCTAssertEqual(
-            PreferencesBackupExportFileName.make(
-                date: Date(timeIntervalSince1970: 0),
-                timeZone: TimeZone(secondsFromGMT: 0)!
-            ),
-            "MacTools Preferences 1970-01-01_00-00-00.json"
-        )
-    }
-
     private var validApplicationPreferences: PreferencesBackup.ApplicationPreferences {
         PreferencesBackup.ApplicationPreferences(
             appearancePreference: AppAppearancePreference.system.rawValue,

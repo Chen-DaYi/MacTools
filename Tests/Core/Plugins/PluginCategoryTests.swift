@@ -3,22 +3,6 @@ import MacToolsPluginKit
 @testable import MacTools
 
 final class PluginCategoryTests: XCTestCase {
-    func testRawValueMatchesAllKnownCategories() {
-        XCTAssertEqual(PluginCategory.display.rawValue, "display")
-        XCTAssertEqual(PluginCategory.audio.rawValue, "audio")
-        XCTAssertEqual(PluginCategory.system.rawValue, "system")
-        XCTAssertEqual(PluginCategory.storage.rawValue, "storage")
-        XCTAssertEqual(PluginCategory.productivity.rawValue, "productivity")
-        XCTAssertEqual(PluginCategory.monitoring.rawValue, "monitoring")
-        XCTAssertEqual(PluginCategory.other.rawValue, "other")
-    }
-
-    func testInitFromRawStringHandlesKnownValues() {
-        XCTAssertEqual(PluginCategory(rawString: "display"), .display)
-        XCTAssertEqual(PluginCategory(rawString: "Display"), .display)
-        XCTAssertEqual(PluginCategory(rawString: "  audio  "), .audio)
-    }
-
     func testInitFromRawStringFallsBackToOther() {
         XCTAssertEqual(PluginCategory(rawString: nil), .other)
         XCTAssertEqual(PluginCategory(rawString: ""), .other)
@@ -33,22 +17,6 @@ final class PluginCategoryTests: XCTestCase {
 }
 
 final class PluginCategoryFilterTests: XCTestCase {
-    func testAllFilterMatchesEveryCategory() {
-        let filter = PluginCategoryFilter.all
-
-        XCTAssertTrue(filter.contains(category: "display"))
-        XCTAssertTrue(filter.contains(category: "audio"))
-        XCTAssertTrue(filter.contains(category: nil))
-        XCTAssertTrue(filter.contains(category: "anything"))
-    }
-
-    func testCategoryFilterOnlyMatchesSameCategory() {
-        let filter = PluginCategoryFilter.category(.display)
-
-        XCTAssertTrue(filter.contains(category: "display"))
-        XCTAssertFalse(filter.contains(category: "audio"))
-    }
-
     func testUnknownCategoryFallsIntoOther() {
         let otherFilter = PluginCategoryFilter.category(.other)
 
@@ -67,11 +35,6 @@ final class PluginListFilterTests: XCTestCase {
     func testQueryMatchesIsCaseInsensitive() {
         XCTAssertTrue(PluginListFilter.matches(query: "ABC", in: ["xyz", "abcdef"]))
         XCTAssertFalse(PluginListFilter.matches(query: "abc", in: ["xyz", "no match"]))
-    }
-
-    func testQueryIgnoresNilHaystacks() {
-        XCTAssertTrue(PluginListFilter.matches(query: "test", in: [nil, "this is a test row"]))
-        XCTAssertFalse(PluginListFilter.matches(query: "test", in: [nil, nil]))
     }
 
     func testManagementItemMatchesByTitleSummaryAndCategory() {

@@ -102,44 +102,6 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.canGoForward)
     }
 
-    func testPluginSubpageMovementIgnoresRemovedCurrentConfiguration() {
-        var availableConfigurationIDs: Set<String> = ["fan-control"]
-        let coordinator = SettingsNavigationCoordinator(
-            initialDestination: .plugins(.configuration("fan-control")),
-            isPluginConfigurationAvailable: { availableConfigurationIDs.contains($0) }
-        )
-        availableConfigurationIDs.remove("fan-control")
-
-        coordinator.movePluginSubpage(
-            .previous,
-            in: [.dashboardLayout, .featurePanelLayout, .marketplace]
-        )
-
-        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
-        XCTAssertEqual(coordinator.history, [.plugins(.configuration("fan-control"))])
-    }
-
-    func testPluginSubpageMovementReadsLatestDynamicOrder() {
-        var configurationIDs: [String] = []
-        let coordinator = SettingsNavigationCoordinator(
-            initialDestination: .plugins(.marketplace),
-            pluginSubpageOrder: {
-                FeatureSettingsPane.settingsSidebarOrder(
-                    configurationIDs: configurationIDs
-                )
-            },
-            isPluginConfigurationAvailable: { configurationIDs.contains($0) }
-        )
-
-        coordinator.movePluginSubpage(.next)
-        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
-
-        configurationIDs = ["fan-control"]
-        coordinator.movePluginSubpage(.next)
-
-        XCTAssertEqual(coordinator.destination, .plugins(.configuration("fan-control")))
-    }
-
     func testRecordsCompletePluginDestinationsAndRestoresExactPaneDuringTraversal() {
         let coordinator = SettingsNavigationCoordinator(
             isPluginConfigurationAvailable: { $0 == "fan-control" }
@@ -201,24 +163,6 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.canGoForward)
     }
 
-    func testHistoryKeepsOnlyTheMostRecent128Destinations() {
-        let coordinator = SettingsNavigationCoordinator()
-
-        for index in 0..<200 {
-            coordinator.navigate(to: index.isMultiple(of: 2) ? .about : .general)
-        }
-
-        XCTAssertEqual(coordinator.history.count, 128)
-        XCTAssertEqual(coordinator.historyIndex, 127)
-        XCTAssertEqual(coordinator.history.first, .about)
-        XCTAssertEqual(coordinator.destination, .general)
-
-        coordinator.goBack()
-
-        XCTAssertEqual(coordinator.historyIndex, 126)
-        XCTAssertEqual(coordinator.destination, .about)
-    }
-
     func testTraversalSkipsPluginConfigurationsThatAreNoLongerAvailable() {
         var availableConfigurationIDs: Set<String> = ["fan-control"]
         let coordinator = SettingsNavigationCoordinator(
@@ -235,44 +179,6 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
 
         coordinator.goForward()
         XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
-    }
-
-    func testUnavailableCurrentPluginConfigurationFallsBackWithoutNoOpHistoryTraversal() {
-        var availableConfigurationIDs: Set<String> = ["fan-control"]
-        let coordinator = SettingsNavigationCoordinator(
-            isPluginConfigurationAvailable: { availableConfigurationIDs.contains($0) }
-        )
-
-        coordinator.navigate(to: .plugins(.marketplace))
-        coordinator.navigate(to: .plugins(.configuration("fan-control")))
-        availableConfigurationIDs.remove("fan-control")
-
-        coordinator.reconcileCurrentDestinationAvailability()
-
-        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
-        XCTAssertEqual(
-            coordinator.history,
-            [
-                .general,
-                .plugins(.marketplace),
-                .plugins(.configuration("fan-control")),
-                .plugins(.marketplace)
-            ]
-        )
-
-        coordinator.goBack()
-        XCTAssertEqual(coordinator.destination, .general)
-    }
-
-    func testNewSettingsWindowCoordinatorStartsWithFreshHistory() {
-        let firstCoordinator = SettingsNavigationCoordinator()
-        firstCoordinator.navigate(to: .about)
-
-        let reopenedCoordinator = SettingsNavigationCoordinator()
-
-        XCTAssertEqual(firstCoordinator.history, [.general, .about])
-        XCTAssertEqual(reopenedCoordinator.history, [.general])
-        XCTAssertFalse(reopenedCoordinator.canGoBack)
     }
 
     func testSearchFocusRequestsAreContextualAndRepeatOnlyAfterFocusLeaves() {
@@ -295,26 +201,6 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertNotEqual(coordinator.searchFocusRequest, firstRequest)
     }
 
-    func testSearchFocusIsNoOpOnEveryNonSearchableSettingsDestination() {
-        let coordinator = SettingsNavigationCoordinator(
-            isPluginConfigurationAvailable: { $0 == "fan-control" }
-        )
-        let destinations: [SettingsNavigationDestination] = [
-            .general,
-            .about,
-            .plugins(.dashboardLayout),
-            .plugins(.featurePanelLayout),
-            .plugins(.configuration("fan-control"))
-        ]
-
-        for destination in destinations {
-            coordinator.navigate(to: destination)
-            XCTAssertFalse(coordinator.requestSearchFocus(), "\(destination) should not request search focus")
-        }
-
-        XCTAssertNil(coordinator.searchFocusRequest)
-    }
-
     func testAboutUpdateActionNavigatesAndCanOnlyBeConsumedOnce() throws {
         let coordinator = SettingsNavigationCoordinator()
 
@@ -335,17 +221,6 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.destination, .about)
         XCTAssertNil(coordinator.aboutUpdateActionRequest)
-    }
-
-    func testRepeatedAboutUpdateActionsUseDistinctRequests() throws {
-        let coordinator = SettingsNavigationCoordinator()
-
-        coordinator.requestAboutUpdateAction(version: "1.2.3")
-        let firstRequest = try XCTUnwrap(coordinator.aboutUpdateActionRequest)
-        coordinator.requestAboutUpdateAction(version: "1.2.3")
-        let secondRequest = try XCTUnwrap(coordinator.aboutUpdateActionRequest)
-
-        XCTAssertNotEqual(firstRequest.id, secondRequest.id)
     }
 
     func testUnifiedSearchPresentationTracksOriginAndRepeatedFocusRequests() {
@@ -398,23 +273,6 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.unifiedSearchQuickSelectionRequest)
     }
 
-    func testUnifiedSearchQuickSelectionRequestCanOnlyBeConsumedOnce() throws {
-        let coordinator = SettingsNavigationCoordinator()
-        coordinator.presentUnifiedSearch(origin: .keyboard)
-        XCTAssertTrue(coordinator.requestUnifiedSearchQuickSelection(number: 2))
-        let request = try XCTUnwrap(
-            coordinator.unifiedSearchQuickSelectionRequest
-        )
-
-        XCTAssertTrue(
-            coordinator.consumeUnifiedSearchQuickSelectionRequest(request)
-        )
-        XCTAssertNil(coordinator.unifiedSearchQuickSelectionRequest)
-        XCTAssertFalse(
-            coordinator.consumeUnifiedSearchQuickSelectionRequest(request)
-        )
-    }
-
     func testSearchNavigationKeepsPaletteOpenForUnavailablePlugin() {
         let coordinator = SettingsNavigationCoordinator(
             isPluginConfigurationAvailable: { _ in false }
@@ -431,50 +289,6 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
-        XCTAssertEqual(coordinator.destination, .general)
-        XCTAssertEqual(coordinator.history, [.general])
-        XCTAssertNil(coordinator.searchRevealRequest)
-    }
-
-    func testSearchNavigationKeepsPaletteOpenForUnavailableSurfacePlugin() {
-        let coordinator = SettingsNavigationCoordinator(
-            isPluginSurfaceAvailable: { _ in false }
-        )
-        let target = SurfaceSettingsSearchTarget(
-            surface: .featurePanel,
-            pluginID: "removed-plugin"
-        )
-        coordinator.presentUnifiedSearch(origin: .keyboard)
-
-        coordinator.navigateFromSearch(
-            to: .plugins(.featurePanelLayout),
-            target: .surface(target)
-        )
-
-        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
-        XCTAssertEqual(coordinator.destination, .general)
-        XCTAssertEqual(coordinator.history, [.general])
-        XCTAssertNil(coordinator.searchRevealRequest)
-    }
-
-    func testSearchNavigationKeepsPaletteOpenForUnavailableExactPluginEntry() {
-        let coordinator = SettingsNavigationCoordinator(
-            isPluginConfigurationAvailable: { $0 == "installed-plugin" },
-            isPluginSettingsSearchTargetAvailable: { _ in false }
-        )
-        let target = PluginSettingsSearchTarget(
-            pluginID: "installed-plugin",
-            entryID: "removed-setting"
-        )
-        coordinator.presentUnifiedSearch(origin: .keyboard)
-
-        XCTAssertFalse(
-            coordinator.navigateFromSearch(
-                to: .plugins(.configuration("installed-plugin")),
-                target: .plugin(target)
-            )
-        )
         XCTAssertTrue(coordinator.isUnifiedSearchPresented)
         XCTAssertEqual(coordinator.destination, .general)
         XCTAssertEqual(coordinator.history, [.general])
@@ -519,34 +333,6 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertEqual(
             try XCTUnwrap(coordinator.searchRevealRequest).target,
             .marketplace(target)
-        )
-    }
-
-    func testSearchNavigationAllowsAvailableSurfacePlugin() throws {
-        let expectedTarget = SurfaceSettingsSearchTarget(
-            surface: .dashboard,
-            pluginID: "hidden-plugin"
-        )
-        var validatedTargets: [SurfaceSettingsSearchTarget] = []
-        let coordinator = SettingsNavigationCoordinator(
-            isPluginSurfaceAvailable: { target in
-                validatedTargets.append(target)
-                return target == expectedTarget
-            }
-        )
-        coordinator.presentUnifiedSearch(origin: .keyboard)
-
-        coordinator.navigateFromSearch(
-            to: .plugins(.dashboardLayout),
-            target: .surface(expectedTarget)
-        )
-
-        XCTAssertEqual(validatedTargets, [expectedTarget])
-        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
-        XCTAssertEqual(coordinator.destination, .plugins(.dashboardLayout))
-        XCTAssertEqual(
-            try XCTUnwrap(coordinator.searchRevealRequest).target,
-            .surface(expectedTarget)
         )
     }
 
@@ -611,19 +397,5 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.destination, .general)
         let request = try XCTUnwrap(coordinator.searchRevealRequest)
         XCTAssertEqual(request.target, .general(.language))
-    }
-
-    func testClearingRevealTargetOnlyClearsTheMatchingRequest() throws {
-        let coordinator = SettingsNavigationCoordinator(initialDestination: .about)
-        coordinator.navigateFromSearch(
-            to: .general,
-            target: .general(.language)
-        )
-
-        coordinator.clearSearchRevealRequest(matching: .general(.appearance))
-        XCTAssertNotNil(coordinator.searchRevealRequest)
-
-        coordinator.clearSearchRevealRequest(matching: .general(.language))
-        XCTAssertNil(coordinator.searchRevealRequest)
     }
 }

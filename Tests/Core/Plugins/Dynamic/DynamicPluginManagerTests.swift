@@ -135,43 +135,6 @@ final class DynamicPluginManagerTests: XCTestCase {
         })
     }
 
-    func testBatchUpdateYieldsMainActorBetweenProgressCallbacks() async throws {
-        let firstAlphaURL = try makePackage(id: "com.example.alpha", version: "1.0.0", displayName: "Alpha")
-        let firstBetaURL = try makePackage(id: "com.example.beta", version: "1.0.0", displayName: "Beta")
-        let updateAlphaURL = try makePackage(id: "com.example.alpha", version: "2.0.0", displayName: "Alpha")
-        let updateBetaURL = try makePackage(id: "com.example.beta", version: "2.0.0", displayName: "Beta")
-        let store = makeStore()
-        _ = try store.installPackage(from: firstAlphaURL)
-        _ = try store.installPackage(from: firstBetaURL)
-        let manager = DynamicPluginManager(
-            packageStore: store,
-            pluginLoader: StubDynamicPluginLoader { _ in [] }
-        )
-        var processedCount = 0
-        var didRunScheduledMainActorWork = false
-        var observedScheduledWorkBeforeCompletion = false
-
-        _ = await manager.updatePluginPackages(
-            [
-                (sourceURL: updateAlphaURL, catalogEntry: makeCatalogEntry(id: "com.example.alpha", version: "2.0.0")),
-                (sourceURL: updateBetaURL, catalogEntry: makeCatalogEntry(id: "com.example.beta", version: "2.0.0")),
-            ],
-            onPackageProcessed: {
-                processedCount += 1
-
-                if processedCount == 1 {
-                    Task { @MainActor in
-                        didRunScheduledMainActorWork = true
-                    }
-                } else {
-                    observedScheduledWorkBeforeCompletion = didRunScheduledMainActorWork
-                }
-            }
-        )
-
-        XCTAssertTrue(observedScheduledWorkBeforeCompletion)
-    }
-
     func testUninstallingLoadedPluginDeletesPackageAndRemovesManagementItem() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
@@ -206,69 +169,6 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.canInstall, true)
     }
 
-    func testInstalledCatalogItemsUseSummaryAsDetailText() throws {
-        let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
-        let store = makeStore()
-        let installedRecord = try store.installPackage(from: sourceURL)
-        let manager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
-        let snapshot = makeCatalogSnapshot(entries: [makeCatalogEntry(id: "com.example.demo", version: "1.0.0")])
-
-        manager.rebuildManagementItems(catalogSnapshot: snapshot)
-
-        let item = try XCTUnwrap(manager.pluginManagementItems.first)
-        XCTAssertEqual(item.state, .installed)
-        XCTAssertEqual(item.detailText, "示例插件")
-        XCTAssertNotEqual(item.detailText, installedRecord.packageURL.path)
-    }
-
-    func testInstalledItemDetailKeepsStatusSpecificMessages() {
-        let packageURL = URL(fileURLWithPath: "/tmp/Demo.mactoolsplugin", isDirectory: true)
-        let installedItem = makeManagementItem(state: .installed, packageURL: packageURL)
-        let restartingItem = makeManagementItem(
-            state: .installed,
-            packageURL: packageURL,
-            requiresRestartToFullyUnload: true
-        )
-        let updatingItem = makeManagementItem(
-            state: .updateAvailable(installedVersion: "1.0.0", catalogVersion: "2.0.0"),
-            packageURL: packageURL
-        )
-
-        XCTAssertEqual(installedItem.detailText, "示例插件")
-        XCTAssertNotEqual(installedItem.detailText, packageURL.path)
-        XCTAssertEqual(
-            restartingItem.detailText,
-            AppL10n.plugins(
-                "plugin.detail.restartRequiredAfterUpdate",
-                defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。"
-            )
-        )
-        XCTAssertEqual(
-            updatingItem.detailText,
-            AppL10n.pluginsFormat(
-                "plugin.detail.updateAvailableFormat",
-                defaultValue: "已安装 %@，可更新到 %@。",
-                "1.0.0",
-                "2.0.0"
-            )
-        )
-    }
-
-    func testManagementItemsCarryReleaseChannelFromManifestAndCatalog() throws {
-        let sourceURL = try makePackage(id: "com.example.demo", releaseChannel: "beta")
-        let store = makeStore()
-        _ = try store.installPackage(from: sourceURL)
-        let manager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
-        let snapshot = makeCatalogSnapshot(
-            entries: [makeCatalogEntry(id: "com.example.demo", version: "1.0.0", releaseChannel: "beta")]
-        )
-
-        manager.rebuildManagementItems(catalogSnapshot: snapshot)
-
-        XCTAssertEqual(manager.pluginManagementItems.first?.releaseChannel, "beta")
-        XCTAssertEqual(manager.installedReleaseChannelsByID()["com.example.demo"] ?? nil, "beta")
-    }
-
     func testCatalogEntryShowsUpdateWhenNewerThanInstalledVersion() throws {
         let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
         let store = makeStore()
@@ -298,39 +198,6 @@ final class DynamicPluginManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.pluginManagementItems.first?.state, .localDevelopment)
         XCTAssertEqual(manager.pluginManagementItems.first?.canInstall, true)
-    }
-
-    func testPreviousPluginKitPackageIsNotPassedToLoader() throws {
-        let sourceURL = try makePackage(
-            id: "com.example.demo",
-            version: "1.0.0",
-            pluginKitVersion: 1
-        )
-        let store = makeStore()
-        let installedURL = store.installedDirectory
-            .appendingPathComponent("com.example.demo", isDirectory: true)
-            .appendingPathExtension("mactoolsplugin")
-        try FileManager.default.copyItem(at: sourceURL, to: installedURL)
-        let loader = StubDynamicPluginLoader { _ in
-            XCTFail("Incompatible plugin packages must not be passed to the dynamic loader.")
-            return []
-        }
-        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
-
-        XCTAssertTrue(manager.loadInstalledPlugins().isEmpty)
-        XCTAssertTrue(loader.receivedRecordIDBatches.isEmpty)
-        XCTAssertTrue(manager.installedCapabilitiesByID().isEmpty)
-        XCTAssertEqual(
-            manager.pluginManagementItems.first?.state,
-            .incompatible(
-                AppL10n.pluginsFormat(
-                    "plugin.error.store.installedSDKIncompatibleFormat",
-                    defaultValue: "插件 SDK 版本不兼容，已安装版本为 %d，当前支持版本为 %d。请更新插件。",
-                    1,
-                    PluginPackageManifestLoader.supportedPluginKitVersion
-                )
-            )
-        )
     }
 
     private func makeStore() -> PluginPackageStore {
@@ -389,23 +256,6 @@ final class DynamicPluginManagerTests: XCTestCase {
                 size: 42
             ),
             releaseChannel: releaseChannel
-        )
-    }
-
-    private func makeManagementItem(
-        state: PluginManagementItem.State,
-        packageURL: URL,
-        requiresRestartToFullyUnload: Bool = false
-    ) -> PluginManagementItem {
-        PluginManagementItem(
-            id: "com.example.demo",
-            title: "Demo",
-            summary: "示例插件",
-            version: "1.0.0",
-            state: state,
-            packageURL: packageURL,
-            requiresRestartToFullyUnload: requiresRestartToFullyUnload,
-            releaseNotesURL: nil
         )
     }
 

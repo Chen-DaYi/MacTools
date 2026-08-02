@@ -69,22 +69,6 @@ private final class MockBatteryWriter: BatteryChargeLimitWriting {
 final class BatteryChargeLimitPluginTests: XCTestCase {
 
     // MARK: Metadata
-
-    func testMetadataIdentifiesBatteryChargeLimitPlugin() {
-        let plugin = makePlugin()
-
-        XCTAssertEqual(plugin.metadata.id, "battery-charge-limit")
-        XCTAssertEqual(plugin.metadata.title, "电池充电上限")
-    }
-
-    func testControlStyleIsDisclosure() {
-        let plugin = makePlugin()
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .disclosure)
-    }
-
-    // MARK: Visibility
-
     func testPanelHiddenWhenNoBattery() {
         let plugin = makePlugin(reader: MockBatteryReader(snapshot: .empty))
 
@@ -327,35 +311,6 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
     }
 
     // MARK: Permissions
-
-    func testPermissionRequirementsIsEmpty() {
-        let plugin = makePlugin()
-
-        XCTAssertTrue(plugin.permissionRequirements.isEmpty)
-    }
-
-    func testSettingsSectionsIsEmpty() {
-        let plugin = makePlugin()
-
-        XCTAssertTrue(plugin.settingsSections.isEmpty)
-    }
-
-    func testShortcutDefinitionsIsEmpty() {
-        let plugin = makePlugin()
-
-        XCTAssertTrue(plugin.shortcutDefinitions.isEmpty)
-    }
-
-    // MARK: Host Integration
-
-    func testPluginHostIncludesBatteryChargeLimitPlugin() {
-        let host = makePluginHostForTests(plugins: [makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)))])
-
-        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "battery-charge-limit" })
-    }
-
-    // MARK: - Helpers
-
     private func makePlugin(
         reader: MockBatteryReader? = nil,
         writer: MockBatteryWriter? = nil

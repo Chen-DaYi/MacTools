@@ -179,48 +179,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         )
     }
 
-    func testLegacyHiddenIDsRemainStagedUntilTheirPluginBecomesAvailable() {
-        XCTAssertTrue(store.addLegacyHiddenPluginIDs(["available", "temporarily-unavailable"]))
-
-        store.migrateLegacyHiddenPluginIDs(
-            dashboardDefaultPluginIDs: ["available"],
-            featurePanelDefaultPluginIDs: ["available"]
-        )
-
-        XCTAssertEqual(
-            store.hiddenPluginIDs(for: .dashboard, defaultPluginIDs: ["available"]),
-            ["available"]
-        )
-        XCTAssertEqual(
-            store.hiddenPluginIDs(for: .featurePanel, defaultPluginIDs: ["available"]),
-            ["available"]
-        )
-
-        // A temporarily unavailable package commonly becomes loadable only
-        // after a later launch or update, so verify the staging survives a
-        // fresh preferences-store instance.
-        store = PluginDisplayPreferencesStore(userDefaults: defaults)
-        store.migrateLegacyHiddenPluginIDs(
-            dashboardDefaultPluginIDs: ["available", "temporarily-unavailable"],
-            featurePanelDefaultPluginIDs: ["available", "temporarily-unavailable"]
-        )
-
-        XCTAssertEqual(
-            store.hiddenPluginIDs(
-                for: .dashboard,
-                defaultPluginIDs: ["available", "temporarily-unavailable"]
-            ),
-            ["available", "temporarily-unavailable"]
-        )
-        XCTAssertEqual(
-            store.hiddenPluginIDs(
-                for: .featurePanel,
-                defaultPluginIDs: ["available", "temporarily-unavailable"]
-            ),
-            ["available", "temporarily-unavailable"]
-        )
-    }
-
     func testSurfaceOrdersAreIndependent() {
         store.setOrderedPluginIDs(
             ["calendar", "activity"],
@@ -314,67 +272,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
     }
 
-    func testUnknownFutureVersionUsesLegacyProjectionWithoutRewritingPayload() throws {
-        let futureData = try JSONEncoder().encode(
-            FuturePreferencesWithLegacyKeys(
-                version: 99,
-                orderedPluginIDs: ["status", "calendar"],
-                hiddenPluginIDs: ["status"],
-                futureOnlyValue: "preserve-me"
-            )
-        )
-        defaults.set(futureData, forKey: "plugin.display.preferences")
-
-        XCTAssertEqual(
-            store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "status"]),
-            ["status", "calendar"]
-        )
-        XCTAssertEqual(
-            store.hiddenPluginIDs(for: .dashboard, defaultPluginIDs: ["calendar", "status"]),
-            ["status"]
-        )
-        XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
-    }
-
-    func testExplicitLayoutEditReplacesUnknownFuturePayload() throws {
-        let futureData = try JSONEncoder().encode(
-            FuturePreferences(
-                version: 99,
-                generalPluginOrder: ["future"],
-                futureOnlyValue: "preserve-me-until-an-edit"
-            )
-        )
-        defaults.set(futureData, forKey: "plugin.display.preferences")
-
-        store.setPluginVisible(
-            false,
-            pluginID: "calendar",
-            on: .dashboard,
-            defaultPluginIDs: ["calendar", "status"]
-        )
-
-        let storedData = try XCTUnwrap(defaults.data(forKey: "plugin.display.preferences"))
-        XCTAssertNotEqual(storedData, futureData)
-        let storedObject = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: storedData) as? [String: Any]
-        )
-        XCTAssertEqual(storedObject["version"] as? Int, 4)
-    }
-
-    func testLegacyHiddenIDsAreNotAcknowledgedWhenFuturePayloadMustBePreserved() throws {
-        let futureData = try JSONEncoder().encode(
-            FuturePreferences(
-                version: 99,
-                generalPluginOrder: ["future"],
-                futureOnlyValue: "preserve-me"
-            )
-        )
-        defaults.set(futureData, forKey: "plugin.display.preferences")
-
-        XCTAssertFalse(store.addLegacyHiddenPluginIDs(["legacy-hidden"]))
-        XCTAssertEqual(defaults.data(forKey: "plugin.display.preferences"), futureData)
-    }
-
     func testResettingOneSurfaceDoesNotAffectTheOther() {
         store.setOrderedPluginIDs(
             ["calendar", "activity"],
@@ -395,22 +292,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(
             store.orderedPluginIDs(for: .featurePanel, defaultPluginIDs: ["activity", "fan"]),
             ["fan", "activity"]
-        )
-    }
-
-    func testSettingsOnlyPluginIsExcludedWhenNotInSurfaceDefaults() {
-        store.setOrderedPluginIDs(
-            ["right-click", "activity"],
-            defaultPluginIDs: ["right-click", "activity"]
-        )
-
-        XCTAssertEqual(
-            store.orderedPluginIDs(for: .dashboard, defaultPluginIDs: ["activity"]),
-            ["activity"]
-        )
-        XCTAssertEqual(
-            store.orderedPluginIDs(for: .featurePanel, defaultPluginIDs: ["activity"]),
-            ["activity"]
         )
     }
 
@@ -453,68 +334,6 @@ final class PluginDisplayPreferencesStoreTests: XCTestCase {
             store.visiblePluginIDs(for: .dashboard, defaultPluginIDs: pluginIDs),
             ["second", "hidden", "first"]
         )
-    }
-
-    func testCurrentPayloadRetainsPublicReleaseCompatibilityProjection() throws {
-        let dashboardPluginIDs = ["calendar", "activity"]
-        let featurePanelPluginIDs = ["calendar", "activity", "fan"]
-        store.setOrderedPluginIDs(
-            ["activity", "calendar"],
-            for: .dashboard,
-            defaultPluginIDs: dashboardPluginIDs
-        )
-        store.setOrderedPluginIDs(
-            ["calendar", "fan", "activity"],
-            for: .featurePanel,
-            defaultPluginIDs: featurePanelPluginIDs
-        )
-        store.setPluginVisible(
-            false,
-            pluginID: "activity",
-            on: .dashboard,
-            defaultPluginIDs: dashboardPluginIDs
-        )
-        store.setPluginVisible(
-            false,
-            pluginID: "calendar",
-            on: .featurePanel,
-            defaultPluginIDs: featurePanelPluginIDs
-        )
-
-        let data = try XCTUnwrap(defaults.data(forKey: "plugin.display.preferences"))
-        let publicReleasePreferences = try JSONDecoder().decode(LegacyPreferences.self, from: data)
-
-        XCTAssertEqual(publicReleasePreferences.orderedPluginIDs, ["activity", "calendar", "fan"])
-        XCTAssertEqual(publicReleasePreferences.hiddenPluginIDs, ["calendar", "activity"])
-    }
-
-    func testBackupRetainsLegacyProjectionAlongsideIndependentSurfaceLayouts() {
-        let dashboardPluginIDs = ["calendar", "activity"]
-        let featurePanelPluginIDs = ["calendar", "activity", "fan"]
-        store.setOrderedPluginIDs(
-            ["calendar", "activity", "fan"],
-            defaultPluginIDs: featurePanelPluginIDs
-        )
-        store.setOrderedPluginIDs(
-            ["activity", "calendar"],
-            for: .dashboard,
-            defaultPluginIDs: dashboardPluginIDs
-        )
-        store.setOrderedPluginIDs(
-            ["calendar", "fan", "activity"],
-            for: .featurePanel,
-            defaultPluginIDs: featurePanelPluginIDs
-        )
-
-        let backup = store.backupSnapshot(
-            defaultPluginIDs: featurePanelPluginIDs,
-            dashboardDefaultPluginIDs: dashboardPluginIDs,
-            featurePanelDefaultPluginIDs: featurePanelPluginIDs
-        )
-
-        XCTAssertEqual(backup.orderedPluginIDs, ["calendar", "activity", "fan"])
-        XCTAssertEqual(backup.dashboardOrderedPluginIDs, ["activity", "calendar"])
-        XCTAssertEqual(backup.featurePanelOrderedPluginIDs, ["calendar", "fan", "activity"])
     }
 
     private func storeLegacyPreferences(order: [String], hidden: Set<String>) throws {

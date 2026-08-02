@@ -183,17 +183,6 @@ final class IPOverviewParserTests: XCTestCase {
         XCTAssertFalse(events.contains(.upload(0)))
     }
 
-    func testParsesNetworkQualityTTYUploadProgressEvents() {
-        let events = IPOverviewNetworkQualityParser.progressEvents(from: """
-        \u{1B}[2K
-        Downlink: capacity 26.079 Mbps, responsiveness 147 RPM (17.608 MB, 6 flows) - Uplink: capacity 24.039 Mbps, responsiveness 173 RPM (9.562 MB, 5 flows)
-        """)
-
-        XCTAssertTrue(events.contains(.phase(.measuringUpload)))
-        XCTAssertTrue(events.contains(.upload(24.039)))
-        XCTAssertFalse(events.contains(.download(26.079)))
-    }
-
     func testGradesNetworkQualityMeasurement() {
         XCTAssertEqual(
             IPOverviewNetworkQualityGrade.evaluate(

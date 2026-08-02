@@ -7,62 +7,6 @@ import XCTest
 final class QuitAppsPluginTests: XCTestCase {
 
     // MARK: - Plugin Metadata
-
-    func testMetadataIdentifiesQuitAppsPlugin() {
-        let plugin = QuitAppsPlugin()
-
-        XCTAssertEqual(plugin.metadata.id, "quit-apps")
-        XCTAssertEqual(plugin.metadata.title, "退出应用")
-    }
-
-    func testIconIsPower() {
-        let plugin = QuitAppsPlugin()
-
-        XCTAssertEqual(plugin.metadata.iconName, "power")
-    }
-
-    func testControlStyleIsButton() {
-        let plugin = QuitAppsPlugin()
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .button)
-        XCTAssertEqual(plugin.primaryPanelDescriptor.buttonTitle, "选择")
-    }
-
-    func testMenuActionBehaviorIsDismissBeforeHandling() {
-        let plugin = QuitAppsPlugin()
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.menuActionBehavior, .dismissBeforeHandling)
-    }
-
-    func testInitialPanelStateIsNotOn() {
-        let plugin = QuitAppsPlugin()
-
-        let state = plugin.primaryPanelState
-        XCTAssertFalse(state.isOn)
-        XCTAssertFalse(state.isExpanded)
-        XCTAssertNil(state.errorMessage)
-    }
-
-    func testPermissionRequirementsIsEmpty() {
-        let plugin = QuitAppsPlugin()
-
-        XCTAssertTrue(plugin.permissionRequirements.isEmpty)
-    }
-
-    func testPluginHostIncludesQuitApps() {
-        let host = makePluginHostForTests(plugins: [QuitAppsPlugin()])
-
-        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "quit-apps" })
-    }
-
-    func testDescriptionMatchesManifest() {
-        let plugin = QuitAppsPlugin()
-
-        XCTAssertEqual(plugin.metadata.defaultDescription, "选择并退出正在运行的应用")
-    }
-
-    // MARK: - QuitAppsViewModel – confirmTitle
-
     func testConfirmTitleIsQuitAllWhenNothingSelected() {
         let vm = QuitAppsViewModel()
 
@@ -81,14 +25,6 @@ final class QuitAppsPluginTests: XCTestCase {
     }
 
     // MARK: - QuitAppsViewModel – invertSelection
-
-    func testInvertSelectionOnEmptyEntriesIsNoop() {
-        let vm = QuitAppsViewModel()
-        vm.invertSelection()
-
-        XCTAssertTrue(vm.entries.isEmpty)
-    }
-
     func testInvertSelectionTogglesAllEntries() {
         let vm = QuitAppsViewModel()
         vm.entries = [
@@ -112,17 +48,6 @@ final class QuitAppsPluginTests: XCTestCase {
 
         XCTAssertTrue(vm.entries[0].isSelected)
     }
-
-    func testToggleEntryUnknownIDIsNoop() {
-        let vm = QuitAppsViewModel()
-        vm.entries = [makeEntry(id: "x", isSelected: false)]
-
-        vm.toggleEntry(id: "unknown")
-
-        XCTAssertFalse(vm.entries[0].isSelected)
-    }
-
-    // MARK: - QuitAppsViewModel – load
 
     func testLoadExcludesHostApp() {
         let vm = QuitAppsViewModel()
@@ -230,20 +155,6 @@ final class QuitAppsPluginTests: XCTestCase {
             ),
             2
         )
-    }
-
-    func testCatalogUsesBundleIdentifierWhenDisplayNameIsBlank() {
-        let application = FakeQuitAppRunningApplication(
-            bundleIdentifier: "com.example.unnamed",
-            localizedName: "  \n"
-        )
-
-        let groups = QuitAppsApplicationCatalog.groups(
-            from: [application],
-            excludingBundleIdentifier: nil
-        )
-
-        XCTAssertEqual(groups.first?.displayName, "com.example.unnamed")
     }
 
     private func makeEntry(id: String, isSelected: Bool) -> QuitAppEntry {

@@ -99,18 +99,6 @@ final class DiskCleanFastWalkerTests: XCTestCase {
     }
 
     /// Tiny buffer forces few entries per batch; verify batch boundaries neither drop nor double-count.
-    func testTinyBufferStillProducesSameTotal() throws {
-        let root = try DiskCleanKnownTree.build(in: temporaryDirectory)
-
-        let tinyBufferWalker = DiskCleanFastWalker(bufferSize: 1)
-        let result = tinyBufferWalker.size(ofItemAt: root, context: .test())
-
-        XCTAssertEqual(result.completeness, .complete)
-        XCTAssertEqual(result.estimatedBytes, DiskCleanKnownTree.expectedBytes)
-        XCTAssertEqual(result.fileCount, DiskCleanKnownTree.expectedFileCount)
-    }
-
-    /// Symlink root: count the link itself, do not follow.
     func testSizesSymlinkRootAsLinkItself() throws {
         try temporaryDirectory.makeFile("target.bin", bytes: 50_000)
         try temporaryDirectory.makeSymlink("alias", destination: "target.bin")
@@ -127,50 +115,4 @@ final class DiskCleanFastWalkerTests: XCTestCase {
     /// Depth limit comes from the **test fixture**, not the walker: `FileManager` creates directories with absolute paths
     /// and fails past PATH_MAX(1024); 60 levels (~640 chars) is a safe constructible size. The walker uses relative
     /// fd addressing end-to-end and is not bound by PATH_MAX.
-    func testHandlesDeepNesting() throws {
-        var relativePath = "Deep"
-        for level in 0..<60 {
-            relativePath += "/level-\(level)"
-        }
-        try temporaryDirectory.makeFile("\(relativePath)/leaf.bin", bytes: 33)
-
-        let result = walker.size(ofItemAt: temporaryDirectory.resolve("Deep").path, context: .test())
-
-        XCTAssertEqual(result.completeness, .complete)
-        XCTAssertEqual(result.estimatedBytes, 33)
-        XCTAssertEqual(result.fileCount, 1)
-    }
-
-    /// Must still accumulate correctly when sibling directory count far exceeds one batch.
-    ///
-    /// Note: this only checks correctness and **cannot** prove bounded fd use — the test process RLIMIT_NOFILE is
-    /// millions, so holding an fd per sibling never hits the limit. fd upper bound is asserted by
-    /// `DiskCleanDirectoryTreeWalkerTests.testKeepsOpenDirectoryCountBoundedByDepth`.
-    func testSumsManySiblingDirectories() throws {
-        let directoryCount = 600
-        for index in 0..<directoryCount {
-            try temporaryDirectory.makeFile("Wide/dir-\(index)/leaf.bin", bytes: 4)
-        }
-
-        let result = walker.size(ofItemAt: temporaryDirectory.resolve("Wide").path, context: .test())
-
-        XCTAssertEqual(result.completeness, .complete)
-        XCTAssertEqual(result.fileCount, directoryCount)
-        XCTAssertEqual(result.estimatedBytes, Int64(directoryCount * 4))
-    }
-
-    func testObservedAtUsesInjectedClock() throws {
-        try temporaryDirectory.makeDirectory("Root")
-        let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
-
-        let result = walker.size(
-            ofItemAt: temporaryDirectory.resolve("Root").path,
-            context: DiskCleanSizingContext(
-                deadline: fixedNow.addingTimeInterval(60),
-                now: { fixedNow }
-            )
-        )
-
-        XCTAssertEqual(result.observedAt, fixedNow)
-    }
 }

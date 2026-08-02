@@ -3,17 +3,6 @@ import XCTest
 
 @MainActor
 final class AutoHideDockPluginTests: XCTestCase {
-    func testMetadataIdentifiesAutoHideDockPlugin() {
-        let plugin = AutoHideDockPlugin(
-            commandRunner: MockDockCommandRunner(),
-            stateReader: { false }
-        )
-
-        XCTAssertEqual(plugin.metadata.id, "auto-hide-dock")
-        XCTAssertEqual(plugin.metadata.title, "自动隐藏程序坞")
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .switch)
-    }
-
     func testInitialStateReflectsStateReader() {
         let plugin = AutoHideDockPlugin(
             commandRunner: MockDockCommandRunner(),
@@ -24,27 +13,20 @@ final class AutoHideDockPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "已开启")
     }
 
-    func testSwitchOnUpdatesDockState() {
+    func testSwitchUpdatesDockState() {
         let runner = MockDockCommandRunner()
-        let plugin = AutoHideDockPlugin(
-            commandRunner: runner,
-            stateReader: { false }
-        )
+        let plugin = AutoHideDockPlugin(commandRunner: runner, stateReader: { false })
 
         plugin.handleAction(.setSwitch(true))
 
-        XCTAssertEqual(runner.setDockAutohideCalls, [true])
+        XCTAssertEqual(runner.calls, [true])
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 
-    func testSwitchFailureKeepsPreviousStateAndSetsError() {
-        let runner = MockDockCommandRunner()
-        runner.shouldFailSet = true
-        let plugin = AutoHideDockPlugin(
-            commandRunner: runner,
-            stateReader: { false }
-        )
+    func testSwitchFailureKeepsStateAndReportsError() {
+        let runner = MockDockCommandRunner(shouldFail: true)
+        let plugin = AutoHideDockPlugin(commandRunner: runner, stateReader: { false })
 
         plugin.handleAction(.setSwitch(true))
 
@@ -54,18 +36,17 @@ final class AutoHideDockPluginTests: XCTestCase {
 }
 
 private final class MockDockCommandRunner: DockCommandRunning {
-    var shouldFailSet = false
-    var setDockAutohideCalls: [Bool] = []
+    let shouldFail: Bool
+    private(set) var calls: [Bool] = []
+
+    init(shouldFail: Bool = false) {
+        self.shouldFail = shouldFail
+    }
 
     func setDockAutohide(_ isEnabled: Bool) throws {
-        if shouldFailSet {
-            throw NSError(
-                domain: "AutoHideDockPluginTests",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "set failed"]
-            )
+        if shouldFail {
+            throw NSError(domain: "AutoHideDockPluginTests", code: 1)
         }
-
-        setDockAutohideCalls.append(isEnabled)
+        calls.append(isEnabled)
     }
 }

@@ -3,17 +3,6 @@ import XCTest
 
 @MainActor
 final class StageManagerPluginTests: XCTestCase {
-    func testMetadataIdentifiesStageManagerPlugin() {
-        let plugin = StageManagerPlugin(
-            commandRunner: MockStageManagerCommandRunner(),
-            stateReader: { false }
-        )
-
-        XCTAssertEqual(plugin.metadata.id, "stage-manager")
-        XCTAssertEqual(plugin.metadata.title, "台前调度")
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .switch)
-    }
-
     func testInitialStateReflectsStateReader() {
         let plugin = StageManagerPlugin(
             commandRunner: MockStageManagerCommandRunner(),
@@ -24,27 +13,20 @@ final class StageManagerPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "已开启")
     }
 
-    func testSwitchOnUpdatesStageManagerState() {
+    func testSwitchUpdatesStageManagerState() {
         let runner = MockStageManagerCommandRunner()
-        let plugin = StageManagerPlugin(
-            commandRunner: runner,
-            stateReader: { false }
-        )
+        let plugin = StageManagerPlugin(commandRunner: runner, stateReader: { false })
 
         plugin.handleAction(.setSwitch(true))
 
-        XCTAssertEqual(runner.setStageManagerCalls, [true])
+        XCTAssertEqual(runner.calls, [true])
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 
-    func testSwitchFailureKeepsPreviousStateAndSetsError() {
-        let runner = MockStageManagerCommandRunner()
-        runner.shouldFailSet = true
-        let plugin = StageManagerPlugin(
-            commandRunner: runner,
-            stateReader: { false }
-        )
+    func testSwitchFailureKeepsStateAndReportsError() {
+        let runner = MockStageManagerCommandRunner(shouldFail: true)
+        let plugin = StageManagerPlugin(commandRunner: runner, stateReader: { false })
 
         plugin.handleAction(.setSwitch(true))
 
@@ -54,18 +36,17 @@ final class StageManagerPluginTests: XCTestCase {
 }
 
 private final class MockStageManagerCommandRunner: StageManagerCommandRunning {
-    var shouldFailSet = false
-    var setStageManagerCalls: [Bool] = []
+    let shouldFail: Bool
+    private(set) var calls: [Bool] = []
+
+    init(shouldFail: Bool = false) {
+        self.shouldFail = shouldFail
+    }
 
     func setStageManagerEnabled(_ isEnabled: Bool) throws {
-        if shouldFailSet {
-            throw NSError(
-                domain: "StageManagerPluginTests",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "set failed"]
-            )
+        if shouldFail {
+            throw NSError(domain: "StageManagerPluginTests", code: 1)
         }
-
-        setStageManagerCalls.append(isEnabled)
+        calls.append(isEnabled)
     }
 }

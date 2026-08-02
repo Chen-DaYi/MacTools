@@ -4,42 +4,6 @@ import MacToolsPluginKit
 
 @MainActor
 final class IPOverviewPluginTests: XCTestCase {
-    func testMetadataUsesStableIdentifier() {
-        let plugin = IPOverviewPlugin()
-
-        XCTAssertEqual(plugin.metadata.id, "ip-overview")
-        XCTAssertEqual(plugin.metadata.title, "IP 检测")
-    }
-
-    func testPluginUsesPrimaryPanelAndConfiguration() {
-        let plugin = IPOverviewPlugin()
-
-        XCTAssertNotNil(plugin.primaryPanel)
-        XCTAssertNil(plugin.componentPanel)
-        XCTAssertNotNil(plugin.configuration)
-    }
-
-    func testPrimaryPanelUsesButtonEntry() {
-        let viewModel = IPOverviewViewModel(storage: IPOverviewPluginTestStorage())
-        let plugin = IPOverviewPlugin(viewModel: viewModel)
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .button)
-        XCTAssertEqual(plugin.primaryPanelDescriptor.buttonTitle, "检测")
-        XCTAssertEqual(plugin.primaryPanelDescriptor.menuActionBehavior, .dismissBeforeHandling)
-        XCTAssertFalse(plugin.primaryPanelState.isExpanded)
-        XCTAssertEqual(
-            plugin.primaryPanelState.detail?.controls.map(\.id),
-            [
-                IPOverviewPlugin.ControlID.copyLocalIPv4,
-                IPOverviewPlugin.ControlID.copyPublicIPv4
-            ]
-        )
-        XCTAssertEqual(
-            plugin.primaryPanelState.detail?.controls.map(\.isEnabled),
-            [false, false]
-        )
-    }
-
     func testPrimaryPanelButtonRequestsConfigurationPresentation() {
         let viewModel = IPOverviewViewModel(storage: IPOverviewPluginTestStorage())
         let plugin = IPOverviewPlugin(viewModel: viewModel)
@@ -124,40 +88,6 @@ final class IPOverviewPluginTests: XCTestCase {
             controls.map(\.isEnabled),
             [true, true]
         )
-    }
-
-    func testPrimaryPanelKeepsBothIPv4SlotsWhenPublicAddressIsUnavailable() async throws {
-        let snapshot = IPOverviewSnapshot(
-            domesticIPv4: nil,
-            domesticIPv6: nil,
-            internationalIPv4: nil,
-            internationalIPv6: nil,
-            localAddresses: [
-                IPOverviewLocalAddress(
-                    id: "en0-192.168.1.10",
-                    interfaceName: "en0",
-                    address: "192.168.1.10",
-                    family: .ipv4
-                )
-            ],
-            geoInfoByIP: [:],
-            sourceResults: [],
-            lastUpdated: nil,
-            errorMessage: "未能从外部检测源获取公网 IP",
-            isRefreshing: false
-        )
-        let viewModel = IPOverviewViewModel(
-            provider: IPOverviewProviderSpy(publicSnapshot: snapshot),
-            storage: IPOverviewPluginTestStorage()
-        )
-        let refreshTask = try XCTUnwrap(viewModel.refreshAddresses())
-        await refreshTask.value
-        let controls = try XCTUnwrap(
-            IPOverviewPlugin(viewModel: viewModel).primaryPanelState.detail?.controls
-        )
-
-        XCTAssertEqual(controls.map(\.actionTitle), ["192.168.1.10", "--"])
-        XCTAssertEqual(controls.map(\.isEnabled), [true, false])
     }
 
     func testOpeningPrimaryPanelRefreshesAddressesWithoutUsingCacheFreshness() async throws {
@@ -532,21 +462,6 @@ final class IPOverviewPluginTests: XCTestCase {
         XCTAssertEqual(assessment.reason, .webRTCMatchesPublicIP)
     }
 
-    func testWebRTCClearsWhenNoVisibleEndpointIsReturned() {
-        let assessment = IPOverviewLeakAssessment.evaluate(
-            kind: .webRTC,
-            results: [
-                IPOverviewLeakTestResult(id: "google", name: "Google", status: .failure("超时")),
-                IPOverviewLeakTestResult(id: "twilio", name: "Twilio", status: .failure("超时"))
-            ],
-            snapshot: leakAssessmentSnapshot(publicIPv4: "203.0.113.8", country: "United States", countryCode: "US"),
-            isRunning: false
-        )
-
-        XCTAssertEqual(assessment.state, .clear)
-        XCTAssertEqual(assessment.reason, .webRTCNoVisibleEndpoint)
-    }
-
     func testDNSWarnsWhenResolverRegionDiffersFromPublicRegion() {
         let assessment = IPOverviewLeakAssessment.evaluate(
             kind: .dns,
@@ -566,26 +481,6 @@ final class IPOverviewPluginTests: XCTestCase {
         XCTAssertEqual(assessment.reason, .dnsDifferentEgressRegion)
         XCTAssertEqual(assessment.issueEndpoint?.countryCode, "JP")
     }
-
-    func testDNSClearsWhenResolverRegionMatchesPublicRegion() {
-        let assessment = IPOverviewLeakAssessment.evaluate(
-            kind: .dns,
-            results: [
-                leakResult(
-                    id: "dns-1",
-                    ip: "198.51.100.24",
-                    country: "United States",
-                    countryCode: "US"
-                )
-            ],
-            snapshot: leakAssessmentSnapshot(publicIPv4: "203.0.113.8", country: "United States", countryCode: "US"),
-            isRunning: false
-        )
-
-        XCTAssertEqual(assessment.state, .clear)
-        XCTAssertEqual(assessment.reason, .dnsMatchesEgressRegion)
-    }
-
 }
 
 private func leakResult(

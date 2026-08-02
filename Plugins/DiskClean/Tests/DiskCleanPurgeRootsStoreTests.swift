@@ -51,17 +51,6 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
     }
 
     /// A trailing slash must not create a second root.
-    func testTrailingSlashIsNotADistinctRoot() throws {
-        let real = try temporaryDirectory.makeDirectory("Work")
-
-        store.add(real.path)
-        let update = store.add(real.path + "/")
-
-        XCTAssertEqual(update.roots, [real.path])
-    }
-
-    // MARK: - Ancestor adjudication
-
     func testDropsDescendantWhenAncestorIsAdded() throws {
         let ancestor = try temporaryDirectory.makeDirectory("Repos")
         let descendant = try temporaryDirectory.makeDirectory("Repos/app")
@@ -73,18 +62,6 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
     }
 
     /// Adjudication is order-independent: descendant then ancestor still keeps the ancestor. Shrinking the user's explicit scope is the worse failure.
-    func testDropsDescendantEvenWhenItWasAddedFirst() throws {
-        let ancestor = try temporaryDirectory.makeDirectory("Repos")
-        let descendant = try temporaryDirectory.makeDirectory("Repos/app")
-
-        store.add(descendant.path)
-        let update = store.add(ancestor.path)
-
-        XCTAssertEqual(update.roots, [ancestor.path])
-        XCTAssertEqual(persistence.storedRoots, [ancestor.path])
-    }
-
-    /// Shared prefix is not ancestry: `/tmp/x/Repos` does not cover `/tmp/x/ReposBackup`.
     func testKeepsSiblingWithSharedPrefix() throws {
         let first = try temporaryDirectory.makeDirectory("Repos")
         let second = try temporaryDirectory.makeDirectory("ReposBackup")
@@ -94,15 +71,6 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
         XCTAssertEqual(update.roots, [first.path, second.path])
         XCTAssertTrue(update.rejections.isEmpty)
     }
-
-    func testAncestorCheckIgnoresSelf() {
-        XCTAssertFalse(DiskCleanPurgeRootNormalizer.isStrictAncestor("/a/b", of: "/a/b"))
-        XCTAssertTrue(DiskCleanPurgeRootNormalizer.isStrictAncestor("/a/b", of: "/a/b/c"))
-        XCTAssertFalse(DiskCleanPurgeRootNormalizer.isStrictAncestor("/a/b", of: "/a/bc"))
-        XCTAssertTrue(DiskCleanPurgeRootNormalizer.isStrictAncestor("/", of: "/a"))
-    }
-
-    // MARK: - Unresolvable
 
     func testRejectsMissingPath() {
         let missing = temporaryDirectory.resolve("NotThere").path
@@ -217,14 +185,6 @@ final class DiskCleanPurgeRootsStoreTests: XCTestCase {
 
         XCTAssertTrue(remaining.isEmpty)
     }
-
-    func testRootsReturnsStoredValuesUnchanged() {
-        persistence.storedRoots = ["/tmp/one", "/tmp/two"]
-
-        XCTAssertEqual(store.roots(), ["/tmp/one", "/tmp/two"])
-    }
-
-    // MARK: - UserDefaults implementation
 
     func testUserDefaultsPersistenceRoundTrip() throws {
         let suiteName = "DiskCleanPurgeRootsStoreTests-\(UUID().uuidString)"

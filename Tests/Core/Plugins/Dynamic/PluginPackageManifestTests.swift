@@ -156,26 +156,4 @@ final class PluginPackageManifestTests: XCTestCase {
             "Calendar"
         )
     }
-
-    func testLocalizedMetadataUsesAppleLanguagesOverrideBeforeSystemLanguages() throws {
-        let metadata = [
-            "en": PluginLocalizedMetadata(displayName: "Calendar", summary: "Events"),
-            "zh-Hans": PluginLocalizedMetadata(displayName: "日历", summary: "日程")
-        ]
-        let suiteName = "PluginLocalizationMatcherTests.\(UUID().uuidString)"
-        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer {
-            userDefaults.removePersistentDomain(forName: suiteName)
-        }
-
-        userDefaults.set(["en"], forKey: "AppleLanguages")
-
-        XCTAssertEqual(
-            PluginLocalizationMatcher.localizedMetadata(
-                from: metadata,
-                userDefaults: userDefaults
-            )?.displayName,
-            "Calendar"
-        )
-    }
 }

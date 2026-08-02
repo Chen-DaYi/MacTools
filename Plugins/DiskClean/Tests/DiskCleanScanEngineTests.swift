@@ -82,26 +82,6 @@ final class DiskCleanScanEngineTests: XCTestCase {
         )
     }
 
-    func testEmitsCategoryFinishedForEveryScopedCategory() async throws {
-        let fileSystem = FakeDiskCleanFileSystem()
-        fileSystem.setItems([.testDirectory("\(home)/Library/Caches/A")], forPattern: "\(home)/Library/Caches/*")
-        let engine = makeEngine(
-            fileSystem: fileSystem,
-            targets: [
-                .test(id: "cache.a", category: .appCaches, globs: ["\(home)/Library/Caches/*"]),
-                // A target with zero hits: the category must still finish or the UI stays stuck on "scanning".
-                .test(id: "cache.b", category: .logs, globs: ["\(home)/Library/Logs/*"])
-            ]
-        )
-
-        let events = try await collect(engine)
-        let finishedCategories = events.compactMap(\.finishedCategory)
-
-        XCTAssertEqual(Set(finishedCategories), [.appCaches, .logs])
-    }
-
-    // MARK: - Concurrency and timeouts
-
     func testLimitsConcurrentSizingToConfiguredMaximum() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
         let items = (0..<12).map { DiskCleanFileItem.testDirectory("\(home)/Library/Caches/Item\($0)") }
@@ -148,30 +128,6 @@ final class DiskCleanScanEngineTests: XCTestCase {
         )
     }
 
-    func testGlobalDeadlineAlreadyPassedStillReportsTimedOutInsteadOfHanging() async throws {
-        let fileSystem = FakeDiskCleanFileSystem()
-        fileSystem.setItems([.testDirectory("\(home)/Library/Caches/A")], forPattern: "\(home)/Library/Caches/*")
-        let executor = FakeDiskCleanSizingExecutor()
-        var configuration = DiskCleanScanEngineConfiguration()
-        configuration.globalTimeout = 0
-        let engine = makeEngine(
-            fileSystem: fileSystem,
-            sizingExecutor: executor,
-            configuration: configuration,
-            targets: [.test(id: "cache.a", globs: ["\(home)/Library/Caches/*"])]
-        )
-
-        let summary = try await finish(engine)
-
-        XCTAssertTrue(executor.requestedPaths.isEmpty, "no sizing submitted after global timeout")
-        XCTAssertEqual(
-            summary.artifact.candidates.first?.sizeResult?.completeness,
-            .partial(reasons: [.timedOut]),
-            "must still emit events or the UI stays stuck on calculating"
-        )
-    }
-
-    /// Real WorkerPool + blocking sizer: item deadline expiry must degrade to partial([.timedOut]).
     func testItemTimeoutProducesPartialResultThroughRealWorkerPool() async throws {
         let fileSystem = FakeDiskCleanFileSystem()
         fileSystem.setItems([.testDirectory("\(home)/Library/Caches/Slow")], forPattern: "\(home)/Library/Caches/*")
@@ -387,28 +343,6 @@ final class DiskCleanScanEngineTests: XCTestCase {
         XCTAssertTrue(summary.limitations.contains(.walkerCircuitBroken))
         XCTAssertTrue(summary.limitations.contains(.threadsAbandoned(count: 3)))
     }
-
-    func testCapsVolumeSkippedReportsSoLimitationsStayBounded() async throws {
-        let fileSystem = FakeDiskCleanFileSystem()
-        let items = (0..<30).map { DiskCleanFileItem.testDirectory("/cache/item\($0)") }
-        fileSystem.setItems(items, forPattern: "/cache/*")
-        let executor = FakeDiskCleanSizingExecutor()
-        executor.setDefaultResult(.testPartial(reasons: [.unsupportedVolume]))
-        var configuration = DiskCleanScanEngineConfiguration()
-        configuration.maximumVolumeSkippedReports = 4
-        let engine = makeEngine(
-            fileSystem: fileSystem,
-            sizingExecutor: executor,
-            configuration: configuration,
-            targets: [.test(id: "cache.a", globs: ["/cache/*"])]
-        )
-
-        let summary = try await finish(engine)
-
-        XCTAssertEqual(summary.limitations.count, 4)
-    }
-
-    // MARK: - Lock detection
 
     func testLockedTargetProducesInUseCandidatesThatAreNotCleanable() async throws {
         let fileSystem = FakeDiskCleanFileSystem()

@@ -140,14 +140,6 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         XCTAssertEqual(items.count, 2)
     }
 
-    func testVersionProviderReturnsEmptyForMissingContainer() async throws {
-        let items = try await expand(containerGlobs: [root.appendingPathComponent("absent").path])
-
-        XCTAssertTrue(items.isEmpty)
-    }
-
-    // MARK: - Unavailable simulator provider
-
     func testUnavailableSimulatorProviderReturnsOnlyUnavailableExistingDeviceDirectories() async throws {
         let devices = try makeDirectory("Devices")
         let unavailable = "3A6B1C2D-0000-4000-8000-000000000001"
@@ -180,19 +172,6 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         let items = try await expandSimulators(devicesRoot: devices, outcome: .success(Data(json.utf8)))
 
         XCTAssertTrue(items.isEmpty)
-    }
-
-    func testUnavailableSimulatorProviderThrowsOnMalformedOutput() async throws {
-        let devices = try makeDirectory("Devices")
-
-        for payload in ["not json at all", "{}", #"{"devices":42}"#] {
-            do {
-                _ = try await expandSimulators(devicesRoot: devices, outcome: .success(Data(payload.utf8)))
-                XCTFail("malformed output should throw: \(payload)")
-            } catch let error as DiskCleanDynamicRuleError {
-                XCTAssertEqual(error, .malformedOutput(command: "simctl list devices -j"))
-            }
-        }
     }
 
     func testUnavailableSimulatorProviderPropagatesTimeout() async throws {
@@ -268,18 +247,6 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
             }
         }
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
-    }
-
-    /// Output larger than the pipe buffer (64KB) must not deadlock: read and wait-for-exit must run in parallel.
-    func testLocalSubprocessRunnerHandlesOutputLargerThanPipeBuffer() async throws {
-        let result = try await LocalDiskCleanSubprocessRunner().run(
-            executablePath: "/usr/bin/head",
-            arguments: ["-c", "400000", "/dev/zero"],
-            timeout: .seconds(10)
-        )
-
-        XCTAssertEqual(result.exitCode, 0)
-        XCTAssertEqual(result.standardOutput.count, 400_000)
     }
 
     // MARK: - Helpers

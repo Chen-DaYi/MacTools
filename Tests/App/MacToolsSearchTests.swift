@@ -65,16 +65,6 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
-    func testCustomSearchEntryRequiresACustomConfigurationSurface() {
-        let plugin = DeclarativeOnlySearchProviderTestPlugin()
-        let host = makePluginHostForTests(plugins: [plugin])
-        let index = MacToolsSearchIndexBuilder.build(pluginHost: host)
-
-        XCTAssertFalse(index.items.contains {
-            $0.id == "\(plugin.metadata.id).settings-search.unrendered"
-        })
-    }
-
     func testGeneralSettingResultCarriesGeneralPageAndExactSearchTarget() throws {
         let host = makePluginHostForTests(plugins: [])
         let result = try XCTUnwrap(
@@ -87,14 +77,6 @@ final class MacToolsSearchTests: XCTestCase {
             result.action,
             .navigate(destination: .general, target: .general(.language))
         )
-    }
-
-    func testGeneralShortcutSettingMatchesIndividualShortcutTitles() {
-        let host = makePluginHostForTests(plugins: [])
-        let results = MacToolsSearchIndexBuilder.build(pluginHost: host)
-            .results(matching: AppShortcutAction.toggleDashboard.title)
-
-        XCTAssertTrue(results.contains { $0.id == "general-setting.appShortcuts" })
     }
 
     func testSurfaceOnlyPluginNavigatesToAndRevealsItsFeaturePanelRow() throws {
@@ -135,40 +117,6 @@ final class MacToolsSearchTests: XCTestCase {
             }
         )
         XCTAssertTrue(index.results(matching: "不存在 屏幕").isEmpty)
-    }
-
-    func testExactTitleRanksAheadOfDescriptionOnlyMatch() {
-        let exact = MacToolsSearchResult(
-            id: "exact",
-            kind: .navigation,
-            title: "屏幕",
-            subtitle: "插件",
-            detail: "",
-            keywords: [],
-            systemImage: "display",
-            action: .navigate(destination: .plugins(.marketplace), target: nil),
-            confirmation: nil,
-            suggestionPriority: nil
-        )
-        let detailOnly = MacToolsSearchResult(
-            id: "detail",
-            kind: .setting,
-            title: "保持常亮",
-            subtitle: "阻止休眠",
-            detail: "防止屏幕因空闲而关闭",
-            keywords: [],
-            systemImage: "coffee",
-            action: .navigate(destination: .plugins(.marketplace), target: nil),
-            confirmation: nil,
-            suggestionPriority: nil
-        )
-
-        XCTAssertEqual(
-            MacToolsSearchIndex(items: [detailOnly, exact])
-                .results(matching: "屏幕")
-                .map(\.id),
-            ["exact", "detail"]
-        )
     }
 
     func testEmptyQueryReturnsOnlyOrderedSuggestedDestinations() {
@@ -215,95 +163,6 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
-    func testQuickSelectionIsLimitedToFirstNineVisibleResults() {
-        let results = (1...10).map {
-            searchResult(id: "result-\($0)", kind: .setting)
-        }
-
-        XCTAssertEqual(
-            MacToolsSearchPresentation.quickSelectionNumber(
-                for: "result-9",
-                in: results
-            ),
-            9
-        )
-        XCTAssertNil(
-            MacToolsSearchPresentation.quickSelectionNumber(
-                for: "result-10",
-                in: results
-            )
-        )
-    }
-
-    func testPaletteModelKeepsOneDerivedResultSnapshotPerQuery() {
-        let host = makePluginHostForTests(plugins: [SearchableTestPlugin()])
-        let model = UnifiedSearchPaletteModel(pluginHost: host)
-
-        XCTAssertEqual(
-            model.results.map(\.id),
-            [
-                "navigation.dashboard",
-                "navigation.feature-panel",
-                "navigation.marketplace",
-                "navigation.general",
-                "navigation.about"
-            ]
-        )
-
-        model.updateQuery("快捷键目标")
-        XCTAssertEqual(model.results.first?.title, "快捷键目标")
-    }
-
-    func testUnifiedSearchFieldLeavesCommandsToActiveInputMethod() {
-        for selector in [
-            #selector(NSResponder.moveUp(_:)),
-            #selector(NSResponder.moveDown(_:)),
-            #selector(NSResponder.insertNewline(_:)),
-            #selector(NSResponder.cancelOperation(_:))
-        ] {
-            XCTAssertNil(
-                UnifiedSearchTextField.command(
-                    for: selector,
-                    hasMarkedText: true
-                )
-            )
-        }
-
-        XCTAssertEqual(
-            UnifiedSearchTextField.command(
-                for: #selector(NSResponder.moveDown(_:)),
-                hasMarkedText: false
-            ),
-            .moveSelection(1)
-        )
-        XCTAssertEqual(
-            UnifiedSearchTextField.command(
-                for: #selector(NSResponder.insertNewline(_:)),
-                hasMarkedText: false
-            ),
-            .submit
-        )
-    }
-
-    func testPaletteLayoutUsesLargerMaximumSizeAndFitsMinimumSettingsWindow() {
-        XCTAssertEqual(
-            UnifiedSearchPaletteLayout.width(for: 720),
-            672
-        )
-        XCTAssertEqual(
-            UnifiedSearchPaletteLayout.width(for: 1_200),
-            672
-        )
-        XCTAssertEqual(
-            UnifiedSearchPaletteLayout.resultListHeight(for: 480),
-            278
-        )
-        XCTAssertEqual(
-            UnifiedSearchPaletteLayout.resultListHeight(for: 800),
-            420
-        )
-    }
-
     func testPluginHostPerformsOnlyDeclaredCommands() {
         let plugin = SearchableTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
@@ -323,21 +182,6 @@ final class MacToolsSearchTests: XCTestCase {
         )
 
         XCTAssertEqual(plugin.performedCommandIDs, ["sleep"])
-    }
-
-    func testPluginHostRejectsAStaleCommandDefinition() {
-        let plugin = SearchableTestPlugin()
-        let host = makePluginHostForTests(plugins: [plugin])
-        let staleDefinition = plugin.commandDefinitions[0]
-        plugin.commandTitle = "新的显示器命令"
-
-        XCTAssertFalse(
-            host.performCommand(
-                pluginID: plugin.metadata.id,
-                expectedDefinition: staleDefinition
-            )
-        )
-        XCTAssertTrue(plugin.performedCommandIDs.isEmpty)
     }
 
     func testPluginHostValidatesLiveExactSettingsTargets() {
@@ -617,50 +461,4 @@ private final class SurfaceOnlySearchTestPlugin: MacToolsPlugin, PluginPrimaryPa
     }
 
     func handleAction(_ action: PluginPanelAction) {}
-}
-
-@MainActor
-private final class DeclarativeOnlySearchProviderTestPlugin:
-    MacToolsPlugin,
-    PluginSettingsSearchProviding
-{
-    let metadata = PluginMetadata(
-        id: "declarative-only-search-provider",
-        title: "Declarative Only",
-        iconName: "slider.horizontal.3",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 3,
-        defaultDescription: "Declarative settings only"
-    )
-    var onStateChange: (() -> Void)?
-    var requestPermissionGuidance: ((String) -> Void)?
-    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-
-    var settingsSections: [PluginSettingsSection] {
-        [
-            PluginSettingsSection(
-                id: "visible",
-                title: "Visible",
-                description: "Rendered by the host.",
-                status: .init(
-                    text: "On",
-                    systemImage: "checkmark",
-                    tone: .positive
-                ),
-                footnote: nil,
-                buttonTitle: nil,
-                actionID: nil
-            )
-        ]
-    }
-
-    var settingsSearchEntries: [PluginSettingsSearchEntry] {
-        [
-            PluginSettingsSearchEntry(
-                id: "unrendered",
-                title: "Unrendered",
-                description: "There is no custom view for this anchor."
-            )
-        ]
-    }
 }

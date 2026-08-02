@@ -3,48 +3,27 @@ import XCTest
 
 @MainActor
 final class AutoHideMenuBarPluginTests: XCTestCase {
-    func testMetadataIdentifiesAutoHideMenuBarPlugin() {
-        let plugin = AutoHideMenuBarPlugin(
-            commandRunner: MockMenuBarCommandRunner(),
-            stateReader: { false }
-        )
-
-        XCTAssertEqual(plugin.metadata.id, "auto-hide-menu-bar")
-        XCTAssertEqual(plugin.metadata.title, "自动隐藏菜单栏")
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .switch)
-    }
-
     func testInitialStateReflectsStateReader() {
-        let plugin = AutoHideMenuBarPlugin(
-            commandRunner: MockMenuBarCommandRunner(),
-            stateReader: { true }
-        )
+        let plugin = makePlugin(stateReader: { true })
 
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "已开启")
     }
 
-    func testSwitchOnUpdatesMenuBarState() {
+    func testSwitchUpdatesMenuBarState() {
         let runner = MockMenuBarCommandRunner()
-        let plugin = AutoHideMenuBarPlugin(
-            commandRunner: runner,
-            stateReader: { false }
-        )
+        let plugin = makePlugin(runner: runner)
 
         plugin.handleAction(.setSwitch(true))
 
-        XCTAssertEqual(runner.setMenuBarAutohideCalls, [true])
+        XCTAssertEqual(runner.calls, [true])
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 
-    func testSwitchFailureKeepsPreviousStateAndSetsError() {
-        let runner = MockMenuBarCommandRunner()
-        runner.shouldFailSet = true
-        let plugin = AutoHideMenuBarPlugin(
-            commandRunner: runner,
-            stateReader: { false }
-        )
+    func testSwitchFailureKeepsStateAndReportsError() {
+        let runner = MockMenuBarCommandRunner(shouldFail: true)
+        let plugin = makePlugin(runner: runner)
 
         plugin.handleAction(.setSwitch(true))
 
@@ -52,57 +31,50 @@ final class AutoHideMenuBarPluginTests: XCTestCase {
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
     }
 
-    func testRefreshUpdatesStateWhenChangedExternally() {
+    func testRefreshPublishesExternalStateChange() {
         var externalState = false
-        let plugin = AutoHideMenuBarPlugin(
-            commandRunner: MockMenuBarCommandRunner(),
-            stateReader: { externalState }
-        )
-
-        XCTAssertFalse(plugin.primaryPanelState.isOn)
-
-        var stateChangeCount = 0
-        plugin.onStateChange = { stateChangeCount += 1 }
+        let plugin = makePlugin(stateReader: { externalState })
+        var notificationCount = 0
+        plugin.onStateChange = { notificationCount += 1 }
 
         externalState = true
         plugin.refresh()
 
         XCTAssertTrue(plugin.primaryPanelState.isOn)
-        XCTAssertEqual(stateChangeCount, 1)
+        XCTAssertEqual(notificationCount, 1)
     }
 
-    func testStateReaderUsesGlobalMenuBarAutohideKey() {
-        let isEnabled = AutoHideMenuBarPlugin.resolvedMenuBarAutohideState(
+    func testStateResolutionPrefersGlobalKeyAndFallsBackToLegacyDockKey() {
+        XCTAssertTrue(AutoHideMenuBarPlugin.resolvedMenuBarAutohideState(
             globalValue: true,
             dockValue: false
-        )
-
-        XCTAssertTrue(isEnabled)
-    }
-
-    func testStateReaderFallsBackToLegacyDockKey() {
-        let isEnabled = AutoHideMenuBarPlugin.resolvedMenuBarAutohideState(
+        ))
+        XCTAssertTrue(AutoHideMenuBarPlugin.resolvedMenuBarAutohideState(
             globalValue: nil,
             dockValue: true
-        )
+        ))
+    }
 
-        XCTAssertTrue(isEnabled)
+    private func makePlugin(
+        runner: MockMenuBarCommandRunner = MockMenuBarCommandRunner(),
+        stateReader: @escaping () -> Bool = { false }
+    ) -> AutoHideMenuBarPlugin {
+        AutoHideMenuBarPlugin(commandRunner: runner, stateReader: stateReader)
     }
 }
 
-final class MockMenuBarCommandRunner: MenuBarCommandRunning {
-    var shouldFailSet = false
-    var setMenuBarAutohideCalls: [Bool] = []
+private final class MockMenuBarCommandRunner: MenuBarCommandRunning {
+    let shouldFail: Bool
+    private(set) var calls: [Bool] = []
+
+    init(shouldFail: Bool = false) {
+        self.shouldFail = shouldFail
+    }
 
     func setMenuBarAutohide(_ isEnabled: Bool) throws {
-        if shouldFailSet {
-            throw NSError(
-                domain: "AutoHideMenuBarPluginTests",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "set failed"]
-            )
+        if shouldFail {
+            throw NSError(domain: "AutoHideMenuBarPluginTests", code: 1)
         }
-
-        setMenuBarAutohideCalls.append(isEnabled)
+        calls.append(isEnabled)
     }
 }

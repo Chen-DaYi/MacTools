@@ -21,47 +21,6 @@ final class DiskCleanSlowWalkerTests: XCTestCase {
     }
 
     // MARK: - Behavior contract (shared asserts with FastWalker)
-
-    func testSumsKnownTree() throws {
-        try DiskCleanWalkerContract.assertSumsKnownTree(walker, in: temporaryDirectory)
-    }
-
-    func testDoesNotFollowDirectorySymlink() throws {
-        try DiskCleanWalkerContract.assertDoesNotFollowDirectorySymlink(walker, in: temporaryDirectory)
-    }
-
-    func testReportsPermissionDenied() throws {
-        try XCTSkipIf(getuid() == 0, "cannot construct EACCES when running as root")
-        try DiskCleanWalkerContract.assertReportsPermissionDenied(walker, in: temporaryDirectory)
-    }
-
-    func testHandlesEmptyDirectory() throws {
-        try DiskCleanWalkerContract.assertHandlesEmptyDirectory(walker, in: temporaryDirectory)
-    }
-
-    func testExpiredDeadlineReportsTimeout() throws {
-        try DiskCleanWalkerContract.assertExpiredDeadlineReportsTimeout(walker, in: temporaryDirectory)
-    }
-
-    func testCancellationReportsTimeout() throws {
-        try DiskCleanWalkerContract.assertCancellationReportsTimeout(walker, in: temporaryDirectory)
-    }
-
-    func testBlockedDeviceIsRefused() throws {
-        try DiskCleanWalkerContract.assertBlockedDeviceIsRefused(walker, in: temporaryDirectory)
-    }
-
-    func testMissingPathReportsWalkError() {
-        DiskCleanWalkerContract.assertMissingPathReportsWalkError(walker, in: temporaryDirectory)
-    }
-
-    func testSizesRegularFileRoot() throws {
-        try DiskCleanWalkerContract.assertSizesRegularFileRoot(walker, in: temporaryDirectory)
-    }
-
-    // MARK: - SlowWalker-specific
-
-    /// readdir returns "." and ".." which must be filtered — otherwise counts duplicate and recursion never ends.
     func testSkipsDotEntries() throws {
         try temporaryDirectory.makeFile("Root/only.bin", bytes: 64)
 

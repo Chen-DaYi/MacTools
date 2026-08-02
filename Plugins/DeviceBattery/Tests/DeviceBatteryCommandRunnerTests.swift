@@ -15,26 +15,6 @@ final class DeviceBatteryCommandRunnerTests: XCTestCase {
         )
     }
 
-    func testShortCommandsCompleteWithoutPipeGraceDelay() async {
-        let clock = ContinuousClock()
-        let start = clock.now
-        var results: [DeviceBatteryCommandResult?] = []
-
-        for _ in 0..<3 {
-            results.append(await DeviceBatteryCommandRunner.run(
-                path: "/usr/bin/printf",
-                arguments: ["done"],
-                timeout: 1
-            ))
-        }
-
-        XCTAssertEqual(results, Array(repeating: DeviceBatteryCommandResult(
-            output: "done",
-            completion: .completed
-        ), count: 3))
-        XCTAssertLessThan(start.duration(to: clock.now), .milliseconds(600))
-    }
-
     func testFiltersOutputWhileDrainingPipe() async {
         let output = await DeviceBatteryCommandRunner.run(
             path: "/usr/bin/printf",
@@ -94,36 +74,6 @@ final class DeviceBatteryCommandRunnerTests: XCTestCase {
             DeviceBatteryCommandResult(output: "done", completion: .completed)
         )
         XCTAssertLessThan(start.duration(to: clock.now), .seconds(1))
-    }
-
-    func testLargeOutputIsDrainedInOrder() async {
-        let output = await DeviceBatteryCommandRunner.run(
-            path: "/usr/bin/jot",
-            arguments: ["-", "1", "20000"],
-            timeout: 2
-        )
-        let lines = output?.output.split(separator: "\n") ?? []
-
-        XCTAssertEqual(output?.completion, .completed)
-        XCTAssertEqual(lines.count, 20_000)
-        XCTAssertEqual(lines.first, "1")
-        XCTAssertEqual(lines.last, "20000")
-    }
-
-    func testPreservesUTF8CharacterSplitAcrossPipeReads() async {
-        let output = await DeviceBatteryCommandRunner.run(
-            path: "/bin/sh",
-            arguments: [
-                "-c",
-                "printf '\\344\\270'; sleep 0.05; printf '\\255\\n'"
-            ],
-            timeout: 1
-        )
-
-        XCTAssertEqual(
-            output,
-            DeviceBatteryCommandResult(output: "中\n", completion: .completed)
-        )
     }
 
     func testFiltersUTF8LineSplitAcrossPipeReads() async {

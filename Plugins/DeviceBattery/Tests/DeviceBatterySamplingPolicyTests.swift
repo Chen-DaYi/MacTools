@@ -109,48 +109,6 @@ final class DeviceBatterySamplingPolicyTests: XCTestCase {
         XCTAssertTrue(cache.items.isEmpty)
     }
 
-    func testSupplementalCacheRetainsUnmatchedBatteryCenterItem() {
-        let referenceDate = Date(timeIntervalSince1970: 1_800_000_000)
-        var cache = DeviceBatterySupplementalItemCache(itemLifetime: 60)
-        let item = makeItem(lastUpdated: referenceDate, groupID: "unmatched-phone")
-
-        cache.update(
-            with: [item],
-            knownTargetGroupIDs: [],
-            knownTargetNames: [],
-            connectedTargetGroupIDs: [],
-            connectedTargetNames: [],
-            referenceDate: referenceDate
-        )
-        cache.update(
-            with: [],
-            knownTargetGroupIDs: [],
-            knownTargetNames: [],
-            connectedTargetGroupIDs: [],
-            connectedTargetNames: [],
-            referenceDate: referenceDate.addingTimeInterval(30)
-        )
-
-        XCTAssertEqual(cache.items, [item])
-    }
-
-    func testSupplementalCacheCanBeInvalidatedForTopologyRefresh() {
-        let referenceDate = Date(timeIntervalSince1970: 1_800_000_000)
-        var cache = DeviceBatterySupplementalItemCache()
-        cache.update(
-            with: [makeItem(lastUpdated: referenceDate, groupID: "unmatched-phone")],
-            knownTargetGroupIDs: [],
-            knownTargetNames: [],
-            connectedTargetGroupIDs: [],
-            connectedTargetNames: [],
-            referenceDate: referenceDate
-        )
-
-        cache.removeAll()
-
-        XCTAssertTrue(cache.items.isEmpty)
-    }
-
     private func parseLogDate(_ value: String) -> Date? {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")

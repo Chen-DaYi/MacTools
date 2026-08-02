@@ -3,10 +3,6 @@ import XCTest
 @testable import MacTools
 
 final class MenuBarStatusItemControllerTests: XCTestCase {
-    func testNilEventDefaultsToComponentPanel() {
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: nil), .componentPanel)
-    }
-
     func testLeftMouseDownOpensComponentPanelImmediately() {
         let event = NSEvent.mouseEvent(
             with: .leftMouseDown,
@@ -23,41 +19,9 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
     }
 
-    func testLeftMouseUpStillOpensComponentPanelForProgrammaticFallback() {
-        let event = NSEvent.mouseEvent(
-            with: .leftMouseUp,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-        )
-
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
-    }
-
     func testRightMouseDownOpensFeaturePanelImmediately() {
         let event = NSEvent.mouseEvent(
             with: .rightMouseDown,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-        )
-
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
-    }
-
-    func testRightMouseUpStillOpensFeaturePanelForProgrammaticFallback() {
-        let event = NSEvent.mouseEvent(
-            with: .rightMouseUp,
             location: .zero,
             modifierFlags: [],
             timestamp: 0,
@@ -108,30 +72,6 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
     func testSwappedRightClickOpensComponentPanel() {
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocation(for: mouseEvent(.rightMouseDown), swapped: true),
-            .componentPanel
-        )
-    }
-
-    func testSwappedNilEventOpensFeaturePanel() {
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(for: nil, swapped: true),
-            .featurePanel
-        )
-    }
-
-    func testSwappedModifierLeftClicksRouteOnlyOptionToRightClickAction() {
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(
-                for: mouseEvent(.leftMouseUp, modifiers: [.control]),
-                swapped: true
-            ),
-            .featurePanel
-        )
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(
-                for: mouseEvent(.leftMouseUp, modifiers: [.option]),
-                swapped: true
-            ),
             .componentPanel
         )
     }

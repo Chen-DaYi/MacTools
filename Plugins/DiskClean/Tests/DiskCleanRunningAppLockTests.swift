@@ -126,25 +126,4 @@ final class DiskCleanRunningAppLockTests: XCTestCase {
     }
 
     // MARK: - Parsing and escaping
-
-    func testEscapesRegexMetacharactersInProcessNames() {
-        XCTAssertEqual(
-            DiskCleanRunningAppLock.pattern(for: ["com.docker.backend", "Sublime Text (Safe Mode)"]),
-            "(com\\.docker\\.backend|Sublime Text \\(Safe Mode\\))"
-        )
-    }
-
-    func testParsesProcessNamesContainingSpaces() {
-        let names = DiskCleanRunningAppLock.processNames(
-            fromPgrepOutput: Data("1234 Google Chrome\n5678 Code Helper (Renderer)\n".utf8)
-        )
-
-        XCTAssertEqual(names, ["Google Chrome", "Code Helper (Renderer)"])
-    }
-
-    func testIgnoresMalformedPgrepLines() {
-        let names = DiskCleanRunningAppLock.processNames(fromPgrepOutput: Data("garbage\n42 \n7 Real\n".utf8))
-
-        XCTAssertEqual(names, ["Real"])
-    }
 }

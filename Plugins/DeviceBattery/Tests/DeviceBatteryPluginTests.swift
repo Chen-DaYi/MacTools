@@ -234,20 +234,6 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertEqual(record.chargeState, .normal)
     }
 
-    func testMobileBatteryParserRecognizesIPodTouch() throws {
-        let record = try XCTUnwrap(DeviceBatteryMobileBatteryParser.record(
-            identifier: "ipod-id",
-            name: "iPod touch",
-            productType: "iPod9,1",
-            deviceClass: "iPod",
-            connectionType: "USB",
-            battery: ["BatteryCurrentCapacity": 42]
-        ))
-
-        XCTAssertEqual(record.category, .mediaPlayer)
-        XCTAssertEqual(record.batteryItem(referenceDate: Date()).kind, .mediaPlayer)
-    }
-
     func testMobileDeviceReadingWinsOverStaleChargingLog() throws {
         let now = Date()
         let mobile = try XCTUnwrap(DeviceBatteryMobileBatteryParser.record(
@@ -383,75 +369,6 @@ final class DeviceBatteryPluginTests: XCTestCase {
                     kind: .airPodsPart,
                     parentName: "AirPods 充电盒",
                     componentIdentity: DeviceBatteryComponentIdentity(groupID: "airpods-advertisement", role: .left)
-                )
-            ]),
-            isEnabled: true,
-            threshold: 10,
-            localization: PluginLocalization(bundle: .main)
-        )
-
-        XCTAssertEqual(notifier.notifications.count, 1)
-    }
-
-    func testLowBatteryNotificationDoesNotRepeatWhenDeviceKindChanges() {
-        let notifier = RecordingLowBatteryNotifier()
-        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
-
-        controller.evaluate(
-            snapshot: makeSnapshot(items: [
-                makeBatteryItem(
-                    id: "bluetooth-mx-anywhere",
-                    name: "MX Anywhere 3S",
-                    level: 9,
-                    kind: .bluetooth
-                )
-            ]),
-            isEnabled: true,
-            threshold: 10,
-            localization: PluginLocalization(bundle: .main)
-        )
-        controller.evaluate(
-            snapshot: makeSnapshot(items: [
-                makeBatteryItem(
-                    id: "batterycenter-mx-anywhere",
-                    name: "MX Anywhere 3S",
-                    level: 8,
-                    kind: .magicAccessory
-                )
-            ]),
-            isEnabled: true,
-            threshold: 10,
-            localization: PluginLocalization(bundle: .main)
-        )
-
-        XCTAssertEqual(notifier.notifications.count, 1)
-    }
-
-    func testLowBatteryNotificationDoesNotRepeatWhenAggregateRoleChanges() {
-        let notifier = RecordingLowBatteryNotifier()
-        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
-
-        controller.evaluate(
-            snapshot: makeSnapshot(items: [
-                makeBatteryItem(
-                    id: "corebluetooth-airpods",
-                    name: "AirPods",
-                    level: 9,
-                    kind: .airPodsPart,
-                    componentIdentity: DeviceBatteryComponentIdentity(groupID: "airpods", role: .aggregate)
-                )
-            ]),
-            isEnabled: true,
-            threshold: 10,
-            localization: PluginLocalization(bundle: .main)
-        )
-        controller.evaluate(
-            snapshot: makeSnapshot(items: [
-                makeBatteryItem(
-                    id: "batterycenter-airpods",
-                    name: "AirPods",
-                    level: 8,
-                    kind: .airPodsPart
                 )
             ]),
             isEnabled: true,

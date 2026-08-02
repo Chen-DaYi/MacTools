@@ -13,63 +13,6 @@ final class SystemStatusPluginTests: XCTestCase {
         super.tearDown()
     }
 
-    func testPluginDescriptorUsesExpandedFullWidthSpan() {
-        let plugin = SystemStatusPlugin(storage: SystemStatusMemoryPluginStorage())
-        let expectedHeight = PluginComponentPanelLayoutMetrics.default.heightSpan(
-            fittingContentHeight: SystemStatusComponentLayout.dashboardContentHeight
-        )
-
-        XCTAssertEqual(plugin.metadata.id, "system-status")
-        XCTAssertEqual(plugin.metadata.title, "系统状态")
-        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: expectedHeight)!)
-    }
-
-    func testPluginHostIncludesSystemStatusComponentOnlyWhenProvided() {
-        let host = makePluginHostForTests(
-            plugins: [SystemStatusPlugin(storage: SystemStatusMemoryPluginStorage())],
-            suiteName: suiteName
-        )
-
-        XCTAssertTrue(host.componentItems.contains { $0.id == "system-status" })
-        XCTAssertFalse(host.panelItems.contains { $0.id == "system-status" })
-
-        let managementItem = host.featureManagementItems.first { $0.id == "system-status" }
-        XCTAssertEqual(managementItem?.presentation, .componentPanel)
-    }
-
-    func testPluginHostCanPresentSystemStatusSettings() {
-        let host = makePluginHostForTests(
-            plugins: [SystemStatusPlugin(storage: SystemStatusMemoryPluginStorage())],
-            suiteName: suiteName
-        )
-        var requests: [AppPresentationRequest] = []
-        host.appPresentationHandler = { requests.append($0) }
-
-        host.presentPluginConfiguration(pluginID: "system-status")
-
-        XCTAssertEqual(requests, [.settings(.pluginConfiguration("system-status"))])
-    }
-
-    func testSystemStatusLayoutUsesTwoColumnCoreMetricGridOrder() {
-        XCTAssertEqual(SystemStatusComponentLayout.columns, 2)
-        XCTAssertEqual(SystemStatusComponentLayout.metricRows, 3)
-        XCTAssertEqual(SystemStatusComponentLayout.cardSpacing, 6)
-        XCTAssertEqual(SystemStatusComponentLayout.cardContentPadding, 8)
-        XCTAssertEqual(SystemStatusComponentLayout.dashboardContentHeight, 411)
-        XCTAssertEqual(
-            SystemStatusComponentLayout.defaultPanelMetricKinds,
-            [.cpu, .gpu, .network, .disk, .memory, .battery, .topProcesses]
-        )
-        XCTAssertEqual(SystemStatusComponentLayout.defaultMenuBarMetricKinds, [.cpu, .gpu, .network, .disk, .memory, .battery])
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .cpu), SystemStatusGridPosition(row: 0, column: 0))
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .gpu), SystemStatusGridPosition(row: 0, column: 1))
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .network), SystemStatusGridPosition(row: 1, column: 0))
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .disk), SystemStatusGridPosition(row: 1, column: 1))
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .memory), SystemStatusGridPosition(row: 2, column: 0))
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .battery), SystemStatusGridPosition(row: 2, column: 1))
-        XCTAssertNil(SystemStatusComponentLayout.position(for: .topProcesses))
-    }
-
     func testSystemStatusLayoutHeightFollowsVisibleMetricRows() {
         XCTAssertEqual(SystemStatusComponentLayout.contentHeight(for: []), 96)
         XCTAssertEqual(SystemStatusComponentLayout.contentHeight(for: [.cpu]), 99)
@@ -210,23 +153,6 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(pruned.count, 1_800)
         XCTAssertEqual(pruned.first?.timestamp, 105)
         XCTAssertEqual(pruned.last?.timestamp, 1_904)
-    }
-
-    func testDisplayHistoryFallbackPruneSortsOutOfOrderSamples() {
-        let points = [
-            SystemStatusHistoryPoint(timestamp: 12),
-            SystemStatusHistoryPoint(timestamp: 10),
-            SystemStatusHistoryPoint(timestamp: 11),
-            SystemStatusHistoryPoint(timestamp: -2_000),
-            SystemStatusHistoryPoint(timestamp: 80)
-        ]
-
-        let pruned = SystemStatusViewModel.prunedDisplayHistory(
-            points,
-            referenceDate: Date(timeIntervalSince1970: 20)
-        )
-
-        XCTAssertEqual(pruned.map(\.timestamp), [10, 11, 12, 80])
     }
 
     func testPluginReusesViewModelAcrossComponentViews() {

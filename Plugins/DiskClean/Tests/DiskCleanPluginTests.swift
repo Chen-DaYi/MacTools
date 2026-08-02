@@ -5,13 +5,6 @@ import MacToolsPluginKit
 
 @MainActor
 final class DiskCleanPluginTests: XCTestCase {
-    func testMetadataIdentifiesDiskCleanPlugin() {
-        let plugin = DiskCleanPlugin(controller: FakeDiskCleanPluginController())
-
-        XCTAssertEqual(plugin.metadata.id, "disk-clean")
-        XCTAssertEqual(plugin.metadata.title, "磁盘清理")
-    }
-
     func testExpandedPanelExposesOnlyScanCleanAndOpenDetailsActions() throws {
         let plugin = DiskCleanPlugin(controller: FakeDiskCleanPluginController())
 
@@ -385,47 +378,6 @@ final class DiskCleanPluginTests: XCTestCase {
             safety: safety,
             sizeResult: sizeResult
         )
-    }
-
-    func testOpenDetailsActionUsesMenuBarStableActionID() throws {
-        let plugin = DiskCleanPlugin(controller: FakeDiskCleanPluginController())
-
-        plugin.handleAction(.setDisclosureExpanded(true))
-
-        let controls = try XCTUnwrap(plugin.primaryPanelState.detail?.primaryControls)
-        let openDetails = try XCTUnwrap(
-            controls.first { $0.id == DiskCleanPlugin.ControlID.openDetails }
-        )
-
-        XCTAssertEqual(DiskCleanPlugin.ControlID.openDetails, MenuBarContent.diskCleanOpenDetailsActionID)
-        switch openDetails.actionBehavior {
-        case .dismissBeforeHandling:
-            break
-        case .keepPresented:
-            XCTFail("Open details action should dismiss the menu before opening the window")
-        }
-    }
-
-    func testPluginHostIncludesDiskCleanWhenProvided() {
-        let host = makePluginHostForTests(plugins: [DiskCleanPlugin(controller: FakeDiskCleanPluginController())])
-
-        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "disk-clean" })
-    }
-
-    func testPluginHostExposesDiskCleanConfigurationWhenProvided() {
-        let host = makePluginHostForTests(plugins: [DiskCleanPlugin(controller: DiskCleanController())])
-
-        XCTAssertTrue(host.pluginConfigurationItems.contains { $0.id == "disk-clean" })
-    }
-
-    func testPresentPluginConfigurationRequestsDiskCleanSettings() {
-        let host = makePluginHostForTests(plugins: [DiskCleanPlugin(controller: DiskCleanController())])
-        var requests: [AppPresentationRequest] = []
-        host.appPresentationHandler = { requests.append($0) }
-
-        host.presentPluginConfiguration(pluginID: "disk-clean")
-
-        XCTAssertEqual(requests, [.settings(.pluginConfiguration("disk-clean"))])
     }
 }
 

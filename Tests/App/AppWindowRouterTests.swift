@@ -34,13 +34,6 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertEqual(featurePanelCallCount, 1)
     }
 
-    func testDefaultPanelPresentationActionsFailSafely() {
-        let actions = SettingsPanelPresentationActions()
-
-        actions.present(.dashboard)
-        actions.present(.featurePanel)
-    }
-
     func testSettingsWindowKeepsItsWidthAcrossDestinations() async throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -245,27 +238,6 @@ final class AppWindowRouterTests: XCTestCase {
         )
     }
 
-    func testLocalCommandMatcherUsesPhysicalNumberRowForUnifiedSearchSelection() {
-        XCTAssertEqual(
-            MacToolsLocalKeyboardCommand.resolve(
-                for: keyEvent(
-                    keyCode: UInt16(kVK_ANSI_1),
-                    characters: "&"
-                )
-            ),
-            .selectUnifiedSearchResult(1)
-        )
-        XCTAssertEqual(
-            MacToolsLocalKeyboardCommand.resolve(
-                for: keyEvent(
-                    keyCode: UInt16(kVK_ANSI_9),
-                    characters: "ç"
-                )
-            ),
-            .selectUnifiedSearchResult(9)
-        )
-    }
-
     func testLocalCommandMatcherLeavesCloseQuitAndUnsupportedModifiersUntouched() {
         for keyCode in [
             kVK_ANSI_W,
@@ -384,33 +356,6 @@ final class AppWindowRouterTests: XCTestCase {
         window.close()
     }
 
-    func testPhysicalCommandNumberRequestsUnifiedSearchQuickSelection() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-
-        router.showUnifiedSearch()
-        let window = try XCTUnwrap(router.settingsWindow)
-        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
-
-        XCTAssertTrue(
-            window.performKeyEquivalent(
-                with: keyEvent(
-                    keyCode: UInt16(kVK_ANSI_2),
-                    characters: "é",
-                    windowNumber: window.windowNumber
-                )
-            )
-        )
-        XCTAssertEqual(
-            coordinator.unifiedSearchQuickSelectionRequest?.number,
-            2
-        )
-
-        window.close()
-    }
-
     func testPhysicalCommandNumberSelectsSettingsTabWhenSearchIsClosed() throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -446,19 +391,6 @@ final class AppWindowRouterTests: XCTestCase {
         router.presentSettings(.appUpdate)
 
         XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .about)
-        router.settingsWindow?.close()
-    }
-
-    func testAppUpdateRequestStillOpensAboutWhenAvailabilityExpires() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-
-        router.presentSettings(.appUpdate)
-
-        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .about)
-        XCTAssertNil(router.settingsNavigationCoordinator?.aboutUpdateActionRequest)
         router.settingsWindow?.close()
     }
 

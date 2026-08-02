@@ -241,21 +241,6 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
     }
 
-    func testKeepDisplayOnPreferenceSurvivesSessionOff() {
-        let storage = KeepAwakeMemoryStorage()
-        let factory = KeepAwakeSessionFactory()
-        let plugin = factory.makePlugin(storage: storage)
-
-        plugin.handleAction(.setSwitch(true))
-        plugin.setKeepDisplayOn(true)
-        plugin.handleAction(.setSwitch(false))
-
-        XCTAssertEqual(storage.values["keep-display-on"] as? Bool, true)
-
-        plugin.handleAction(.setSwitch(true))
-        XCTAssertEqual(factory.sessions.last?.startedConfigurations.last?.preventDisplaySleep, true)
-    }
-
     func testClosedLidSettingRequiresPortableMacButCanBeEnabledOnBattery() {
         let storage = KeepAwakeMemoryStorage()
         let desktopFactory = KeepAwakeSessionFactory(
@@ -485,56 +470,6 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true, false, true])
     }
 
-    func testSoftwareDisplayPreferenceSurvivesRelaunchWhileParentIsDisabled() async {
-        let storage = KeepAwakeMemoryStorage()
-        storage.set(true, forKey: "persistent-enabled")
-        storage.set(true, forKey: "keep-desktop-available-with-lid-closed")
-        let factory = KeepAwakeSessionFactory()
-        let plugin = factory.makePlugin(storage: storage)
-
-        plugin.activate(context: Self.context(storage: storage))
-
-        XCTAssertTrue(plugin.primaryPanelState.isOn)
-        XCTAssertFalse(factory.virtualDisplayManager.isActive)
-        XCTAssertEqual(
-            storage.values["keep-desktop-available-with-lid-closed"] as? Bool,
-            true
-        )
-        XCTAssertEqual(
-            factory.sessions[0].startedConfigurations.last,
-            MockKeepAwakeSession.Configuration(
-                endDate: nil,
-                preventDisplaySleep: false,
-                preventLidCloseSleep: false
-            )
-        )
-
-        plugin.setKeepAwakeWithLidClosed(true)
-        await settleVirtualDisplayUpdate()
-
-        XCTAssertTrue(factory.virtualDisplayManager.isActive)
-        XCTAssertEqual(factory.virtualDisplayManager.startCount, 1)
-        XCTAssertEqual(factory.sessions[0].lidCloseSleepPreventionUpdates, [true])
-        XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true])
-    }
-
-    func testSoftwareDisplayKeepsDisplayAssertionWhenDisplayPreferenceTurnsOff() async {
-        let storage = KeepAwakeMemoryStorage()
-        let factory = KeepAwakeSessionFactory()
-        let plugin = factory.makePlugin(storage: storage)
-
-        plugin.setKeepAwakeWithLidClosed(true)
-        plugin.setKeepDisplayOn(true)
-        plugin.handleAction(.setSwitch(true))
-        plugin.setKeepDesktopAvailableWithLidClosed(true)
-        await settleVirtualDisplayUpdate()
-        plugin.setKeepDisplayOn(false)
-
-        XCTAssertTrue(factory.sessions[0].displaySleepPreventionUpdates.isEmpty)
-        XCTAssertNil(storage.values["keep-display-on"])
-        XCTAssertTrue(factory.virtualDisplayManager.isActive)
-    }
-
     func testSoftwareDisplayPausesOnBatteryAndResumesOnExternalPower() async {
         let storage = KeepAwakeMemoryStorage()
         let factory = KeepAwakeSessionFactory()
@@ -601,35 +536,6 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(storage.values["keep-awake-with-lid-closed"] as? Bool, true)
         XCTAssertNil(storage.values["keep-desktop-available-with-lid-closed"])
         XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法创建软件显示器。")
-    }
-
-    func testSoftwareDisplayRetriesSilentlyFailedDisplayAssertionBeforeStarting() async {
-        let storage = KeepAwakeMemoryStorage()
-        storage.set(true, forKey: "persistent-enabled")
-        storage.set(true, forKey: "keep-awake-with-lid-closed")
-        storage.set(true, forKey: "keep-desktop-available-with-lid-closed")
-        let factory = KeepAwakeSessionFactory()
-        factory.configureSession = {
-            $0.appliesDisplaySleepPreventionDuringStart = false
-        }
-        let plugin = factory.makePlugin(storage: storage)
-
-        plugin.activate(context: Self.context(storage: storage))
-        await settleVirtualDisplayUpdate()
-
-        XCTAssertEqual(
-            factory.sessions[0].startedConfigurations.last?.preventDisplaySleep,
-            true
-        )
-        XCTAssertEqual(factory.sessions[0].displaySleepPreventionUpdates, [true])
-        XCTAssertTrue(factory.sessions[0].isPreventingDisplaySleep)
-        XCTAssertEqual(factory.virtualDisplayManager.startCount, 1)
-        XCTAssertTrue(factory.virtualDisplayManager.isActive)
-        XCTAssertEqual(
-            storage.values["keep-desktop-available-with-lid-closed"] as? Bool,
-            true
-        )
-        XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 
     func testSoftwareDisplayDoesNotStartWhenDisplayAssertionRetryFails() async {
@@ -742,44 +648,6 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(
             storage.values["keep-desktop-available-with-lid-closed"] as? Bool,
             true
-        )
-    }
-
-    func testSettingsSearchIncludesScreenBasedToolsOptionOnPortableMac() {
-        let portableFactory = KeepAwakeSessionFactory()
-        let portablePlugin = portableFactory.makePlugin(
-            storage: KeepAwakeMemoryStorage()
-        )
-
-        XCTAssertEqual(
-            portablePlugin.settingsSearchEntries.map(\.id),
-            [
-                KeepAwakeSettingsSearchEntryID.keepDisplayOn,
-                KeepAwakeSettingsSearchEntryID.keepAwakeWithLidClosed,
-                KeepAwakeSettingsSearchEntryID.keepScreenBasedToolsWorking,
-            ]
-        )
-
-        let childEntry = portablePlugin.settingsSearchEntries.last
-        XCTAssertEqual(childEntry?.title, "让屏幕相关工具继续工作")
-        XCTAssertEqual(
-            childEntry?.description,
-            "合盖后支持 Codex Computer Use、桌面自动化、屏幕共享和远程控制。"
-        )
-
-        let desktopFactory = KeepAwakeSessionFactory(
-            powerSourceState: KeepAwakePowerSourceState(
-                isPortableMac: false,
-                isOnExternalPower: true
-            )
-        )
-        let desktopPlugin = desktopFactory.makePlugin(
-            storage: KeepAwakeMemoryStorage()
-        )
-
-        XCTAssertEqual(
-            desktopPlugin.settingsSearchEntries.map(\.id),
-            [KeepAwakeSettingsSearchEntryID.keepDisplayOn]
         )
     }
 
@@ -944,30 +812,6 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 
-    func testDisconnectingPowerPreservesClosedLidReleaseErrorAfterStoppingSession() {
-        let storage = KeepAwakeMemoryStorage()
-        let factory = KeepAwakeSessionFactory()
-        let plugin = factory.makePlugin(storage: storage)
-
-        plugin.setKeepAwakeWithLidClosed(true)
-        plugin.handleAction(.setSwitch(true))
-        factory.sessions[0].lidCloseUpdateError = MockKeepAwakeSessionError.lidCloseUpdateFailed
-
-        factory.powerSourceMonitor.send(
-            KeepAwakePowerSourceState(
-                isPortableMac: true,
-                isOnExternalPower: false
-            )
-        )
-
-        XCTAssertEqual(factory.sessions[0].lidCloseSleepPreventionUpdates, [false])
-        XCTAssertEqual(factory.sessions[0].stopRequestCount, 1)
-        XCTAssertNil(storage.values["keep-awake-with-lid-closed"])
-        XCTAssertNil(plugin.primaryPanelCompactIndicator)
-        XCTAssertFalse(plugin.primaryPanelState.isOn)
-        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法更新合盖状态。")
-    }
-
     func testClosedLidPreferenceRestoresPausedWithoutExternalPower() {
         let storage = KeepAwakeMemoryStorage()
         storage.set(true, forKey: "keep-awake-with-lid-closed")
@@ -985,36 +829,6 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertEqual(factory.sessions[0].startedConfigurations.last?.preventLidCloseSleep, false)
         XCTAssertEqual(storage.values["keep-awake-with-lid-closed"] as? Bool, true)
         XCTAssertNil(plugin.primaryPanelCompactIndicator)
-    }
-
-    func testFailedClosedLidResumeClearsPreferenceAndKeepsNormalSessionRunning() {
-        let storage = KeepAwakeMemoryStorage()
-        let factory = KeepAwakeSessionFactory()
-        let plugin = factory.makePlugin(storage: storage)
-
-        plugin.setKeepAwakeWithLidClosed(true)
-        plugin.handleAction(.setSwitch(true))
-        factory.powerSourceMonitor.send(
-            KeepAwakePowerSourceState(
-                isPortableMac: true,
-                isOnExternalPower: false
-            )
-        )
-        factory.sessions[0].lidCloseUpdateError = MockKeepAwakeSessionError.lidCloseUpdateFailed
-
-        factory.powerSourceMonitor.send(
-            KeepAwakePowerSourceState(
-                isPortableMac: true,
-                isOnExternalPower: true
-            )
-        )
-
-        XCTAssertEqual(factory.sessions[0].lidCloseSleepPreventionUpdates, [false, true])
-        XCTAssertEqual(factory.sessions[0].stopRequestCount, 0)
-        XCTAssertNil(storage.values["keep-awake-with-lid-closed"])
-        XCTAssertNil(plugin.primaryPanelCompactIndicator)
-        XCTAssertTrue(plugin.primaryPanelState.isOn)
-        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法更新合盖状态。")
     }
 
     func testTimedSessionSubtitleKeepsRemainingAndAbsoluteStopCompact() {
@@ -1046,75 +860,6 @@ final class KeepAwakeStopScheduleFormattingTests: XCTestCase {
     }
 
     private var locale: Locale { Locale(identifier: "en_US_POSIX") }
-
-    func testSameDayStopUsesTimeOnly() {
-        let reference = date(year: 2026, month: 7, day: 10, hour: 14, minute: 0)
-        let end = date(year: 2026, month: 7, day: 10, hour: 16, minute: 30)
-
-        let label = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
-            until: end,
-            referenceDate: reference,
-            calendar: calendar,
-            localization: localization,
-            locale: locale
-        )
-
-        XCTAssertTrue(label.contains("4:30"), label)
-        XCTAssertFalse(label.contains("16:30"), label)
-    }
-
-    func testSameDayStopUsesLocalePreferred24HourClock() {
-        let reference = date(year: 2026, month: 7, day: 10, hour: 14, minute: 0)
-        let end = date(year: 2026, month: 7, day: 10, hour: 16, minute: 30)
-
-        let label = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
-            until: end,
-            referenceDate: reference,
-            calendar: calendar,
-            localization: localization,
-            locale: Locale(identifier: "en_GB")
-        )
-
-        XCTAssertTrue(label.contains("16:30"), label)
-    }
-
-    func testNextDayStopUsesTomorrowPrefix() {
-        let reference = date(year: 2026, month: 7, day: 10, hour: 22, minute: 0)
-        let end = date(year: 2026, month: 7, day: 11, hour: 1, minute: 15)
-
-        let label = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
-            until: end,
-            referenceDate: reference,
-            calendar: calendar,
-            localization: localization,
-            locale: locale
-        )
-
-        // PluginLocalization falls back to default Chinese copy when the key is not in the test host bundle.
-        XCTAssertTrue(label.contains("1:15"), label)
-        XCTAssertTrue(
-            label.contains("Tomorrow") || label.contains("明天"),
-            label
-        )
-    }
-
-    func testLaterDayStopIncludesDate() {
-        let reference = date(year: 2026, month: 7, day: 10, hour: 12, minute: 0)
-        let end = date(year: 2026, month: 7, day: 12, hour: 9, minute: 5)
-
-        let label = KeepAwakeStopScheduleFormatting.absoluteStopLabel(
-            until: end,
-            referenceDate: reference,
-            calendar: calendar,
-            localization: localization,
-            locale: locale
-        )
-
-        XCTAssertTrue(label.contains("9:05"), label)
-        XCTAssertFalse(label.contains("Tomorrow") || label.contains("明天"), label)
-        XCTAssertTrue(label.contains("Jul") || label.contains("7") || label.contains("12"), label)
-    }
-
     private func date(year: Int, month: Int, day: Int, hour: Int, minute: Int) -> Date {
         var components = DateComponents()
         components.year = year

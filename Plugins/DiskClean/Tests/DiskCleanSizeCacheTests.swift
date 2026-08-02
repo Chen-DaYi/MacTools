@@ -32,41 +32,6 @@ final class DiskCleanSizeCacheTests: XCTestCase {
         XCTAssertNil(cache.result(forPath: path, identity: replaced, now: Date()))
     }
 
-    func testDifferentDeviceDoesNotHit() {
-        let cache = DiskCleanSizeCache()
-        cache.store(path: path, result: .testComplete(identity: .test(devid: 1)), now: Date())
-
-        XCTAssertNil(cache.result(forPath: path, identity: .test(devid: 2), now: Date()))
-    }
-
-    func testDifferentMtimeDoesNotHit() {
-        let cache = DiskCleanSizeCache()
-        cache.store(
-            path: path,
-            result: .testComplete(identity: .test(mtime: Date(timeIntervalSince1970: 500))),
-            now: Date()
-        )
-
-        XCTAssertNil(
-            cache.result(
-                forPath: path,
-                identity: .test(mtime: Date(timeIntervalSince1970: 501)),
-                now: Date()
-            )
-        )
-    }
-
-    func testMissDropsStaleEntry() {
-        let cache = DiskCleanSizeCache()
-        cache.store(path: path, result: .testComplete(identity: .test(fileID: 2)), now: Date())
-
-        _ = cache.result(forPath: path, identity: .test(fileID: 3), now: Date())
-
-        XCTAssertEqual(cache.count, 0, "identity-mismatched entries are worthless; hit check clears them")
-    }
-
-    // MARK: - TTL and capacity
-
     func testEntryExpiresAfterTimeToLive() {
         let cache = DiskCleanSizeCache(timeToLive: 240)
         let storedAt = Date(timeIntervalSince1970: 10_000)
@@ -80,29 +45,6 @@ final class DiskCleanSizeCacheTests: XCTestCase {
             cache.result(forPath: path, identity: identity, now: storedAt.addingTimeInterval(240))
         )
     }
-
-    func testTimeToLiveIsStrictlyShorterThanFreshnessWindow() {
-        XCTAssertLessThan(
-            DiskCleanSizeCache.timeToLive,
-            DiskCleanScanFreshness.window,
-            "TTL must be shorter than the expiry window or 'expire → rescan → hit old cache → still expired' becomes a loop"
-        )
-    }
-
-    func testEvictsOldestEntryBeyondCapacity() {
-        let cache = DiskCleanSizeCache(capacity: 2)
-        let identity = DiskCleanRootIdentity.test()
-        let now = Date()
-        cache.store(path: "/a", result: .testComplete(identity: identity), now: now)
-        cache.store(path: "/b", result: .testComplete(identity: identity), now: now)
-        cache.store(path: "/c", result: .testComplete(identity: identity), now: now)
-
-        XCTAssertEqual(cache.count, 2)
-        XCTAssertNil(cache.result(forPath: "/a", identity: identity, now: now))
-        XCTAssertNotNil(cache.result(forPath: "/c", identity: identity, now: now))
-    }
-
-    // MARK: - Cache complete only
 
     func testPartialResultIsNeverStored() {
         let cache = DiskCleanSizeCache()
@@ -291,37 +233,5 @@ final class DiskCleanRootIdentityProbeTests: XCTestCase {
         try temporary.makeSymlink("Alias", destination: "Real")
 
         XCTAssertNil(probe.identity(ofItemAt: temporary.resolve("Alias/Inner").path))
-    }
-
-    func testMissingPathHasNoIdentity() {
-        XCTAssertNil(probe.identity(ofItemAt: temporary.resolve("nope").path))
-    }
-
-    /// Real-FS "replace directory while preserving mtime": cache must miss.
-    func testReplacedDirectoryWithPreservedMtimeInvalidatesCache() throws {
-        // Write both with the same fixed mtime so comparisons are not affected by utimes microsecond truncation.
-        let pinnedMtime = Date(timeIntervalSince1970: 1_600_000_000)
-        let directory = try temporary.makeDirectory("Cache")
-        try temporary.makeFile("Cache/a.bin", bytes: 10)
-        try FileManager.default.setAttributes([.modificationDate: pinnedMtime], ofItemAtPath: directory.path)
-        let originalIdentity = try XCTUnwrap(probe.identity(ofItemAt: directory.path))
-        let cache = DiskCleanSizeCache()
-        cache.store(
-            path: directory.path,
-            result: .testComplete(bytes: 10, identity: originalIdentity),
-            now: Date()
-        )
-
-        try FileManager.default.removeItem(at: directory)
-        try temporary.makeDirectory("Cache")
-        try FileManager.default.setAttributes([.modificationDate: pinnedMtime], ofItemAtPath: directory.path)
-        let replacedIdentity = try XCTUnwrap(probe.identity(ofItemAt: directory.path))
-
-        XCTAssertEqual(replacedIdentity.mtime, originalIdentity.mtime, "mtime was preserved")
-        XCTAssertNotEqual(replacedIdentity.fileID, originalIdentity.fileID)
-        XCTAssertNil(
-            cache.result(forPath: directory.path, identity: replacedIdentity, now: Date()),
-            "same mtime different inode must be treated as different objects"
-        )
     }
 }

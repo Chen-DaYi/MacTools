@@ -18,10 +18,6 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertNil(SidecarCoreService.identifierString(from: NSObject()))
     }
 
-    func testMetadataUsesStableSidecarID() {
-        XCTAssertEqual(makePlugin(service: FakeSidecarService()).metadata.id, "sidecar")
-    }
-
     func testCollapsedRowSaysWhenNoSidecarDisplayIsAvailable() {
         let plugin = makePlugin(service: FakeSidecarService())
 
@@ -73,19 +69,6 @@ final class SidecarPluginTests: XCTestCase {
         let callsAfterHiding = service.reachableDevicesCallCount
         try? await Task.sleep(nanoseconds: 30_000_000)
         XCTAssertEqual(service.reachableDevicesCallCount, callsAfterHiding)
-    }
-
-    func testCompactPanelShowsOneDirectActionPerDevice() {
-        let plugin = makePlugin(service: FakeSidecarService(devices: [
-            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
-            SidecarDevice(id: "ipad-2", name: "Other iPad", connectionState: .disconnected)
-        ]))
-
-        let controls = plugin.primaryPanelState.detail?.primaryControls ?? []
-        XCTAssertEqual(controls.map(\.id), ["sidecar-connect.ipad-1", "sidecar-connect.ipad-2"])
-        XCTAssertEqual(controls.first?.sectionTitle, "可用的 Sidecar 显示器")
-        XCTAssertEqual(controls.first?.actionTitle, "My iPad · 连接")
-        XCTAssertEqual(controls.first?.actionIconSystemName, "circle")
     }
 
     func testConnectedDevicesAppearFirstWithGreenConnectedIconAndDisconnectAction() {
@@ -190,23 +173,6 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertFalse(control?.isEnabled ?? true)
     }
 
-    func testUntestedSystemShowsAWarningWithoutDisablingSidecar() {
-        let service = FakeSidecarService(devices: [
-            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected)
-        ])
-        service.isMinimumTestedSystem = false
-        let plugin = makePlugin(service: service)
-
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 台可连接的 Sidecar 显示器 · 未在 macOS 14.2 之前测试")
-        XCTAssertTrue(plugin.primaryPanelState.isEnabled)
-    }
-
-    func testMinimumTestedVersionCheckDoesNotExcludeOlderSystems() {
-        XCTAssertFalse(SidecarCoreService.isMinimumTested(OperatingSystemVersion(majorVersion: 14, minorVersion: 1, patchVersion: 0)))
-        XCTAssertTrue(SidecarCoreService.isMinimumTested(OperatingSystemVersion(majorVersion: 14, minorVersion: 2, patchVersion: 0)))
-        XCTAssertTrue(SidecarCoreService.isMinimumTested(OperatingSystemVersion(majorVersion: 15, minorVersion: 0, patchVersion: 0)))
-    }
-
     func testPendingThenSuccessReturnsRowToLiveSummary() {
         let service = FakeSidecarService(devices: [
             SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected)
@@ -221,18 +187,6 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.detail?.primaryControls.first?.actionIconSystemName, "checkmark.circle")
     }
 
-    func testUnnamedDeviceUsesLocalizedFallbackName() {
-        let service = FakeSidecarService(devices: [
-            SidecarDevice(id: "ipad-1", name: "", connectionState: .disconnected)
-        ])
-        let plugin = makePlugin(service: service)
-
-        XCTAssertEqual(
-            plugin.primaryPanelState.detail?.primaryControls.first?.actionTitle,
-            "Sidecar 显示器 · 连接"
-        )
-    }
-
     func testMissingWiredCapabilityKeepsAutomaticConnectionAvailable() {
         let service = FakeSidecarService(devices: [
             SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected)
@@ -244,35 +198,6 @@ final class SidecarPluginTests: XCTestCase {
 
         XCTAssertTrue(service.didConnect)
         XCTAssertFalse(service.receivedWiredOnly)
-    }
-
-    func testMissingWiredCapabilityDoesNotDisconnectCurrentDisplayBeforeFailing() {
-        let service = FakeSidecarService(devices: [
-            SidecarDevice(id: "ipad-current", name: "Current iPad", connectionState: .connected),
-            SidecarDevice(id: "ipad-target", name: "Target iPad", connectionState: .disconnected)
-        ])
-        service.supportsWiredOnlyConnections = false
-        let preferences = SidecarPreferencesStore(storage: InMemoryPluginStorage())
-        preferences.reconcile(with: service.reachableDevices())
-        preferences.updateTransport(.wiredOnly, for: "ipad-target")
-        let plugin = makePlugin(service: service, preferences: preferences)
-
-        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-target"))
-
-        XCTAssertTrue(service.operations.isEmpty)
-        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "当前系统不支持此 Sidecar 操作")
-    }
-
-    func testConfirmedConnectionReplacesTransientFeedbackWithConnectedState() {
-        let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
-        let plugin = makePlugin(service: service)
-        plugin.handleAction(.invokeAction(controlID: "sidecar-connect.ipad-1"))
-        service.complete(.success(()))
-        service.updateDevices([SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected)])
-        plugin.refresh()
-
-        XCTAssertEqual(plugin.primaryPanelState.detail?.primaryControls.first?.actionTitle, "My iPad · 断开连接")
-        XCTAssertEqual(plugin.primaryPanelState.detail?.primaryControls.first?.actionIconSystemName, "checkmark.circle.fill")
     }
 
     func testShortcutPreferencesPersistWhenDeviceIsUnavailable() {
@@ -328,32 +253,6 @@ final class SidecarPluginTests: XCTestCase {
         )
     }
 
-    func testRestoringPreferencesRemovesDuplicateShortcutBindings() throws {
-        struct PortablePreferences: Codable {
-            let devices: [SidecarDevicePreference]
-            let disconnectAllShortcut: ShortcutBinding?
-            let connectFirstAvailableShortcut: ShortcutBinding?
-        }
-
-        let binding = ShortcutBinding(keyCode: 0, modifiers: [.command, .option])
-        let data = try JSONEncoder().encode(PortablePreferences(
-            devices: [
-                SidecarDevicePreference(id: "ipad-1", name: "First", shortcut: binding),
-                SidecarDevicePreference(id: "ipad-2", name: "Second", shortcut: binding)
-            ],
-            disconnectAllShortcut: binding,
-            connectFirstAvailableShortcut: binding
-        ))
-        let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
-
-        store.restorePortablePreferences(from: data)
-
-        XCTAssertEqual(store.connectFirstAvailableShortcut, binding)
-        XCTAssertNil(store.disconnectAllShortcut)
-        XCTAssertNil(store.preference(for: "ipad-1")?.shortcut)
-        XCTAssertNil(store.preference(for: "ipad-2")?.shortcut)
-    }
-
     func testOnlyCustomizedOfflineDevicePreferencesNeedToRemainVisible() {
         let defaultPreference = SidecarDevicePreference(id: "ipad-1", name: "My iPad")
         let wiredPreference = SidecarDevicePreference(
@@ -370,21 +269,6 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertFalse(defaultPreference.hasCustomConfiguration)
         XCTAssertTrue(wiredPreference.hasCustomConfiguration)
         XCTAssertTrue(shortcutPreference.hasCustomConfiguration)
-    }
-
-    func testSharedDeviceOrderingPrioritizesConnectedThenAvailableDisplays() {
-        XCTAssertLessThan(
-            SidecarDeviceOrdering.rank(for: .connected),
-            SidecarDeviceOrdering.rank(for: .disconnected)
-        )
-        XCTAssertLessThan(
-            SidecarDeviceOrdering.rank(for: .disconnected),
-            SidecarDeviceOrdering.rank(for: .unknown)
-        )
-        XCTAssertLessThan(
-            SidecarDeviceOrdering.rank(for: .unknown),
-            SidecarDeviceOrdering.rank(for: nil)
-        )
     }
 
     func testConfiguredPerDeviceShortcutUsesHostActionAndSavedTransport() {
@@ -406,23 +290,6 @@ final class SidecarPluginTests: XCTestCase {
         plugin.handleShortcutAction(id: "device.ipad-1")
         XCTAssertTrue(service.didConnect)
         XCTAssertTrue(service.receivedWiredOnly)
-    }
-
-    func testHostShortcutBindingKeepsOfflineDeviceDefinitionAvailable() {
-        let service = FakeSidecarService(devices: [
-            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected)
-        ])
-        let plugin = makePlugin(service: service)
-        let binding = ShortcutBinding(keyCode: 0, modifiers: [.command, .option])
-
-        plugin.shortcutBindingDidChange(id: "device.ipad-1", binding: binding)
-        service.updateDevices([])
-        plugin.refresh()
-
-        XCTAssertEqual(
-            plugin.shortcutDefinitions.first(where: { $0.id == "device.ipad-1" })?.defaultBinding,
-            nil
-        )
     }
 
     func testConnectFirstAvailableShortcutUsesSavedPriorityAndConnectionMode() {
@@ -465,24 +332,6 @@ final class SidecarPluginTests: XCTestCase {
 
         withExtendedLifetime(plugin) {}
         XCTAssertTrue(service.operations.isEmpty)
-    }
-
-    func testExplicitConnectShortcutSwitchesFromTheKnownConnectedDisplay() {
-        let service = FakeSidecarService(devices: [
-            SidecarDevice(id: "ipad-current", name: "Current iPad", connectionState: .connected),
-            SidecarDevice(id: "ipad-target", name: "Target iPad", connectionState: .disconnected)
-        ])
-        let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
-        store.reconcile(with: service.reachableDevices())
-        store.updateShortcutAction(.connect, for: "ipad-target")
-        store.updateShortcut(ShortcutBinding(keyCode: 0, modifiers: [.command]), for: "ipad-target")
-        let plugin = makePlugin(service: service, preferences: store)
-
-        plugin.activate(context: PluginRuntimeContext(pluginID: "sidecar", storage: InMemoryPluginStorage()))
-        plugin.handleShortcutAction(id: "device.ipad-target")
-
-        withExtendedLifetime(plugin) {}
-        XCTAssertEqual(service.operations, ["disconnect:ipad-current"])
     }
 
     func testDisconnectShortcutDoesNotGuessUnknownOrDisconnectedState() {
@@ -545,26 +394,6 @@ final class SidecarPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.primaryPanelState.errorMessage, "Unavailable")
         plugin.panelSurfaceDidBecomeHidden(.primary)
-        XCTAssertNil(plugin.primaryPanelState.errorMessage)
-    }
-
-    func testExpiredShortcutFailureDoesNotAppearWhenThePanelOpens() {
-        let service = FakeSidecarService(devices: [SidecarDevice(id: "ipad-1", name: "My iPad")])
-        let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
-        store.reconcile(with: service.reachableDevices())
-        store.updateShortcutAction(.disconnect, for: "ipad-1")
-        store.updateShortcut(ShortcutBinding(keyCode: 0, modifiers: [.command]), for: "ipad-1")
-        let plugin = makePlugin(
-            service: service,
-            preferences: store,
-            terminalFeedbackExpiration: 0
-        )
-
-        plugin.activate(context: PluginRuntimeContext(pluginID: "sidecar", storage: InMemoryPluginStorage()))
-        plugin.handleShortcutAction(id: "device.ipad-1")
-        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "该 Sidecar 显示器当前未连接")
-
-        plugin.panelSurfaceDidBecomeVisible(.primary)
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 

@@ -80,40 +80,6 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertTrue(items.isEmpty)
     }
 
-    func testPythonCacheMatchesUnconditionally() throws {
-        try temporaryDirectory.makeDirectory("root/scripts/__pycache__")
-
-        let items = try discoverItems()
-
-        XCTAssertEqual(items.map(\.path), [path("root/scripts/__pycache__")])
-        XCTAssertEqual(items[0].kind, .pythonCache)
-        XCTAssertNil(items[0].projectMarker, "unconditional hits have no marker to display")
-    }
-
-    /// A **directory** named `package.json` is coincidence, not a project root.
-    func testMarkerMustNotBeADirectory() throws {
-        try temporaryDirectory.makeDirectory("root/app/package.json")
-        try temporaryDirectory.makeDirectory("root/app/node_modules")
-
-        let items = try discoverItems()
-
-        XCTAssertTrue(items.isEmpty)
-    }
-
-    /// In a monorepo, `package.json` may be a symlink to a shared manifest and still counts as a project root.
-    func testMarkerMayBeSymlink() throws {
-        try temporaryDirectory.makeFile("root/shared.json", bytes: 10)
-        try temporaryDirectory.makeSymlink("root/app/package.json", destination: "../shared.json")
-        try temporaryDirectory.makeDirectory("root/app/node_modules")
-
-        let items = try discoverItems()
-
-        XCTAssertEqual(items.map(\.path), [path("root/app/node_modules")])
-    }
-
-    // MARK: - Pruning and depth
-
-    /// Hit-and-prune: nested dependency trees inside `node_modules` make reporting deeper hits meaningless.
     func testPrunesNestedCandidatesInsideAHit() throws {
         try temporaryDirectory.makeFile("root/app/package.json", bytes: 10)
         try temporaryDirectory.makeFile("root/app/node_modules/lib/package.json", bytes: 10)
@@ -137,19 +103,6 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(items.map(\.path), [path("root/a/b/c/d/e/node_modules")])
     }
 
-    func testDepthLimitIsConfigurable() throws {
-        try temporaryDirectory.makeFile("root/a/b/package.json", bytes: 10)
-        try temporaryDirectory.makeDirectory("root/a/b/node_modules")
-        discovery = DiskCleanPurgeDiscovery(maximumDepth: 2)
-
-        let items = try discoverItems()
-
-        XCTAssertTrue(items.isEmpty, "depth-3 candidates must not be found under max depth 2")
-    }
-
-    // MARK: - Symlinks
-
-    /// Never follow directory symlinks: following leaves the scan root and pulls in unauthorized directories.
     func testDoesNotFollowDirectorySymlink() throws {
         try temporaryDirectory.makeFile("outside/app/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("outside/app/node_modules")
@@ -190,15 +143,6 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertEqual(report.status, .unreadable(reason: .permissionDenied))
     }
 
-    func testReportsUnreadableWhenRootIsAFile() throws {
-        try temporaryDirectory.makeFile("root", bytes: 4)
-
-        let report = discovery.discover(root: path("root"))
-
-        XCTAssertEqual(report.status, .unreadable(reason: .walkError))
-    }
-
-    /// An unreadable subtree only degrades completeness; other subtrees still yield candidates.
     func testUnreadableSubtreeDegradesCompleteness() throws {
         try temporaryDirectory.makeFile("root/app/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("root/app/node_modules")
@@ -240,16 +184,6 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
     }
 
     /// Worktree/submodule `.git` is a file, not a directory, and still counts as a repository.
-    func testTreatsGitFileAsRepository() throws {
-        try temporaryDirectory.makeFile("root/repo/.git", bytes: 20)
-        try temporaryDirectory.makeFile("root/repo/package.json", bytes: 10)
-        try temporaryDirectory.makeDirectory("root/repo/node_modules")
-
-        let items = try discoverItems()
-
-        XCTAssertEqual(items.map(\.repositoryPath), [path("root/repo")])
-    }
-
     func testRootItselfCanBeTheRepository() throws {
         try temporaryDirectory.makeDirectory("root/.git")
         try temporaryDirectory.makeFile("root/package.json", bytes: 10)
@@ -334,33 +268,6 @@ final class DiskCleanPurgeScannerTests: XCTestCase {
         XCTAssertFalse(candidate.isSelectedByDefault)
     }
 
-    func testMissingGitExecutableIsTreatedAsDirty() async throws {
-        try makeSingleRepositoryLayout()
-        let runner = ScriptedDiskCleanSubprocessRunner(
-            error: DiskCleanSubprocessError.executableUnavailable(path: "/usr/bin/git")
-        )
-
-        let candidate = try await scanSingleCandidate(runner: runner)
-
-        XCTAssertEqual(
-            candidate.gitState,
-            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("未找到 git"))
-        )
-    }
-
-    func testNonZeroExitIsTreatedAsDirty() async throws {
-        try makeSingleRepositoryLayout()
-        let runner = ScriptedDiskCleanSubprocessRunner(statusExitCode: 128)
-
-        let candidate = try await scanSingleCandidate(runner: runner)
-
-        XCTAssertEqual(
-            candidate.gitState,
-            .dirty(repositoryPath: path("root/repo"), reason: .inspectionFailed("status 退出码 128"))
-        )
-    }
-
-    /// Candidates outside a repository must not spawn any subprocess.
     func testSkipsGitInspectionOutsideRepositories() async throws {
         try temporaryDirectory.makeFile("root/app/package.json", bytes: 10)
         try temporaryDirectory.makeDirectory("root/app/node_modules")

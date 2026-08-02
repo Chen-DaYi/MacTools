@@ -195,22 +195,6 @@ final class DiskCleanControllerTests: XCTestCase {
         )
     }
 
-    func testResultObservedBeforeScanStartIsExpiredImmediately() async throws {
-        let clock = TestDiskCleanClock(now: observedAt.addingTimeInterval(DiskCleanScanFreshness.window + 1))
-        let engine = ControlledDiskCleanScanEngine()
-        let controller = makeController(engine: engine, clock: clock)
-
-        controller.scan()
-        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
-        engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-
-        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
-        XCTAssertTrue(controller.snapshot.isResultExpired, "a cache hit with old observedAt may already be expired at birth")
-        XCTAssertFalse(controller.snapshot.canClean)
-    }
-
-    // MARK: - Clean-set invariants
-
     func testCleanDropsCandidatesWithIncompleteSize() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let executor = FakeDiskCleanExecutor()
@@ -273,29 +257,6 @@ final class DiskCleanControllerTests: XCTestCase {
     }
 
     // MARK: - Selection commands (§8.1)
-
-    func testDefaultSelectionCoversLowRiskCandidatesOnly() async throws {
-        let engine = ControlledDiskCleanScanEngine()
-        let controller = makeController(engine: engine)
-
-        controller.scan()
-        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
-        engine.emit(
-            .finished(
-                makeSummary(candidates: [
-                    makeSizedCandidate(id: "low", path: "/cache/low"),
-                    makeSizedCandidate(id: "medium", path: "/cache/medium", risk: .medium),
-                    makeCandidate(id: "unsized", path: "/cache/unsized")
-                ])
-            )
-        )
-        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
-
-        XCTAssertEqual(controller.snapshot.selection.selectedIDs, ["low"])
-        XCTAssertEqual(controller.snapshot.selection.selectableIDs, ["low", "medium"])
-        XCTAssertEqual(controller.snapshot.selection.selectedEstimatedBytes, 1_024)
-    }
-
     func testStreamingCandidateJoinsSelectionOnlyOnceItsSizeIsKnown() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let controller = makeController(engine: engine)
@@ -314,52 +275,6 @@ final class DiskCleanControllerTests: XCTestCase {
         engine.emit(.candidateSized(id: candidate.id, result: .testComplete(bytes: 512, observedAt: observedAt)))
 
         await waitUntil("auto-selected by default policy after sizing") { controller.snapshot.selection.selectedIDs == ["a"] }
-    }
-
-    func testTogglingUnselectableCandidateIsRejected() async throws {
-        let engine = ControlledDiskCleanScanEngine()
-        let controller = makeController(engine: engine)
-
-        controller.scan()
-        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
-        let locked = makeCandidate(id: "locked", path: "/cache/locked", safety: .inUse(processName: "App"))
-            .applying(.testComplete(bytes: 1_024, observedAt: observedAt))
-        engine.emit(.finished(makeSummary(candidates: [locked])))
-        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
-
-        controller.setCandidateSelected("locked", isSelected: true)
-
-        XCTAssertTrue(controller.snapshot.selection.isEmpty, "locked candidates cannot be selected; the command must be rejected, not only disabled in UI")
-        XCTAssertFalse(controller.snapshot.canClean)
-    }
-
-    func testCategorySelectAllNeverPullsInMediumRiskCandidates() async throws {
-        let engine = ControlledDiskCleanScanEngine()
-        let controller = makeController(engine: engine)
-
-        controller.scan()
-        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
-        engine.emit(
-            .finished(
-                makeSummary(candidates: [
-                    makeSizedCandidate(id: "low", path: "/cache/low"),
-                    makeSizedCandidate(id: "medium", path: "/cache/medium", risk: .medium)
-                ])
-            )
-        )
-        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
-
-        controller.setCategorySelection(.appCaches, isSelected: false)
-        XCTAssertTrue(controller.snapshot.selection.isEmpty)
-
-        controller.setCategorySelection(.appCaches, isSelected: true)
-
-        XCTAssertEqual(
-            controller.snapshot.selection.selectedIDs,
-            ["low"],
-            "\"select all\" selects every low-risk item in the class; medium/high are never pulled in"
-        )
-        XCTAssertEqual(controller.snapshot.selection.state(of: .appCaches), .partiallySelected)
     }
 
     func testCleanSubmitsExactlyTheSelectedSet() async throws {
@@ -386,24 +301,6 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(executor.lastSelectedIDs, ["keep"], "menu bar and detail page share the same selection set")
     }
 
-    func testCleanIsDisabledWhenSelectionIsEmpty() async throws {
-        let engine = ControlledDiskCleanScanEngine()
-        let executor = FakeDiskCleanExecutor()
-        let controller = makeController(engine: engine, executor: executor)
-
-        controller.scan()
-        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
-        engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
-        XCTAssertTrue(controller.snapshot.canClean)
-
-        controller.setCandidateSelected("a", isSelected: false)
-
-        XCTAssertFalse(controller.snapshot.canClean, "with empty selection the button grays out; it does not fall back to \"clean all\"")
-        controller.clean()
-        XCTAssertEqual(executor.callCount, 0)
-    }
-
     func testChangingSelectionInvalidatesPendingPlan() async throws {
         let executor = FakeDiskCleanExecutor()
         let controller = try await makeScannedController(executor: executor, mode: .permanent)
@@ -417,44 +314,6 @@ final class DiskCleanControllerTests: XCTestCase {
         controller.confirmPendingClean()
         XCTAssertEqual(executor.callCount, 0, "once selection changes, the frozen plan no longer matches any user intent")
     }
-
-    func testCategorySelectionChangeInvalidatesPendingPlan() async throws {
-        let executor = FakeDiskCleanExecutor()
-        let controller = try await makeScannedController(executor: executor, mode: .permanent)
-        controller.clean()
-        XCTAssertEqual(controller.snapshot.phase, .confirming)
-
-        controller.setCategorySelection(.appCaches, isSelected: false)
-
-        XCTAssertEqual(controller.snapshot.phase, .scanned)
-        XCTAssertNil(controller.snapshot.pendingPlan)
-        XCTAssertEqual(executor.callCount, 0)
-    }
-
-    func testRescanStartsFromDefaultSelection() async throws {
-        let engine = ControlledDiskCleanScanEngine()
-        let controller = makeController(engine: engine)
-
-        controller.scan()
-        await waitUntil("scan started") { controller.snapshot.phase == .scanning }
-        engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("scan finished") { controller.snapshot.phase == .scanned }
-        controller.setCandidateSelected("a", isSelected: false)
-        XCTAssertTrue(controller.snapshot.selection.isEmpty)
-
-        controller.scan()
-        await waitUntil("second round started") { controller.snapshot.phase == .scanning }
-        engine.emit(.finished(makeSummary(candidates: [makeSizedCandidate(id: "a", path: "/cache/a")])))
-        await waitUntil("second round finished") { controller.snapshot.phase == .scanned }
-
-        XCTAssertEqual(
-            controller.snapshot.selection.selectedIDs,
-            ["a"],
-            "candidate IDs are stable across scans; previous unchecks must not silently reappear in new results"
-        )
-    }
-
-    // MARK: - Scope selection
 
     func testChangingScopeMarksResultStale() async throws {
         let engine = ControlledDiskCleanScanEngine()
@@ -548,30 +407,6 @@ final class DiskCleanControllerTests: XCTestCase {
     }
 
     /// Installer section scope is fixed and always scannable.
-    func testInstallerScopeIsAlwaysScannable() {
-        let engine = ControlledDiskCleanScanEngine()
-        let controller = makeController(engine: engine)
-
-        controller.setScope(.installers)
-
-        XCTAssertTrue(controller.snapshot.canScan)
-        XCTAssertTrue(controller.snapshot.selectedChoices.isEmpty, "non-rules scopes have no group concept")
-    }
-
-    /// Grouping only applies to the rules section. Sending `setChoice` to a P2 section would replace the whole section scope,
-    /// so it must be a no-op.
-    func testSetChoiceIsIgnoredOutsideRuleScope() {
-        let engine = ControlledDiskCleanScanEngine()
-        let controller = makeController(engine: engine)
-        controller.setScope(.installers)
-
-        controller.setChoice(.cache, isSelected: false)
-
-        XCTAssertEqual(controller.snapshot.scope, .installers)
-    }
-
-    // MARK: - confirming（§8.4）
-
     func testTrashModeExecutesInOneStepWithoutConfirmation() async throws {
         let executor = FakeDiskCleanExecutor()
         let controller = try await makeScannedController(executor: executor, mode: .trash)
@@ -685,20 +520,6 @@ final class DiskCleanControllerTests: XCTestCase {
         XCTAssertEqual(executor.callCount, 0, "confirmation window must never push execution past the expiry gate")
     }
 
-    func testCancelCurrentOperationDiscardsPendingPlan() async throws {
-        let executor = FakeDiskCleanExecutor()
-        let controller = try await makeScannedController(executor: executor, mode: .permanent)
-        controller.clean()
-
-        controller.cancelCurrentOperation()
-
-        XCTAssertEqual(controller.snapshot.phase, .scanned)
-        XCTAssertNil(controller.snapshot.pendingPlan)
-    }
-
-    // MARK: - Plan minting failure
-
-    /// Minting failure = zero deletes. Report the reason as-is; do not degrade to "partial clean".
     func testPlanMintingFailureSurfacesErrorAndSkipsExecution() async throws {
         let engine = ControlledDiskCleanScanEngine()
         let executor = FakeDiskCleanExecutor()

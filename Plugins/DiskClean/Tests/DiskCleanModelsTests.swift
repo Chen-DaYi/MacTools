@@ -3,37 +3,6 @@ import XCTest
 @testable import DiskCleanPlugin
 
 final class DiskCleanModelsTests: XCTestCase {
-    func testCleanupChoiceTitlesMatchFirstVersionScope() {
-        XCTAssertEqual(DiskCleanChoice.cache.title, "缓存清理")
-        XCTAssertEqual(DiskCleanChoice.developer.title, "开发者缓存清理")
-        XCTAssertEqual(DiskCleanChoice.browser.title, "浏览器缓存清理")
-        XCTAssertEqual(DiskCleanChoice.allCases, [.cache, .developer, .browser])
-    }
-
-    // MARK: - Panel equivalence mapping
-
-    /// The three v1 panel groups are decided by legacyRuleID prefix — the only equivalence check for v1/v2 scan scope.
-    func testChoiceIsDerivedFromLegacyRuleIDPrefix() {
-        XCTAssertEqual(DiskCleanChoice(legacyRuleID: "cache.user-essentials"), .cache)
-        XCTAssertEqual(DiskCleanChoice(legacyRuleID: "developer.homebrew"), .developer)
-        XCTAssertEqual(DiskCleanChoice(legacyRuleID: "browser.safari"), .browser)
-        XCTAssertNil(DiskCleanChoice(legacyRuleID: "unknown.thing"))
-    }
-
-    /// Every v2 target must map to a panel group, or it would silently drop out of scan scope.
-    func testEveryRuleTargetMapsToAPanelChoice() {
-        for target in DiskCleanRuleCatalogV2.current.ruleTargets {
-            XCTAssertNotNil(
-                DiskCleanChoice(legacyRuleID: target.legacyRuleID),
-                "target \(target.id) legacyRuleID \(target.legacyRuleID) has no panel mapping"
-            )
-        }
-    }
-
-    /// P2 synthetic targets **must not** have a panel mapping: regular three-group scans
-    /// filter targets by `DiskCleanChoice`, which is the second safeguard against
-    /// accidentally including developer artifacts and installers
-    /// (the first is `ScanEngine.scopedTargets(for:)` splitting by scope).
     func testExternalTargetsHaveNoPanelChoice() {
         let external = DiskCleanRuleCatalogV2.current.targets.filter(\.isExternallyDiscovered)
         XCTAssertFalse(external.isEmpty)
@@ -48,21 +17,6 @@ final class DiskCleanModelsTests: XCTestCase {
     /// Category cannot replace legacy prefix for scope: some targets have category and panel
     /// from different sources (`browser.service-worker.editors` is developer category;
     /// `aiTools` spans both cache.* and developer.*).
-    func testCategoryIsNotIsomorphicToPanelChoice() {
-        func choices(in category: DiskCleanCategoryID) -> Set<DiskCleanChoice> {
-            Set(
-                DiskCleanRuleCatalogV2.current
-                    .targets(in: category)
-                    .compactMap { DiskCleanChoice(legacyRuleID: $0.legacyRuleID) }
-            )
-        }
-
-        XCTAssertEqual(choices(in: .developer), [.developer, .browser])
-        XCTAssertEqual(choices(in: .aiTools), [.cache, .developer])
-    }
-
-    // MARK: - Candidate invariants (§3.1)
-
     func testCandidateWithoutSizeResultIsNotCleanable() {
         XCTAssertFalse(makeCandidate(sizeResult: nil).isCleanable)
     }

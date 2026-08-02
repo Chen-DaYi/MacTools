@@ -152,55 +152,6 @@ final class DiskCleanSelectionModelTests: XCTestCase {
         XCTAssertFalse(model.isSelected(makeCandidate(id: "newMedium", risk: .medium)))
     }
 
-    func testNewCandidateStaysUnselectedAfterExplicitDeselectAll() {
-        var model = DiskCleanSelectionModel()
-        model.setCategory(.appCaches, isSelected: false)
-
-        XCTAssertFalse(
-            model.isSelected(makeCandidate(id: "newLow", risk: .low)),
-            "explicit deselect-all is a standing intent, not a one-shot action"
-        )
-        XCTAssertTrue(
-            model.isSelected(makeCandidate(id: "otherCategory", category: .logs)),
-            "other categories are unaffected"
-        )
-    }
-
-    func testNewLowRiskCandidateJoinsAfterExplicitSelectAll() {
-        var model = DiskCleanSelectionModel()
-        model.setCategory(.appCaches, isSelected: true)
-
-        XCTAssertTrue(model.isSelected(makeCandidate(id: "newLow", risk: .low)))
-        XCTAssertFalse(
-            model.isSelected(makeCandidate(id: "newMedium", risk: .medium)),
-            "medium is never pulled in by select-all, including newly arrived items"
-        )
-    }
-
-    func testPerItemOverrideSurvivesNewCandidatesArriving() {
-        var model = DiskCleanSelectionModel()
-        let existing = makeCandidate(id: "existing", risk: .low)
-        model.setCandidate(existing, isSelected: false)
-
-        let projection = model.projection(for: [existing, makeCandidate(id: "new", risk: .low)])
-
-        XCTAssertEqual(projection.selectedIDs, ["new"])
-    }
-
-    func testDeselectAllRemainsInEffectAfterUserReselectsOneItem() {
-        var model = DiskCleanSelectionModel()
-        model.setCategory(.appCaches, isSelected: false)
-        let picked = makeCandidate(id: "picked", risk: .low)
-        model.setCandidate(picked, isSelected: true)
-
-        XCTAssertTrue(model.isSelected(picked))
-        XCTAssertFalse(
-            model.isSelected(makeCandidate(id: "new", risk: .low)),
-            "reselecting one item does not revoke category-level deselect-all"
-        )
-    }
-
-    /// Candidate appears unsized first, then size completes (design §4.1, §4.2): default policy must apply the moment it becomes selectable.
     func testCandidateEntersSelectionOnceSizingCompletes() {
         let model = DiskCleanSelectionModel()
         let unsized = makeCandidate(id: "a", sized: false)

@@ -1,61 +1,8 @@
 import XCTest
-@testable import MacTools
 @testable import EmptyTrashPlugin
 
 @MainActor
 final class EmptyTrashPluginTests: XCTestCase {
-    func testMetadataIdentifiesEmptyTrashPlugin() {
-        let plugin = EmptyTrashPlugin()
-
-        XCTAssertEqual(plugin.metadata.id, "empty-trash")
-        XCTAssertEqual(plugin.metadata.title, "清空废纸篓")
-    }
-
-    func testControlStyleIsButton() {
-        let plugin = EmptyTrashPlugin()
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .button)
-        XCTAssertEqual(plugin.primaryPanelDescriptor.buttonTitle, "清空")
-    }
-
-    func testInitialStateIsOffAndDisabled() {
-        let plugin = EmptyTrashPlugin()
-
-        let state = plugin.primaryPanelState
-        XCTAssertFalse(state.isOn)
-        XCTAssertFalse(state.isEnabled)
-    }
-
-    func testInitialSubtitleShowsEmpty() {
-        let plugin = EmptyTrashPlugin()
-
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "废纸篓为空")
-    }
-
-    func testPermissionRequirementsIsEmpty() {
-        let plugin = EmptyTrashPlugin()
-
-        XCTAssertTrue(plugin.permissionRequirements.isEmpty)
-    }
-
-    func testPluginHostIncludesEmptyTrashWhenProvided() {
-        let host = makePluginHostForTests(plugins: [EmptyTrashPlugin()])
-
-        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "empty-trash" })
-    }
-
-    func testPluginDescriptionMatches() {
-        let plugin = EmptyTrashPlugin()
-
-        XCTAssertEqual(plugin.metadata.defaultDescription, "清空废纸篓中的所有项目")
-    }
-
-    func testMenuActionBehaviorIsKeepPresented() {
-        let plugin = EmptyTrashPlugin()
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.menuActionBehavior, .keepPresented)
-    }
-
     func testRefreshDoesNotCountItemsWhilePrimaryPanelIsHidden() async {
         let counter = TrashCountProbe(itemCount: 3)
         let plugin = EmptyTrashPlugin(

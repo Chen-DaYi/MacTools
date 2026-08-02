@@ -1,73 +1,43 @@
 import XCTest
-@testable import MacTools
 @testable import NightShiftPlugin
 
 @MainActor
 final class NightShiftPluginTests: XCTestCase {
     private struct MockController: NightShiftControlling {
         var status: Bool
-        var setEnabledResult: Bool = true
+        var setEnabledResult = true
 
         func getStatus() -> Bool { status }
         func setEnabled(_ enabled: Bool) -> Bool { setEnabledResult }
     }
 
-    func testMetadataIdentifiesNightShiftPlugin() {
+    func testPanelStateReflectsControllerStatus() {
+        let disabled = NightShiftPlugin(controller: MockController(status: false))
+        let enabled = NightShiftPlugin(controller: MockController(status: true))
+
+        XCTAssertFalse(disabled.primaryPanelState.isOn)
+        XCTAssertEqual(disabled.primaryPanelState.subtitle, "已关闭")
+        XCTAssertTrue(enabled.primaryPanelState.isOn)
+        XCTAssertEqual(enabled.primaryPanelState.subtitle, "已开启")
+    }
+
+    func testSwitchUpdatesPanelState() {
         let plugin = NightShiftPlugin(controller: MockController(status: false))
-
-        XCTAssertEqual(plugin.metadata.id, "night-shift")
-        XCTAssertEqual(plugin.metadata.title, "夜览")
-    }
-
-    func testControlStyleIsSwitch() {
-        let plugin = NightShiftPlugin(controller: MockController(status: false))
-
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .switch)
-    }
-
-    func testPanelStateReflectsDisabledStatus() {
-        let plugin = NightShiftPlugin(controller: MockController(status: false))
-
-        XCTAssertFalse(plugin.primaryPanelState.isOn)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已关闭")
-    }
-
-    func testPanelStateReflectsEnabledStatus() {
-        let plugin = NightShiftPlugin(controller: MockController(status: true))
-
-        XCTAssertTrue(plugin.primaryPanelState.isOn)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已开启")
-    }
-
-    func testPermissionRequirementsIsEmpty() {
-        let plugin = NightShiftPlugin(controller: MockController(status: false))
-
-        XCTAssertTrue(plugin.permissionRequirements.isEmpty)
-    }
-
-    func testPluginHostIncludesNightShiftWhenProvided() {
-        let host = makePluginHostForTests(plugins: [NightShiftPlugin(controller: MockController(status: false))])
-
-        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "night-shift" })
-    }
-
-    func testHandleActionEnablesNightShift() {
-        var controller = MockController(status: false)
-        controller.setEnabledResult = true
-        let plugin = NightShiftPlugin(controller: controller)
 
         plugin.handleAction(.setSwitch(true))
 
         XCTAssertTrue(plugin.primaryPanelState.isOn)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
 
-    func testHandleActionOnFailureSetsErrorMessage() {
-        var controller = MockController(status: true)
-        controller.setEnabledResult = false
-        let plugin = NightShiftPlugin(controller: controller)
+    func testSwitchFailureKeepsStateAndReportsError() {
+        let plugin = NightShiftPlugin(
+            controller: MockController(status: true, setEnabledResult: false)
+        )
 
         plugin.handleAction(.setSwitch(false))
 
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
     }
 }

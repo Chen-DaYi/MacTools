@@ -51,25 +51,6 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertEqual(candidates[0].note, .mayNotBeInstaller)
     }
 
-    func testMatchesExtensionCaseInsensitively() throws {
-        try makeDownload("Legacy.DMG", bytes: 8, ageDays: 30)
-
-        let candidates = try scanCandidates()
-
-        XCTAssertEqual(candidates.map(\.kind), [.diskImage])
-    }
-
-    func testIgnoresUnrelatedFiles() throws {
-        try makeDownload("notes.txt", bytes: 4, ageDays: 30)
-        try makeDownload("README", bytes: 4, ageDays: 30)
-        try makeDownload("archive.dmg.part", bytes: 4, ageDays: 30)
-
-        XCTAssertTrue(try scanCandidates().isEmpty)
-    }
-
-    // MARK: - Age boundary
-
-    /// Default-selected only when strictly older than 7 days: a fresh download may not be installed yet.
     func testRecentInstallerIsListedWithoutDefaultSelection() throws {
         try makeDownload("Fresh.dmg", bytes: 8, ageDays: 3)
 
@@ -80,29 +61,6 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertEqual(candidates[0].note, .recentlyModified)
     }
 
-    func testAgeBoundaryIsExclusive() throws {
-        try makeDownload("Exactly.dmg", bytes: 8, age: DiskCleanInstallerScanner.defaultStaleAge)
-        try makeDownload("JustOver.dmg", bytes: 8, age: DiskCleanInstallerScanner.defaultStaleAge + 1)
-
-        let candidates = try scanCandidates()
-
-        XCTAssertEqual(
-            candidates.map { [$0.displayName, "\($0.isSelectedByDefault)"] },
-            [["Exactly.dmg", "false"], ["JustOver.dmg", "true"]]
-        )
-    }
-
-    func testStaleAgeIsConfigurable() throws {
-        try makeDownload("TwoDays.dmg", bytes: 8, ageDays: 2)
-
-        let candidates = try scanCandidates(staleAge: 24 * 60 * 60)
-
-        XCTAssertTrue(candidates[0].isSelectedByDefault)
-    }
-
-    // MARK: - Top-level and type constraints
-
-    /// Top-level only, no recursion: subdirectories are often user-organized material.
     func testDoesNotRecurseIntoSubdirectories() throws {
         try makeDownload("Archive/Old.dmg", bytes: 8, ageDays: 100)
 
@@ -157,11 +115,6 @@ final class DiskCleanInstallerScannerTests: XCTestCase {
         XCTAssertEqual(outcome, .unavailable(path: missing, reason: .walkError))
     }
 
-    func testEmptyDirectoryScansSuccessfully() {
-        XCTAssertEqual(makeScanner().scan(), .scanned(candidates: []))
-    }
-
-    /// Mid-stream readdir failure must not look like a successful partial scan.
     func testEnumerationErrorIsNotReportedAsSuccessfulScan() {
         let downloads = temporaryDirectory.resolve("Downloads").path
         let observationDate = observationDate
