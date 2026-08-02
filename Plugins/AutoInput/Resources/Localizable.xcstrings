@@ -4,7 +4,15 @@
     "error.switchFailed" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تعذّر تبديل مصدر الإدخال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequelle konnte nicht gewechselt werden" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to switch input source" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo cambiar la fuente de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de changer la source de saisie" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースを切り替えられません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스를 전환할 수 없습니다" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível alternar a fonte de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось переключить источник ввода" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法切换输入法" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法切換輸入法" } }
       }
@@ -12,7 +20,15 @@
     "metadata.title" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تبديل مصادر الإدخال تلقائيًا" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequelle automatisch wechseln" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto Input" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cambio automático de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Changement automatique de saisie" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースの自動切り替え" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스 자동 전환" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Troca automática de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Автопереключение источника ввода" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动切换输入法" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動切換輸入法" } }
       }
@@ -20,7 +36,15 @@
     "metadata.description" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تذكّر مصادر الإدخال وبدّلها تلقائيًا لكل تطبيق." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequellen pro App merken und automatisch wechseln." } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Remember and automatically switch input sources for each app" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Recuerde y cambie automáticamente las fuentes de entrada de cada app." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mémorisez et changez automatiquement la source de saisie pour chaque app." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アプリごとに入力ソースを記憶して自動的に切り替えます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "앱별 입력 소스를 기억하고 자동으로 전환합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Lembre e alterne automaticamente as fontes de entrada de cada app." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запоминайте и автоматически переключайте источники ввода для приложений." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "按应用记住并自动切换输入法" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "按應用程式記住並自動切換輸入法" } }
       }
@@ -28,7 +52,15 @@
     "panel.subtitle.paused" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "متوقف مؤقتًا" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pausiert" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Paused" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "En pausa" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "En pause" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "一時停止中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "일시 정지됨" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Em pausa" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Приостановлено" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已暂停" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已暫停" } }
       }
@@ -36,7 +68,15 @@
     "panel.subtitle.rulesFormat" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "%d من القواعد الثابتة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d feste Regeln" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "%d fixed rules" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d reglas fijas" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d règles fixes" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "固定ルール %d 件" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "고정 규칙 %d개" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%d regras fixas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фиксированных правил: %d" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 条固定规则" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 條固定規則" } }
       }
@@ -44,7 +84,15 @@
     "panel.subtitle.remembering" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تذكّر التطبيقات مفعّل" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "App-Erinnerung ist aktiviert" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "App memory is on" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Memoria por app activada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mémorisation par app activée" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アプリごとの記憶はオンです" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "앱별 기억이 켜져 있음" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Memória por app ativada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запоминание для приложений включено" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动记忆已开启" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動記憶已開啟" } }
       }
@@ -52,7 +100,15 @@
     "panel.subtitle.noRules" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لا توجد قواعد تبديل" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Keine Wechselregeln" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "No switching rules" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No hay reglas de cambio" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucune règle de changement" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "切り替えルールなし" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전환 규칙 없음" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Nenhuma regra de alternância" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет правил переключения" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无切换规则" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫無切換規則" } }
       }
@@ -60,7 +116,15 @@
     "settings.behavior.title" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "سلوك التبديل" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wechselverhalten" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Switching Behavior" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Comportamiento de cambio" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Comportement de changement" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "切り替え動作" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전환 동작" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Comportamento de alternância" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поведение переключения" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换行为" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切換行為" } }
       }
@@ -68,7 +132,15 @@
     "settings.memory.title" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تذكّر مصدر الإدخال" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequelle merken" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Remember Input Source" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Recordar fuente de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mémoriser la source de saisie" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースを記憶" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스 기억" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Lembrar fonte de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запоминать источник ввода" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动记忆" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動記憶" } }
       }
@@ -76,7 +148,15 @@
     "settings.memory.description" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "استعد آخر مصدر إدخال عند الرجوع إلى تطبيق." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beim Zurückkehren zu einer App die zuletzt verwendete Eingabequelle wiederherstellen." } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Restore the last input source when returning to an app." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Restaura la última fuente de entrada al volver a una app." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Restaurez la dernière source de saisie lorsque vous revenez à une app." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アプリに戻ったとき、最後に使用した入力ソースを復元します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "앱으로 돌아갈 때 마지막으로 사용한 입력 소스를 복원합니다." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Restaure a última fonte de entrada ao voltar para um app." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Восстанавливать последний источник ввода при возврате в приложение." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切回应用时恢复上次使用的输入法。" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切回應用程式時恢復上次使用的輸入法。" } }
       }
@@ -84,7 +164,15 @@
     "settings.rules.title" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "القواعد الثابتة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Feste Regeln" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Fixed Rules" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Reglas fijas" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Règles fixes" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "固定ルール" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "고정 규칙" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Regras fixas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фиксированные правила" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "固定规则" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "固定規則" } }
       }
@@ -92,7 +180,15 @@
     "settings.rules.add" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "إضافة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hinzufügen" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Add" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Añadir" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajouter" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "追加" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "추가" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Adicionar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "加入" } }
       }
@@ -100,7 +196,15 @@
     "settings.rules.empty" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "أضف تطبيقًا وعيّن مصدر الإدخال الخاص به" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "App hinzufügen und eine Eingabequelle zuweisen" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Add an app and assign its input source" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Añade una app y asígnale una fuente de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajoutez une app et attribuez-lui une source de saisie" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アプリを追加して入力ソースを指定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "앱을 추가하고 입력 소스 지정" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Adicione um app e atribua uma fonte de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавьте приложение и назначьте ему источник ввода" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加应用，为它指定固定输入法" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "加入應用程式，為它指定固定輸入法" } }
       }
@@ -108,7 +212,15 @@
     "settings.rules.delete" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "حذف هذه القاعدة" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese Regel löschen" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete this rule" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Eliminar esta regla" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Supprimer cette règle" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このルールを削除" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 규칙 삭제" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Excluir esta regra" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить это правило" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除此规则" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "刪除此規則" } }
       }
@@ -116,7 +228,15 @@
     "settings.source.unavailable" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مصدر الإدخال غير متاح" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabequelle nicht verfügbar" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Input source unavailable" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Fuente de entrada no disponible" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Source de saisie indisponible" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースを利用できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스를 사용할 수 없음" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Fonte de entrada indisponível" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Источник ввода недоступен" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入法不可用" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入法不可用" } }
       }
@@ -124,7 +244,15 @@
     "openPanel.title" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اختيار تطبيق" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "App auswählen" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose App" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Elegir app" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisir une app" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アプリを選択" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "앱 선택" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Escolher app" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать приложение" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择应用" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇應用程式" } }
       }
@@ -132,7 +260,15 @@
     "openPanel.message" : {
       "extractionState" : "manual",
       "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اختر تطبيقًا تريد تبديل مصدر الإدخال فيه تلقائيًا" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "App auswählen, deren Eingabequelle automatisch gewechselt werden soll" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose an app whose input source should switch automatically" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Elige una app cuya fuente de entrada deba cambiar automáticamente" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisissez une app dont la source de saisie doit changer automatiquement" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力ソースを自動的に切り替えるアプリを選択" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 소스를 자동으로 전환할 앱을 선택하세요" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Escolha um app cuja fonte de entrada deve ser alternada automaticamente" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите приложение, для которого нужно автоматически переключать источник ввода" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择要自动切换输入法的应用" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇要自動切換輸入法的應用程式" } }
       }
