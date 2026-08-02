@@ -1,0 +1,142 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "error.switchFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to switch input source" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法切换输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法切換輸入法" } }
+      }
+    },
+    "metadata.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto Input" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动切换输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動切換輸入法" } }
+      }
+    },
+    "metadata.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remember and automatically switch input sources for each app" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "按应用记住并自动切换输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "按應用程式記住並自動切換輸入法" } }
+      }
+    },
+    "panel.subtitle.paused" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paused" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已暂停" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已暫停" } }
+      }
+    },
+    "panel.subtitle.rulesFormat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d fixed rules" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 条固定规则" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%d 條固定規則" } }
+      }
+    },
+    "panel.subtitle.remembering" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "App memory is on" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动记忆已开启" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動記憶已開啟" } }
+      }
+    },
+    "panel.subtitle.noRules" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No switching rules" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无切换规则" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫無切換規則" } }
+      }
+    },
+    "settings.behavior.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Switching Behavior" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换行为" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切換行為" } }
+      }
+    },
+    "settings.memory.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remember Input Source" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动记忆" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動記憶" } }
+      }
+    },
+    "settings.memory.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Restore the last input source when returning to an app." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切回应用时恢复上次使用的输入法。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "切回應用程式時恢復上次使用的輸入法。" } }
+      }
+    },
+    "settings.rules.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fixed Rules" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "固定规则" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "固定規則" } }
+      }
+    },
+    "settings.rules.add" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "加入" } }
+      }
+    },
+    "settings.rules.empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add an app and assign its input source" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加应用，为它指定固定输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "加入應用程式，為它指定固定輸入法" } }
+      }
+    },
+    "settings.rules.delete" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete this rule" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除此规则" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "刪除此規則" } }
+      }
+    },
+    "settings.source.unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input source unavailable" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入法不可用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輸入法不可用" } }
+      }
+    },
+    "openPanel.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose App" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择应用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇應用程式" } }
+      }
+    },
+    "openPanel.message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose an app whose input source should switch automatically" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择要自动切换输入法的应用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇要自動切換輸入法的應用程式" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
