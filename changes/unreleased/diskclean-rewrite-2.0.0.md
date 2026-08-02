@@ -4,4 +4,4 @@ type: changed
 area: Disk Cleanup
 ---
 
-Disk Cleanup is rewritten for faster scanning and safer deletion. It now covers system caches, developer artifacts, and leftover installers; moves items to Trash by default; skips Full Disk Access–protected paths until authorized; blocks incomplete or locked results from cleanup; and rejects overly broad developer-artifact scan folders such as Home or system locations.
+Disk Cleanup now scans system caches, developer artifacts, and leftover installers faster. Cleanup moves items to Trash by default and blocks protected, incomplete, locked, or overly broad targets.
