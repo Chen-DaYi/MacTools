@@ -45,8 +45,18 @@ final class ApplicationActivityObserverTests: XCTestCase {
             expecting: .waking
         )
 
+        let settlement = expectation(description: "wake settlement preserves inactive session")
+        observer.onStateChange = { state in
+            if state == .sessionInactive {
+                settlement.fulfill()
+            }
+        }
+        if observer.state == .sessionInactive {
+            settlement.fulfill()
+        }
         center.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
-        try? await Task.sleep(for: .milliseconds(60))
+        await fulfillment(of: [settlement], timeout: 1)
+
         XCTAssertEqual(observer.state, .sessionInactive)
 
         await post(
