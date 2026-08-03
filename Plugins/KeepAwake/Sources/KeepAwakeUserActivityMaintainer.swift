@@ -8,7 +8,7 @@ protocol KeepAwakeUserActivityMaintaining: AnyObject {
     var onFailure: ((Error) -> Void)? { get set }
 
     func start() throws
-    func stop()
+    func stop() throws
 }
 
 @MainActor
@@ -20,23 +20,32 @@ final class KeepAwakeUserActivityMaintainer: KeepAwakeUserActivityMaintaining {
         static let refreshInterval: TimeInterval = 30
     }
 
-    private struct UserActivityError: LocalizedError {
-        let result: IOReturn
-        let localization: PluginLocalization
+    private enum UserActivityError: LocalizedError {
+        case declarationFailed(IOReturn, PluginLocalization)
+        case releaseFailed(IOReturn, PluginLocalization)
 
         var errorDescription: String? {
-            localization.format(
-                "error.automaticLock.userActivityFailedFormat",
-                defaultValue: "无法阻止自动锁定，系统返回错误 %d。",
-                result
-            )
+            switch self {
+            case let .declarationFailed(result, localization):
+                localization.format(
+                    "error.automaticLock.userActivityFailedFormat",
+                    defaultValue: "无法阻止自动锁定，系统返回错误 %d。",
+                    result
+                )
+            case let .releaseFailed(result, localization):
+                localization.format(
+                    "error.automaticLock.userActivityReleaseFailedFormat",
+                    defaultValue: "无法恢复自动锁定，系统返回错误 %d。自动锁定可能仍被阻止。",
+                    result
+                )
+            }
         }
     }
 
     var onFailure: ((Error) -> Void)?
 
     var isActive: Bool {
-        refreshTimer != nil
+        refreshTimer != nil || activityAssertionID != IOPMAssertionID(0)
     }
 
     private let localization: PluginLocalization
@@ -74,7 +83,7 @@ final class KeepAwakeUserActivityMaintainer: KeepAwakeUserActivityMaintaining {
     }
 
     func start() throws {
-        guard !isActive else {
+        guard refreshTimer == nil else {
             return
         }
 
@@ -90,7 +99,7 @@ final class KeepAwakeUserActivityMaintainer: KeepAwakeUserActivityMaintaining {
         refreshTimer = timer
     }
 
-    func stop() {
+    func stop() throws {
         refreshTimer?.invalidate()
         refreshTimer = nil
 
@@ -100,8 +109,7 @@ final class KeepAwakeUserActivityMaintainer: KeepAwakeUserActivityMaintaining {
 
         let result = releaseAssertion(activityAssertionID)
         guard result == kIOReturnSuccess else {
-            onFailure?(UserActivityError(result: result, localization: localization))
-            return
+            throw UserActivityError.releaseFailed(result, localization)
         }
         activityAssertionID = IOPMAssertionID(0)
     }
@@ -110,15 +118,22 @@ final class KeepAwakeUserActivityMaintainer: KeepAwakeUserActivityMaintaining {
         do {
             try reportUserActivity()
         } catch {
-            stop()
-            onFailure?(error)
+            let activityError = error
+            do {
+                try stop()
+                onFailure?(activityError)
+            } catch {
+                onFailure?(error)
+            }
         }
     }
 
     private func reportUserActivity() throws {
-        let result = declareActivity(&activityAssertionID)
+        var candidateAssertionID = activityAssertionID
+        let result = declareActivity(&candidateAssertionID)
         guard result == kIOReturnSuccess else {
-            throw UserActivityError(result: result, localization: localization)
+            throw UserActivityError.declarationFailed(result, localization)
         }
+        activityAssertionID = candidateAssertionID
     }
 }

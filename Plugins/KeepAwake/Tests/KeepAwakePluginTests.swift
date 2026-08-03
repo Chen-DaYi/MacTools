@@ -314,6 +314,7 @@ final class MockKeepAwakeUserActivityMaintainer: KeepAwakeUserActivityMaintainin
     private(set) var startCount = 0
     private(set) var stopCount = 0
     var startError: Error?
+    var stopError: Error?
 
     func start() throws {
         guard !isActive else { return }
@@ -324,9 +325,12 @@ final class MockKeepAwakeUserActivityMaintainer: KeepAwakeUserActivityMaintainin
         isActive = true
     }
 
-    func stop() {
+    func stop() throws {
         guard isActive else { return }
         stopCount += 1
+        if let stopError {
+            throw stopError
+        }
         isActive = false
     }
 
@@ -367,6 +371,7 @@ final class MockKeepAwakeSession: KeepAwakeSessionManaging {
     private(set) var stopRequestCount = 0
     private(set) var isPreventingDisplaySleep = false
     var appliesDisplaySleepPreventionDuringStart = true
+    var startError: Error?
     var displayUpdateError: Error?
     var lidCloseUpdateError: Error?
 
@@ -386,6 +391,9 @@ final class MockKeepAwakeSession: KeepAwakeSessionManaging {
                 preventLidCloseSleep: preventLidCloseSleep
             )
         )
+        if let startError {
+            throw startError
+        }
         if appliesDisplaySleepPreventionDuringStart {
             isPreventingDisplaySleep = preventDisplaySleep
         }
@@ -432,11 +440,14 @@ final class MockKeepAwakePowerSourceMonitor: KeepAwakePowerSourceMonitoring {
 }
 
 enum MockKeepAwakeSessionError: LocalizedError {
+    case startFailed
     case displayUpdateFailed
     case lidCloseUpdateFailed
 
     var errorDescription: String? {
         switch self {
+        case .startFailed:
+            return "无法启动阻止休眠。"
         case .displayUpdateFailed:
             return "无法更新屏幕状态。"
         case .lidCloseUpdateFailed:

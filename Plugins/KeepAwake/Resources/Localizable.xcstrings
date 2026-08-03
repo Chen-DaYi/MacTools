@@ -33,6 +33,22 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法阻止自動鎖定，系統傳回錯誤 %d。" } }
       }
     },
+    "error.automaticLock.userActivityReleaseFailedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذّرت استعادة القفل التلقائي. خطأ النظام %d. ربما لا يزال القفل التلقائي ممنوعًا." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Automatische Sperre konnte nicht wiederhergestellt werden. Systemfehler %d. Die automatische Sperre wird möglicherweise weiterhin verhindert." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Could not restore automatic locking. System error %d. Automatic locking may still be prevented." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudo restaurar el bloqueo automático. Error del sistema %d. Es posible que el bloqueo automático siga impedido." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de rétablir le verrouillage automatique. Erreur système %d. Le verrouillage automatique est peut-être toujours empêché." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "自動ロックを復元できませんでした。システムエラー %d。自動ロックが引き続き防止されている可能性があります。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "자동 잠금을 복원할 수 없습니다. 시스템 오류 %d. 자동 잠금이 계속 방지될 수 있습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível restaurar o bloqueio automático. Erro do sistema %d. O bloqueio automático pode continuar impedido." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось восстановить автоматическую блокировку. Системная ошибка %d. Автоблокировка всё ещё может быть отключена." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法恢复自动锁定，系统返回错误 %d。自动锁定可能仍被阻止。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法恢復自動鎖定，系統傳回錯誤 %d。自動鎖定可能仍被阻止。" } }
+      }
+    },
     "panel.screenTools.indicator": {
       "extractionState": "manual",
       "localizations": {

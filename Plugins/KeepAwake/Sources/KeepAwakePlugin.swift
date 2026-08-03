@@ -159,6 +159,13 @@ final class KeepAwakePlugin:
     private var isPreventingDisplaySleep = false
     private var scheduledEndDate: Date?
     private var timedStateRefreshTimer: Timer?
+    private var pendingAutomaticFallback: PendingAutomaticFallback?
+    private var pendingUserActivityCleanupError: Error?
+
+    private struct PendingAutomaticFallback {
+        let behavior: KeepAwakeBehavior
+        let primaryError: Error
+    }
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "keep-awake"),
@@ -340,12 +347,29 @@ final class KeepAwakePlugin:
     }
 
     func refresh() {
+        if let pendingAutomaticFallback, session != nil {
+            applyAutomaticFallback(
+                to: pendingAutomaticFallback.behavior,
+                because: pendingAutomaticFallback.primaryError
+            )
+        }
+
+        retryPendingUserActivityCleanupIfNeeded()
         scheduleTimedStateRefreshIfNeeded()
     }
 
     func deactivate(reason: PluginDeactivationReason) {
         powerSourceMonitor.stop()
-        userActivityMaintainer.stop()
+        do {
+            try userActivityMaintainer.stop()
+            pendingUserActivityCleanupError = nil
+        } catch {
+            logger.error(
+                "failed to stop automatic screen-lock prevention during deactivation: \(error.localizedDescription, privacy: .public)"
+            )
+            pendingUserActivityCleanupError = error
+            lastErrorMessage = error.localizedDescription
+        }
         cancelVirtualDisplayStart()
         virtualDisplayManager.stop()
         guard reason.requiresStateCleanup else { return }
@@ -496,29 +520,22 @@ final class KeepAwakePlugin:
     }
 
     func setBehavior(_ behavior: KeepAwakeBehavior) {
-        guard preferences.behavior != behavior else {
+        let behaviorChanged = preferences.behavior != behavior
+        guard behaviorChanged || preservesFuturePreferencePayload else {
             return
         }
 
         lastErrorMessage = nil
-        let previousPreferences = preferences
-        preferences.behavior = behavior
-
-        guard session != nil else {
-            preservesFuturePreferencePayload = false
-            persistPreferences()
-            notifyChange()
-            return
-        }
 
         do {
-            try reconcileRuntimeConfiguration()
+            if behaviorChanged {
+                try transitionBehavior(to: behavior)
+            }
+            pendingAutomaticFallback = nil
             preservesFuturePreferencePayload = false
             persistPreferences()
             notifyChange()
         } catch {
-            preferences = previousPreferences
-            try? reconcileRuntimeConfiguration()
             logger.error("keep-awake behavior update failed: \(error.localizedDescription, privacy: .public)")
             lastErrorMessage = error.localizedDescription
             notifyChange()
@@ -558,12 +575,22 @@ final class KeepAwakePlugin:
             notifyChange()
         } catch {
             logger.error("keep-awake session update failed: \(error.localizedDescription, privacy: .public)")
+            var cleanupError: Error?
             if !hadRunningSession {
-                userActivityMaintainer.stop()
+                do {
+                    try userActivityMaintainer.stop()
+                    pendingUserActivityCleanupError = nil
+                } catch {
+                    logger.error(
+                        "failed to clean up automatic screen-lock prevention after session start failure: \(error.localizedDescription, privacy: .public)"
+                    )
+                    pendingUserActivityCleanupError = error
+                    cleanupError = error
+                }
                 cancelVirtualDisplayStart()
                 virtualDisplayManager.stop()
             }
-            lastErrorMessage = error.localizedDescription
+            lastErrorMessage = cleanupError?.localizedDescription ?? error.localizedDescription
             notifyChange()
         }
     }
@@ -614,7 +641,7 @@ final class KeepAwakePlugin:
 
     private func reconcileRuntimeConfiguration() throws {
         guard let session else {
-            userActivityMaintainer.stop()
+            try userActivityMaintainer.stop()
             stopVirtualDisplayIfNeeded()
             return
         }
@@ -639,17 +666,71 @@ final class KeepAwakePlugin:
         }
 
         guard automaticLockPreventionShouldRun(capabilities: capabilities) else {
-            userActivityMaintainer.stop()
+            do {
+                try userActivityMaintainer.stop()
+                pendingUserActivityCleanupError = nil
+            } catch {
+                pendingUserActivityCleanupError = error
+                throw KeepAwakeRuntimeServiceError.userActivityCleanup(error)
+            }
             reconcileVirtualDisplay()
             return
         }
 
         do {
             try userActivityMaintainer.start()
+            pendingUserActivityCleanupError = nil
         } catch {
             throw KeepAwakeRuntimeServiceError.userActivity(error)
         }
         reconcileVirtualDisplay()
+    }
+
+    private func transitionBehavior(to behavior: KeepAwakeBehavior) throws {
+        guard preferences.behavior != behavior else {
+            return
+        }
+
+        let previousPreferences = preferences
+        let nextPreferences = KeepAwakePreferences(behavior: behavior)
+
+        if previousPreferences.capabilities.preventAutomaticScreenLock,
+           !nextPreferences.capabilities.preventAutomaticScreenLock {
+            // Release the security-sensitive user-activity assertion before the
+            // selected behavior can claim that automatic locking follows macOS.
+            try userActivityMaintainer.stop()
+        }
+
+        preferences = nextPreferences
+        do {
+            try reconcileRuntimeConfiguration()
+        } catch {
+            preferences = previousPreferences
+            try? reconcileRuntimeConfiguration()
+            throw error
+        }
+    }
+
+    private func applyAutomaticFallback(
+        to behavior: KeepAwakeBehavior,
+        because primaryError: Error
+    ) {
+        do {
+            try transitionBehavior(to: behavior)
+            pendingAutomaticFallback = nil
+            persistPreferences()
+            lastErrorMessage = primaryError.localizedDescription
+        } catch {
+            logger.error(
+                "failed to clean up screen-tools behavior during fallback: \(error.localizedDescription, privacy: .public)"
+            )
+            pendingAutomaticFallback = PendingAutomaticFallback(
+                behavior: behavior,
+                primaryError: primaryError
+            )
+            lastErrorMessage = error.localizedDescription
+        }
+        notifyChange()
     }
 
     private func reconcileVirtualDisplay() {
@@ -730,36 +811,35 @@ final class KeepAwakePlugin:
         logger.error(
             "software display start failed: \(error.localizedDescription, privacy: .public)"
         )
-        preferences.behavior = .keepDisplayOn
-        persistPreferences()
-        userActivityMaintainer.stop()
         virtualDisplayIsDesired = false
         cancelVirtualDisplayStart()
         virtualDisplayManager.stop()
-
-        try? reconcileRuntimeConfiguration()
-        lastErrorMessage = error.localizedDescription
-        notifyChange()
+        applyAutomaticFallback(to: .keepDisplayOn, because: error)
     }
 
     private func handleRuntimeConfigurationFailure(_ error: Error) {
+        let fallbackBehavior: KeepAwakeBehavior
         if let runtimeError = error as? KeepAwakeRuntimeServiceError {
             switch runtimeError {
             case .lidClose:
-                preferences.behavior = .keepDisplayOn
+                fallbackBehavior = .keepDisplayOn
             case .display:
-                preferences.behavior = .allowDisplayToTurnOff
+                fallbackBehavior = .allowDisplayToTurnOff
             case .userActivity:
-                preferences.behavior = .keepDisplayOn
+                fallbackBehavior = .keepDisplayOn
+            case let .userActivityCleanup(cleanupError):
+                stopVirtualDisplayIfNeeded()
+                pendingUserActivityCleanupError = cleanupError
+                lastErrorMessage = cleanupError.localizedDescription
+                notifyChange()
+                return
             }
+        } else {
+            fallbackBehavior = preferences.behavior
         }
 
-        persistPreferences()
-        userActivityMaintainer.stop()
         stopVirtualDisplayIfNeeded()
-        try? reconcileRuntimeConfiguration()
-        lastErrorMessage = error.localizedDescription
-        notifyChange()
+        applyAutomaticFallback(to: fallbackBehavior, because: error)
     }
 
     private func cancelVirtualDisplayStart() {
@@ -880,16 +960,30 @@ final class KeepAwakePlugin:
 
     private func handleSessionEnd(_ reason: KeepAwakeSession.EndReason) {
         session = nil
+        pendingAutomaticFallback = nil
         isPreventingDisplaySleep = false
-        userActivityMaintainer.stop()
+        let cleanupError: Error?
+        do {
+            try userActivityMaintainer.stop()
+            pendingUserActivityCleanupError = nil
+            cleanupError = nil
+        } catch {
+            logger.error(
+                "failed to release automatic screen-lock prevention after session end: \(error.localizedDescription, privacy: .public)"
+            )
+            pendingUserActivityCleanupError = error
+            cleanupError = error
+        }
         virtualDisplayIsDesired = false
         cancelVirtualDisplayStart()
         virtualDisplayManager.stop()
         resetSelectionToDefaults()
 
-        switch reason {
-        case .userRequested, .completed:
+        switch (reason, cleanupError) {
+        case (.userRequested, nil), (.completed, nil):
             lastErrorMessage = nil
+        case let (.userRequested, error?), let (.completed, error?):
+            lastErrorMessage = error.localizedDescription
         }
 
         notifyChange()
@@ -1060,11 +1154,10 @@ final class KeepAwakePlugin:
                 defaultValue: "软件显示器已停止；已切换为保持屏幕常亮。"
             )
         )
-        preferences.behavior = .keepDisplayOn
-        persistPreferences()
-        try? reconcileRuntimeConfiguration()
-        lastErrorMessage = error.localizedDescription
-        notifyChange()
+        virtualDisplayIsDesired = false
+        cancelVirtualDisplayStart()
+        virtualDisplayManager.stop()
+        applyAutomaticFallback(to: .keepDisplayOn, because: error)
     }
 
     private func handleUserActivityFailure(_ error: Error) {
@@ -1075,17 +1168,43 @@ final class KeepAwakePlugin:
         logger.error(
             "automatic screen-lock prevention failed: \(error.localizedDescription, privacy: .public)"
         )
-        preferences.behavior = .keepDisplayOn
-        persistPreferences()
-        try? reconcileRuntimeConfiguration()
-        lastErrorMessage = error.localizedDescription
-        notifyChange()
+        stopVirtualDisplayIfNeeded()
+        applyAutomaticFallback(to: .keepDisplayOn, because: error)
     }
 
     private func resetSelectionToDefaults() {
         selectedDurationPreset = .forever
         scheduledEndDate = nil
         invalidateTimedStateRefreshTimer()
+    }
+
+    private func retryPendingUserActivityCleanupIfNeeded() {
+        guard let pendingError = pendingUserActivityCleanupError else {
+            return
+        }
+
+        if session != nil,
+           automaticLockPreventionShouldRun(capabilities: activeCapabilities) {
+            pendingUserActivityCleanupError = nil
+            if lastErrorMessage == pendingError.localizedDescription {
+                lastErrorMessage = nil
+            }
+            return
+        }
+
+        do {
+            try userActivityMaintainer.stop()
+            pendingUserActivityCleanupError = nil
+            if lastErrorMessage == pendingError.localizedDescription {
+                lastErrorMessage = nil
+            }
+        } catch {
+            logger.error(
+                "failed to finish automatic screen-lock cleanup: \(error.localizedDescription, privacy: .public)"
+            )
+            pendingUserActivityCleanupError = error
+            lastErrorMessage = error.localizedDescription
+        }
     }
 
     private func notifyChange() {
@@ -1103,10 +1222,14 @@ private enum KeepAwakeRuntimeServiceError: LocalizedError {
     case lidClose(Error)
     case display(Error)
     case userActivity(Error)
+    case userActivityCleanup(Error)
 
     var errorDescription: String? {
         switch self {
-        case let .lidClose(error), let .display(error), let .userActivity(error):
+        case let .lidClose(error),
+             let .display(error),
+             let .userActivity(error),
+             let .userActivityCleanup(error):
             return error.localizedDescription
         }
     }

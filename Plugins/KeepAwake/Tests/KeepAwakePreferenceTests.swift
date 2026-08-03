@@ -5,9 +5,17 @@ import MacToolsPluginKit
 @testable import KeepAwakePlugin
 
 private enum MockUserActivityError: LocalizedError {
-    case failed
+    case declarationFailed
+    case releaseFailed
 
-    var errorDescription: String? { "无法声明用户活动。" }
+    var errorDescription: String? {
+        switch self {
+        case .declarationFailed:
+            "无法声明用户活动。"
+        case .releaseFailed:
+            "无法恢复自动锁定。"
+        }
+    }
 }
 
 @MainActor
@@ -556,7 +564,7 @@ final class KeepAwakePreferenceTests: XCTestCase {
                 isOnExternalPower: true
             )
         )
-        factory.userActivityMaintainer.startError = MockUserActivityError.failed
+        factory.userActivityMaintainer.startError = MockUserActivityError.declarationFailed
         let plugin = factory.makePlugin(storage: storage)
 
         plugin.handleAction(.setSwitch(true))
@@ -570,6 +578,51 @@ final class KeepAwakePreferenceTests: XCTestCase {
             KeepAwakeBehavior.keepScreenBasedToolsWorking.rawValue
         )
         XCTAssertEqual(storage.values["keep-awake-with-lid-closed"] as? Bool, true)
+    }
+
+    func testExplicitlyAcceptingFutureFallbackPersistsCurrentBehavior() {
+        let storage = KeepAwakeMemoryStorage()
+        storage.set(99, forKey: StorageKey.version)
+        storage.set(
+            KeepAwakeBehavior.keepScreenBasedToolsWorking.rawValue,
+            forKey: StorageKey.behavior
+        )
+        storage.set(true, forKey: "persistent-enabled")
+        let factory = KeepAwakeSessionFactory(
+            powerSourceState: KeepAwakePowerSourceState(
+                isPortableMac: false,
+                isOnExternalPower: true
+            )
+        )
+        factory.userActivityMaintainer.startError = MockUserActivityError.declarationFailed
+        let plugin = factory.makePlugin(storage: storage)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "keep-awake", storage: storage))
+
+        XCTAssertEqual(storage.integer(forKey: StorageKey.version), 99)
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            KeepAwakeBehavior.keepScreenBasedToolsWorking.rawValue
+        )
+
+        plugin.setBehavior(.keepDisplayOn)
+
+        XCTAssertEqual(storage.integer(forKey: StorageKey.version), 3)
+        XCTAssertEqual(storage.string(forKey: StorageKey.behavior), "keep-display-on")
+
+        let relaunchedFactory = KeepAwakeSessionFactory(
+            powerSourceState: KeepAwakePowerSourceState(
+                isPortableMac: false,
+                isOnExternalPower: true
+            )
+        )
+        let relaunchedPlugin = relaunchedFactory.makePlugin(storage: storage)
+        relaunchedPlugin.activate(
+            context: PluginRuntimeContext(pluginID: "keep-awake", storage: storage)
+        )
+
+        XCTAssertTrue(relaunchedFactory.sessions[0].isPreventingDisplaySleep)
+        XCTAssertFalse(relaunchedFactory.userActivityMaintainer.isActive)
     }
 
     func testCurrentBehaviorRemainsAuthoritativeAndCleansStaleSettings() {
@@ -694,7 +747,9 @@ final class KeepAwakePreferenceTests: XCTestCase {
         plugin.handleAction(.setSwitch(true))
         await settleAsyncState()
 
-        factory.userActivityMaintainer.simulateFailure(MockUserActivityError.failed)
+        factory.userActivityMaintainer.simulateFailure(
+            MockUserActivityError.declarationFailed
+        )
         await settleAsyncState()
 
         XCTAssertEqual(storage.string(forKey: StorageKey.behavior), "keep-display-on")
@@ -708,7 +763,7 @@ final class KeepAwakePreferenceTests: XCTestCase {
         let plugin = factory.makePlugin(storage: storage)
         plugin.setBehavior(.keepDisplayOn)
         plugin.handleAction(.setSwitch(true))
-        factory.userActivityMaintainer.startError = MockUserActivityError.failed
+        factory.userActivityMaintainer.startError = MockUserActivityError.declarationFailed
 
         plugin.setBehavior(.keepScreenBasedToolsWorking)
 
@@ -727,6 +782,279 @@ final class KeepAwakePreferenceTests: XCTestCase {
         )
         XCTAssertTrue(factory.userActivityMaintainer.isActive)
         XCTAssertTrue(factory.virtualDisplayManager.isActive)
+    }
+
+    func testClosedLidPowerPauseRetriesFailedUserActivityCleanup() async {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory(
+            powerSourceState: KeepAwakePowerSourceState(
+                isPortableMac: true,
+                isOnExternalPower: true,
+                isLidClosed: true
+            )
+        )
+        let plugin = factory.makePlugin(storage: storage)
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        await settleAsyncState()
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+
+        factory.powerSourceMonitor.send(
+            KeepAwakePowerSourceState(
+                isPortableMac: true,
+                isOnExternalPower: false,
+                isLidClosed: true
+            )
+        )
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "keep-screen-based-tools-working"
+        )
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法恢复自动锁定。")
+
+        factory.userActivityMaintainer.stopError = nil
+        plugin.refresh()
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "keep-screen-based-tools-working"
+        )
+        XCTAssertFalse(factory.userActivityMaintainer.isActive)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+
+        factory.powerSourceMonitor.send(
+            KeepAwakePowerSourceState(
+                isPortableMac: true,
+                isOnExternalPower: true,
+                isLidClosed: true
+            )
+        )
+        await settleAsyncState()
+
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertTrue(factory.virtualDisplayManager.isActive)
+    }
+
+    func testFailedUserActivityReleaseKeepsScreenToolsSelectedAndCanRetry() async {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory(
+            powerSourceState: KeepAwakePowerSourceState(
+                isPortableMac: false,
+                isOnExternalPower: true
+            )
+        )
+        let plugin = factory.makePlugin(storage: storage)
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+
+        plugin.setBehavior(.keepDisplayOn)
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "keep-screen-based-tools-working"
+        )
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法恢复自动锁定。")
+
+        factory.userActivityMaintainer.stopError = nil
+        plugin.setBehavior(.keepDisplayOn)
+        await settleAsyncState()
+
+        XCTAssertEqual(storage.string(forKey: StorageKey.behavior), "keep-display-on")
+        XCTAssertFalse(factory.userActivityMaintainer.isActive)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testSessionEndReportsAndRefreshRetriesUserActivityRelease() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory(
+            powerSourceState: KeepAwakePowerSourceState(
+                isPortableMac: false,
+                isOnExternalPower: true
+            )
+        )
+        let plugin = factory.makePlugin(storage: storage)
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+
+        plugin.handleAction(.setSwitch(false))
+
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法恢复自动锁定。")
+
+        factory.userActivityMaintainer.stopError = nil
+        plugin.refresh()
+
+        XCTAssertFalse(factory.userActivityMaintainer.isActive)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testFailedReenableKeepsCleanupFailureVisibleAndRetryable() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory(
+            powerSourceState: KeepAwakePowerSourceState(
+                isPortableMac: false,
+                isOnExternalPower: true
+            )
+        )
+        let plugin = factory.makePlugin(storage: storage)
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+        plugin.handleAction(.setSwitch(false))
+        factory.configureSession = { session in
+            session.startError = MockKeepAwakeSessionError.startFailed
+        }
+
+        plugin.handleAction(.setSwitch(true))
+
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法恢复自动锁定。")
+
+        factory.userActivityMaintainer.stopError = nil
+        plugin.refresh()
+
+        XCTAssertFalse(factory.userActivityMaintainer.isActive)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testOffSessionBehaviorChangeRetriesPendingUserActivityRelease() {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory(
+            powerSourceState: KeepAwakePowerSourceState(
+                isPortableMac: false,
+                isOnExternalPower: true
+            )
+        )
+        let plugin = factory.makePlugin(storage: storage)
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+        plugin.handleAction(.setSwitch(false))
+
+        plugin.setBehavior(.allowDisplayToTurnOff)
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "keep-screen-based-tools-working"
+        )
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法恢复自动锁定。")
+
+        factory.userActivityMaintainer.stopError = nil
+        plugin.setBehavior(.allowDisplayToTurnOff)
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "allow-display-to-turn-off"
+        )
+        XCTAssertFalse(factory.userActivityMaintainer.isActive)
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testVirtualDisplayFailureDoesNotCommitFallbackWhenUserActivityReleaseFails() async {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        factory.virtualDisplayManager.startError = MockVirtualDisplayError.creationFailed
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+        let plugin = factory.makePlugin(storage: storage)
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+
+        plugin.handleAction(.setSwitch(true))
+        await settleAsyncState()
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "keep-screen-based-tools-working"
+        )
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法恢复自动锁定。")
+
+        factory.userActivityMaintainer.stopError = nil
+        plugin.refresh()
+
+        XCTAssertEqual(storage.string(forKey: StorageKey.behavior), "keep-display-on")
+        XCTAssertFalse(factory.userActivityMaintainer.isActive)
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法创建软件显示器。")
+    }
+
+    func testVirtualDisplayTerminationDoesNotCommitFallbackWhenUserActivityReleaseFails() async {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        await settleAsyncState()
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+
+        factory.virtualDisplayManager.simulateUnexpectedTermination()
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "keep-screen-based-tools-working"
+        )
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法恢复自动锁定。")
+
+        factory.userActivityMaintainer.stopError = nil
+        plugin.refresh()
+
+        XCTAssertEqual(storage.string(forKey: StorageKey.behavior), "keep-display-on")
+        XCTAssertFalse(factory.userActivityMaintainer.isActive)
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(
+            plugin.primaryPanelState.errorMessage,
+            "软件显示器已停止；已切换为保持屏幕常亮。"
+        )
+    }
+
+    func testRuntimeFallbackDoesNotCommitWhenUserActivityReleaseFails() async {
+        let storage = KeepAwakeMemoryStorage()
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: storage)
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        await settleAsyncState()
+        factory.sessions[0].displayUpdateError = MockKeepAwakeSessionError.displayUpdateFailed
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+
+        factory.powerSourceMonitor.send(
+            KeepAwakePowerSourceState(
+                isPortableMac: true,
+                isOnExternalPower: false,
+                isLidClosed: true
+            )
+        )
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "keep-screen-based-tools-working"
+        )
+        XCTAssertTrue(factory.userActivityMaintainer.isActive)
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法恢复自动锁定。")
+
+        factory.sessions[0].displayUpdateError = nil
+        factory.userActivityMaintainer.stopError = nil
+        plugin.refresh()
+
+        XCTAssertEqual(
+            storage.string(forKey: StorageKey.behavior),
+            "allow-display-to-turn-off"
+        )
+        XCTAssertFalse(factory.userActivityMaintainer.isActive)
+        XCTAssertFalse(factory.virtualDisplayManager.isActive)
+        XCTAssertEqual(plugin.primaryPanelState.errorMessage, "无法更新屏幕状态。")
     }
 
     func testVirtualDisplayFailureFallsBackToKeepDisplayOn() async {
@@ -889,7 +1217,7 @@ final class KeepAwakeUserActivityMaintainerTests: XCTestCase {
         XCTAssertTrue(maintainer.isActive)
         XCTAssertEqual(reportedIDs, [42])
 
-        maintainer.stop()
+        try maintainer.stop()
         XCTAssertFalse(maintainer.isActive)
         XCTAssertEqual(releasedIDs, [42])
     }
@@ -903,22 +1231,23 @@ final class KeepAwakeUserActivityMaintainerTests: XCTestCase {
                 declarationCount += 1
                 assertionID = 7
                 return kIOReturnSuccess
-            }
+            },
+            assertionReleaser: { _ in kIOReturnSuccess }
         )
 
         try maintainer.start()
         try maintainer.start()
 
         XCTAssertEqual(declarationCount, 1)
-        maintainer.stop()
+        try maintainer.stop()
     }
 
     func testFailedReleaseRetainsAssertionForRetry() throws {
         var releaseResults = [kIOReturnError, kIOReturnSuccess]
         var releasedIDs: [IOPMAssertionID] = []
-        var reportedFailures: [Error] = []
+        let localization = PluginLocalization(bundle: .main)
         let maintainer = KeepAwakeUserActivityMaintainer(
-            localization: PluginLocalization(bundle: .main),
+            localization: localization,
             refreshInterval: 60,
             activityDeclarer: { assertionID in
                 assertionID = 42
@@ -929,14 +1258,62 @@ final class KeepAwakeUserActivityMaintainerTests: XCTestCase {
                 return releaseResults.removeFirst()
             }
         )
-        maintainer.onFailure = { reportedFailures.append($0) }
 
         try maintainer.start()
-        maintainer.stop()
-        maintainer.stop()
+        XCTAssertThrowsError(try maintainer.stop()) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                localization.format(
+                    "error.automaticLock.userActivityReleaseFailedFormat",
+                    defaultValue: "无法恢复自动锁定，系统返回错误 %d。自动锁定可能仍被阻止。",
+                    kIOReturnError
+                )
+            )
+        }
+        XCTAssertTrue(maintainer.isActive)
+        try maintainer.stop()
 
         XCTAssertEqual(releasedIDs, [42, 42])
-        XCTAssertEqual(reportedFailures.count, 1)
+        XCTAssertFalse(maintainer.isActive)
+    }
+
+    func testFailedRefreshPreservesPreviousAssertionForReleaseRetry() async throws {
+        var declarationCount = 0
+        var releaseResults = [kIOReturnError, kIOReturnSuccess]
+        var releasedIDs: [IOPMAssertionID] = []
+        let refreshFailure = expectation(description: "refresh failure reported")
+        let maintainer = KeepAwakeUserActivityMaintainer(
+            localization: PluginLocalization(bundle: .main),
+            refreshInterval: 0.01,
+            activityDeclarer: { assertionID in
+                declarationCount += 1
+                if declarationCount == 1 {
+                    assertionID = 42
+                    return kIOReturnSuccess
+                }
+
+                assertionID = 0
+                return kIOReturnError
+            },
+            assertionReleaser: { assertionID in
+                releasedIDs.append(assertionID)
+                return releaseResults.removeFirst()
+            }
+        )
+        maintainer.onFailure = { _ in
+            refreshFailure.fulfill()
+        }
+
+        try maintainer.start()
+        await fulfillment(of: [refreshFailure], timeout: 1)
+
+        XCTAssertTrue(maintainer.isActive)
+        XCTAssertEqual(releasedIDs, [42])
+
+        try maintainer.stop()
+
+        XCTAssertFalse(maintainer.isActive)
+        XCTAssertEqual(releasedIDs, [42, 42])
     }
 
     func testInitialDeclarationFailureDoesNotStartMaintainer() {
