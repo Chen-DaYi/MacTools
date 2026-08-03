@@ -226,6 +226,7 @@ struct StandaloneCommandPaletteRootView: View {
                 focusRequestID: state.focusRequestID,
                 resetRequestID: state.resetRequestID,
                 quickSelectionRequest: state.quickSelectionRequest,
+                showsCustomShadow: false,
                 actions: actions
             )
             .padding(24)
@@ -493,7 +494,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         panel.contentView = hostingView
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = false
+        panel.hasShadow = true
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false

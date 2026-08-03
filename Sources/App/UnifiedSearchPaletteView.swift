@@ -220,6 +220,7 @@ struct UnifiedSearchPresentationView: View {
                     focusRequestID: navigationCoordinator.unifiedSearchFocusRequestID,
                     resetRequestID: nil,
                     quickSelectionRequest: navigationCoordinator.unifiedSearchQuickSelectionRequest,
+                    showsCustomShadow: true,
                     actions: UnifiedSearchPaletteActions(
                         dismiss: navigationCoordinator.dismissUnifiedSearch,
                         navigate: navigationCoordinator.navigateFromSearch,
@@ -238,6 +239,19 @@ struct UnifiedSearchPaletteActions {
     let consumeQuickSelection: (UnifiedSearchQuickSelectionRequest) -> Bool
 }
 
+private struct UnifiedSearchPaletteShadowModifier: ViewModifier {
+    let isEnabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.shadow(color: .black.opacity(0.22), radius: 28, y: 12)
+        } else {
+            content
+        }
+    }
+}
+
 struct UnifiedSearchPaletteView: View {
     private enum Layout {
         static let rowCornerRadius: CGFloat = 8
@@ -250,6 +264,7 @@ struct UnifiedSearchPaletteView: View {
     let focusRequestID: UInt
     let resetRequestID: UInt?
     let quickSelectionRequest: UnifiedSearchQuickSelectionRequest?
+    let showsCustomShadow: Bool
     let actions: UnifiedSearchPaletteActions
     @StateObject private var model: UnifiedSearchPaletteModel
     @State private var query = ""
@@ -264,6 +279,7 @@ struct UnifiedSearchPaletteView: View {
         focusRequestID: UInt,
         resetRequestID: UInt?,
         quickSelectionRequest: UnifiedSearchQuickSelectionRequest?,
+        showsCustomShadow: Bool,
         actions: UnifiedSearchPaletteActions
     ) {
         self.pluginHost = pluginHost
@@ -273,6 +289,7 @@ struct UnifiedSearchPaletteView: View {
         self.focusRequestID = focusRequestID
         self.resetRequestID = resetRequestID
         self.quickSelectionRequest = quickSelectionRequest
+        self.showsCustomShadow = showsCustomShadow
         self.actions = actions
         _model = StateObject(
             wrappedValue: UnifiedSearchPaletteModel(pluginHost: pluginHost)
@@ -297,7 +314,7 @@ struct UnifiedSearchPaletteView: View {
                 .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
                 .allowsHitTesting(false)
         }
-        .shadow(color: .black.opacity(0.22), radius: 28, y: 12)
+        .modifier(UnifiedSearchPaletteShadowModifier(isEnabled: showsCustomShadow))
         .onAppear {
             syncSelection()
             handleQuickSelectionRequest(quickSelectionRequest)

@@ -386,6 +386,7 @@ final class AppWindowRouterTests: XCTestCase {
         let firstFocusRequestID = state.focusRequestID
 
         XCTAssertTrue(panel.isVisible)
+        XCTAssertTrue(panel.hasShadow)
         XCTAssertEqual(panelDismissalRequests, 1)
 
         router.toggleCommandPalette()
