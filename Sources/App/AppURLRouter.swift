@@ -136,18 +136,9 @@ enum AppDeepLinkParser {
             }
         }
 
-        guard components.path.hasPrefix("/"), !components.path.contains("//") else {
+        guard let pathComponents = decodedPathComponents(from: components.percentEncodedPath) else {
             return .failure(.unsupportedRoute)
         }
-
-        var path = components.path
-        if path.count > 1, path.hasSuffix("/") {
-            path.removeLast()
-        }
-
-        let pathComponents = path
-            .split(separator: "/", omittingEmptySubsequences: true)
-            .map(String.init)
 
         switch pathComponents {
         case ["settings"]:
@@ -175,6 +166,36 @@ enum AppDeepLinkParser {
         default:
             return .failure(.unsupportedRoute)
         }
+    }
+
+    private static func decodedPathComponents(from percentEncodedPath: String) -> [String]? {
+        guard percentEncodedPath.hasPrefix("/"), !percentEncodedPath.contains("//") else {
+            return nil
+        }
+
+        var normalizedPath = percentEncodedPath
+        if normalizedPath.count > 1, normalizedPath.hasSuffix("/") {
+            normalizedPath.removeLast()
+        }
+
+        var components: [String] = []
+        for encodedComponent in normalizedPath.split(
+            separator: "/",
+            omittingEmptySubsequences: true
+        ) {
+            guard let component = String(encodedComponent).removingPercentEncoding,
+                  !component.isEmpty,
+                  component != ".",
+                  component != "..",
+                  !component.contains("/"),
+                  !component.contains("\\"),
+                  !component.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+            else {
+                return nil
+            }
+            components.append(component)
+        }
+        return components
     }
 
     private static func hasExactAppAuthority(_ url: URL, scheme: String) -> Bool {

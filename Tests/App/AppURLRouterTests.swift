@@ -37,6 +37,17 @@ final class AppURLRouterTests: XCTestCase {
         )
     }
 
+    func testParserDecodesSafeCharactersWithinIndividualPathSegments() throws {
+        let url = try XCTUnwrap(
+            URL(string: "mactools://app/settings/plugins/fan%2Dcontrol")
+        )
+
+        XCTAssertEqual(
+            AppDeepLinkParser.parse(url, acceptedSchemes: ["mactools"]),
+            .success(.settings(.pluginConfiguration("fan-control")))
+        )
+    }
+
     func testParserRejectsDuplicateParameters() throws {
         let url = try XCTUnwrap(
             URL(string: "mactools://app/search?source=website&source=docs")
@@ -55,14 +66,20 @@ final class AppURLRouterTests: XCTestCase {
             ("mactools://other/settings", .unsupportedHost),
             ("mactools://app/settings/plugins/a", .malformedPluginID),
             ("mactools://app/settings/plugins/bad%20id", .malformedPluginID),
-            ("mactools://app/settings/plugins/fan-control%0A", .malformedPluginID),
-            ("mactools://app/settings/plugins/fan-control%0D", .malformedPluginID),
+            ("mactools://app/settings/plugins/fan-control%0A", .unsupportedRoute),
+            ("mactools://app/settings/plugins/fan-control%0D", .unsupportedRoute),
             ("mactools://app/settings/unknown", .unsupportedRoute),
             ("mactools://app//settings", .unsupportedRoute),
             ("mactools://app/settings//", .unsupportedRoute),
             ("mactools://app/panels/dashboard//", .unsupportedRoute),
             ("mactools://app/search//", .unsupportedRoute),
             ("mactools://app/settings/plugins/fan-control//", .unsupportedRoute),
+            ("mactools://app/panels%2Fdashboard", .unsupportedRoute),
+            ("mactools://app/panels%2fdashboard", .unsupportedRoute),
+            ("mactools://app/settings%2Fplugins%2Ffan-control", .unsupportedRoute),
+            ("mactools://app/panels%5Cdashboard", .unsupportedRoute),
+            ("mactools://app/settings/%2E%2E/about", .unsupportedRoute),
+            ("mactools://app/panels/%00dashboard", .unsupportedRoute),
             ("mactools://app/plugins/fan-control/commands/start", .unsupportedRoute),
             ("mactools://app/search?=value", .unsupportedURLComponents),
             ("mactools://app/settings#private", .unsupportedURLComponents),
