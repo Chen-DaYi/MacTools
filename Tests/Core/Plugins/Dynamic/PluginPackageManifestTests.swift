@@ -58,6 +58,24 @@ final class PluginPackageManifestTests: XCTestCase {
         }
     }
 
+    func testManifestValidationRejectsReservedOrTerminatedPluginIdentifiers() {
+        for id in ["marketplace", "fan-control\n", "fan-control\r"] {
+            let manifest = PluginPackageManifest(
+                id: id,
+                displayName: "Demo",
+                version: "1.0.0",
+                minHostVersion: "0.15.0",
+                bundleRelativePath: "Demo.bundle"
+            )
+
+            XCTAssertThrowsError(
+                try PluginPackageManifestLoader.validate(manifest, hostVersion: "0.16.0")
+            ) { error in
+                XCTAssertEqual(error as? PluginPackageManifestError, .invalidIdentifier(id))
+            }
+        }
+    }
+
     func testManifestValidationRejectsIncompatibleHostVersion() {
         let manifest = PluginPackageManifest(
             id: "com.example.demo",
