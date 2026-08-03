@@ -63,6 +63,11 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         "navigation.forward",
     ]
 
+    private let appShortcutLocalizationKeys = [
+        "shortcuts.openCommandPalette.description",
+        "shortcuts.openCommandPalette.title",
+    ]
+
     func testPluginStaticLocalizationKeysCoverAllSupportedLanguages() throws {
         var failures: [String] = []
 
@@ -199,6 +204,25 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         var failures: [String] = []
         for key in settingsNavigationLocalizationKeys {
             validate(key: key, in: strings, pluginName: "Settings Navigation", failures: &failures)
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testAppShortcutLocalizationKeysCoverAllSupportedLanguages() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+            .appending(path: "Settings.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        guard let strings = catalog["strings"] as? [String: [String: Any]] else {
+            throw AuditError.invalidCatalog(catalogURL.path)
+        }
+
+        var failures: [String] = []
+        for key in appShortcutLocalizationKeys {
+            validate(key: key, in: strings, pluginName: "App Shortcuts", failures: &failures)
         }
 
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))

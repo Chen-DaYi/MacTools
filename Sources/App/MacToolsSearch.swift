@@ -470,7 +470,7 @@ enum MacToolsSearchIndexBuilder {
         }
 
         items += AppShortcutAction.allCases.compactMap { action -> MacToolsSearchResult? in
-            guard action != .openSettings else {
+            guard action.isCommandPaletteSearchEligible else {
                 return nil
             }
 
@@ -517,9 +517,11 @@ enum MacToolsSearchIndexBuilder {
     private static func generalSettingsResults(
         pluginHost: PluginHost
     ) -> [MacToolsSearchResult] {
-        let shortcutKeywords = pluginHost.appShortcutItems.flatMap { item in
-            [item.title, item.description, item.bindingText]
-        }
+        let shortcutKeywords = pluginHost.appShortcutItems
+            .filter { $0.action.isCommandPaletteSearchEligible }
+            .flatMap { item in
+                [item.title, item.description, item.bindingText]
+            }
 
         return [
             generalSettingResult(
