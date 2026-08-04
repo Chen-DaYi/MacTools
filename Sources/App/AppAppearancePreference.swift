@@ -1,6 +1,6 @@
 import AppKit
 
-enum AppAppearancePreference: String, CaseIterable, Identifiable {
+enum AppAppearancePreference: String, CaseIterable, Hashable, Identifiable {
     case system
     case dark
     case light
@@ -64,6 +64,12 @@ enum AppAppearancePreference: String, CaseIterable, Identifiable {
         }
 
         return preference
+    }
+
+    @MainActor
+    func storeAndApply(in userDefaults: UserDefaults = .standard) {
+        userDefaults.set(rawValue, forKey: Self.userDefaultsKey)
+        apply()
     }
 
     @MainActor
