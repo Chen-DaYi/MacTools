@@ -112,6 +112,10 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             MenuBarStatusItemPresentationAction(request: .toggleFeaturePanel),
             .toggleFeaturePanel
         )
+        XCTAssertEqual(
+            MenuBarStatusItemPresentationAction(request: .toggleCommandPalette),
+            .toggleCommandPalette
+        )
     }
 
     func testGlobalMousePolicyRecognizesStatusItemLocation() {
