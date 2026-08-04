@@ -154,6 +154,121 @@ final class FeatureManagementTableViewTests: XCTestCase {
         ))
     }
 
+    func testContextMenuPolicyGroupsVisibleDynamicPluginActionsInExpectedOrder() {
+        let item = makeItem(
+            id: "dynamic",
+            isActive: false,
+            canUninstall: true,
+            hasSettings: true
+        )
+
+        XCTAssertEqual(
+            FeatureManagementContextMenuPolicy.actionGroups(
+                for: item,
+                row: 1,
+                itemCount: 3,
+                mode: .surface(.dashboard),
+                isReorderEnabled: true
+            ),
+            [
+                [.openSettings, .viewMarketplace],
+                [
+                    .moveToTop(isEnabled: true),
+                    .moveToBottom(isEnabled: true),
+                    .setVisible(false),
+                ],
+                [.uninstall],
+            ]
+        )
+    }
+
+    func testContextMenuPolicyDisablesMoveActionsAtVisibleListBoundaries() {
+        let item = makeItem(id: "built-in", isActive: false)
+
+        XCTAssertEqual(
+            FeatureManagementContextMenuPolicy.actionGroups(
+                for: item,
+                row: 0,
+                itemCount: 3,
+                mode: .surface(.featurePanel),
+                isReorderEnabled: true
+            ),
+            [[
+                .moveToTop(isEnabled: false),
+                .moveToBottom(isEnabled: true),
+                .setVisible(false),
+            ]]
+        )
+        XCTAssertEqual(
+            FeatureManagementContextMenuPolicy.actionGroups(
+                for: item,
+                row: 2,
+                itemCount: 3,
+                mode: .surface(.featurePanel),
+                isReorderEnabled: true
+            ),
+            [[
+                .moveToTop(isEnabled: true),
+                .moveToBottom(isEnabled: false),
+                .setVisible(false),
+            ]]
+        )
+    }
+
+    func testContextMenuPolicyKeepsBuiltInRowsActionableOnBothSurfaces() {
+        let item = makeItem(id: "built-in", isActive: false)
+
+        for mode in [
+            FeatureManagementTableMode.surface(.dashboard),
+            .surface(.featurePanel),
+        ] {
+            XCTAssertEqual(
+                FeatureManagementContextMenuPolicy.actionGroups(
+                    for: item,
+                    row: 0,
+                    itemCount: 1,
+                    mode: mode,
+                    isReorderEnabled: true
+                ),
+                [[
+                    .moveToTop(isEnabled: false),
+                    .moveToBottom(isEnabled: false),
+                    .setVisible(false),
+                ]]
+            )
+        }
+    }
+
+    func testContextMenuPolicyOmitsMoveActionsForHiddenRows() {
+        let item = makeItem(
+            id: "hidden",
+            isActive: false,
+            isVisible: false,
+            canUninstall: true,
+            hasSettings: true
+        )
+
+        for mode in [
+            FeatureManagementTableMode.surface(.dashboard),
+            .surface(.featurePanel),
+        ] {
+            XCTAssertEqual(
+                FeatureManagementContextMenuPolicy.actionGroups(
+                    for: item,
+                    row: 0,
+                    itemCount: 1,
+                    mode: mode,
+                    isReorderEnabled: false
+                ),
+                [
+                    [.openSettings, .viewMarketplace],
+                    [.setVisible(true)],
+                    [.uninstall],
+                ]
+            )
+        }
+    }
+
     private func makeItem(
         id: String,
         isActive: Bool,
