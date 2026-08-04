@@ -75,6 +75,46 @@ final class PluginPackageManifestTests: XCTestCase {
         }
     }
 
+    func testExtractionPackagesDeclareTheirRequiredHostCompatibility() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let expectations = [
+            (path: "Plugins/MouseEnhancer/plugin.json", minimum: "1.1.3", supports115: true),
+            (path: "Plugins/TrackpadGestures/plugin.json", minimum: "1.1.6", supports115: false),
+        ]
+        for expectation in expectations {
+            let relativePath = expectation.path
+            let manifestURL = repositoryRoot.appendingPathComponent(relativePath)
+            let manifest = try JSONDecoder().decode(
+                PluginPackageManifest.self,
+                from: Data(contentsOf: manifestURL)
+            )
+
+            XCTAssertEqual(manifest.minHostVersion, expectation.minimum)
+            XCTAssertNoThrow(
+                try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.6")
+            )
+            if expectation.supports115 {
+                XCTAssertNoThrow(
+                    try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.5")
+                )
+            } else {
+                XCTAssertThrowsError(
+                    try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.5")
+                ) { error in
+                    XCTAssertEqual(
+                        error as? PluginPackageManifestError,
+                        .incompatibleHostVersion(required: "1.1.6", current: "1.1.5")
+                    )
+                }
+            }
+        }
+    }
+
     func testManifestDecodesWithCategoryAndReleaseChannel() throws {
         let json = """
         {
