@@ -21,6 +21,7 @@ enum SettingsPresentationRequest: Equatable {
 
 enum AppPresentationRequest: Equatable {
     case settings(SettingsPresentationRequest)
+    case toggleCommandPalette
     case toggleDashboard
     case toggleFeaturePanel
     case showDashboard
@@ -32,11 +33,17 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
     case openSettings = "app.open-settings"
     case toggleDashboard = "app.toggle-dashboard"
     case toggleFeaturePanel = "app.toggle-feature-panel"
+    case openCommandPalette = "app.open-command-palette"
 
     var title: String {
         switch self {
         case .openSettings:
             return AppL10n.settings("shortcuts.openSettings.title", defaultValue: "打开设置")
+        case .openCommandPalette:
+            return AppL10n.settings(
+                "shortcuts.openCommandPalette.title",
+                defaultValue: "打开命令面板"
+            )
         case .toggleDashboard:
             return AppL10n.settings("shortcuts.toggleDashboard.title", defaultValue: "切换仪表盘")
         case .toggleFeaturePanel:
@@ -48,6 +55,11 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         switch self {
         case .openSettings:
             return AppL10n.settings("shortcuts.openSettings.description", defaultValue: "打开 MacTools 设置。")
+        case .openCommandPalette:
+            return AppL10n.settings(
+                "shortcuts.openCommandPalette.description",
+                defaultValue: "在任意位置显示或隐藏 MacTools 命令面板。"
+            )
         case .toggleDashboard:
             return AppL10n.settings(
                 "shortcuts.toggleDashboard.description",
@@ -65,6 +77,8 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         switch self {
         case .openSettings:
             return "gearshape"
+        case .openCommandPalette:
+            return "command.square"
         case .toggleDashboard:
             return "square.grid.2x2"
         case .toggleFeaturePanel:
@@ -76,10 +90,21 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         switch self {
         case .openSettings:
             return .settings(.settings)
+        case .openCommandPalette:
+            return .toggleCommandPalette
         case .toggleDashboard:
             return .toggleDashboard
         case .toggleFeaturePanel:
             return .toggleFeaturePanel
+        }
+    }
+
+    var isCommandPaletteSearchEligible: Bool {
+        switch self {
+        case .openSettings, .openCommandPalette:
+            false
+        case .toggleDashboard, .toggleFeaturePanel:
+            true
         }
     }
 }
