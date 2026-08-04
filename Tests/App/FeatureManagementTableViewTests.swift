@@ -269,6 +269,38 @@ final class FeatureManagementTableViewTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testContextMenuActionsRemainBoundToOriginalPluginAfterCellReuse() {
+        let originalItem = makeItem(
+            id: "original",
+            isActive: false,
+            canUninstall: true,
+            hasSettings: true
+        )
+        let replacementItem = makeItem(
+            id: "replacement",
+            isActive: false,
+            canUninstall: true,
+            hasSettings: true
+        )
+
+        XCTAssertEqual(
+            FeatureManagementTableCellInspection.contextMenuEventsAfterReconfiguringCell(
+                originalItem: originalItem,
+                replacementItem: replacementItem,
+                mode: .surface(.featurePanel)
+            ),
+            [
+                "settings:original",
+                "marketplace:original",
+                "move-top:original",
+                "move-bottom:original",
+                "visibility:original:false",
+                "uninstall:original",
+            ]
+        )
+    }
+
     private func makeItem(
         id: String,
         isActive: Bool,
