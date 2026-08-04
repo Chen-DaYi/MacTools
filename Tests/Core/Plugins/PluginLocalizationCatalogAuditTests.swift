@@ -69,6 +69,11 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         "navigation.forward",
     ]
 
+    private let appShortcutLocalizationKeys = [
+        "shortcuts.openCommandPalette.description",
+        "shortcuts.openCommandPalette.title",
+    ]
+
     func testPluginStaticLocalizationKeysCoverAllSupportedLanguages() throws {
         var failures: [String] = []
 
@@ -95,6 +100,47 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
                     pluginName: plugin.lastPathComponent,
                     failures: &failures
                 )
+            }
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testKeepAwakeCatalogContainsOnlyReferencedKeys() throws {
+        let plugin = repositoryRoot.appending(path: "Plugins/KeepAwake")
+        let catalog = try loadCatalog(for: plugin)
+        let sourceFiles = try files(withExtension: "swift", in: plugin.appending(path: "Sources"))
+        var referencedKeys = Set(dynamicLocalizationKeys["KeepAwake", default: []])
+
+        for sourceFile in sourceFiles {
+            let source = try String(contentsOf: sourceFile, encoding: .utf8)
+            referencedKeys.formUnion(staticLocalizationKeys(in: source))
+        }
+
+        let unusedKeys = Set(catalog.keys).subtracting(referencedKeys).sorted()
+        XCTAssertTrue(
+            unusedKeys.isEmpty,
+            "KeepAwake contains unreferenced localization keys:\n\(unusedKeys.joined(separator: "\n"))"
+        )
+    }
+
+    func testKeepAwakeFallbacksMatchSourceLanguageCatalogValues() throws {
+        let plugin = repositoryRoot.appending(path: "Plugins/KeepAwake")
+        let catalog = try loadCatalog(for: plugin)
+        let sourceFiles = try files(withExtension: "swift", in: plugin.appending(path: "Sources"))
+        var failures: [String] = []
+
+        for sourceFile in sourceFiles {
+            let source = try String(contentsOf: sourceFile, encoding: .utf8)
+            for fallback in staticLocalizationFallbacks(in: source) {
+                guard let catalogValue = sourceLanguageValue(for: fallback.key, in: catalog) else {
+                    continue
+                }
+                if fallback.value != catalogValue {
+                    failures.append(
+                        "\(sourceFile.lastPathComponent): \(fallback.key) fallback \"\(fallback.value)\" does not match zh-Hans catalog value \"\(catalogValue)\""
+                    )
+                }
             }
         }
 
@@ -205,6 +251,25 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         var failures: [String] = []
         for key in settingsNavigationLocalizationKeys {
             validate(key: key, in: strings, pluginName: "Settings Navigation", failures: &failures)
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testAppShortcutLocalizationKeysCoverAllSupportedLanguages() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+            .appending(path: "Settings.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        guard let strings = catalog["strings"] as? [String: [String: Any]] else {
+            throw AuditError.invalidCatalog(catalogURL.path)
+        }
+
+        var failures: [String] = []
+        for key in appShortcutLocalizationKeys {
+            validate(key: key, in: strings, pluginName: "App Shortcuts", failures: &failures)
         }
 
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
@@ -373,6 +438,41 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
             }
             return String(source[keyRange])
         })
+    }
+
+    private func staticLocalizationFallbacks(in source: String) -> [(key: String, value: String)] {
+        let expression = try! NSRegularExpression(
+            pattern: #"(?:\b(?:self\.)?[A-Za-z_]\w*|PluginLocalization\([^\n]*\))\.(?:string|format)\s*\(\s*\"([^\"]+)\"\s*,\s*defaultValue\s*:\s*\"((?:\\.|[^\"\\])*)\""#
+        )
+        let range = NSRange(source.startIndex..., in: source)
+        return expression.matches(in: source, range: range).compactMap { match in
+            guard
+                let keyRange = Range(match.range(at: 1), in: source),
+                let valueRange = Range(match.range(at: 2), in: source)
+            else {
+                return nil
+            }
+
+            let escapedValue = String(source[valueRange])
+            let jsonString = "\"\(escapedValue)\""
+            let value = try? JSONSerialization.jsonObject(with: Data(jsonString.utf8)) as? String
+            return (String(source[keyRange]), value ?? escapedValue)
+        }
+    }
+
+    private func sourceLanguageValue(
+        for key: String,
+        in catalog: [String: [String: Any]]
+    ) -> String? {
+        guard
+            let localizations = catalog[key]?["localizations"] as? [String: Any],
+            let sourceLocalization = localizations["zh-Hans"] as? [String: Any],
+            let stringUnit = sourceLocalization["stringUnit"] as? [String: Any]
+        else {
+            return nil
+        }
+
+        return stringUnit["value"] as? String
     }
 
     private func files(withExtension fileExtension: String, in directory: URL) throws -> [URL] {
