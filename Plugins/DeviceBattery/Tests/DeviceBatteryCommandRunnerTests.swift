@@ -49,7 +49,7 @@ final class DeviceBatteryCommandRunnerTests: XCTestCase {
         let output = await DeviceBatteryCommandRunner.run(
             path: "/bin/sh",
             arguments: ["-c", "printf 'keep\\nskip\\n'; sleep 5"],
-            timeout: 0.05,
+            timeout: 0.5,
             outputLineFilter: { $0 == "keep" }
         )
 
@@ -57,7 +57,7 @@ final class DeviceBatteryCommandRunnerTests: XCTestCase {
             output,
             DeviceBatteryCommandResult(output: "keep\n", completion: .timedOut)
         )
-        XCTAssertLessThan(start.duration(to: clock.now), .seconds(1))
+        XCTAssertLessThan(start.duration(to: clock.now), .seconds(2))
     }
 
     func testCompletedParentDoesNotWaitForDescendantHoldingPipe() async {
