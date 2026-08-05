@@ -1,0 +1,51 @@
+# Trackpad Gestures manual hardware verification
+
+This checklist covers behavior that requires physical trackpad hardware and real macOS input settings. Automated tests do not replace these checks.
+
+Status for issue #237: **Not run**. Record the tested Mac model, trackpad model, macOS version, result, and any notes before release.
+
+## Core matrix
+
+| Scenario | Variants to verify | Expected result | Status |
+| --- | --- | --- | --- |
+| Built-in MacBook trackpad | macOS 14 and each newer supported major version | Configured three- to five-finger taps and long touches recognize once; every distinct TipTap release recognizes while its fixed fingers remain down; disabled mappings do nothing | Not run |
+| Magic Trackpad | USB and Bluetooth when available | Recognition matches the built-in trackpad and remains isolated per physical device | Not run |
+| Tap to click | Enabled and disabled | A recognized TipTap performs exactly its mapped action and does not activate the link, button, or text field under the pointer; a failed gesture preserves the original click | Not run |
+| Secondary click | Two-finger click and corner-click configurations | TipTap click consumption and middle-click conversion work without duplicates; unrelated clicks outside an active gesture candidate remain usable | Not run |
+| Simultaneous external-mouse click | Click an external mouse while exactly one configured click-producing gesture candidate is active | The settings warning is visible; record whether the external click conflicts because macOS does not expose a reliable native-click device source | Not run |
+| Typing protection | Built-in keyboard and an external keyboard; 0.2, 0.4, and 1.0 second delays | Ordinary key events still reach the frontmost app, gestures stay inactive while a key is held and during the configured delay, and recognition rearms only after every trackpad contact lifts | Not run |
+| Typing protection disabled | Built-in keyboard with protection switched off | Keyboard activity does not pause configured gestures | Not run |
+| Three-finger dragging | Enabled and disabled | Conflicting three-finger mappings fail safely; native dragging remains usable | Not run |
+| Test Gestures | Start and stop while contacts are active; test three-, four-, and five-finger double taps; leave the plugin page while testing | Recognized gestures are reported during testing, no configured action executes, and testing stops automatically when the page disappears | Not run |
+| Settings accessibility | VoiceOver; minimum window width; increased text size | Typing controls have meaningful names and values, recognized test gestures are announced, compact header controls remain usable, and the mapping editor scrolls without hiding its action footer | Not run |
+| Sleep and wake | Sleep with the listener active, then wake | Recognition resumes once without a stale or duplicate listener | Not run |
+| External device changes | Connect, disconnect, and reconnect a Magic Trackpad | Device discovery recovers; removed devices stop producing state; other devices continue working | Not run |
+| Permission changes | Revoke and restore Accessibility and Input Monitoring | Listeners stop on revocation, guidance is clear, and recognition resumes only after permission is restored | Not run |
+
+## Gesture sampling
+
+On each available device, sample every initial gesture twice: once with a configured keyboard shortcut and once with the middle-click action:
+
+- TipTap Left and Right with one fixed finger.
+- TipTap Left, Middle, and Right with two fixed fingers.
+- Three-, four-, and five-finger tap.
+- Three-, four-, and five-finger double tap.
+- Three-, four-, and five-finger long touch.
+
+For each double tap, touch and fully release twice in quick succession; expect its configured action exactly once on the second release. Repeat in Test Gestures and confirm the first release reports the ordinary single tap while the second release reports only the double tap. A gap longer than about 320 ms, excessive movement, an overlong contact, or a finger rebound before full release must not recognize a double tap.
+
+For every TipTap variant, keep the fixed fingers down and tap the additional finger five times; expect exactly five actions. Configure sibling regions together and alternate between them without lifting the fixed fingers. Holding the additional finger must not auto-repeat.
+
+Repeat the TipTap sample with the pointer over a link, a button, and a text field. Each recognized gesture must execute its shortcut exactly once without clicking or focusing the item below the pointer. Then deliberately fail the gesture by moving the fixed finger or holding the tapping finger too long; the native click must still reach the item.
+
+For every middle-click mapping—including all TipTap, multi-finger tap, and long-touch variants—confirm that one recognition produces exactly one middle click. While its contact candidate is active, click an external mouse and record any conflict; macOS does not provide a reliable device source for that native click.
+
+With “Ignore Gestures While Typing” enabled, rest part of the palm on the built-in trackpad while continuously typing normal letters, holding a key, and using key repeat. No mapped gesture should fire and the typed characters must remain unchanged. Stop typing but keep the same trackpad contacts down past the configured delay; gestures must remain blocked. Lift every contact, then perform a deliberate TipTap and confirm it works. Repeat at 0.2, 0.4, and 1.0 seconds, and confirm modifier-only presses do not start the delay.
+
+Also confirm that excessive movement, long taps, extra fingers, and ambiguous TipTap placement do not trigger an action, and that moving or lifting a fixed finger ends the repeated session until all contacts reset.
+
+## Result record
+
+| Date | Tester | Mac / trackpad | macOS | Result | Notes |
+| --- | --- | --- | --- | --- | --- |
+| — | — | — | — | Not run | — |

@@ -1,6 +1,7 @@
 import AppKit
 import CoreFoundation
 import CoreGraphics
+import Darwin
 import Foundation
 import IOKit
 import MultitouchSupport
@@ -12,6 +13,110 @@ protocol MouseEnhancerMiddleClickSessionManaging: AnyObject {
 
     func activate()
     func deactivate()
+}
+
+final class MouseEnhancerMultitouchRuntime: @unchecked Sendable {
+    typealias CreateDeviceListFunction = @convention(c) () -> Unmanaged<CFMutableArray>?
+    typealias RegisterCallbackFunction = @convention(c) (MTDevice, MTFrameCallbackFunction) -> Bool
+    typealias UnregisterCallbackFunction = @convention(c) (MTDevice, MTFrameCallbackFunction) -> Bool
+    typealias StartDeviceFunction = @convention(c) (MTDevice, Int32) -> Void
+    typealias StopDeviceFunction = @convention(c) (MTDevice) -> Void
+    typealias ReleaseDeviceFunction = @convention(c) (MTDevice) -> Void
+
+    private static let frameworkPath =
+        "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
+
+    private let libraryHandle: UnsafeMutableRawPointer
+    private let createDeviceListFunction: CreateDeviceListFunction
+    private let registerCallbackFunction: RegisterCallbackFunction
+    private let unregisterCallbackFunction: UnregisterCallbackFunction
+    private let startDeviceFunction: StartDeviceFunction
+    private let stopDeviceFunction: StopDeviceFunction
+    private let releaseDeviceFunction: ReleaseDeviceFunction
+
+    static func load() -> MouseEnhancerMultitouchRuntime? {
+        guard let handle = dlopen(frameworkPath, RTLD_LAZY | RTLD_LOCAL) else { return nil }
+        guard
+            let createDeviceList: CreateDeviceListFunction = loadSymbol(
+                "MTDeviceCreateList", from: handle
+            ),
+            let registerCallback: RegisterCallbackFunction = loadSymbol(
+                "MTRegisterContactFrameCallback", from: handle
+            ),
+            let unregisterCallback: UnregisterCallbackFunction = loadSymbol(
+                "MTUnregisterContactFrameCallback", from: handle
+            ),
+            let startDevice: StartDeviceFunction = loadSymbol("MTDeviceStart", from: handle),
+            let stopDevice: StopDeviceFunction = loadSymbol("MTDeviceStop", from: handle),
+            let releaseDevice: ReleaseDeviceFunction = loadSymbol("MTDeviceRelease", from: handle)
+        else {
+            dlclose(handle)
+            return nil
+        }
+        return MouseEnhancerMultitouchRuntime(
+            libraryHandle: handle,
+            createDeviceListFunction: createDeviceList,
+            registerCallbackFunction: registerCallback,
+            unregisterCallbackFunction: unregisterCallback,
+            startDeviceFunction: startDevice,
+            stopDeviceFunction: stopDevice,
+            releaseDeviceFunction: releaseDevice
+        )
+    }
+
+    private static func loadSymbol<Function>(
+        _ name: String,
+        from handle: UnsafeMutableRawPointer
+    ) -> Function? {
+        guard let symbol = dlsym(handle, name) else { return nil }
+        return unsafeBitCast(symbol, to: Function.self)
+    }
+
+    private init(
+        libraryHandle: UnsafeMutableRawPointer,
+        createDeviceListFunction: CreateDeviceListFunction,
+        registerCallbackFunction: RegisterCallbackFunction,
+        unregisterCallbackFunction: UnregisterCallbackFunction,
+        startDeviceFunction: StartDeviceFunction,
+        stopDeviceFunction: StopDeviceFunction,
+        releaseDeviceFunction: ReleaseDeviceFunction
+    ) {
+        self.libraryHandle = libraryHandle
+        self.createDeviceListFunction = createDeviceListFunction
+        self.registerCallbackFunction = registerCallbackFunction
+        self.unregisterCallbackFunction = unregisterCallbackFunction
+        self.startDeviceFunction = startDeviceFunction
+        self.stopDeviceFunction = stopDeviceFunction
+        self.releaseDeviceFunction = releaseDeviceFunction
+    }
+
+    deinit {
+        dlclose(libraryHandle)
+    }
+
+    func createDeviceList() -> [MTDevice] {
+        createDeviceListFunction()?.takeUnretainedValue() as? [MTDevice] ?? []
+    }
+
+    func register(_ device: MTDevice, callback: MTFrameCallbackFunction) {
+        _ = registerCallbackFunction(device, callback)
+    }
+
+    func unregister(_ device: MTDevice, callback: MTFrameCallbackFunction) {
+        _ = unregisterCallbackFunction(device, callback)
+    }
+
+    func start(_ device: MTDevice) {
+        startDeviceFunction(device, 0)
+    }
+
+    func stop(_ device: MTDevice) {
+        stopDeviceFunction(device)
+    }
+
+    func release(_ device: MTDevice) {
+        releaseDeviceFunction(device)
+    }
 }
 
 /// Manages trackpad multitouch callbacks and converts a system left-click into a middle-click
@@ -58,6 +163,7 @@ final class MouseEnhancerMiddleClickSession: MouseEnhancerMiddleClickSessionMana
     private var ioIterator: io_iterator_t = 0
     private var displayCallbackRegistered = false
     private var restartWorkItem: DispatchWorkItem?
+    private let multitouchRuntime: MouseEnhancerMultitouchRuntime?
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "MouseEnhancerMiddleClickSession")
 
     /// After wake, the multitouch driver may not be ready; delay before rebuilding listeners.
@@ -70,13 +176,8 @@ final class MouseEnhancerMiddleClickSession: MouseEnhancerMiddleClickSessionMana
 
     nonisolated(unsafe) static weak var activeSession: MouseEnhancerMiddleClickSession?
 
-    // MARK: - MTDeviceCreateList (private symbol linked through @_silgen_name)
-
-    @_silgen_name("MTDeviceCreateList")
-    private static func _mtDeviceCreateList() -> Unmanaged<CFMutableArray>?
-
-    private static func createDeviceList() -> [MTDevice] {
-        _mtDeviceCreateList()?.takeUnretainedValue() as? [MTDevice] ?? []
+    init(multitouchRuntime: MouseEnhancerMultitouchRuntime? = .load()) {
+        self.multitouchRuntime = multitouchRuntime
     }
 
     // MARK: - Multitouch Callback
@@ -163,15 +264,26 @@ final class MouseEnhancerMiddleClickSession: MouseEnhancerMiddleClickSessionMana
 
     private func startTouchListeners() {
         guard devices.isEmpty else { return }
-        devices = Self.createDeviceList()
+        guard let multitouchRuntime else {
+            logger.error("MultitouchSupport is unavailable; legacy middle click cannot start")
+            return
+        }
+        devices = multitouchRuntime.createDeviceList()
         if devices.isEmpty {
             logger.warning("no multitouch devices detected; waiting for IOKit notification or wake retry")
         }
-        devices.forEach { $0.register(contactFrameCallback: touchCallback); $0.start(runMode: 0) }
+        devices.forEach {
+            multitouchRuntime.register($0, callback: touchCallback)
+            multitouchRuntime.start($0)
+        }
     }
 
     private func stopTouchListeners() {
-        devices.forEach { $0.unregister(contactFrameCallback: touchCallback); $0.stop(); $0.release() }
+        devices.forEach {
+            multitouchRuntime?.unregister($0, callback: touchCallback)
+            multitouchRuntime?.stop($0)
+            multitouchRuntime?.release($0)
+        }
         devices.removeAll()
         threeDown = false
         wasThreeDown = false

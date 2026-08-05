@@ -17,6 +17,19 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
     ]
 
     private let pluginManagementLocalizationKeys = [
+        "plugin.error.catalog.extractionRollbackFailedFormat",
+        "plugin.error.catalog.migrationCompletionPersistenceFailed",
+        "plugin.error.catalog.migrationJournalPersistenceFailed",
+        "plugin.error.dynamic.extractionCoordinatorRequiredFormat",
+        "plugin.error.dynamic.extractionDestinationBelowMinimum",
+        "plugin.error.dynamic.extractionDestinationNotReady",
+        "plugin.error.dynamic.recordNotFoundFormat",
+        "plugin.error.dynamic.rollbackRequiresUnloadedFormat",
+        "plugin.error.dynamic.runtimeValidationFailedFormat",
+        "plugin.error.dynamic.runtimeValidationNoPlugin",
+        "plugin.error.dynamic.runtimeValidationNoResult",
+        "plugin.error.dynamic.runtimeValidationReadinessUnsupported",
+        "plugin.error.store.migrationStatePersistenceFailed",
         "plugin.management.active",
         "plugin.management.uninstall.confirmationMessage",
         "plugin.management.uninstall.confirmationTitle",

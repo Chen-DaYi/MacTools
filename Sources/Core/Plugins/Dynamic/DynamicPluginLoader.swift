@@ -31,6 +31,8 @@ final class DynamicPluginLoader: DynamicPluginLoading {
                 return DynamicPluginLoadResult(record: record, plugins: [], errorMessage: nil)
             }
 
+            var plugins: [any MacToolsPlugin] = []
+            var activationAttemptedCount = 0
             do {
                 let provider = try PluginInvocationGuard
                     .value(operation: "load provider for \(record.id)") {
@@ -38,7 +40,7 @@ final class DynamicPluginLoader: DynamicPluginLoading {
                     }
                     .get()
                 let context = packageStore.runtimeContext(for: record)
-                let plugins = try PluginInvocationGuard
+                plugins = try PluginInvocationGuard
                     .value(operation: "make plugins for \(record.id)") {
                         provider.makePlugins()
                     }
@@ -46,6 +48,7 @@ final class DynamicPluginLoader: DynamicPluginLoading {
                 try Self.validateLoadedPlugins(plugins, for: record)
 
                 for plugin in plugins {
+                    activationAttemptedCount += 1
                     try PluginInvocationGuard
                         .run(operation: "activate plugin \(plugin.metadata.id)") {
                             plugin.activate(context: context)
@@ -55,12 +58,31 @@ final class DynamicPluginLoader: DynamicPluginLoading {
 
                 return DynamicPluginLoadResult(record: record, plugins: plugins, errorMessage: nil)
             } catch {
+                Self.deactivateAfterFailedLoad(
+                    Array(plugins.prefix(activationAttemptedCount)),
+                    recordID: record.id
+                )
                 return DynamicPluginLoadResult(
                     record: record,
                     plugins: [],
                     errorMessage: error.localizedDescription
                 )
             }
+        }
+    }
+
+    static func deactivateAfterFailedLoad(
+        _ plugins: [any MacToolsPlugin],
+        recordID: String
+    ) {
+        for plugin in plugins {
+            _ = PluginInvocationGuard
+                .run(operation: "deactivate failed plugin \(recordID)") {
+                    plugin.deactivate(reason: .disabled)
+                }
+            plugin.onStateChange = nil
+            plugin.requestPermissionGuidance = nil
+            plugin.shortcutBindingResolver = nil
         }
     }
 

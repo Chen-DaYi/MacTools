@@ -89,9 +89,12 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             return
         }
 
-        guard pluginAutomaticUpdateVersionStore.needsAutomaticUpdateCheck(
+        let needsAutomaticUpdateCheck = pluginAutomaticUpdateVersionStore.needsAutomaticUpdateCheck(
             currentAppVersion: currentAppVersion
-        ) else {
+        )
+        guard needsAutomaticUpdateCheck
+            || pluginHost.hasPendingDynamicPluginExtractionMigration
+        else {
             pluginHost.loadDynamicPluginsIfNeeded()
             activateAppURLRouter()
             return

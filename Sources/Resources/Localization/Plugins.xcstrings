@@ -3296,6 +3296,290 @@
         }
       }
     },
+    "plugin.error.catalog.extractionRollbackFailedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "فشل ترحيل ميزة المكون الإضافي %@‏: %@؛ وفشل التراجع أيضًا: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Migration der Plugin-Funktion %@ fehlgeschlagen: %@; auch das Rollback ist fehlgeschlagen: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin feature migration %@ failed: %@; rollback also failed: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error en la migración de la función del complemento %@: %@; la reversión también falló: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échec de la migration de fonctionnalité du plugin %@ : %@ ; la restauration a également échoué : %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグイン機能の移行 %@ に失敗しました: %@。ロールバックにも失敗しました: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인 기능 마이그레이션 %@ 실패: %@. 롤백도 실패함: %@"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falha na migração do recurso do plug-in %@: %@; a reversão também falhou: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сбой миграции функции плагина %@: %@; откат также не выполнен: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件功能迁移 %@ 失败：%@；回滚也失败：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛功能遷移 %@ 失敗：%@；回復也失敗：%@"
+          }
+        }
+      }
+    },
+    "plugin.error.catalog.migrationCompletionPersistenceFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تم تحديث المكونات الإضافية، ولكن تعذر حفظ حالة اكتمال الترحيل. ستستمر الاستعادة عند التشغيل التالي."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Plugins wurden aktualisiert, aber der abgeschlossene Migrationsstatus konnte nicht gespeichert werden. Die Wiederherstellung wird beim nächsten Start fortgesetzt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plugins were updated, but the completed migration state could not be saved. Recovery will continue at the next launch."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los complementos se actualizaron, pero no se pudo guardar el estado de migración completada. La recuperación continuará en el próximo inicio."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les plugins ont été mis à jour, mais l’état de migration terminée n’a pas pu être enregistré. La récupération se poursuivra au prochain lancement."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグインは更新されましたが、移行完了状態を保存できませんでした。次回起動時に復旧を続行します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인은 업데이트되었지만 마이그레이션 완료 상태를 저장할 수 없습니다. 다음 실행 시 복구를 계속합니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os plug-ins foram atualizados, mas não foi possível salvar o estado de migração concluída. A recuperação continuará na próxima inicialização."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Плагины обновлены, но не удалось сохранить состояние завершённой миграции. Восстановление продолжится при следующем запуске."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件已更新，但无法保存迁移完成状态；下次启动时将继续恢复。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛已更新，但無法儲存遷移完成狀態；下次啟動時將繼續復原。"
+          }
+        }
+      }
+    },
+    "plugin.error.catalog.migrationPlanInvalidated": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تغيرت حالة المكونات الإضافية. حاول التحديث مرة أخرى."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Pluginstatus hat sich geändert. Versuche die Aktualisierung erneut."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin state changed. Try the update again."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El estado de los complementos cambió. Intenta actualizar de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’état des plugins a changé. Réessayez la mise à jour."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグインの状態が変更されました。もう一度アップデートしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인 상태가 변경되었습니다. 업데이트를 다시 시도하십시오."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O estado dos plug-ins mudou. Tente atualizar novamente."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Состояние плагинов изменилось. Повторите обновление."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件状态已更改，请重试更新。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛狀態已變更，請重試更新。"
+          }
+        }
+      }
+    },
+    "plugin.error.catalog.migrationJournalPersistenceFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذر حفظ حالة ترحيل المكون الإضافي. تم إيقاف التحديث."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Plugin-Migrationsstatus konnte nicht gespeichert werden. Die Aktualisierung wurde abgebrochen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save plugin migration state. The update was stopped."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo guardar el estado de migración del complemento. Se detuvo la actualización."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d’enregistrer l’état de migration du plugin. La mise à jour a été interrompue."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグインの移行状態を保存できなかったため、更新を中止しました。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인 마이그레이션 상태를 저장할 수 없어 업데이트를 중단했습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível salvar o estado de migração do plug-in. A atualização foi interrompida."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить состояние миграции плагина. Обновление остановлено."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存插件迁移状态，已停止更新。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存外掛遷移狀態，已停止更新。"
+          }
+        }
+      }
+    },
     "plugin.error.catalog.httpStatusFormat": {
       "extractionState": "manual",
       "localizations": {
@@ -4783,6 +5067,645 @@
           "stringUnit": {
             "state": "translated",
             "value": "無法讀取外掛 bundle：%@"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.extractionCoordinatorRequiredFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يجب أن ينفذ منسق ترحيل الميزات تغيير حزمة المكون الإضافي: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Änderung des Plugin-Pakets muss vom Koordinator für die Funktionsmigration ausgeführt werden: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin package change must be performed by the feature-migration coordinator: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El coordinador de migración de funciones debe realizar el cambio del paquete del complemento: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La modification du paquet du plugin doit être effectuée par le coordinateur de migration des fonctionnalités : %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグイン パッケージの変更は機能移行コーディネータで行う必要があります: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인 패키지 변경은 기능 마이그레이션 코디네이터가 수행해야 합니다: %@"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A alteração do pacote do plug-in deve ser realizada pelo coordenador de migração de recursos: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменение пакета плагина должен выполнить координатор миграции функций: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件包变更需要由功能迁移协调器完成：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛套件變更需要由功能遷移協調器完成：%@"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.extractionDestinationBelowMinimum": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "إصدار المكون الإضافي الوجهة لترحيل الميزة قديم جدًا."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Version des Ziel-Plugins für die Funktionsmigration ist zu alt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The destination plugin version for feature migration is too old."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La versión del complemento de destino para la migración de funciones es demasiado antigua."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La version du plugin de destination pour la migration des fonctionnalités est trop ancienne."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "機能移行先のプラグインのバージョンが古すぎます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기능 마이그레이션 대상 플러그인 버전이 너무 낮습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A versão do plug-in de destino para a migração de recursos é muito antiga."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Версия целевого плагина для миграции функции устарела."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提取功能的目标插件版本过低。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "功能遷移的目標外掛版本過舊。"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.extractionDestinationNotReady": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "المكون الإضافي الوجهة لترحيل الميزة غير جاهز."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Ziel-Plugin für die Funktionsmigration ist noch nicht bereit."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The destination plugin for feature migration is not ready."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El complemento de destino para la migración de funciones no está listo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le plugin de destination pour la migration des fonctionnalités n’est pas prêt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "機能移行先のプラグインの準備ができていません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기능 마이그레이션 대상 플러그인이 준비되지 않았습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O plug-in de destino para a migração de recursos não está pronto."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Целевой плагин для миграции функции не готов."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提取功能的目标插件尚未就绪。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "功能遷移的目標外掛尚未就緒。"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.recordNotFoundFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لم يتم العثور على سجل المكون الإضافي المثبت: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datensatz des installierten Plugins nicht gefunden: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installed plugin record not found: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se encontró el registro del complemento instalado: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrement du plugin installé introuvable : %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インストール済みプラグインのレコードが見つかりません: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치된 플러그인 기록을 찾을 수 없습니다: %@"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registro do plug-in instalado não encontrado: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись установленного плагина не найдена: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到已安装的插件记录：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找不到已安裝的外掛記錄：%@"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.rollbackRequiresUnloadedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا يمكن التراجع عن حزمة مكون إضافي قيد الاستخدام: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein verwendetes Plugin-Paket kann nicht zurückgesetzt werden: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cannot roll back a plugin package that is in use: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se puede revertir un paquete de complemento que está en uso: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de restaurer un paquet de plugin en cours d’utilisation : %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用中のプラグイン パッケージはロールバックできません: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용 중인 플러그인 패키지는 롤백할 수 없습니다: %@"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não é possível reverter um pacote de plug-in em uso: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нельзя откатить используемый пакет плагина: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法回滚正在使用的插件包：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法回復正在使用的外掛套件：%@"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.runtimeValidationFailedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "فشل التحقق من تشغيل المكون الإضافي %@: %@"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufzeitprüfung für Plugin %@ fehlgeschlagen: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runtime validation failed for plugin %@: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error de validación en ejecución del complemento %@: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échec de la validation à l’exécution du plugin %@ : %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグイン %@ の実行時検証に失敗しました: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인 %@ 런타임 검증 실패: %@"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Falha na validação em tempo de execução do plug-in %@: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сбой проверки плагина %@ во время выполнения: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件 %@ 运行验证失败：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛 %@ 執行驗證失敗：%@"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.runtimeValidationNoPlugin": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لم يُرجع محمّل المكون الإضافي مكونًا إضافيًا صالحًا للاستخدام."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Plugin-Loader hat kein verwendbares Plugin zurückgegeben."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plugin loader returned no usable plugin."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El cargador de complementos no devolvió ningún complemento utilizable."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le chargeur de plugins n’a renvoyé aucun plugin utilisable."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグイン ローダーから使用可能なプラグインが返されませんでした。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인 로더가 사용 가능한 플러그인을 반환하지 않았습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O carregador de plug-ins não retornou um plug-in utilizável."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузчик плагина не вернул пригодный для использования плагин."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件加载器未返回可用插件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛載入器未傳回可用的外掛。"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.runtimeValidationNoResult": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لم يُرجع محمّل المكون الإضافي نتيجة تحقق."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Plugin-Loader hat kein Prüfergebnis zurückgegeben."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plugin loader returned no validation result."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El cargador de complementos no devolvió ningún resultado de validación."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le chargeur de plugins n’a renvoyé aucun résultat de validation."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグイン ローダーから検証結果が返されませんでした。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인 로더가 검증 결과를 반환하지 않았습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O carregador de plug-ins não retornou um resultado de validação."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузчик плагина не вернул результат проверки."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件加载器未返回验证结果。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛載入器未傳回驗證結果。"
+          }
+        }
+      }
+    },
+    "plugin.error.dynamic.runtimeValidationReadinessUnsupported": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا يدعم المكون الإضافي التحقق من الجاهزية لترحيل الميزات."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Plugin unterstützt keine Bereitschaftsprüfung für die Funktionsmigration."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plugin does not support feature-migration readiness checks."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El complemento no admite comprobaciones de preparación para la migración de funciones."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le plugin ne prend pas en charge les contrôles de disponibilité pour la migration des fonctionnalités."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグインは機能移行の準備状況チェックに対応していません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인이 기능 마이그레이션 준비 상태 검사를 지원하지 않습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O plug-in não oferece suporte a verificações de prontidão para migração de recursos."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Плагин не поддерживает проверку готовности к миграции функций."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插件不支持功能迁移就绪检查。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "外掛不支援功能遷移就緒檢查。"
           }
         }
       }
@@ -6629,6 +7552,77 @@
           "stringUnit": {
             "state": "translated",
             "value": "安裝完成後無法讀取外掛記錄。"
+          }
+        }
+      }
+    },
+    "plugin.error.store.migrationStatePersistenceFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذر حفظ حالة ترحيل المكون الإضافي. لم تتم إزالة المكون الإضافي."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Plugin-Migrationsstatus konnte nicht gespeichert werden. Das Plugin wurde nicht entfernt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save plugin migration state. The plugin was not removed."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo guardar el estado de migración del complemento. El complemento no se eliminó."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d’enregistrer l’état de migration du plugin. Le plugin n’a pas été supprimé."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プラグインの移行状態を保存できなかったため、プラグインは削除されませんでした。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "플러그인 마이그레이션 상태를 저장할 수 없어 플러그인을 제거하지 않았습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível salvar o estado de migração do plug-in. O plug-in não foi removido."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить состояние миграции плагина. Плагин не был удалён."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存插件迁移状态，未移除插件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存外掛遷移狀態，未移除外掛。"
           }
         }
       }

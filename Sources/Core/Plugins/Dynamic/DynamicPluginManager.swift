@@ -1,6 +1,50 @@
 import Foundation
 import MacToolsPluginKit
 
+struct PluginExtractionMigrationPolicy {
+    let id: String
+    let sourcePluginID: String
+    let destinationPluginID: String
+    let sourceRetirementVersion: String
+    let minimumDestinationVersion: String
+    let legacyPreferenceKey: String
+    let completionKey: String
+
+    var transactionJournalKey: String {
+        "\(completionKey).in-progress"
+    }
+
+    var sourceUninstallIntentKey: String {
+        "\(completionKey).source-uninstall-intent"
+    }
+
+    var sourceUninstallRemoveDataKey: String {
+        "\(sourceUninstallIntentKey).remove-data"
+    }
+
+    let destinationPreferenceMigrationMarkerKey = "migration.mouse-enhancer-middle-click.v2"
+
+    static let mouseEnhancerMiddleClick = PluginExtractionMigrationPolicy(
+        id: "mouse-enhancer-middle-click.v1",
+        sourcePluginID: "mouse-enhancer",
+        destinationPluginID: "trackpad-gestures",
+        sourceRetirementVersion: "1.0.7",
+        minimumDestinationVersion: "1.0.0",
+        legacyPreferenceKey: "plugin.mouse-enhancer.mouse-enhancer.middle-click.enabled",
+        completionKey: "plugins.dynamic.extraction.mouse-enhancer-middle-click.v1"
+    )
+}
+
+enum PluginPackageMutationAuthorization {
+    case standard
+    case featureExtractionCoordinator
+}
+
+struct PluginPackageRollbackSnapshot {
+    let pluginID: String
+    let packageURL: URL
+}
+
 struct PluginManagementItem: Identifiable, Equatable {
     enum State: Equatable {
         case available
@@ -141,6 +185,7 @@ final class DynamicPluginManager: ObservableObject {
     private var deferredPluginIDs: Set<String> = []
     private var catalogSnapshot: PluginCatalogSnapshot?
     private var latestLoadErrorsByID: [String: String] = [:]
+    private var packageMutationGenerationsByPluginID: [String: UInt64] = [:]
 
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     var onPluginsChanged: (([any MacToolsPlugin]) -> Void)?
@@ -161,16 +206,47 @@ final class DynamicPluginManager: ObservableObject {
         let records = packageStore.installedRecords()
         deactivateMissingPlugins(records: records)
 
+        let extractionPolicy = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        let extractionHasPersistedJournal = packageStore
+            .featureExtractionMigrationHasPersistedJournal()
+        let extractionHasInferredUnsafeState = !extractionHasPersistedJournal
+            && packageStore.featureExtractionMigrationHasUnsafeInstalledState()
+        let extractionRequiresRuntimeArbitration = extractionHasPersistedJournal
+            || extractionHasInferredUnsafeState
+        let legacySourceIsAlreadyLoaded = loadedPluginsByID[extractionPolicy.sourcePluginID] != nil
+
         let recordsToLoad = records.filter { record in
             guard case .installed = record.state else {
                 return false
             }
 
+            if extractionRequiresRuntimeArbitration,
+               record.id == extractionPolicy.sourcePluginID,
+               !PluginVersionComparator.isVersion(
+                   record.manifest.version,
+                   atLeast: extractionPolicy.sourceRetirementVersion
+               ) {
+                return false
+            }
+
+            if extractionRequiresRuntimeArbitration,
+               legacySourceIsAlreadyLoaded,
+               record.id == extractionPolicy.destinationPluginID {
+                return false
+            }
+
             return loadedPluginsByID[record.id] == nil && !deferredPluginIDs.contains(record.id)
         }
-        let loadedResults = recordsToLoad.isEmpty
+        var loadedResults = recordsToLoad.isEmpty
             ? []
             : pluginLoader.loadInstalledPlugins(from: recordsToLoad)
+        if extractionRequiresRuntimeArbitration, !legacySourceIsAlreadyLoaded {
+            loadedResults = resultsByFallingBackToLegacyExtractionSourceIfNeeded(
+                loadedResults,
+                installedRecords: records,
+                policy: extractionPolicy
+            )
+        }
         let loadedResultsByID = Dictionary(
             uniqueKeysWithValues: loadedResults.map { ($0.record.id, $0) }
         )
@@ -209,6 +285,81 @@ final class DynamicPluginManager: ObservableObject {
         return activePlugins(from: records)
     }
 
+    private func resultsByFallingBackToLegacyExtractionSourceIfNeeded(
+        _ initialResults: [DynamicPluginLoadResult],
+        installedRecords: [PluginPackageRecord],
+        policy: PluginExtractionMigrationPolicy
+    ) -> [DynamicPluginLoadResult] {
+        if loadedPluginsByID[policy.destinationPluginID] != nil {
+            return initialResults
+        }
+
+        var results = initialResults
+        if let destinationIndex = results.firstIndex(where: {
+            $0.record.id == policy.destinationPluginID
+        }) {
+            let destinationResult = results[destinationIndex]
+            let destinationMeetsMinimum = PluginVersionComparator.isVersion(
+                destinationResult.record.manifest.version,
+                atLeast: policy.minimumDestinationVersion
+            )
+            if destinationMeetsMinimum,
+               destinationResult.errorMessage == nil,
+               !destinationResult.plugins.isEmpty {
+                do {
+                    try validateFeatureExtractionReadiness(
+                        plugins: destinationResult.plugins,
+                        pluginID: policy.destinationPluginID
+                    )
+                    return results
+                } catch {
+                    deactivatePluginInstances(destinationResult.plugins, reason: .disabled)
+                    results[destinationIndex] = DynamicPluginLoadResult(
+                        record: destinationResult.record,
+                        plugins: [],
+                        errorMessage: error.localizedDescription
+                    )
+                }
+            } else {
+                if !destinationResult.plugins.isEmpty {
+                    deactivatePluginInstances(destinationResult.plugins, reason: .disabled)
+                }
+                results[destinationIndex] = DynamicPluginLoadResult(
+                    record: destinationResult.record,
+                    plugins: [],
+                    errorMessage: destinationResult.errorMessage
+                        ?? (destinationMeetsMinimum
+                            ? AppL10n.plugins(
+                                "plugin.error.dynamic.extractionDestinationNotReady",
+                                defaultValue: "提取功能的目标插件尚未就绪。"
+                            )
+                            : AppL10n.plugins(
+                                "plugin.error.dynamic.extractionDestinationBelowMinimum",
+                                defaultValue: "提取功能的目标插件版本过低。"
+                            ))
+                )
+            }
+        }
+
+        guard let sourceRecord = installedRecords.first(where: { record in
+            guard record.id == policy.sourcePluginID,
+                  case .installed = record.state,
+                  !deferredPluginIDs.contains(record.id)
+            else {
+                return false
+            }
+            return !PluginVersionComparator.isVersion(
+                record.manifest.version,
+                atLeast: policy.sourceRetirementVersion
+            )
+        }) else {
+            return results
+        }
+
+        results.append(contentsOf: pluginLoader.loadInstalledPlugins(from: [sourceRecord]))
+        return results
+    }
+
     func prepareInstalledPluginsWithoutLoading() {
         let records = packageStore.installedRecords()
         deactivateMissingPlugins(records: records)
@@ -230,10 +381,18 @@ final class DynamicPluginManager: ObservableObject {
 
     func installPluginPackage(
         from sourceURL: URL,
-        catalogEntry: PluginCatalogEntry? = nil
+        catalogEntry: PluginCatalogEntry? = nil,
+        reloadAfterInstall: Bool = true,
+        authorization: PluginPackageMutationAuthorization = .standard
     ) throws {
         try validatePackage(sourceURL, matches: catalogEntry)
+        let manifest = try PluginPackageManifestLoader.load(
+            from: sourceURL,
+            hostVersion: packageStore.hostVersion
+        )
+        try validateFeatureExtractionMutation(manifest: manifest, authorization: authorization)
         let record = try packageStore.installPackage(from: sourceURL)
+        recordSuccessfulPackageMutation(pluginID: record.id)
 
         if loadedPluginIDs.contains(record.id) {
             deferredPluginIDs.insert(record.id)
@@ -242,17 +401,180 @@ final class DynamicPluginManager: ObservableObject {
             deferredPluginIDs.remove(record.id)
         }
 
-        reloadInstalledPlugins()
+        if reloadAfterInstall {
+            reloadInstalledPlugins()
+        }
     }
 
-    func updatePluginPackage(from sourceURL: URL, catalogEntry: PluginCatalogEntry? = nil) throws {
-        try updatePluginPackageWithoutReload(from: sourceURL, catalogEntry: catalogEntry)
+    func updatePluginPackage(
+        from sourceURL: URL,
+        catalogEntry: PluginCatalogEntry? = nil,
+        reloadAfterUpdate: Bool = true,
+        authorization: PluginPackageMutationAuthorization = .standard
+    ) throws {
+        try updatePluginPackageWithoutReload(
+            from: sourceURL,
+            catalogEntry: catalogEntry,
+            authorization: authorization
+        )
+        if reloadAfterUpdate {
+            reloadInstalledPlugins()
+        }
+    }
+
+    /// Removes a package installed as the first half of a migration when validation or the paired
+    /// source update fails. Runtime preflight may map the bundle, but its instance is torn down;
+    /// rollback is unavailable once the manager has admitted the package to its normal lifecycle.
+    func rollbackUnloadedPluginInstallation(pluginID: String) throws {
+        guard !loadedPluginIDs.contains(pluginID) else {
+            throw DynamicPluginManagerOperationError.rollbackRequiresUnloadedPlugin(pluginID)
+        }
+
+        try packageStore.uninstall(pluginID: pluginID, removeData: false)
+        recordSuccessfulPackageMutation(pluginID: pluginID)
+        deferredPluginIDs.remove(pluginID)
+        loadedPluginsByID.removeValue(forKey: pluginID)
+    }
+
+    func makeRollbackSnapshot(pluginID: String) throws -> PluginPackageRollbackSnapshot {
+        guard !loadedPluginIDs.contains(pluginID) else {
+            throw DynamicPluginManagerOperationError.rollbackRequiresUnloadedPlugin(pluginID)
+        }
+        guard let record = packageStore.installedRecords().first(where: { $0.id == pluginID }) else {
+            throw DynamicPluginManagerOperationError.pluginRecordNotFound(pluginID)
+        }
+
+        let snapshotURL = temporaryDirectory
+            .appendingPathComponent("\(pluginID)-rollback-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        try FileManager.default.copyItem(at: record.packageURL, to: snapshotURL)
+        return PluginPackageRollbackSnapshot(pluginID: pluginID, packageURL: snapshotURL)
+    }
+
+    func restoreRollbackSnapshot(_ snapshot: PluginPackageRollbackSnapshot) throws {
+        guard !loadedPluginIDs.contains(snapshot.pluginID) else {
+            throw DynamicPluginManagerOperationError.rollbackRequiresUnloadedPlugin(snapshot.pluginID)
+        }
+        _ = try packageStore.updatePackage(from: snapshot.packageURL)
+        recordSuccessfulPackageMutation(pluginID: snapshot.pluginID)
+        deferredPluginIDs.remove(snapshot.pluginID)
+        loadedPluginsByID.removeValue(forKey: snapshot.pluginID)
+    }
+
+    func discardRollbackSnapshot(_ snapshot: PluginPackageRollbackSnapshot) {
+        try? FileManager.default.removeItem(at: snapshot.packageURL)
+    }
+
+    func snapshotPluginPreferences(pluginID: String) -> [String: Any] {
+        packageStore.snapshotPluginPreferences(pluginID: pluginID)
+    }
+
+    func restorePluginPreferences(_ snapshot: [String: Any], pluginID: String) {
+        packageStore.restorePluginPreferences(snapshot, pluginID: pluginID)
+    }
+
+    func featureExtractionMigrationIsInProgress() -> Bool {
+        packageStore.featureExtractionMigrationIsInProgress()
+    }
+
+    func featureExtractionSourceUninstallIsPending() -> Bool {
+        packageStore.featureExtractionSourceUninstallIsPending()
+    }
+
+    func removePluginPreference(pluginID: String, key: String) {
+        packageStore.removePluginPreference(pluginID: pluginID, key: key)
+    }
+
+    /// Runs the same trust, bundle, provider, metadata, and activation path used by normal
+    /// loading, then immediately tears the instance down. A successful return proves a newly
+    /// installed extraction destination can take over before its source package is retired.
+    func validatePluginInstallationBeforeMigration(pluginID: String) throws {
+        if let loadedPlugins = loadedPluginsByID[pluginID] {
+            try validateFeatureExtractionReadiness(
+                plugins: loadedPlugins,
+                pluginID: pluginID
+            )
+            return
+        }
+
+        guard let record = packageStore.installedRecords().first(where: { $0.id == pluginID }) else {
+            throw DynamicPluginManagerOperationError.pluginRecordNotFound(pluginID)
+        }
+
+        guard let result = pluginLoader.loadInstalledPlugins(from: [record])
+            .first(where: { $0.record.id == pluginID })
+        else {
+            throw DynamicPluginManagerOperationError.pluginRuntimeValidationFailed(
+                pluginID,
+                AppL10n.plugins(
+                    "plugin.error.dynamic.runtimeValidationNoResult",
+                    defaultValue: "插件加载器未返回验证结果。"
+                )
+            )
+        }
+
+        defer {
+            deactivatePluginInstances(result.plugins, reason: .updating)
+        }
+        guard result.errorMessage == nil, !result.plugins.isEmpty else {
+            throw DynamicPluginManagerOperationError.pluginRuntimeValidationFailed(
+                pluginID,
+                result.errorMessage ?? AppL10n.plugins(
+                    "plugin.error.dynamic.runtimeValidationNoPlugin",
+                    defaultValue: "插件加载器未返回可用插件。"
+                )
+            )
+        }
+        try validateFeatureExtractionReadiness(
+            plugins: result.plugins,
+            pluginID: pluginID
+        )
+    }
+
+    private func validateFeatureExtractionReadiness(
+        plugins: [any MacToolsPlugin],
+        pluginID: String
+    ) throws {
+        guard plugins.allSatisfy({ $0 is any PluginFeatureExtractionReadinessProviding }) else {
+            throw DynamicPluginManagerOperationError.pluginRuntimeValidationFailed(
+                pluginID,
+                AppL10n.plugins(
+                    "plugin.error.dynamic.runtimeValidationReadinessUnsupported",
+                    defaultValue: "插件不支持功能迁移就绪检查。"
+                )
+            )
+        }
+        for plugin in plugins {
+            try (plugin as! any PluginFeatureExtractionReadinessProviding)
+                .validateFeatureExtractionReadiness()
+        }
+    }
+
+    /// Stops an old loaded source before a replacement is preflight-activated, preventing two
+    /// raw-device owners from overlapping during an in-app extraction migration.
+    func suspendLoadedPluginForMigration(pluginID: String) -> Bool {
+        guard loadedPluginsByID[pluginID] != nil else {
+            return false
+        }
+        deactivateLoadedPlugins(pluginID: pluginID, reason: .disabled)
+        return true
+    }
+
+    func restoreSuspendedPluginAfterMigrationFailure(pluginID: String, wasSuspended: Bool) {
+        guard wasSuspended,
+              isInstalledPlugin(pluginID),
+              loadedPluginsByID[pluginID] == nil,
+              !deferredPluginIDs.contains(pluginID)
+        else {
+            return
+        }
         reloadInstalledPlugins()
     }
 
     func updatePluginPackages(
         _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)],
         reloadAfterUpdate: Bool = true,
+        featureExtractionAuthorizedPluginIDs: Set<String> = [],
         onPackageProcessed: (() -> Void)? = nil
     ) async -> [PluginPackageUpdateFailure] {
         guard !updates.isEmpty else {
@@ -278,7 +600,10 @@ final class DynamicPluginManager: ObservableObject {
             do {
                 try updatePluginPackageWithoutReload(
                     from: update.sourceURL,
-                    catalogEntry: update.catalogEntry
+                    catalogEntry: update.catalogEntry,
+                    authorization: featureExtractionAuthorizedPluginIDs.contains(
+                        update.catalogEntry.id
+                    ) ? .featureExtractionCoordinator : .standard
                 )
                 didUpdatePackage = true
             } catch {
@@ -299,16 +624,19 @@ final class DynamicPluginManager: ObservableObject {
 
     private func updatePluginPackageWithoutReload(
         from sourceURL: URL,
-        catalogEntry: PluginCatalogEntry? = nil
+        catalogEntry: PluginCatalogEntry? = nil,
+        authorization: PluginPackageMutationAuthorization = .standard
     ) throws {
         try validatePackage(sourceURL, matches: catalogEntry)
         let manifest = try PluginPackageManifestLoader.load(
             from: sourceURL,
             hostVersion: packageStore.hostVersion
         )
+        try validateFeatureExtractionMutation(manifest: manifest, authorization: authorization)
         let wasLoaded = loadedPluginIDs.contains(manifest.id)
 
         _ = try packageStore.updatePackage(from: sourceURL)
+        recordSuccessfulPackageMutation(pluginID: manifest.id)
 
         if wasLoaded {
             deactivateLoadedPlugins(pluginID: manifest.id, reason: .updating)
@@ -316,6 +644,83 @@ final class DynamicPluginManager: ObservableObject {
             packageStore.markRequiresRestartToFullyUnload(pluginID: manifest.id)
         } else {
             deferredPluginIDs.remove(manifest.id)
+        }
+    }
+
+    func isPluginLoaded(_ pluginID: String) -> Bool {
+        loadedPluginIDs.contains(pluginID)
+    }
+
+    func packageMutationGeneration(for pluginID: String) -> UInt64 {
+        packageMutationGenerationsByPluginID[pluginID, default: 0]
+    }
+
+    private func recordSuccessfulPackageMutation(pluginID: String) {
+        packageMutationGenerationsByPluginID[pluginID, default: 0] &+= 1
+    }
+
+    private func validateFeatureExtractionMutation(
+        manifest: PluginPackageManifest,
+        authorization: PluginPackageMutationAuthorization
+    ) throws {
+        guard case .standard = authorization else { return }
+        let policy = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        let installedVersions = installedPackageVersionsByID()
+        let retiredSourceIsInstalled = installedVersions[policy.sourcePluginID].map {
+            PluginVersionComparator.isVersion(
+                $0,
+                atLeast: policy.sourceRetirementVersion
+            )
+        } == true
+        let destinationMinimumMustBePreserved = retiredSourceIsInstalled
+            || packageStore.featureExtractionMigrationIsComplete()
+
+        if manifest.id == policy.destinationPluginID,
+           let sourceVersion = installedVersions[policy.sourcePluginID],
+           !PluginVersionComparator.isVersion(
+               sourceVersion,
+               atLeast: policy.sourceRetirementVersion
+           ) {
+            throw DynamicPluginManagerOperationError.featureExtractionCoordinatorRequired(
+                manifest.id
+            )
+        }
+
+        if manifest.id == policy.destinationPluginID,
+           !PluginVersionComparator.isVersion(
+               manifest.version,
+               atLeast: policy.minimumDestinationVersion
+           ),
+           destinationMinimumMustBePreserved {
+            throw DynamicPluginManagerOperationError.featureExtractionCoordinatorRequired(
+                manifest.id
+            )
+        }
+
+        if manifest.id == policy.sourcePluginID,
+           !PluginVersionComparator.isVersion(
+               manifest.version,
+               atLeast: policy.sourceRetirementVersion
+           ),
+           installedVersions[policy.destinationPluginID] != nil {
+            throw DynamicPluginManagerOperationError.featureExtractionCoordinatorRequired(
+                manifest.id
+            )
+        }
+
+        if manifest.id == policy.sourcePluginID,
+           PluginVersionComparator.isVersion(
+               manifest.version,
+               atLeast: policy.sourceRetirementVersion
+           ),
+           let installedSourceVersion = installedVersions[policy.sourcePluginID],
+           !PluginVersionComparator.isVersion(
+               installedSourceVersion,
+               atLeast: policy.sourceRetirementVersion
+           ) {
+            throw DynamicPluginManagerOperationError.featureExtractionCoordinatorRequired(
+                manifest.id
+            )
         }
     }
 
@@ -382,6 +787,7 @@ final class DynamicPluginManager: ObservableObject {
         deactivateLoadedPlugins(pluginID: pluginID, reason: .uninstalling)
         do {
             try packageStore.uninstall(pluginID: pluginID, removeData: removeData)
+            recordSuccessfulPackageMutation(pluginID: pluginID)
         } catch {
             // Package removal failed after its side effects were stopped. Reload
             // the still-installed package so the host returns to its previous
@@ -443,6 +849,13 @@ final class DynamicPluginManager: ObservableObject {
             return
         }
 
+        deactivatePluginInstances(plugins, reason: reason)
+    }
+
+    private func deactivatePluginInstances(
+        _ plugins: [any MacToolsPlugin],
+        reason: PluginDeactivationReason
+    ) {
         for plugin in plugins {
             plugin.deactivate(reason: reason)
             plugin.onStateChange = nil
@@ -592,6 +1005,43 @@ final class DynamicPluginManager: ObservableObject {
 
     private func managementItemSort(_ lhs: PluginManagementItem, _ rhs: PluginManagementItem) -> Bool {
         lhs.title.localizedCompare(rhs.title) == .orderedAscending
+    }
+}
+
+private enum DynamicPluginManagerOperationError: LocalizedError {
+    case rollbackRequiresUnloadedPlugin(String)
+    case pluginRecordNotFound(String)
+    case pluginRuntimeValidationFailed(String, String)
+    case featureExtractionCoordinatorRequired(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .rollbackRequiresUnloadedPlugin(pluginID):
+            AppL10n.pluginsFormat(
+                "plugin.error.dynamic.rollbackRequiresUnloadedFormat",
+                defaultValue: "无法回滚正在使用的插件包：%@",
+                pluginID
+            )
+        case let .pluginRecordNotFound(pluginID):
+            AppL10n.pluginsFormat(
+                "plugin.error.dynamic.recordNotFoundFormat",
+                defaultValue: "未找到已安装的插件记录：%@",
+                pluginID
+            )
+        case let .pluginRuntimeValidationFailed(pluginID, reason):
+            AppL10n.pluginsFormat(
+                "plugin.error.dynamic.runtimeValidationFailedFormat",
+                defaultValue: "插件 %@ 运行验证失败：%@",
+                pluginID,
+                reason
+            )
+        case let .featureExtractionCoordinatorRequired(pluginID):
+            AppL10n.pluginsFormat(
+                "plugin.error.dynamic.extractionCoordinatorRequiredFormat",
+                defaultValue: "插件包变更需要由功能迁移协调器完成：%@",
+                pluginID
+            )
+        }
     }
 }
 

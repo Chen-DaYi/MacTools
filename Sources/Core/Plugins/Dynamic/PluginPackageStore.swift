@@ -22,6 +22,7 @@ enum PluginPackageStoreError: LocalizedError {
     case invalidPackage(URL)
     case installFailed(String)
     case removeFailed(String)
+    case migrationStatePersistenceFailed
 
     var errorDescription: String? {
         switch self {
@@ -35,6 +36,11 @@ enum PluginPackageStoreError: LocalizedError {
             return AppL10n.pluginsFormat("plugin.error.store.installFailedFormat", defaultValue: "插件安装失败：%@", reason)
         case let .removeFailed(reason):
             return AppL10n.pluginsFormat("plugin.error.store.removeFailedFormat", defaultValue: "插件移除失败：%@", reason)
+        case .migrationStatePersistenceFailed:
+            return AppL10n.plugins(
+                "plugin.error.store.migrationStatePersistenceFailed",
+                defaultValue: "无法保存插件迁移状态，未移除插件。"
+            )
         }
     }
 }
@@ -56,6 +62,7 @@ final class PluginPackageStore {
 
     private let fileManager: FileManager
     private let userDefaults: UserDefaults
+    private let synchronizeUserDefaults: (UserDefaults) -> Bool
     let hostVersion: String
     private var pendingRestartPluginIDs: Set<String> = []
 
@@ -63,10 +70,12 @@ final class PluginPackageStore {
         rootDirectory: URL? = nil,
         fileManager: FileManager = .default,
         userDefaults: UserDefaults = .standard,
+        synchronizeUserDefaults: @escaping (UserDefaults) -> Bool = { $0.synchronize() },
         hostVersion: String = AppMetadata.shortVersion ?? "0"
     ) {
         self.fileManager = fileManager
         self.userDefaults = userDefaults
+        self.synchronizeUserDefaults = synchronizeUserDefaults
         self.hostVersion = hostVersion
 
         let root = rootDirectory ?? Self.defaultRootDirectory(fileManager: fileManager)
@@ -78,10 +87,18 @@ final class PluginPackageStore {
         self.temporaryDirectory = root.appendingPathComponent("Temporary", isDirectory: true)
 
         createBaseDirectories()
+        recoverFeatureExtractionSourceUninstallIfNeeded()
+        reconcileCompletedFeatureExtractionJournalIfNeeded()
     }
 
     func installedRecords() -> [PluginPackageRecord] {
         createBaseDirectories()
+        recoverFeatureExtractionSourceUninstallIfNeeded()
+        reconcileCompletedFeatureExtractionJournalIfNeeded()
+
+        let pendingSourceUninstallID = featureExtractionSourceUninstallIsPending()
+            ? PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick.sourcePluginID
+            : nil
 
         let packageURLs = (try? fileManager.contentsOfDirectory(
             at: installedDirectory,
@@ -91,6 +108,9 @@ final class PluginPackageStore {
 
         return packageURLs
             .filter { $0.pathExtension == "mactoolsplugin" }
+            .filter { packageURL in
+                packageURL.deletingPathExtension().lastPathComponent != pendingSourceUninstallID
+            }
             .compactMap { packageURL in
                 do {
                     let manifest = try PluginPackageManifestLoader.decode(from: packageURL)
@@ -155,6 +175,73 @@ final class PluginPackageStore {
             .sorted { lhs, rhs in
                 lhs.manifest.localizedDisplayName.localizedCompare(rhs.manifest.localizedDisplayName) == .orderedAscending
             }
+    }
+
+    func featureExtractionMigrationIsInProgress() -> Bool {
+        featureExtractionMigrationHasPersistedJournal()
+            || featureExtractionSourceUninstallIsPending()
+            || featureExtractionMigrationHasUnsafeInstalledState()
+    }
+
+    func featureExtractionSourceUninstallIsPending() -> Bool {
+        let policy = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        return userDefaults.object(forKey: policy.sourceUninstallIntentKey) != nil
+    }
+
+    func featureExtractionMigrationHasPersistedJournal() -> Bool {
+        reconcileCompletedFeatureExtractionJournalIfNeeded()
+        return userDefaults.bool(
+            forKey: PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick.transactionJournalKey
+        )
+    }
+
+    func featureExtractionMigrationIsComplete() -> Bool {
+        userDefaults.bool(
+            forKey: PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick.completionKey
+        )
+    }
+
+    func featureExtractionMigrationHasUnsafeInstalledState() -> Bool {
+        let policy = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        guard userDefaults.object(forKey: policy.completionKey) == nil else {
+            return false
+        }
+
+        let installedRecordsByID = Dictionary(
+            installedRecords().compactMap { record -> (String, PluginPackageRecord)? in
+                guard case .installed = record.state else { return nil }
+                return (record.id, record)
+            },
+            uniquingKeysWith: { _, latest in latest }
+        )
+        guard installedRecordsByID[policy.sourcePluginID] != nil,
+              let destination = installedRecordsByID[policy.destinationPluginID],
+              PluginVersionComparator.isVersion(
+                  destination.manifest.version,
+                  atLeast: policy.minimumDestinationVersion
+              )
+        else {
+            return false
+        }
+        return true
+    }
+
+    func removePluginPreference(pluginID: String, key: String) {
+        userDefaults.removeObject(forKey: "plugin.\(pluginID).\(key)")
+    }
+
+    func snapshotPluginPreferences(pluginID: String) -> [String: Any] {
+        let prefix = "plugin.\(pluginID)."
+        return userDefaults.dictionaryRepresentation().filter { key, _ in
+            key.hasPrefix(prefix)
+        }
+    }
+
+    func restorePluginPreferences(_ snapshot: [String: Any], pluginID: String) {
+        UserDefaultsPluginStorage.removeAllValues(pluginID: pluginID, userDefaults: userDefaults)
+        for (key, value) in snapshot {
+            userDefaults.set(value, forKey: key)
+        }
     }
 
     func installPackage(from sourceURL: URL, replaceExisting: Bool = false) throws -> PluginPackageRecord {
@@ -257,14 +344,31 @@ final class PluginPackageStore {
     }
 
     func uninstall(pluginID: String, removeData: Bool) throws {
+        let extractionWasInProgress = featureExtractionMigrationIsInProgress()
+        let extractionPolicy = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        let requiresDurableSourceUninstallIntent = pluginID == extractionPolicy.sourcePluginID
+            && extractionWasInProgress
+
+        if requiresDurableSourceUninstallIntent {
+            userDefaults.set(true, forKey: extractionPolicy.sourceUninstallIntentKey)
+            userDefaults.set(removeData, forKey: extractionPolicy.sourceUninstallRemoveDataKey)
+            guard synchronizeUserDefaults(userDefaults) else {
+                userDefaults.removeObject(forKey: extractionPolicy.sourceUninstallIntentKey)
+                userDefaults.removeObject(forKey: extractionPolicy.sourceUninstallRemoveDataKey)
+                _ = synchronizeUserDefaults(userDefaults)
+                throw PluginPackageStoreError.migrationStatePersistenceFailed
+            }
+        }
+
         try removePackageFiles(pluginID: pluginID)
         markPendingRestart(pluginID: pluginID)
 
         if removeData {
-            try? fileManager.removeItem(at: dataDirectory.appendingPathComponent(pluginID, isDirectory: true))
-            try? fileManager.removeItem(at: cacheDirectory.appendingPathComponent(pluginID, isDirectory: true))
-            try? fileManager.removeItem(at: temporaryDirectory.appendingPathComponent(pluginID, isDirectory: true))
-            UserDefaultsPluginStorage.removeAllValues(pluginID: pluginID, userDefaults: userDefaults)
+            removePluginData(pluginID: pluginID)
+        }
+
+        if requiresDurableSourceUninstallIntent {
+            finalizeFeatureExtractionSourceUninstall()
         }
     }
 
@@ -303,6 +407,64 @@ final class PluginPackageStore {
         } catch {
             throw PluginPackageStoreError.removeFailed(error.localizedDescription)
         }
+    }
+
+    private func recoverFeatureExtractionSourceUninstallIfNeeded() {
+        let policy = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        guard featureExtractionSourceUninstallIsPending() else { return }
+
+        let packageURL = installedDirectory
+            .appendingPathComponent(policy.sourcePluginID, isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        if fileManager.fileExists(atPath: packageURL.path) {
+            do {
+                try fileManager.removeItem(at: packageURL)
+            } catch {
+                // Keep the durable intent and suppress this source from installed records.
+                // A later store access or app launch retries the idempotent removal.
+                return
+            }
+        }
+
+        if userDefaults.bool(forKey: policy.sourceUninstallRemoveDataKey) {
+            removePluginData(pluginID: policy.sourcePluginID)
+        }
+        finalizeFeatureExtractionSourceUninstall()
+    }
+
+    private func finalizeFeatureExtractionSourceUninstall() {
+        let policy = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+
+        // Keep the tombstone durable until completion and journal removal are themselves durable.
+        // Recovery can therefore distinguish an explicit uninstall from a crashed source update.
+        userDefaults.set(true, forKey: policy.completionKey)
+        userDefaults.removeObject(forKey: policy.transactionJournalKey)
+        guard synchronizeUserDefaults(userDefaults) else { return }
+
+        userDefaults.removeObject(forKey: policy.sourceUninstallIntentKey)
+        userDefaults.removeObject(forKey: policy.sourceUninstallRemoveDataKey)
+        _ = synchronizeUserDefaults(userDefaults)
+    }
+
+    private func reconcileCompletedFeatureExtractionJournalIfNeeded() {
+        let policy = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        guard userDefaults.bool(forKey: policy.completionKey),
+              userDefaults.object(forKey: policy.transactionJournalKey) != nil
+        else {
+            return
+        }
+
+        // Completion is written and synchronized before the journal is removed. A crash between
+        // those steps leaves this safe terminal state, so discard only the stale journal.
+        userDefaults.removeObject(forKey: policy.transactionJournalKey)
+        _ = synchronizeUserDefaults(userDefaults)
+    }
+
+    private func removePluginData(pluginID: String) {
+        try? fileManager.removeItem(at: dataDirectory.appendingPathComponent(pluginID, isDirectory: true))
+        try? fileManager.removeItem(at: cacheDirectory.appendingPathComponent(pluginID, isDirectory: true))
+        try? fileManager.removeItem(at: temporaryDirectory.appendingPathComponent(pluginID, isDirectory: true))
+        UserDefaultsPluginStorage.removeAllValues(pluginID: pluginID, userDefaults: userDefaults)
     }
 
     private func createBaseDirectories() {

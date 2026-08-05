@@ -171,54 +171,54 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "تحسين عناصر التحكم في الماوس ولوحة التتبع."
+            "value": "ضبط اتجاه تمرير الماوس ولوحة التتبع."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verbessern Sie die Maus- und Trackpad-Steuerung."
+            "value": "Scrollrichtung für Maus und Trackpad getrennt anpassen."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mejore los controles del mouse y del trackpad."
+            "value": "Ajusta por separado el desplazamiento del ratón y del trackpad."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Améliorez les contrôles de la souris et du trackpad."
+            "value": "Réglez séparément le défilement de la souris et du trackpad."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "マウスとトラックパッドのコントロールを強化します。"
+            "value": "マウスとトラックパッドのスクロール方向を個別に調整します。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "마우스 및 트랙패드 컨트롤이 향상되었습니다."
+            "value": "마우스와 트랙패드의 스크롤 방향을 각각 조정합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aprimore os controles do mouse e do trackpad."
+            "value": "Ajuste separadamente a rolagem do mouse e do trackpad."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Улучшите управление мышью и трекпадом."
+            "value": "Настраивайте прокрутку мыши и трекпада отдельно."
           }
         },
-        "en": { "stringUnit": { "state": "translated", "value": "Enhance mouse and trackpad controls." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "增强鼠标与触控板控制" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "增強滑鼠與觸控板控制" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Adjust mouse and trackpad scroll directions separately." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "分别调整鼠标与触控板的滚动方向" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "分別調整滑鼠與觸控板的捲動方向" } }
       }
     },
     "metadata.title": {
@@ -476,54 +476,54 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يستمع لأحداث التمرير ويرسل نقرات متوسطة."
+            "value": "يستمع إلى أحداث التمرير ويعدلها."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hört auf Scroll-Ereignisse und sendet Mittelklicks."
+            "value": "Überwacht und ändert Scroll-Ereignisse."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escucha eventos de desplazamiento y envía clics centrales."
+            "value": "Escucha y ajusta los eventos de desplazamiento."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Écoute les événements de défilement et envoie des clics du milieu."
+            "value": "Écoute et ajuste les événements de défilement."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "スクロール イベントをリッスンし、中クリックを送信します。"
+            "value": "スクロールイベントを監視して調整します。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "스크롤 이벤트를 수신하고 중간 클릭을 보냅니다."
+            "value": "스크롤 이벤트를 감지하고 조정합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Escuta eventos de rolagem e envia cliques do meio."
+            "value": "Monitora e ajusta eventos de rolagem."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Прослушивает события прокрутки и отправляет средние щелчки."
+            "value": "Отслеживает и корректирует события прокрутки."
           }
         },
-        "en": { "stringUnit": { "state": "translated", "value": "Listens for scroll events and sends middle clicks." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用于监听滚动事件和发送中键点击。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "用於監聽滾動事件和傳送中鍵點按。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Listens for and adjusts scroll events." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用于监听和调整滚动事件。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "用於監聽和調整捲動事件。" } }
       }
     },
     "permission.accessibility.footnote": {
