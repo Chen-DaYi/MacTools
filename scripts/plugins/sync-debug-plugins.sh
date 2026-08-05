@@ -268,6 +268,14 @@ package_is_complete() {
     [[ -f "$package_path/plugin.json" && -d "$package_path/$bundle_relative_path" ]]
 }
 
+installed_package_matches() {
+    local package_path="$1"
+    local install_path="$2"
+
+    [[ -d "$install_path" ]] || return 1
+    /usr/bin/diff -rq "$package_path" "$install_path" >/dev/null 2>&1
+}
+
 packages=()
 synced_count=0
 installed_count=0
@@ -311,7 +319,8 @@ while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bund
 
     if [[ "$SKIP_INSTALL" != "1" ]]; then
         install_path="$INSTALL_DIR/$plugin_id.mactoolsplugin"
-        if [[ "$package_synced" == "1" || ! -d "$install_path" ]]; then
+        if [[ "$package_synced" == "1" ]] \
+            || ! installed_package_matches "$package_path" "$install_path"; then
             copy_package_to_installed_store "$package_path" "$plugin_id"
             installed_count=$((installed_count + 1))
         fi

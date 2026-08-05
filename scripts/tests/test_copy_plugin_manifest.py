@@ -138,6 +138,69 @@ class CopyPluginManifestTests(unittest.TestCase):
                 host_version,
             )
 
+    def test_debug_sync_repairs_stale_installed_package(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "Source"
+            products = root / "Products"
+            output = root / "Output"
+            install = root / "Installed"
+            bundle = products / "Example.bundle"
+            source.mkdir()
+            bundle.mkdir(parents=True)
+            (bundle / "payload").write_text("debug bundle", encoding="utf-8")
+            (source / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "id": "example-debug-plugin",
+                        "displayName": "Example",
+                        "version": "1.0.0",
+                        "minHostVersion": "99.0.0",
+                        "pluginKitVersion": 3,
+                        "bundleRelativePath": "Example.bundle",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            command = [
+                str(SYNC_SCRIPT),
+                "--source-dir", str(source),
+                "--products-dir", str(products),
+                "--output-dir", str(output),
+                "--install-dir", str(install),
+            ]
+            subprocess.run(command, check=True, capture_output=True, text=True)
+
+            installed_manifest = (
+                install
+                / "example-debug-plugin.mactoolsplugin/plugin.json"
+            )
+            stale_manifest = json.loads(installed_manifest.read_text(encoding="utf-8"))
+            stale_manifest["minHostVersion"] = "999.0.0"
+            installed_manifest.write_text(
+                json.dumps(stale_manifest),
+                encoding="utf-8",
+            )
+
+            repaired = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            packaged_manifest = (
+                output
+                / "Packages/example-debug-plugin.mactoolsplugin/plugin.json"
+            )
+
+            self.assertIn("skipped 1 unchanged", repaired.stdout)
+            self.assertIn("Installed 1 debug plugin package", repaired.stdout)
+            self.assertEqual(
+                installed_manifest.read_bytes(),
+                packaged_manifest.read_bytes(),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
