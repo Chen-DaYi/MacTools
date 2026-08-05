@@ -474,10 +474,13 @@ final class PluginHost: ObservableObject {
             presetStore: actionPresetStore,
             scheme: actionURLScheme
         )
+        let workflowStore = WorkflowStore(userDefaults: shortcutStore.userDefaults)
         self.automationController = AutomationController(
-            store: WorkflowStore(userDefaults: shortcutStore.userDefaults),
+            store: workflowStore,
+            ruleStore: AutomationRuleStore(userDefaults: shortcutStore.userDefaults),
             registry: actionRegistry,
-            executor: actionExecutor
+            executor: actionExecutor,
+            systemServices: SystemAutomationServices.make()
         )
 
         self.automationController.onCatalogChange = { [weak self] in

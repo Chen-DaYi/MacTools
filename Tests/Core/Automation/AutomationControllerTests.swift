@@ -59,6 +59,36 @@ final class AutomationControllerTests: XCTestCase {
             .publishedAction(.globalShortcut)
         )
     }
+
+    func testRuleManagementKeepsMultipleIndependentRulesForWorkflow() throws {
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let executor = ActionExecutor(registry: registry)
+        let workflowStore = WorkflowStore(userDefaults: defaults)
+        let ruleStore = AutomationRuleStore(userDefaults: defaults)
+        let controller = AutomationController(
+            store: workflowStore,
+            ruleStore: ruleStore,
+            registry: registry,
+            executor: executor
+        )
+        let workflow = try XCTUnwrap(controller.createWorkflow())
+        let first = try XCTUnwrap(controller.createRule(workflowID: workflow.id))
+        let second = try XCTUnwrap(controller.duplicateRule(id: first.id))
+        var updated = second
+        updated.name = "接入显示器"
+        updated.trigger = .display(DisplayAutomationTrigger(event: .connected))
+        updated.conditions = [.power(PowerAutomationCondition(source: .adapter))]
+
+        controller.saveRule(updated)
+
+        XCTAssertEqual(controller.rules(workflowID: workflow.id).count, 2)
+        XCTAssertEqual(controller.rules(workflowID: workflow.id).last?.name, "接入显示器")
+        controller.deleteRule(id: first.id)
+        XCTAssertEqual(controller.rules(workflowID: workflow.id).map(\.id), [second.id])
+    }
 }
 
 @MainActor

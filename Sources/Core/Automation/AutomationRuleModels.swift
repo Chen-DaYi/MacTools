@@ -47,7 +47,7 @@ enum ApplicationAutomationEvent: String, Codable, CaseIterable, Sendable {
 
 struct ApplicationAutomationTrigger: Codable, Equatable, Hashable, Sendable {
     var event: ApplicationAutomationEvent = .activates
-    var bundleIdentifier: String = ""
+    var bundleIdentifier: String = "com.apple.finder"
 }
 
 enum PowerAutomationEvent: String, Codable, CaseIterable, Sendable {

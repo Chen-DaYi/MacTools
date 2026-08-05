@@ -7,34 +7,62 @@ final class AutomationController: ObservableObject {
     nonisolated static let providerID = "automation"
 
     @Published private(set) var workflows: [WorkflowDefinition] = []
+    @Published private(set) var rules: [AutomationRule] = []
     @Published private(set) var history: [WorkflowRun] = []
     @Published private(set) var activeRunIDs: Set<UUID> = []
     @Published private(set) var lastErrorMessage: String?
 
     private let store: WorkflowStore
+    private let ruleStore: AutomationRuleStore
     private let registry: ActionRegistry
     private let runner: WorkflowRunner
+    private var runtime: AutomationRuntime?
+    private let calendarProvider: SystemCalendarAutomationTriggerProvider?
     private var startedHandles: [UUID: ActionExecutionHandle] = [:]
 
     var onCatalogChange: (() -> Void)?
 
     init(
         store: WorkflowStore,
+        ruleStore: AutomationRuleStore = AutomationRuleStore(),
         registry: ActionRegistry,
         executor: ActionExecutor,
-        runner: WorkflowRunner? = nil
+        runner: WorkflowRunner? = nil,
+        systemServices: SystemAutomationServices? = nil
     ) {
         self.store = store
+        self.ruleStore = ruleStore
         self.registry = registry
         self.runner = runner ?? WorkflowRunner(
             store: store,
             registry: registry,
             executor: executor
         )
+        self.calendarProvider = systemServices?.calendarProvider
+        if let systemServices {
+            self.runtime = AutomationRuntime(
+                ruleStore: ruleStore,
+                workflowStore: store,
+                workflowStarter: self.runner,
+                snapshotProvider: systemServices.snapshotProvider,
+                providers: systemServices.providers
+            )
+        }
         self.runner.onRunChange = { [weak self] in
             self?.reloadRuntimeSnapshots()
         }
+        self.runtime?.onChange = { [weak self] in
+            self?.reloadRuntimeSnapshots()
+        }
         reloadAll()
+    }
+
+    func startAutomaticRules() {
+        runtime?.start()
+    }
+
+    func stopAutomaticRules() {
+        runtime?.stop()
     }
 
     @discardableResult
@@ -66,6 +94,58 @@ final class AutomationController: ObservableObject {
             return
         }
         finishDefinitionMutation()
+    }
+
+    @discardableResult
+    func createRule(workflowID: UUID) -> AutomationRule? {
+        switch ruleStore.create(workflowID: workflowID) {
+        case let .success(rule):
+            finishRuleMutation()
+            return rule
+        case let .failure(error):
+            record(error)
+            return nil
+        }
+    }
+
+    @discardableResult
+    func duplicateRule(id: UUID) -> AutomationRule? {
+        switch ruleStore.duplicate(id: id) {
+        case let .success(rule):
+            finishRuleMutation()
+            return rule
+        case let .failure(error):
+            record(error)
+            return nil
+        }
+    }
+
+    func deleteRule(id: UUID) {
+        guard ruleStore.delete(id: id) else { return }
+        finishRuleMutation()
+    }
+
+    func saveRule(_ rule: AutomationRule) {
+        switch ruleStore.upsert(rule) {
+        case .success:
+            finishRuleMutation()
+        case let .failure(error):
+            record(error)
+        }
+    }
+
+    func rules(workflowID: UUID) -> [AutomationRule] {
+        rules.filter { $0.workflowID == workflowID }
+    }
+
+    func triggerAvailability(for kind: AutomationTriggerKind) -> AutomationTriggerAvailability {
+        runtime?.availability(for: kind) ?? .unavailable("触发器服务未启动。")
+    }
+
+    func requestCalendarAccess() async {
+        _ = await calendarProvider?.requestAccess()
+        runtime?.refreshProviders()
+        objectWillChange.send()
     }
 
     func setWorkflowEnabled(_ isEnabled: Bool, id: UUID) {
@@ -296,8 +376,15 @@ final class AutomationController: ObservableObject {
         onCatalogChange?()
     }
 
+    private func finishRuleMutation() {
+        lastErrorMessage = nil
+        rules = ruleStore.rules()
+        runtime?.refreshProviders()
+    }
+
     private func reloadAll() {
         workflows = store.workflows()
+        rules = ruleStore.rules()
         reloadRuntimeSnapshots()
     }
 
@@ -356,6 +443,15 @@ final class AutomationController: ObservableObject {
         case .persistenceFailed: "无法保存工作流。"
         case .unsafeForExport: "工作流包含不可安全导出的参数。"
         case .invalidImport: "工作流文件无效。"
+        }
+    }
+
+    private func record(_ error: AutomationRuleStoreError) {
+        lastErrorMessage = switch error {
+        case let .invalidRule(reason): "自动规则无效：\(reason)"
+        case .ruleNotFound: "找不到自动规则。"
+        case .maximumRuleCountReached: "自动规则数量已达上限。"
+        case .persistenceFailed: "无法保存自动规则。"
         }
     }
 

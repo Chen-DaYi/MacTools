@@ -70,6 +70,7 @@ struct AutomationSettingsView: View {
                     WorkflowCollectionRow(
                         automation: automation,
                         workflow: workflow,
+                        ruleCount: automation.rules(workflowID: workflow.id).count,
                         lastRun: automation.recentRuns(workflowID: workflow.id, limit: 1).first
                     )
                     .tag(workflow.id)
@@ -98,6 +99,7 @@ struct AutomationSettingsView: View {
 private struct WorkflowCollectionRow: View {
     @ObservedObject var automation: AutomationController
     let workflow: WorkflowDefinition
+    let ruleCount: Int
     let lastRun: WorkflowRun?
 
     var body: some View {
@@ -134,7 +136,7 @@ private struct WorkflowCollectionRow: View {
     private var summary: String {
         let state = workflow.isEnabled ? "已启用" : "已停用"
         let last = lastRun.map { " · 上次\(runStatusTitle($0.status))" } ?? ""
-        return "\(workflow.steps.count) 个步骤 · \(state)\(last)"
+        return "\(workflow.steps.count) 个步骤 · \(ruleCount) 条规则 · \(state)\(last)"
     }
 }
 
@@ -152,7 +154,7 @@ private struct WorkflowDetailView: View {
                 header
                 stepsSection
                 runFromSection
-                automaticRulesPlaceholder
+                automaticRulesSection
                 historySection
 
                 if let error = automation.lastErrorMessage {
@@ -322,17 +324,45 @@ private struct WorkflowDetailView: View {
         }
     }
 
-    private var automaticRulesPlaceholder: some View {
+    private var automaticRulesSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label("自动规则", systemImage: "clock.arrow.circlepath")
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .foregroundStyle(.secondary)
-            Text("当前没有自动规则。手动运行不受规则条件影响。")
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-                .padding(PluginSettingsTheme.Spacing.cardContent)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Label("自动规则", systemImage: "clock.arrow.circlepath")
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    _ = automation.createRule(workflowID: workflow.id)
+                } label: {
+                    Label("添加规则", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            let rules = automation.rules(workflowID: workflow.id)
+            if rules.isEmpty {
+                Text("当前没有自动规则。手动运行不受规则条件影响。")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .padding(PluginSettingsTheme.Spacing.cardContent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .pluginSettingsCardBackground(.host)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(rules.enumerated()), id: \.element.id) { index, rule in
+                        AutomationRuleEditor(
+                            automation: automation,
+                            rule: rule,
+                            workflowName: workflow.name
+                        )
+                        if index + 1 < rules.count {
+                            PluginSettingsListDivider()
+                        }
+                    }
+                }
                 .pluginSettingsCardBackground(.host)
+            }
         }
     }
 
@@ -362,6 +392,470 @@ private struct WorkflowDetailView: View {
                 .pluginSettingsCardBackground(.host)
             }
         }
+    }
+}
+
+private struct AutomationRuleEditor: View {
+    @ObservedObject var automation: AutomationController
+    let rule: AutomationRule
+    let workflowName: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                TextField("规则名称", text: binding(\.name))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 180, idealWidth: 240, maxWidth: 320)
+
+                HStack {
+                    Text("当")
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    Picker("触发器", selection: triggerKindBinding) {
+                        ForEach(AutomationTriggerKind.allCases) { kind in
+                            Text(kind.title).tag(kind)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(minWidth: 150, maxWidth: 220)
+                    Spacer()
+                    triggerAvailabilityView
+                }
+
+                triggerConfiguration
+
+                HStack {
+                    Text("如果")
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    Text(rule.conditions.isEmpty ? "无附加条件" : "满足全部 \(rule.conditions.count) 个条件")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    conditionMenu
+                }
+
+                ForEach(rule.conditions) { condition in
+                    AutomationConditionEditor(
+                        condition: condition,
+                        onChange: { replaceCondition($0) },
+                        onDelete: { removeCondition(condition) }
+                    )
+                    .padding(.leading, 24)
+                }
+
+                HStack {
+                    Text("运行")
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    Text(workflowName)
+                    Spacer()
+                    Button("创建副本") { _ = automation.duplicateRule(id: rule.id) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    Button("删除", role: .destructive) { automation.deleteRule(id: rule.id) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: triggerIcon)
+                    .foregroundStyle(rule.isEnabled ? Color.accentColor : .secondary)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(rule.name)
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    Text("当 \(triggerSummary)\(conditionSummary) · 运行 \(workflowName)")
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Toggle("启用", isOn: binding(\.isEnabled))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+        .accessibilityIdentifier("mactools.automation.rule.\(rule.id.uuidString)")
+    }
+
+    private func binding<Value>(_ keyPath: WritableKeyPath<AutomationRule, Value>) -> Binding<Value> {
+        Binding(
+            get: { rule[keyPath: keyPath] },
+            set: { value in
+                var updated = rule
+                updated[keyPath: keyPath] = value
+                automation.saveRule(updated)
+            }
+        )
+    }
+
+    private var triggerKindBinding: Binding<AutomationTriggerKind> {
+        Binding(
+            get: { rule.trigger.kind },
+            set: { kind in
+                var updated = rule
+                updated.trigger = .defaultValue(for: kind)
+                automation.saveRule(updated)
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var triggerConfiguration: some View {
+        switch rule.trigger {
+        case let .schedule(value):
+            HStack {
+                Stepper("\(twoDigits(value.hour)):\(twoDigits(value.minute))", value: triggerIntBinding(value.hour, range: 0 ... 23) { .schedule(replacing(value, hour: $0)) }, in: 0 ... 23)
+                Stepper("分钟 \(value.minute)", value: triggerIntBinding(value.minute, range: 0 ... 59) { .schedule(replacing(value, minute: $0)) }, in: 0 ... 59)
+            }
+            weekdayEditor(value.weekdays) { .schedule(replacing(value, weekdays: $0)) }
+        case let .calendar(value):
+            HStack {
+                Picker("时机", selection: triggerValueBinding(value.phase) { .calendar(replacing(value, phase: $0)) }) {
+                    Text("开始").tag(CalendarAutomationPhase.starts)
+                    Text("结束").tag(CalendarAutomationPhase.ends)
+                }
+                .frame(maxWidth: 150)
+                Stepper("偏移 \(value.offsetMinutes) 分钟", value: triggerIntBinding(value.offsetMinutes, range: -1_440 ... 1_440) { .calendar(replacing(value, offsetMinutes: $0)) }, in: -1_440 ... 1_440)
+            }
+            TextField("标题包含（可选）", text: optionalTriggerStringBinding(value.titleContains) { .calendar(replacing(value, titleContains: $0)) })
+                .textFieldStyle(.roundedBorder)
+            if !automation.triggerAvailability(for: .calendar).isAvailable {
+                Button("允许访问日历") {
+                    Task { await automation.requestCalendarAccess() }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        case let .application(value):
+            HStack {
+                Picker("事件", selection: triggerValueBinding(value.event) { .application(replacing(value, event: $0)) }) {
+                    Text("启动").tag(ApplicationAutomationEvent.launches)
+                    Text("激活").tag(ApplicationAutomationEvent.activates)
+                }
+                .frame(maxWidth: 150)
+                TextField("应用 Bundle ID", text: triggerStringBinding(value.bundleIdentifier) { .application(replacing(value, bundleIdentifier: $0)) })
+                    .textFieldStyle(.roundedBorder)
+            }
+        case let .power(value):
+            HStack {
+                Picker("事件", selection: triggerValueBinding(value.event) { .power(replacing(value, event: $0)) }) {
+                    Text("接入电源").tag(PowerAutomationEvent.adapterConnected)
+                    Text("断开电源").tag(PowerAutomationEvent.adapterDisconnected)
+                    Text("电量降至阈值").tag(PowerAutomationEvent.batteryAtOrBelow)
+                }
+                .frame(maxWidth: 180)
+                if value.event == .batteryAtOrBelow {
+                    Stepper("\(value.batteryLevel)%", value: triggerIntBinding(value.batteryLevel, range: 0 ... 100) { .power(replacing(value, batteryLevel: $0)) }, in: 0 ... 100)
+                }
+            }
+        case let .display(value):
+            HStack {
+                Picker("事件", selection: triggerValueBinding(value.event) { .display(replacing(value, event: $0)) }) {
+                    Text("连接").tag(DisplayAutomationEvent.connected)
+                    Text("断开").tag(DisplayAutomationEvent.disconnected)
+                }
+                .frame(maxWidth: 150)
+                TextField("显示器名称包含（可选）", text: optionalTriggerStringBinding(value.displayNameContains) { .display(replacing(value, displayNameContains: $0)) })
+                    .textFieldStyle(.roundedBorder)
+            }
+        case let .network(value):
+            HStack {
+                Picker("状态", selection: triggerValueBinding(value.status) { .network(replacing(value, status: $0)) }) {
+                    Text("可用").tag(AutomationNetworkStatus.available)
+                    Text("不可用").tag(AutomationNetworkStatus.unavailable)
+                }
+                Picker("接口", selection: triggerValueBinding(value.interface) { .network(replacing(value, interface: $0)) }) {
+                    ForEach(AutomationNetworkInterface.allCases, id: \.self) { interface in
+                        Text(networkInterfaceTitle(interface)).tag(interface)
+                    }
+                }
+            }
+            .frame(maxWidth: 360)
+        }
+    }
+
+    @ViewBuilder
+    private var triggerAvailabilityView: some View {
+        let availability = automation.triggerAvailability(for: rule.trigger.kind)
+        if availability.isAvailable {
+            Label("可用", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(PluginSettingsTheme.Typography.statusBadge)
+        } else {
+            Label(availability.reason ?? "不可用", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .font(PluginSettingsTheme.Typography.rowDescription)
+        }
+    }
+
+    private var conditionMenu: some View {
+        Menu {
+            conditionButton("当前应用", condition: .frontmostApplication(FrontmostApplicationCondition(bundleIdentifier: "com.apple.finder")))
+            conditionButton("电池与电源", condition: .power(PowerAutomationCondition()))
+            conditionButton("已连接显示器", condition: .connectedDisplay(ConnectedDisplayCondition()))
+            conditionButton("时间范围", condition: .timeRange(TimeRangeAutomationCondition()))
+            conditionButton("网络状态", condition: .network(NetworkAutomationCondition()))
+        } label: {
+            Label("添加条件", systemImage: "plus")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(rule.conditions.count >= AutomationRule.maximumConditionCount)
+    }
+
+    private func conditionButton(_ title: String, condition: AutomationCondition) -> some View {
+        Button(title) {
+            guard !rule.conditions.contains(where: { $0.id == condition.id }) else { return }
+            var updated = rule
+            updated.conditions.append(condition)
+            automation.saveRule(updated)
+        }
+        .disabled(rule.conditions.contains(where: { $0.id == condition.id }))
+    }
+
+    private func replaceCondition(_ condition: AutomationCondition) {
+        guard let index = rule.conditions.firstIndex(where: { $0.id == condition.id }) else { return }
+        var updated = rule
+        updated.conditions[index] = condition
+        automation.saveRule(updated)
+    }
+
+    private func removeCondition(_ condition: AutomationCondition) {
+        var updated = rule
+        updated.conditions.removeAll { $0.id == condition.id }
+        automation.saveRule(updated)
+    }
+
+    private func saveTrigger(_ trigger: AutomationTrigger) {
+        var updated = rule
+        updated.trigger = trigger
+        automation.saveRule(updated)
+    }
+
+    private func triggerValueBinding<Value>(_ value: Value, make: @escaping (Value) -> AutomationTrigger) -> Binding<Value> {
+        Binding(get: { value }, set: { saveTrigger(make($0)) })
+    }
+
+    private func triggerIntBinding(_ value: Int, range: ClosedRange<Int>, make: @escaping (Int) -> AutomationTrigger) -> Binding<Int> {
+        Binding(get: { value }, set: { saveTrigger(make(min(max($0, range.lowerBound), range.upperBound))) })
+    }
+
+    private func triggerStringBinding(_ value: String, make: @escaping (String) -> AutomationTrigger) -> Binding<String> {
+        Binding(get: { value }, set: { saveTrigger(make($0)) })
+    }
+
+    private func optionalTriggerStringBinding(_ value: String?, make: @escaping (String?) -> AutomationTrigger) -> Binding<String> {
+        Binding(get: { value ?? "" }, set: { saveTrigger(make($0.isEmpty ? nil : $0)) })
+    }
+
+    private func weekdayEditor(_ weekdays: [Int], make: @escaping ([Int]) -> AutomationTrigger) -> some View {
+        HStack(spacing: 4) {
+            ForEach(1 ... 7, id: \.self) { weekday in
+                Button(weekdayTitle(weekday)) {
+                    var updated = Set(weekdays)
+                    if updated.contains(weekday), updated.count > 1 {
+                        updated.remove(weekday)
+                    } else {
+                        updated.insert(weekday)
+                    }
+                    saveTrigger(make(updated.sorted()))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .tint(weekdays.contains(weekday) ? .accentColor : .secondary)
+            }
+        }
+    }
+
+    private var triggerIcon: String {
+        switch rule.trigger.kind {
+        case .schedule: "clock"
+        case .calendar: "calendar"
+        case .application: "app"
+        case .power: "bolt"
+        case .display: "display"
+        case .network: "network"
+        }
+    }
+
+    private var triggerSummary: String {
+        switch rule.trigger {
+        case let .schedule(value): "每周指定日期 \(twoDigits(value.hour)):\(twoDigits(value.minute))"
+        case let .calendar(value): "日历事件\(value.phase == .starts ? "开始" : "结束")"
+        case let .application(value): "\(value.bundleIdentifier) \(value.event == .launches ? "启动" : "激活")"
+        case let .power(value): powerEventTitle(value.event)
+        case let .display(value): "显示器\(value.event == .connected ? "连接" : "断开")"
+        case let .network(value): "网络变为\(value.status == .available ? "可用" : "不可用")"
+        }
+    }
+
+    private var conditionSummary: String {
+        rule.conditions.isEmpty ? "" : "，且满足 \(rule.conditions.count) 个条件"
+    }
+}
+
+private struct AutomationConditionEditor: View {
+    let condition: AutomationCondition
+    let onChange: (AutomationCondition) -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            conditionFields
+            Spacer()
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "xmark.circle")
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var conditionFields: some View {
+        switch condition {
+        case let .frontmostApplication(value):
+            Text("当前应用")
+            Picker("匹配", selection: binding(value.isExcluded) { .frontmostApplication(replacing(value, isExcluded: $0)) }) {
+                Text("是").tag(false)
+                Text("不是").tag(true)
+            }
+            .labelsHidden()
+            .frame(width: 70)
+            TextField("Bundle ID", text: binding(value.bundleIdentifier) { .frontmostApplication(replacing(value, bundleIdentifier: $0)) })
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 180, maxWidth: 280)
+        case let .power(value):
+            Text("电源")
+            Picker("来源", selection: powerSourceBinding(value)) {
+                Text("任意").tag("any")
+                Text("电源适配器").tag(AutomationPowerSource.adapter.rawValue)
+                Text("电池").tag(AutomationPowerSource.battery.rawValue)
+            }
+            .labelsHidden()
+            .frame(width: 130)
+            Stepper("最低 \(value.minimumBatteryLevel ?? 0)%", value: optionalLevelBinding(value, minimum: true), in: 0 ... 100)
+            Stepper("最高 \(value.maximumBatteryLevel ?? 100)%", value: optionalLevelBinding(value, minimum: false), in: 0 ... 100)
+        case let .connectedDisplay(value):
+            Text("显示器已连接")
+            TextField("名称包含", text: optionalStringBinding(value.displayNameContains) { .connectedDisplay(replacing(value, displayNameContains: $0)) })
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 160, maxWidth: 240)
+        case let .timeRange(value):
+            Text("时间")
+            Stepper("从 \(minuteTitle(value.startMinute))", value: binding(value.startMinute) { .timeRange(replacing(value, startMinute: $0)) }, in: 0 ... 1_439, step: 15)
+            Stepper("至 \(minuteTitle(value.endMinute))", value: binding(value.endMinute) { .timeRange(replacing(value, endMinute: $0)) }, in: 0 ... 1_439, step: 15)
+        case let .network(value):
+            Text("网络")
+            Picker("状态", selection: binding(value.status) { .network(replacing(value, status: $0)) }) {
+                Text("可用").tag(AutomationNetworkStatus.available)
+                Text("不可用").tag(AutomationNetworkStatus.unavailable)
+            }
+            .labelsHidden()
+            Picker("接口", selection: binding(value.interface) { .network(replacing(value, interface: $0)) }) {
+                ForEach(AutomationNetworkInterface.allCases, id: \.self) { interface in
+                    Text(networkInterfaceTitle(interface)).tag(interface)
+                }
+            }
+            .labelsHidden()
+        }
+    }
+
+    private func binding<Value>(_ value: Value, make: @escaping (Value) -> AutomationCondition) -> Binding<Value> {
+        Binding(get: { value }, set: { onChange(make($0)) })
+    }
+
+    private func optionalStringBinding(_ value: String?, make: @escaping (String?) -> AutomationCondition) -> Binding<String> {
+        Binding(get: { value ?? "" }, set: { onChange(make($0.isEmpty ? nil : $0)) })
+    }
+
+    private func powerSourceBinding(_ value: PowerAutomationCondition) -> Binding<String> {
+        Binding(
+            get: { value.source?.rawValue ?? "any" },
+            set: { rawValue in
+                onChange(.power(replacing(value, source: AutomationPowerSource(rawValue: rawValue))))
+            }
+        )
+    }
+
+    private func optionalLevelBinding(_ value: PowerAutomationCondition, minimum: Bool) -> Binding<Int> {
+        Binding(
+            get: { minimum ? (value.minimumBatteryLevel ?? 0) : (value.maximumBatteryLevel ?? 100) },
+            set: { level in
+                if minimum {
+                    onChange(.power(replacing(value, minimumBatteryLevel: min(level, value.maximumBatteryLevel ?? 100))))
+                } else {
+                    onChange(.power(replacing(value, maximumBatteryLevel: max(level, value.minimumBatteryLevel ?? 0))))
+                }
+            }
+        )
+    }
+}
+
+private func replacing(_ value: ScheduleAutomationTrigger, hour: Int? = nil, minute: Int? = nil, weekdays: [Int]? = nil) -> ScheduleAutomationTrigger {
+    ScheduleAutomationTrigger(hour: hour ?? value.hour, minute: minute ?? value.minute, weekdays: weekdays ?? value.weekdays)
+}
+
+private func replacing(_ value: CalendarAutomationTrigger, phase: CalendarAutomationPhase? = nil, titleContains: String?? = nil, offsetMinutes: Int? = nil) -> CalendarAutomationTrigger {
+    CalendarAutomationTrigger(phase: phase ?? value.phase, calendarIdentifier: value.calendarIdentifier, titleContains: titleContains ?? value.titleContains, offsetMinutes: offsetMinutes ?? value.offsetMinutes)
+}
+
+private func replacing(_ value: ApplicationAutomationTrigger, event: ApplicationAutomationEvent? = nil, bundleIdentifier: String? = nil) -> ApplicationAutomationTrigger {
+    ApplicationAutomationTrigger(event: event ?? value.event, bundleIdentifier: bundleIdentifier ?? value.bundleIdentifier)
+}
+
+private func replacing(_ value: PowerAutomationTrigger, event: PowerAutomationEvent? = nil, batteryLevel: Int? = nil) -> PowerAutomationTrigger {
+    PowerAutomationTrigger(event: event ?? value.event, batteryLevel: batteryLevel ?? value.batteryLevel)
+}
+
+private func replacing(_ value: DisplayAutomationTrigger, event: DisplayAutomationEvent? = nil, displayNameContains: String?? = nil) -> DisplayAutomationTrigger {
+    DisplayAutomationTrigger(event: event ?? value.event, displayIdentifier: value.displayIdentifier, displayNameContains: displayNameContains ?? value.displayNameContains)
+}
+
+private func replacing(_ value: NetworkAutomationTrigger, status: AutomationNetworkStatus? = nil, interface: AutomationNetworkInterface? = nil) -> NetworkAutomationTrigger {
+    NetworkAutomationTrigger(status: status ?? value.status, interface: interface ?? value.interface)
+}
+
+private func replacing(_ value: FrontmostApplicationCondition, isExcluded: Bool? = nil, bundleIdentifier: String? = nil) -> FrontmostApplicationCondition {
+    FrontmostApplicationCondition(bundleIdentifier: bundleIdentifier ?? value.bundleIdentifier, isExcluded: isExcluded ?? value.isExcluded)
+}
+
+private func replacing(_ value: PowerAutomationCondition, source: AutomationPowerSource?? = nil, minimumBatteryLevel: Int?? = nil, maximumBatteryLevel: Int?? = nil) -> PowerAutomationCondition {
+    PowerAutomationCondition(source: source ?? value.source, minimumBatteryLevel: minimumBatteryLevel ?? value.minimumBatteryLevel, maximumBatteryLevel: maximumBatteryLevel ?? value.maximumBatteryLevel)
+}
+
+private func replacing(_ value: ConnectedDisplayCondition, displayNameContains: String?? = nil) -> ConnectedDisplayCondition {
+    ConnectedDisplayCondition(displayIdentifier: value.displayIdentifier, displayNameContains: displayNameContains ?? value.displayNameContains)
+}
+
+private func replacing(_ value: TimeRangeAutomationCondition, startMinute: Int? = nil, endMinute: Int? = nil) -> TimeRangeAutomationCondition {
+    TimeRangeAutomationCondition(startMinute: startMinute ?? value.startMinute, endMinute: endMinute ?? value.endMinute, weekdays: value.weekdays)
+}
+
+private func replacing(_ value: NetworkAutomationCondition, status: AutomationNetworkStatus? = nil, interface: AutomationNetworkInterface? = nil) -> NetworkAutomationCondition {
+    NetworkAutomationCondition(status: status ?? value.status, interface: interface ?? value.interface)
+}
+
+private func twoDigits(_ value: Int) -> String { String(format: "%02d", value) }
+private func minuteTitle(_ value: Int) -> String { "\(twoDigits(value / 60)):\(twoDigits(value % 60))" }
+private func weekdayTitle(_ value: Int) -> String { ["日", "一", "二", "三", "四", "五", "六"][max(1, min(7, value)) - 1] }
+
+private func networkInterfaceTitle(_ value: AutomationNetworkInterface) -> String {
+    switch value {
+    case .any: "任意"
+    case .wifi: "Wi-Fi"
+    case .wiredEthernet: "以太网"
+    case .cellular: "蜂窝网络"
+    case .other: "其他"
+    }
+}
+
+private func powerEventTitle(_ value: PowerAutomationEvent) -> String {
+    switch value {
+    case .adapterConnected: "接入电源"
+    case .adapterDisconnected: "断开电源"
+    case .batteryAtOrBelow: "电量降至阈值"
     }
 }
 

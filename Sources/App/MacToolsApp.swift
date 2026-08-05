@@ -63,6 +63,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         pluginHost.actionConfirmationService.setHandler { request in
             await actionConfirmationService.confirm(request)
         }
+        pluginHost.automationController.startAutomaticRules()
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,
             windowRouter: windowRouter,
@@ -78,6 +79,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        pluginHost.automationController.stopAutomaticRules()
         statusItemController?.dismissPanels()
         pluginHost.deactivateAllPlugins()
     }
