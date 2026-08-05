@@ -99,14 +99,6 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         }
     }
 
-    var isCommandPaletteSearchEligible: Bool {
-        switch self {
-        case .openSettings, .openCommandPalette:
-            false
-        case .toggleDashboard, .toggleFeaturePanel:
-            true
-        }
-    }
 }
 
 private extension FeatureSettingsPane {

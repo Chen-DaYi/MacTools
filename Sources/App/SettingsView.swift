@@ -21,6 +21,7 @@ struct SettingsView: View {
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
+    let appearanceUserDefaults: UserDefaults
     @StateObject private var uninstallConfirmationSession = PluginUninstallConfirmationSession()
     var showDashboard: () -> Void = {}
     var showFeaturePanel: () -> Void = {}
@@ -39,7 +40,8 @@ struct SettingsView: View {
                     navigationCoordinator: navigationCoordinator,
                     menuBarIconSettings: menuBarIconSettings,
                     menuBarIconGallery: menuBarIconGallery,
-                    launchAtLoginController: launchAtLoginController
+                    launchAtLoginController: launchAtLoginController,
+                    appearanceUserDefaults: appearanceUserDefaults
                 )
                     .tag(SettingsDestination.general)
                     .tabItem {
@@ -80,6 +82,8 @@ struct SettingsView: View {
             if navigationCoordinator.isUnifiedSearchPresented {
                 UnifiedSearchPresentationView(
                     pluginHost: pluginHost,
+                    launchAtLoginController: launchAtLoginController,
+                    appearanceUserDefaults: appearanceUserDefaults,
                     navigationCoordinator: navigationCoordinator
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -261,11 +265,33 @@ struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
+    private let appearanceUserDefaults: UserDefaults
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
     @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
     @State private var activeSearchTarget: GeneralSettingsSearchTarget?
     @State private var clearSearchTargetTask: Task<Void, Never>?
+
+    init(
+        pluginHost: PluginHost,
+        navigationCoordinator: SettingsNavigationCoordinator,
+        menuBarIconSettings: MenuBarIconSettings,
+        menuBarIconGallery: MenuBarIconGalleryLibrary,
+        launchAtLoginController: LaunchAtLoginController,
+        appearanceUserDefaults: UserDefaults
+    ) {
+        self.pluginHost = pluginHost
+        self.navigationCoordinator = navigationCoordinator
+        self.menuBarIconSettings = menuBarIconSettings
+        self.menuBarIconGallery = menuBarIconGallery
+        self.launchAtLoginController = launchAtLoginController
+        self.appearanceUserDefaults = appearanceUserDefaults
+        _appearancePreferenceRawValue = AppStorage(
+            wrappedValue: AppAppearancePreference.system.rawValue,
+            AppAppearancePreference.userDefaultsKey,
+            store: appearanceUserDefaults
+        )
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -360,8 +386,7 @@ struct GeneralSettingsView: View {
         Binding {
             AppAppearancePreference(rawValue: appearancePreferenceRawValue) ?? .system
         } set: { preference in
-            appearancePreferenceRawValue = preference.rawValue
-            preference.apply()
+            preference.storeAndApply(in: appearanceUserDefaults)
         }
     }
 

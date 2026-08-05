@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import XCTest
 import MacToolsPluginKit
@@ -9,7 +10,14 @@ final class MacToolsSearchTests: XCTestCase {
     func testIndexIncludesNavigationDeclarativeSettingsCustomSettingsAndCommands() throws {
         let plugin = SearchableTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin, SurfaceOnlySearchTestPlugin()])
-        let index = MacToolsSearchIndexBuilder.build(pluginHost: host)
+        let appCommand = appHostCommandDefinition(
+            id: "app-command.toggle-dashboard",
+            action: .appShortcut(.toggleDashboard)
+        )
+        let index = MacToolsSearchIndexBuilder.build(
+            pluginHost: host,
+            appHostCommandDefinitions: [appCommand]
+        )
 
         XCTAssertTrue(index.items.contains {
             $0.kind == .navigation && $0.title == plugin.metadata.title
@@ -33,10 +41,10 @@ final class MacToolsSearchTests: XCTestCase {
             $0.kind == .command && $0.title == AppShortcutAction.toggleDashboard.title
         })
         XCTAssertFalse(index.items.contains {
-            $0.action == .appCommand(.openCommandPalette)
+            $0.id == "app-command.open-command-palette"
         })
         XCTAssertFalse(index.items.contains {
-            $0.action == .appCommand(.openSettings)
+            $0.id == "app-command.open-settings"
         })
         XCTAssertTrue(index.items.contains {
             $0.id == "general-setting.appearance" && $0.kind == .setting
@@ -59,6 +67,222 @@ final class MacToolsSearchTests: XCTestCase {
                 "\(action.title) must not be indexed through shortcut keywords"
             )
         }
+    }
+
+    func testAppShortcutsAreNotAutomaticallyPromotedIntoCommands() {
+        let index = MacToolsSearchIndexBuilder.build(
+            pluginHost: makePluginHostForTests(plugins: [])
+        )
+
+        XCTAssertFalse(index.items.contains {
+            if case .appHostCommand = $0.action {
+                return true
+            }
+            return false
+        })
+    }
+
+    func testAppHostCommandCarriesExpectedDefinitionConfirmationAndKeywords() throws {
+        let confirmation = MacToolsCommandConfirmation(
+            title: "确认命令",
+            message: "确认执行此命令。",
+            confirmButtonTitle: "执行"
+        )
+        let definition = AppHostCommandDefinition(
+            id: "app-command.test-confirmed",
+            title: "测试命令",
+            description: "用于验证确认流程。",
+            keywords: ["confirmed", "确认"],
+            systemImage: "checkmark.circle",
+            confirmation: confirmation,
+            action: .setLaunchAtLogin(true)
+        )
+        let index = MacToolsSearchIndexBuilder.build(
+            pluginHost: makePluginHostForTests(plugins: []),
+            appHostCommandDefinitions: [definition]
+        )
+        let result = try XCTUnwrap(index.items.first { $0.id == definition.id })
+
+        XCTAssertEqual(result.action, .appHostCommand(expectedDefinition: definition))
+        XCTAssertEqual(result.confirmation, confirmation)
+        XCTAssertEqual(
+            MacToolsSearchActivationDecision.resolve(for: result),
+            .confirm(confirmation)
+        )
+        XCTAssertEqual(index.results(matching: "confirmed").first?.id, definition.id)
+        XCTAssertEqual(index.results(matching: "确认").first?.id, definition.id)
+    }
+
+    func testModelAutomaticallyRebuildsAfterPluginVisibilityChanges() async throws {
+        let plugin = SurfaceOnlySearchTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let suiteName = "MacToolsSearchModelTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let context = AppHostCommandContext(
+            pluginHost: host,
+            launchAtLoginController: LaunchAtLoginController(
+                service: SearchTestLaunchAtLoginService()
+            ),
+            appearanceUserDefaults: defaults
+        )
+        let model = UnifiedSearchPaletteModel(commandContext: context)
+        model.updateQuery(plugin.metadata.title)
+        let hideAction = AppHostCommandAction.setPluginVisibility(
+            pluginID: plugin.metadata.id,
+            surface: .featurePanel,
+            isVisible: false
+        )
+        let showAction = AppHostCommandAction.setPluginVisibility(
+            pluginID: plugin.metadata.id,
+            surface: .featurePanel,
+            isVisible: true
+        )
+        XCTAssertTrue(model.results.contains { result in
+            guard case let .appHostCommand(definition) = result.action else {
+                return false
+            }
+            return definition.action == hideAction
+        })
+        let (rebuild, cancellable) = expectModelResults(
+            model,
+            description: "Visibility change rebuilds the command index"
+        ) { results in
+            results.contains { result in
+                guard case let .appHostCommand(definition) = result.action else {
+                    return false
+                }
+                return definition.action == showAction
+            }
+        }
+
+        host.setPluginVisible(false, id: plugin.metadata.id, on: .featurePanel)
+
+        await fulfillment(of: [rebuild], timeout: 1)
+        withExtendedLifetime(cancellable) {}
+        XCTAssertTrue(model.results.contains { result in
+            guard case let .appHostCommand(definition) = result.action else {
+                return false
+            }
+            return definition.action == showAction
+        })
+        XCTAssertFalse(model.results.contains { result in
+            guard case let .appHostCommand(definition) = result.action else {
+                return false
+            }
+            return definition.action == hideAction
+        })
+    }
+
+    func testModelAutomaticallyRebuildsAfterLaunchAtLoginChanges() async {
+        let suiteName = "MacToolsSearchLaunchModelTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let service = SearchTestLaunchAtLoginService()
+        let controller = LaunchAtLoginController(service: service)
+        let context = AppHostCommandContext(
+            pluginHost: makePluginHostForTests(plugins: []),
+            launchAtLoginController: controller,
+            appearanceUserDefaults: defaults
+        )
+        let model = UnifiedSearchPaletteModel(commandContext: context)
+        model.updateQuery("launch at login")
+        let (rebuild, cancellable) = expectModelResults(
+            model,
+            description: "Launch-at-login change rebuilds the command index"
+        ) { results in
+            results.contains { result in
+                guard case let .appHostCommand(definition) = result.action else {
+                    return false
+                }
+                return definition.action == .setLaunchAtLogin(false)
+            }
+        }
+
+        service.isRegistered = true
+        controller.refreshStatus()
+
+        await fulfillment(of: [rebuild], timeout: 1)
+        withExtendedLifetime(cancellable) {}
+        XCTAssertTrue(model.results.contains { result in
+            guard case let .appHostCommand(definition) = result.action else {
+                return false
+            }
+            return definition.action == .setLaunchAtLogin(false)
+        })
+        XCTAssertFalse(model.results.contains { result in
+            guard case let .appHostCommand(definition) = result.action else {
+                return false
+            }
+            return definition.action == .setLaunchAtLogin(true)
+        })
+    }
+
+    func testModelAutomaticallyRebuildsAfterAppearanceChanges() async {
+        let suiteName = "MacToolsSearchAppearanceModelTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let originalAppearance = NSApp.appearance
+        defer { NSApp.appearance = originalAppearance }
+        let context = AppHostCommandContext(
+            pluginHost: makePluginHostForTests(plugins: []),
+            launchAtLoginController: LaunchAtLoginController(
+                service: SearchTestLaunchAtLoginService()
+            ),
+            appearanceUserDefaults: defaults
+        )
+        let model = UnifiedSearchPaletteModel(commandContext: context)
+        model.updateQuery("appearance")
+        let (rebuild, cancellable) = expectModelResults(
+            model,
+            description: "Appearance change rebuilds the command index"
+        ) { results in
+            results.contains { result in
+                guard case let .appHostCommand(definition) = result.action else {
+                    return false
+                }
+                return definition.action == .setAppearance(.system)
+            } && !results.contains { result in
+                guard case let .appHostCommand(definition) = result.action else {
+                    return false
+                }
+                return definition.action == .setAppearance(.dark)
+            }
+        }
+
+        AppAppearancePreference.dark.storeAndApply(in: defaults)
+
+        await fulfillment(of: [rebuild], timeout: 1)
+        withExtendedLifetime(cancellable) {}
+        XCTAssertEqual(AppAppearancePreference.stored(in: defaults), .dark)
+        XCTAssertTrue(model.results.contains { result in
+            guard case let .appHostCommand(definition) = result.action else {
+                return false
+            }
+            return definition.action == .setAppearance(.system)
+        })
+        XCTAssertFalse(model.results.contains { result in
+            guard case let .appHostCommand(definition) = result.action else {
+                return false
+            }
+            return definition.action == .setAppearance(.dark)
+        })
+    }
+
+    private func expectModelResults(
+        _ model: UnifiedSearchPaletteModel,
+        description: String,
+        matching predicate: @escaping ([MacToolsSearchResult]) -> Bool
+    ) -> (XCTestExpectation, AnyCancellable) {
+        let expectation = expectation(description: description)
+        let cancellable = model.$results
+            .dropFirst()
+            .first(where: predicate)
+            .sink { _ in expectation.fulfill() }
+        return (expectation, cancellable)
     }
 
     func testCustomSettingResultCarriesPluginPageAndExactSearchTarget() throws {
@@ -326,6 +550,34 @@ final class MacToolsSearchTests: XCTestCase {
             confirmation: nil,
             suggestionPriority: nil
         )
+    }
+
+    private func appHostCommandDefinition(
+        id: String,
+        action: AppHostCommandAction
+    ) -> AppHostCommandDefinition {
+        AppHostCommandDefinition(
+            id: id,
+            title: AppShortcutAction.toggleDashboard.title,
+            description: AppShortcutAction.toggleDashboard.description,
+            keywords: [],
+            systemImage: AppShortcutAction.toggleDashboard.systemImage,
+            confirmation: nil,
+            action: action
+        )
+    }
+}
+
+@MainActor
+private final class SearchTestLaunchAtLoginService: LaunchAtLoginServicing {
+    var isRegistered = false
+
+    func register() throws {
+        isRegistered = true
+    }
+
+    func unregister() throws {
+        isRegistered = false
     }
 }
 

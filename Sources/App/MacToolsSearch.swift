@@ -38,7 +38,7 @@ enum MacToolsSearchAction: Hashable {
         pluginID: String,
         expectedDefinition: PluginCommandDefinition
     )
-    case appCommand(AppShortcutAction)
+    case appHostCommand(expectedDefinition: AppHostCommandDefinition)
 }
 
 struct MacToolsSearchResult: Identifiable, Hashable {
@@ -50,7 +50,7 @@ struct MacToolsSearchResult: Identifiable, Hashable {
     let keywords: [String]
     let systemImage: String
     let action: MacToolsSearchAction
-    let confirmation: PluginCommandDefinition.Confirmation?
+    let confirmation: MacToolsCommandConfirmation?
     let suggestionPriority: Int?
 
     var accessibilityLabel: String {
@@ -231,9 +231,24 @@ enum MacToolsSearchPresentation {
     }
 }
 
+enum MacToolsSearchActivationDecision: Equatable {
+    case execute
+    case confirm(MacToolsCommandConfirmation)
+
+    static func resolve(for result: MacToolsSearchResult) -> MacToolsSearchActivationDecision {
+        guard let confirmation = result.confirmation else {
+            return .execute
+        }
+        return .confirm(confirmation)
+    }
+}
+
 @MainActor
 enum MacToolsSearchIndexBuilder {
-    static func build(pluginHost: PluginHost) -> MacToolsSearchIndex {
+    static func build(
+        pluginHost: PluginHost,
+        appHostCommandDefinitions: [AppHostCommandDefinition] = []
+    ) -> MacToolsSearchIndex {
         var items: [MacToolsSearchResult] = [
             navigationResult(
                 id: "navigation.general",
@@ -464,26 +479,22 @@ enum MacToolsSearchIndexBuilder {
                     pluginID: item.pluginID,
                     expectedDefinition: item.definition
                 ),
-                confirmation: item.definition.confirmation,
+                confirmation: item.definition.confirmation.map(MacToolsCommandConfirmation.init),
                 suggestionPriority: nil
             )
         }
 
-        items += AppShortcutAction.allCases.compactMap { action -> MacToolsSearchResult? in
-            guard action.isCommandPaletteSearchEligible else {
-                return nil
-            }
-
-            return MacToolsSearchResult(
-                id: "app-command.\(action.rawValue)",
+        items += appHostCommandDefinitions.map { definition in
+            MacToolsSearchResult(
+                id: definition.id,
                 kind: .command,
-                title: action.title,
+                title: definition.title,
                 subtitle: AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools"),
-                detail: action.description,
-                keywords: [],
-                systemImage: action.systemImage,
-                action: .appCommand(action),
-                confirmation: nil,
+                detail: definition.description,
+                keywords: definition.keywords,
+                systemImage: definition.systemImage,
+                action: .appHostCommand(expectedDefinition: definition),
+                confirmation: definition.confirmation,
                 suggestionPriority: nil
             )
         }
@@ -517,8 +528,9 @@ enum MacToolsSearchIndexBuilder {
     private static func generalSettingsResults(
         pluginHost: PluginHost
     ) -> [MacToolsSearchResult] {
+        let sharedShortcutActions = Set(AppHostCommandCatalog.sharedAppShortcutActions)
         let shortcutKeywords = pluginHost.appShortcutItems
-            .filter { $0.action.isCommandPaletteSearchEligible }
+            .filter { sharedShortcutActions.contains($0.action) }
             .flatMap { item in
                 [item.title, item.description, item.bindingText]
             }

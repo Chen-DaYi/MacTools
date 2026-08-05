@@ -213,6 +213,8 @@ final class MacToolsCommandPalettePanel: NSPanel {
 
 struct StandaloneCommandPaletteRootView: View {
     let pluginHost: PluginHost
+    let launchAtLoginController: LaunchAtLoginController
+    let appearanceUserDefaults: UserDefaults
     @ObservedObject var state: StandaloneCommandPaletteState
     let actions: UnifiedSearchPaletteActions
 
@@ -220,6 +222,8 @@ struct StandaloneCommandPaletteRootView: View {
         GeometryReader { geometry in
             UnifiedSearchPaletteView(
                 pluginHost: pluginHost,
+                launchAtLoginController: launchAtLoginController,
+                appearanceUserDefaults: appearanceUserDefaults,
                 availableSize: geometry.size,
                 presentationOrigin: state.presentationOrigin,
                 shortcutHint: state.shortcutHint,
@@ -279,6 +283,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let menuBarIconSettings: MenuBarIconSettings
     private let menuBarIconGallery: MenuBarIconGalleryLibrary
     private let launchAtLoginController: LaunchAtLoginController
+    private let appearanceUserDefaults: UserDefaults
     private(set) var settingsWindow: NSWindow?
     private(set) var settingsNavigationCoordinator: SettingsNavigationCoordinator?
     private(set) var commandPalettePanel: NSPanel?
@@ -301,13 +306,15 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         appUpdater: AppUpdater,
         menuBarIconSettings: MenuBarIconSettings,
         menuBarIconGallery: MenuBarIconGalleryLibrary,
-        launchAtLoginController: LaunchAtLoginController
+        launchAtLoginController: LaunchAtLoginController,
+        appearanceUserDefaults: UserDefaults = .standard
     ) {
         self.pluginHost = pluginHost
         self.appUpdater = appUpdater
         self.menuBarIconSettings = menuBarIconSettings
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
+        self.appearanceUserDefaults = appearanceUserDefaults
         super.init()
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
@@ -341,6 +348,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     func showUnifiedSearch() {
+        launchAtLoginController.refreshStatus()
         presentSettings(.settings)
         settingsNavigationCoordinator?.presentUnifiedSearch(origin: .keyboard)
     }
@@ -365,6 +373,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             return
         }
 
+        launchAtLoginController.refreshStatus()
         onProgrammaticSettingsPresentation()
         let state = commandPaletteState ?? StandaloneCommandPaletteState()
         let panel = commandPalettePanel ?? makeCommandPalettePanel(state: state)
@@ -444,6 +453,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 menuBarIconSettings: menuBarIconSettings,
                 menuBarIconGallery: menuBarIconGallery,
                 launchAtLoginController: launchAtLoginController,
+                appearanceUserDefaults: appearanceUserDefaults,
                 showDashboard: { [weak self] in
                     self?.panelPresentationActions.present(.dashboard)
                 },
@@ -486,6 +496,8 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         let hostingView = NSHostingView(
             rootView: StandaloneCommandPaletteRootView(
                 pluginHost: pluginHost,
+                launchAtLoginController: launchAtLoginController,
+                appearanceUserDefaults: appearanceUserDefaults,
                 state: state,
                 actions: actions
             )
