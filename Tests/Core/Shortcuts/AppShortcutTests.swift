@@ -25,6 +25,9 @@ final class AppShortcutTests: XCTestCase {
         let dashboardBinding = ShortcutBinding(keyCode: 2, modifiers: [.command, .option])
 
         XCTAssertEqual(host.appShortcutItems.map(\.action), AppShortcutAction.allCases)
+        XCTAssertEqual(host.appShortcutItems.count, 4)
+        XCTAssertEqual(host.appShortcutItems.last?.action, .openCommandPalette)
+        XCTAssertFalse(try item(.openCommandPalette, in: host).canClear)
         XCTAssertTrue(host.appShortcutItems.allSatisfy { !$0.canClear })
         XCTAssertTrue(
             host.appShortcutItems.allSatisfy {
@@ -64,16 +67,39 @@ final class AppShortcutTests: XCTestCase {
         let firstHost = makeHost(defaults: defaults)
 
         XCTAssertNil(
-            firstHost.setAppShortcutBindingAndReturnError(binding, for: .toggleFeaturePanel)
+            firstHost.setAppShortcutBindingAndReturnError(binding, for: .openCommandPalette)
         )
 
         let restoredHost = makeHost(defaults: defaults)
 
         XCTAssertEqual(
-            try item(.toggleFeaturePanel, in: restoredHost).bindingText,
+            try item(.openCommandPalette, in: restoredHost).bindingText,
             ShortcutFormatter.displayString(for: binding)
         )
         XCTAssertFalse(try item(.toggleDashboard, in: restoredHost).canClear)
+    }
+
+    func testOpenCommandPaletteRegistersGloballyOnlyWhenAssigned() throws {
+        let manager = GlobalShortcutManager()
+        let host = makeHost(defaults: try makeDefaults(), manager: manager)
+        let binding = ShortcutBinding(keyCode: 35, modifiers: [.command, .option])
+
+        XCTAssertFalse(
+            manager.debugRegistrationsForTests.contains {
+                $0.shortcutID == AppShortcutAction.openCommandPalette.rawValue
+            }
+        )
+
+        XCTAssertNil(
+            host.setAppShortcutBindingAndReturnError(binding, for: .openCommandPalette)
+        )
+
+        XCTAssertTrue(
+            manager.debugRegistrationsForTests.contains {
+                $0.binding == binding
+                    && $0.shortcutID.hasPrefix("action-shortcut.")
+            }
+        )
     }
 
     func testAppShortcutRejectsConflictWithAnotherAppShortcutIncludingOpenSettings() throws {
@@ -384,12 +410,16 @@ final class AppShortcutTests: XCTestCase {
     func testBackupRoundTripPreservesAppShortcutBindings() throws {
         let dashboardBinding = ShortcutBinding(keyCode: 7, modifiers: [.command, .option])
         let featureBinding = ShortcutBinding(keyCode: 8, modifiers: [.command, .shift])
+        let paletteBinding = ShortcutBinding(keyCode: 11, modifiers: [.control, .option])
         let sourceHost = makeHost(defaults: try makeDefaults())
         XCTAssertNil(
             sourceHost.setAppShortcutBindingAndReturnError(dashboardBinding, for: .toggleDashboard)
         )
         XCTAssertNil(
             sourceHost.setAppShortcutBindingAndReturnError(featureBinding, for: .toggleFeaturePanel)
+        )
+        XCTAssertNil(
+            sourceHost.setAppShortcutBindingAndReturnError(paletteBinding, for: .openCommandPalette)
         )
 
         let backup = sourceHost.makePreferencesBackup()
@@ -400,6 +430,10 @@ final class AppShortcutTests: XCTestCase {
         XCTAssertEqual(
             backup.shortcutCustomizations[AppShortcutAction.toggleFeaturePanel.rawValue],
             .custom(featureBinding)
+        )
+        XCTAssertEqual(
+            backup.shortcutCustomizations[AppShortcutAction.openCommandPalette.rawValue],
+            .custom(paletteBinding)
         )
 
         let restoredHost = makeHost(defaults: try makeDefaults())
@@ -413,6 +447,10 @@ final class AppShortcutTests: XCTestCase {
         XCTAssertEqual(
             try item(.toggleFeaturePanel, in: restoredHost).bindingText,
             ShortcutFormatter.displayString(for: featureBinding)
+        )
+        XCTAssertEqual(
+            try item(.openCommandPalette, in: restoredHost).bindingText,
+            ShortcutFormatter.displayString(for: paletteBinding)
         )
     }
 
@@ -455,13 +493,15 @@ final class AppShortcutTests: XCTestCase {
         manager.triggerForTests(shortcutID: AppShortcutAction.toggleDashboard.rawValue)
         manager.triggerForTests(shortcutID: AppShortcutAction.toggleFeaturePanel.rawValue)
         manager.triggerForTests(shortcutID: AppShortcutAction.openSettings.rawValue)
+        manager.triggerForTests(shortcutID: AppShortcutAction.openCommandPalette.rawValue)
 
         XCTAssertEqual(
             requests,
             [
                 .toggleDashboard,
                 .toggleFeaturePanel,
-                .settings(.settings)
+                .settings(.settings),
+                .toggleCommandPalette
             ]
         )
     }

@@ -36,6 +36,53 @@ enum FeatureManagementReorderPolicy {
     }
 }
 
+enum FeatureManagementContextMenuAction: Equatable {
+    case openSettings
+    case viewMarketplace
+    case moveToTop(isEnabled: Bool)
+    case moveToBottom(isEnabled: Bool)
+    case setVisible(Bool)
+    case uninstall
+}
+
+enum FeatureManagementContextMenuPolicy {
+    static func actionGroups(
+        for item: FeatureManagementTableItem,
+        row: Int,
+        itemCount: Int,
+        mode: FeatureManagementTableMode,
+        isReorderEnabled: Bool
+    ) -> [[FeatureManagementContextMenuAction]] {
+        var primaryActions: [FeatureManagementContextMenuAction] = []
+        if item.hasSettings {
+            primaryActions.append(.openSettings)
+        }
+        if item.canUninstall {
+            primaryActions.append(.viewMarketplace)
+        }
+
+        var layoutActions: [FeatureManagementContextMenuAction] = []
+        let showsMoveActions = item.isVisible
+            && FeatureManagementReorderPolicy.canReorder(
+                mode: mode,
+                isReorderEnabled: isReorderEnabled
+            )
+            && (0..<itemCount).contains(row)
+        if showsMoveActions {
+            layoutActions.append(.moveToTop(isEnabled: row > 0))
+            layoutActions.append(.moveToBottom(isEnabled: row < itemCount - 1))
+        }
+        layoutActions.append(.setVisible(!item.isVisible))
+
+        let destructiveActions: [FeatureManagementContextMenuAction] = item.canUninstall
+            ? [.uninstall]
+            : []
+
+        return [primaryActions, layoutActions, destructiveActions]
+            .filter { !$0.isEmpty }
+    }
+}
+
 struct FeatureManagementTableItem: Identifiable {
     let id: String
     let title: String
@@ -236,13 +283,30 @@ struct FeatureManagementTableView: NSViewRepresentable {
             }
 
             let item = parent.items[row]
+            let contextMenuActionGroups = FeatureManagementContextMenuPolicy.actionGroups(
+                for: item,
+                row: row,
+                itemCount: parent.items.count,
+                mode: parent.mode,
+                isReorderEnabled: parent.isReorderEnabled
+            )
             view.configure(
                 item: item,
                 mode: parent.mode,
                 showsHandle: parent.mode.supportsReordering && parent.isReorderEnabled,
                 isSearchHighlighted: item.id == parent.highlightedPluginID,
+                contextMenuActionGroups: contextMenuActionGroups,
                 onSetVisible: { [weak self] isVisible in
                     self?.parent.onSetVisible(item.id, isVisible)
+                },
+                onMoveToTop: { [weak self] in
+                    self?.parent.onMove(item.id, 0)
+                },
+                onMoveToBottom: { [weak self] in
+                    guard let self else {
+                        return
+                    }
+                    self.parent.onMove(item.id, self.parent.items.count)
                 },
                 onOpenSettings: { [weak self] in
                     self?.parent.onOpenSettings(item.id)
@@ -656,6 +720,19 @@ enum FeatureManagementVisibilityToggleState {
     }
 }
 
+private final class FeatureManagementMenuActionTarget: NSObject {
+    private let handler: () -> Void
+
+    init(handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc
+    func invokeAction(_ sender: NSMenuItem) {
+        handler()
+    }
+}
+
 private final class FeatureManagementTableCellView: NSTableCellView {
     private let containerView = NSView()
     private let iconBackgroundView = NSView()
@@ -670,10 +747,12 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private let handleImageView = NSImageView()
     private var openSettingsHandler: (() -> Void)?
     private var setVisibleHandler: ((Bool) -> Void)?
+    private var moveToTopHandler: (() -> Void)?
+    private var moveToBottomHandler: (() -> Void)?
     private var openMarketplaceHandler: (() -> Void)?
     private var requestUninstallHandler: (() -> Void)?
+    private var contextMenuActionGroups: [[FeatureManagementContextMenuAction]] = []
     private var hasSettings = false
-    private var canUninstall = false
     private var isVisible = true
     private var pluginTitle = ""
     private var mode: FeatureManagementTableMode?
@@ -696,17 +775,22 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         mode: FeatureManagementTableMode,
         showsHandle: Bool,
         isSearchHighlighted: Bool = false,
+        contextMenuActionGroups: [[FeatureManagementContextMenuAction]],
         onSetVisible: @escaping (Bool) -> Void,
+        onMoveToTop: @escaping () -> Void,
+        onMoveToBottom: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
         onOpenMarketplace: @escaping () -> Void,
         onRequestUninstall: @escaping () -> Void
     ) {
         openSettingsHandler = onOpenSettings
         setVisibleHandler = onSetVisible
+        moveToTopHandler = onMoveToTop
+        moveToBottomHandler = onMoveToBottom
         openMarketplaceHandler = onOpenMarketplace
         requestUninstallHandler = onRequestUninstall
+        self.contextMenuActionGroups = contextMenuActionGroups
         hasSettings = item.hasSettings
-        canUninstall = item.canUninstall
         isVisible = item.isVisible
         pluginTitle = item.title
         self.mode = mode
@@ -909,6 +993,10 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
     @objc
     private func handleVisibilityAction(_ sender: NSButton) {
+        toggleVisibility()
+    }
+
+    private func toggleVisibility() {
         guard let mode else {
             return
         }
@@ -922,60 +1010,81 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         setVisibleHandler?(nextValue)
     }
 
-    @objc
-    private func handleOpenMarketplace(_ sender: NSMenuItem) {
-        openMarketplaceHandler?()
-    }
-
-    @objc
-    private func handleRequestUninstall(_ sender: NSMenuItem) {
-        requestUninstallHandler?()
-    }
-
     override func menu(for event: NSEvent) -> NSMenu? {
         actionsMenu()
     }
 
     private func actionsMenu() -> NSMenu? {
-        guard canUninstall else {
+        guard !contextMenuActionGroups.isEmpty else {
             return nil
         }
 
         let menu = NSMenu()
-        if hasSettings {
-            let openSettings = NSMenuItem(
-                title: AppL10n.plugins("plugin.management.openSettings", defaultValue: "打开插件设置"),
-                action: #selector(handleOpenSettingsMenuItem(_:)),
-                keyEquivalent: ""
-            )
-            openSettings.target = self
-            menu.addItem(openSettings)
+        menu.autoenablesItems = false
+        for actionGroup in contextMenuActionGroups {
+            if !menu.items.isEmpty {
+                menu.addItem(.separator())
+            }
+            actionGroup.forEach { menu.addItem(menuItem(for: $0)) }
         }
-
-        let marketplace = NSMenuItem(
-            title: AppL10n.plugins("plugin.management.viewMarketplace", defaultValue: "在市场中查看"),
-            action: #selector(handleOpenMarketplace(_:)),
-            keyEquivalent: ""
-        )
-        marketplace.target = self
-        menu.addItem(marketplace)
-
-        menu.addItem(.separator())
-        let uninstall = NSMenuItem(
-            title: AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"),
-            action: #selector(handleRequestUninstall(_:)),
-            keyEquivalent: ""
-        )
-        uninstall.target = self
-        menu.addItem(uninstall)
 
         return menu
     }
 
-    @objc
-    private func handleOpenSettingsMenuItem(_ sender: NSMenuItem) {
-        openSettingsHandler?()
+    private func menuItem(for action: FeatureManagementContextMenuAction) -> NSMenuItem {
+        let title: String
+        let handler: () -> Void
+        let isEnabled: Bool
+        switch action {
+        case .openSettings:
+            title = AppL10n.plugins("plugin.management.openSettings", defaultValue: "打开插件设置")
+            let snapshot = openSettingsHandler
+            handler = { snapshot?() }
+            isEnabled = true
+        case .viewMarketplace:
+            title = AppL10n.plugins("plugin.management.viewMarketplace", defaultValue: "在市场中查看")
+            let snapshot = openMarketplaceHandler
+            handler = { snapshot?() }
+            isEnabled = true
+        case let .moveToTop(actionIsEnabled):
+            title = AppL10n.plugins("plugin.management.moveToTop", defaultValue: "移到顶部")
+            let snapshot = moveToTopHandler
+            handler = { snapshot?() }
+            isEnabled = actionIsEnabled
+        case let .moveToBottom(actionIsEnabled):
+            title = AppL10n.plugins("plugin.management.moveToBottom", defaultValue: "移到底部")
+            let snapshot = moveToBottomHandler
+            handler = { snapshot?() }
+            isEnabled = actionIsEnabled
+        case let .setVisible(targetIsVisible):
+            title = visibilityMenuActionTitle(targetIsVisible: targetIsVisible)
+            let snapshot = setVisibleHandler
+            handler = { snapshot?(targetIsVisible) }
+            isEnabled = true
+        case .uninstall:
+            title = AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载")
+            let snapshot = requestUninstallHandler
+            handler = { snapshot?() }
+            isEnabled = true
+        }
+
+        let item = NSMenuItem(
+            title: title,
+            action: #selector(FeatureManagementMenuActionTarget.invokeAction(_:)),
+            keyEquivalent: ""
+        )
+        let actionTarget = FeatureManagementMenuActionTarget(handler: handler)
+        item.isEnabled = isEnabled
+        item.target = actionTarget
+        item.representedObject = actionTarget
+        return item
     }
+
+#if DEBUG
+    func contextMenuForInspection() -> NSMenu? {
+        actionsMenu()
+    }
+#endif
 
     private func setIconActionHovered(_ isHovered: Bool) {
         guard hasSettings else {
@@ -1029,6 +1138,35 @@ private final class FeatureManagementTableCellView: NSTableCellView {
                 "plugin.management.showInFeaturePanelFormat",
                 defaultValue: "在功能面板显示%@",
                 pluginTitle
+            )
+        }
+    }
+
+    private func visibilityMenuActionTitle(targetIsVisible: Bool) -> String {
+        guard let mode else {
+            return ""
+        }
+
+        switch (mode, targetIsVisible) {
+        case (.surface(.dashboard), true):
+            return AppL10n.plugins(
+                "plugin.management.showInDashboard",
+                defaultValue: "在仪表盘中显示"
+            )
+        case (.surface(.dashboard), false):
+            return AppL10n.plugins(
+                "plugin.management.hideFromDashboard",
+                defaultValue: "在仪表盘中隐藏"
+            )
+        case (.surface(.featurePanel), true):
+            return AppL10n.plugins(
+                "plugin.management.showInFeaturePanel",
+                defaultValue: "在功能面板中显示"
+            )
+        case (.surface(.featurePanel), false):
+            return AppL10n.plugins(
+                "plugin.management.hideFromFeaturePanel",
+                defaultValue: "在功能面板中隐藏"
             )
         }
     }
@@ -1091,6 +1229,49 @@ private final class FeatureManagementReleaseChannelBadgeView: NSView {
 
 #if DEBUG
 enum FeatureManagementTableCellInspection {
+    private final class EventRecorder {
+        var events: [String] = []
+    }
+
+    @MainActor
+    static func contextMenuEventsAfterReconfiguringCell(
+        originalItem: FeatureManagementTableItem,
+        replacementItem: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode
+    ) -> [String] {
+        let recorder = EventRecorder()
+        let cell = FeatureManagementTableCellView(
+            frame: NSRect(
+                x: 0,
+                y: 0,
+                width: 480,
+                height: FeatureManagementTableView.rowHeight
+            )
+        )
+        configure(
+            cell,
+            item: originalItem,
+            mode: mode,
+            recorder: recorder
+        )
+        guard let originalMenu = cell.contextMenuForInspection() else {
+            return recorder.events
+        }
+
+        configure(
+            cell,
+            item: replacementItem,
+            mode: mode,
+            recorder: recorder
+        )
+        for index in originalMenu.items.indices where
+            !originalMenu.items[index].isSeparatorItem && originalMenu.items[index].isEnabled
+        {
+            originalMenu.performActionForItem(at: index)
+        }
+        return recorder.events
+    }
+
     @MainActor
     static func containsSwiftUIHostingViewAfterConfiguring(
         item: FeatureManagementTableItem,
@@ -1137,12 +1318,49 @@ enum FeatureManagementTableCellInspection {
             item: item,
             mode: mode,
             showsHandle: showsHandle,
+            contextMenuActionGroups: FeatureManagementContextMenuPolicy.actionGroups(
+                for: item,
+                row: 0,
+                itemCount: 1,
+                mode: mode,
+                isReorderEnabled: showsHandle
+            ),
             onSetVisible: { _ in },
+            onMoveToTop: {},
+            onMoveToBottom: {},
             onOpenSettings: {},
             onOpenMarketplace: {},
             onRequestUninstall: {}
         )
         return cell
+    }
+
+    @MainActor
+    private static func configure(
+        _ cell: FeatureManagementTableCellView,
+        item: FeatureManagementTableItem,
+        mode: FeatureManagementTableMode,
+        recorder: EventRecorder
+    ) {
+        let pluginID = item.id
+        cell.configure(
+            item: item,
+            mode: mode,
+            showsHandle: true,
+            contextMenuActionGroups: FeatureManagementContextMenuPolicy.actionGroups(
+                for: item,
+                row: 1,
+                itemCount: 3,
+                mode: mode,
+                isReorderEnabled: true
+            ),
+            onSetVisible: { recorder.events.append("visibility:\(pluginID):\($0)") },
+            onMoveToTop: { recorder.events.append("move-top:\(pluginID)") },
+            onMoveToBottom: { recorder.events.append("move-bottom:\(pluginID)") },
+            onOpenSettings: { recorder.events.append("settings:\(pluginID)") },
+            onOpenMarketplace: { recorder.events.append("marketplace:\(pluginID)") },
+            onRequestUninstall: { recorder.events.append("uninstall:\(pluginID)") }
+        )
     }
 
     @MainActor

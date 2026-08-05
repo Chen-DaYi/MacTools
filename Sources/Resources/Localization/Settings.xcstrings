@@ -8616,6 +8616,38 @@
         }
       }
     },
+    "shortcuts.openCommandPalette.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "أظهر أو أخفِ لوحة أوامر MacTools من أي مكان." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Blendet die MacTools-Befehlspalette überall ein oder aus." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show or hide the MacTools Command Palette from anywhere." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Muestra u oculta la paleta de comandos de MacTools desde cualquier lugar." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Affiche ou masque la palette de commandes MacTools depuis n’importe où." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "どこからでもMacToolsのコマンドパレットを表示または非表示にします。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "어디서나 MacTools 명령 팔레트를 표시하거나 가립니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostra ou oculta a Paleta de Comandos do MacTools em qualquer lugar." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показывает или скрывает палитру команд MacTools из любого приложения." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在任意位置显示或隐藏 MacTools 命令面板。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在任何位置顯示或隱藏 MacTools 指令面板。" } }
+      }
+    },
+    "shortcuts.openCommandPalette.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "فتح لوحة الأوامر" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Befehlspalette öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open Command Palette" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abrir paleta de comandos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir la palette de commandes" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "コマンドパレットを開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "명령 팔레트 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abrir Paleta de Comandos" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открыть палитру команд" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打开命令面板" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "打開指令面板" } }
+      }
+    },
     "shortcuts.openSettings.description": {
       "extractionState": "manual",
       "localizations": {

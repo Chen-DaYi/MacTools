@@ -113,6 +113,10 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             .toggleFeaturePanel
         )
         XCTAssertEqual(
+            MenuBarStatusItemPresentationAction(request: .toggleCommandPalette),
+            .toggleCommandPalette
+        )
+        XCTAssertEqual(
             MenuBarStatusItemPresentationAction(request: .showDashboard),
             .showComponentPanel
         )

@@ -32,6 +32,12 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertTrue(index.items.contains {
             $0.kind == .command && $0.title == AppShortcutAction.toggleDashboard.title
         })
+        XCTAssertFalse(index.items.contains {
+            $0.kind == .command && $0.title == AppShortcutAction.openCommandPalette.title
+        })
+        XCTAssertFalse(index.items.contains {
+            $0.kind == .command && $0.title == AppShortcutAction.openSettings.title
+        })
         XCTAssertTrue(index.items.contains {
             $0.id == "general-setting.appearance" && $0.kind == .setting
         })
@@ -79,6 +85,21 @@ final class MacToolsSearchTests: XCTestCase {
 
         XCTAssertEqual(outcome, .completed(.succeeded()))
         XCTAssertEqual(requests, [.toggleDashboard])
+    }
+
+    func testExcludedAppShortcutsDoNotLeakIntoSearchKeywords() {
+        let index = MacToolsSearchIndexBuilder.build(
+            pluginHost: makePluginHostForTests(plugins: [])
+        )
+
+        for action in [AppShortcutAction.openSettings, .openCommandPalette] {
+            XCTAssertFalse(
+                index.results(matching: action.title).contains {
+                    $0.id == "general-setting.appShortcuts"
+                },
+                "\(action.title) must not be indexed through shortcut keywords"
+            )
+        }
     }
 
     func testCustomSettingResultCarriesPluginPageAndExactSearchTarget() throws {

@@ -464,14 +464,16 @@ enum MacToolsSearchIndexBuilder {
             uniquingKeysWith: { first, _ in first }
         )
         items += pluginHost.actionCatalogEntries.enumerated().compactMap { index, entry in
-            guard
-                entry.reference.key != ActionKey(
-                    providerID: "mactools",
-                    actionID: AppShortcutAction.openSettings.rawValue
-                ),
-                case let .success(action) = pluginHost.actionRegistry.registeredAction(
+            if entry.reference.key.providerID == "mactools",
+               let appAction = AppShortcutAction(
+                   rawValue: entry.reference.key.actionID
+               ),
+               !appAction.isCommandPaletteSearchEligible {
+                return nil
+            }
+            guard case let .success(action) = pluginHost.actionRegistry.registeredAction(
                     for: entry.reference
-                )
+            )
             else {
                 return nil
             }
@@ -539,9 +541,11 @@ enum MacToolsSearchIndexBuilder {
     private static func generalSettingsResults(
         pluginHost: PluginHost
     ) -> [MacToolsSearchResult] {
-        let shortcutKeywords = pluginHost.appShortcutItems.flatMap { item in
-            [item.title, item.description, item.bindingText]
-        }
+        let shortcutKeywords = pluginHost.appShortcutItems
+            .filter { $0.action.isCommandPaletteSearchEligible }
+            .flatMap { item in
+                [item.title, item.description, item.bindingText]
+            }
 
         return [
             generalSettingResult(

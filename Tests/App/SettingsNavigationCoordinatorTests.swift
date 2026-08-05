@@ -240,6 +240,12 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .keyboard)
         XCTAssertGreaterThan(coordinator.unifiedSearchFocusRequestID, firstFocusRequestID)
 
+        coordinator.presentUnifiedSearch(origin: .globalShortcut("⌥⌘P"))
+        XCTAssertEqual(
+            coordinator.unifiedSearchPresentationOrigin,
+            .globalShortcut("⌥⌘P")
+        )
+
         coordinator.dismissUnifiedSearch()
 
         XCTAssertFalse(coordinator.isUnifiedSearchPresented)

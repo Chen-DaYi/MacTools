@@ -44,6 +44,7 @@ enum SettingsSearchField: Equatable {
 enum UnifiedSearchPresentationOrigin: Equatable {
     case pluginSidebar
     case keyboard
+    case globalShortcut(String)
 }
 
 enum PluginSubpageMoveDirection {
@@ -332,11 +333,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
         to destination: SettingsNavigationDestination,
         target: SettingsSearchRevealTarget?
     ) -> Bool {
-        guard
-            isAvailable(destination),
-            target.map(isAvailable) ?? true,
-            target.map({ isCompatible($0, with: destination) }) ?? true
-        else {
+        guard canNavigateFromSearch(to: destination, target: target) else {
             return false
         }
 
@@ -354,6 +351,15 @@ final class SettingsNavigationCoordinator: ObservableObject {
             target: target
         )
         return true
+    }
+
+    func canNavigateFromSearch(
+        to destination: SettingsNavigationDestination,
+        target: SettingsSearchRevealTarget?
+    ) -> Bool {
+        isAvailable(destination)
+            && (target.map(isAvailable) ?? true)
+            && (target.map { isCompatible($0, with: destination) } ?? true)
     }
 
     func clearSearchRevealRequest(_ request: SettingsSearchRevealRequest) {
