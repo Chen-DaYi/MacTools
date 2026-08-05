@@ -49,6 +49,9 @@ final class DeviceBatteryCommandRunnerTests: XCTestCase {
         let output = await DeviceBatteryCommandRunner.run(
             path: "/bin/sh",
             arguments: ["-c", "printf 'keep\\nskip\\n'; sleep 5"],
+            // Leave enough launch time under the parallel full suite. This test
+            // covers partial-output draining and the 2-second assertion below
+            // still proves that the descendant's 5-second pipe is not awaited.
             timeout: 0.5,
             outputLineFilter: { $0 == "keep" }
         )

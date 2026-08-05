@@ -34,6 +34,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private let launchAtLoginController = LaunchAtLoginController()
     private let appearanceUserDefaults = UserDefaults.standard
     private let pluginAutomaticUpdateVersionStore = PluginAutomaticUpdateVersionStore()
+    private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
 
@@ -62,7 +63,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        RightClickURLRouter.shared.handle(urls)
+        appURLRouter.handle(urls)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -86,6 +87,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
                 currentAppVersion: currentAppVersion
             )
+            activateAppURLRouter()
             return
         }
 
@@ -93,18 +95,29 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             currentAppVersion: currentAppVersion
         ) else {
             pluginHost.loadDynamicPluginsIfNeeded()
+            activateAppURLRouter()
             return
         }
 
         Task { @MainActor in
             let updateSucceeded = await pluginHost.automaticUpdateInstalledPluginsBeforeLoading()
-            guard updateSucceeded else {
-                return
+            if updateSucceeded {
+                pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
+                    currentAppVersion: currentAppVersion
+                )
             }
-
-            pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
-                currentAppVersion: currentAppVersion
-            )
+            activateAppURLRouter()
         }
+    }
+
+    private func activateAppURLRouter() {
+        appURLRouter.activate(
+            presentationHandler: { [weak self] request in
+                self?.pluginHost.appPresentationHandler?(request)
+            },
+            isPluginConfigurationAvailable: { [weak self] pluginID in
+                self?.pluginHost.hasPluginConfiguration(pluginID: pluginID) == true
+            }
+        )
     }
 }
