@@ -110,6 +110,7 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
             true
         }
     }
+
 }
 
 private extension FeatureSettingsPane {
@@ -1532,6 +1533,10 @@ final class PluginHost: ObservableObject {
         return !dynamicPluginManager.installedPackageVersionsByID().isEmpty
     }
 
+    var hasPendingDynamicPluginExtractionMigration: Bool {
+        pluginCatalogManager?.hasPendingExtractionMigrationResume ?? false
+    }
+
     @discardableResult
     func automaticUpdateInstalledPluginsBeforeLoading() async -> Bool {
         guard let pluginCatalogManager else {
@@ -1572,12 +1577,12 @@ final class PluginHost: ObservableObject {
         presentPluginMarketplace()
         automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
             phase: .updating,
-            pluginIDs: updatePlan.updateableInstalledPluginIDs,
+            pluginIDs: updatePlan.affectedPluginIDs,
             message: AppL10n.pluginsFormat(
                 "plugin.autoUpdate.message.progressFormat",
                 defaultValue: "已完成 %d/%d",
                 0,
-                updatePlan.updateableInstalledPluginIDs.count
+                updatePlan.affectedPluginIDs.count
             )
         )
         syncPluginManagementState()
@@ -1586,7 +1591,7 @@ final class PluginHost: ObservableObject {
             try await pluginCatalogManager.updateInstalledPluginsToLatestBeforeLoading { [weak self] progress in
                 self?.automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
                     phase: .updating,
-                    pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                    pluginIDs: updatePlan.affectedPluginIDs,
                     message: AppL10n.pluginsFormat(
                         "plugin.autoUpdate.message.progressFormat",
                         defaultValue: "已完成 %d/%d",
@@ -1598,18 +1603,18 @@ final class PluginHost: ObservableObject {
             syncPluginManagementState()
             automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
                 phase: .completed,
-                pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                pluginIDs: updatePlan.affectedPluginIDs,
                 message: AppL10n.pluginsFormat(
                     "plugin.autoUpdate.message.updatedInstalledFormat",
                     defaultValue: "已更新 %d 个插件。",
-                    updatePlan.updateableInstalledPluginIDs.count
+                    updatePlan.affectedPluginIDs.count
                 )
             )
         } catch {
             syncPluginManagementState()
             automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
                 phase: .failed,
-                pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                pluginIDs: updatePlan.affectedPluginIDs,
                 message: error.localizedDescription
             )
         }

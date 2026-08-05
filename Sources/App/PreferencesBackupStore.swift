@@ -30,8 +30,7 @@ final class PreferencesBackupStore: PreferencesBackupApplicationStoring {
             return
         }
 
-        userDefaults.set(appearance.rawValue, forKey: AppAppearancePreference.userDefaultsKey)
-        appearance.apply()
+        appearance.storeAndApply(in: userDefaults)
         language.store(in: userDefaults)
         userDefaults.set(clickBehavior.rawValue, forKey: MenuBarClickBehaviorPreference.userDefaultsKey)
     }

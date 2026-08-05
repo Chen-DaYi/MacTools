@@ -59,9 +59,22 @@ struct PluginCatalogBulkUpdateError: LocalizedError {
 
 struct PluginCatalogUpdatePlan: Equatable {
     let updateableInstalledPluginIDs: [String]
+    let migrationAffectedPluginIDs: [String]
+
+    init(
+        updateableInstalledPluginIDs: [String],
+        migrationAffectedPluginIDs: [String] = []
+    ) {
+        self.updateableInstalledPluginIDs = updateableInstalledPluginIDs
+        self.migrationAffectedPluginIDs = migrationAffectedPluginIDs
+    }
+
+    var affectedPluginIDs: [String] {
+        Array(Set(updateableInstalledPluginIDs + migrationAffectedPluginIDs)).sorted()
+    }
 
     var isEmpty: Bool {
-        updateableInstalledPluginIDs.isEmpty
+        affectedPluginIDs.isEmpty
     }
 }
 
@@ -75,12 +88,39 @@ struct PluginCatalogUpdateProgress: Equatable {
     }
 }
 
+private struct PendingPluginExtractionMigration {
+    let rule: PluginExtractionMigrationPolicy
+    let destinationEntry: PluginCatalogEntry?
+    let sourceUpdateEntry: PluginCatalogEntry?
+    let destinationNeedsInstall: Bool
+    let destinationNeedsUpdate: Bool
+    let sourceNeedsInstall: Bool
+
+    var affectedPluginIDs: [String] {
+        var ids: [String] = []
+        if destinationNeedsInstall || destinationNeedsUpdate {
+            ids.append(rule.destinationPluginID)
+        }
+        if sourceUpdateEntry != nil {
+            ids.append(rule.sourcePluginID)
+        }
+        if ids.isEmpty {
+            // A fully updated pair still requires journaled readiness validation and durable
+            // completion. Represent that logical reconciliation as real migration work.
+            ids = [rule.sourcePluginID, rule.destinationPluginID]
+        }
+        return ids
+    }
+}
+
 @MainActor
 final class PluginCatalogManager {
     private let catalogProvider: (any PluginCatalogProviding)?
     private let packageResolver: any PluginPackageResolving
     private let dynamicPluginManager: DynamicPluginManager
     private let source: PluginCatalogSource?
+    private let extractionMigrationUserDefaults: UserDefaults?
+    private let synchronizeExtractionMigrationDefaults: (UserDefaults) -> Bool
 
     private var snapshot: PluginCatalogSnapshot?
     private(set) var status: PluginCatalogStatus
@@ -89,12 +129,18 @@ final class PluginCatalogManager {
         catalogProvider: (any PluginCatalogProviding)?,
         packageResolver: any PluginPackageResolving,
         dynamicPluginManager: DynamicPluginManager,
-        source: PluginCatalogSource?
+        source: PluginCatalogSource?,
+        extractionMigrationUserDefaults: UserDefaults? = nil,
+        synchronizeExtractionMigrationDefaults: @escaping (UserDefaults) -> Bool = {
+            $0.synchronize()
+        }
     ) {
         self.catalogProvider = catalogProvider
         self.packageResolver = packageResolver
         self.dynamicPluginManager = dynamicPluginManager
         self.source = source
+        self.extractionMigrationUserDefaults = extractionMigrationUserDefaults
+        self.synchronizeExtractionMigrationDefaults = synchronizeExtractionMigrationDefaults
 
         if let source {
             switch source {
@@ -129,7 +175,8 @@ final class PluginCatalogManager {
             catalogProvider: provider,
             packageResolver: resolver,
             dynamicPluginManager: dynamicPluginManager,
-            source: source
+            source: source,
+            extractionMigrationUserDefaults: .standard
         )
     }
 
@@ -160,28 +207,78 @@ final class PluginCatalogManager {
     }
 
     func installPlugin(id: String) async throws {
+        let extractionRule = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        if id == extractionRule.destinationPluginID,
+           extractionMigrationRequiresCoordinatedTransition() {
+            guard pendingExtractionMigration(requiresLegacyPreference: false) != nil else {
+                throw PluginCatalogManagerError.catalogEntryNotFound(extractionRule.sourcePluginID)
+            }
+            _ = try await performPendingExtractionMigration(
+                reloadAfterMigration: true,
+                requiresLegacyPreference: false
+            )
+            return
+        }
+
         let entry = try catalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
         try dynamicPluginManager.installPluginPackage(
             from: packageURL,
             catalogEntry: entry
         )
+        if id == extractionRule.sourcePluginID || id == extractionRule.destinationPluginID {
+            _ = try await performPendingExtractionMigration(
+                reloadAfterMigration: true,
+                requiresLegacyPreference: false
+            )
+        }
     }
 
     func updatePlugin(id: String) async throws {
+        let extractionRule = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        if id == extractionRule.sourcePluginID {
+            if pendingExtractionMigration() != nil {
+                let migratedSourceIDs = try await performPendingExtractionMigration(
+                    reloadAfterMigration: true
+                )
+                if migratedSourceIDs.contains(id) {
+                    return
+                }
+            } else if let entry = usableCatalogEntry(id: id),
+                      shouldDeferSourceUpdateForExtraction(
+                          entry,
+                          installedVersions: dynamicPluginManager.installedPackageVersionsByID()
+                      ) {
+                throw PluginCatalogManagerError.catalogEntryNotFound(
+                    extractionRule.destinationPluginID
+                )
+            }
+        }
+
         let entry = try catalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
         guard dynamicPluginManager.isInstalledPlugin(id) else {
             return
         }
 
-        try dynamicPluginManager.updatePluginPackage(from: packageURL, catalogEntry: entry)
+        try dynamicPluginManager.updatePluginPackage(
+            from: packageURL,
+            catalogEntry: entry,
+            authorization: id == extractionRule.sourcePluginID
+                ? .featureExtractionCoordinator
+                : .standard
+        )
     }
 
     func updateAvailablePlugins(
         progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
     ) async throws {
-        let entries = try availableUpdateEntries()
+        let migratedSourceIDs = try await performPendingExtractionMigration(
+            reloadAfterMigration: true
+        )
+        let entries = try availableUpdateEntries().filter {
+            !migratedSourceIDs.contains($0.id)
+        }
         guard !entries.isEmpty else {
             return
         }
@@ -191,18 +288,278 @@ final class PluginCatalogManager {
 
     func automaticUpdatePlanForInstalledPlugins() -> PluginCatalogUpdatePlan {
         let entries = updateEntriesForInstalledPlugins()
-        return PluginCatalogUpdatePlan(updateableInstalledPluginIDs: entries.map(\.id))
+        let migration = pendingExtractionMigration()
+        return PluginCatalogUpdatePlan(
+            updateableInstalledPluginIDs: entries.map(\.id),
+            migrationAffectedPluginIDs: migration?.affectedPluginIDs ?? []
+        )
+    }
+
+    var hasPendingExtractionMigrationResume: Bool {
+        dynamicPluginManager.featureExtractionMigrationIsInProgress()
+            || pendingExtractionMigration() != nil
     }
 
     func updateInstalledPluginsToLatestBeforeLoading(
         progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
     ) async throws {
-        let entries = updateEntriesForInstalledPlugins()
+        let pendingMigration = pendingExtractionMigration()
+        let migrationAffectedCount = pendingMigration?.affectedPluginIDs.count ?? 0
+        let initialUpdateEntries = updateEntriesForInstalledPlugins()
+        let plannedMigrationSourceID = pendingMigration?.sourceUpdateEntry?.id
+        let remainingUpdateCount = initialUpdateEntries.filter {
+            $0.id != plannedMigrationSourceID
+        }.count
+        let totalCount = migrationAffectedCount + remainingUpdateCount
+
+        if migrationAffectedCount > 0 {
+            progress?(PluginCatalogUpdateProgress(completedCount: 0, totalCount: totalCount))
+            await Task.yield()
+        }
+
+        let migrationUpdatedPluginIDs = try await performPendingExtractionMigration()
+        let entries = updateEntriesForInstalledPlugins().filter {
+            !migrationUpdatedPluginIDs.contains($0.id)
+        }
         guard !entries.isEmpty else {
+            if migrationAffectedCount > 0 {
+                progress?(
+                    PluginCatalogUpdateProgress(
+                        completedCount: migrationAffectedCount,
+                        totalCount: totalCount
+                    )
+                )
+            }
             return
         }
 
-        try await updatePlugins(entries: entries, reloadAfterUpdate: false, progress: progress)
+        try await updatePlugins(
+            entries: entries,
+            reloadAfterUpdate: false,
+            progress: { updateProgress in
+                progress?(
+                    PluginCatalogUpdateProgress(
+                        completedCount: migrationAffectedCount + updateProgress.completedCount,
+                        totalCount: totalCount
+                    )
+                )
+            }
+        )
+    }
+
+    private func performPendingExtractionMigration(
+        reloadAfterMigration: Bool = false,
+        requiresLegacyPreference: Bool = true
+    ) async throws -> Set<String> {
+        guard let pending = pendingExtractionMigration(
+            requiresLegacyPreference: requiresLegacyPreference
+        ),
+              let defaults = extractionMigrationUserDefaults
+        else {
+            return []
+        }
+
+        let participantVersionsBeforeResolution = dynamicPluginManager
+            .installedPackageVersionsByID()
+        let sourceMutationGenerationBeforeResolution = dynamicPluginManager
+            .packageMutationGeneration(for: pending.rule.sourcePluginID)
+        let destinationMutationGenerationBeforeResolution = dynamicPluginManager
+            .packageMutationGeneration(for: pending.rule.destinationPluginID)
+        let migrationWasAlreadyInProgress = dynamicPluginManager
+            .featureExtractionMigrationIsInProgress()
+
+        let destinationPackageURL: URL?
+        if pending.destinationNeedsInstall || pending.destinationNeedsUpdate {
+            guard let destinationEntry = pending.destinationEntry else {
+                throw PluginCatalogManagerError.catalogEntryNotFound(pending.rule.destinationPluginID)
+            }
+            destinationPackageURL = try await packageResolver.resolvePackage(for: destinationEntry)
+        } else {
+            destinationPackageURL = nil
+        }
+
+        let sourceUpdatePackageURL: URL?
+        if let sourceUpdateEntry = pending.sourceUpdateEntry {
+            sourceUpdatePackageURL = try await packageResolver.resolvePackage(for: sourceUpdateEntry)
+        } else {
+            sourceUpdatePackageURL = nil
+        }
+
+        let participantVersionsAfterResolution = dynamicPluginManager
+            .installedPackageVersionsByID()
+        guard defaults.object(forKey: pending.rule.completionKey) == nil,
+              participantVersionsAfterResolution[pending.rule.sourcePluginID]
+                == participantVersionsBeforeResolution[pending.rule.sourcePluginID],
+              participantVersionsAfterResolution[pending.rule.destinationPluginID]
+                == participantVersionsBeforeResolution[pending.rule.destinationPluginID],
+              dynamicPluginManager.packageMutationGeneration(
+                  for: pending.rule.sourcePluginID
+              ) == sourceMutationGenerationBeforeResolution,
+              dynamicPluginManager.packageMutationGeneration(
+                  for: pending.rule.destinationPluginID
+              ) == destinationMutationGenerationBeforeResolution
+        else {
+            // Package resolution is an actor-reentrant suspension point. A user uninstall or
+            // replacement of either participant during that interval wins over this stale plan.
+            // Report cancellation instead of claiming those participants migrated successfully.
+            throw PluginCatalogManagerError.migrationPlanInvalidated
+        }
+
+        let transactionJournalWasAlreadyPresent = defaults.bool(
+            forKey: pending.rule.transactionJournalKey
+        )
+        defaults.set(true, forKey: pending.rule.transactionJournalKey)
+        guard synchronizeExtractionMigrationDefaults(defaults) else {
+            if !transactionJournalWasAlreadyPresent {
+                defaults.removeObject(forKey: pending.rule.transactionJournalKey)
+                _ = synchronizeExtractionMigrationDefaults(defaults)
+            }
+            throw PluginCatalogManagerError.migrationJournalPersistenceFailed
+        }
+        if migrationWasAlreadyInProgress {
+            // Recovery always commits forward. Re-run the destination's idempotent preference
+            // migration in case the previous process stopped during preflight or rollback.
+            dynamicPluginManager.removePluginPreference(
+                pluginID: pending.rule.destinationPluginID,
+                key: pending.rule.destinationPreferenceMigrationMarkerKey
+            )
+        }
+
+        let destinationPreferenceSnapshot = dynamicPluginManager.snapshotPluginPreferences(
+            pluginID: pending.rule.destinationPluginID
+        )
+        let destinationWasLoaded = pending.destinationNeedsUpdate
+            && dynamicPluginManager.isPluginLoaded(pending.rule.destinationPluginID)
+        let suspendedSource = pending.sourceUpdateEntry.map {
+            dynamicPluginManager.suspendLoadedPluginForMigration(pluginID: $0.id)
+        } ?? false
+        var installedDestination = false
+        var destinationRollbackSnapshot: PluginPackageRollbackSnapshot?
+        do {
+            if let destinationPackageURL, let destinationEntry = pending.destinationEntry {
+                if pending.destinationNeedsInstall {
+                    try dynamicPluginManager.installPluginPackage(
+                        from: destinationPackageURL,
+                        catalogEntry: destinationEntry,
+                        reloadAfterInstall: false,
+                        authorization: .featureExtractionCoordinator
+                    )
+                    installedDestination = true
+                } else {
+                    if !destinationWasLoaded {
+                        destinationRollbackSnapshot = try dynamicPluginManager.makeRollbackSnapshot(
+                            pluginID: pending.rule.destinationPluginID
+                        )
+                    }
+                    try dynamicPluginManager.updatePluginPackage(
+                        from: destinationPackageURL,
+                        catalogEntry: destinationEntry,
+                        reloadAfterUpdate: false,
+                        authorization: .featureExtractionCoordinator
+                    )
+                }
+            }
+
+            if destinationWasLoaded {
+                // Native bundles already admitted to the process cannot prove the replacement
+                // binary is active. Stage the compatible package and finish after restart.
+                dynamicPluginManager.restoreSuspendedPluginAfterMigrationFailure(
+                    pluginID: pending.rule.sourcePluginID,
+                    wasSuspended: suspendedSource
+                )
+                return pending.sourceUpdateEntry.map { [$0.id] } ?? []
+            }
+
+            try dynamicPluginManager.validatePluginInstallationBeforeMigration(
+                pluginID: pending.rule.destinationPluginID
+            )
+
+            if let sourceUpdatePackageURL, let sourceUpdateEntry = pending.sourceUpdateEntry {
+                if pending.sourceNeedsInstall {
+                    try dynamicPluginManager.installPluginPackage(
+                        from: sourceUpdatePackageURL,
+                        catalogEntry: sourceUpdateEntry,
+                        reloadAfterInstall: false,
+                        authorization: .featureExtractionCoordinator
+                    )
+                } else {
+                    try dynamicPluginManager.updatePluginPackage(
+                        from: sourceUpdatePackageURL,
+                        catalogEntry: sourceUpdateEntry,
+                        reloadAfterUpdate: false,
+                        authorization: .featureExtractionCoordinator
+                    )
+                }
+            }
+        } catch {
+            var migrationError = error
+            var canRestoreSuspendedSource = true
+            dynamicPluginManager.restorePluginPreferences(
+                destinationPreferenceSnapshot,
+                pluginID: pending.rule.destinationPluginID
+            )
+            if let destinationRollbackSnapshot {
+                do {
+                    try dynamicPluginManager.restoreRollbackSnapshot(destinationRollbackSnapshot)
+                    dynamicPluginManager.discardRollbackSnapshot(destinationRollbackSnapshot)
+                } catch let rollbackError {
+                    canRestoreSuspendedSource = false
+                    migrationError = PluginExtractionMigrationError(
+                        migrationID: pending.rule.id,
+                        primaryError: error,
+                        rollbackError: rollbackError
+                    )
+                }
+            } else if installedDestination {
+                do {
+                    try dynamicPluginManager.rollbackUnloadedPluginInstallation(
+                        pluginID: pending.rule.destinationPluginID
+                    )
+                } catch let rollbackError {
+                    canRestoreSuspendedSource = false
+                    migrationError = PluginExtractionMigrationError(
+                        migrationID: pending.rule.id,
+                        primaryError: error,
+                        rollbackError: rollbackError
+                    )
+                }
+            }
+            let rolledBackVersions = dynamicPluginManager.installedPackageVersionsByID()
+            let completedRollbackToSourceOnly = canRestoreSuspendedSource
+                && rolledBackVersions[pending.rule.destinationPluginID] == nil
+                && rolledBackVersions[pending.rule.sourcePluginID].map {
+                    !PluginVersionComparator.isVersion(
+                        $0,
+                        atLeast: pending.rule.sourceRetirementVersion
+                    )
+                } == true
+            if completedRollbackToSourceOnly {
+                defaults.removeObject(forKey: pending.rule.transactionJournalKey)
+                _ = synchronizeExtractionMigrationDefaults(defaults)
+            }
+            if canRestoreSuspendedSource {
+                dynamicPluginManager.restoreSuspendedPluginAfterMigrationFailure(
+                    pluginID: pending.rule.sourcePluginID,
+                    wasSuspended: suspendedSource
+                )
+            }
+            throw migrationError
+        }
+
+        if let destinationRollbackSnapshot {
+            dynamicPluginManager.discardRollbackSnapshot(destinationRollbackSnapshot)
+        }
+
+        guard persistExtractionMigrationCompletion(pending.rule, defaults: defaults) else {
+            throw PluginCatalogManagerError.migrationCompletionPersistenceFailed
+        }
+        if reloadAfterMigration {
+            dynamicPluginManager.reloadInstalledPlugins()
+        }
+        if let sourceUpdateEntry = pending.sourceUpdateEntry {
+            return [sourceUpdateEntry.id]
+        }
+        return []
     }
 
     private func updatePlugins(
@@ -243,6 +600,9 @@ final class PluginCatalogManager {
             contentsOf: await dynamicPluginManager.updatePluginPackages(
                 resolvedUpdates,
                 reloadAfterUpdate: reloadAfterUpdate,
+                featureExtractionAuthorizedPluginIDs: [
+                    PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick.sourcePluginID,
+                ],
                 onPackageProcessed: {
                     completedCount += 1
                     reportProgress()
@@ -257,6 +617,148 @@ final class PluginCatalogManager {
 
     func rebuildManagementItems() {
         dynamicPluginManager.rebuildManagementItems(catalogSnapshot: snapshot)
+    }
+
+    private func pendingExtractionMigration(
+        requiresLegacyPreference: Bool = true
+    ) -> PendingPluginExtractionMigration? {
+        let rule = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        guard let defaults = extractionMigrationUserDefaults,
+              defaults.object(forKey: rule.completionKey) == nil,
+              !dynamicPluginManager.featureExtractionSourceUninstallIsPending()
+        else {
+            return nil
+        }
+        let transactionIsInProgress = dynamicPluginManager
+            .featureExtractionMigrationIsInProgress()
+        if requiresLegacyPreference,
+           !transactionIsInProgress,
+           defaults.object(forKey: rule.legacyPreferenceKey) == nil {
+            return nil
+        }
+
+        let installedVersions = dynamicPluginManager.installedPackageVersionsByID()
+        let sourceVersion = installedVersions[rule.sourcePluginID]
+        let sourceNeedsInstall = sourceVersion == nil
+        guard !sourceNeedsInstall || transactionIsInProgress else {
+            return nil
+        }
+
+        let installedDestinationVersion = installedVersions[rule.destinationPluginID]
+        let destinationNeedsInstall = installedDestinationVersion == nil
+        let destinationNeedsUpdate = installedDestinationVersion.map {
+            !PluginVersionComparator.isVersion($0, atLeast: rule.minimumDestinationVersion)
+        } ?? false
+        let destinationEntry: PluginCatalogEntry?
+        if destinationNeedsInstall || destinationNeedsUpdate {
+            guard let availableDestination = usableCatalogEntry(id: rule.destinationPluginID),
+                  PluginVersionComparator.isVersion(
+                      availableDestination.version,
+                      atLeast: rule.minimumDestinationVersion
+                  ),
+                  installedDestinationVersion.map({
+                      PluginVersionComparator.isVersion(
+                          availableDestination.version,
+                          newerThan: $0
+                      )
+                  }) ?? true
+            else {
+                return nil
+            }
+            destinationEntry = availableDestination
+        } else {
+            destinationEntry = nil
+        }
+
+        let sourceUpdateEntry: PluginCatalogEntry?
+        if let sourceVersion,
+           PluginVersionComparator.isVersion(sourceVersion, atLeast: rule.sourceRetirementVersion) {
+            sourceUpdateEntry = nil
+        } else {
+            guard let availableSourceUpdate = usableCatalogEntry(id: rule.sourcePluginID),
+                  PluginVersionComparator.isVersion(
+                      availableSourceUpdate.version,
+                      atLeast: rule.sourceRetirementVersion
+                  ),
+                  sourceVersion.map({
+                      PluginVersionComparator.isVersion(
+                          availableSourceUpdate.version,
+                          newerThan: $0
+                      )
+                  }) ?? true
+            else {
+                // Keep the old source package intact until its replacement package and the
+                // source version that retires the behavior can be migrated as one operation.
+                return nil
+            }
+            sourceUpdateEntry = availableSourceUpdate
+        }
+
+        return PendingPluginExtractionMigration(
+            rule: rule,
+            destinationEntry: destinationEntry,
+            sourceUpdateEntry: sourceUpdateEntry,
+            destinationNeedsInstall: destinationNeedsInstall,
+            destinationNeedsUpdate: destinationNeedsUpdate,
+            sourceNeedsInstall: sourceNeedsInstall
+        )
+    }
+
+    private func extractionMigrationRequiresCoordinatedTransition() -> Bool {
+        let rule = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        guard let defaults = extractionMigrationUserDefaults,
+              defaults.object(forKey: rule.completionKey) == nil
+        else {
+            return false
+        }
+
+        let installedVersions = dynamicPluginManager.installedPackageVersionsByID()
+        guard let sourceVersion = installedVersions[rule.sourcePluginID]
+        else {
+            return false
+        }
+        let destinationIsCompatible = installedVersions[rule.destinationPluginID].map {
+            PluginVersionComparator.isVersion($0, atLeast: rule.minimumDestinationVersion)
+        } ?? false
+        return !destinationIsCompatible && !PluginVersionComparator.isVersion(
+            sourceVersion,
+            atLeast: rule.sourceRetirementVersion
+        )
+    }
+
+    private func persistExtractionMigrationCompletion(
+        _ rule: PluginExtractionMigrationPolicy,
+        defaults: UserDefaults
+    ) -> Bool {
+        let completionWasAlreadyPresent = defaults.bool(forKey: rule.completionKey)
+        defaults.set(true, forKey: rule.completionKey)
+
+        // Keep the write-ahead journal until completion itself is durable. If this write fails,
+        // restore an uncommitted in-memory view so recovery remains eligible in this process.
+        guard synchronizeExtractionMigrationDefaults(defaults) else {
+            if !completionWasAlreadyPresent {
+                defaults.removeObject(forKey: rule.completionKey)
+                _ = synchronizeExtractionMigrationDefaults(defaults)
+            }
+            return false
+        }
+
+        // A failure here can leave completion + journal on disk. PluginPackageStore reconciles
+        // that explicitly safe crash state during initialization and before journal checks.
+        defaults.removeObject(forKey: rule.transactionJournalKey)
+        _ = synchronizeExtractionMigrationDefaults(defaults)
+        return true
+    }
+
+    private func usableCatalogEntry(id: String) -> PluginCatalogEntry? {
+        guard let entry = snapshot?.catalog.plugins.first(where: { $0.id == id }),
+              snapshot?.catalog.revoked.contains(where: {
+                  $0.matches(pluginID: entry.id, version: entry.version)
+              }) != true
+        else {
+            return nil
+        }
+        return entry
     }
 
     private func catalogEntry(id: String) throws -> PluginCatalogEntry {
@@ -279,12 +781,16 @@ final class PluginCatalogManager {
             uniqueKeysWithValues: (snapshot?.catalog.plugins ?? []).map { ($0.id, $0) }
         )
 
-        return try ids.map { id in
+        let installedVersions = dynamicPluginManager.installedPackageVersionsByID()
+        return try ids.compactMap { id in
             guard let entry = entriesByID[id] else {
                 throw PluginCatalogManagerError.catalogEntryNotFound(id)
             }
 
-            return entry
+            return shouldDeferSourceUpdateForExtraction(
+                entry,
+                installedVersions: installedVersions
+            ) ? nil : entry
         }
     }
 
@@ -302,8 +808,39 @@ final class PluginCatalogManager {
                 return false
             }
 
+            if shouldDeferSourceUpdateForExtraction(entry, installedVersions: installedVersionsByID) {
+                return false
+            }
+
             return PluginVersionComparator.isVersion(entry.version, newerThan: installedVersion)
         }
+    }
+
+    private func shouldDeferSourceUpdateForExtraction(
+        _ entry: PluginCatalogEntry,
+        installedVersions: [String: String]
+    ) -> Bool {
+        let rule = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        guard entry.id == rule.sourcePluginID,
+              PluginVersionComparator.isVersion(entry.version, atLeast: rule.sourceRetirementVersion),
+              let defaults = extractionMigrationUserDefaults,
+              defaults.object(forKey: rule.completionKey) == nil,
+              defaults.object(forKey: rule.legacyPreferenceKey) != nil
+        else {
+            return false
+        }
+
+        let destinationIsCompatible = installedVersions[rule.destinationPluginID].map {
+            PluginVersionComparator.isVersion($0, atLeast: rule.minimumDestinationVersion)
+        } ?? false
+        guard !destinationIsCompatible else { return false }
+        guard let destinationEntry = usableCatalogEntry(id: rule.destinationPluginID) else {
+            return true
+        }
+        return !PluginVersionComparator.isVersion(
+            destinationEntry.version,
+            atLeast: rule.minimumDestinationVersion
+        )
     }
 
     private func statusSource(for snapshot: PluginCatalogSnapshot) -> PluginCatalogStatus.Source {
@@ -318,11 +855,45 @@ final class PluginCatalogManager {
 
 enum PluginCatalogManagerError: LocalizedError, Equatable {
     case catalogEntryNotFound(String)
+    case migrationPlanInvalidated
+    case migrationJournalPersistenceFailed
+    case migrationCompletionPersistenceFailed
 
     var errorDescription: String? {
         switch self {
         case let .catalogEntryNotFound(id):
             return AppL10n.pluginsFormat("plugin.error.catalog.entryNotFoundFormat", defaultValue: "插件列表中未找到插件：%@", id)
+        case .migrationPlanInvalidated:
+            return AppL10n.plugins(
+                "plugin.error.catalog.migrationPlanInvalidated",
+                defaultValue: "插件状态已更改，请重试更新。"
+            )
+        case .migrationJournalPersistenceFailed:
+            return AppL10n.plugins(
+                "plugin.error.catalog.migrationJournalPersistenceFailed",
+                defaultValue: "无法保存插件迁移状态，未执行更新。"
+            )
+        case .migrationCompletionPersistenceFailed:
+            return AppL10n.plugins(
+                "plugin.error.catalog.migrationCompletionPersistenceFailed",
+                defaultValue: "插件已更新，但无法保存迁移完成状态；下次启动时将继续恢复。"
+            )
         }
+    }
+}
+
+private struct PluginExtractionMigrationError: LocalizedError {
+    let migrationID: String
+    let primaryError: Error
+    let rollbackError: Error
+
+    var errorDescription: String? {
+        AppL10n.pluginsFormat(
+            "plugin.error.catalog.extractionRollbackFailedFormat",
+            defaultValue: "插件功能迁移 %@ 失败：%@；回滚也失败：%@",
+            migrationID,
+            primaryError.localizedDescription,
+            rollbackError.localizedDescription
+        )
     }
 }

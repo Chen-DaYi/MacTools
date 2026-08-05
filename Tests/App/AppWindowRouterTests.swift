@@ -175,7 +175,8 @@ final class AppWindowRouterTests: XCTestCase {
             appUpdater: AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
-            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())
+            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService()),
+            appearanceUserDefaults: defaults
         )
 
         router.presentSettings(.pluginMarketplace)
@@ -217,7 +218,8 @@ final class AppWindowRouterTests: XCTestCase {
             appUpdater: AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
-            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())
+            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService()),
+            appearanceUserDefaults: defaults
         )
 
         host.presentPluginMarketplace()
@@ -682,7 +684,8 @@ final class AppWindowRouterTests: XCTestCase {
             appUpdater: appUpdater ?? AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
-            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService())
+            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService()),
+            appearanceUserDefaults: defaults
         )
     }
 

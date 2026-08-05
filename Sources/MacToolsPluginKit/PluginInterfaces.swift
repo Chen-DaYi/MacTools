@@ -136,6 +136,13 @@ public protocol DisplayTopologyRefreshing {
     func refreshDisplayTopology()
 }
 
+/// Optional preflight contract for a plugin that takes ownership of behavior extracted from
+/// another package. This is a separate protocol so existing plugin witness tables remain stable.
+@MainActor
+public protocol PluginFeatureExtractionReadinessProviding: AnyObject {
+    func validateFeatureExtractionReadiness() throws
+}
+
 /// Optional protocol for plugins that expose a compact, read-only status in the primary panel row.
 /// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
 @MainActor

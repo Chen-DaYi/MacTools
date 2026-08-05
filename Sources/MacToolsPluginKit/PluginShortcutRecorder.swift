@@ -122,6 +122,7 @@ public struct PluginShortcutRecorder: View {
     public let onEndRecording: (() -> Void)?
 
     @State private var isPresented = false
+    @State private var isHovered = false
 
     public init(
         title: String,
@@ -153,8 +154,29 @@ public struct PluginShortcutRecorder: View {
             )
         }
         .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(
+            cornerRadius: PluginSettingsTheme.Radius.field,
+            style: .continuous
+        ))
+        .overlay {
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
+                .strokeBorder(
+                    Color.accentColor.opacity(isHovered && !isPresented ? 0.45 : 0),
+                    lineWidth: PluginSettingsTheme.Stroke.standard
+                )
+                .allowsHitTesting(false)
+        }
         .help(PluginKitLocalization.shortcutRecorderHelp(title: title))
         .accessibilityLabel(Text(title))
+        .onHover { hovering in
+            isHovered = hovering
+            (hovering ? NSCursor.pointingHand : NSCursor.arrow).set()
+        }
+        .onDisappear {
+            guard isHovered else { return }
+            isHovered = false
+            NSCursor.arrow.set()
+        }
         .background {
             GeometryReader { proxy in
                 PluginShortcutRecorderPopoverAnchor(

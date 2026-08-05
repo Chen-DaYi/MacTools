@@ -98,26 +98,64 @@ private final class MockMouseEnhancerMiddleClickSession: MouseEnhancerMiddleClic
 
 @MainActor
 final class MouseEnhancerPluginTests: XCTestCase {
-    func testStoreIgnoresLegacyMiddleClickStorageKeys() {
+    func testStoreLeavesExtractedMiddleClickStorageKeysUntouched() {
         let storage = MouseEnhancerMemoryStorage()
-        storage.values["middle-click.enabled"] = true
-        storage.values["middle-click.required-finger-count"] = 5
+        storage.values["mouse-enhancer.middle-click.enabled"] = true
+        storage.values["mouse-enhancer.middle-click.finger-count"] = 5
 
         let store = MouseEnhancerStore(storage: storage)
 
-        XCTAssertFalse(store.configuration.middleClickEnabled)
-        XCTAssertEqual(store.configuration.middleClickFingerCount, 3)
-    }
-
-    func testMiddleClickConfigurationPersistsUnderMouseEnhancerKeys() {
-        let storage = MouseEnhancerMemoryStorage()
-        let store = MouseEnhancerStore(storage: storage)
-
-        store.setMiddleClickEnabled(true)
-        store.setMiddleClickFingerCount(5)
-
+        XCTAssertFalse(store.configuration.shouldInstallEventTap)
+        XCTAssertTrue(store.configuration.middleClickEnabled)
+        XCTAssertEqual(store.configuration.middleClickFingerCount, 5)
         XCTAssertEqual(storage.values["mouse-enhancer.middle-click.enabled"] as? Bool, true)
         XCTAssertEqual(storage.values["mouse-enhancer.middle-click.finger-count"] as? Int, 5)
+    }
+
+    func testFeatureExtractionHostNeverStartsLegacyMiddleClickListener() {
+        let storage = MouseEnhancerMemoryStorage()
+        storage.values["mouse-enhancer.middle-click.enabled"] = true
+        storage.values["mouse-enhancer.middle-click.finger-count"] = 5
+        let middleClickSession = MockMouseEnhancerMiddleClickSession()
+        let plugin = makePlugin(
+            storage: storage,
+            middleClickSession: middleClickSession,
+            hostVersion: "1.1.6"
+        )
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "mouse-enhancer"))
+
+        XCTAssertEqual(middleClickSession.activateCallCount, 0)
+        XCTAssertEqual(middleClickSession.deactivateCallCount, 0)
+    }
+
+    func testDowngradedHostRestoresLegacyMiddleClickFromPreservedPreferences() {
+        let storage = MouseEnhancerMemoryStorage()
+        storage.values["mouse-enhancer.middle-click.enabled"] = true
+        storage.values["mouse-enhancer.middle-click.finger-count"] = 5
+        let middleClickSession = MockMouseEnhancerMiddleClickSession()
+        let plugin = makePlugin(
+            storage: storage,
+            middleClickSession: middleClickSession,
+            hostVersion: "1.1.5"
+        )
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "mouse-enhancer"))
+
+        XCTAssertEqual(middleClickSession.activateCallCount, 1)
+        XCTAssertEqual(middleClickSession.requiredFingerCount, 5)
+    }
+
+    func testLegacyMiddleClickOwnershipUsesHostVersionBoundary() {
+        XCTAssertTrue(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.1.5"))
+        XCTAssertFalse(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.1.6"))
+        XCTAssertFalse(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.1.6-beta.1"))
+        XCTAssertFalse(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: "1.2.0"))
+        XCTAssertFalse(MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(hostVersion: nil))
+    }
+
+    func testLegacyMultitouchRuntimeResolvesRequiredSymbolsDynamically() {
+        XCTAssertNotNil(MouseEnhancerMultitouchRuntime.load())
     }
 
     func testPanelButtonRequestsConfigurationPresentation() {
@@ -188,78 +226,6 @@ final class MouseEnhancerPluginTests: XCTestCase {
 
         XCTAssertFalse(session.updatedConfigurations.isEmpty)
         XCTAssertTrue(session.updatedConfigurations.last?.reverseMouseHorizontal == true)
-    }
-
-    func testMiddleClickStartsWhenEnabledAndAccessibilityGranted() {
-        let scrollSession = MockMouseEnhancerSession()
-        let middleClickSession = MockMouseEnhancerMiddleClickSession()
-        let plugin = makePlugin(
-            session: scrollSession,
-            middleClickSession: middleClickSession,
-            accessibilityTrusted: true
-        )
-
-        plugin.store.setMiddleClickFingerCount(4)
-        plugin.store.setMiddleClickEnabled(true)
-        plugin.configurationDidChange()
-
-        XCTAssertTrue(scrollSession.activatedConfigurations.isEmpty)
-        XCTAssertEqual(middleClickSession.activateCallCount, 1)
-        XCTAssertEqual(middleClickSession.requiredFingerCount, 4)
-    }
-
-    func testMiddleClickFingerCountChangeUpdatesRunningSession() {
-        let middleClickSession = MockMouseEnhancerMiddleClickSession()
-        let plugin = makePlugin(
-            middleClickSession: middleClickSession,
-            accessibilityTrusted: true
-        )
-
-        plugin.store.setMiddleClickEnabled(true)
-        plugin.configurationDidChange()
-        plugin.store.setMiddleClickFingerCount(5)
-        plugin.configurationDidChange()
-
-        XCTAssertEqual(middleClickSession.activateCallCount, 1)
-        XCTAssertEqual(middleClickSession.requiredFingerCount, 5)
-        XCTAssertTrue(middleClickSession.assignedFingerCounts.contains(5))
-    }
-
-    func testTurningMiddleClickOffStopsSession() {
-        let middleClickSession = MockMouseEnhancerMiddleClickSession()
-        let plugin = makePlugin(
-            middleClickSession: middleClickSession,
-            accessibilityTrusted: true
-        )
-
-        plugin.store.setMiddleClickEnabled(true)
-        plugin.configurationDidChange()
-        plugin.store.setMiddleClickEnabled(false)
-        plugin.configurationDidChange()
-
-        XCTAssertEqual(middleClickSession.activateCallCount, 1)
-        XCTAssertEqual(middleClickSession.deactivateCallCount, 1)
-    }
-
-    func testMiddleClickRequestsPermissionWhenAccessibilityDenied() {
-        let middleClickSession = MockMouseEnhancerMiddleClickSession()
-        var didRequestPermission = false
-        let plugin = makePlugin(
-            middleClickSession: middleClickSession,
-            accessibilityTrusted: false,
-            requestAccessibilityTrust: false
-        )
-        plugin.requestPermissionGuidance = { id in
-            didRequestPermission = id == "accessibility"
-        }
-
-        plugin.store.setMiddleClickEnabled(true)
-        plugin.configurationDidChange()
-
-        XCTAssertTrue(didRequestPermission)
-        XCTAssertEqual(middleClickSession.activateCallCount, 0)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "启用前需要辅助功能授权")
-        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
     }
 
     func testPermissionRequirementsIncludeAccessibilityAndInputMonitoring() {
@@ -475,19 +441,22 @@ final class MouseEnhancerPluginTests: XCTestCase {
     }
 
     private func makePlugin(
+        storage: MouseEnhancerMemoryStorage? = nil,
         session: MockMouseEnhancerSession? = nil,
         middleClickSession: MockMouseEnhancerMiddleClickSession? = nil,
+        hostVersion: String = "1.1.6",
         accessibilityTrusted: Bool = true,
         requestAccessibilityTrust: Bool = true,
         inputMonitoringStatus: MouseEnhancerInputMonitoringAuthorizationStatus = .granted
     ) -> MouseEnhancerPlugin {
-        let storage = MouseEnhancerMemoryStorage()
+        let storage = storage ?? MouseEnhancerMemoryStorage()
         return MouseEnhancerPlugin(
             context: PluginRuntimeContext(pluginID: "mouse-enhancer", storage: storage),
             session: session ?? MockMouseEnhancerSession(),
             makeMiddleClickSession: {
                 middleClickSession ?? MockMouseEnhancerMiddleClickSession()
             },
+            hostVersion: hostVersion,
             accessibilityTrusted: { accessibilityTrusted },
             requestAccessibilityTrust: { _ in requestAccessibilityTrust },
             inputMonitoringAuthorizationStatus: { inputMonitoringStatus },

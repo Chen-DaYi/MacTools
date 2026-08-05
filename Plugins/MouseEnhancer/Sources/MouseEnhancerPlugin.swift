@@ -31,6 +31,31 @@ enum MouseEnhancerInputMonitoringAuthorizationStatus {
     case unknown
 }
 
+enum MouseEnhancerHostCompatibility {
+    static let featureExtractionHostVersion = "1.1.6"
+
+    static func ownsLegacyMiddleClick(hostVersion: String?) -> Bool {
+        guard let hostVersion else { return false }
+        return compare(hostVersion, featureExtractionHostVersion) == .orderedAscending
+    }
+
+    private static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let left = lhs.split(separator: ".").map(numericPrefix)
+        let right = rhs.split(separator: ".").map(numericPrefix)
+        for index in 0..<max(left.count, right.count) {
+            let leftPart = index < left.count ? left[index] : 0
+            let rightPart = index < right.count ? right[index] : 0
+            if leftPart < rightPart { return .orderedAscending }
+            if leftPart > rightPart { return .orderedDescending }
+        }
+        return .orderedSame
+    }
+
+    private static func numericPrefix(_ component: Substring) -> Int {
+        Int(component.prefix(while: \.isNumber)) ?? 0
+    }
+}
+
 @MainActor
 final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing, PluginConfigurationPresenting {
     private enum PermissionID {
@@ -51,6 +76,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
     private let localization: PluginLocalization
     private let session: any MouseEnhancerSessionManaging
     private let makeMiddleClickSession: @MainActor () -> any MouseEnhancerMiddleClickSessionManaging
+    private let ownsLegacyMiddleClick: Bool
     private var middleClickSession: (any MouseEnhancerMiddleClickSessionManaging)?
     private let accessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityTrust: @MainActor (Bool) -> Bool
@@ -70,6 +96,9 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         makeMiddleClickSession: @escaping @MainActor () -> any MouseEnhancerMiddleClickSessionManaging = {
             MouseEnhancerMiddleClickSession()
         },
+        hostVersion: String? = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String,
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         accessibilityTrusted: @escaping @MainActor () -> Bool = MouseEnhancerAccessibilityCheck.isTrusted,
         requestAccessibilityTrust: @escaping @MainActor (Bool) -> Bool = MouseEnhancerAccessibilityCheck.requestTrust(prompt:),
@@ -80,6 +109,9 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         self.store = MouseEnhancerStore(storage: context.storage)
         self.session = session ?? MouseEnhancerSession()
         self.makeMiddleClickSession = makeMiddleClickSession
+        self.ownsLegacyMiddleClick = MouseEnhancerHostCompatibility.ownsLegacyMiddleClick(
+            hostVersion: hostVersion
+        )
         self.accessibilityTrusted = accessibilityTrusted
         self.requestAccessibilityTrust = requestAccessibilityTrust
         self.inputMonitoringAuthorizationStatus = inputMonitoringAuthorizationStatus
@@ -98,7 +130,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
             order: 56,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "增强鼠标与触控板滚动控制"
+                defaultValue: "分别调整鼠标与触控板的滚动方向"
             )
         )
     }
@@ -146,7 +178,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
                 title: localization.string("permission.accessibility.title", defaultValue: "辅助功能"),
                 description: localization.string(
                     "permission.accessibility.description",
-                    defaultValue: "用于监听滚动事件和发送中键点击。"
+                    defaultValue: "用于监听和调整滚动事件。"
                 )
             ),
             PluginPermissionRequirement(
@@ -174,6 +206,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
                 MouseEnhancerSettingsView(
                     store: self.store,
                     localization: self.localization,
+                    showsLegacyMiddleClick: self.ownsLegacyMiddleClick,
                     onChange: { [weak self] in
                         self?.configurationDidChange()
                     }
@@ -250,7 +283,9 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         lastErrorMessage = nil
 
         let configuration = store.configuration
-        guard configuration.shouldInstallEventTap || configuration.middleClickEnabled else {
+        guard configuration.shouldInstallEventTap
+            || (ownsLegacyMiddleClick && configuration.middleClickEnabled)
+        else {
             return true
         }
 
@@ -320,7 +355,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
     private func applyMiddleClickConfiguration() {
         let configuration = store.configuration
 
-        guard configuration.middleClickEnabled else {
+        guard ownsLegacyMiddleClick, configuration.middleClickEnabled else {
             stopMiddleClickSession()
             return
         }
@@ -343,7 +378,9 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         newSession.requiredFingerCount = configuration.middleClickFingerCount
         newSession.activate()
         middleClickSession = newSession
-        logger.info("middle click enabled requiredFingerCount=\(configuration.middleClickFingerCount, privacy: .public)")
+        logger.info(
+            "legacy middle click enabled requiredFingerCount=\(configuration.middleClickFingerCount, privacy: .public)"
+        )
     }
 
     private func stopMiddleClickSession() {
@@ -387,11 +424,14 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
             return localization.string("panel.subtitle.needsAccessibility", defaultValue: "启用前需要辅助功能授权")
         }
 
-        if !configuration.shouldInstallEventTap, !configuration.middleClickEnabled {
+        if !configuration.shouldInstallEventTap,
+           !(ownsLegacyMiddleClick && configuration.middleClickEnabled) {
             return localization.string("panel.subtitle.off", defaultValue: "未启用增强功能")
         }
 
-        if configuration.middleClickEnabled, !configuration.shouldInstallEventTap {
+        if ownsLegacyMiddleClick,
+           configuration.middleClickEnabled,
+           !configuration.shouldInstallEventTap {
             return localization.format(
                 "panel.subtitle.middleClickEnabledFormat",
                 defaultValue: "模拟中键 · %d指",
@@ -432,7 +472,8 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
     }
 
     private func activeConfigurationNeedsAccessibility(_ configuration: MouseEnhancerConfiguration) -> Bool {
-        configuration.shouldInstallEventTap || configuration.middleClickEnabled
+        configuration.shouldInstallEventTap
+            || (ownsLegacyMiddleClick && configuration.middleClickEnabled)
     }
 
     private var inputMonitoringPermissionState: PluginPermissionState {

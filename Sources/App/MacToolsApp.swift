@@ -32,6 +32,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private let menuBarIconSettings = MenuBarIconSettings()
     private let menuBarIconGallery = MenuBarIconGalleryLibrary()
     private let launchAtLoginController = LaunchAtLoginController()
+    private let appearanceUserDefaults = UserDefaults.standard
     private let pluginAutomaticUpdateVersionStore = PluginAutomaticUpdateVersionStore()
     private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
@@ -49,7 +50,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        AppAppearancePreference.applyStoredPreference()
+        AppAppearancePreference.applyStoredPreference(userDefaults: appearanceUserDefaults)
         launchAtLoginController.refreshStatus()
         UNUserNotificationCenter.current().delegate = self
 
@@ -58,7 +59,8 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             appUpdater: appUpdater,
             menuBarIconSettings: menuBarIconSettings,
             menuBarIconGallery: menuBarIconGallery,
-            launchAtLoginController: launchAtLoginController
+            launchAtLoginController: launchAtLoginController,
+            appearanceUserDefaults: appearanceUserDefaults
         )
         self.windowRouter = windowRouter
         let actionConfirmationService = AppActionConfirmationService { [weak self] in
@@ -113,9 +115,12 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             return
         }
 
-        guard pluginAutomaticUpdateVersionStore.needsAutomaticUpdateCheck(
+        let needsAutomaticUpdateCheck = pluginAutomaticUpdateVersionStore.needsAutomaticUpdateCheck(
             currentAppVersion: currentAppVersion
-        ) else {
+        )
+        guard needsAutomaticUpdateCheck
+            || pluginHost.hasPendingDynamicPluginExtractionMigration
+        else {
             pluginHost.loadDynamicPluginsIfNeeded()
             completeBootstrap()
             return

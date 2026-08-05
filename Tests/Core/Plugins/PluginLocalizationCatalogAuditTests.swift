@@ -17,6 +17,19 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
     ]
 
     private let pluginManagementLocalizationKeys = [
+        "plugin.error.catalog.extractionRollbackFailedFormat",
+        "plugin.error.catalog.migrationCompletionPersistenceFailed",
+        "plugin.error.catalog.migrationJournalPersistenceFailed",
+        "plugin.error.dynamic.extractionCoordinatorRequiredFormat",
+        "plugin.error.dynamic.extractionDestinationBelowMinimum",
+        "plugin.error.dynamic.extractionDestinationNotReady",
+        "plugin.error.dynamic.recordNotFoundFormat",
+        "plugin.error.dynamic.rollbackRequiresUnloadedFormat",
+        "plugin.error.dynamic.runtimeValidationFailedFormat",
+        "plugin.error.dynamic.runtimeValidationNoPlugin",
+        "plugin.error.dynamic.runtimeValidationNoResult",
+        "plugin.error.dynamic.runtimeValidationReadinessUnsupported",
+        "plugin.error.store.migrationStatePersistenceFailed",
         "plugin.management.active",
         "plugin.management.uninstall.confirmationMessage",
         "plugin.management.uninstall.confirmationTitle",
@@ -414,6 +427,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
 
         let appDirectory = repositoryRoot.appending(path: "Sources").appending(path: "App")
         let sourceNames = [
+            "AppHostCommands.swift",
             "MacToolsSearch.swift",
             "SettingsView.swift",
             "UnifiedSearchPaletteView.swift",
@@ -472,6 +486,46 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
                 categories.isSubset(of: Set(plural.keys)),
                 "\(language) is missing plural categories \(categories.subtracting(plural.keys))"
             )
+        }
+    }
+
+    func testUnifiedSearchVisibilityFormatsPreserveBothArguments() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+            .appending(path: "Search.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        let strings = try XCTUnwrap(catalog["strings"] as? [String: [String: Any]])
+        let keys = [
+            "search.command.pluginVisibility.show.titleFormat",
+            "search.command.pluginVisibility.show.descriptionFormat",
+            "search.command.pluginVisibility.hide.titleFormat",
+            "search.command.pluginVisibility.hide.descriptionFormat",
+        ]
+
+        for key in keys {
+            let entry = try XCTUnwrap(strings[key], "Missing localization key \(key)")
+            let localizations = try XCTUnwrap(
+                entry["localizations"] as? [String: Any],
+                "Missing localizations for \(key)"
+            )
+            for language in supportedLanguages {
+                let localization = try XCTUnwrap(
+                    localizations[language] as? [String: Any],
+                    "Missing \(language) localization for \(key)"
+                )
+                let stringUnit = try XCTUnwrap(
+                    localization["stringUnit"] as? [String: Any],
+                    "Missing string unit for \(key) in \(language)"
+                )
+                let value = try XCTUnwrap(
+                    stringUnit["value"] as? String,
+                    "Missing value for \(key) in \(language)"
+                )
+                XCTAssertTrue(value.contains("%1$@"), "\(key) in \(language) is missing %1$@")
+                XCTAssertTrue(value.contains("%2$@"), "\(key) in \(language) is missing %2$@")
+            }
         }
     }
 

@@ -4,6 +4,7 @@ import MacToolsPluginKit
 struct MouseEnhancerSettingsView: View {
     @ObservedObject var store: MouseEnhancerStore
     let localization: PluginLocalization
+    let showsLegacyMiddleClick: Bool
     let onChange: () -> Void
 
     var body: some View {
@@ -59,18 +60,20 @@ struct MouseEnhancerSettingsView: View {
                     isOn: trackpadHorizontalBinding
                 )
 
-                PluginSettingsListDivider()
-
-                toggleRow(
-                    title: localization.string("settings.middleClick.title", defaultValue: "模拟鼠标中键"),
-                    description: localization.string("settings.middleClick.description", defaultValue: "触控板轻点模拟鼠标中键点击。"),
-                    icon: "hand.tap",
-                    isOn: middleClickEnabledBinding
-                )
-
-                if store.configuration.middleClickEnabled {
+                if showsLegacyMiddleClick {
                     PluginSettingsListDivider()
-                    fingerCountRow
+
+                    toggleRow(
+                        title: localization.string("settings.middleClick.title", defaultValue: "模拟鼠标中键"),
+                        description: localization.string("settings.middleClick.description", defaultValue: "触控板轻点模拟鼠标中键点击。"),
+                        icon: "hand.tap",
+                        isOn: middleClickEnabledBinding
+                    )
+
+                    if store.configuration.middleClickEnabled {
+                        PluginSettingsListDivider()
+                        fingerCountRow
+                    }
                 }
             }
             .pluginSettingsCardBackground(.host)
@@ -184,6 +187,7 @@ struct MouseEnhancerSettingsView: View {
             }
         )
     }
+
 }
 
 private struct MouseEnhancerToggleRow: View {
@@ -249,7 +253,11 @@ private struct FingerCountButton: View {
                 Image(systemName: "hand.raised")
                     .pluginSettingsRowIconStyle(isSelected ? Color.accentColor : Color.primary)
 
-                Text(localization.format("settings.middleClick.fingerCount.optionFormat", defaultValue: "%d指", count))
+                Text(localization.format(
+                    "settings.middleClick.fingerCount.optionFormat",
+                    defaultValue: "%d指",
+                    count
+                ))
                     .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
             }
             .frame(maxWidth: .infinity)
@@ -269,9 +277,7 @@ private struct FingerCountButton: View {
         .overlay(
             RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous)
                 .strokeBorder(
-                    isSelected
-                        ? Color.accentColor.opacity(0.35)
-                        : Color.clear,
+                    isSelected ? Color.accentColor.opacity(0.35) : Color.clear,
                     lineWidth: PluginSettingsTheme.Stroke.standard
                 )
         )
@@ -282,6 +288,7 @@ private struct FingerCountButton: View {
     MouseEnhancerSettingsView(
         store: MouseEnhancerStore(storage: UserDefaultsPluginStorage(pluginID: "mouse-enhancer-preview")),
         localization: PluginLocalization(bundle: .main),
+        showsLegacyMiddleClick: false,
         onChange: {}
     )
     .frame(width: 440)
