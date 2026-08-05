@@ -582,6 +582,11 @@ struct UnifiedSearchPaletteView: View {
                 .foregroundStyle(.secondary)
                 .help("清除快捷键")
             }
+
+            ActionRunLinkCopyButton(
+                pluginHost: pluginHost,
+                reference: reference
+            )
         }
     }
 

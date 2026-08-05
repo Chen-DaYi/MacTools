@@ -1,0 +1,148 @@
+import AppKit
+import MacToolsPluginKit
+import XCTest
+@testable import MacTools
+
+@MainActor
+final class RunLinkExecutionCoordinatorTests: XCTestCase {
+    func testSuccessfulInvocationUsesExecutorAndPresentsSanitizedFeedback() async throws {
+        let setup = try makeSetup()
+        setup.provider.operation = { .succeeded(message: "private provider detail") }
+
+        await setup.coordinator.execute(.direct(setup.reference.key))
+
+        XCTAssertEqual(setup.provider.beginCount, 1)
+        XCTAssertEqual(
+            setup.feedback.values,
+            [
+                RunLinkExecutionFeedback(
+                    tone: .success,
+                    title: "操作已完成",
+                    message: "运行链接执行成功。"
+                ),
+            ]
+        )
+        XCTAssertFalse(setup.feedback.values[0].message.contains("private"))
+    }
+
+    func testConfirmAlwaysUsesInjectedConfirmationAndHonorsDenial() async throws {
+        let denied = try makeSetup(
+            risk: .confirmationRequired,
+            externalPolicy: .confirmAlways,
+            confirmationResult: false
+        )
+
+        await denied.coordinator.execute(.direct(denied.reference.key))
+
+        XCTAssertEqual(denied.confirmation.requests.count, 1)
+        XCTAssertEqual(denied.provider.beginCount, 0)
+        XCTAssertEqual(denied.feedback.values.last?.title, "无法执行操作")
+        XCTAssertEqual(denied.feedback.values.last?.message, "用户取消了操作。")
+    }
+
+    func testUnknownDisallowedAndProviderFailureNeverExposeProviderDetails() async throws {
+        let setup = try makeSetup()
+        setup.provider.operation = { .failed(message: "secret-token-123") }
+
+        await setup.coordinator.execute(.direct(setup.reference.key))
+        await setup.coordinator.execute(
+            .direct(ActionKey(providerID: "missing-provider", actionID: "missing-action"))
+        )
+
+        XCTAssertEqual(setup.feedback.values.count, 2)
+        XCTAssertFalse(setup.feedback.values.map(\.message).joined().contains("secret-token-123"))
+        XCTAssertEqual(setup.feedback.values[0].message, "操作未能完成。")
+        XCTAssertEqual(setup.feedback.values[1].title, "运行链接不可用")
+    }
+
+    func testClipboardUsesIsolatedPasteboard() {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
+        pasteboard.declareTypes([.string], owner: nil)
+
+        ActionRunLinkClipboard.copy("mactools://app/actions/test/run", pasteboard: pasteboard)
+
+        XCTAssertEqual(
+            pasteboard.string(forType: .string),
+            "mactools://app/actions/test/run"
+        )
+    }
+
+    private struct Setup {
+        let provider: ActionExecutorTestProvider
+        let reference: ActionReference
+        let confirmation: RecordingRunLinkConfirmationService
+        let feedback: RecordingRunLinkFeedbackPresenter
+        let coordinator: RunLinkExecutionCoordinator
+    }
+
+    private func makeSetup(
+        risk: ActionRisk = .safe,
+        externalPolicy: ActionExternalInvocationPolicy = .allowed,
+        confirmationResult: Bool = true
+    ) throws -> Setup {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            risk: risk,
+            confirmation: risk == .confirmationRequired
+                ? ActionConfirmation(
+                    title: "确认",
+                    message: "继续？",
+                    confirmButtonTitle: "继续"
+                )
+                : nil,
+            externalPolicy: externalPolicy,
+            capabilities: [.foregroundInteractive]
+        )
+        let reference = ActionReference(key: definition.key)
+        registry.synchronize([provider.registration(definition: definition)])
+        let suite = "RunLinkExecutionCoordinatorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let service = ActionRunLinkService(
+            registry: registry,
+            presetStore: ActionInvocationPresetStore(userDefaults: defaults),
+            scheme: "mactools"
+        )
+        let confirmation = RecordingRunLinkConfirmationService(result: confirmationResult)
+        let feedback = RecordingRunLinkFeedbackPresenter()
+        let coordinator = RunLinkExecutionCoordinator(
+            registry: registry,
+            executor: ActionExecutor(registry: registry),
+            runLinkService: service,
+            confirmationService: confirmation,
+            feedbackPresenter: feedback
+        )
+        return Setup(
+            provider: provider,
+            reference: reference,
+            confirmation: confirmation,
+            feedback: feedback,
+            coordinator: coordinator
+        )
+    }
+}
+
+@MainActor
+private final class RecordingRunLinkConfirmationService: ActionConfirmationRequesting {
+    let result: Bool
+    private(set) var requests: [ActionConfirmationRequest] = []
+
+    init(result: Bool) {
+        self.result = result
+    }
+
+    func confirm(_ request: ActionConfirmationRequest) async -> Bool {
+        requests.append(request)
+        return result
+    }
+}
+
+@MainActor
+private final class RecordingRunLinkFeedbackPresenter: RunLinkFeedbackPresenting {
+    private(set) var values: [RunLinkExecutionFeedback] = []
+
+    func present(_ feedback: RunLinkExecutionFeedback) {
+        values.append(feedback)
+    }
+}

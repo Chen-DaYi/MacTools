@@ -216,6 +216,7 @@ struct ActionShortcutSettingsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
                     ActionShortcutCatalogRow(
+                        pluginHost: pluginHost,
                         item: item,
                         onRecord: { binding in record(binding, for: item) },
                         onClear: { pluginHost.clearActionShortcut(for: item.reference) }
@@ -261,50 +262,62 @@ private struct ActionShortcutCatalogRow: View {
         static let actionButtonSize: CGFloat = 22
     }
 
+    @ObservedObject var pluginHost: PluginHost
     let item: ActionShortcutCatalogItem
     let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
     let onClear: () -> Void
 
     var body: some View {
-        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Image(systemName: item.systemImage)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 24)
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Image(systemName: item.systemImage)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                HStack(spacing: 8) {
-                    Text(item.title)
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                        .lineLimit(1)
-                    statusBadge
+                VStack(
+                    alignment: .leading,
+                    spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+                ) {
+                    HStack(spacing: 8) {
+                        Text(item.title)
+                            .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                            .lineLimit(1)
+                        statusBadge
+                    }
+
+                    Text(supportingText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(statusColor)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(supportingText)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(statusColor)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                PluginShortcutRecorder(
+                    title: item.title,
+                    displayText: item.bindingText,
+                    minWidth: Layout.recorderWidth,
+                    onRecord: onRecord
+                )
+                .frame(width: Layout.recorderWidth)
+                .disabled(!item.canAssign)
+
+                Button(action: onClear) {
+                    Image(systemName: "xmark.circle.fill")
+                        .frame(width: Layout.actionButtonSize, height: Layout.actionButtonSize)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("清除快捷键")
+                .opacity(item.bindingText.isEmpty ? 0 : 1)
+                .disabled(item.bindingText.isEmpty)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            PluginShortcutRecorder(
-                title: item.title,
-                displayText: item.bindingText,
-                minWidth: Layout.recorderWidth,
-                onRecord: onRecord
+            ActionRunLinkControl(
+                pluginHost: pluginHost,
+                reference: item.reference
             )
-            .frame(width: Layout.recorderWidth)
-            .disabled(!item.canAssign)
-
-            Button(action: onClear) {
-                Image(systemName: "xmark.circle.fill")
-                    .frame(width: Layout.actionButtonSize, height: Layout.actionButtonSize)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("清除快捷键")
-            .opacity(item.bindingText.isEmpty ? 0 : 1)
-            .disabled(item.bindingText.isEmpty)
+            .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
         }
         .pluginSettingsListRowPadding(interactive: true)
     }

@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 
 @MainActor
@@ -23,6 +24,82 @@ final class AppURLRouterTests: XCTestCase {
                 )
                 XCTAssertEqual(parsed, .success(expected), "Failed route: \(scheme)://app/\(path)")
             }
+        }
+    }
+
+    func testParserAcceptsDocumentedActionAndPresetRoutesInBothSchemes() throws {
+        let presetID = UUID(uuidString: "7B420000-0000-0000-0000-000000000001")!
+
+        for scheme in ["mactools", "mactools-dev"] {
+            XCTAssertEqual(
+                AppDeepLinkParser.parseRoute(
+                    try XCTUnwrap(
+                        URL(string: "\(scheme)://app/actions/microphone-mute/toggle")
+                    ),
+                    acceptedSchemes: [scheme]
+                ),
+                .success(
+                    .run(
+                        .direct(
+                            ActionKey(providerID: "microphone-mute", actionID: "toggle")
+                        )
+                    )
+                )
+            )
+            XCTAssertEqual(
+                AppDeepLinkParser.parseRoute(
+                    try XCTUnwrap(
+                        URL(string: "\(scheme)://app/presets/\(presetID.uuidString)")
+                    ),
+                    acceptedSchemes: [scheme]
+                ),
+                .success(.run(.preset(presetID)))
+            )
+        }
+    }
+
+    func testNavigationOnlyParserDoesNotExecuteActionRoutes() throws {
+        let url = try XCTUnwrap(
+            URL(string: "mactools://app/actions/display-sleep/sleep")
+        )
+
+        XCTAssertEqual(
+            AppDeepLinkParser.parse(url, acceptedSchemes: ["mactools"]),
+            .failure(.unsupportedRoute)
+        )
+    }
+
+    func testActionParserRejectsParametersMalformedIDsAndEncodedSeparators() throws {
+        let cases: [(String, AppURLRoutingError)] = [
+            (
+                "mactools://app/actions/display-sleep/sleep?confirm=false",
+                .unexpectedActionParameters
+            ),
+            ("mactools://app/actions/display-sleep/sleep?", .unexpectedActionParameters),
+            (
+                "mactools://app/actions/display-sleep/sleep?x=1&x=2",
+                .duplicatedParameter("x")
+            ),
+            ("mactools://app/actions/a/b", .malformedActionID),
+            ("mactools://app/actions/display-sleep/bad%20id", .malformedActionID),
+            ("mactools://app/actions/display-sleep/sleep%2Fnow", .unsupportedRoute),
+            ("mactools://app/actions/display-sleep/%2E%2E", .unsupportedRoute),
+            ("mactools://app/presets/not-a-uuid", .invalidPresetID),
+            (
+                "mactools://app/presets/7B420000-0000-0000-0000-000000000001?x=1",
+                .unexpectedActionParameters
+            ),
+        ]
+
+        for (urlString, expected) in cases {
+            XCTAssertEqual(
+                AppDeepLinkParser.parseRoute(
+                    try XCTUnwrap(URL(string: urlString)),
+                    acceptedSchemes: ["mactools"]
+                ),
+                .failure(expected),
+                "Unexpected result for \(urlString)"
+            )
         }
     }
 
@@ -248,5 +325,117 @@ final class AppURLRouterTests: XCTestCase {
             requests,
             [.showDashboard, .showDashboard, .showFeaturePanel, .showUnifiedSearch]
         )
+    }
+
+    func testMixedColdLaunchRoutesPreserveArrivalOrder() async throws {
+        enum Event: Equatable {
+            case navigation(AppPresentationRequest)
+            case action(ActionRunLinkRequest)
+        }
+        var events: [Event] = []
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in XCTFail("Unexpected delegation") }
+        )
+        let settings = try XCTUnwrap(URL(string: "mactools://app/settings/general"))
+        let action = try XCTUnwrap(
+            URL(string: "mactools://app/actions/display-sleep/sleep")
+        )
+        let search = try XCTUnwrap(URL(string: "mactools://app/search"))
+
+        XCTAssertEqual(router.handle(settings), .queued(.settings(.general)))
+        XCTAssertEqual(
+            router.handle(action),
+            .queuedAction(.direct(ActionKey(providerID: "display-sleep", actionID: "sleep")))
+        )
+        XCTAssertEqual(router.handle(search), .queued(.search))
+
+        let synchronous = router.activate(
+            presentationHandler: { request in events.append(.navigation(request)) },
+            isPluginConfigurationAvailable: { _ in true },
+            actionHandler: { request in events.append(.action(request)) }
+        )
+        XCTAssertEqual(synchronous, [.handled(.settings(.general))])
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(
+            events,
+            [
+                .navigation(.settings(.general)),
+                .action(
+                    .direct(ActionKey(providerID: "display-sleep", actionID: "sleep"))
+                ),
+                .navigation(.showUnifiedSearch),
+            ]
+        )
+    }
+
+    func testActiveActionDeliveryIsSerializedAndBacklogIsBounded() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            maximumPendingDeepLinks: 2,
+            rightClickHandler: { _ in }
+        )
+        var activeCount = 0
+        var maximumActiveCount = 0
+        var delivered: [ActionRunLinkRequest] = []
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionHandler: { request in
+                activeCount += 1
+                maximumActiveCount = max(maximumActiveCount, activeCount)
+                delivered.append(request)
+                try? await Task.sleep(for: .milliseconds(10))
+                activeCount -= 1
+            }
+        )
+        let first = try XCTUnwrap(URL(string: "mactools://app/actions/test-provider/first"))
+        let second = try XCTUnwrap(URL(string: "mactools://app/actions/test-provider/second"))
+        let overflow = try XCTUnwrap(URL(string: "mactools://app/actions/test-provider/third"))
+
+        XCTAssertEqual(
+            router.handle(first),
+            .queuedAction(.direct(ActionKey(providerID: "test-provider", actionID: "first")))
+        )
+        XCTAssertEqual(
+            router.handle(second),
+            .queuedAction(.direct(ActionKey(providerID: "test-provider", actionID: "second")))
+        )
+        XCTAssertEqual(router.handle(overflow), .rejected(.pendingQueueFull))
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(maximumActiveCount, 1)
+        XCTAssertEqual(
+            delivered,
+            [
+                .direct(ActionKey(providerID: "test-provider", actionID: "first")),
+                .direct(ActionKey(providerID: "test-provider", actionID: "second")),
+            ]
+        )
+    }
+
+    func testActiveActionCannotRecursivelyQueueItself() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in }
+        )
+        let url = try XCTUnwrap(URL(string: "mactools://app/actions/test-provider/run"))
+        var recursiveResult: AppURLHandlingResult?
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionHandler: { _ in
+                recursiveResult = router.handle(url)
+            }
+        )
+
+        XCTAssertEqual(
+            router.handle(url),
+            .queuedAction(.direct(ActionKey(providerID: "test-provider", actionID: "run")))
+        )
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(recursiveResult, .rejected(.recursiveActionInvocation))
     }
 }

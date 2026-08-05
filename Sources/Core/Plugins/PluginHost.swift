@@ -313,6 +313,8 @@ final class PluginHost: ObservableObject {
     let actionExecutor: ActionExecutor
     private let actionShortcutStore: ActionShortcutAssignmentStore
     let shortcutAssignmentService: ShortcutAssignmentService
+    private let actionPresetStore: ActionInvocationPresetStore
+    let actionRunLinkService: ActionRunLinkService
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
@@ -420,7 +422,8 @@ final class PluginHost: ObservableObject {
         applicationActivityObserver: (any ApplicationActivityObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180),
         pluginStateChangeRebuildDelay: Duration = .milliseconds(80),
-        loadDynamicPluginsOnInit: Bool = true
+        loadDynamicPluginsOnInit: Bool = true,
+        actionURLScheme: String = RightClickURLRouter.bundleURLSchemes().sorted().first ?? "mactools"
     ) {
         self.builtInPlugins = plugins.sorted {
             if $0.metadata.order == $1.metadata.order {
@@ -445,13 +448,22 @@ final class PluginHost: ObservableObject {
         let actionShortcutStore = ActionShortcutAssignmentStore(
             userDefaults: shortcutStore.userDefaults
         )
+        let actionPresetStore = ActionInvocationPresetStore(
+            userDefaults: shortcutStore.userDefaults
+        )
         self.actionRegistry = actionRegistry
         self.actionExecutor = ActionExecutor(registry: actionRegistry)
         self.actionShortcutStore = actionShortcutStore
+        self.actionPresetStore = actionPresetStore
         self.shortcutAssignmentService = ShortcutAssignmentService(
             registry: actionRegistry,
             store: actionShortcutStore,
             shortcutManager: globalShortcutManager
+        )
+        self.actionRunLinkService = ActionRunLinkService(
+            registry: actionRegistry,
+            presetStore: actionPresetStore,
+            scheme: actionURLScheme
         )
 
         configureCallbacks(for: self.builtInPlugins)
@@ -1007,6 +1019,29 @@ final class PluginHost: ObservableObject {
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         actionRegistry.availability(for: reference)
+    }
+
+    func actionRunLinkPresentation(
+        for reference: ActionReference
+    ) -> ActionRunLinkPresentation {
+        actionRunLinkService.presentation(for: reference)
+    }
+
+    func createActionRunLink(
+        for reference: ActionReference
+    ) -> Result<ActionRunLinkRepresentation, ActionInvocationPresetError> {
+        let result = actionRunLinkService.createPreset(for: reference)
+        if case .success = result {
+            objectWillChange.send()
+        }
+        return result
+    }
+
+    func deleteActionRunLinkPreset(for reference: ActionReference) {
+        guard actionRunLinkService.deletePreset(for: reference) else {
+            return
+        }
+        objectWillChange.send()
     }
 
     func clearShortcut(for shortcutID: String) {

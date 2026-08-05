@@ -159,6 +159,10 @@ final class ActionRegistry: ObservableObject {
         )
     }
 
+    func definition(for key: ActionKey) -> ActionDefinition? {
+        definitions[key]
+    }
+
     func availability(for reference: ActionReference) -> ActionAvailability {
         guard case .success = registeredAction(for: reference),
               let provider = providers[reference.key.providerID] else {

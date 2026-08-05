@@ -36,6 +36,15 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
+    private lazy var runLinkExecutionCoordinator = RunLinkExecutionCoordinator(
+        registry: pluginHost.actionRegistry,
+        executor: pluginHost.actionExecutor,
+        runLinkService: pluginHost.actionRunLinkService,
+        confirmationService: AppActionConfirmationService { [weak self] in
+            self?.windowRouter?.windowForActionConfirmation()
+        },
+        feedbackPresenter: SystemRunLinkFeedbackPresenter()
+    )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppAppearancePreference.applyStoredPreference()
@@ -115,6 +124,9 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             },
             isPluginConfigurationAvailable: { [weak self] pluginID in
                 self?.pluginHost.hasPluginConfiguration(pluginID: pluginID) == true
+            },
+            actionHandler: { [weak self] request in
+                await self?.runLinkExecutionCoordinator.execute(request)
             }
         )
     }

@@ -158,6 +158,11 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         settingsNavigationCoordinator?.presentUnifiedSearch(origin: .keyboard)
     }
 
+    func windowForActionConfirmation() -> NSWindow? {
+        presentSettings(.settings)
+        return settingsWindow
+    }
+
     func setPanelPresentationActions(
         showDashboard: @escaping () -> Void,
         showFeaturePanel: @escaping () -> Void
