@@ -31,6 +31,9 @@ enum MenuBarStatusItemPresentationAction: Equatable {
     case presentSettings(SettingsPresentationRequest)
     case toggleComponentPanel
     case toggleFeaturePanel
+    case showComponentPanel
+    case showFeaturePanel
+    case showUnifiedSearch
 
     init(request: AppPresentationRequest) {
         switch request {
@@ -40,6 +43,12 @@ enum MenuBarStatusItemPresentationAction: Equatable {
             self = .toggleComponentPanel
         case .toggleFeaturePanel:
             self = .toggleFeaturePanel
+        case .showDashboard:
+            self = .showComponentPanel
+        case .showFeaturePanel:
+            self = .showFeaturePanel
+        case .showUnifiedSearch:
+            self = .showUnifiedSearch
         }
     }
 }
@@ -144,6 +153,12 @@ final class MenuBarStatusItemController: NSObject {
                 self?.toggleDashboard()
             case .toggleFeaturePanel:
                 self?.toggleFeaturePanel()
+            case .showComponentPanel:
+                self?.showDashboard()
+            case .showFeaturePanel:
+                self?.showFeaturePanel()
+            case .showUnifiedSearch:
+                windowRouter?.showUnifiedSearch()
             }
         }
     }

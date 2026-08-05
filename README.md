@@ -70,6 +70,8 @@
 
 > **Right-click action:** You can use Option + left-click on the MacTools icon to trigger the right-click action.
 
+> **Deep links:** Open Settings, installed plugin settings, Dashboard, Feature Panel, or unified search through the navigation-only [`mactools://app/...` URL API](docs/url-scheme.md).
+
 ## Supported Languages
 
 MacTools supports Simplified Chinese, Traditional Chinese, English, Spanish, French, Russian, Portuguese, German, Japanese, Korean, and Arabic.
