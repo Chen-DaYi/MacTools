@@ -12,6 +12,8 @@ enum FeatureSettingsPane: Hashable {
 
 enum SettingsPresentationRequest: Equatable {
     case settings
+    case general
+    case about
     case appUpdate
     case pluginMarketplace
     case pluginConfiguration(String)
@@ -22,6 +24,9 @@ enum AppPresentationRequest: Equatable {
     case toggleCommandPalette
     case toggleDashboard
     case toggleFeaturePanel
+    case showDashboard
+    case showFeaturePanel
+    case showUnifiedSearch
 }
 
 enum AppShortcutAction: String, CaseIterable, Hashable {

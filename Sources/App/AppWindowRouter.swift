@@ -534,9 +534,17 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         let wasVisible = window.isVisible
         let pendingAppUpdateVersion: String?
 
+        settingsNavigationCoordinator?.dismissUnifiedSearch()
+
         switch request {
         case .settings:
             pendingAppUpdateVersion = nil
+        case .general:
+            pendingAppUpdateVersion = nil
+            settingsNavigationCoordinator?.navigate(to: .general)
+        case .about:
+            pendingAppUpdateVersion = nil
+            settingsNavigationCoordinator?.navigate(to: .about)
         case .appUpdate:
             pendingAppUpdateVersion = appUpdater.availableUpdateVersion
             settingsNavigationCoordinator?.navigate(to: .about)
