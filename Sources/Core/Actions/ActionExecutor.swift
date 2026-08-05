@@ -19,6 +19,13 @@ final class RejectingActionConfirmationService: ActionConfirmationRequesting {
     }
 }
 
+@MainActor
+final class ApprovedActionConfirmationService: ActionConfirmationRequesting {
+    func confirm(_ request: ActionConfirmationRequest) async -> Bool {
+        true
+    }
+}
+
 enum ActionExecutionRejection: Error, Equatable {
     case unknownAction(ActionKey)
     case invalidParameters(String)
@@ -65,7 +72,10 @@ final class ActionExecutor {
         self.confirmationTimeout = confirmationTimeout
     }
 
-    func execute(_ invocation: ActionInvocation) async -> ActionExecutionOutcome {
+    func execute(
+        _ invocation: ActionInvocation,
+        confirmationService overrideConfirmationService: (any ActionConfirmationRequesting)? = nil
+    ) async -> ActionExecutionOutcome {
         let initial: RegisteredAction
         switch registry.registeredAction(for: invocation.reference) {
         case let .success(action):
@@ -94,7 +104,8 @@ final class ActionExecutor {
                     reference: invocation.reference,
                     confirmation: confirmation,
                     source: invocation.source
-                )
+                ),
+                using: overrideConfirmationService ?? confirmationService
             ) {
             case .response(true):
                 break
@@ -166,11 +177,12 @@ final class ActionExecutor {
     }
 
     private func confirmationResponse(
-        _ request: ActionConfirmationRequest
+        _ request: ActionConfirmationRequest,
+        using confirmationService: any ActionConfirmationRequesting
     ) async -> ConfirmationRace {
         return await withTaskGroup(of: ConfirmationRace.self) { group in
             group.addTask {
-                .response(await self.confirmationService.confirm(request))
+                .response(await confirmationService.confirm(request))
             }
             group.addTask { [confirmationTimeout] in
                 try? await Task.sleep(for: confirmationTimeout)

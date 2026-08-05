@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import LockScreenPlugin
 
 @MainActor
@@ -12,5 +13,8 @@ final class LockScreenPluginTests: XCTestCase {
         XCTAssertTrue(plugin.primaryPanelState.isEnabled)
         XCTAssertFalse(plugin.primaryPanelState.isOn)
         XCTAssertEqual(plugin.commandDefinitions.count, 1)
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["execute"])
+        XCTAssertEqual(plugin.actionDefinitions.first?.externalInvocationPolicy, .confirmAlways)
+        XCTAssertNotNil(plugin.actionDefinitions.first?.confirmation)
     }
 }

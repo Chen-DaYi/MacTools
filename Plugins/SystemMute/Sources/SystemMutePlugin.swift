@@ -84,7 +84,10 @@ struct CoreAudioSystemOutputController: SystemAudioControlling {
 }
 
 @MainActor
-final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+    }
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -143,6 +146,30 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: localization.string("action.setMute.title", defaultValue: "设置系统静音"),
+                description: metadata.defaultDescription,
+                keywords: ["静音", "声音", "音频"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(id: "enabled", title: "静音", kind: .boolean),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(reference: actionReference(enabled: true), title: "静音系统音频"),
+            ActionCatalogEntry(reference: actionReference(enabled: false), title: "恢复系统音频"),
+        ]
+    }
+
     func refresh() {
         let current = controller.readMuteState()
         if current != isMuted {
@@ -171,9 +198,28 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
 
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+        }
+        let succeeded = applyMute(enabled)
+        let message = lastErrorMessage
+        return ActionExecutionHandle {
+            succeeded ? .succeeded() : .failed(message: message ?? "静音操作失败。")
+        }
+    }
+
     // MARK: - Private
 
-    private func applyMute(_ muted: Bool) {
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    @discardableResult
+    private func applyMute(_ muted: Bool) -> Bool {
         let success = controller.setMuteState(muted)
         if success {
             isMuted = muted
@@ -185,5 +231,6 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
                 : localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
         }
         onStateChange?()
+        return success
     }
 }

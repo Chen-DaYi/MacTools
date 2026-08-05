@@ -40,6 +40,47 @@ final class MacToolsSearchTests: XCTestCase {
         })
     }
 
+    func testCommandResultsCarryCanonicalActionReferences() throws {
+        let plugin = SearchableTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let result = try XCTUnwrap(
+            MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
+                $0.title == "让显示器休眠"
+            }
+        )
+
+        guard case let .executeAction(reference) = result.action else {
+            return XCTFail("Expected the shared action executor route")
+        }
+        XCTAssertEqual(reference.key, ActionKey(providerID: "searchable", actionID: "sleep"))
+        XCTAssertNotNil(try? host.actionRegistry.registeredAction(for: reference).get())
+        XCTAssertEqual(
+            host.actionShortcutCatalogItems.first(where: { $0.reference == reference })?.status,
+            .unassigned
+        )
+    }
+
+    func testMacToolsSearchActionExecutesThroughPresentationRouting() async throws {
+        let host = makePluginHostForTests(plugins: [])
+        var requests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { requests.append($0) }
+        let result = try XCTUnwrap(
+            MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
+                $0.title == AppShortcutAction.toggleDashboard.title
+            }
+        )
+        guard case let .executeAction(reference) = result.action else {
+            return XCTFail("Expected a canonical action")
+        }
+
+        let outcome = await host.actionExecutor.execute(
+            ActionInvocation(reference: reference, source: .unifiedSearch, mode: .foreground)
+        )
+
+        XCTAssertEqual(outcome, .completed(.succeeded()))
+        XCTAssertEqual(requests, [.toggleDashboard])
+    }
+
     func testCustomSettingResultCarriesPluginPageAndExactSearchTarget() throws {
         let plugin = SearchableTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
@@ -129,6 +170,7 @@ final class MacToolsSearchTests: XCTestCase {
             [
                 "navigation.dashboard",
                 "navigation.feature-panel",
+                "navigation.actions-and-shortcuts",
                 "navigation.marketplace",
                 "navigation.general",
                 "navigation.about"

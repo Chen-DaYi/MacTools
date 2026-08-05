@@ -56,6 +56,7 @@ extension FeatureSettingsPane {
         configurationIDs: some Sequence<String>
     ) -> [FeatureSettingsPane] {
         [
+            .actionsAndShortcuts,
             .dashboardLayout,
             .featurePanelLayout,
             .marketplace

@@ -48,8 +48,8 @@
       "summary": "一鍵立即鎖定螢幕，進入密碼解鎖界面"
     }
   },
-  "version": "1.0.9",
-  "minHostVersion": "1.1.5",
+  "version": "1.0.10",
+  "minHostVersion": "1.2.0",
   "pluginKitVersion": 3,
   "bundleRelativePath": "LockScreen.bundle",
   "factoryClass": "LockScreenPlugin.LockScreenPluginFactory",

@@ -4,6 +4,7 @@ import SwiftUI
 import MacToolsPluginKit
 
 enum FeatureSettingsPane: Hashable {
+    case actionsAndShortcuts
     case dashboardLayout
     case featurePanelLayout
     case marketplace
@@ -98,6 +99,8 @@ private extension FeatureSettingsPane {
 
     var landingPage: PluginSettingsLandingPage? {
         switch self {
+        case .actionsAndShortcuts:
+            nil
         case .dashboardLayout:
             .dashboard
         case .featurePanelLayout:
@@ -357,6 +360,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
     @Published private(set) var actionShortcutItems: [ActionShortcutSettingsItem] = []
+    @Published private(set) var actionShortcutCatalogItems: [ActionShortcutCatalogItem] = []
     @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
     @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
     @Published private(set) var actionCatalogEntries: [ActionCatalogEntry] = []
@@ -950,6 +954,61 @@ final class PluginHost: ObservableObject {
         rebuildDerivedState()
     }
 
+    func setActionShortcutBindingAndReturnError(
+        _ binding: ShortcutBinding,
+        for reference: ActionReference,
+        replacingConflictingActionAssignments: Bool = false
+    ) -> String? {
+        let result = setActionShortcutBinding(
+            binding,
+            to: reference,
+            replacingConflictingActionAssignments: replacingConflictingActionAssignments
+        )
+        if case .success = result {
+            return nil
+        }
+        if case let .failure(error) = result {
+            return error.localizedDescription
+        }
+        return nil
+    }
+
+    func setActionShortcutBinding(
+        _ binding: ShortcutBinding,
+        to reference: ActionReference,
+        replacingConflictingActionAssignments: Bool = false
+    ) -> ActionShortcutMutationResult {
+        let result = shortcutAssignmentService.assign(
+            binding,
+            to: reference,
+            replacingConflictingActionAssignments: replacingConflictingActionAssignments
+        )
+        switch result {
+        case .success:
+            syncGlobalShortcuts()
+        case .failure:
+            break
+        }
+        return result
+    }
+
+    func clearActionShortcut(for reference: ActionReference) {
+        guard shortcutAssignmentService.clear(reference) else {
+            return
+        }
+        syncGlobalShortcuts()
+    }
+
+    func actionShortcutSettingsItem(
+        for reference: ActionReference
+    ) -> ActionShortcutSettingsItem? {
+        shortcutAssignmentService.settingsItem(for: reference)
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        actionRegistry.availability(for: reference)
+    }
+
     func clearShortcut(for shortcutID: String) {
         guard let descriptor = shortcutDescriptor(for: shortcutID) else {
             return
@@ -1009,7 +1068,7 @@ final class PluginHost: ObservableObject {
     @discardableResult
     func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) -> Bool {
         switch pane {
-        case .dashboardLayout, .featurePanelLayout, .marketplace:
+        case .actionsAndShortcuts, .dashboardLayout, .featurePanelLayout, .marketplace:
             if let landingPage = pane.landingPage {
                 pluginDisplayPreferencesStore.setLastPluginSettingsLandingPage(landingPage)
             }
@@ -2214,6 +2273,18 @@ final class PluginHost: ObservableObject {
                       let provider = plugin as? any PluginLegacyActionShortcutProviding else {
                     return
                 }
+                for assignment in assignments {
+                    guard let shortcutDefinitionID = assignment.legacyShortcutDefinitionID else {
+                        continue
+                    }
+                    self.shortcutStore.setCustomization(
+                        .cleared,
+                        for: self.shortcutItemID(
+                            pluginID: plugin.metadata.id,
+                            shortcutDefinitionID: shortcutDefinitionID
+                        )
+                    )
+                }
                 self.guardPluginCall(plugin, operation: "finish legacy action shortcut migration") {
                     provider.legacyActionShortcutsDidMigrate()
                 }
@@ -3392,6 +3463,60 @@ final class PluginHost: ObservableObject {
             reservedOwnerDescriptions: ownerDescriptions
         )
         actionShortcutItems = shortcutAssignmentService.settingsItems
+        actionShortcutCatalogItems = buildActionShortcutCatalogItems()
+    }
+
+    private func buildActionShortcutCatalogItems() -> [ActionShortcutCatalogItem] {
+        actionCatalogEntries.compactMap { entry in
+            guard case let .success(action) = actionRegistry.registeredAction(
+                for: entry.reference
+            ) else {
+                return nil
+            }
+
+            let availability = actionRegistry.availability(for: entry.reference)
+            let assignmentItem = shortcutAssignmentService.settingsItem(
+                for: entry.reference
+            )
+            let status: ActionShortcutCatalogStatus
+            if let assignmentItem {
+                switch assignmentItem.state {
+                case .registered:
+                    status = .assigned
+                case let .unavailable(reason):
+                    status = .unavailable(reason)
+                case let .conflict(ownerDescription):
+                    status = .conflicted(ownerDescription)
+                case let .registrationFailed(code):
+                    status = .conflicted("系统注册失败（\(code)）。")
+                case .invalidBinding:
+                    status = .conflicted("快捷键无效。")
+                }
+            } else if availability.isAvailable {
+                status = .unassigned
+            } else {
+                status = .unavailable(availability.reason)
+            }
+
+            let ownerTitle: String
+            if entry.reference.key.providerID == "mactools" {
+                ownerTitle = "MacTools"
+            } else {
+                ownerTitle = corePlugin(for: entry.reference.key.providerID)?.metadata.title
+                    ?? entry.reference.key.providerID
+            }
+            return ActionShortcutCatalogItem(
+                reference: entry.reference,
+                title: entry.title,
+                ownerTitle: ownerTitle,
+                description: action.definition.description,
+                systemImage: action.definition.systemImage,
+                bindingText: assignmentItem?.bindingText ?? "",
+                status: status,
+                canAssign: availability.isAvailable
+                    && action.definition.capabilities.contains(.foregroundInteractive)
+            )
+        }
     }
 
     private func handleShortcutTrigger(shortcutID: String) {

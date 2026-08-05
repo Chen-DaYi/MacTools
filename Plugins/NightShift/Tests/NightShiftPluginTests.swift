@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import NightShiftPlugin
 
 @MainActor
@@ -39,5 +40,18 @@ final class NightShiftPluginTests: XCTestCase {
 
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testActionCatalogProvidesIdempotentNightShiftChoices() async throws {
+        let plugin = NightShiftPlugin(controller: MockController(status: false))
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["启用夜览", "停用夜览"])
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 }

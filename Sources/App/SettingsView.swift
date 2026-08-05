@@ -1296,6 +1296,14 @@ private struct FeatureSettingsSidebar: View {
     @ViewBuilder
     private func sidebarRow(for pane: FeatureSettingsPane) -> some View {
         switch pane {
+        case .actionsAndShortcuts:
+            FeatureSettingsSidebarRow(
+                title: AppL10n.settings("actions.title", defaultValue: "操作与快捷键"),
+                systemImage: "command",
+                iconTint: .orange
+            )
+            .tag(pane)
+            .id(pane)
         case .dashboardLayout:
             FeatureSettingsSidebarRow(
                 title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
@@ -1472,6 +1480,8 @@ private struct FeatureSettingsDetailPane: View {
     @ViewBuilder
     private var detail: some View {
         switch selectedPane {
+        case .actionsAndShortcuts:
+            ActionShortcutSettingsView(pluginHost: pluginHost)
         case .dashboardLayout:
             SurfaceLayoutSettingsView(
                 navigationCoordinator: navigationCoordinator,

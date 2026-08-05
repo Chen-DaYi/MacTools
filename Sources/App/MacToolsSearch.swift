@@ -34,11 +34,7 @@ enum MacToolsSearchAction: Hashable {
         destination: SettingsNavigationDestination,
         target: SettingsSearchRevealTarget?
     )
-    case pluginCommand(
-        pluginID: String,
-        expectedDefinition: PluginCommandDefinition
-    )
-    case appCommand(AppShortcutAction)
+    case executeAction(ActionReference)
 }
 
 struct MacToolsSearchResult: Identifiable, Hashable {
@@ -50,7 +46,7 @@ struct MacToolsSearchResult: Identifiable, Hashable {
     let keywords: [String]
     let systemImage: String
     let action: MacToolsSearchAction
-    let confirmation: PluginCommandDefinition.Confirmation?
+    let confirmation: ActionConfirmation?
     let suggestionPriority: Int?
 
     var accessibilityLabel: String {
@@ -236,6 +232,18 @@ enum MacToolsSearchIndexBuilder {
     static func build(pluginHost: PluginHost) -> MacToolsSearchIndex {
         var items: [MacToolsSearchResult] = [
             navigationResult(
+                id: "navigation.actions-and-shortcuts",
+                title: AppL10n.settings("actions.title", defaultValue: "操作与快捷键"),
+                subtitle: AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools"),
+                detail: AppL10n.settings(
+                    "actions.description",
+                    defaultValue: "查找操作并统一管理全局快捷键。"
+                ),
+                systemImage: "command",
+                destination: .plugins(.actionsAndShortcuts),
+                suggestionPriority: 2
+            ),
+            navigationResult(
                 id: "navigation.general",
                 title: AppL10n.settings("tab.general", defaultValue: "通用"),
                 subtitle: AppL10n.search("search.subtitle.appSettings", defaultValue: "应用设置"),
@@ -245,7 +253,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "gearshape",
                 destination: .general,
-                suggestionPriority: 3
+                suggestionPriority: 4
             ),
             navigationResult(
                 id: "navigation.dashboard",
@@ -281,7 +289,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "shippingbox",
                 destination: .plugins(.marketplace),
-                suggestionPriority: 2
+                suggestionPriority: 3
             ),
             navigationResult(
                 id: "navigation.about",
@@ -293,7 +301,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "info.circle",
                 destination: .about,
-                suggestionPriority: 4
+                suggestionPriority: 5
             )
         ]
 
@@ -451,39 +459,49 @@ enum MacToolsSearchIndexBuilder {
             )
         }
 
-        items += pluginHost.pluginCommandItems.map { item in
-            MacToolsSearchResult(
-                id: item.id,
-                kind: .command,
-                title: item.definition.title,
-                subtitle: item.pluginTitle,
-                detail: item.definition.description,
-                keywords: item.definition.keywords,
-                systemImage: item.definition.systemImage,
-                action: .pluginCommand(
-                    pluginID: item.pluginID,
-                    expectedDefinition: item.definition
+        let pluginTitlesByID = Dictionary(
+            pluginHost.pluginManagementItems.map { ($0.id, $0.title) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        items += pluginHost.actionCatalogEntries.enumerated().compactMap { index, entry in
+            guard
+                entry.reference.key != ActionKey(
+                    providerID: "mactools",
+                    actionID: AppShortcutAction.openSettings.rawValue
                 ),
-                confirmation: item.definition.confirmation,
-                suggestionPriority: nil
-            )
-        }
-
-        items += AppShortcutAction.allCases.compactMap { action -> MacToolsSearchResult? in
-            guard action != .openSettings else {
+                case let .success(action) = pluginHost.actionRegistry.registeredAction(
+                    for: entry.reference
+                )
+            else {
                 return nil
             }
 
+            let availability = pluginHost.actionAvailability(for: entry.reference)
+            let ownerTitle = entry.reference.key.providerID == "mactools"
+                ? AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools")
+                : pluginTitlesByID[entry.reference.key.providerID]
+                    ?? entry.reference.key.providerID
+            let subtitle = entry.subtitle.map { "\(ownerTitle) · \($0)" } ?? ownerTitle
+            let detail = [action.definition.description, availability.reason]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " · ")
+            let shortcutText = pluginHost.actionShortcutSettingsItem(
+                for: entry.reference
+            )?.bindingText
+
             return MacToolsSearchResult(
-                id: "app-command.\(action.rawValue)",
+                id: "action.\(entry.reference.key.providerID).\(entry.reference.key.actionID).\(index)",
                 kind: .command,
-                title: action.title,
-                subtitle: AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools"),
-                detail: action.description,
-                keywords: [],
-                systemImage: action.systemImage,
-                action: .appCommand(action),
-                confirmation: nil,
+                title: entry.title,
+                subtitle: subtitle,
+                detail: detail,
+                keywords: action.definition.keywords + [shortcutText].compactMap { $0 },
+                systemImage: action.definition.systemImage,
+                action: .executeAction(entry.reference),
+                confirmation: action.definition.risk == .confirmationRequired
+                    ? action.definition.confirmation
+                    : nil,
                 suggestionPriority: nil
             )
         }

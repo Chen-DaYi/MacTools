@@ -37,6 +37,26 @@ enum ActionShortcutRegistrationState: Equatable {
     case invalidBinding
 }
 
+enum ActionShortcutCatalogStatus: Equatable {
+    case assigned
+    case unassigned
+    case conflicted(String)
+    case unavailable(String?)
+}
+
+struct ActionShortcutCatalogItem: Identifiable, Equatable {
+    let reference: ActionReference
+    let title: String
+    let ownerTitle: String
+    let description: String
+    let systemImage: String
+    let bindingText: String
+    let status: ActionShortcutCatalogStatus
+    let canAssign: Bool
+
+    var id: ActionReference { reference }
+}
+
 struct ActionShortcutSettingsItem: Identifiable, Equatable {
     let assignment: ActionShortcutAssignmentRecord
     let title: String
@@ -82,6 +102,10 @@ final class ShortcutAssignmentService {
 
     func assignment(for reference: ActionReference) -> ActionShortcutAssignmentRecord? {
         store.assignment(for: reference)
+    }
+
+    func settingsItem(for reference: ActionReference) -> ActionShortcutSettingsItem? {
+        settingsItems.first { $0.assignment.reference == reference }
     }
 
     func reference(forShortcutID shortcutID: String) -> ActionReference? {

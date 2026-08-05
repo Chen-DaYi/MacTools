@@ -23,7 +23,13 @@ private struct TranslatorPluginProvider: PluginProvider {
 typealias ScreenshotRegionCapturerFactory = @MainActor (@escaping () -> Bool) -> any ScreenshotRegionCapturing
 
 @MainActor
-final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
+final class TranslatorPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginConfigurationPresenting,
+    PluginActionProviding,
+    PluginLegacyActionShortcutProviding
+{
     private enum APIKeyState: Equatable {
         case unknown
         case present
@@ -186,6 +192,84 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
                 isRequired: false
             ),
         ]
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: TranslatorConstants.ActionID.selectTranslation
+                ),
+                title: localization.string("shortcut.selectTranslation.title", defaultValue: "划词翻译"),
+                description: localization.string(
+                    "shortcut.selectTranslation.description",
+                    defaultValue: "翻译当前选中的文本。"
+                ),
+                keywords: ["翻译", "选中文本", "划词"],
+                systemImage: "text.cursor",
+                externalInvocationPolicy: .allowed,
+                capabilities: [.foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: TranslatorConstants.ActionID.screenshotTranslation
+                ),
+                title: localization.string("shortcut.screenshotTranslation.title", defaultValue: "截图翻译"),
+                description: localization.string(
+                    "shortcut.screenshotTranslation.description",
+                    defaultValue: "框选截图区域并翻译识别出的文字。"
+                ),
+                keywords: ["翻译", "截图", "OCR"],
+                systemImage: "viewfinder",
+                externalInvocationPolicy: .allowed,
+                capabilities: [.foregroundInteractive]
+            ),
+        ]
+    }
+
+    var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] {
+        shortcutDefinitions.compactMap { definition in
+            guard let binding = shortcutBindingResolver?(definition.id) else {
+                return nil
+            }
+            return LegacyActionShortcutAssignment(
+                reference: ActionReference(
+                    key: ActionKey(
+                        providerID: metadata.id,
+                        actionID: definition.actionID
+                    )
+                ),
+                binding: binding,
+                legacyShortcutDefinitionID: definition.id
+            )
+        }
+    }
+
+    func legacyActionShortcutsDidMigrate() {}
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard isShortcutEnabled else {
+            return .unavailable("翻译快捷键已暂停。")
+        }
+        switch reference.key.actionID {
+        case TranslatorConstants.ActionID.selectTranslation:
+            return accessibilityTrustProvider()
+                ? .available
+                : .unavailable("需要辅助功能授权。")
+        case TranslatorConstants.ActionID.screenshotTranslation:
+            return screenRecordingPermissionProvider()
+                ? .available
+                : .unavailable("需要屏幕录制授权。")
+        default:
+            return .unavailable("操作不可用。")
+        }
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        handleShortcutAction(id: invocation.reference.key.actionID)
+        return ActionExecutionHandle { .succeeded() }
     }
 
     var configuration: PluginConfiguration? {

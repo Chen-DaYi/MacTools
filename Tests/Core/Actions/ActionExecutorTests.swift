@@ -138,6 +138,36 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(outcome, .completed(.succeeded(message: "完成")))
         XCTAssertEqual(provider.beginCount, 1)
     }
+
+    func testPerInvocationConfirmationServiceCannotSkipExecutorRevalidation() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            risk: .confirmationRequired,
+            confirmation: ActionConfirmation(
+                title: "确认",
+                message: "继续操作？",
+                confirmButtonTitle: "继续"
+            )
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(registry: registry)
+        let invocation = ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .unifiedSearch,
+            mode: .foreground
+        )
+
+        let rejected = await executor.execute(invocation)
+        let approved = await executor.execute(
+            invocation,
+            confirmationService: ApprovedActionConfirmationService()
+        )
+
+        XCTAssertEqual(rejected, .rejected(.confirmationDenied))
+        XCTAssertEqual(approved, .completed(.succeeded()))
+        XCTAssertEqual(provider.beginCount, 1)
+    }
 }
 
 @MainActor

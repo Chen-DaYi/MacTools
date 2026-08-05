@@ -38,7 +38,8 @@ final class KeepAwakePlugin:
     PluginPrimaryPanel,
     PluginPrimaryPanelCompactIndicatorProviding,
     PluginSettingsSearchProviding,
-    DisplayTopologyRefreshing
+    DisplayTopologyRefreshing,
+    PluginActionProviding
 {
     typealias SessionFactory = (
         PluginLocalization,
@@ -65,6 +66,10 @@ final class KeepAwakePlugin:
 
     private enum ControlID {
         static let duration = "duration"
+    }
+
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
     }
 
     private enum VirtualDisplayIdentity {
@@ -251,6 +256,30 @@ final class KeepAwakePlugin:
 
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: "设置阻止休眠",
+                description: metadata.defaultDescription,
+                keywords: ["休眠", "唤醒", "保持运行"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(id: "enabled", title: "阻止休眠", kind: .boolean),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(reference: actionReference(enabled: true), title: "启用阻止休眠"),
+            ActionCatalogEntry(reference: actionReference(enabled: false), title: "停用阻止休眠"),
+        ]
+    }
+
     var settingsSearchEntries: [PluginSettingsSearchEntry] {
         var entries = [
             PluginSettingsSearchEntry(
@@ -423,6 +452,29 @@ final class KeepAwakePlugin:
     func handleSettingsAction(id: String) {}
 
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+        }
+        setKeepAwakeEnabled(enabled)
+        let failedMessage = enabled && session == nil
+            ? (lastErrorMessage ?? "无法启用阻止休眠。")
+            : nil
+        return ActionExecutionHandle {
+            if let failedMessage {
+                return .failed(message: failedMessage)
+            }
+            return .succeeded()
+        }
+    }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
 
     private var panelSubtitle: String {
         guard session != nil else {

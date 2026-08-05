@@ -124,7 +124,8 @@ final class DisplayBrightnessPlugin:
     PluginPrimaryPanel,
     PluginShortcutEventHandling,
     DisplayTopologyRefreshing,
-    PluginSettingsSearchProviding
+    PluginSettingsSearchProviding,
+    PluginActionProviding
 {
     private enum Constants {
         static let displayControlPrefix = "display."
@@ -239,6 +240,57 @@ final class DisplayBrightnessPlugin:
             shortcutDefinition(direction: .decrease),
             shortcutDefinition(direction: .increase)
         ]
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [DisplayBrightnessShortcutDirection.decrease, .increase].map { direction in
+            let title = localization.format(
+                "shortcut.titleFormat",
+                defaultValue: "%@亮度",
+                direction.title(localization: localization)
+            )
+            return ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: direction.actionID),
+                title: title,
+                description: localization.format(
+                    "shortcut.descriptionFormat",
+                    defaultValue: "%@显示器亮度。",
+                    direction.title(localization: localization)
+                ),
+                keywords: ["亮度", "显示器", direction.title(localization: localization)],
+                systemImage: direction.systemImage,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            )
+        }
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard Self.shortcutDirection(for: reference.key.actionID) != nil else {
+            return .unavailable("操作不可用。")
+        }
+        return controller.snapshot().displays.isEmpty
+            ? .unavailable("未检测到可调节亮度的显示器。")
+            : .available
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard let direction = Self.shortcutDirection(for: invocation.reference.key.actionID) else {
+            return ActionExecutionHandle { .failed(message: "操作不可用。") }
+        }
+        let snapshot = controller.snapshot()
+        let targetDisplayIDs = shortcutTargetDisplayIDs(in: snapshot)
+        guard !targetDisplayIDs.isEmpty else {
+            return ActionExecutionHandle { .failed(message: "未检测到可调节亮度的显示器。") }
+        }
+        let action = DisplayBrightnessShortcutAction(
+            id: invocation.reference.key.actionID,
+            direction: direction,
+            targetDisplayIDs: targetDisplayIDs
+        )
+        applyShortcutAction(action, step: 1, phase: .changed)
+        commitShortcutAction(action)
+        return ActionExecutionHandle { .succeeded() }
     }
 
     var settingsSearchEntries: [PluginSettingsSearchEntry] {

@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 @testable import DisplayBrightnessPlugin
 
@@ -121,6 +122,27 @@ final class DisplayBrightnessPluginTests: XCTestCase {
         XCTAssertEqual(definitions.map(\.settingsGroupID), ["display-brightness.shortcuts", "display-brightness.shortcuts"])
         XCTAssertEqual(definitions.map(\.sharedBindingGroupID), [nil, nil])
         XCTAssertEqual(definitions.map(\.scope), [.global, .global])
+    }
+
+    func testDiscreteBrightnessActionUsesConfiguredTargetAndCommits() async throws {
+        let controller = MockDisplayBrightnessController()
+        controller.snapshotValue = DisplayBrightnessSnapshot(
+            displays: [makeBrightnessDisplay(id: 7, name: "Studio Display", brightness: 0.72)],
+            errorMessage: nil
+        )
+        let plugin = DisplayBrightnessPlugin(
+            controller: controller,
+            mouseDisplayIDProvider: { 7 }
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.last?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(controller.brightnessWrites.map(\.phase), [.changed, .ended])
+        XCTAssertEqual(controller.brightnessWrites.first?.value ?? 0, 0.73, accuracy: 0.0001)
     }
 
     func testShortcutPreferencesDefaultToFollowingMouse() {

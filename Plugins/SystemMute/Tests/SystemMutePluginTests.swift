@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import SystemMutePlugin
 
 @MainActor
@@ -52,5 +53,19 @@ final class SystemMutePluginTests: XCTestCase {
         plugin.refresh()
 
         XCTAssertEqual(notificationCount, 0)
+    }
+
+    func testActionCatalogProvidesIdempotentMuteChoices() async throws {
+        let plugin = SystemMutePlugin(controller: MockController(muteState: false))
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["静音系统音频", "恢复系统音频"])
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 }

@@ -71,6 +71,21 @@ final class KeepAwakePluginTests: XCTestCase {
         XCTAssertFalse(secondFactory.sessions[0].startedConfigurations[0].preventLidCloseSleep)
     }
 
+    func testIdempotentActionEnablesKeepAwakeThroughSessionFactory() async throws {
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["启用阻止休眠", "停用阻止休眠"])
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(factory.sessions.count, 1)
+    }
+
     func testTemporarySessionDoesNotRestoreAfterHostShutdown() {
         let storage = KeepAwakeMemoryStorage()
         let firstFactory = KeepAwakeSessionFactory()

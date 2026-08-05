@@ -20,7 +20,12 @@ private struct LockScreenPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCommandProviding {
+final class LockScreenPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginCommandProviding,
+    PluginActionProviding
+{
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -79,6 +84,30 @@ final class LockScreenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCommandP
                 systemImage: metadata.iconName
             )
         ]
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: "execute"),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: ["锁屏", "隐私", "安全"],
+                systemImage: metadata.iconName,
+                confirmation: ActionConfirmation(
+                    title: "锁定屏幕？",
+                    message: "此运行链接将立即锁定屏幕。",
+                    confirmButtonTitle: "锁定"
+                ),
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        lockScreen()
+        return ActionExecutionHandle { .succeeded() }
     }
 
     func handleCommand(id: String) {

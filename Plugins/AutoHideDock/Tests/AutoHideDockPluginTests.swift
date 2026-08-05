@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import AutoHideDockPlugin
 
 @MainActor
@@ -32,6 +33,19 @@ final class AutoHideDockPluginTests: XCTestCase {
 
         XCTAssertFalse(plugin.primaryPanelState.isOn)
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testActionExecutesThroughSameDockMutation() async throws {
+        let runner = MockDockCommandRunner()
+        let plugin = AutoHideDockPlugin(commandRunner: runner, stateReader: { false })
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(runner.calls, [true])
     }
 }
 

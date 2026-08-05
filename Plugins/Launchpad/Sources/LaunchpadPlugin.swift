@@ -24,7 +24,12 @@ private struct LaunchpadPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class LaunchpadPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginActionProviding,
+    PluginLegacyActionShortcutProviding
+{
     private enum ControlID {
         static let execute = "execute"
     }
@@ -140,6 +145,45 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleShortcutAction(id: String) {
         guard id == ActionID.toggle else { return }
         openLaunchpad()
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("shortcut.toggle.title", defaultValue: "打开启动台"),
+                description: localization.string(
+                    "shortcut.toggle.description",
+                    defaultValue: "唤出或收起应用网格。"
+                ),
+                keywords: ["启动台", "应用", "Launchpad"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.foregroundInteractive]
+            ),
+        ]
+    }
+
+    var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] {
+        guard let binding = shortcutBindingResolver?(ShortcutID.toggle) else {
+            return []
+        }
+        return [
+            LegacyActionShortcutAssignment(
+                reference: ActionReference(
+                    key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle)
+                ),
+                binding: binding,
+                legacyShortcutDefinitionID: ShortcutID.toggle
+            ),
+        ]
+    }
+
+    func legacyActionShortcutsDidMigrate() {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        openLaunchpad()
+        return ActionExecutionHandle { .succeeded() }
     }
 
     private func openLaunchpad() {

@@ -19,7 +19,12 @@ private struct DisplaySleepPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCommandProviding {
+final class DisplaySleepPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    PluginCommandProviding,
+    PluginActionProviding
+{
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -78,6 +83,30 @@ final class DisplaySleepPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComman
                 systemImage: metadata.iconName
             )
         ]
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: "execute"),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: ["显示器", "休眠", "睡眠"],
+                systemImage: metadata.iconName,
+                confirmation: ActionConfirmation(
+                    title: "让显示器休眠？",
+                    message: "此运行链接将立即关闭显示器。",
+                    confirmButtonTitle: "休眠"
+                ),
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        sleepDisplays()
+        return ActionExecutionHandle { .succeeded() }
     }
 
     func handleCommand(id: String) {

@@ -20,7 +20,10 @@ private struct AppearancePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+    }
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -78,6 +81,30 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: "设置系统外观",
+                description: metadata.defaultDescription,
+                keywords: ["深色", "浅色", "外观"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(id: "enabled", title: "深色模式", kind: .boolean),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(reference: actionReference(enabled: true), title: "启用深色模式"),
+            ActionCatalogEntry(reference: actionReference(enabled: false), title: "启用浅色模式"),
+        ]
+    }
+
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)
     }
@@ -85,6 +112,16 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+        }
+        let succeeded = setDarkMode(enabled)
+        return ActionExecutionHandle {
+            succeeded ? .succeeded() : .failed(message: "切换系统外观失败。")
+        }
+    }
 
     func refresh() {
         let current = Self.readSystemDarkMode()
@@ -106,7 +143,15 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
         return style == "Dark"
     }
 
-    private func setDarkMode(_ enable: Bool) {
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    @discardableResult
+    private func setDarkMode(_ enable: Bool) -> Bool {
         let script = """
         tell application "System Events"
             tell appearance preferences
@@ -119,9 +164,11 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel {
         appleScript?.executeAndReturnError(&error)
         if let error {
             logger.error("Failed to set dark mode: \(error)")
+            return false
         } else {
             isDarkMode = enable
             onStateChange?()
+            return true
         }
     }
 

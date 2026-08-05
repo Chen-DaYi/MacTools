@@ -227,13 +227,31 @@ struct UnifiedSearchPaletteView: View {
         static let rowCornerRadius: CGFloat = 8
     }
 
+    private enum PendingAlert: Identifiable {
+        case execute(MacToolsSearchResult)
+        case replaceShortcut(
+            reference: ActionReference,
+            binding: ShortcutBinding,
+            ownerDescription: String
+        )
+
+        var id: String {
+            switch self {
+            case let .execute(result):
+                "execute.\(result.id)"
+            case let .replaceShortcut(reference, _, _):
+                "shortcut.\(reference.key.id)"
+            }
+        }
+    }
+
     let pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let availableSize: CGSize
     @StateObject private var model: UnifiedSearchPaletteModel
     @State private var query = ""
     @State private var selectedResultID: String?
-    @State private var pendingConfirmation: MacToolsSearchResult?
+    @State private var pendingAlert: PendingAlert?
 
     init(
         pluginHost: PluginHost,
@@ -286,21 +304,37 @@ struct UnifiedSearchPaletteView: View {
         .onExitCommand {
             navigationCoordinator.dismissUnifiedSearch()
         }
-        .alert(item: $pendingConfirmation) { result in
-            let confirmation = result.confirmation
-            return Alert(
-                title: Text(confirmation?.title ?? result.title),
-                message: Text(confirmation?.message ?? result.detail),
-                primaryButton: .destructive(
-                    Text(
-                        confirmation?.confirmButtonTitle
-                            ?? AppL10n.search("search.action.run", defaultValue: "执行")
-                    )
-                ) {
-                    execute(result)
-                },
-                secondaryButton: .cancel()
-            )
+        .alert(item: $pendingAlert) { pendingAlert in
+            switch pendingAlert {
+            case let .execute(result):
+                let confirmation = result.confirmation
+                return Alert(
+                    title: Text(confirmation?.title ?? result.title),
+                    message: Text(confirmation?.message ?? result.detail),
+                    primaryButton: .destructive(
+                        Text(
+                            confirmation?.confirmButtonTitle
+                                ?? AppL10n.search("search.action.run", defaultValue: "执行")
+                        )
+                    ) {
+                        execute(result)
+                    },
+                    secondaryButton: .cancel()
+                )
+            case let .replaceShortcut(reference, binding, ownerDescription):
+                return Alert(
+                    title: Text("替换快捷键？"),
+                    message: Text("此快捷键已分配给“\(ownerDescription)”。替换后，原操作将不再使用它。"),
+                    primaryButton: .destructive(Text("替换")) {
+                        _ = pluginHost.setActionShortcutBinding(
+                            binding,
+                            to: reference,
+                            replacingConflictingActionAssignments: true
+                        )
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
@@ -450,11 +484,12 @@ struct UnifiedSearchPaletteView: View {
     ) -> some View {
         let isSelected = result.id == selectedResultID
 
-        return Button {
-            selectedResultID = result.id
-            activate(result)
-        } label: {
-            HStack(spacing: 12) {
+        return HStack(spacing: 8) {
+            Button {
+                selectedResultID = result.id
+                activate(result)
+            } label: {
+                HStack(spacing: 12) {
                 Image(systemName: result.systemImage)
                     .frame(width: 18)
                     .foregroundStyle(isSelected ? Color.white : Color.accentColor)
@@ -492,20 +527,62 @@ struct UnifiedSearchPaletteView: View {
                                     : Color.accentColor.opacity(0.1)
                             )
                     )
+                }
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: Layout.rowCornerRadius, style: .continuous)
-                    .fill(isSelected ? Color.accentColor : Color.clear)
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            shortcutControls(for: result)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: Layout.rowCornerRadius, style: .continuous)
+                .fill(isSelected ? Color.accentColor : Color.clear)
+        )
         .accessibilityLabel(result.accessibilityLabel)
         .accessibilityHint(accessibilityHint(for: result, number: quickSelectionNumber))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("mactools.unified-search.result.\(result.id)")
+    }
+
+    @ViewBuilder
+    private func shortcutControls(for result: MacToolsSearchResult) -> some View {
+        if case let .executeAction(reference) = result.action {
+            let shortcut = pluginHost.actionShortcutSettingsItem(for: reference)
+            PluginShortcutRecorder(
+                title: "\(result.title)快捷键",
+                displayText: shortcut?.bindingText ?? "",
+                minWidth: 72,
+                onRecord: { binding in
+                    switch pluginHost.setActionShortcutBinding(binding, to: reference) {
+                    case .success:
+                        return .accepted
+                    case let .failure(.conflict(ownerDescription)):
+                        pendingAlert = .replaceShortcut(
+                            reference: reference,
+                            binding: binding,
+                            ownerDescription: ownerDescription
+                        )
+                        return .rejected("需要确认后替换现有快捷键。")
+                    case let .failure(error):
+                        return .rejected(error.localizedDescription)
+                    }
+                }
+            )
+            .frame(width: 72)
+
+            if shortcut != nil {
+                Button {
+                    pluginHost.clearActionShortcut(for: reference)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("清除快捷键")
+            }
+        }
     }
 
     private var footer: some View {
@@ -688,7 +765,7 @@ struct UnifiedSearchPaletteView: View {
 
     private func activate(_ result: MacToolsSearchResult) {
         if result.confirmation != nil {
-            pendingConfirmation = result
+            pendingAlert = .execute(result)
         } else {
             execute(result)
         }
@@ -703,20 +780,25 @@ struct UnifiedSearchPaletteView: View {
             ) {
                 model.refresh()
             }
-        case let .pluginCommand(pluginID, expectedDefinition):
-            if pluginHost.performCommand(
-                pluginID: pluginID,
-                expectedDefinition: expectedDefinition
-            ) {
-                navigationCoordinator.dismissUnifiedSearch()
-            } else {
-                model.refresh()
-            }
-        case let .appCommand(action):
-            if pluginHost.performAppCommand(action) {
-                navigationCoordinator.dismissUnifiedSearch()
-            } else {
-                model.refresh()
+        case let .executeAction(reference):
+            Task { @MainActor in
+                let confirmationService: (any ActionConfirmationRequesting)? =
+                    result.confirmation == nil
+                        ? nil
+                        : ApprovedActionConfirmationService()
+                let outcome = await pluginHost.actionExecutor.execute(
+                    ActionInvocation(
+                        reference: reference,
+                        source: .unifiedSearch,
+                        mode: .foreground
+                    ),
+                    confirmationService: confirmationService
+                )
+                if case .completed(.succeeded) = outcome {
+                    navigationCoordinator.dismissUnifiedSearch()
+                } else {
+                    model.refresh()
+                }
             }
         }
     }

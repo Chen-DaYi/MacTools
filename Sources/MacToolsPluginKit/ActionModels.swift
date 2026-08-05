@@ -442,10 +442,16 @@ public protocol PluginActionProviding: AnyObject {
 public struct LegacyActionShortcutAssignment: Hashable, Codable, Sendable {
     public let reference: ActionReference
     public let binding: ShortcutBinding
+    public let legacyShortcutDefinitionID: String?
 
-    public init(reference: ActionReference, binding: ShortcutBinding) {
+    public init(
+        reference: ActionReference,
+        binding: ShortcutBinding,
+        legacyShortcutDefinitionID: String? = nil
+    ) {
         self.reference = reference
         self.binding = binding
+        self.legacyShortcutDefinitionID = legacyShortcutDefinitionID
     }
 }
 
