@@ -59,7 +59,7 @@
   },
   "capabilities": {
     "primaryPanel": true,
-    "componentPanel": true,
+    "componentPanel": false,
     "configuration": true
   },
   "permissions": [],

@@ -89,6 +89,10 @@ if [[ -z "$SOURCE_DIR" || ! -d "$SOURCE_DIR" ]]; then
     echo "Plugin source directory not found: $SOURCE_DIR" >&2
     exit 1
 fi
+SOURCE_IS_SINGLE_PLUGIN=0
+if [[ -f "$SOURCE_DIR/plugin.json" ]]; then
+    SOURCE_IS_SINGLE_PLUGIN=1
+fi
 
 PRODUCTS_DIR="$(cd "$PRODUCTS_DIR" 2>/dev/null && pwd || true)"
 if [[ -z "$PRODUCTS_DIR" || ! -d "$PRODUCTS_DIR" ]]; then
@@ -276,10 +280,41 @@ installed_package_matches() {
     /usr/bin/diff -rq "$package_path" "$install_path" >/dev/null 2>&1
 }
 
+quarantine_stale_installed_packages() {
+    local quarantine_dir
+    local installed_package
+    local is_expected
+    local package_path
+    local package_name
+    local quarantine_path
+
+    quarantine_dir="$(dirname "$INSTALL_DIR")/Quarantined"
+    for installed_package in "$INSTALL_DIR"/*.mactoolsplugin(N/); do
+        package_name="${installed_package:t}"
+        is_expected=0
+        for package_path in "${packages[@]}"; do
+            if [[ "${package_path:t}" == "$package_name" ]]; then
+                is_expected=1
+                break
+            fi
+        done
+        [[ "$is_expected" == "0" ]] || continue
+
+        mkdir -p "$quarantine_dir"
+        quarantine_path="$quarantine_dir/$package_name"
+        if [[ -e "$quarantine_path" ]]; then
+            quarantine_path="$quarantine_dir/${package_name%.mactoolsplugin}.$$.mactoolsplugin"
+        fi
+        mv "$installed_package" "$quarantine_path"
+        quarantined_count=$((quarantined_count + 1))
+    done
+}
+
 packages=()
 synced_count=0
 installed_count=0
 skipped_count=0
+quarantined_count=0
 
 echo "Discovering Debug plugin bundles..."
 if plugin_records="$(discover_plugin_records)"; then
@@ -356,9 +391,16 @@ if [[ "$synced_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
         "${catalog_args[@]}"
 fi
 
+if [[ "$SKIP_INSTALL" != "1"
+    && "$plugin_filter_count" -eq 0
+    && "$SOURCE_IS_SINGLE_PLUGIN" -eq 0 ]]; then
+    quarantine_stale_installed_packages
+fi
+
 echo "Synced $synced_count changed debug plugin package(s); skipped $skipped_count unchanged."
 echo "Catalog: $CATALOG_PATH"
 if [[ "$SKIP_INSTALL" != "1" ]]; then
     echo "Installed $installed_count debug plugin package(s)."
+    echo "Quarantined $quarantined_count stale debug plugin package(s)."
     echo "Installed store: $INSTALL_DIR"
 fi

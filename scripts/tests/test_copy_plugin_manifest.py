@@ -68,13 +68,14 @@ class CopyPluginManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)
             source = root / "Source"
+            plugin_root = source / "Example"
             products = root / "Products"
             output = root / "Output"
             bundle = products / "Example.bundle"
-            source.mkdir()
+            plugin_root.mkdir(parents=True)
             bundle.mkdir(parents=True)
             (bundle / "payload").write_text("debug bundle", encoding="utf-8")
-            (source / "plugin.json").write_text(
+            (plugin_root / "plugin.json").write_text(
                 json.dumps(
                     {
                         "id": "example-debug-plugin",
@@ -200,6 +201,121 @@ class CopyPluginManifestTests(unittest.TestCase):
                 installed_manifest.read_bytes(),
                 packaged_manifest.read_bytes(),
             )
+
+    def test_full_debug_sync_quarantines_package_missing_from_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "Source"
+            plugin_root = source / "Example"
+            products = root / "Products"
+            output = root / "Output"
+            install = root / "Plugins/Installed"
+            bundle = products / "Example.bundle"
+            stale_package = install / "stale-debug-plugin.mactoolsplugin"
+            plugin_root.mkdir(parents=True)
+            bundle.mkdir(parents=True)
+            stale_package.mkdir(parents=True)
+            (bundle / "payload").write_text("debug bundle", encoding="utf-8")
+            (stale_package / "plugin.json").write_text(
+                json.dumps({"id": "stale-debug-plugin"}),
+                encoding="utf-8",
+            )
+            (plugin_root / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "id": "example-debug-plugin",
+                        "displayName": "Example",
+                        "version": "1.0.0",
+                        "minHostVersion": "99.0.0",
+                        "pluginKitVersion": 3,
+                        "bundleRelativePath": "Example.bundle",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    str(SYNC_SCRIPT),
+                    "--source-dir", str(source),
+                    "--products-dir", str(products),
+                    "--output-dir", str(output),
+                    "--install-dir", str(install),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            quarantined = root / "Plugins/Quarantined/stale-debug-plugin.mactoolsplugin"
+
+            self.assertIn("Quarantined 1 stale debug plugin package", result.stdout)
+            self.assertFalse(stale_package.exists())
+            self.assertTrue(quarantined.is_dir())
+            self.assertTrue(
+                (install / "example-debug-plugin.mactoolsplugin").is_dir()
+            )
+
+    def test_partial_debug_sync_preserves_unrelated_installed_package(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "Source"
+            products = root / "Products"
+            output = root / "Output"
+            install = root / "Plugins/Installed"
+            bundle = products / "Example.bundle"
+            unrelated_package = install / "unrelated-debug-plugin.mactoolsplugin"
+            source.mkdir()
+            bundle.mkdir(parents=True)
+            unrelated_package.mkdir(parents=True)
+            (bundle / "payload").write_text("debug bundle", encoding="utf-8")
+            (unrelated_package / "plugin.json").write_text(
+                json.dumps({"id": "unrelated-debug-plugin"}),
+                encoding="utf-8",
+            )
+            (source / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "id": "example-debug-plugin",
+                        "displayName": "Example",
+                        "version": "1.0.0",
+                        "minHostVersion": "99.0.0",
+                        "pluginKitVersion": 3,
+                        "bundleRelativePath": "Example.bundle",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            command = [
+                str(SYNC_SCRIPT),
+                "--source-dir", str(source),
+                "--products-dir", str(products),
+                "--output-dir", str(output),
+                "--install-dir", str(install),
+            ]
+            filtered_result = subprocess.run(
+                [*command, "--plugin", "example-debug-plugin"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            single_plugin_result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertIn(
+                "Quarantined 0 stale debug plugin package",
+                filtered_result.stdout,
+            )
+            self.assertIn(
+                "Quarantined 0 stale debug plugin package",
+                single_plugin_result.stdout,
+            )
+            self.assertTrue(unrelated_package.is_dir())
+            self.assertFalse((root / "Plugins/Quarantined").exists())
 
 
 if __name__ == "__main__":

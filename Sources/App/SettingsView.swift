@@ -114,7 +114,17 @@ struct SettingsView: View {
         Binding(
             get: { navigationCoordinator.destination.settingsDestination },
             set: { destination in
-                navigationCoordinator.selectSettingsDestination(destination)
+                guard destination != navigationCoordinator.destination.settingsDestination else {
+                    return
+                }
+
+                // TabView writes its selection during the same update pass in
+                // which it swaps the page. Defer the observable navigation
+                // change so SwiftUI does not publish from inside that pass.
+                Task { @MainActor in
+                    await Task.yield()
+                    navigationCoordinator.selectSettingsDestination(destination)
+                }
             }
         )
     }
@@ -1420,10 +1430,18 @@ private struct FeatureSettingsSidebar: View {
         Binding(
             get: { selection },
             set: { newSelection in
-                guard let newSelection else {
+                guard let newSelection, newSelection != selection else {
                     return
                 }
-                selection = newSelection
+
+                // AppKit-backed sidebar lists write their selection while
+                // SwiftUI is still updating the view hierarchy. Publishing a
+                // coordinator destination from that callback produces a
+                // runtime fault, so finish the list update before navigating.
+                Task { @MainActor in
+                    await Task.yield()
+                    selection = newSelection
+                }
             }
         )
     }

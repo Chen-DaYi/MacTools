@@ -90,6 +90,8 @@ Finder Sync, Share, Quick Look, and other macOS app extensions are host-level ta
 
 In Debug development, `make run` builds the main `MacTools` scheme, then synchronizes the freshly built plugin bundles from `build/DerivedData/Build/Products/Debug` into `build/LocalPlugins/Packages`, generates `build/LocalPlugins/catalog.dev.json`, and updates `~/Library/Application Support/MacTools Dev/Plugins/Installed`. This keeps the local marketplace and installed plugins on the latest source code without running a separate plugin build.
 
+A full Debug sync mirrors the current checkout: packages missing from its local catalog are moved from `Installed` to the sibling `Quarantined` directory so packages left by another worktree cannot appear as incompatible. A filtered sync such as `make sync-debug-plugins PLUGIN=calendar` preserves unrelated installed packages.
+
 Debug package copies normalize `minHostVersion` to the locally built app version because the host and plugin bundles come from the same checkout. Release packages preserve each source manifest's declared minimum host version.
 
 If the plugin needs extra frameworks, private include paths, bundle resources, helper/tool targets, or target dependencies, add only those differences in `Plugins/<PluginName>/project.yml`. If the plugin package contains an extra executable inside the bundle resources, declare it in `plugin.json.package.signPaths` so release packaging signs it before signing the bundle.
