@@ -82,6 +82,70 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
     }
 
+    func testPresentedPanelSupportsSpacesAndEscapeDismissal() throws {
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+
+        XCTAssertTrue(controller.present(entries: [testEntry()]))
+        let behavior = try XCTUnwrap(controller.presentedPanelCollectionBehavior)
+        XCTAssertTrue(behavior.contains(.moveToActiveSpace))
+        XCTAssertTrue(behavior.contains(.fullScreenAuxiliary))
+        XCTAssertTrue(behavior.contains(.transient))
+        XCTAssertTrue(behavior.contains(.ignoresCycle))
+
+        let escape = try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: "\u{1B}",
+                charactersIgnoringModifiers: "\u{1B}",
+                isARepeat: false,
+                keyCode: 53
+            )
+        )
+        XCTAssertTrue(controller.processKeyEvent(escape))
+        XCTAssertFalse(controller.isShown)
+    }
+
+    func testPointerDismissalKeepsInsideClickAndClosesForOutsideClick() throws {
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+
+        XCTAssertTrue(controller.present(entries: [testEntry()]))
+        let frame = try XCTUnwrap(controller.presentedPanelFrame)
+        controller.dismissIfPointerIsOutside(
+            CGPoint(x: frame.midX, y: frame.midY)
+        )
+        XCTAssertTrue(controller.isShown)
+
+        controller.dismissIfPointerIsOutside(
+            CGPoint(x: frame.maxX + 1, y: frame.maxY + 1)
+        )
+        XCTAssertFalse(controller.isShown)
+    }
+
+    func testAccessibilityPolicyHonorsReducedMotionAndTransparency() {
+        let standard = ActionGridOverlayAccessibilityPolicy(
+            reduceMotion: false,
+            reduceTransparency: false
+        )
+        XCTAssertTrue(standard.animatesSelection)
+        XCTAssertTrue(standard.usesMaterialBackground)
+
+        let reduced = ActionGridOverlayAccessibilityPolicy(
+            reduceMotion: true,
+            reduceTransparency: true
+        )
+        XCTAssertFalse(reduced.animatesSelection)
+        XCTAssertFalse(reduced.usesMaterialBackground)
+    }
+
     func testUnavailableEntryKeepsGridOpenAndSuccessfulExecutionRequestsDismissal() async {
         let reference = ActionReference(key: ActionKey(providerID: "provider", actionID: "run"))
         var executionCount = 0
@@ -119,5 +183,14 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         }
         XCTAssertEqual(executionCount, 1)
         XCTAssertTrue(dismissed)
+    }
+
+    private func testEntry() -> ActionGridPresentationEntry {
+        ActionGridPresentationEntry(
+            id: "one",
+            reference: ActionReference(
+                key: ActionKey(providerID: "missing", actionID: "run")
+            )
+        )
     }
 }

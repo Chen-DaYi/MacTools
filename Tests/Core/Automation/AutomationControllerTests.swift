@@ -169,6 +169,38 @@ final class AutomationControllerTests: XCTestCase {
         XCTAssertEqual(controller.recentRuns(workflowID: workflow.id).first?.status, .cancelled)
         XCTAssertEqual(provider.cancelCount, 1)
     }
+
+    func testDeletingActiveWorkflowCancelsProviderAndFinalizesRun() async throws {
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let provider = CancellableAutomationControllerTestProvider()
+        registry.synchronize([provider.registration])
+        let controller = AutomationController(
+            store: WorkflowStore(userDefaults: defaults),
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let workflow = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: workflow.id, reference: provider.reference)
+        let runID = try XCTUnwrap(controller.startWorkflow(id: workflow.id))
+        for _ in 0 ..< 100 where controller.activeRunIDs(for: workflow.id).isEmpty {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(controller.deleteWorkflow(id: workflow.id))
+        for _ in 0 ..< 100 where controller.activeRunIDs.contains(runID) {
+            await Task.yield()
+        }
+
+        XCTAssertNil(controller.workflows.first { $0.id == workflow.id })
+        XCTAssertEqual(provider.cancelCount, 1)
+        XCTAssertEqual(
+            controller.history.first { $0.id == runID }?.status,
+            .cancelled
+        )
+    }
 }
 
 @MainActor

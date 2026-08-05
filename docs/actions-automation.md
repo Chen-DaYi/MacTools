@@ -15,7 +15,7 @@ Unavailable references are retained by shortcut assignments, workflows, presets,
 
 ## Automation boundaries
 
-Workflows can be created, renamed, duplicated, enabled or disabled, reordered, run, tested, stopped, and deleted. Automatic rules are managed separately; deleting a workflow explicitly removes its attached rules so enabled orphan triggers cannot remain hidden. Manual Run and Test ignore rule-specific conditions. Enabled workflows publish stable `automation/workflow.<uuid>` actions, so Unified Search, global shortcuts, Run Links, and Action Grid need no workflow-specific dispatch path.
+Workflows can be created, renamed, duplicated, enabled or disabled, reordered, run, tested, stopped, and deleted. Automatic rules are managed separately; deleting a workflow first cancels its active runs and explicitly removes its attached rules so neither an unreachable run nor enabled orphan trigger remains hidden. Manual Run and Test ignore rule-specific conditions. Enabled workflows publish stable `automation/workflow.<uuid>` actions, so Unified Search, global shortcuts, Run Links, and Action Grid need no workflow-specific dispatch path.
 
 Automatic rules use one trigger and zero or more conditions:
 

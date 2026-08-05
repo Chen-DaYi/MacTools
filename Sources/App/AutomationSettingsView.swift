@@ -195,7 +195,7 @@ private struct WorkflowDetailView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("相关自动规则会一并删除。保存的快捷键、运行链接和网格条目会保留，并显示为不可用。")
+            Text("运行中的任务会先停止，相关自动规则会一并删除。保存的快捷键、运行链接和网格条目会保留，并显示为不可用。")
         }
     }
 

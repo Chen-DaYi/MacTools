@@ -106,6 +106,14 @@ enum ActionGridOverlayGeometry {
     }
 }
 
+struct ActionGridOverlayAccessibilityPolicy: Equatable {
+    let reduceMotion: Bool
+    let reduceTransparency: Bool
+
+    var animatesSelection: Bool { !reduceMotion }
+    var usesMaterialBackground: Bool { !reduceTransparency }
+}
+
 @MainActor
 final class ActionGridOverlayModel: ObservableObject {
     @Published private(set) var entries: [ResolvedActionGridEntry] = []
@@ -277,6 +285,10 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
 
     var isShown: Bool { panel != nil }
     var presentedEntryIDs: [String] { model.entries.map(\.id) }
+    var presentedPanelFrame: CGRect? { panel?.frame }
+    var presentedPanelCollectionBehavior: NSWindow.CollectionBehavior? {
+        panel?.collectionBehavior
+    }
 
     @discardableResult
     func present(entries: [ActionGridPresentationEntry]) -> Bool {
@@ -312,7 +324,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.level = .popUpMenu
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient, .ignoresCycle]
-        panel.keyEventHandler = { [weak self] event in self?.handleKeyEvent(event) ?? false }
+        panel.keyEventHandler = { [weak self] event in self?.processKeyEvent(event) ?? false }
         panel.contentView = NSHostingView(
             rootView: ActionGridOverlayView(model: model, onDismiss: { [weak self] in self?.close() })
         )
@@ -345,7 +357,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         if panel != nil { close() }
     }
 
-    private func handleKeyEvent(_ event: NSEvent) -> Bool {
+    func processKeyEvent(_ event: NSEvent) -> Bool {
         guard let command = ActionGridKeyCommand.resolve(
             keyCode: event.keyCode,
             characters: event.charactersIgnoringModifiers
@@ -365,6 +377,11 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         return true
     }
 
+    func dismissIfPointerIsOutside(_ point: CGPoint) {
+        guard let frame = panel?.frame, !frame.contains(point) else { return }
+        close()
+    }
+
     private func installDismissHandlers(panel: NSPanel) {
         let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         tokens.localMouse = NSEvent.addLocalMonitorForEvents(matching: mouseMask) { [weak self, weak panel] event in
@@ -375,8 +392,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         tokens.globalMouse = NSEvent.addGlobalMonitorForEvents(matching: mouseMask) { [weak self] _ in
             let point = NSEvent.mouseLocation
             Task { @MainActor in
-                guard let self, let frame = self.panel?.frame, !frame.contains(point) else { return }
-                self.close()
+                self?.dismissIfPointerIsOutside(point)
             }
         }
         tokens.resignKey = NotificationCenter.default.addObserver(
@@ -394,6 +410,13 @@ private struct ActionGridOverlayView: View {
     let onDismiss: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var accessibilityPolicy: ActionGridOverlayAccessibilityPolicy {
+        ActionGridOverlayAccessibilityPolicy(
+            reduceMotion: reduceMotion,
+            reduceTransparency: reduceTransparency
+        )
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -433,11 +456,22 @@ private struct ActionGridOverlayView: View {
         .padding(16)
         .background {
             RoundedRectangle(cornerRadius: 18)
-                .fill(reduceTransparency ? Color(nsColor: .windowBackgroundColor) : Color.clear)
-                .background(reduceTransparency ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.ultraThinMaterial))
+                .fill(
+                    accessibilityPolicy.usesMaterialBackground
+                        ? Color.clear
+                        : Color(nsColor: .windowBackgroundColor)
+                )
+                .background(
+                    accessibilityPolicy.usesMaterialBackground
+                        ? AnyShapeStyle(.ultraThinMaterial)
+                        : AnyShapeStyle(Color.clear)
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 18))
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: model.selectedIndex)
+        .animation(
+            accessibilityPolicy.animatesSelection ? .easeOut(duration: 0.16) : nil,
+            value: model.selectedIndex
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("操作网格")
     }

@@ -91,6 +91,7 @@ final class AutomationController: ObservableObject {
 
     @discardableResult
     func deleteWorkflow(id: UUID) -> Bool {
+        let runsToCancel = activeRunIDs(for: id)
         let existingRules = ruleStore.rules()
         let retainedRules = existingRules.filter { $0.workflowID != id }
         guard retainedRules == existingRules || ruleStore.replace(retainedRules) else {
@@ -104,6 +105,7 @@ final class AutomationController: ObservableObject {
             lastErrorMessage = "无法删除工作流。"
             return false
         }
+        runsToCancel.forEach(cancel(runID:))
         finishDefinitionMutation()
         return true
     }

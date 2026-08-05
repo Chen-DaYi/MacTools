@@ -1,3 +1,4 @@
+import AppKit
 import MacToolsPluginKit
 import SwiftUI
 
@@ -101,6 +102,21 @@ struct ActionGridSettingsView: View {
     }
 
     private func entryRow(_ entry: ActionGridEntry) -> some View {
+        ActionGridEntryRow(plugin: plugin, store: store, entry: entry)
+    }
+
+    private var previewColumns: [GridItem] {
+        let count = max(1, store.entries.count)
+        return Array(repeating: GridItem(.flexible(), spacing: 8), count: count <= 6 ? 2 : 3)
+    }
+}
+
+struct ActionGridEntryRow: View {
+    let plugin: ActionGridPlugin
+    @ObservedObject var store: ActionGridStore
+    let entry: ActionGridEntry
+
+    var body: some View {
         let item = plugin.item(for: entry.reference)
         let title = entry.customTitle ?? item?.title ?? "不可用操作"
         let owner = item?.ownerTitle ?? "提供者缺失"
@@ -112,7 +128,7 @@ struct ActionGridSettingsView: View {
             owner: owner,
             availability: availability
         )
-        return HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Image(systemName: item?.systemImage ?? "questionmark.square.dashed")
                 .frame(width: 24)
                 .accessibilityHidden(true)
@@ -126,42 +142,156 @@ struct ActionGridSettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibility.summaryLabel)
-            if item?.canOpenOwner == true {
-                Button("设置") {
-                    plugin.openOwner(for: entry.reference)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityLabel(accessibility.settingsLabel)
-                .accessibilityHint("打开操作提供者设置")
-            }
-            Menu("替换") {
-                ForEach(plugin.catalogItems(excluding: entry.id)) { replacement in
-                    Button(replacement.title) {
-                        if store.replace(id: entry.id, reference: replacement.reference) {
-                            plugin.notifyMutation()
-                        }
+            ActionGridEntryControlsView(
+                settingsAction: item?.canOpenOwner == true ? {
+                    _ = plugin.openOwner(for: entry.reference)
+                } : nil,
+                replacementOptions: plugin.catalogItems(excluding: entry.id).map {
+                    ActionGridReplacementOption(title: $0.title, reference: $0.reference)
+                },
+                replaceAction: { replacement in
+                    if store.replace(id: entry.id, reference: replacement) {
+                        plugin.notifyMutation()
                     }
-                }
-            }
-            .menuStyle(.borderlessButton)
-            .accessibilityLabel(accessibility.replaceLabel)
-            .accessibilityHint("选择其他操作替换此条目")
-            Button(role: .destructive) {
-                if store.remove(id: entry.id) { plugin.notifyMutation() }
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibility.removeLabel)
-            .accessibilityHint("从操作网格移除此条目")
+                },
+                removeAction: {
+                    if store.remove(id: entry.id) { plugin.notifyMutation() }
+                },
+                accessibility: accessibility,
+                identifierPrefix: "mactools.action-grid.entry.\(entry.id.uuidString)"
+            )
+            .fixedSize(horizontal: true, vertical: false)
         }
         .accessibilityElement(children: .contain)
     }
+}
 
-    private var previewColumns: [GridItem] {
-        let count = max(1, store.entries.count)
-        return Array(repeating: GridItem(.flexible(), spacing: 8), count: count <= 6 ? 2 : 3)
+struct ActionGridReplacementOption: Equatable {
+    let title: String
+    let reference: ActionReference
+}
+
+struct ActionGridEntryControlsView: NSViewRepresentable {
+    let settingsAction: (() -> Void)?
+    let replacementOptions: [ActionGridReplacementOption]
+    let replaceAction: (ActionReference) -> Void
+    let removeAction: () -> Void
+    let accessibility: ActionGridEntryAccessibility
+    let identifierPrefix: String
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSStackView {
+        let settingsButton = NSButton(
+            title: "设置",
+            target: context.coordinator,
+            action: #selector(Coordinator.openSettings)
+        )
+        settingsButton.bezelStyle = .rounded
+        settingsButton.controlSize = .small
+
+        let replacementButton = NSPopUpButton(frame: .zero, pullsDown: true)
+        replacementButton.bezelStyle = .rounded
+        replacementButton.controlSize = .small
+
+        let removeButton = NSButton(
+            image: NSImage(systemSymbolName: "trash", accessibilityDescription: nil) ?? NSImage(),
+            target: context.coordinator,
+            action: #selector(Coordinator.remove)
+        )
+        removeButton.bezelStyle = .inline
+        removeButton.isBordered = false
+        removeButton.controlSize = .small
+        removeButton.contentTintColor = .systemRed
+
+        let stack = NSStackView(views: [settingsButton, replacementButton, removeButton])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = PluginSettingsTheme.Spacing.rowContentControl
+        stack.setHuggingPriority(.required, for: .horizontal)
+
+        context.coordinator.settingsButton = settingsButton
+        context.coordinator.replacementButton = replacementButton
+        context.coordinator.removeButton = removeButton
+        updateNSView(stack, context: context)
+        return stack
+    }
+
+    func updateNSView(_ nsView: NSStackView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.settingsAction = settingsAction
+        coordinator.replaceAction = replaceAction
+        coordinator.removeAction = removeAction
+        coordinator.replacementOptions = replacementOptions
+
+        coordinator.settingsButton?.isHidden = settingsAction == nil
+        configure(
+            coordinator.settingsButton,
+            label: accessibility.settingsLabel,
+            help: "打开操作提供者设置",
+            identifier: "\(identifierPrefix).settings"
+        )
+        configure(
+            coordinator.replacementButton,
+            label: accessibility.replaceLabel,
+            help: "选择其他操作替换此条目",
+            identifier: "\(identifierPrefix).replace"
+        )
+        configure(
+            coordinator.removeButton,
+            label: accessibility.removeLabel,
+            help: "从操作网格移除此条目",
+            identifier: "\(identifierPrefix).remove"
+        )
+
+        let menu = NSMenu()
+        menu.addItem(withTitle: "替换", action: nil, keyEquivalent: "")
+        for (index, option) in replacementOptions.enumerated() {
+            let item = NSMenuItem(
+                title: option.title,
+                action: #selector(Coordinator.replace(_:)),
+                keyEquivalent: ""
+            )
+            item.target = coordinator
+            item.tag = index
+            menu.addItem(item)
+        }
+        coordinator.replacementButton?.menu = menu
+        coordinator.replacementButton?.isEnabled = !replacementOptions.isEmpty
+    }
+
+    private func configure(
+        _ element: NSView?,
+        label: String,
+        help: String,
+        identifier: String
+    ) {
+        element?.setAccessibilityLabel(label)
+        element?.setAccessibilityHelp(help)
+        element?.setAccessibilityIdentifier(identifier)
+    }
+
+    final class Coordinator: NSObject {
+        weak var settingsButton: NSButton?
+        weak var replacementButton: NSPopUpButton?
+        weak var removeButton: NSButton?
+        var settingsAction: (() -> Void)?
+        var replaceAction: ((ActionReference) -> Void)?
+        var removeAction: (() -> Void)?
+        var replacementOptions: [ActionGridReplacementOption] = []
+
+        @objc func openSettings() {
+            settingsAction?()
+        }
+
+        @objc func replace(_ sender: NSMenuItem) {
+            guard replacementOptions.indices.contains(sender.tag) else { return }
+            replaceAction?(replacementOptions[sender.tag].reference)
+        }
+
+        @objc func remove() {
+            removeAction?()
+        }
     }
 }
 
