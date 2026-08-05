@@ -36,6 +36,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
+    private var actionGridOverlayController: ActionGridOverlayController?
     private lazy var runLinkExecutionCoordinator = RunLinkExecutionCoordinator(
         registry: pluginHost.actionRegistry,
         executor: pluginHost.actionExecutor,
@@ -63,6 +64,11 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         pluginHost.actionConfirmationService.setHandler { request in
             await actionConfirmationService.confirm(request)
         }
+        let actionGridOverlayController = ActionGridOverlayController(pluginHost: pluginHost)
+        self.actionGridOverlayController = actionGridOverlayController
+        pluginHost.installActionGridPresenter { [weak actionGridOverlayController] entries in
+            actionGridOverlayController?.present(entries: entries) ?? false
+        }
         pluginHost.automationController.startAutomaticRules()
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,
@@ -80,6 +86,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
 
     func applicationWillTerminate(_ notification: Notification) {
         pluginHost.automationController.stopAutomaticRules()
+        actionGridOverlayController?.close(restoringFocus: false)
         statusItemController?.dismissPanels()
         pluginHost.deactivateAllPlugins()
     }

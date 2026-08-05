@@ -245,6 +245,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         case let .pluginConfiguration(pluginID):
             pendingAppUpdateVersion = nil
             settingsNavigationCoordinator?.navigate(to: .plugins(.configuration(pluginID)))
+        case let .feature(pane):
+            pendingAppUpdateVersion = nil
+            settingsNavigationCoordinator?.navigate(to: .plugins(pane))
         }
 
         let contentSize = window.contentView?.bounds.size ?? SettingsWindowLayout.defaultContentSize

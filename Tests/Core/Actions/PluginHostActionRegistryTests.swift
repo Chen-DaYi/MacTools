@@ -80,6 +80,37 @@ final class PluginHostActionRegistryTests: XCTestCase {
         XCTAssertEqual(outcome, .rejected(.unavailable("目标已断开连接")))
         XCTAssertEqual(plugin.beginCount, 0)
     }
+
+    func testActionOwnerNavigationUsesHostSettingsRoutes() {
+        let host = makePluginHostForTests(plugins: [])
+        var requests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { requests.append($0) }
+
+        XCTAssertTrue(
+            host.presentActionOwner(
+                for: ActionReference(key: ActionKey(providerID: "mactools", actionID: "test"))
+            )
+        )
+        XCTAssertTrue(
+            host.presentActionOwner(
+                for: ActionReference(
+                    key: ActionKey(providerID: AutomationController.providerID, actionID: "test")
+                )
+            )
+        )
+        XCTAssertFalse(
+            host.presentActionOwner(
+                for: ActionReference(key: ActionKey(providerID: "missing", actionID: "test"))
+            )
+        )
+        XCTAssertEqual(
+            requests,
+            [
+                .settings(.feature(.actionsAndShortcuts)),
+                .settings(.feature(.automation)),
+            ]
+        )
+    }
 }
 
 @MainActor

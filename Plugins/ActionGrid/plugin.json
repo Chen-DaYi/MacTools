@@ -1,0 +1,31 @@
+{
+  "id": "action-grid",
+  "displayName": "操作网格",
+  "summary": "在指针附近打开用户配置的常用操作网格。",
+  "localizedMetadata": {
+    "en": {
+      "displayName": "Action Grid",
+      "summary": "Open a user-configured grid of favorite actions near the pointer."
+    },
+    "zh-Hans": {
+      "displayName": "操作网格",
+      "summary": "在指针附近打开用户配置的常用操作网格。"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.2.0",
+  "pluginKitVersion": 3,
+  "bundleRelativePath": "ActionGrid.bundle",
+  "factoryClass": "ActionGridPlugin.ActionGridPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "ActionGridPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": false,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [],
+  "category": "system"
+}

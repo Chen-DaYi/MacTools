@@ -105,6 +105,23 @@ final class AppWindowRouterTests: XCTestCase {
         window.close()
     }
 
+    func testFeatureSettingsPresentationRoutesToRequestedPage() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.presentSettings(.feature(.actionsAndShortcuts))
+        XCTAssertEqual(
+            router.settingsNavigationCoordinator?.destination,
+            .plugins(.actionsAndShortcuts)
+        )
+
+        router.presentSettings(.feature(.automation))
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .plugins(.automation))
+        router.settingsWindow?.close()
+    }
+
     private func settleWindowLayout(_ window: NSWindow) async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async {

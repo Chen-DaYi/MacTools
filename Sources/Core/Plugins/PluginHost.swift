@@ -19,6 +19,7 @@ enum SettingsPresentationRequest: Equatable {
     case appUpdate
     case pluginMarketplace
     case pluginConfiguration(String)
+    case feature(FeatureSettingsPane)
 }
 
 enum AppPresentationRequest: Equatable {
@@ -318,6 +319,7 @@ final class PluginHost: ObservableObject {
     private let actionPresetStore: ActionInvocationPresetStore
     let actionRunLinkService: ActionRunLinkService
     let automationController: AutomationController
+    private var actionGridPresentationHandler: (([ActionGridPresentationEntry]) -> Bool)?
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
@@ -1092,6 +1094,13 @@ final class PluginHost: ObservableObject {
         appPresentationHandler?(.settings(.pluginConfiguration(pluginID)))
     }
 
+    func installActionGridPresenter(
+        _ presenter: @escaping ([ActionGridPresentationEntry]) -> Bool
+    ) {
+        actionGridPresentationHandler = presenter
+        actionRegistry.invalidateAvailability()
+    }
+
     func presentPluginMarketplace() {
         appPresentationHandler?(.settings(.pluginMarketplace))
     }
@@ -1674,6 +1683,9 @@ final class PluginHost: ObservableObject {
                 configurationPresenting.requestConfigurationPresentation = { [weak self] in
                     self?.presentPluginConfiguration(pluginID: pluginID)
                 }
+            }
+            if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
+                actionGridConsumer.actionGridHostContext = makeActionGridHostContext()
             }
             if let activityStateHandling = plugin as? any PluginApplicationActivityStateHandling {
                 guardPluginCall(plugin, operation: "set application activity state") {
@@ -2297,6 +2309,103 @@ final class PluginHost: ObservableObject {
         migrateLegacyAppActionShortcutsIfNeeded()
         migrateLegacyPluginActionShortcutsIfNeeded()
         actionCatalogEntries = actionRegistry.catalogEntries
+        for plugin in activePlugins {
+            (plugin as? any ActionGridHostContextConsuming)?.actionSurfaceCatalogDidChange()
+        }
+    }
+
+    private func makeActionGridHostContext() -> ActionGridHostContext {
+        ActionGridHostContext(
+            catalog: { [weak self] in self?.actionSurfaceCatalogItems() ?? [] },
+            item: { [weak self] reference in self?.actionSurfaceItem(for: reference) },
+            migrate: { [weak self] reference in
+                guard let self,
+                      case let .success(migrated) = self.actionRegistry.migrate(reference) else {
+                    return nil
+                }
+                return migrated
+            },
+            openOwner: { [weak self] reference in
+                self?.presentActionOwner(for: reference) ?? false
+            },
+            canPresent: { [weak self] in self?.actionGridPresentationHandler != nil },
+            present: { [weak self] entries in
+                guard let self,
+                      (1 ... 9).contains(entries.count),
+                      Set(entries.map(\.id)).count == entries.count,
+                      Set(entries.map(\.reference)).count == entries.count,
+                      entries.allSatisfy({
+                          $0.reference.key != ActionKey(providerID: "action-grid", actionID: "show")
+                      }) else {
+                    return false
+                }
+                return self.actionGridPresentationHandler?(entries) ?? false
+            }
+        )
+    }
+
+    private func actionSurfaceCatalogItems() -> [ActionSurfaceCatalogItem] {
+        actionRegistry.catalogEntries.compactMap { entry in
+            actionSurfaceItem(for: entry.reference)
+        }
+    }
+
+    private func actionSurfaceItem(for reference: ActionReference) -> ActionSurfaceCatalogItem? {
+        guard case let .success(action) = actionRegistry.registeredAction(for: reference) else {
+            return nil
+        }
+        let ownerTitle = actionSurfaceOwnerTitle(providerID: reference.key.providerID)
+        return ActionSurfaceCatalogItem(
+            reference: reference,
+            title: action.catalogEntry?.title ?? action.definition.title,
+            subtitle: action.catalogEntry?.subtitle,
+            ownerTitle: ownerTitle,
+            systemImage: action.definition.systemImage,
+            availability: actionRegistry.availability(for: reference),
+            isSafe: action.definition.risk == .safe,
+            canOpenOwner: canPresentActionOwner(for: reference)
+        )
+    }
+
+    @discardableResult
+    func presentActionOwner(for reference: ActionReference) -> Bool {
+        guard let appPresentationHandler else { return false }
+        switch reference.key.providerID {
+        case "mactools":
+            appPresentationHandler(.settings(.feature(.actionsAndShortcuts)))
+        case AutomationController.providerID:
+            appPresentationHandler(.settings(.feature(.automation)))
+        case let pluginID:
+            rebuildDerivedState()
+            guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
+                return false
+            }
+            appPresentationHandler(.settings(.pluginConfiguration(pluginID)))
+        }
+        return true
+    }
+
+    private func canPresentActionOwner(for reference: ActionReference) -> Bool {
+        guard appPresentationHandler != nil else { return false }
+        switch reference.key.providerID {
+        case "mactools", AutomationController.providerID:
+            return true
+        case let pluginID:
+            return pluginConfigurationItems.contains(where: { $0.id == pluginID })
+        }
+    }
+
+    func actionSurfaceOwnerTitle(providerID: String) -> String {
+        switch providerID {
+        case "mactools":
+            return "MacTools"
+        case AutomationController.providerID:
+            return "自动化"
+        default:
+            return activePlugins.first {
+                $0.metadata.id == providerID
+            }?.metadata.title ?? providerID
+        }
     }
 
     private func migrateLegacyAppActionShortcutsIfNeeded() {
@@ -2622,6 +2731,7 @@ final class PluginHost: ObservableObject {
         plugin.requestPermissionGuidance = nil
         plugin.shortcutBindingResolver = nil
         (plugin as? any PluginConfigurationPresenting)?.requestConfigurationPresentation = nil
+        (plugin as? any ActionGridHostContextConsuming)?.actionGridHostContext = nil
         syncGlobalShortcuts()
     }
 
