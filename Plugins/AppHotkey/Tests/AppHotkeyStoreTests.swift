@@ -82,13 +82,45 @@ final class AppHotkeyPluginTests: XCTestCase {
         ))
         let plugin = makePlugin(storage: storage)
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "1 个快捷键已启用")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "2 个应用可用")
 
         plugin.handleAction(.setSwitch(false))
 
         XCTAssertFalse(plugin.primaryPanelState.isOn)
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "快捷键已暂停")
         XCTAssertFalse(storage.bool(forKey: "isEnabled"))
+    }
+
+    func testEntriesPublishConcreteActionsAndLegacyBindingsMigrateOnce() throws {
+        let storage = InMemoryPluginStorage()
+        let store = AppHotkeyStore(storage: storage)
+        let binding = ShortcutBinding(keyCode: 4, modifiers: [.command, .option])
+        let entry = AppShortcutEntry(
+            bundleURL: URL(fileURLWithPath: "/Applications/Safari.app"),
+            displayName: "Safari",
+            shortcut: binding
+        )
+        store.addEntry(entry)
+        let plugin = makePlugin(storage: storage)
+
+        let catalogEntry = try XCTUnwrap(plugin.actionCatalogEntries.first)
+        XCTAssertEqual(catalogEntry.title, "Safari")
+        XCTAssertEqual(catalogEntry.reference.key.actionID, "launch")
+        XCTAssertEqual(
+            plugin.legacyActionShortcutAssignments,
+            [
+                LegacyActionShortcutAssignment(
+                    reference: catalogEntry.reference,
+                    binding: binding
+                ),
+            ]
+        )
+
+        plugin.legacyActionShortcutsDidMigrate()
+
+        XCTAssertTrue(plugin.legacyActionShortcutAssignments.isEmpty)
+        XCTAssertNil(AppHotkeyStore(storage: storage).entries.first?.shortcut)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.reference, catalogEntry.reference)
     }
 
     private func makePlugin() -> AppHotkeyPlugin {

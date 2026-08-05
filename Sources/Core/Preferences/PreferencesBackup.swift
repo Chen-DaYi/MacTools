@@ -2,7 +2,7 @@ import Foundation
 import MacToolsPluginKit
 
 struct PreferencesBackup: Codable, Equatable, Sendable {
-    static let currentFormatVersion = 2
+    static let currentFormatVersion = 3
     static let maximumFileSize = 1 * 1024 * 1024
 
     struct ApplicationPreferences: Codable, Equatable, Sendable {
@@ -16,12 +16,14 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
     let application: ApplicationPreferences
     let pluginDisplay: PluginDisplayPreferencesBackup
     let shortcutCustomizations: [String: ShortcutCustomization]
+    let actionShortcutAssignments: [ActionShortcutAssignmentRecord]
     let pluginPreferences: [String: Data]
 
     init(
         application: ApplicationPreferences,
         pluginDisplay: PluginDisplayPreferencesBackup,
         shortcutCustomizations: [String: ShortcutCustomization],
+        actionShortcutAssignments: [ActionShortcutAssignmentRecord] = [],
         pluginPreferences: [String: Data] = [:],
         exportedAt: Date = .now
     ) {
@@ -30,6 +32,7 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
         self.application = application
         self.pluginDisplay = pluginDisplay
         self.shortcutCustomizations = shortcutCustomizations
+        self.actionShortcutAssignments = actionShortcutAssignments
         self.pluginPreferences = pluginPreferences
     }
 
@@ -39,6 +42,7 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
         case application
         case pluginDisplay
         case shortcutCustomizations
+        case actionShortcutAssignments
         case pluginPreferences
     }
 
@@ -52,6 +56,10 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
             [String: ShortcutCustomization].self,
             forKey: .shortcutCustomizations
         )
+        actionShortcutAssignments = try container.decodeIfPresent(
+            [ActionShortcutAssignmentRecord].self,
+            forKey: .actionShortcutAssignments
+        ) ?? []
         pluginPreferences = try container.decodeIfPresent(
             [String: Data].self,
             forKey: .pluginPreferences
@@ -157,12 +165,14 @@ struct PreferencesImportPreview: Equatable {
     let unavailablePluginIDs: [String]
     let shortcutCount: Int
     let unavailableShortcutIDs: [String]
+    let unavailableActionReferences: [ActionReference]
     let installablePlugins: [PreferencesImportInstallablePlugin]
 
     static func make(
         backup: PreferencesBackup,
         availablePluginIDs: Set<String>,
         availableShortcutIDs: Set<String>,
+        availableActionReferences: Set<ActionReference> = [],
         pluginManagementItems: [PluginManagementItem],
         applicationPreferencesAreValid: (PreferencesBackup.ApplicationPreferences) -> Bool
     ) throws -> PreferencesImportPreview {
@@ -176,6 +186,13 @@ struct PreferencesImportPreview: Equatable {
             .union(backup.pluginDisplay.dashboardHiddenPluginIDs ?? [])
             .union(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? [])
             .union(backup.pluginPreferences.keys)
+            .union(
+                backup.actionShortcutAssignments.compactMap {
+                    $0.reference.key.providerID == "mactools"
+                        ? nil
+                        : $0.reference.key.providerID
+                }
+            )
         let missingPluginIDs = backedUpPluginIDs.subtracting(availablePluginIDs)
         let managementItemsByID = Dictionary(
             pluginManagementItems.map { ($0.id, $0) },
@@ -191,12 +208,28 @@ struct PreferencesImportPreview: Equatable {
             )
         }
         let installablePluginIDs = Set(installablePlugins.map(\.id))
+        let compatibilityShortcutIDs = Set(
+            backup.actionShortcutAssignments.compactMap { assignment in
+                assignment.reference.key.providerID == "mactools"
+                    ? assignment.reference.key.actionID
+                    : nil
+            }
+        )
         let backedUpShortcutIDs = Set(backup.shortcutCustomizations.keys)
+            .subtracting(compatibilityShortcutIDs)
+        let availableActionCount = backup.actionShortcutAssignments.filter {
+            availableActionReferences.contains($0.reference)
+        }.count
+        let unavailableActionReferences = backup.actionShortcutAssignments
+            .map(\.reference)
+            .filter { !availableActionReferences.contains($0) }
         return PreferencesImportPreview(
             pluginCount: backedUpPluginIDs.intersection(availablePluginIDs).count,
             unavailablePluginIDs: missingPluginIDs.subtracting(installablePluginIDs).sorted(),
-            shortcutCount: backedUpShortcutIDs.intersection(availableShortcutIDs).count,
+            shortcutCount: backedUpShortcutIDs.intersection(availableShortcutIDs).count
+                + availableActionCount,
             unavailableShortcutIDs: backedUpShortcutIDs.subtracting(availableShortcutIDs).sorted(),
+            unavailableActionReferences: unavailableActionReferences,
             installablePlugins: installablePlugins.sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
         )
     }

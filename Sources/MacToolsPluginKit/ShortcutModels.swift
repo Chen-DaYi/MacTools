@@ -251,7 +251,7 @@ public struct ShortcutSettingsItem: Identifiable {
     }
 }
 
-public enum ShortcutValidationError: LocalizedError {
+public enum ShortcutValidationError: LocalizedError, Equatable {
     case missingModifier
     case modifierOnly
     case requiredShortcut

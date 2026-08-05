@@ -341,10 +341,11 @@ final class PreferencesBackupTests: XCTestCase {
             shortcutCustomizations: [:]
         )
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
-        json["formatVersion"] = 3
+        let unsupportedVersion = PreferencesBackup.currentFormatVersion + 1
+        json["formatVersion"] = unsupportedVersion
 
         XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
-            guard case PreferencesBackupError.unsupportedFormatVersion(3) = error else {
+            guard case PreferencesBackupError.unsupportedFormatVersion(unsupportedVersion) = error else {
                 return XCTFail("Expected unsupported format version error, got \(error)")
             }
         }

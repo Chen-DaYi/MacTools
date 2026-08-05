@@ -1,0 +1,301 @@
+import Carbon
+import Foundation
+import MacToolsPluginKit
+
+enum ActionShortcutAssignmentError: Error, Equatable {
+    case unavailableAction
+    case invalidBinding(ShortcutValidationError)
+    case conflict(ownerDescription: String)
+    case persistenceFailed
+
+    var localizedDescription: String {
+        switch self {
+        case .unavailableAction:
+            return "操作不可用。"
+        case let .invalidBinding(error):
+            return error.localizedDescription
+        case let .conflict(ownerDescription):
+            return ShortcutValidationError.duplicate(
+                ownerDescription: ownerDescription
+            ).localizedDescription
+        case .persistenceFailed:
+            return "无法保存快捷键。"
+        }
+    }
+}
+
+enum ActionShortcutMutationResult: Equatable {
+    case success
+    case failure(ActionShortcutAssignmentError)
+}
+
+enum ActionShortcutRegistrationState: Equatable {
+    case registered
+    case unavailable(reason: String?)
+    case conflict(ownerDescription: String)
+    case registrationFailed(code: OSStatus)
+    case invalidBinding
+}
+
+struct ActionShortcutSettingsItem: Identifiable, Equatable {
+    let assignment: ActionShortcutAssignmentRecord
+    let title: String
+    let subtitle: String?
+    let state: ActionShortcutRegistrationState
+
+    var id: UUID {
+        assignment.id
+    }
+
+    var bindingText: String {
+        ShortcutFormatter.displayString(for: assignment.binding)
+    }
+}
+
+@MainActor
+final class ShortcutAssignmentService {
+    private static let shortcutIDPrefix = "action-shortcut."
+
+    private let registry: ActionRegistry
+    private let store: ActionShortcutAssignmentStore
+    private let shortcutManager: GlobalShortcutManager
+
+    private var reservedRegistrations: [GlobalShortcutManager.Registration] = []
+    private var reservedOwnerDescriptions: [String: String] = [:]
+    private var referencesByShortcutID: [String: ActionReference] = [:]
+
+    private(set) var settingsItems: [ActionShortcutSettingsItem] = []
+
+    init(
+        registry: ActionRegistry,
+        store: ActionShortcutAssignmentStore,
+        shortcutManager: GlobalShortcutManager
+    ) {
+        self.registry = registry
+        self.store = store
+        self.shortcutManager = shortcutManager
+    }
+
+    var assignments: [ActionShortcutAssignmentRecord] {
+        store.assignments()
+    }
+
+    func assignment(for reference: ActionReference) -> ActionShortcutAssignmentRecord? {
+        store.assignment(for: reference)
+    }
+
+    func reference(forShortcutID shortcutID: String) -> ActionReference? {
+        referencesByShortcutID[shortcutID]
+    }
+
+    @discardableResult
+    func assign(
+        _ binding: ShortcutBinding,
+        to reference: ActionReference,
+        replacingConflictingActionAssignments: Bool = false
+    ) -> ActionShortcutMutationResult {
+        guard binding.hasRequiredModifiers else {
+            return .failure(.invalidBinding(.missingModifier))
+        }
+        guard !ShortcutKeyCode.isModifier(binding.keyCode) else {
+            return .failure(.invalidBinding(.modifierOnly))
+        }
+        if let error = MacToolsReservedShortcutBindings.validationError(for: binding) {
+            return .failure(.invalidBinding(error))
+        }
+
+        guard case let .success(action) = registry.registeredAction(for: reference),
+              action.catalogEntry != nil,
+              action.definition.capabilities.contains(.foregroundInteractive) else {
+            return .failure(.unavailableAction)
+        }
+
+        if let reserved = reservedRegistrations.first(where: { $0.binding == binding }) {
+            return .failure(
+                .conflict(
+                    ownerDescription: reservedOwnerDescriptions[reserved.shortcutID]
+                        ?? reserved.shortcutID
+                )
+            )
+        }
+
+        var records = store.assignments()
+        let conflictingRecords = records.filter {
+            $0.reference != reference && $0.binding == binding
+        }
+        if let conflict = conflictingRecords.first,
+           !replacingConflictingActionAssignments {
+            return .failure(
+                .conflict(ownerDescription: title(for: conflict.reference))
+            )
+        }
+        if replacingConflictingActionAssignments {
+            let conflictingIDs = Set(conflictingRecords.map(\.id))
+            records.removeAll { conflictingIDs.contains($0.id) }
+        }
+
+        if let index = records.firstIndex(where: { $0.reference == reference }) {
+            records[index] = ActionShortcutAssignmentRecord(
+                id: records[index].id,
+                reference: reference,
+                binding: binding
+            )
+        } else {
+            records.append(
+                ActionShortcutAssignmentRecord(reference: reference, binding: binding)
+            )
+        }
+
+        guard store.replaceAll(records) else {
+            return .failure(.persistenceFailed)
+        }
+        synchronize(
+            reservedRegistrations: reservedRegistrations,
+            reservedOwnerDescriptions: reservedOwnerDescriptions
+        )
+        return .success
+    }
+
+    @discardableResult
+    func clear(_ reference: ActionReference) -> Bool {
+        var records = store.assignments()
+        let originalCount = records.count
+        records.removeAll { $0.reference == reference }
+        guard records.count != originalCount else {
+            return false
+        }
+        guard store.replaceAll(records) else {
+            return false
+        }
+        synchronize(
+            reservedRegistrations: reservedRegistrations,
+            reservedOwnerDescriptions: reservedOwnerDescriptions
+        )
+        return true
+    }
+
+    @discardableResult
+    func replaceAllForImport(
+        _ records: [ActionShortcutAssignmentRecord]
+    ) -> ActionShortcutMutationResult {
+        var seenBindings: [ShortcutBinding: ActionShortcutAssignmentRecord] = [:]
+        for record in records {
+            guard record.binding.isValid,
+                  MacToolsReservedShortcutBindings.validationError(for: record.binding) == nil else {
+                return .failure(.invalidBinding(.missingModifier))
+            }
+            if let reserved = reservedRegistrations.first(where: {
+                $0.binding == record.binding
+            }) {
+                return .failure(
+                    .conflict(
+                        ownerDescription: reservedOwnerDescriptions[reserved.shortcutID]
+                            ?? reserved.shortcutID
+                    )
+                )
+            }
+            if let conflict = seenBindings[record.binding] {
+                return .failure(.conflict(ownerDescription: title(for: conflict.reference)))
+            }
+            seenBindings[record.binding] = record
+        }
+        guard store.replaceAll(records) else {
+            return .failure(.persistenceFailed)
+        }
+        synchronize(
+            reservedRegistrations: reservedRegistrations,
+            reservedOwnerDescriptions: reservedOwnerDescriptions
+        )
+        return .success
+    }
+
+    func synchronize(
+        reservedRegistrations: [GlobalShortcutManager.Registration],
+        reservedOwnerDescriptions: [String: String]
+    ) {
+        self.reservedRegistrations = reservedRegistrations
+        self.reservedOwnerDescriptions = reservedOwnerDescriptions
+
+        let records = store.assignments()
+        var registrations = reservedRegistrations
+        var references: [String: ActionReference] = [:]
+        var states: [UUID: ActionShortcutRegistrationState] = [:]
+        var claimedBindings = Dictionary(
+            reservedRegistrations.map { ($0.binding, $0.shortcutID) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        for record in records {
+            guard record.binding.isValid,
+                  MacToolsReservedShortcutBindings.validationError(for: record.binding) == nil else {
+                states[record.id] = .invalidBinding
+                continue
+            }
+            guard case let .success(action) = registry.registeredAction(for: record.reference),
+                  action.catalogEntry != nil else {
+                states[record.id] = .unavailable(reason: "操作不可用。")
+                continue
+            }
+            let availability = registry.availability(for: record.reference)
+            guard availability.isAvailable else {
+                states[record.id] = .unavailable(reason: availability.reason)
+                continue
+            }
+            if let ownerID = claimedBindings[record.binding] {
+                states[record.id] = .conflict(
+                    ownerDescription: reservedOwnerDescriptions[ownerID]
+                        ?? records.first(where: {
+                            Self.shortcutID(for: $0.id) == ownerID
+                        }).map { title(for: $0.reference) }
+                        ?? ownerID
+                )
+                continue
+            }
+
+            let shortcutID = Self.shortcutID(for: record.id)
+            registrations.append(
+                GlobalShortcutManager.Registration(
+                    shortcutID: shortcutID,
+                    binding: record.binding
+                )
+            )
+            references[shortcutID] = record.reference
+            claimedBindings[record.binding] = shortcutID
+        }
+
+        let registrationStatuses = shortcutManager.updateBindings(registrations)
+        for record in records where states[record.id] == nil {
+            let shortcutID = Self.shortcutID(for: record.id)
+            switch registrationStatuses[shortcutID] {
+            case .registered:
+                states[record.id] = .registered
+            case let .failed(.system(code)):
+                states[record.id] = .registrationFailed(code: code)
+            case .failed(.invalidBinding), .none:
+                states[record.id] = .invalidBinding
+            }
+        }
+
+        referencesByShortcutID = references
+        settingsItems = records.map { record in
+            let entry = try? registry.registeredAction(for: record.reference).get()
+            return ActionShortcutSettingsItem(
+                assignment: record,
+                title: entry?.catalogEntry?.title ?? entry?.definition.title ?? record.reference.key.id,
+                subtitle: entry?.catalogEntry?.subtitle,
+                state: states[record.id] ?? .unavailable(reason: nil)
+            )
+        }
+    }
+
+    private func title(for reference: ActionReference) -> String {
+        guard case let .success(action) = registry.registeredAction(for: reference) else {
+            return reference.key.id
+        }
+        return action.catalogEntry?.title ?? action.definition.title
+    }
+
+    private static func shortcutID(for assignmentID: UUID) -> String {
+        shortcutIDPrefix + assignmentID.uuidString.lowercased()
+    }
+}

@@ -7,7 +7,7 @@ final class ShortcutStore {
         static let prefix = "shortcut.customization."
     }
 
-    private let userDefaults: UserDefaults
+    let userDefaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 

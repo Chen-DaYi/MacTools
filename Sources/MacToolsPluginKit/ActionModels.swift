@@ -439,6 +439,24 @@ public protocol PluginActionProviding: AnyObject {
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle
 }
 
+public struct LegacyActionShortcutAssignment: Hashable, Codable, Sendable {
+    public let reference: ActionReference
+    public let binding: ShortcutBinding
+
+    public init(reference: ActionReference, binding: ShortcutBinding) {
+        self.reference = reference
+        self.binding = binding
+    }
+}
+
+/// Optional one-shot bridge for plugins that registered ordinary shortcuts before actions existed.
+/// The host persists the returned assignments before invoking the completion callback.
+@MainActor
+public protocol PluginLegacyActionShortcutProviding: AnyObject {
+    var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] { get }
+    func legacyActionShortcutsDidMigrate()
+}
+
 public extension PluginActionProviding {
     var actionCatalogEntries: [ActionCatalogEntry] {
         actionDefinitions.compactMap { definition in

@@ -42,12 +42,10 @@ final class AppShortcutTests: XCTestCase {
         XCTAssertTrue(try item(.toggleDashboard, in: host).canClear)
         XCTAssertFalse(try item(.toggleFeaturePanel, in: host).canClear)
         XCTAssertTrue(
-            manager.debugRegistrationsForTests.contains(
-                .init(
-                    shortcutID: AppShortcutAction.toggleDashboard.rawValue,
-                    binding: dashboardBinding
-                )
-            )
+            manager.debugRegistrationsForTests.contains {
+                $0.binding == dashboardBinding
+                    && $0.shortcutID.hasPrefix("action-shortcut.")
+            }
         )
 
         host.clearAppShortcut(.toggleDashboard)
@@ -55,7 +53,7 @@ final class AppShortcutTests: XCTestCase {
         XCTAssertFalse(try item(.toggleDashboard, in: host).canClear)
         XCTAssertFalse(
             manager.debugRegistrationsForTests.contains {
-                $0.shortcutID == AppShortcutAction.toggleDashboard.rawValue
+                $0.binding == dashboardBinding
             }
         )
     }
@@ -376,12 +374,10 @@ final class AppShortcutTests: XCTestCase {
             ShortcutFormatter.displayString(for: binding)
         )
         XCTAssertTrue(
-            restoredManager.debugRegistrationsForTests.contains(
-                .init(
-                    shortcutID: AppShortcutAction.toggleDashboard.rawValue,
-                    binding: binding
-                )
-            )
+            restoredManager.debugRegistrationsForTests.contains {
+                $0.binding == binding
+                    && $0.shortcutID.hasPrefix("action-shortcut.")
+            }
         )
     }
 

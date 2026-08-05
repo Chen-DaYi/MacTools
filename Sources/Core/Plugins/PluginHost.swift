@@ -306,9 +306,10 @@ final class PluginHost: ObservableObject {
     private let pluginStateChangeRebuildDelay: Duration
     let dynamicPluginManager: DynamicPluginManager?
     private let pluginCatalogManager: PluginCatalogManager?
-
-    private(set) lazy var actionRegistry = ActionRegistry()
-    private(set) lazy var actionExecutor = ActionExecutor(registry: actionRegistry)
+    let actionRegistry: ActionRegistry
+    let actionExecutor: ActionExecutor
+    private let actionShortcutStore: ActionShortcutAssignmentStore
+    let shortcutAssignmentService: ShortcutAssignmentService
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
@@ -355,6 +356,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var settingsCards: [PluginSettingsCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
+    @Published private(set) var actionShortcutItems: [ActionShortcutSettingsItem] = []
     @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
     @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
     @Published private(set) var actionCatalogEntries: [ActionCatalogEntry] = []
@@ -435,6 +437,18 @@ final class PluginHost: ObservableObject {
         self.pluginStateChangeRebuildDelay = pluginStateChangeRebuildDelay
         self.dynamicPluginManager = dynamicPluginManager
         self.pluginCatalogManager = pluginCatalogManager
+        let actionRegistry = ActionRegistry()
+        let actionShortcutStore = ActionShortcutAssignmentStore(
+            userDefaults: shortcutStore.userDefaults
+        )
+        self.actionRegistry = actionRegistry
+        self.actionExecutor = ActionExecutor(registry: actionRegistry)
+        self.actionShortcutStore = actionShortcutStore
+        self.shortcutAssignmentService = ShortcutAssignmentService(
+            registry: actionRegistry,
+            store: actionShortcutStore,
+            shortcutManager: globalShortcutManager
+        )
 
         configureCallbacks(for: self.builtInPlugins)
 
@@ -531,12 +545,20 @@ final class PluginHost: ObservableObject {
             }
         }
 
-        syncGlobalShortcuts()
         rebuildDerivedState()
+        syncGlobalShortcuts()
     }
 
     func makePreferencesBackup() -> PreferencesBackup {
         let shortcutDescriptors = shortcutDescriptors()
+        var shortcutCustomizations = shortcutStore.customizations(
+            for: shortcutDescriptors.map(\.itemID)
+        )
+        for action in AppShortcutAction.allCases {
+            if let binding = resolvedAppShortcutBinding(for: action) {
+                shortcutCustomizations[action.rawValue] = .custom(binding)
+            }
+        }
 
         return PreferencesBackup(
             application: preferencesBackupStore.applicationPreferences(),
@@ -545,9 +567,8 @@ final class PluginHost: ObservableObject {
                 dashboardDefaultPluginIDs: defaultPluginIDs(for: .dashboard),
                 featurePanelDefaultPluginIDs: defaultPluginIDs(for: .featurePanel)
             ),
-            shortcutCustomizations: shortcutStore.customizations(
-                for: AppShortcutAction.allCases.map(\.rawValue) + shortcutDescriptors.map(\.itemID)
-            ),
+            shortcutCustomizations: shortcutCustomizations,
+            actionShortcutAssignments: shortcutAssignmentService.assignments,
             pluginPreferences: portablePluginPreferences()
         )
     }
@@ -559,6 +580,7 @@ final class PluginHost: ObservableObject {
             availableShortcutIDs: Set(
                 AppShortcutAction.allCases.map(\.rawValue) + shortcutDescriptors().map(\.itemID)
             ),
+            availableActionReferences: Set(actionCatalogEntries.map(\.reference)),
             pluginManagementItems: pluginManagementItems,
             applicationPreferencesAreValid: preferencesBackupStore.validates
         )
@@ -627,7 +649,14 @@ final class PluginHost: ObservableObject {
         )
 
         restorePortablePluginPreferences(backup.pluginPreferences)
-        let shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)
+        var shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)
+        if !backup.actionShortcutAssignments.isEmpty {
+            if case let .failure(error) = shortcutAssignmentService.replaceAllForImport(
+                backup.actionShortcutAssignments
+            ) {
+                shortcutErrors["action-shortcuts"] = error.localizedDescription
+            }
+        }
 
         rebuildDerivedState()
         syncGlobalShortcuts()
@@ -888,18 +917,17 @@ final class PluginHost: ObservableObject {
         _ binding: ShortcutBinding,
         for action: AppShortcutAction
     ) -> String? {
-        do {
-            try validateAppShortcut(binding, for: action)
-            shortcutStore.setCustomization(.custom(binding), for: action.rawValue)
+        let result = shortcutAssignmentService.assign(
+            binding,
+            to: actionReference(for: action)
+        )
+        switch result {
+        case .success:
             appShortcutErrors.removeValue(forKey: action)
             rebuildDerivedState()
             syncGlobalShortcuts()
             return nil
-        } catch let error as ShortcutValidationError {
-            appShortcutErrors[action] = error.localizedDescription
-            rebuildDerivedState()
-            return error.localizedDescription
-        } catch {
+        case let .failure(error):
             appShortcutErrors[action] = error.localizedDescription
             rebuildDerivedState()
             return error.localizedDescription
@@ -907,7 +935,7 @@ final class PluginHost: ObservableObject {
     }
 
     func clearAppShortcut(_ action: AppShortcutAction) {
-        shortcutStore.setCustomization(.cleared, for: action.rawValue)
+        shortcutAssignmentService.clear(actionReference(for: action))
         appShortcutErrors.removeValue(forKey: action)
         rebuildDerivedState()
         syncGlobalShortcuts()
@@ -1934,6 +1962,8 @@ final class PluginHost: ObservableObject {
             }
         }
 
+        synchronizeActionRegistry()
+
         let shortcutDescriptors = shortcutDescriptors()
         shortcutItems = shortcutDescriptors.map { descriptor in
             let customization = shortcutStore.customization(for: descriptor.itemID)
@@ -2017,8 +2047,6 @@ final class PluginHost: ObservableObject {
                 )
             }
         }
-
-        synchronizeActionRegistry()
 
         pluginConfigurationItems = buildPluginConfigurationItems(
             settingsCards: settingsCards,
@@ -2145,7 +2173,52 @@ final class PluginHost: ObservableObject {
         }
 
         actionRegistry.synchronize(registrations)
+        migrateLegacyAppActionShortcutsIfNeeded()
+        migrateLegacyPluginActionShortcutsIfNeeded()
         actionCatalogEntries = actionRegistry.catalogEntries
+    }
+
+    private func migrateLegacyAppActionShortcutsIfNeeded() {
+        let candidates = AppShortcutAction.allCases.compactMap { action
+            -> (reference: ActionReference, binding: ShortcutBinding)? in
+            guard let binding = shortcutStore.resolvedBinding(
+                for: action.rawValue,
+                default: nil
+            ) else {
+                return nil
+            }
+            return (actionReference(for: action), binding)
+        }
+        actionShortcutStore.migrateLegacyAppAssignments(candidates) { [shortcutStore] in
+            for action in AppShortcutAction.allCases {
+                shortcutStore.setCustomization(.inheritDefault, for: action.rawValue)
+            }
+        }
+    }
+
+    private func migrateLegacyPluginActionShortcutsIfNeeded() {
+        for plugin in orderedCorePlugins() {
+            guard let provider = plugin as? any PluginLegacyActionShortcutProviding else {
+                continue
+            }
+            let assignments = guardedValue(
+                for: plugin,
+                operation: "read legacy action shortcuts",
+                provider.legacyActionShortcutAssignments
+            ) ?? []
+            actionShortcutStore.migrateLegacyPluginAssignments(
+                pluginID: plugin.metadata.id,
+                assignments: assignments
+            ) { [weak self, weak plugin] in
+                guard let self, let plugin,
+                      let provider = plugin as? any PluginLegacyActionShortcutProviding else {
+                    return
+                }
+                self.guardPluginCall(plugin, operation: "finish legacy action shortcut migration") {
+                    provider.legacyActionShortcutsDidMigrate()
+                }
+            }
+        }
     }
 
     private func hostActionRegistration() -> ActionProviderRegistration {
@@ -2171,11 +2244,7 @@ final class PluginHost: ObservableObject {
                     subtitle: "MacTools"
                 )
             },
-            availability: { [weak self] _ in
-                self?.appPresentationHandler == nil
-                    ? .unavailable("MacTools 尚未准备完成。")
-                    : .available
-            },
+            availability: { _ in .available },
             begin: { [weak self] invocation in
                 guard let self,
                       let action = AppShortcutAction(rawValue: invocation.reference.key.actionID),
@@ -2905,7 +2974,13 @@ final class PluginHost: ObservableObject {
     }
 
     private func resolvedAppShortcutBinding(for action: AppShortcutAction) -> ShortcutBinding? {
-        shortcutStore.resolvedBinding(for: action.rawValue, default: nil)
+        shortcutAssignmentService.assignment(for: actionReference(for: action))?.binding
+    }
+
+    private func actionReference(for action: AppShortcutAction) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: "mactools", actionID: action.rawValue)
+        )
     }
 
     private func pluginShortcutConflict(
@@ -2990,10 +3065,18 @@ final class PluginHost: ObservableObject {
             )
         }
         for action in AppShortcutAction.allCases {
-            shortcutStore.setCustomization(
-                appCustomizations[action] ?? .inheritDefault,
-                for: action.rawValue
+            let binding = ShortcutStore.resolve(
+                customization: appCustomizations[action] ?? .inheritDefault,
+                defaultBinding: nil
             )
+            if let binding {
+                _ = shortcutAssignmentService.assign(
+                    binding,
+                    to: actionReference(for: action)
+                )
+            } else {
+                shortcutAssignmentService.clear(actionReference(for: action))
+            }
             appShortcutErrors.removeValue(forKey: action)
         }
 
@@ -3279,7 +3362,7 @@ final class PluginHost: ObservableObject {
 
     private func syncGlobalShortcuts() {
         let descriptors = shortcutDescriptors()
-        var registrations = descriptors.compactMap { descriptor -> GlobalShortcutManager.Registration? in
+        let registrations = descriptors.compactMap { descriptor -> GlobalShortcutManager.Registration? in
             guard descriptor.definition.scope == .global else {
                 return nil
             }
@@ -3298,26 +3381,34 @@ final class PluginHost: ObservableObject {
             )
         }
 
-        for action in AppShortcutAction.allCases {
-            guard let binding = resolvedAppShortcutBinding(for: action),
-                  pluginShortcutConflict(for: binding, descriptors: descriptors) == nil,
-                  MacToolsReservedShortcutBindings.validationError(for: binding) == nil
-            else {
-                continue
-            }
-
-            registrations.append(
-                GlobalShortcutManager.Registration(
-                    shortcutID: action.rawValue,
-                    binding: binding
-                )
-            )
-        }
-
-        globalShortcutManager.updateBindings(registrations)
+        let ownerDescriptions = Dictionary(
+            descriptors.map {
+                ($0.itemID, "\($0.pluginTitle) · \($0.definition.title)")
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        shortcutAssignmentService.synchronize(
+            reservedRegistrations: registrations,
+            reservedOwnerDescriptions: ownerDescriptions
+        )
+        actionShortcutItems = shortcutAssignmentService.settingsItems
     }
 
     private func handleShortcutTrigger(shortcutID: String) {
+        if let reference = shortcutAssignmentService.reference(forShortcutID: shortcutID) {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                _ = await actionExecutor.execute(
+                    ActionInvocation(
+                        reference: reference,
+                        source: .globalShortcut,
+                        mode: .foreground
+                    )
+                )
+            }
+            return
+        }
+
         if let action = AppShortcutAction(rawValue: shortcutID) {
             appPresentationHandler?(action.presentationRequest)
             return
