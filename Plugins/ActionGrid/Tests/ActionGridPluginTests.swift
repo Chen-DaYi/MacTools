@@ -5,6 +5,87 @@ import XCTest
 
 @MainActor
 final class ActionGridPluginTests: XCTestCase {
+    func testLocalizedAccessibilityCopyUsesRuntimePluginLanguage() throws {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(originalPreference) }
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let bundleURL = directory.appendingPathComponent("ActionGridTests.bundle", isDirectory: true)
+        let languageURL = bundleURL.appendingPathComponent("en.lproj", isDirectory: true)
+        let arabicLanguageURL = bundleURL.appendingPathComponent("ar.lproj", isDirectory: true)
+        try FileManager.default.createDirectory(at: languageURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: arabicLanguageURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try [
+            "\"%@，%@，%@\" = \"%@, %@, %@\";",
+            "\"设置“%@”\" = \"Settings for “%@”\";",
+            "\"替换“%@”\" = \"Replace “%@”\";",
+            "\"移除“%@”\" = \"Remove “%@”\";",
+            "\"设置\" = \"Settings\";",
+            "\"替换\" = \"Replace\";",
+            "\"打开操作提供者设置\" = \"Open action provider settings\";",
+            "\"选择其他操作替换此条目\" = \"Choose another action for this entry\";",
+            "\"从操作网格移除此条目\" = \"Remove this entry from Action Grid\";",
+            "\"metadata.title\" = \"Action Grid\";",
+            "\"metadata.description\" = \"Open favorite actions near the pointer\";",
+        ].joined(separator: "\n").write(
+            to: languageURL.appendingPathComponent("Localizable.strings"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try [
+            "\"metadata.title\" = \"شبكة الإجراءات\";",
+            "\"metadata.description\" = \"افتح شبكة إجراءات مفضلة بالقرب من المؤشر\";",
+            "\"第 %d 个条目\" = \"الإدخال %d\";",
+        ].joined(separator: "\n").write(
+            to: arabicLanguageURL.appendingPathComponent("Localizable.strings"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        PluginRuntimeLocalization.source.setPreference("en")
+        let plugin = ActionGridPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "action-grid",
+                resourceBundle: try XCTUnwrap(Bundle(url: bundleURL)),
+                storage: ActionGridTestStorage()
+            )
+        )
+        let accessibility = ActionGridEntryAccessibility(
+            title: "Lock Screen",
+            owner: "MacTools",
+            availability: "Available",
+            copy: plugin.accessibilityCopy
+        )
+
+        XCTAssertEqual(accessibility.summaryLabel, "Lock Screen, MacTools, Available")
+        XCTAssertEqual(accessibility.settingsLabel, "Settings for “Lock Screen”")
+        XCTAssertEqual(accessibility.replaceLabel, "Replace “Lock Screen”")
+        XCTAssertEqual(accessibility.removeLabel, "Remove “Lock Screen”")
+        XCTAssertEqual(accessibility.copy.settingsButtonTitle, "Settings")
+        XCTAssertEqual(accessibility.copy.replacementMenuTitle, "Replace")
+        XCTAssertEqual(plugin.configuration?.description, "Open favorite actions near the pointer")
+        let reference = ActionReference(key: ActionKey(providerID: "example", actionID: "run"))
+        XCTAssertTrue(plugin.store.add(reference: reference))
+        XCTAssertEqual(
+            plugin.actionSurfaceAssignmentSummary(for: reference)?.surfaceTitle,
+            "Action Grid"
+        )
+
+        PluginRuntimeLocalization.source.setPreference("ar")
+        XCTAssertEqual(
+            plugin.configuration?.description,
+            "افتح شبكة إجراءات مفضلة بالقرب من المؤشر"
+        )
+        XCTAssertEqual(
+            plugin.actionSurfaceAssignmentSummary(for: reference)?.surfaceTitle,
+            "شبكة الإجراءات"
+        )
+    }
+
     func testSettingsRowExposesDistinctAccessibleOperations() {
         let accessibility = ActionGridEntryAccessibility(
             title: "锁定屏幕",

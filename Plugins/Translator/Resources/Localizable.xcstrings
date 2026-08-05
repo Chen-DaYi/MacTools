@@ -1,6 +1,54 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "action.unavailable.accessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "يلزم منح إذن تسهيلات الاستخدام." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Bedienungshilfen-Berechtigung erforderlich." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Accessibility permission is required." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Se requiere permiso de accesibilidad." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "L’autorisation d’accessibilité est requise." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アクセシビリティの許可が必要です。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "손쉬운 사용 권한이 필요합니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "A permissão de acessibilidade é necessária." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Требуется разрешение на универсальный доступ." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "需要辅助功能授权。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "需要輔助使用權限。" } }
+      }
+    },
+    "action.unavailable.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "اختصارات الترجمة متوقفة مؤقتًا." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Übersetzungs-Kurzbefehle sind pausiert." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Translation shortcuts are paused." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Los atajos de traducción están en pausa." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Les raccourcis de traduction sont en pause." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "翻訳ショートカットは一時停止中です。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "번역 단축키가 일시 정지되었습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Os atalhos de tradução estão pausados." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Сочетания клавиш перевода приостановлены." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "翻译快捷键已暂停。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "翻譯快速鍵已暫停。" } }
+      }
+    },
+    "action.unavailable.screenRecording": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "يلزم منح إذن تسجيل الشاشة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Bildschirmaufnahme-Berechtigung erforderlich." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Screen Recording permission is required." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Se requiere permiso de grabación de pantalla." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "L’autorisation d’enregistrement de l’écran est requise." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "画面収録の許可が必要です。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "화면 기록 권한이 필요합니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "A permissão de gravação de tela é necessária." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Требуется разрешение на запись экрана." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "需要屏幕录制授权。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "需要螢幕錄製權限。" } }
+      }
+    },
     "capture.error.automationFailed": {
       "extractionState": "manual",
       "localizations": {

@@ -257,7 +257,10 @@ final class DisplayBrightnessPlugin:
                     defaultValue: "%@显示器亮度。",
                     direction.title(localization: localization)
                 ),
-                keywords: ["亮度", "显示器", direction.title(localization: localization)],
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "显示器亮度"),
+                    direction.title(localization: localization),
+                ],
                 systemImage: direction.systemImage,
                 externalInvocationPolicy: .allowed,
                 capabilities: [.background, .foregroundInteractive]
@@ -267,21 +270,32 @@ final class DisplayBrightnessPlugin:
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         guard Self.shortcutDirection(for: reference.key.actionID) != nil else {
-            return .unavailable("操作不可用。")
+            return .unavailable(PluginKitLocalization.actionUnavailable)
         }
         return controller.snapshot().displays.isEmpty
-            ? .unavailable("未检测到可调节亮度的显示器。")
+            ? .unavailable(
+                localization.string(
+                    "action.unavailable.noDisplays",
+                    defaultValue: "未检测到可调节亮度的显示器。"
+                )
+            )
             : .available
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard let direction = Self.shortcutDirection(for: invocation.reference.key.actionID) else {
-            return ActionExecutionHandle { .failed(message: "操作不可用。") }
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionUnavailable) }
         }
         let snapshot = controller.snapshot()
         let targetDisplayIDs = shortcutTargetDisplayIDs(in: snapshot)
         guard !targetDisplayIDs.isEmpty else {
-            return ActionExecutionHandle { .failed(message: "未检测到可调节亮度的显示器。") }
+            let failureMessage = localization.string(
+                "action.unavailable.noDisplays",
+                defaultValue: "未检测到可调节亮度的显示器。"
+            )
+            return ActionExecutionHandle {
+                .failed(message: failureMessage)
+            }
         }
         let action = DisplayBrightnessShortcutAction(
             id: invocation.reference.key.actionID,

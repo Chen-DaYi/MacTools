@@ -372,9 +372,14 @@ struct UnifiedSearchPaletteView: View {
                 )
             case let .replaceShortcut(reference, binding, ownerDescription):
                 return Alert(
-                    title: Text("替换快捷键？"),
-                    message: Text("此快捷键已分配给“\(ownerDescription)”。替换后，原操作将不再使用它。"),
-                    primaryButton: .destructive(Text("替换")) {
+                    title: Text(FeatureL10n.string("替换快捷键？")),
+                    message: Text(
+                        FeatureL10n.format(
+                            "此快捷键已分配给“%@”。替换后，原操作将不再使用它。",
+                            ownerDescription
+                        )
+                    ),
+                    primaryButton: .destructive(Text(FeatureL10n.string("替换"))) {
                         _ = pluginHost.setActionShortcutBinding(
                             binding,
                             to: reference,
@@ -602,7 +607,7 @@ struct UnifiedSearchPaletteView: View {
         if case let .executeAction(reference) = result.action {
             let shortcut = pluginHost.actionShortcutSettingsItem(for: reference)
             PluginShortcutRecorder(
-                title: "\(result.title)快捷键",
+                title: FeatureL10n.format("%@ 快捷键", result.title),
                 displayText: shortcut?.bindingText ?? "",
                 minWidth: 72,
                 onRecord: { binding in
@@ -615,7 +620,7 @@ struct UnifiedSearchPaletteView: View {
                             binding: binding,
                             ownerDescription: ownerDescription
                         )
-                        return .rejected("需要确认后替换现有快捷键。")
+                        return .rejected(FeatureL10n.string("需要确认后替换现有快捷键。"))
                     case let .failure(error):
                         return .rejected(error.localizedDescription)
                     }
@@ -631,7 +636,7 @@ struct UnifiedSearchPaletteView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("清除快捷键")
+                .help(FeatureL10n.string("清除快捷键"))
             }
 
             ActionRunLinkCopyButton(
@@ -647,8 +652,8 @@ struct UnifiedSearchPaletteView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("打开所属功能的设置")
-                .accessibilityLabel("打开所属功能的设置")
+                .help(FeatureL10n.string("打开所属功能的设置"))
+                .accessibilityLabel(FeatureL10n.string("打开所属功能的设置"))
             }
         }
     }

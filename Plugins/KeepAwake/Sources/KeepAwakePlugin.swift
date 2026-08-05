@@ -285,12 +285,25 @@ final class KeepAwakePlugin:
         [
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
-                title: "设置阻止休眠",
-                description: metadata.defaultDescription,
-                keywords: ["休眠", "唤醒", "保持运行"],
+                title: localization.string("metadata.title", defaultValue: "阻止休眠"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "保持 Mac 唤醒；可选保持屏幕常亮或让屏幕工具继续工作。MacBook 合盖运行要求连接电源"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "阻止休眠"),
+                    localization.string(
+                        "metadata.description",
+                        defaultValue: "保持 Mac 唤醒；可选保持屏幕常亮或让屏幕工具继续工作。MacBook 合盖运行要求连接电源"
+                    ),
+                ],
                 systemImage: metadata.iconName,
                 parameters: [
-                    ActionParameterDefinition(id: "enabled", title: "阻止休眠", kind: .boolean),
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("metadata.title", defaultValue: "阻止休眠"),
+                        kind: .boolean
+                    ),
                 ],
                 externalInvocationPolicy: .allowed,
                 capabilities: [.background, .foregroundInteractive]
@@ -300,8 +313,14 @@ final class KeepAwakePlugin:
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
-            ActionCatalogEntry(reference: actionReference(enabled: true), title: "启用阻止休眠"),
-            ActionCatalogEntry(reference: actionReference(enabled: false), title: "停用阻止休眠"),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.enable.title", defaultValue: "启用阻止休眠")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.disable.title", defaultValue: "停用阻止休眠")
+            ),
         ]
     }
 
@@ -444,11 +463,11 @@ final class KeepAwakePlugin:
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
-            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         setKeepAwakeEnabled(enabled)
         let failedMessage = enabled && session == nil
-            ? (lastErrorMessage ?? "无法启用阻止休眠。")
+            ? localization.string("error.enableFailed", defaultValue: "无法启用阻止休眠。")
             : nil
         return ActionExecutionHandle {
             if let failedMessage {

@@ -12,12 +12,12 @@ enum AutomationTriggerKind: String, Codable, CaseIterable, Identifiable, Sendabl
 
     var title: String {
         switch self {
-        case .schedule: "时间与日程"
-        case .calendar: "日历事件"
-        case .application: "应用"
-        case .power: "电池与电源"
-        case .display: "显示器"
-        case .network: "网络"
+        case .schedule: FeatureL10n.string("时间与日程")
+        case .calendar: FeatureL10n.string("日历事件")
+        case .application: FeatureL10n.string("应用")
+        case .power: FeatureL10n.string("电池与电源")
+        case .display: FeatureL10n.string("显示器")
+        case .network: FeatureL10n.string("网络")
         }
     }
 }
@@ -189,7 +189,7 @@ struct AutomationRule: Codable, Equatable, Sendable, Identifiable {
 
     init(
         id: UUID = UUID(),
-        name: String = "新建规则",
+        name: String = FeatureL10n.string("新建规则"),
         workflowID: UUID,
         isEnabled: Bool = true,
         trigger: AutomationTrigger = .schedule(ScheduleAutomationTrigger()),

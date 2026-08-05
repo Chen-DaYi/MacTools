@@ -3,6 +3,18 @@ import Foundation
 private final class PluginKitBundleToken {}
 
 public enum PluginKitLocalization {
+    public static var actionInvalidParameters: String {
+        string("action.error.invalidParameters", defaultValue: "操作参数无效。")
+    }
+
+    public static var actionUnavailable: String {
+        string("action.error.unavailable", defaultValue: "操作不可用。")
+    }
+
+    public static var actionFailed: String {
+        string("action.error.failed", defaultValue: "操作未能完成。")
+    }
+
     public static var defaultShortcutPlaceholder: String {
         string("shortcutRecorder.defaultPlaceholder", defaultValue: "未设置")
     }

@@ -12,26 +12,29 @@ struct ActionGridSettingsView: View {
             preview
             entriesSection
             if let error = store.loadError {
-                Label("无法读取已保存的网格：\(error)", systemImage: "exclamationmark.triangle.fill")
+                Label(
+                    plugin.localizedFormat("无法读取已保存的网格：%@", error),
+                    systemImage: "exclamationmark.triangle.fill"
+                )
                     .foregroundStyle(.red)
                     .font(PluginSettingsTheme.Typography.rowDescription)
             }
         }
-        .alert("重置操作网格？", isPresented: $confirmingReset) {
-            Button("重置", role: .destructive) {
+        .alert(plugin.localized("重置操作网格？"), isPresented: $confirmingReset) {
+            Button(plugin.localized("重置"), role: .destructive) {
                 if store.reset(to: plugin.suggestedReferences()) {
                     plugin.notifyMutation()
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(plugin.localized("取消"), role: .cancel) {}
         } message: {
-            Text("这会替换当前条目，并使用一组安全的建议操作。")
+            Text(plugin.localized("这会替换当前条目，并使用一组安全的建议操作。"))
         }
     }
 
     private var preview: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label("预览", systemImage: "square.grid.3x3")
+            Label(plugin.localized("预览"), systemImage: "square.grid.3x3")
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
             LazyVGrid(columns: previewColumns, spacing: 8) {
@@ -40,7 +43,7 @@ struct ActionGridSettingsView: View {
                     VStack(spacing: 6) {
                         Image(systemName: item?.systemImage ?? "questionmark.square.dashed")
                             .font(.title2)
-                        Text(entry.customTitle ?? item?.title ?? "不可用操作")
+                        Text(entry.customTitle ?? item?.title ?? plugin.localized("不可用操作"))
                             .font(PluginSettingsTheme.Typography.rowTitle)
                             .lineLimit(1)
                     }
@@ -50,7 +53,11 @@ struct ActionGridSettingsView: View {
                 }
             }
             if store.entries.isEmpty {
-                ContentUnavailableView("网格为空", systemImage: "square.grid.3x3", description: Text("添加最多九个操作。"))
+                ContentUnavailableView(
+                    plugin.localized("网格为空"),
+                    systemImage: "square.grid.3x3",
+                    description: Text(plugin.localized("添加最多九个操作。"))
+                )
                     .frame(maxWidth: .infinity, minHeight: 130)
                     .pluginSettingsCardBackground(.host)
             }
@@ -60,12 +67,12 @@ struct ActionGridSettingsView: View {
     private var entriesSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
-                Label("条目", systemImage: "list.bullet")
+                Label(plugin.localized("条目"), systemImage: "list.bullet")
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.secondary)
                 Spacer()
                 addMenu
-                Button("重置") { confirmingReset = true }
+                Button(plugin.localized("重置")) { confirmingReset = true }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
@@ -94,7 +101,7 @@ struct ActionGridSettingsView: View {
                 }
             }
         } label: {
-            Label("添加操作", systemImage: "plus")
+            Label(plugin.localized("添加操作"), systemImage: "plus")
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
@@ -118,15 +125,18 @@ struct ActionGridEntryRow: View {
 
     var body: some View {
         let item = plugin.item(for: entry.reference)
-        let title = entry.customTitle ?? item?.title ?? "不可用操作"
-        let owner = item?.ownerTitle ?? "提供者缺失"
+        let title = entry.customTitle ?? item?.title ?? plugin.localized("不可用操作")
+        let owner = item?.ownerTitle ?? plugin.localized("提供者缺失")
         let availability = item.map {
-            $0.availability.isAvailable ? "可用" : ($0.availability.reason ?? "不可用")
-        } ?? "重新安装后会自动恢复"
+            $0.availability.isAvailable
+                ? plugin.localized("可用")
+                : ($0.availability.reason ?? plugin.localized("不可用"))
+        } ?? plugin.localized("重新安装后会自动恢复")
         let accessibility = ActionGridEntryAccessibility(
             title: title,
             owner: owner,
-            availability: availability
+            availability: availability,
+            copy: plugin.accessibilityCopy
         )
         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Image(systemName: item?.systemImage ?? "questionmark.square.dashed")
@@ -203,7 +213,7 @@ struct ActionGridEntryControlsView: NSViewRepresentable {
         var replacementOptions: [ActionGridReplacementOption] = []
 
         override init(frame frameRect: NSRect) {
-            settingsButton = NSButton(title: "设置", target: nil, action: nil)
+            settingsButton = NSButton(title: "", target: nil, action: nil)
             replacementButton = NSPopUpButton(frame: .zero, pullsDown: true)
             removeButton = NSButton(
                 image: NSImage(
@@ -261,30 +271,35 @@ struct ActionGridEntryControlsView: NSViewRepresentable {
             self.replacementOptions = replacementOptions
 
             settingsButton.isHidden = settingsAction == nil
+            settingsButton.title = accessibility.copy.settingsButtonTitle
             configure(
                 settingsButton,
                 role: .button,
                 label: accessibility.settingsLabel,
-                help: "打开操作提供者设置",
+                help: accessibility.copy.settingsHelp,
                 identifier: "\(identifierPrefix).settings"
             )
             configure(
                 replacementButton,
                 role: .menuButton,
                 label: accessibility.replaceLabel,
-                help: "选择其他操作替换此条目",
+                help: accessibility.copy.replaceHelp,
                 identifier: "\(identifierPrefix).replace"
             )
             configure(
                 removeButton,
                 role: .button,
                 label: accessibility.removeLabel,
-                help: "从操作网格移除此条目",
+                help: accessibility.copy.removeHelp,
                 identifier: "\(identifierPrefix).remove"
             )
 
             let menu = NSMenu()
-            menu.addItem(withTitle: "替换", action: nil, keyEquivalent: "")
+            menu.addItem(
+                withTitle: accessibility.copy.replacementMenuTitle,
+                action: nil,
+                keyEquivalent: ""
+            )
             for (index, option) in replacementOptions.enumerated() {
                 let item = NSMenuItem(
                     title: option.title,
@@ -335,9 +350,48 @@ struct ActionGridEntryAccessibility: Equatable {
     let title: String
     let owner: String
     let availability: String
+    let copy: ActionGridAccessibilityCopy
 
-    var summaryLabel: String { "\(title)，\(owner)，\(availability)" }
-    var settingsLabel: String { "设置“\(title)”" }
-    var replaceLabel: String { "替换“\(title)”" }
-    var removeLabel: String { "移除“\(title)”" }
+    init(
+        title: String,
+        owner: String,
+        availability: String,
+        copy: ActionGridAccessibilityCopy = .source
+    ) {
+        self.title = title
+        self.owner = owner
+        self.availability = availability
+        self.copy = copy
+    }
+
+    var summaryLabel: String {
+        String(format: copy.summaryFormat, title, owner, availability)
+    }
+    var settingsLabel: String { String(format: copy.settingsLabelFormat, title) }
+    var replaceLabel: String { String(format: copy.replaceLabelFormat, title) }
+    var removeLabel: String { String(format: copy.removeLabelFormat, title) }
+}
+
+struct ActionGridAccessibilityCopy: Equatable {
+    let summaryFormat: String
+    let settingsLabelFormat: String
+    let replaceLabelFormat: String
+    let removeLabelFormat: String
+    let settingsButtonTitle: String
+    let replacementMenuTitle: String
+    let settingsHelp: String
+    let replaceHelp: String
+    let removeHelp: String
+
+    static let source = ActionGridAccessibilityCopy(
+        summaryFormat: "%@，%@，%@",
+        settingsLabelFormat: "设置“%@”",
+        replaceLabelFormat: "替换“%@”",
+        removeLabelFormat: "移除“%@”",
+        settingsButtonTitle: "设置",
+        replacementMenuTitle: "替换",
+        settingsHelp: "打开操作提供者设置",
+        replaceHelp: "选择其他操作替换此条目",
+        removeHelp: "从操作网格移除此条目"
+    )
 }

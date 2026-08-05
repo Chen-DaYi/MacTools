@@ -129,12 +129,22 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAction
         [
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
-                title: "设置程序坞自动隐藏",
-                description: metadata.defaultDescription,
-                keywords: ["程序坞", "Dock", "隐藏"],
+                title: localization.string("metadata.title", defaultValue: "自动隐藏程序坞"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "控制程序坞自动隐藏"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "自动隐藏程序坞"),
+                    "Dock",
+                ],
                 systemImage: metadata.iconName,
                 parameters: [
-                    ActionParameterDefinition(id: "enabled", title: "自动隐藏", kind: .boolean),
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("metadata.title", defaultValue: "自动隐藏程序坞"),
+                        kind: .boolean
+                    ),
                 ],
                 externalInvocationPolicy: .allowed,
                 capabilities: [.background, .foregroundInteractive]
@@ -144,8 +154,14 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAction
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
-            ActionCatalogEntry(reference: actionReference(enabled: true), title: "隐藏程序坞"),
-            ActionCatalogEntry(reference: actionReference(enabled: false), title: "显示程序坞"),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.hide.title", defaultValue: "隐藏程序坞")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.show.title", defaultValue: "显示程序坞")
+            ),
         ]
     }
 
@@ -175,12 +191,17 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAction
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
-            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = setDockHidden(enabled)
-        let message = lastErrorMessage
+        let failureMessage = localization.string(
+            "error.toggleFailed",
+            defaultValue: "更新程序坞失败。"
+        )
         return ActionExecutionHandle {
-            succeeded ? .succeeded() : .failed(message: message ?? "更新程序坞失败。")
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
         }
     }
 

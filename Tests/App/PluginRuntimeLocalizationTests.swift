@@ -110,6 +110,33 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         XCTAssertEqual(MenuBarPanelTab.components.accessibilityTitle, "Components Panel")
     }
 
+    func testFeatureSurfacesSwitchLanguageAndFormattingAtRuntime() {
+        let expectations: [(language: String, actions: String, automation: String)] = [
+            ("en", "Actions & Shortcuts", "Automation"),
+            ("de", "Aktionen und Tastenkürzel", "Automatisierung"),
+            ("ar", "الإجراءات والاختصارات", "الأتمتة"),
+            ("zh-Hans", "操作与快捷键", "自动化"),
+        ]
+
+        for expectation in expectations {
+            setRuntimePreference(expectation.language)
+            XCTAssertEqual(FeatureL10n.string("操作与快捷键"), expectation.actions)
+            XCTAssertEqual(FeatureL10n.string("自动化"), expectation.automation)
+        }
+
+        setRuntimePreference("en")
+        XCTAssertEqual(
+            FeatureL10n.format("%d 个步骤 · %d 条规则 · %@%@", 3, 2, "Enabled", ""),
+            "3 steps · 2 rules · Enabled"
+        )
+
+        setRuntimePreference("ar")
+        XCTAssertEqual(
+            PluginRuntimeLocalization.locale.language.characterDirection,
+            .rightToLeft
+        )
+    }
+
     private func makeLocalizedTestBundle() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

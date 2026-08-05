@@ -88,6 +88,11 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     private enum ActionID {
         static let setEnabled = "set-enabled"
     }
+
+    private enum ErrorState {
+        case muteFailed
+        case unmuteFailed
+    }
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -106,7 +111,18 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     private let localization: PluginLocalization
     private let controller: any SystemAudioControlling
     private var isMuted: Bool = false
-    private var lastErrorMessage: String?
+    private var lastErrorState: ErrorState?
+
+    private var lastErrorMessage: String? {
+        switch lastErrorState {
+        case .muteFailed:
+            localization.string("error.muteFailed", defaultValue: "静音操作失败")
+        case .unmuteFailed:
+            localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
+        case nil:
+            nil
+        }
+    }
 
     init(
         controller: any SystemAudioControlling = CoreAudioSystemOutputController(),
@@ -151,11 +167,21 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: localization.string("action.setMute.title", defaultValue: "设置系统静音"),
-                description: metadata.defaultDescription,
-                keywords: ["静音", "声音", "音频"],
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "切换系统输出静音"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "系统静音"),
+                    localization.string("metadata.description", defaultValue: "切换系统输出静音"),
+                ],
                 systemImage: metadata.iconName,
                 parameters: [
-                    ActionParameterDefinition(id: "enabled", title: "静音", kind: .boolean),
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("action.setMute.title", defaultValue: "设置系统静音"),
+                        kind: .boolean
+                    ),
                 ],
                 externalInvocationPolicy: .allowed,
                 capabilities: [.background, .foregroundInteractive]
@@ -165,8 +191,14 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
-            ActionCatalogEntry(reference: actionReference(enabled: true), title: "静音系统音频"),
-            ActionCatalogEntry(reference: actionReference(enabled: false), title: "恢复系统音频"),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.mute.title", defaultValue: "静音系统音频")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.unmute.title", defaultValue: "恢复系统音频")
+            ),
         ]
     }
 
@@ -200,12 +232,16 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
-            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = applyMute(enabled)
         let message = lastErrorMessage
+        let failureMessage = message
+            ?? localization.string("error.muteFailed", defaultValue: "静音操作失败")
         return ActionExecutionHandle {
-            succeeded ? .succeeded() : .failed(message: message ?? "静音操作失败。")
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
         }
     }
 
@@ -223,12 +259,10 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
         let success = controller.setMuteState(muted)
         if success {
             isMuted = muted
-            lastErrorMessage = nil
+            lastErrorState = nil
         } else {
             logger.error("Failed to set system mute to \(muted, privacy: .public)")
-            lastErrorMessage = muted
-                ? localization.string("error.muteFailed", defaultValue: "静音操作失败")
-                : localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
+            lastErrorState = muted ? .muteFailed : .unmuteFailed
         }
         onStateChange?()
         return success

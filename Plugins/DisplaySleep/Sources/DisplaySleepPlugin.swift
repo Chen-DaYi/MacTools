@@ -89,14 +89,29 @@ final class DisplaySleepPlugin:
         [
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: "execute"),
-                title: metadata.title,
-                description: metadata.defaultDescription,
-                keywords: ["显示器", "休眠", "睡眠"],
+                title: localization.string("metadata.title", defaultValue: "显示器休眠"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "立即让显示器休眠"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "显示器休眠"),
+                    localization.string("metadata.description", defaultValue: "立即让显示器休眠"),
+                ],
                 systemImage: metadata.iconName,
                 confirmation: ActionConfirmation(
-                    title: "让显示器休眠？",
-                    message: "此运行链接将立即关闭显示器。",
-                    confirmButtonTitle: "休眠"
+                    title: localization.string(
+                        "action.confirmation.title",
+                        defaultValue: "让显示器休眠？"
+                    ),
+                    message: localization.string(
+                        "action.confirmation.message",
+                        defaultValue: "此运行链接将立即关闭显示器。"
+                    ),
+                    confirmButtonTitle: localization.string(
+                        "action.confirmation.confirm",
+                        defaultValue: "休眠"
+                    )
                 ),
                 externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive]

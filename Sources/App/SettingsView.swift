@@ -1308,7 +1308,7 @@ private struct FeatureSettingsSidebar: View {
         switch pane {
         case .actionsAndShortcuts:
             FeatureSettingsSidebarRow(
-                title: AppL10n.settings("actions.title", defaultValue: "操作与快捷键"),
+                title: FeatureL10n.string("操作与快捷键"),
                 systemImage: "command",
                 iconTint: .orange
             )
@@ -1316,7 +1316,7 @@ private struct FeatureSettingsSidebar: View {
             .id(pane)
         case .automation:
             FeatureSettingsSidebarRow(
-                title: "自动化",
+                title: FeatureL10n.string("自动化"),
                 systemImage: "bolt.horizontal.circle",
                 iconTint: .indigo
             )

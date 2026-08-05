@@ -100,7 +100,7 @@ final class ShortcutAssignmentServiceTests: XCTestCase {
         XCTAssertEqual(harness.service.assignments.first?.reference, reference)
         XCTAssertEqual(
             harness.service.settingsItems.first?.state,
-            .unavailable(reason: "操作不可用。")
+            .unavailable(reason: FeatureL10n.string("操作不可用。"))
         )
         XCTAssertFalse(
             harness.manager.debugRegistrationsForTests.contains {

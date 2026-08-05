@@ -54,13 +54,13 @@ final class ActionShortcutAssignmentStore {
                   payload.assignments.count <= Self.maximumAssignmentCount,
                   Set(payload.assignments.map(\.id)).count == payload.assignments.count,
                   Set(payload.assignments.map(\.reference)).count == payload.assignments.count else {
-                loadError = "快捷键数据格式无效。"
+                loadError = FeatureL10n.string("快捷键数据格式无效。")
                 return []
             }
             loadError = nil
             return payload.assignments
         } catch {
-            loadError = "快捷键数据无法读取。"
+            loadError = FeatureL10n.string("快捷键数据无法读取。")
             return []
         }
     }

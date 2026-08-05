@@ -99,7 +99,7 @@ final class AutomationRuntime {
 
     func availability(for kind: AutomationTriggerKind) -> AutomationTriggerAvailability {
         providers.first { $0.kind == kind }?.availability
-            ?? .unavailable("触发器服务未启动。")
+            ?? .unavailable(FeatureL10n.string("触发器服务未启动。"))
     }
 
     func receive(_ event: AutomationTriggerEvent) {
@@ -130,15 +130,30 @@ final class AutomationRuntime {
         pruneDeliveries(referenceDate: eventDate)
 
         guard let workflow = workflowStore.workflow(id: rule.workflowID) else {
-            recordSkipped(rule: rule, event: event, workflowName: "不可用工作流", reason: "工作流不存在。")
+            recordSkipped(
+                rule: rule,
+                event: event,
+                workflowName: FeatureL10n.string("不可用工作流"),
+                reason: .workflowDoesNotExist
+            )
             return
         }
         guard workflow.isEnabled else {
-            recordSkipped(rule: rule, event: event, workflowName: workflow.name, reason: "工作流已停用。")
+            recordSkipped(
+                rule: rule,
+                event: event,
+                workflowName: workflow.name,
+                reason: .workflowDisabled
+            )
             return
         }
         guard !activeRuleIDs.contains(rule.id) else {
-            recordSkipped(rule: rule, event: event, workflowName: workflow.name, reason: "该规则的上一次运行尚未结束。")
+            recordSkipped(
+                rule: rule,
+                event: event,
+                workflowName: workflow.name,
+                reason: .previousRunActive
+            )
             return
         }
 
@@ -151,7 +166,7 @@ final class AutomationRuntime {
                 rule: rule,
                 event: event,
                 workflowName: workflow.name,
-                reason: evaluation.reason ?? "规则条件不满足。"
+                reason: evaluation.failureReason ?? .conditionsNotMet
             )
             return
         }
@@ -189,7 +204,7 @@ final class AutomationRuntime {
         rule: AutomationRule,
         event: AutomationTriggerEvent,
         workflowName: String,
-        reason: String
+        reason: AutomationRunSkipReason
     ) {
         let timestamp = now()
         _ = workflowStore.record(
@@ -200,7 +215,10 @@ final class AutomationRuntime {
                 startedAt: timestamp,
                 finishedAt: timestamp,
                 status: .skipped,
-                summary: "规则“\(rule.name)”未运行：\(reason)"
+                automationSkippedSummary: AutomationSkippedRunSummary(
+                    ruleName: rule.name,
+                    reason: reason
+                )
             )
         )
         onChange?()
@@ -211,13 +229,13 @@ final class AutomationRuntime {
         lastDelivery = lastDelivery.filter { $0.value >= cutoff }
     }
 
-    private func startErrorMessage(_ error: WorkflowStartError) -> String {
+    private func startErrorMessage(_ error: WorkflowStartError) -> AutomationRunSkipReason {
         switch error {
-        case .workflowNotFound: "找不到工作流。"
-        case .workflowDisabled: "工作流已停用。"
-        case .emptyWorkflow: "工作流尚未添加步骤。"
-        case .recursiveInvocation: "检测到递归工作流调用。"
-        case .maximumDepthExceeded: "工作流嵌套层级已达上限。"
+        case .workflowNotFound: .workflowNotFound
+        case .workflowDisabled: .workflowDisabled
+        case .emptyWorkflow: .emptyWorkflow
+        case .recursiveInvocation: .recursiveInvocation
+        case .maximumDepthExceeded: .maximumDepthExceeded
         }
     }
 }

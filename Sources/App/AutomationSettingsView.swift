@@ -26,9 +26,9 @@ struct AutomationSettingsView: View {
                 .id(workflow.id)
             } else {
                 ContentUnavailableView(
-                    "尚无工作流",
+                    FeatureL10n.string("尚无工作流"),
                     systemImage: "bolt.horizontal.circle",
-                    description: Text("创建工作流后，可组合多个 MacTools 操作。")
+                    description: Text(FeatureL10n.string("创建工作流后，可组合多个 MacTools 操作。"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -44,7 +44,7 @@ struct AutomationSettingsView: View {
     private var workflowList: some View {
         VStack(spacing: 0) {
             HStack {
-                Label("自动化", systemImage: "bolt.horizontal.circle")
+                Label(FeatureL10n.string("自动化"), systemImage: "bolt.horizontal.circle")
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                 Spacer()
                 Button {
@@ -56,14 +56,14 @@ struct AutomationSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("新建工作流")
+                .help(FeatureL10n.string("新建工作流"))
             }
             .padding(12)
 
             Divider()
 
             if automation.workflows.isEmpty {
-                ContentUnavailableView("尚无工作流", systemImage: "bolt.slash")
+                ContentUnavailableView(FeatureL10n.string("尚无工作流"), systemImage: "bolt.slash")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $selectedWorkflowID) {
@@ -136,29 +136,37 @@ private struct WorkflowCollectionRow: View {
             }
             .buttonStyle(.plain)
             .disabled(!workflow.isEnabled || workflow.steps.isEmpty)
-            .help("运行工作流")
-            .accessibilityLabel("运行“\(workflow.name)”")
+            .help(FeatureL10n.string("运行工作流"))
+            .accessibilityLabel(FeatureL10n.format("运行“%@”", workflow.name))
 
             Menu {
-                Button("上移") { automation.moveWorkflow(id: workflow.id, offset: -1) }
+                Button(FeatureL10n.string("上移")) { automation.moveWorkflow(id: workflow.id, offset: -1) }
                     .disabled(!canMoveUp)
-                Button("下移") { automation.moveWorkflow(id: workflow.id, offset: 1) }
+                Button(FeatureL10n.string("下移")) { automation.moveWorkflow(id: workflow.id, offset: 1) }
                     .disabled(!canMoveDown)
             } label: {
                 Image(systemName: "arrow.up.arrow.down")
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .accessibilityLabel("调整“\(workflow.name)”的顺序")
+            .accessibilityLabel(FeatureL10n.format("调整“%@”的顺序", workflow.name))
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .contain)
     }
 
     private var summary: String {
-        let state = workflow.isEnabled ? "已启用" : "已停用"
-        let last = lastRun.map { " · 上次\(runStatusTitle($0.status))" } ?? ""
-        return "\(workflow.steps.count) 个步骤 · \(ruleCount) 条规则 · \(state)\(last)"
+        let state = workflow.isEnabled ? FeatureL10n.string("已启用") : FeatureL10n.string("已停用")
+        let last = lastRun.map {
+            FeatureL10n.format(" · 上次%@", runStatusTitle($0.status))
+        } ?? ""
+        return FeatureL10n.format(
+            "%d 个步骤 · %d 条规则 · %@%@",
+            workflow.steps.count,
+            ruleCount,
+            state,
+            last
+        )
     }
 }
 
@@ -187,15 +195,15 @@ private struct WorkflowDetailView: View {
             }
             .padding(PluginSettingsTheme.Spacing.pagePadding)
         }
-        .alert("删除工作流？", isPresented: $pendingDelete) {
-            Button("删除", role: .destructive) {
+        .alert(FeatureL10n.string("删除工作流？"), isPresented: $pendingDelete) {
+            Button(FeatureL10n.string("删除"), role: .destructive) {
                 if automation.deleteWorkflow(id: workflow.id) {
                     onDeleted()
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(FeatureL10n.string("取消"), role: .cancel) {}
         } message: {
-            Text("运行中的任务会先停止，相关自动规则会一并删除。保存的快捷键、运行链接和网格条目会保留，并显示为不可用。")
+            Text(FeatureL10n.string("运行中的任务会先停止，相关自动规则会一并删除。保存的快捷键、运行链接和网格条目会保留，并显示为不可用。"))
         }
     }
 
@@ -208,7 +216,7 @@ private struct WorkflowDetailView: View {
                     .frame(width: 34)
 
                 TextField(
-                    "工作流名称",
+                    FeatureL10n.string("工作流名称"),
                     text: Binding(
                         get: { workflow.name },
                         set: { automation.renameWorkflow(id: workflow.id, name: $0) }
@@ -218,7 +226,7 @@ private struct WorkflowDetailView: View {
                 .textFieldStyle(.plain)
 
                 Toggle(
-                    "启用",
+                    FeatureL10n.string("启用"),
                     isOn: Binding(
                         get: { workflow.isEnabled },
                         set: { automation.setWorkflowEnabled($0, id: workflow.id) }
@@ -227,33 +235,33 @@ private struct WorkflowDetailView: View {
                 .toggleStyle(.switch)
 
                 if activeWorkflowRunIDs.isEmpty {
-                    Button("测试") {
+                    Button(FeatureL10n.string("测试")) {
                         _ = automation.startWorkflow(id: workflow.id, test: true)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(workflow.steps.isEmpty)
 
-                    Button("运行") {
+                    Button(FeatureL10n.string("运行")) {
                         _ = automation.startWorkflow(id: workflow.id)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(!workflow.isEnabled || workflow.steps.isEmpty)
                 } else {
-                    Button("停止", role: .destructive) {
+                    Button(FeatureL10n.string("停止"), role: .destructive) {
                         activeWorkflowRunIDs.forEach(automation.cancel(runID:))
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .help("停止当前工作流运行")
+                    .help(FeatureL10n.string("停止当前工作流运行"))
                     .accessibilityIdentifier("mactools.automation.stop")
                 }
 
                 Menu {
-                    Button("创建副本") { _ = automation.duplicateWorkflow(id: workflow.id) }
+                    Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateWorkflow(id: workflow.id) }
                     Divider()
-                    Button("删除", role: .destructive) { pendingDelete = true }
+                    Button(FeatureL10n.string("删除"), role: .destructive) { pendingDelete = true }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -261,7 +269,7 @@ private struct WorkflowDetailView: View {
                 .fixedSize()
             }
 
-            Text("按顺序运行多个操作；每个步骤都会重新检查可用性、权限和确认要求。")
+            Text(FeatureL10n.string("按顺序运行多个操作；每个步骤都会重新检查可用性、权限和确认要求。"))
                 .font(PluginSettingsTheme.Typography.pageDescription)
                 .foregroundStyle(.secondary)
         }
@@ -276,7 +284,7 @@ private struct WorkflowDetailView: View {
     private var stepsSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
-                Label("步骤", systemImage: "list.number")
+                Label(FeatureL10n.string("步骤"), systemImage: "list.number")
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -285,9 +293,9 @@ private struct WorkflowDetailView: View {
 
             if workflow.steps.isEmpty {
                 ContentUnavailableView(
-                    "尚未添加步骤",
+                    FeatureL10n.string("尚未添加步骤"),
                     systemImage: "plus.circle",
-                    description: Text("从操作目录添加第一个步骤。")
+                    description: Text(FeatureL10n.string("从操作目录添加第一个步骤。"))
                 )
                 .frame(maxWidth: .infinity, minHeight: 150)
                 .pluginSettingsCardBackground(.host)
@@ -324,7 +332,7 @@ private struct WorkflowDetailView: View {
                 }
             }
         } label: {
-            Label("添加操作", systemImage: "plus")
+            Label(FeatureL10n.string("添加操作"), systemImage: "plus")
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
@@ -333,18 +341,21 @@ private struct WorkflowDetailView: View {
 
     private var runFromSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label("运行方式", systemImage: "play.circle")
+            Label(FeatureL10n.string("运行方式"), systemImage: "play.circle")
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Label("统一搜索中可用", systemImage: "magnifyingglass")
+                Label(FeatureL10n.string("统一搜索中可用"), systemImage: "magnifyingglass")
                 if let item = pluginHost.actionShortcutSettingsItem(
                     for: workflow.actionReference
                 ) {
-                    Label("全局快捷键：\(item.bindingText)", systemImage: "command")
+                    Label(
+                        FeatureL10n.format("全局快捷键：%@", item.bindingText),
+                        systemImage: "command"
+                    )
                 } else {
-                    Label("尚未分配全局快捷键", systemImage: "command")
+                    Label(FeatureL10n.string("尚未分配全局快捷键"), systemImage: "command")
                         .foregroundStyle(.secondary)
                 }
                 ActionRunLinkControl(
@@ -362,14 +373,14 @@ private struct WorkflowDetailView: View {
                             systemImage: summary.systemImage
                         )
                         Spacer()
-                        Button("配置") {
+                        Button(FeatureL10n.string("配置")) {
                             pluginHost.presentPluginConfiguration(pluginID: summary.surfaceID)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
                 }
-                Text("手势与操作网格由各自的功能页面管理。")
+                Text(FeatureL10n.string("手势与操作网格由各自的功能页面管理。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
             }
@@ -382,14 +393,14 @@ private struct WorkflowDetailView: View {
     private var automaticRulesSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
-                Label("自动规则", systemImage: "clock.arrow.circlepath")
+                Label(FeatureL10n.string("自动规则"), systemImage: "clock.arrow.circlepath")
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {
                     _ = automation.createRule(workflowID: workflow.id)
                 } label: {
-                    Label("添加规则", systemImage: "plus")
+                    Label(FeatureL10n.string("添加规则"), systemImage: "plus")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -397,7 +408,7 @@ private struct WorkflowDetailView: View {
 
             let rules = automation.rules(workflowID: workflow.id)
             if rules.isEmpty {
-                Text("当前没有自动规则。手动运行不受规则条件影响。")
+                Text(FeatureL10n.string("当前没有自动规则。手动运行不受规则条件影响。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .padding(PluginSettingsTheme.Spacing.cardContent)
@@ -424,12 +435,12 @@ private struct WorkflowDetailView: View {
     private var historySection: some View {
         let runs = automation.recentRuns(workflowID: workflow.id)
         return VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label("最近运行", systemImage: "clock")
+            Label(FeatureL10n.string("最近运行"), systemImage: "clock")
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
 
             if runs.isEmpty {
-                Text("尚无运行记录。")
+                Text(FeatureL10n.string("尚无运行记录。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .padding(PluginSettingsTheme.Spacing.cardContent)
@@ -438,7 +449,7 @@ private struct WorkflowDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(runs.enumerated()), id: \.element.id) { index, run in
-                        WorkflowRunRow(run: run)
+                        WorkflowRunRow(pluginHost: pluginHost, run: run)
                         if index + 1 < runs.count {
                             PluginSettingsListDivider()
                         }
@@ -459,14 +470,14 @@ private struct AutomationRuleEditor: View {
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                TextField("规则名称", text: binding(\.name))
+                TextField(FeatureL10n.string("规则名称"), text: binding(\.name))
                     .textFieldStyle(.roundedBorder)
                     .frame(minWidth: 180, idealWidth: 240, maxWidth: 320)
 
                 HStack {
-                    Text("当")
+                    Text(FeatureL10n.string("当"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Picker("触发器", selection: triggerKindBinding) {
+                    Picker(FeatureL10n.string("触发器"), selection: triggerKindBinding) {
                         ForEach(AutomationTriggerKind.allCases) { kind in
                             Text(kind.title).tag(kind)
                         }
@@ -480,9 +491,16 @@ private struct AutomationRuleEditor: View {
                 triggerConfiguration
 
                 HStack {
-                    Text("如果")
+                    Text(FeatureL10n.string("如果"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text(rule.conditions.isEmpty ? "无附加条件" : "满足全部 \(rule.conditions.count) 个条件")
+                    Text(
+                        rule.conditions.isEmpty
+                            ? FeatureL10n.string("无附加条件")
+                            : FeatureL10n.format(
+                                "满足全部 %d 个条件",
+                                rule.conditions.count
+                            )
+                    )
                         .foregroundStyle(.secondary)
                     Spacer()
                     conditionMenu
@@ -498,14 +516,14 @@ private struct AutomationRuleEditor: View {
                 }
 
                 HStack {
-                    Text("运行")
+                    Text(FeatureL10n.string("运行"))
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     Text(workflowName)
                     Spacer()
-                    Button("创建副本") { _ = automation.duplicateRule(id: rule.id) }
+                    Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateRule(id: rule.id) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                    Button("删除", role: .destructive) { automation.deleteRule(id: rule.id) }
+                    Button(FeatureL10n.string("删除"), role: .destructive) { automation.deleteRule(id: rule.id) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
@@ -519,13 +537,19 @@ private struct AutomationRuleEditor: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(rule.name)
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text("当 \(triggerSummary)\(conditionSummary) · 运行 \(workflowName)")
+                    Text(
+                        AutomationRuleSummaryFormatter.summary(
+                            trigger: rule.trigger,
+                            conditionCount: rule.conditions.count,
+                            workflowName: workflowName
+                        )
+                    )
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Toggle("启用", isOn: binding(\.isEnabled))
+                Toggle(FeatureL10n.string("启用"), isOn: binding(\.isEnabled))
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
@@ -562,22 +586,22 @@ private struct AutomationRuleEditor: View {
         case let .schedule(value):
             HStack {
                 Stepper("\(twoDigits(value.hour)):\(twoDigits(value.minute))", value: triggerIntBinding(value.hour, range: 0 ... 23) { .schedule(replacing(value, hour: $0)) }, in: 0 ... 23)
-                Stepper("分钟 \(value.minute)", value: triggerIntBinding(value.minute, range: 0 ... 59) { .schedule(replacing(value, minute: $0)) }, in: 0 ... 59)
+                Stepper(FeatureL10n.format("分钟 %d", value.minute), value: triggerIntBinding(value.minute, range: 0 ... 59) { .schedule(replacing(value, minute: $0)) }, in: 0 ... 59)
             }
             weekdayEditor(value.weekdays) { .schedule(replacing(value, weekdays: $0)) }
         case let .calendar(value):
             HStack {
-                Picker("时机", selection: triggerValueBinding(value.phase) { .calendar(replacing(value, phase: $0)) }) {
-                    Text("开始").tag(CalendarAutomationPhase.starts)
-                    Text("结束").tag(CalendarAutomationPhase.ends)
+                Picker(FeatureL10n.string("时机"), selection: triggerValueBinding(value.phase) { .calendar(replacing(value, phase: $0)) }) {
+                    Text(FeatureL10n.string("开始")).tag(CalendarAutomationPhase.starts)
+                    Text(FeatureL10n.string("结束")).tag(CalendarAutomationPhase.ends)
                 }
                 .frame(maxWidth: 150)
-                Stepper("偏移 \(value.offsetMinutes) 分钟", value: triggerIntBinding(value.offsetMinutes, range: -1_440 ... 1_440) { .calendar(replacing(value, offsetMinutes: $0)) }, in: -1_440 ... 1_440)
+                Stepper(FeatureL10n.format("偏移 %d 分钟", value.offsetMinutes), value: triggerIntBinding(value.offsetMinutes, range: -1_440 ... 1_440) { .calendar(replacing(value, offsetMinutes: $0)) }, in: -1_440 ... 1_440)
             }
-            TextField("标题包含（可选）", text: optionalTriggerStringBinding(value.titleContains) { .calendar(replacing(value, titleContains: $0)) })
+            TextField(FeatureL10n.string("标题包含（可选）"), text: optionalTriggerStringBinding(value.titleContains) { .calendar(replacing(value, titleContains: $0)) })
                 .textFieldStyle(.roundedBorder)
             if !automation.triggerAvailability(for: .calendar).isAvailable {
-                Button("允许访问日历") {
+                Button(FeatureL10n.string("允许访问日历")) {
                     Task { await automation.requestCalendarAccess() }
                 }
                 .buttonStyle(.bordered)
@@ -585,20 +609,20 @@ private struct AutomationRuleEditor: View {
             }
         case let .application(value):
             HStack {
-                Picker("事件", selection: triggerValueBinding(value.event) { .application(replacing(value, event: $0)) }) {
-                    Text("启动").tag(ApplicationAutomationEvent.launches)
-                    Text("激活").tag(ApplicationAutomationEvent.activates)
+                Picker(FeatureL10n.string("事件"), selection: triggerValueBinding(value.event) { .application(replacing(value, event: $0)) }) {
+                    Text(FeatureL10n.string("启动")).tag(ApplicationAutomationEvent.launches)
+                    Text(FeatureL10n.string("激活")).tag(ApplicationAutomationEvent.activates)
                 }
                 .frame(maxWidth: 150)
-                TextField("应用 Bundle ID", text: triggerStringBinding(value.bundleIdentifier) { .application(replacing(value, bundleIdentifier: $0)) })
+                TextField(FeatureL10n.string("应用 Bundle ID"), text: triggerStringBinding(value.bundleIdentifier) { .application(replacing(value, bundleIdentifier: $0)) })
                     .textFieldStyle(.roundedBorder)
             }
         case let .power(value):
             HStack {
-                Picker("事件", selection: triggerValueBinding(value.event) { .power(replacing(value, event: $0)) }) {
-                    Text("接入电源").tag(PowerAutomationEvent.adapterConnected)
-                    Text("断开电源").tag(PowerAutomationEvent.adapterDisconnected)
-                    Text("电量降至阈值").tag(PowerAutomationEvent.batteryAtOrBelow)
+                Picker(FeatureL10n.string("事件"), selection: triggerValueBinding(value.event) { .power(replacing(value, event: $0)) }) {
+                    Text(FeatureL10n.string("接入电源")).tag(PowerAutomationEvent.adapterConnected)
+                    Text(FeatureL10n.string("断开电源")).tag(PowerAutomationEvent.adapterDisconnected)
+                    Text(FeatureL10n.string("电量降至阈值")).tag(PowerAutomationEvent.batteryAtOrBelow)
                 }
                 .frame(maxWidth: 180)
                 if value.event == .batteryAtOrBelow {
@@ -607,21 +631,21 @@ private struct AutomationRuleEditor: View {
             }
         case let .display(value):
             HStack {
-                Picker("事件", selection: triggerValueBinding(value.event) { .display(replacing(value, event: $0)) }) {
-                    Text("连接").tag(DisplayAutomationEvent.connected)
-                    Text("断开").tag(DisplayAutomationEvent.disconnected)
+                Picker(FeatureL10n.string("事件"), selection: triggerValueBinding(value.event) { .display(replacing(value, event: $0)) }) {
+                    Text(FeatureL10n.string("连接")).tag(DisplayAutomationEvent.connected)
+                    Text(FeatureL10n.string("断开")).tag(DisplayAutomationEvent.disconnected)
                 }
                 .frame(maxWidth: 150)
-                TextField("显示器名称包含（可选）", text: optionalTriggerStringBinding(value.displayNameContains) { .display(replacing(value, displayNameContains: $0)) })
+                TextField(FeatureL10n.string("显示器名称包含（可选）"), text: optionalTriggerStringBinding(value.displayNameContains) { .display(replacing(value, displayNameContains: $0)) })
                     .textFieldStyle(.roundedBorder)
             }
         case let .network(value):
             HStack {
-                Picker("状态", selection: triggerValueBinding(value.status) { .network(replacing(value, status: $0)) }) {
-                    Text("可用").tag(AutomationNetworkStatus.available)
-                    Text("不可用").tag(AutomationNetworkStatus.unavailable)
+                Picker(FeatureL10n.string("状态"), selection: triggerValueBinding(value.status) { .network(replacing(value, status: $0)) }) {
+                    Text(FeatureL10n.string("可用")).tag(AutomationNetworkStatus.available)
+                    Text(FeatureL10n.string("不可用")).tag(AutomationNetworkStatus.unavailable)
                 }
-                Picker("接口", selection: triggerValueBinding(value.interface) { .network(replacing(value, interface: $0)) }) {
+                Picker(FeatureL10n.string("接口"), selection: triggerValueBinding(value.interface) { .network(replacing(value, interface: $0)) }) {
                     ForEach(AutomationNetworkInterface.allCases, id: \.self) { interface in
                         Text(networkInterfaceTitle(interface)).tag(interface)
                     }
@@ -635,11 +659,11 @@ private struct AutomationRuleEditor: View {
     private var triggerAvailabilityView: some View {
         let availability = automation.triggerAvailability(for: rule.trigger.kind)
         if availability.isAvailable {
-            Label("可用", systemImage: "checkmark.circle.fill")
+            Label(FeatureL10n.string("可用"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .font(PluginSettingsTheme.Typography.statusBadge)
         } else {
-            Label(availability.reason ?? "不可用", systemImage: "exclamationmark.triangle.fill")
+            Label(availability.reason ?? FeatureL10n.string("不可用"), systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
                 .font(PluginSettingsTheme.Typography.rowDescription)
         }
@@ -647,13 +671,13 @@ private struct AutomationRuleEditor: View {
 
     private var conditionMenu: some View {
         Menu {
-            conditionButton("当前应用", condition: .frontmostApplication(FrontmostApplicationCondition(bundleIdentifier: "com.apple.finder")))
-            conditionButton("电池与电源", condition: .power(PowerAutomationCondition()))
-            conditionButton("已连接显示器", condition: .connectedDisplay(ConnectedDisplayCondition()))
-            conditionButton("时间范围", condition: .timeRange(TimeRangeAutomationCondition()))
-            conditionButton("网络状态", condition: .network(NetworkAutomationCondition()))
+            conditionButton(FeatureL10n.string("当前应用"), condition: .frontmostApplication(FrontmostApplicationCondition(bundleIdentifier: "com.apple.finder")))
+            conditionButton(FeatureL10n.string("电池与电源"), condition: .power(PowerAutomationCondition()))
+            conditionButton(FeatureL10n.string("已连接显示器"), condition: .connectedDisplay(ConnectedDisplayCondition()))
+            conditionButton(FeatureL10n.string("时间范围"), condition: .timeRange(TimeRangeAutomationCondition()))
+            conditionButton(FeatureL10n.string("网络状态"), condition: .network(NetworkAutomationCondition()))
         } label: {
-            Label("添加条件", systemImage: "plus")
+            Label(FeatureL10n.string("添加条件"), systemImage: "plus")
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
@@ -735,19 +759,53 @@ private struct AutomationRuleEditor: View {
         }
     }
 
-    private var triggerSummary: String {
-        switch rule.trigger {
-        case let .schedule(value): "每周指定日期 \(twoDigits(value.hour)):\(twoDigits(value.minute))"
-        case let .calendar(value): "日历事件\(value.phase == .starts ? "开始" : "结束")"
-        case let .application(value): "\(value.bundleIdentifier) \(value.event == .launches ? "启动" : "激活")"
-        case let .power(value): powerEventTitle(value.event)
-        case let .display(value): "显示器\(value.event == .connected ? "连接" : "断开")"
-        case let .network(value): "网络变为\(value.status == .available ? "可用" : "不可用")"
+}
+
+@MainActor
+enum AutomationRuleSummaryFormatter {
+    static func summary(
+        trigger: AutomationTrigger,
+        conditionCount: Int,
+        workflowName: String
+    ) -> String {
+        let trigger = triggerSummary(for: trigger)
+        if conditionCount == 0 {
+            return FeatureL10n.format("当 %@ · 运行 %@", trigger, workflowName)
         }
+        return FeatureL10n.format(
+            "当 %@，且满足 %d 个条件 · 运行 %@",
+            trigger,
+            conditionCount,
+            workflowName
+        )
     }
 
-    private var conditionSummary: String {
-        rule.conditions.isEmpty ? "" : "，且满足 \(rule.conditions.count) 个条件"
+    static func triggerSummary(for trigger: AutomationTrigger) -> String {
+        switch trigger {
+        case let .schedule(value):
+            FeatureL10n.format(
+                "每周指定日期 %@:%@",
+                twoDigits(value.hour),
+                twoDigits(value.minute)
+            )
+        case let .calendar(value):
+            value.phase == .starts
+                ? FeatureL10n.string("日历事件开始")
+                : FeatureL10n.string("日历事件结束")
+        case let .application(value):
+            value.event == .launches
+                ? FeatureL10n.format("应用 %@ 启动", value.bundleIdentifier)
+                : FeatureL10n.format("应用 %@ 激活", value.bundleIdentifier)
+        case let .power(value): powerEventTitle(value.event)
+        case let .display(value):
+            value.event == .connected
+                ? FeatureL10n.string("显示器连接")
+                : FeatureL10n.string("显示器断开")
+        case let .network(value):
+            value.status == .available
+                ? FeatureL10n.string("网络变为可用")
+                : FeatureL10n.string("网络变为不可用")
+        }
     }
 }
 
@@ -771,10 +829,10 @@ private struct AutomationConditionEditor: View {
     private var conditionFields: some View {
         switch condition {
         case let .frontmostApplication(value):
-            Text("当前应用")
-            Picker("匹配", selection: binding(value.isExcluded) { .frontmostApplication(replacing(value, isExcluded: $0)) }) {
-                Text("是").tag(false)
-                Text("不是").tag(true)
+            Text(FeatureL10n.string("当前应用"))
+            Picker(FeatureL10n.string("匹配"), selection: binding(value.isExcluded) { .frontmostApplication(replacing(value, isExcluded: $0)) }) {
+                Text(FeatureL10n.string("是")).tag(false)
+                Text(FeatureL10n.string("不是")).tag(true)
             }
             .labelsHidden()
             .frame(width: 70)
@@ -782,33 +840,33 @@ private struct AutomationConditionEditor: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 180, maxWidth: 280)
         case let .power(value):
-            Text("电源")
-            Picker("来源", selection: powerSourceBinding(value)) {
-                Text("任意").tag("any")
-                Text("电源适配器").tag(AutomationPowerSource.adapter.rawValue)
-                Text("电池").tag(AutomationPowerSource.battery.rawValue)
+            Text(FeatureL10n.string("电源"))
+            Picker(FeatureL10n.string("来源"), selection: powerSourceBinding(value)) {
+                Text(FeatureL10n.string("任意")).tag("any")
+                Text(FeatureL10n.string("电源适配器")).tag(AutomationPowerSource.adapter.rawValue)
+                Text(FeatureL10n.string("电池")).tag(AutomationPowerSource.battery.rawValue)
             }
             .labelsHidden()
             .frame(width: 130)
-            Stepper("最低 \(value.minimumBatteryLevel ?? 0)%", value: optionalLevelBinding(value, minimum: true), in: 0 ... 100)
-            Stepper("最高 \(value.maximumBatteryLevel ?? 100)%", value: optionalLevelBinding(value, minimum: false), in: 0 ... 100)
+            Stepper(FeatureL10n.format("最低 %d%%", value.minimumBatteryLevel ?? 0), value: optionalLevelBinding(value, minimum: true), in: 0 ... 100)
+            Stepper(FeatureL10n.format("最高 %d%%", value.maximumBatteryLevel ?? 100), value: optionalLevelBinding(value, minimum: false), in: 0 ... 100)
         case let .connectedDisplay(value):
-            Text("显示器已连接")
-            TextField("名称包含", text: optionalStringBinding(value.displayNameContains) { .connectedDisplay(replacing(value, displayNameContains: $0)) })
+            Text(FeatureL10n.string("显示器已连接"))
+            TextField(FeatureL10n.string("名称包含"), text: optionalStringBinding(value.displayNameContains) { .connectedDisplay(replacing(value, displayNameContains: $0)) })
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 160, maxWidth: 240)
         case let .timeRange(value):
-            Text("时间")
-            Stepper("从 \(minuteTitle(value.startMinute))", value: binding(value.startMinute) { .timeRange(replacing(value, startMinute: $0)) }, in: 0 ... 1_439, step: 15)
-            Stepper("至 \(minuteTitle(value.endMinute))", value: binding(value.endMinute) { .timeRange(replacing(value, endMinute: $0)) }, in: 0 ... 1_439, step: 15)
+            Text(FeatureL10n.string("时间"))
+            Stepper(FeatureL10n.format("从 %@", minuteTitle(value.startMinute)), value: binding(value.startMinute) { .timeRange(replacing(value, startMinute: $0)) }, in: 0 ... 1_439, step: 15)
+            Stepper(FeatureL10n.format("至 %@", minuteTitle(value.endMinute)), value: binding(value.endMinute) { .timeRange(replacing(value, endMinute: $0)) }, in: 0 ... 1_439, step: 15)
         case let .network(value):
-            Text("网络")
-            Picker("状态", selection: binding(value.status) { .network(replacing(value, status: $0)) }) {
-                Text("可用").tag(AutomationNetworkStatus.available)
-                Text("不可用").tag(AutomationNetworkStatus.unavailable)
+            Text(FeatureL10n.string("网络"))
+            Picker(FeatureL10n.string("状态"), selection: binding(value.status) { .network(replacing(value, status: $0)) }) {
+                Text(FeatureL10n.string("可用")).tag(AutomationNetworkStatus.available)
+                Text(FeatureL10n.string("不可用")).tag(AutomationNetworkStatus.unavailable)
             }
             .labelsHidden()
-            Picker("接口", selection: binding(value.interface) { .network(replacing(value, interface: $0)) }) {
+            Picker(FeatureL10n.string("接口"), selection: binding(value.interface) { .network(replacing(value, interface: $0)) }) {
                 ForEach(AutomationNetworkInterface.allCases, id: \.self) { interface in
                     Text(networkInterfaceTitle(interface)).tag(interface)
                 }
@@ -894,23 +952,29 @@ private func replacing(_ value: NetworkAutomationCondition, status: AutomationNe
 
 private func twoDigits(_ value: Int) -> String { String(format: "%02d", value) }
 private func minuteTitle(_ value: Int) -> String { "\(twoDigits(value / 60)):\(twoDigits(value % 60))" }
-private func weekdayTitle(_ value: Int) -> String { ["日", "一", "二", "三", "四", "五", "六"][max(1, min(7, value)) - 1] }
+private func weekdayTitle(_ value: Int) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = PluginRuntimeLocalization.locale
+    let symbols = formatter.veryShortWeekdaySymbols ?? []
+    let index = max(1, min(7, value)) - 1
+    return symbols.indices.contains(index) ? symbols[index] : String(value)
+}
 
 private func networkInterfaceTitle(_ value: AutomationNetworkInterface) -> String {
     switch value {
-    case .any: "任意"
+    case .any: FeatureL10n.string("任意")
     case .wifi: "Wi-Fi"
-    case .wiredEthernet: "以太网"
-    case .cellular: "蜂窝网络"
-    case .other: "其他"
+    case .wiredEthernet: FeatureL10n.string("以太网")
+    case .cellular: FeatureL10n.string("蜂窝网络")
+    case .other: FeatureL10n.string("其他")
     }
 }
 
 private func powerEventTitle(_ value: PowerAutomationEvent) -> String {
     switch value {
-    case .adapterConnected: "接入电源"
-    case .adapterDisconnected: "断开电源"
-    case .batteryAtOrBelow: "电量降至阈值"
+    case .adapterConnected: FeatureL10n.string("接入电源")
+    case .adapterDisconnected: FeatureL10n.string("断开电源")
+    case .batteryAtOrBelow: FeatureL10n.string("电量降至阈值")
     }
 }
 
@@ -938,7 +1002,7 @@ private struct WorkflowStepEditor: View {
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                     if !availability.isAvailable {
-                        Text(availability.reason ?? "操作不可用。")
+                        Text(availability.reason ?? FeatureL10n.string("操作不可用。"))
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.red)
                     }
@@ -989,7 +1053,7 @@ private struct WorkflowStepEditor: View {
     @ViewBuilder
     private var stepOptions: some View {
         TextField(
-            "步骤名称（可选）",
+            FeatureL10n.string("步骤名称（可选）"),
             text: Binding(
                 get: { step.label ?? "" },
                 set: { update(label: $0) }
@@ -999,9 +1063,9 @@ private struct WorkflowStepEditor: View {
         .frame(minWidth: 150, idealWidth: 190, maxWidth: 240)
 
         HStack(spacing: 6) {
-            Text("延迟")
+            Text(FeatureL10n.string("延迟"))
             TextField(
-                "秒",
+                FeatureL10n.string("秒"),
                 value: Binding(
                     get: { step.delaySeconds },
                     set: { update(delay: $0) }
@@ -1010,18 +1074,18 @@ private struct WorkflowStepEditor: View {
             )
             .textFieldStyle(.roundedBorder)
             .frame(width: 64)
-            Text("秒")
+            Text(FeatureL10n.string("秒"))
         }
 
         Picker(
-            "失败时",
+            FeatureL10n.string("失败时"),
             selection: Binding(
                 get: { step.errorPolicy },
                 set: { update(policy: $0) }
             )
         ) {
-            Text("停止").tag(WorkflowStepErrorPolicy.stop)
-            Text("继续").tag(WorkflowStepErrorPolicy.continueRunning)
+            Text(FeatureL10n.string("停止")).tag(WorkflowStepErrorPolicy.stop)
+            Text(FeatureL10n.string("继续")).tag(WorkflowStepErrorPolicy.continueRunning)
         }
         .frame(minWidth: 130, maxWidth: 170)
     }
@@ -1159,6 +1223,7 @@ private struct WorkflowParameterEditor: View {
 }
 
 private struct WorkflowRunRow: View {
+    @ObservedObject var pluginHost: PluginHost
     let run: WorkflowRun
 
     var body: some View {
@@ -1168,13 +1233,18 @@ private struct WorkflowRunRow: View {
                     HStack {
                         Image(systemName: stepStatusImage(result.status))
                             .foregroundStyle(stepStatusColor(result.status))
-                        Text(result.title)
+                        Text(
+                            WorkflowHistoryPresentation.actionTitle(
+                                for: result,
+                                registry: pluginHost.actionRegistry
+                            )
+                        )
                         Spacer()
                         Text(stepStatusTitle(result.status))
                             .foregroundStyle(.secondary)
                     }
                     .font(PluginSettingsTheme.Typography.rowDescription)
-                    if let message = result.message {
+                    if let message = result.localizedMessage {
                         Text(message)
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary)
@@ -1190,23 +1260,41 @@ private struct WorkflowRunRow: View {
                 Text(run.startedAt, style: .relative)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("\(run.stepResults.count) 个步骤")
+                Text(FeatureL10n.format("%d 个步骤", run.stepResults.count))
                     .foregroundStyle(.secondary)
             }
             .font(PluginSettingsTheme.Typography.rowDescription)
         }
         .pluginSettingsListRowPadding(interactive: true)
     }
+
+}
+
+@MainActor
+enum WorkflowHistoryPresentation {
+    static func actionTitle(
+        for result: WorkflowStepRunResult,
+        registry: ActionRegistry
+    ) -> String {
+        guard result.titleSource != .custom else {
+            return result.title
+        }
+        let reference = result.actionReference ?? ActionReference(key: result.actionKey)
+        if case let .success(action) = registry.registeredAction(for: reference) {
+            return action.catalogEntry?.title ?? action.definition.title
+        }
+        return registry.definition(for: result.actionKey)?.title ?? result.title
+    }
 }
 
 private func runStatusTitle(_ status: WorkflowRunStatus) -> String {
     switch status {
-    case .running: "运行中"
-    case .succeeded: "成功"
-    case .failed: "失败"
-    case .cancelled: "已取消"
-    case .interrupted: "已中断"
-    case .skipped: "已跳过"
+    case .running: FeatureL10n.string("运行中")
+    case .succeeded: FeatureL10n.string("成功")
+    case .failed: FeatureL10n.string("失败")
+    case .cancelled: FeatureL10n.string("已取消")
+    case .interrupted: FeatureL10n.string("已中断")
+    case .skipped: FeatureL10n.string("已跳过")
     }
 }
 
@@ -1232,12 +1320,12 @@ private func runStatusColor(_ status: WorkflowRunStatus) -> Color {
 
 private func stepStatusTitle(_ status: WorkflowStepRunStatus) -> String {
     switch status {
-    case .succeeded: "成功"
-    case .failed: "失败"
-    case .cancelled: "已取消"
-    case .timedOut: "超时"
-    case .unavailable: "不可用"
-    case .skipped: "已跳过"
+    case .succeeded: FeatureL10n.string("成功")
+    case .failed: FeatureL10n.string("失败")
+    case .cancelled: FeatureL10n.string("已取消")
+    case .timedOut: FeatureL10n.string("超时")
+    case .unavailable: FeatureL10n.string("不可用")
+    case .skipped: FeatureL10n.string("已跳过")
     }
 }
 

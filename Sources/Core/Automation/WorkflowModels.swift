@@ -102,34 +102,103 @@ enum WorkflowStepRunStatus: String, Codable, Equatable, Sendable {
     case skipped
 }
 
+enum WorkflowHistoryLocalizationKey: String, Codable, Equatable, Sendable {
+    case recursiveInvocation = "检测到递归工作流调用。"
+    case maximumDepthExceeded = "工作流嵌套层级已达上限。"
+    case workflowCancelled = "工作流已取消。"
+    case requiredActionUnavailable = "必需操作不可用。"
+    case stoppedAtFailedStep = "工作流在失败步骤处停止。"
+    case completedWithFailures = "工作流已完成，但部分步骤失败。"
+    case completed = "工作流已完成。"
+    case actionVersionUnavailable = "操作版本不可用。"
+    case actionFailed = "操作未能完成。"
+    case actionCancelled = "操作已取消。"
+    case actionTimedOut = "操作超时。"
+    case actionUnavailable = "操作当前不可用。"
+    case actionDidNotStart = "操作未能开始。"
+    case notRun = "未执行。"
+    case interruptedByExit = "MacTools 上次退出时，工作流仍在运行。"
+
+    var localizedText: String {
+        switch self {
+        case .recursiveInvocation: FeatureL10n.string("检测到递归工作流调用。")
+        case .maximumDepthExceeded: FeatureL10n.string("工作流嵌套层级已达上限。")
+        case .workflowCancelled: FeatureL10n.string("工作流已取消。")
+        case .requiredActionUnavailable: FeatureL10n.string("必需操作不可用。")
+        case .stoppedAtFailedStep: FeatureL10n.string("工作流在失败步骤处停止。")
+        case .completedWithFailures: FeatureL10n.string("工作流已完成，但部分步骤失败。")
+        case .completed: FeatureL10n.string("工作流已完成。")
+        case .actionVersionUnavailable: FeatureL10n.string("操作版本不可用。")
+        case .actionFailed: FeatureL10n.string("操作未能完成。")
+        case .actionCancelled: FeatureL10n.string("操作已取消。")
+        case .actionTimedOut: FeatureL10n.string("操作超时。")
+        case .actionUnavailable: FeatureL10n.string("操作当前不可用。")
+        case .actionDidNotStart: FeatureL10n.string("操作未能开始。")
+        case .notRun: FeatureL10n.string("未执行。")
+        case .interruptedByExit: FeatureL10n.string("MacTools 上次退出时，工作流仍在运行。")
+        }
+    }
+}
+
+enum WorkflowStepTitleSource: String, Codable, Equatable, Sendable {
+    case action
+    case custom
+}
+
+struct AutomationSkippedRunSummary: Codable, Equatable, Sendable {
+    let ruleName: String
+    let reason: AutomationRunSkipReason
+
+    var localizedText: String {
+        FeatureL10n.format(
+            "规则“%@”未运行：%@",
+            ruleName,
+            reason.localizedText
+        )
+    }
+}
+
 struct WorkflowStepRunResult: Codable, Equatable, Sendable, Identifiable {
     let id: UUID
     let stepID: UUID
     let actionKey: ActionKey
-    let title: String
+    var title: String
+    var titleSource: WorkflowStepTitleSource?
+    var actionReference: ActionReference?
     let startedAt: Date?
     let finishedAt: Date
     let status: WorkflowStepRunStatus
     let message: String?
+    var messageLocalizationKey: WorkflowHistoryLocalizationKey?
 
     init(
         id: UUID = UUID(),
         stepID: UUID,
         actionKey: ActionKey,
         title: String,
+        titleSource: WorkflowStepTitleSource? = nil,
+        actionReference: ActionReference? = nil,
         startedAt: Date?,
         finishedAt: Date,
         status: WorkflowStepRunStatus,
-        message: String? = nil
+        message: String? = nil,
+        messageLocalizationKey: WorkflowHistoryLocalizationKey? = nil
     ) {
         self.id = id
         self.stepID = stepID
         self.actionKey = actionKey
         self.title = title
+        self.titleSource = titleSource
+        self.actionReference = actionReference
         self.startedAt = startedAt
         self.finishedAt = finishedAt
         self.status = status
-        self.message = message
+        self.message = messageLocalizationKey?.localizedText ?? message
+        self.messageLocalizationKey = messageLocalizationKey
+    }
+
+    var localizedMessage: String? {
+        messageLocalizationKey?.localizedText ?? message
     }
 }
 
@@ -146,6 +215,8 @@ struct WorkflowRun: Codable, Equatable, Sendable, Identifiable {
     var status: WorkflowRunStatus
     var stepResults: [WorkflowStepRunResult]
     var summary: String?
+    var summaryLocalizationKey: WorkflowHistoryLocalizationKey?
+    var automationSkippedSummary: AutomationSkippedRunSummary?
 
     init(
         id: UUID = UUID(),
@@ -157,6 +228,8 @@ struct WorkflowRun: Codable, Equatable, Sendable, Identifiable {
         status: WorkflowRunStatus = .running,
         stepResults: [WorkflowStepRunResult] = [],
         summary: String? = nil,
+        summaryLocalizationKey: WorkflowHistoryLocalizationKey? = nil,
+        automationSkippedSummary: AutomationSkippedRunSummary? = nil,
         formatVersion: Int = currentFormatVersion
     ) {
         self.formatVersion = formatVersion
@@ -168,7 +241,15 @@ struct WorkflowRun: Codable, Equatable, Sendable, Identifiable {
         self.finishedAt = finishedAt
         self.status = status
         self.stepResults = stepResults
-        self.summary = summary
+        self.summary = summaryLocalizationKey?.localizedText ?? summary
+        self.summaryLocalizationKey = summaryLocalizationKey
+        self.automationSkippedSummary = automationSkippedSummary
+    }
+
+    var localizedSummary: String? {
+        automationSkippedSummary?.localizedText
+            ?? summaryLocalizationKey?.localizedText
+            ?? summary
     }
 }
 

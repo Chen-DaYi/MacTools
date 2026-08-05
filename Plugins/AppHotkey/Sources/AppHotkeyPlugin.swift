@@ -144,7 +144,10 @@ final class AppHotkeyPlugin:
                 "action.launch.description",
                 defaultValue: "打开应用；若应用位于最前方则隐藏。"
             ),
-            keywords: ["应用", "启动", "隐藏"],
+            keywords: [
+                localization.string("metadata.title", defaultValue: "应用快捷键"),
+                localization.string("action.launch.title", defaultValue: "打开应用"),
+            ],
             systemImage: "app.dashed",
             parameters: [
                 ActionParameterDefinition(
@@ -176,7 +179,7 @@ final class AppHotkeyPlugin:
                     parameters: parameters
                 ),
                 title: entry.displayName,
-                subtitle: metadata.title
+                subtitle: localization.string("metadata.title", defaultValue: "应用快捷键")
             )
         }
     }
@@ -198,7 +201,13 @@ final class AppHotkeyPlugin:
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard actionAvailability(for: invocation.reference).isAvailable,
               let entry = entry(for: invocation.reference) else {
-            return ActionExecutionHandle(operation: { .failed(message: "应用不可用。") })
+            let failureMessage = localization.string(
+                "action.unavailable.missing",
+                defaultValue: "应用不可用。"
+            )
+            return ActionExecutionHandle(operation: {
+                .failed(message: failureMessage)
+            })
         }
         launch(entryID: entry.id)
         return ActionExecutionHandle(operation: { .succeeded() })

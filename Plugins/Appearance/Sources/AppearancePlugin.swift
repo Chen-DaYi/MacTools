@@ -85,12 +85,22 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
         [
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
-                title: "设置系统外观",
-                description: metadata.defaultDescription,
-                keywords: ["深色", "浅色", "外观"],
+                title: localization.string("metadata.title", defaultValue: "深色模式"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "切换系统亮色与深色外观"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "深色模式"),
+                    localization.string("metadata.description", defaultValue: "切换系统亮色与深色外观"),
+                ],
                 systemImage: metadata.iconName,
                 parameters: [
-                    ActionParameterDefinition(id: "enabled", title: "深色模式", kind: .boolean),
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("metadata.title", defaultValue: "深色模式"),
+                        kind: .boolean
+                    ),
                 ],
                 externalInvocationPolicy: .allowed,
                 capabilities: [.background, .foregroundInteractive]
@@ -100,8 +110,14 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
-            ActionCatalogEntry(reference: actionReference(enabled: true), title: "启用深色模式"),
-            ActionCatalogEntry(reference: actionReference(enabled: false), title: "启用浅色模式"),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.enableDark.title", defaultValue: "启用深色模式")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.enableLight.title", defaultValue: "启用浅色模式")
+            ),
         ]
     }
 
@@ -115,11 +131,17 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
-            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = setDarkMode(enabled)
+        let failureMessage = localization.string(
+            "error.toggleFailed",
+            defaultValue: "切换系统外观失败。"
+        )
         return ActionExecutionHandle {
-            succeeded ? .succeeded() : .failed(message: "切换系统外观失败。")
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
         }
     }
 

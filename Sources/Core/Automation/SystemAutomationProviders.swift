@@ -172,9 +172,9 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
     var availability: AutomationTriggerAvailability {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess: .available
-        case .notDetermined: .unavailable("需要日历访问权限。")
-        case .denied, .restricted, .writeOnly: .unavailable("日历访问权限不可用。")
-        @unknown default: .unavailable("无法确定日历访问状态。")
+        case .notDetermined: .unavailable(FeatureL10n.string("需要日历访问权限。"))
+        case .denied, .restricted, .writeOnly: .unavailable(FeatureL10n.string("日历访问权限不可用。"))
+        @unknown default: .unavailable(FeatureL10n.string("无法确定日历访问状态。"))
         }
     }
 
@@ -356,17 +356,46 @@ final class SystemApplicationAutomationTriggerProvider: AutomationTriggerProvidi
 
 @MainActor
 final class SystemPowerAutomationTriggerProvider: AutomationTriggerProviding {
+    typealias NotificationSourceFactory = (UnsafeMutableRawPointer) -> CFRunLoopSource?
+
     let kind: AutomationTriggerKind = .power
-    private(set) var availability: AutomationTriggerAvailability = .available
+
+    private enum AvailabilityState {
+        case available
+        case notificationSourceUnavailable
+    }
 
     private let now: () -> Date
+    private let notificationSourceFactory: NotificationSourceFactory
+    private var availabilityState: AvailabilityState = .available
     private var handler: (@MainActor (AutomationTriggerEvent) -> Void)?
     private var source: CFRunLoopSource?
     private var previous = readPowerSnapshot()
     private var thresholds: Set<Int> = []
 
-    init(now: @escaping () -> Date = Date.init) {
+    var availability: AutomationTriggerAvailability {
+        switch availabilityState {
+        case .available:
+            .available
+        case .notificationSourceUnavailable:
+            .unavailable(FeatureL10n.string("无法监听电源状态。"))
+        }
+    }
+
+    init(
+        now: @escaping () -> Date = Date.init,
+        notificationSourceFactory: @escaping NotificationSourceFactory = { context in
+            IOPSNotificationCreateRunLoopSource({ context in
+                guard let context else { return }
+                let provider = Unmanaged<SystemPowerAutomationTriggerProvider>
+                    .fromOpaque(context)
+                    .takeUnretainedValue()
+                Task { @MainActor in provider.powerStateChanged() }
+            }, context)?.takeRetainedValue()
+        }
+    ) {
         self.now = now
+        self.notificationSourceFactory = notificationSourceFactory
     }
 
     func start(handler: @escaping @MainActor (AutomationTriggerEvent) -> Void) {
@@ -374,17 +403,11 @@ final class SystemPowerAutomationTriggerProvider: AutomationTriggerProviding {
         previous = Self.readPowerSnapshot()
         guard source == nil else { return }
         let context = Unmanaged.passUnretained(self).toOpaque()
-        guard let unmanaged = IOPSNotificationCreateRunLoopSource({ context in
-            guard let context else { return }
-            let provider = Unmanaged<SystemPowerAutomationTriggerProvider>
-                .fromOpaque(context)
-                .takeUnretainedValue()
-            Task { @MainActor in provider.powerStateChanged() }
-        }, context) else {
-            availability = .unavailable("无法监听电源状态。")
+        guard let source = notificationSourceFactory(context) else {
+            availabilityState = .notificationSourceUnavailable
             return
         }
-        let source = unmanaged.takeRetainedValue()
+        availabilityState = .available
         self.source = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
     }

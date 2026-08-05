@@ -129,12 +129,22 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAct
         [
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
-                title: "设置菜单栏自动隐藏",
-                description: metadata.defaultDescription,
-                keywords: ["菜单栏", "隐藏", "全屏"],
+                title: localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "控制菜单栏自动隐藏"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+                    localization.string("metadata.description", defaultValue: "控制菜单栏自动隐藏"),
+                ],
                 systemImage: metadata.iconName,
                 parameters: [
-                    ActionParameterDefinition(id: "enabled", title: "自动隐藏", kind: .boolean),
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("metadata.title", defaultValue: "自动隐藏菜单栏"),
+                        kind: .boolean
+                    ),
                 ],
                 externalInvocationPolicy: .allowed,
                 capabilities: [.background, .foregroundInteractive]
@@ -144,8 +154,14 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAct
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
-            ActionCatalogEntry(reference: actionReference(enabled: true), title: "隐藏菜单栏"),
-            ActionCatalogEntry(reference: actionReference(enabled: false), title: "显示菜单栏"),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.hide.title", defaultValue: "隐藏菜单栏")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.show.title", defaultValue: "显示菜单栏")
+            ),
         ]
     }
 
@@ -175,12 +191,17 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAct
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
-            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = setMenuBarHidden(enabled)
-        let message = lastErrorMessage
+        let failureMessage = localization.string(
+            "error.toggleFailed",
+            defaultValue: "更新菜单栏失败。"
+        )
         return ActionExecutionHandle {
-            succeeded ? .succeeded() : .failed(message: message ?? "更新菜单栏失败。")
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
         }
     }
 

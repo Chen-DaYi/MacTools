@@ -81,7 +81,7 @@ final class ActionRunLinkServiceTests: XCTestCase {
         let unpublished = try makeService(reference: unpublishedReference, publish: false)
         XCTAssertEqual(
             unpublished.service.presentation(for: unpublishedReference),
-            .unavailable("此操作尚未发布到操作目录。")
+            .unavailable(FeatureL10n.string("此操作尚未发布到操作目录。"))
         )
         XCTAssertEqual(
             unpublished.service.resolve(.direct(unpublishedReference.key)),
@@ -103,7 +103,7 @@ final class ActionRunLinkServiceTests: XCTestCase {
         ))
         XCTAssertEqual(
             setup.service.presentation(for: reference),
-            .unavailable("操作提供方当前不可用。")
+            .unavailable(FeatureL10n.string("操作提供方当前不可用。"))
         )
         XCTAssertEqual(
             setup.service.resolve(.direct(reference.key)),

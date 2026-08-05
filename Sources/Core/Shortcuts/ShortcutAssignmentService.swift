@@ -11,7 +11,7 @@ enum ActionShortcutAssignmentError: Error, Equatable {
     var localizedDescription: String {
         switch self {
         case .unavailableAction:
-            return "操作不可用。"
+            return FeatureL10n.string("操作不可用。")
         case let .invalidBinding(error):
             return error.localizedDescription
         case let .conflict(ownerDescription):
@@ -19,7 +19,7 @@ enum ActionShortcutAssignmentError: Error, Equatable {
                 ownerDescription: ownerDescription
             ).localizedDescription
         case .persistenceFailed:
-            return "无法保存快捷键。"
+            return FeatureL10n.string("无法保存快捷键。")
         }
     }
 }
@@ -260,7 +260,7 @@ final class ShortcutAssignmentService {
             }
             guard case let .success(action) = registry.registeredAction(for: record.reference),
                   action.catalogEntry != nil else {
-                states[record.id] = .unavailable(reason: "操作不可用。")
+                states[record.id] = .unavailable(reason: FeatureL10n.string("操作不可用。"))
                 continue
             }
             let availability = registry.availability(for: record.reference)

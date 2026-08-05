@@ -247,7 +247,7 @@ final class ActionRegistry: ObservableObject {
     func availability(for reference: ActionReference) -> ActionAvailability {
         guard case .success = registeredAction(for: reference),
               let provider = providers[reference.key.providerID] else {
-            return .unavailable("操作不可用。")
+            return .unavailable(FeatureL10n.string("操作不可用。"))
         }
         return provider.registration.availability(reference)
     }

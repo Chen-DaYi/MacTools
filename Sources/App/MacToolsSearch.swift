@@ -487,7 +487,10 @@ enum MacToolsSearchIndexBuilder {
             let permissionTitles = pluginHost.actionPermissionTitles(for: entry.reference)
             let permissionSummary = permissionTitles.isEmpty
                 ? nil
-                : "所需权限：\(permissionTitles.joined(separator: "、"))"
+                : FeatureL10n.format(
+                    "所需权限：%@",
+                    FeatureL10n.joined(permissionTitles)
+                )
             let detail = [action.definition.description, permissionSummary, availability.reason]
                 .compactMap { $0 }
                 .filter { !$0.isEmpty }

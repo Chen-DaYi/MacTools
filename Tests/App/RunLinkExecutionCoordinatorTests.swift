@@ -5,6 +5,21 @@ import XCTest
 
 @MainActor
 final class RunLinkExecutionCoordinatorTests: XCTestCase {
+    private let preferenceKey = PluginRuntimeLocalization.preferenceUserDefaultsKey
+    private var originalPreference: String?
+
+    override func setUp() {
+        super.setUp()
+        originalPreference = UserDefaults.standard.string(forKey: preferenceKey)
+        PluginRuntimeLocalization.source.setPreference("en")
+    }
+
+    override func tearDown() {
+        PluginRuntimeLocalization.source.setPreference(originalPreference)
+        originalPreference = nil
+        super.tearDown()
+    }
+
     func testSuccessfulInvocationUsesExecutorAndPresentsSanitizedFeedback() async throws {
         let setup = try makeSetup()
         setup.provider.operation = { .succeeded(message: "private provider detail") }
@@ -17,8 +32,8 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
             [
                 RunLinkExecutionFeedback(
                     tone: .success,
-                    title: "操作已完成",
-                    message: "运行链接执行成功。"
+                    title: "Action Completed",
+                    message: "Run Link executed successfully."
                 ),
             ]
         )
@@ -36,8 +51,8 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(denied.confirmation.requests.count, 1)
         XCTAssertEqual(denied.provider.beginCount, 0)
-        XCTAssertEqual(denied.feedback.values.last?.title, "无法执行操作")
-        XCTAssertEqual(denied.feedback.values.last?.message, "用户取消了操作。")
+        XCTAssertEqual(denied.feedback.values.last?.title, "The action could not start.")
+        XCTAssertEqual(denied.feedback.values.last?.message, "The action was cancelled.")
     }
 
     func testUnknownDisallowedAndProviderFailureNeverExposeProviderDetails() async throws {
@@ -51,8 +66,8 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(setup.feedback.values.count, 2)
         XCTAssertFalse(setup.feedback.values.map(\.message).joined().contains("secret-token-123"))
-        XCTAssertEqual(setup.feedback.values[0].message, "操作未能完成。")
-        XCTAssertEqual(setup.feedback.values[1].title, "运行链接不可用")
+        XCTAssertEqual(setup.feedback.values[0].message, "The action could not be completed.")
+        XCTAssertEqual(setup.feedback.values[1].title, "Run Link Unavailable")
     }
 
     func testClipboardUsesIsolatedPasteboard() {
@@ -72,17 +87,17 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
         defer { presenter.dismiss() }
 
         presenter.present(
-            RunLinkExecutionFeedback(tone: .success, title: "完成", message: "操作成功。")
+            RunLinkExecutionFeedback(tone: .success, title: "Done", message: "Action succeeded.")
         )
         presenter.present(
-            RunLinkExecutionFeedback(tone: .failure, title: "失败", message: "操作不可用。")
+            RunLinkExecutionFeedback(tone: .failure, title: "Failed", message: "Action unavailable.")
         )
 
         let panels = NSApp.windows.filter {
             $0.identifier == SystemRunLinkFeedbackPresenter.panelIdentifier && $0.isVisible
         }
         XCTAssertEqual(panels.count, 1)
-        XCTAssertEqual(panels.first?.accessibilityLabel(), "失败，操作不可用。")
+        XCTAssertEqual(panels.first?.accessibilityLabel(), "Failed and Action unavailable.")
     }
 
     private struct Setup {

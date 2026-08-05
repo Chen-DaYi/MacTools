@@ -5,6 +5,88 @@ import XCTest
 
 @MainActor
 final class AutomationControllerTests: XCTestCase {
+    func testRuleSummariesUseCompleteMessagesAcrossLocales() {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(originalPreference) }
+        let calendar = AutomationTrigger.calendar(
+            CalendarAutomationTrigger(phase: .starts)
+        )
+        let display = AutomationTrigger.display(
+            DisplayAutomationTrigger(event: .disconnected)
+        )
+        let expectations: [(String, String, String)] = [
+            (
+                "en",
+                "When Calendar event starts · Run Demo",
+                "When Display disconnected and conditions match (2) · Run Demo"
+            ),
+            (
+                "de",
+                "Wenn Kalenderereignis beginnt · Demo ausführen",
+                "Wenn Monitor getrennt und Bedingungen erfüllt sind (2) · Demo ausführen"
+            ),
+            (
+                "ar",
+                "عند بدء حدث التقويم · تشغيل Demo",
+                "عند قطع اتصال الشاشة مع استيفاء الشروط (2) · تشغيل Demo"
+            ),
+        ]
+
+        for (language, calendarSummary, displaySummary) in expectations {
+            PluginRuntimeLocalization.source.setPreference(language)
+            XCTAssertEqual(
+                withoutBidirectionalIsolation(AutomationRuleSummaryFormatter.summary(
+                    trigger: calendar,
+                    conditionCount: 0,
+                    workflowName: "Demo"
+                )),
+                calendarSummary
+            )
+            XCTAssertEqual(
+                withoutBidirectionalIsolation(AutomationRuleSummaryFormatter.summary(
+                    trigger: display,
+                    conditionCount: 2,
+                    workflowName: "Demo"
+                )),
+                displaySummary
+            )
+        }
+    }
+
+    private func withoutBidirectionalIsolation(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\u{2068}", with: "")
+            .replacingOccurrences(of: "\u{2069}", with: "")
+    }
+
+    func testExistingErrorRelocalizesOnSameControllerInstance() throws {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(originalPreference) }
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let controller = AutomationController(
+            store: WorkflowStore(userDefaults: defaults),
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+
+        PluginRuntimeLocalization.source.setPreference("zh-Hans")
+        controller.renameWorkflow(id: UUID(), name: "Missing")
+        XCTAssertEqual(controller.lastErrorMessage, "找不到工作流。")
+
+        PluginRuntimeLocalization.source.setPreference("en")
+        XCTAssertEqual(controller.lastErrorMessage, "The workflow could not be found.")
+
+        PluginRuntimeLocalization.source.setPreference("ar")
+        XCTAssertEqual(controller.lastErrorMessage, "لا يمكن العثور على سير العمل.")
+    }
+
     func testEnabledWorkflowPublishesStableOrdinaryActionAndDisabledWorkflowDisappears() throws {
         let suite = "AutomationControllerTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

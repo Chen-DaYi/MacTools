@@ -61,7 +61,7 @@ final class WorkflowRunner {
         let actionHandle = ActionExecutionHandle(
             operation: { [weak self] in
                 guard let self else {
-                    return .failed(message: "工作流运行器不可用。")
+                    return .failed(message: FeatureL10n.string("工作流运行器不可用。"))
                 }
                 return await self.execute(
                     runID: runID,
@@ -94,7 +94,7 @@ final class WorkflowRunner {
             executionHandles.removeValue(forKey: runID)
         }
         guard let workflow = store.workflow(id: workflowID) else {
-            return .failed(message: "找不到工作流。")
+            return .failed(message: FeatureL10n.string("找不到工作流。"))
         }
         let stack = WorkflowExecutionContext.workflowStack
         if stack.contains(workflowID) {
@@ -102,18 +102,18 @@ final class WorkflowRunner {
                 runID: runID,
                 workflow: workflow,
                 source: source,
-                summary: "检测到递归工作流调用。"
+                summaryLocalizationKey: .recursiveInvocation
             )
-            return .failed(message: "检测到递归工作流调用。")
+            return .failed(message: FeatureL10n.string("检测到递归工作流调用。"))
         }
         if stack.count >= Self.maximumExecutionDepth {
             recordRejectedRun(
                 runID: runID,
                 workflow: workflow,
                 source: source,
-                summary: "工作流嵌套层级已达上限。"
+                summaryLocalizationKey: .maximumDepthExceeded
             )
-            return .failed(message: "工作流嵌套层级已达上限。")
+            return .failed(message: FeatureL10n.string("工作流嵌套层级已达上限。"))
         }
 
         return await WorkflowExecutionContext.$workflowStack.withValue(stack + [workflowID]) {
@@ -156,7 +156,7 @@ final class WorkflowRunner {
                     remainingSteps: workflow.steps.dropFirst(index + 1),
                     to: &run
                 )
-                finish(&run, status: .cancelled, summary: "工作流已取消。")
+                finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
                 return .cancelled
             }
 
@@ -169,7 +169,7 @@ final class WorkflowRunner {
                         remainingSteps: workflow.steps.dropFirst(index + 1),
                         to: &run
                     )
-                    finish(&run, status: .cancelled, summary: "工作流已取消。")
+                    finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
                     return .cancelled
                 }
             }
@@ -184,7 +184,7 @@ final class WorkflowRunner {
                     for: originalStep,
                     startedAt: stepStart,
                     status: .unavailable,
-                    message: "操作版本不可用。"
+                    messageLocalizationKey: .actionVersionUnavailable
                 )
                 run.stepResults.append(result)
                 _ = store.record(run)
@@ -192,8 +192,8 @@ final class WorkflowRunner {
                 hadFailure = true
                 if originalStep.errorPolicy == .stop {
                     appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
-                    finish(&run, status: .failed, summary: "必需操作不可用。")
-                    return .failed(message: "必需操作不可用。")
+                    finish(&run, status: .failed, summaryLocalizationKey: .requiredActionUnavailable)
+                    return .failed(message: FeatureL10n.string("必需操作不可用。"))
                 }
                 continue
             }
@@ -216,23 +216,23 @@ final class WorkflowRunner {
                 continue
             case .cancelled:
                 appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
-                finish(&run, status: .cancelled, summary: "工作流已取消。")
+                finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
                 return .cancelled
             case .failed, .timedOut, .unavailable, .skipped:
                 hadFailure = true
                 if originalStep.errorPolicy == .stop {
                     appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
-                    finish(&run, status: .failed, summary: "工作流在失败步骤处停止。")
-                    return .failed(message: "工作流在失败步骤处停止。")
+                    finish(&run, status: .failed, summaryLocalizationKey: .stoppedAtFailedStep)
+                    return .failed(message: FeatureL10n.string("工作流在失败步骤处停止。"))
                 }
             }
         }
 
         if hadFailure {
-            finish(&run, status: .failed, summary: "工作流已完成，但部分步骤失败。")
-            return .failed(message: "部分步骤失败。")
+            finish(&run, status: .failed, summaryLocalizationKey: .completedWithFailures)
+            return .failed(message: FeatureL10n.string("部分步骤失败。"))
         }
-        finish(&run, status: .succeeded, summary: "工作流已完成。")
+        finish(&run, status: .succeeded, summaryLocalizationKey: .completed)
         return .succeeded()
     }
 
@@ -261,21 +261,21 @@ final class WorkflowRunner {
                 for: step,
                 startedAt: startedAt,
                 status: .failed,
-                message: "操作未能完成。"
+                messageLocalizationKey: .actionFailed
             )
         case .completed(.cancelled):
             return stepResult(
                 for: step,
                 startedAt: startedAt,
                 status: .cancelled,
-                message: "操作已取消。"
+                messageLocalizationKey: .actionCancelled
             )
         case .rejected(.executionTimedOut), .rejected(.confirmationTimedOut):
             return stepResult(
                 for: step,
                 startedAt: startedAt,
                 status: .timedOut,
-                message: "操作超时。"
+                messageLocalizationKey: .actionTimedOut
             )
         case .rejected(.unknownAction), .rejected(.unavailable),
              .rejected(.backgroundExecutionUnsupported),
@@ -286,14 +286,14 @@ final class WorkflowRunner {
                 for: step,
                 startedAt: startedAt,
                 status: .unavailable,
-                message: "操作当前不可用。"
+                messageLocalizationKey: .actionUnavailable
             )
         case .rejected:
             return stepResult(
                 for: step,
                 startedAt: startedAt,
                 status: .failed,
-                message: "操作未能开始。"
+                messageLocalizationKey: .actionDidNotStart
             )
         }
     }
@@ -302,22 +302,37 @@ final class WorkflowRunner {
         for step: WorkflowStep,
         startedAt: Date?,
         status: WorkflowStepRunStatus,
-        message: String? = nil
+        message: String? = nil,
+        messageLocalizationKey: WorkflowHistoryLocalizationKey? = nil
     ) -> WorkflowStepRunResult {
         WorkflowStepRunResult(
             stepID: step.id,
             actionKey: step.reference.key,
             title: step.label?.isEmpty == false ? step.label! : actionTitle(for: step.reference),
+            titleSource: step.label?.isEmpty == false ? .custom : .action,
+            actionReference: ActionReference(
+                key: step.reference.key,
+                schemaVersion: step.reference.schemaVersion
+            ),
             startedAt: startedAt,
             finishedAt: now(),
             status: status,
-            message: message
+            message: message,
+            messageLocalizationKey: messageLocalizationKey
         )
     }
 
     private func actionTitle(for reference: ActionReference) -> String {
         guard case let .success(action) = registry.registeredAction(for: reference) else {
             return reference.key.id
+        }
+        let parametersByID = Dictionary(
+            uniqueKeysWithValues: action.definition.parameters.map { ($0.id, $0) }
+        )
+        if reference.parameters.entries.contains(where: {
+            parametersByID[$0.name]?.privacy == .sensitive
+        }) {
+            return action.definition.title
         }
         return action.catalogEntry?.title ?? action.definition.title
     }
@@ -332,7 +347,7 @@ final class WorkflowRunner {
                 for: currentStep,
                 startedAt: nil,
                 status: .cancelled,
-                message: "工作流已取消。"
+                messageLocalizationKey: .workflowCancelled
             )
         )
         appendSkipped(remainingSteps, to: &run)
@@ -348,7 +363,7 @@ final class WorkflowRunner {
                     for: step,
                     startedAt: nil,
                     status: .skipped,
-                    message: "未执行。"
+                    messageLocalizationKey: .notRun
                 )
             )
         }
@@ -357,11 +372,12 @@ final class WorkflowRunner {
     private func finish(
         _ run: inout WorkflowRun,
         status: WorkflowRunStatus,
-        summary: String
+        summaryLocalizationKey: WorkflowHistoryLocalizationKey
     ) {
         run.status = status
         run.finishedAt = now()
-        run.summary = summary
+        run.summary = summaryLocalizationKey.localizedText
+        run.summaryLocalizationKey = summaryLocalizationKey
         _ = store.record(run)
         onRunChange?()
     }
@@ -370,7 +386,7 @@ final class WorkflowRunner {
         runID: UUID,
         workflow: WorkflowDefinition,
         source: WorkflowRunSource,
-        summary: String
+        summaryLocalizationKey: WorkflowHistoryLocalizationKey
     ) {
         let timestamp = now()
         _ = store.record(
@@ -382,7 +398,7 @@ final class WorkflowRunner {
                 startedAt: timestamp,
                 finishedAt: timestamp,
                 status: .failed,
-                summary: summary
+                summaryLocalizationKey: summaryLocalizationKey
             )
         )
         onRunChange?()

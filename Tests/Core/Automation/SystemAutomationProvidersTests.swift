@@ -1,7 +1,32 @@
+import MacToolsPluginKit
 import XCTest
 @testable import MacTools
 
 final class SystemAutomationProvidersTests: XCTestCase {
+    @MainActor
+    func testPowerProviderFailureRelocalizesOnSameInstance() {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(originalPreference) }
+        let provider = SystemPowerAutomationTriggerProvider(
+            notificationSourceFactory: { _ in nil }
+        )
+        provider.start { _ in }
+
+        PluginRuntimeLocalization.source.setPreference("en")
+        XCTAssertEqual(
+            provider.availability,
+            .unavailable("Unable to monitor power status.")
+        )
+
+        PluginRuntimeLocalization.source.setPreference("ar")
+        XCTAssertEqual(
+            provider.availability,
+            .unavailable("غير قادر على مراقبة حالة الطاقة.")
+        )
+    }
+
     func testScheduleFindsNextConfiguredWeekdayWithoutCatchUp() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))

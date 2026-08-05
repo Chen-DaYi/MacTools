@@ -68,7 +68,7 @@ final class SystemRunLinkFeedbackPresenter: RunLinkFeedbackPresenting {
             ]
             self.panel = panel
         }
-        panel.setAccessibilityLabel("\(feedback.title)，\(feedback.message)")
+        panel.setAccessibilityLabel(FeatureL10n.joined([feedback.title, feedback.message]))
         panel.contentView = NSHostingView(
             rootView: RunLinkFeedbackView(feedback: feedback)
         )
@@ -129,7 +129,7 @@ private struct RunLinkFeedbackView: View {
                 )
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(feedback.title)，\(feedback.message)")
+        .accessibilityLabel(FeatureL10n.joined([feedback.title, feedback.message]))
     }
 }
 
@@ -152,7 +152,7 @@ final class AppActionConfirmationService: ActionConfirmationRequesting {
         alert.messageText = request.confirmation.title
         alert.informativeText = request.confirmation.message
         alert.addButton(withTitle: request.confirmation.confirmButtonTitle)
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: FeatureL10n.string("取消"))
         return await withCheckedContinuation { continuation in
             alert.beginSheetModal(for: window) { response in
                 continuation.resume(returning: response == .alertFirstButtonReturn)
@@ -192,7 +192,7 @@ final class RunLinkExecutionCoordinator {
             feedbackPresenter.present(
                 RunLinkExecutionFeedback(
                     tone: .failure,
-                    title: "运行链接不可用",
+                    title: FeatureL10n.string("运行链接不可用"),
                     message: message(for: error)
                 )
             )
@@ -203,8 +203,8 @@ final class RunLinkExecutionCoordinator {
             feedbackPresenter.present(
                 RunLinkExecutionFeedback(
                     tone: .failure,
-                    title: "运行链接不可用",
-                    message: "操作提供方当前不可用。"
+                    title: FeatureL10n.string("运行链接不可用"),
+                    message: FeatureL10n.string("操作提供方当前不可用。")
                 )
             )
             return
@@ -223,25 +223,25 @@ final class RunLinkExecutionCoordinator {
         case .completed(.succeeded):
             return RunLinkExecutionFeedback(
                 tone: .success,
-                title: "操作已完成",
-                message: "运行链接执行成功。"
+                title: FeatureL10n.string("操作已完成"),
+                message: FeatureL10n.string("运行链接执行成功。")
             )
         case .completed(.failed):
             return RunLinkExecutionFeedback(
                 tone: .failure,
-                title: "操作失败",
-                message: "操作未能完成。"
+                title: FeatureL10n.string("失败"),
+                message: FeatureL10n.string("操作未能完成。")
             )
         case .completed(.cancelled):
             return RunLinkExecutionFeedback(
                 tone: .failure,
-                title: "操作已取消",
-                message: "运行链接未完成。"
+                title: FeatureL10n.string("已取消"),
+                message: FeatureL10n.string("操作已取消。")
             )
         case let .rejected(rejection):
             return RunLinkExecutionFeedback(
                 tone: .failure,
-                title: "无法执行操作",
+                title: FeatureL10n.string("操作未能开始。"),
                 message: message(for: rejection)
             )
         }
@@ -250,40 +250,40 @@ final class RunLinkExecutionCoordinator {
     private func message(for error: ActionRunLinkResolutionError) -> String {
         switch error {
         case .unknownAction:
-            "找不到对应操作；请检查插件是否已安装并启用。"
+            FeatureL10n.string("找不到对应操作。")
         case .unavailablePreset:
-            "运行链接预设不存在或已删除。"
+            FeatureL10n.string("运行链接预设不可用。")
         case .parameterizedDirectAction:
-            "此操作需要使用已保存的运行链接预设。"
+            FeatureL10n.string("此操作需要使用已保存的运行链接预设。")
         case .externalInvocationUnavailable:
-            "此操作不允许从外部调用。"
+            FeatureL10n.string("此操作不允许从外部调用。")
         case .sensitiveParametersUnsupported:
-            "包含敏感参数的预设不能通过运行链接调用。"
+            FeatureL10n.string("包含敏感参数的预设不能通过运行链接调用。")
         }
     }
 
     private func message(for rejection: ActionExecutionRejection) -> String {
         switch rejection {
         case .unknownAction, .providerChanged:
-            "操作提供方已发生变化，请重试。"
+            FeatureL10n.string("操作提供方已发生变化，请重试。")
         case .invalidParameters:
-            "运行链接参数无效。"
+            FeatureL10n.string("运行链接参数无效。")
         case .providerFailure:
-            "操作提供方未能开始执行。"
+            FeatureL10n.string("操作未能开始。")
         case let .unavailable(reason):
-            reason ?? "操作当前不可用。"
+            reason ?? FeatureL10n.string("操作当前不可用。")
         case .backgroundExecutionUnsupported, .foregroundExecutionUnsupported:
-            "操作不支持当前执行方式。"
+            FeatureL10n.string("操作不支持当前执行方式。")
         case .externalInvocationUnavailable:
-            "此操作不允许从外部调用。"
+            FeatureL10n.string("此操作不允许从外部调用。")
         case .confirmationUnavailable:
-            "此操作需要确认，但无法显示确认界面。"
+            FeatureL10n.string("此操作需要确认，但无法显示确认界面。")
         case .confirmationDenied:
-            "用户取消了操作。"
+            FeatureL10n.string("操作已取消。")
         case .confirmationTimedOut:
-            "确认已超时。"
+            FeatureL10n.string("确认已超时。")
         case .executionTimedOut:
-            "操作执行超时。"
+            FeatureL10n.string("操作超时。")
         }
     }
 }

@@ -207,7 +207,10 @@ final class TranslatorPlugin:
                     "shortcut.selectTranslation.description",
                     defaultValue: "翻译当前选中的文本。"
                 ),
-                keywords: ["翻译", "选中文本", "划词"],
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "翻译"),
+                    localization.string("shortcut.selectTranslation.title", defaultValue: "划词翻译"),
+                ],
                 systemImage: "text.cursor",
                 externalInvocationPolicy: .allowed,
                 capabilities: [.foregroundInteractive]
@@ -222,7 +225,11 @@ final class TranslatorPlugin:
                     "shortcut.screenshotTranslation.description",
                     defaultValue: "框选截图区域并翻译识别出的文字。"
                 ),
-                keywords: ["翻译", "截图", "OCR"],
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "翻译"),
+                    localization.string("shortcut.screenshotTranslation.title", defaultValue: "截图翻译"),
+                    "OCR",
+                ],
                 systemImage: "viewfinder",
                 externalInvocationPolicy: .allowed,
                 capabilities: [.foregroundInteractive]
@@ -267,19 +274,34 @@ final class TranslatorPlugin:
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         guard isShortcutEnabled else {
-            return .unavailable("翻译快捷键已暂停。")
+            return .unavailable(
+                localization.string(
+                    "action.unavailable.paused",
+                    defaultValue: "翻译快捷键已暂停。"
+                )
+            )
         }
         switch reference.key.actionID {
         case TranslatorConstants.ActionID.selectTranslation:
             return accessibilityTrustProvider()
                 ? .available
-                : .unavailable("需要辅助功能授权。")
+                : .unavailable(
+                    localization.string(
+                        "action.unavailable.accessibility",
+                        defaultValue: "需要辅助功能授权。"
+                    )
+                )
         case TranslatorConstants.ActionID.screenshotTranslation:
             return screenRecordingPermissionProvider()
                 ? .available
-                : .unavailable("需要屏幕录制授权。")
+                : .unavailable(
+                    localization.string(
+                        "action.unavailable.screenRecording",
+                        defaultValue: "需要屏幕录制授权。"
+                    )
+                )
         default:
-            return .unavailable("操作不可用。")
+            return .unavailable(PluginKitLocalization.actionUnavailable)
         }
     }
 

@@ -53,7 +53,7 @@ final class AutomationRuleEvaluatorTests: XCTestCase {
         failing[2] = .connectedDisplay(ConnectedDisplayCondition(displayIdentifier: "missing"))
         let result = evaluator.evaluate(conditions: failing, snapshot: snapshot)
         XCTAssertFalse(result.isSatisfied)
-        XCTAssertEqual(result.reason, "指定显示器未连接。")
+        XCTAssertEqual(result.reason, FeatureL10n.string("指定显示器未连接。"))
     }
 
     func testOvernightTimeRangeIncludesBothSidesOfMidnight() throws {

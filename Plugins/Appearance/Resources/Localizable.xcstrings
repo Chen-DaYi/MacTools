@@ -1,6 +1,164 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "error.toggleFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر تبديل مظهر النظام." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Das Systemerscheinungsbild konnte nicht gewechselt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Failed to switch the system appearance." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudo cambiar la apariencia del sistema." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de changer l’apparence du système." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "システムの外観を切り替えられませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "시스템 모양을 전환할 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível alternar a aparência do sistema." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось изменить оформление системы." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "切换系统外观失败。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "切換系統外觀失敗。" } }
+      }
+    },
+    "action.enableDark.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تشغيل الوضع الداكن"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dunkelmodus aktivieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn On Dark Mode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar modo oscuro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer le mode sombre"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダークモードにする"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다크 모드 켜기"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativar modo escuro"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить темный режим"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用深色模式"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用深色模式"
+          }
+        }
+      }
+    },
+    "action.enableLight.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تشغيل الوضع الفاتح"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hellen Modus aktivieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn On Light Mode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar modo claro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer le mode clair"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライトモードにする"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "라이트 모드 켜기"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativar modo claro"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить светлый режим"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用浅色模式"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用淺色模式"
+          }
+        }
+      }
+    },
     "metadata.title": {
       "extractionState": "manual",
       "localizations": {

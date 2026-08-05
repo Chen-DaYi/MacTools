@@ -67,7 +67,7 @@ final class WorkflowStore {
     }
 
     @discardableResult
-    func create(name: String = "新建工作流") -> Result<WorkflowDefinition, WorkflowStoreError> {
+    func create(name: String = FeatureL10n.string("新建工作流")) -> Result<WorkflowDefinition, WorkflowStoreError> {
         var stored = workflows()
         guard stored.count < Self.maximumWorkflowCount else {
             return .failure(.maximumWorkflowCountReached)
@@ -116,7 +116,7 @@ final class WorkflowStore {
         }
         var copy = WorkflowDefinition(
             name: byteLimited(
-                source.name + " 副本",
+                source.name + FeatureL10n.string(" 副本"),
                 maximumByteCount: WorkflowDefinition.maximumNameByteCount
             ),
             systemImage: source.systemImage,
@@ -225,10 +225,14 @@ final class WorkflowStore {
                 return []
             }
             historyLoadError = nil
-            if let workflowID {
-                return envelope.runs.filter { $0.workflowID == workflowID }
+            let runs = migrateLegacyHistory(envelope.runs)
+            if runs != envelope.runs {
+                _ = replaceHistory(runs)
             }
-            return envelope.runs
+            if let workflowID {
+                return runs.filter { $0.workflowID == workflowID }
+            }
+            return runs
         } catch {
             historyLoadError = "invalid-history-payload"
             return []
@@ -237,9 +241,10 @@ final class WorkflowStore {
 
     @discardableResult
     func record(_ run: WorkflowRun) -> Bool {
+        let sanitizedRun = migrateLegacyHistory([run])[0]
         var runs = history()
-        runs.removeAll { $0.id == run.id }
-        runs.insert(run, at: 0)
+        runs.removeAll { $0.id == sanitizedRun.id }
+        runs.insert(sanitizedRun, at: 0)
         if runs.count > Self.maximumHistoryCount {
             runs.removeLast(runs.count - Self.maximumHistoryCount)
         }
@@ -330,12 +335,65 @@ final class WorkflowStore {
         for index in runs.indices where runs[index].status == .running {
             runs[index].status = .interrupted
             runs[index].finishedAt = .now
-            runs[index].summary = "MacTools 上次退出时，工作流仍在运行。"
+            runs[index].summaryLocalizationKey = .interruptedByExit
+            runs[index].summary = WorkflowHistoryLocalizationKey.interruptedByExit.localizedText
             changed = true
         }
         if changed {
             _ = replaceHistory(runs)
         }
+    }
+
+    private func migrateLegacyHistory(_ storedRuns: [WorkflowRun]) -> [WorkflowRun] {
+        let currentStepsByWorkflowID = Dictionary(
+            uniqueKeysWithValues: workflows().map { workflow in
+                (
+                    workflow.id,
+                    Dictionary(uniqueKeysWithValues: workflow.steps.map { ($0.id, $0) })
+                )
+            }
+        )
+        var runs = storedRuns
+        for runIndex in runs.indices {
+            if runs[runIndex].summaryLocalizationKey == nil,
+               let summary = runs[runIndex].summary,
+               let key = WorkflowHistoryLocalizationKey(rawValue: summary) {
+                runs[runIndex].summaryLocalizationKey = key
+            }
+            for resultIndex in runs[runIndex].stepResults.indices {
+                let currentStep = currentStepsByWorkflowID[runs[runIndex].workflowID]?[
+                    runs[runIndex].stepResults[resultIndex].stepID
+                ]
+                let currentLabel = currentStep?.label
+                runs[runIndex].stepResults[resultIndex].titleSource =
+                    currentLabel?.isEmpty == false
+                        && runs[runIndex].stepResults[resultIndex].title == currentLabel
+                            ? .custom
+                            : .action
+                let existingReference = runs[runIndex].stepResults[resultIndex].actionReference
+                let presentationReference = ActionReference(
+                    key: runs[runIndex].stepResults[resultIndex].actionKey,
+                    schemaVersion: existingReference?.schemaVersion
+                        ?? currentStep?.reference.schemaVersion
+                        ?? 1
+                )
+                if existingReference != presentationReference {
+                    runs[runIndex].stepResults[resultIndex].actionReference = presentationReference
+                }
+                if runs[runIndex].stepResults[resultIndex].titleSource == .action,
+                   runs[runIndex].stepResults[resultIndex].title
+                    != runs[runIndex].stepResults[resultIndex].actionKey.id {
+                    runs[runIndex].stepResults[resultIndex].title =
+                        runs[runIndex].stepResults[resultIndex].actionKey.id
+                }
+                if runs[runIndex].stepResults[resultIndex].messageLocalizationKey == nil,
+                   let message = runs[runIndex].stepResults[resultIndex].message,
+                   let key = WorkflowHistoryLocalizationKey(rawValue: message) {
+                    runs[runIndex].stepResults[resultIndex].messageLocalizationKey = key
+                }
+            }
+        }
+        return runs
     }
 
     private func validate(_ workflows: [WorkflowDefinition]) -> String? {

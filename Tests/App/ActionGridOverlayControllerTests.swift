@@ -4,6 +4,21 @@ import XCTest
 
 @MainActor
 final class ActionGridOverlayControllerTests: XCTestCase {
+    private let preferenceKey = PluginRuntimeLocalization.preferenceUserDefaultsKey
+    private var originalPreference: String?
+
+    override func setUp() {
+        super.setUp()
+        originalPreference = UserDefaults.standard.string(forKey: preferenceKey)
+        PluginRuntimeLocalization.source.setPreference("en")
+    }
+
+    override func tearDown() {
+        PluginRuntimeLocalization.source.setPreference(originalPreference)
+        originalPreference = nil
+        super.tearDown()
+    }
+
     func testGeometryClampsGridToPointerDisplayVisibleFrame() {
         let visible = CGRect(x: 1_000, y: 200, width: 700, height: 500)
         let frame = ActionGridOverlayGeometry.targetFrame(
@@ -49,8 +64,8 @@ final class ActionGridOverlayControllerTests: XCTestCase {
             availability: .unavailable("需要权限。")
         )
 
-        XCTAssertEqual(available.accessibilityLabel, "运行，测试插件，可用")
-        XCTAssertEqual(unavailable.accessibilityLabel, "运行，测试插件，需要权限。")
+        XCTAssertEqual(available.accessibilityLabel, "运行, 测试插件, and Available")
+        XCTAssertEqual(unavailable.accessibilityLabel, "运行, 测试插件, and 需要权限。")
     }
 
     func testRepeatedPresentationReusesOneOverlayPanel() throws {
@@ -144,6 +159,42 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
         XCTAssertFalse(reduced.animatesSelection)
         XCTAssertFalse(reduced.usesMaterialBackground)
+    }
+
+    func testOverlayRootUsesSelectedLocaleDirection() {
+        XCTAssertEqual(
+            ActionGridOverlayRootView.layoutDirection(for: Locale(identifier: "ar")),
+            .rightToLeft
+        )
+        XCTAssertEqual(
+            ActionGridOverlayRootView.layoutDirection(for: Locale(identifier: "de")),
+            .leftToRight
+        )
+    }
+
+    func testModelReresolvesVisibleEntriesAfterRuntimeLanguageChange() {
+        let reference = ActionReference(key: ActionKey(providerID: "provider", actionID: "run"))
+        var title = "English"
+        let model = ActionGridOverlayModel(
+            resolver: { entry in
+                ResolvedActionGridEntry(
+                    id: entry.id,
+                    reference: entry.reference,
+                    title: title,
+                    ownerTitle: "Owner",
+                    systemImage: "bolt",
+                    availability: .available
+                )
+            },
+            executor: { _ in .completed(.succeeded()) }
+        )
+        model.update([ActionGridPresentationEntry(id: "entry", reference: reference)])
+        XCTAssertEqual(model.entries.first?.title, "English")
+
+        title = "العربية"
+        model.refreshLocalization()
+
+        XCTAssertEqual(model.entries.first?.title, "العربية")
     }
 
     func testUnavailableEntryKeepsGridOpenAndSuccessfulExecutionRequestsDismissal() async {

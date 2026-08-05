@@ -176,7 +176,108 @@ final class PluginHostActionRegistryTests: XCTestCase {
             host.actionShortcutCatalogItems.first(where: {
                 $0.reference.key == plugin.definition.key
             })?.permissionSummary,
-            "所需权限：测试权限"
+            FeatureL10n.format("所需权限：%@", "测试权限")
+        )
+    }
+
+    func testPermissionSummaryUsesSelectedRuntimeLocaleForMultiplePermissions() {
+        let original = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(original) }
+        PluginRuntimeLocalization.source.setPreference("de")
+        let plugin = NativeActionTestPlugin()
+        plugin.permissionTitles = ["Kamera", "Mikrofon"]
+        let host = makePluginHostForTests(plugins: [plugin])
+
+        XCTAssertEqual(
+            host.actionShortcutCatalogItems.first(where: {
+                $0.reference.key == plugin.definition.key
+            })?.permissionSummary,
+            FeatureL10n.format(
+                "所需权限：%@",
+                FeatureL10n.joined(plugin.permissionTitles)
+            )
+        )
+        XCTAssertTrue(
+            host.actionShortcutCatalogItems.first(where: {
+                $0.reference.key == plugin.definition.key
+            })?.permissionSummary?.contains("und") == true
+        )
+    }
+
+    func testDynamicActionMetadataSwitchesLanguageWithoutReloadingPlugin() async throws {
+        let original = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(original) }
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        let defaultsSuite = "PluginHostActionRegistryTests.metadata.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsSuite))
+        defer { defaults.removePersistentDomain(forName: defaultsSuite) }
+        let sourcePackage = temporaryRoot
+            .appendingPathComponent("Source", isDirectory: true)
+            .appendingPathComponent("runtime-localized-action", isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        let bundleRelativePath = "RuntimeLocalizedAction.bundle"
+        try FileManager.default.createDirectory(
+            at: sourcePackage.appendingPathComponent(bundleRelativePath, isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let manifest = PluginPackageManifest(
+            id: RuntimeLocalizedActionTestPlugin.providerID,
+            displayName: "Runtime Localized Action",
+            version: "1.0.0",
+            minHostVersion: "0.1.0",
+            bundleRelativePath: bundleRelativePath,
+            localizedMetadata: [
+                "en": PluginLocalizedMetadata(
+                    displayName: "Runtime Action",
+                    summary: "Switch a test state."
+                ),
+                "ar": PluginLocalizedMetadata(
+                    displayName: "إجراء وقت التشغيل",
+                    summary: "بدّل حالة اختبار."
+                ),
+            ]
+        )
+        try JSONEncoder().encode(manifest).write(
+            to: sourcePackage.appendingPathComponent("plugin.json")
+        )
+        let store = PluginPackageStore(
+            rootDirectory: temporaryRoot.appendingPathComponent("Store", isDirectory: true),
+            userDefaults: defaults,
+            hostVersion: "1.0.0"
+        )
+        _ = try store.installPackage(from: sourcePackage)
+        let plugin = RuntimeLocalizedActionTestPlugin()
+        let loader = PluginHostDynamicTestLoader(plugin: plugin)
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
+
+        PluginRuntimeLocalization.source.setPreference("en")
+        let host = makePluginHostForTests(
+            plugins: [],
+            dynamicPluginManager: manager
+        )
+        let reference = ActionReference(key: plugin.actionKey)
+        XCTAssertEqual(host.actionSurfaceOwnerTitle(providerID: plugin.metadata.id), "Runtime Action")
+        XCTAssertEqual(
+            host.actionShortcutCatalogItems.first(where: { $0.reference == reference })?.description,
+            "Switch a test state."
+        )
+
+        PluginRuntimeLocalization.source.setPreference("ar")
+        for _ in 0 ..< 20 where host.localizationRevision == 0 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(loader.loadCount, 1)
+        XCTAssertEqual(host.actionSurfaceOwnerTitle(providerID: plugin.metadata.id), "إجراء وقت التشغيل")
+        XCTAssertEqual(
+            host.actionShortcutCatalogItems.first(where: { $0.reference == reference })?.description,
+            "بدّل حالة اختبار."
         )
     }
 
@@ -324,11 +425,88 @@ final class PluginHostActionRegistryTests: XCTestCase {
         )
 
         XCTAssertEqual(item.bindingText, ShortcutFormatter.displayString(for: binding))
-        XCTAssertEqual(item.status, .unavailable("操作不可用。"))
+        XCTAssertEqual(item.status, .unavailable(FeatureL10n.string("操作不可用。")))
         XCTAssertFalse(item.canAssign)
         XCTAssertEqual(
             reloadedHost.shortcutAssignmentService.assignment(for: reference)?.binding,
             binding
+        )
+    }
+
+    func testShortcutRunLinkWorkflowAndRuleSurviveIsolatedHostRelaunch() async throws {
+        let suiteName = "PluginHostActionRegistryTests.integration.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let firstPlugin = ParameterizedActionTestPlugin()
+        let firstManager = GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        let firstHost = makeIsolatedHost(
+            plugin: firstPlugin,
+            defaults: defaults,
+            shortcutManager: firstManager
+        )
+        let reference = try firstPlugin.reference(target: "display-1")
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_3),
+            modifiers: [.control, .command]
+        )
+
+        XCTAssertEqual(firstHost.setActionShortcutBinding(binding, to: reference), .success)
+        let runLink = try firstHost.createActionRunLink(for: reference).get()
+        let workflow = try XCTUnwrap(firstHost.automationController.createWorkflow())
+        firstHost.automationController.addStep(workflowID: workflow.id, reference: reference)
+        let rule = try XCTUnwrap(
+            firstHost.automationController.createRule(workflowID: workflow.id)
+        )
+
+        let secondPlugin = ParameterizedActionTestPlugin()
+        let secondManager = GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        let secondHost = makeIsolatedHost(
+            plugin: secondPlugin,
+            defaults: defaults,
+            shortcutManager: secondManager
+        )
+
+        XCTAssertEqual(
+            secondHost.shortcutAssignmentService.assignment(for: reference)?.binding,
+            binding
+        )
+        XCTAssertEqual(
+            secondHost.automationController.workflows.first(where: { $0.id == workflow.id })?.steps.map(\.reference),
+            [reference]
+        )
+        XCTAssertEqual(
+            secondHost.automationController.rules(workflowID: workflow.id).map(\.id),
+            [rule.id]
+        )
+        guard case let .available(reloadedRunLink, presetID) = secondHost.actionRunLinkPresentation(
+            for: reference
+        ) else {
+            return XCTFail("Expected the Run Link preset to survive relaunch")
+        }
+        XCTAssertEqual(reloadedRunLink, runLink)
+        XCTAssertNotNil(presetID)
+
+        let outcome = await secondHost.actionExecutor.execute(
+            ActionInvocation(reference: reference, source: .test, mode: .foreground)
+        )
+        XCTAssertEqual(outcome, .completed(.succeeded()))
+        XCTAssertEqual(secondPlugin.invocations.map(\.reference), [reference])
+    }
+
+    private func makeIsolatedHost(
+        plugin: any MacToolsPlugin,
+        defaults: UserDefaults,
+        shortcutManager: GlobalShortcutManager
+    ) -> PluginHost {
+        PluginHost(
+            plugins: [plugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: shortcutManager,
+            loadDynamicPluginsOnInit: false,
+            actionURLScheme: "mactools-tests"
         )
     }
 
@@ -373,19 +551,20 @@ private final class NativeActionTestPlugin:
     var availability: ActionAvailability = .available
     var beginCount = 0
     var summarizedReference: ActionReference?
+    var permissionTitles = ["测试权限"]
     var operation: @MainActor @Sendable () async -> ActionExecutionResult = {
         .succeeded(message: "native")
     }
 
     var permissionRequirements: [PluginPermissionRequirement] {
-        [
+        permissionTitles.enumerated().map { index, title in
             PluginPermissionRequirement(
-                id: "test-permission",
+                id: "test-permission-\(index)",
                 kind: .accessibility,
-                title: "测试权限",
+                title: title,
                 description: "测试操作所需权限"
-            ),
-        ]
+            )
+        }
     }
 
     let definition = ActionDefinition(
@@ -423,7 +602,61 @@ private final class NativeActionTestPlugin:
     }
 
     func permissionRequirementIDs(for actionKey: ActionKey) -> [String] {
-        actionKey == definition.key ? ["test-permission"] : []
+        actionKey == definition.key
+            ? permissionTitles.indices.map { "test-permission-\($0)" }
+            : []
+    }
+}
+
+@MainActor
+private final class RuntimeLocalizedActionTestPlugin: MacToolsPlugin, PluginActionProviding {
+    static let providerID = "runtime-localized-action"
+
+    let metadata = PluginMetadata(
+        id: providerID,
+        title: "Stale Construction Title",
+        iconName: "globe",
+        iconTint: .blue,
+        order: 1,
+        defaultDescription: "Stale construction description"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var actionKey: ActionKey { ActionKey(providerID: Self.providerID, actionID: "toggle") }
+
+    var actionDefinitions: [ActionDefinition] {
+        let isArabic = PluginRuntimeLocalization.locale.language.languageCode?.identifier == "ar"
+        return [
+            ActionDefinition(
+                key: actionKey,
+                title: isArabic ? "تبديل" : "Toggle",
+                description: isArabic ? "بدّل حالة اختبار." : "Switch a test state.",
+                systemImage: "globe",
+                capabilities: [.foregroundInteractive]
+            ),
+        ]
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        ActionExecutionHandle { .succeeded() }
+    }
+}
+
+@MainActor
+private final class PluginHostDynamicTestLoader: DynamicPluginLoading {
+    let plugin: any MacToolsPlugin
+    private(set) var loadCount = 0
+
+    init(plugin: any MacToolsPlugin) {
+        self.plugin = plugin
+    }
+
+    func loadInstalledPlugins(from records: [PluginPackageRecord]) -> [DynamicPluginLoadResult] {
+        loadCount += 1
+        return records.map {
+            DynamicPluginLoadResult(record: $0, plugins: [plugin], errorMessage: nil)
+        }
     }
 }
 
@@ -455,6 +688,58 @@ private final class LegacyActionTestPlugin: MacToolsPlugin, PluginCommandProvidi
 
     func handleCommand(id: String) {
         performedCommandIDs.append(id)
+    }
+}
+
+@MainActor
+private final class ParameterizedActionTestPlugin: MacToolsPlugin, PluginActionProviding {
+    let metadata = PluginMetadata(
+        id: "parameterized-action-provider",
+        title: "Parameterized Actions",
+        iconName: "slider.horizontal.3",
+        iconTint: .blue,
+        order: 4,
+        defaultDescription: "Integration test actions"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var invocations: [ActionInvocation] = []
+
+    let definition = ActionDefinition(
+        key: ActionKey(providerID: "parameterized-action-provider", actionID: "select"),
+        title: "Select Target",
+        description: "Select a deterministic test target.",
+        systemImage: "scope",
+        parameters: [
+            ActionParameterDefinition(id: "target", title: "Target", kind: .string),
+        ],
+        externalInvocationPolicy: .allowed,
+        capabilities: [.foregroundInteractive]
+    )
+
+    var actionDefinitions: [ActionDefinition] { [definition] }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: try! reference(target: "display-1"),
+                title: definition.title,
+                subtitle: metadata.title
+            ),
+        ]
+    }
+
+    func reference(target: String) throws -> ActionReference {
+        ActionReference(
+            key: definition.key,
+            parameters: try ActionParameterSet(["target": .string(target)])
+        )
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        invocations.append(invocation)
+        return ActionExecutionHandle { .succeeded() }
     }
 }
 

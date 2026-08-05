@@ -53,11 +53,11 @@ private enum ActionShortcutFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: "全部"
-        case .assigned: "已分配"
-        case .unassigned: "未分配"
-        case .conflicted: "冲突"
-        case .unavailable: "不可用"
+        case .all: FeatureL10n.string("全部")
+        case .assigned: FeatureL10n.string("已分配")
+        case .unassigned: FeatureL10n.string("未分配")
+        case .conflicted: FeatureL10n.string("冲突")
+        case .unavailable: FeatureL10n.string("不可用")
         }
     }
 
@@ -94,9 +94,9 @@ struct ActionShortcutSettingsView: View {
 
                 if groupedItems.isEmpty {
                     ContentUnavailableView(
-                        "没有匹配的操作",
+                        FeatureL10n.string("没有匹配的操作"),
                         systemImage: "command",
-                        description: Text("调整搜索词或筛选条件后重试。")
+                        description: Text(FeatureL10n.string("调整搜索词或筛选条件后重试。"))
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
@@ -110,9 +110,12 @@ struct ActionShortcutSettingsView: View {
         .background(SettingsStyle.contentBackground)
         .alert(item: $pendingReplacement) { replacement in
             Alert(
-                title: Text("替换快捷键？"),
-                message: Text("此快捷键已分配给“\(replacement.ownerDescription)”。替换后，原操作将不再使用它。"),
-                primaryButton: .destructive(Text("替换")) {
+                title: Text(FeatureL10n.string("替换快捷键？")),
+                message: Text(FeatureL10n.format(
+                    "此快捷键已分配给“%@”。替换后，原操作将不再使用它。",
+                    replacement.ownerDescription
+                )),
+                primaryButton: .destructive(Text(FeatureL10n.string("替换"))) {
                     _ = pluginHost.setActionShortcutBinding(
                         replacement.binding,
                         to: replacement.reference,
@@ -127,10 +130,10 @@ struct ActionShortcutSettingsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("操作与快捷键", systemImage: "command")
+            Label(FeatureL10n.string("操作与快捷键"), systemImage: "command")
                 .font(PluginSettingsTheme.Typography.pageTitle)
 
-            Text("查找 MacTools 与插件操作，并在同一个冲突空间中管理全局快捷键。")
+            Text(FeatureL10n.string("查找 MacTools 与插件操作，并在同一个冲突空间中管理全局快捷键。"))
                 .font(PluginSettingsTheme.Typography.pageDescription)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -157,14 +160,14 @@ struct ActionShortcutSettingsView: View {
     }
 
     private var searchField: some View {
-        TextField("搜索操作、插件或快捷键", text: $query)
+        TextField(FeatureL10n.string("搜索操作、插件或快捷键"), text: $query)
             .textFieldStyle(.roundedBorder)
             .frame(minWidth: 220, maxWidth: .infinity)
             .accessibilityIdentifier("mactools.actions.search")
     }
 
     private var filterPicker: some View {
-        Picker("筛选", selection: $filter) {
+        Picker(FeatureL10n.string("筛选"), selection: $filter) {
             ForEach(ActionShortcutFilter.allCases) { option in
                 Text(option.title).tag(option)
             }
@@ -243,7 +246,7 @@ struct ActionShortcutSettingsView: View {
                 binding: binding,
                 ownerDescription: ownerDescription
             )
-            return .rejected("需要确认后替换现有快捷键。")
+            return .rejected(FeatureL10n.string("需要确认后替换现有快捷键。"))
         case let .failure(error):
             return .rejected(error.localizedDescription)
         }
@@ -308,7 +311,7 @@ private struct ActionShortcutCatalogRow: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("清除快捷键")
+                .help(FeatureL10n.string("清除快捷键"))
                 .opacity(item.bindingText.isEmpty ? 0 : 1)
                 .disabled(item.bindingText.isEmpty)
             }
@@ -323,7 +326,7 @@ private struct ActionShortcutCatalogRow: View {
                 Button {
                     pluginHost.presentActionOwner(for: item.reference)
                 } label: {
-                    Label("打开所属功能的设置", systemImage: "gearshape")
+                    Label(FeatureL10n.string("打开所属功能的设置"), systemImage: "gearshape")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -345,10 +348,10 @@ private struct ActionShortcutCatalogRow: View {
 
     private var statusTitle: String {
         switch item.status {
-        case .assigned: "已分配"
-        case .unassigned: "未分配"
-        case .conflicted: "冲突"
-        case .unavailable: "不可用"
+        case .assigned: FeatureL10n.string("已分配")
+        case .unassigned: FeatureL10n.string("未分配")
+        case .conflicted: FeatureL10n.string("冲突")
+        case .unavailable: FeatureL10n.string("不可用")
         }
     }
 
@@ -368,9 +371,9 @@ private struct ActionShortcutCatalogRow: View {
                 .compactMap { $0 }
                 .joined(separator: " · ")
         case let .conflicted(owner):
-            "与“\(owner)”冲突。"
+            FeatureL10n.format("与“%@”冲突。", owner)
         case let .unavailable(reason):
-            reason ?? "此操作当前不可用。"
+            reason ?? FeatureL10n.string("此操作当前不可用。")
         }
     }
 }

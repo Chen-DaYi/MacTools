@@ -69,7 +69,13 @@ final class ActionGridPlugin:
     }
 
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription, prefersFullHeight: true) { [weak self] _ in
+        PluginConfiguration(
+            description: localization.string(
+                "metadata.description",
+                defaultValue: "在指针附近打开常用操作网格"
+            ),
+            prefersFullHeight: true
+        ) { [weak self] _ in
             if let self {
                 ActionGridSettingsView(plugin: self, store: self.store)
             } else {
@@ -90,7 +96,13 @@ final class ActionGridPlugin:
                     "action.show.description",
                     defaultValue: "在指针附近打开操作网格。"
                 ),
-                keywords: ["操作", "网格", "启动器", "action", "grid", "launcher"],
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "操作网格"),
+                    localization.string("action.show.title", defaultValue: "显示操作网格"),
+                    "action",
+                    "grid",
+                    "launcher",
+                ],
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .allowed,
                 capabilities: [.foregroundInteractive],
@@ -101,13 +113,13 @@ final class ActionGridPlugin:
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         guard reference.key == Self.showActionKey else {
-            return .unavailable("操作不可用。")
+            return .unavailable(localized("操作不可用。"))
         }
         guard store.entries.contains(where: { $0.reference.key != Self.showActionKey }) else {
-            return .unavailable("请先配置操作网格。")
+            return .unavailable(localized("请先配置操作网格。"))
         }
         guard actionGridHostContext?.canPresent == true else {
-            return .unavailable("操作网格暂时无法显示。")
+            return .unavailable(localized("操作网格暂时无法显示。"))
         }
         return .available
     }
@@ -115,13 +127,16 @@ final class ActionGridPlugin:
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         ActionExecutionHandle { [weak self] in
             guard let self, let context = self.actionGridHostContext else {
-                return .failed(message: "操作网格暂时无法显示。")
+                return .failed(
+                    message: self?.localized("操作网格暂时无法显示。")
+                        ?? PluginKitLocalization.actionUnavailable
+                )
             }
             let entries = self.store.entries
                 .filter { $0.reference.key != Self.showActionKey }
                 .map(\.presentationEntry)
             guard !entries.isEmpty, context.present(entries: entries) else {
-                return .failed(message: "无法显示操作网格。")
+                return .failed(message: self.localized("无法显示操作网格。"))
             }
             return .succeeded()
         }
@@ -184,9 +199,35 @@ final class ActionGridPlugin:
         }
         return ActionSurfaceAssignmentSummary(
             surfaceID: metadata.id,
-            surfaceTitle: metadata.title,
+            surfaceTitle: localization.string("metadata.title", defaultValue: "操作网格"),
             systemImage: metadata.iconName,
-            detail: "第 \(index + 1) 个条目"
+            detail: localizedFormat("第 %d 个条目", index + 1)
+        )
+    }
+
+    func localized(_ source: String) -> String {
+        localization.string(source, defaultValue: source)
+    }
+
+    func localizedFormat(_ source: String, _ arguments: CVarArg...) -> String {
+        String(
+            format: localized(source),
+            locale: PluginRuntimeLocalization.locale,
+            arguments: arguments
+        )
+    }
+
+    var accessibilityCopy: ActionGridAccessibilityCopy {
+        ActionGridAccessibilityCopy(
+            summaryFormat: localized("%@，%@，%@"),
+            settingsLabelFormat: localized("设置“%@”"),
+            replaceLabelFormat: localized("替换“%@”"),
+            removeLabelFormat: localized("移除“%@”"),
+            settingsButtonTitle: localized("设置"),
+            replacementMenuTitle: localized("替换"),
+            settingsHelp: localized("打开操作提供者设置"),
+            replaceHelp: localized("选择其他操作替换此条目"),
+            removeHelp: localized("从操作网格移除此条目")
         )
     }
 

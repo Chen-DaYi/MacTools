@@ -93,7 +93,7 @@ final class AutomationRuleStore {
             return .failure(.ruleNotFound)
         }
         let copy = AutomationRule(
-            name: byteLimited(source.name + " 副本"),
+            name: byteLimited(source.name + FeatureL10n.string(" 副本")),
             workflowID: source.workflowID,
             isEnabled: source.isEnabled,
             trigger: source.trigger,

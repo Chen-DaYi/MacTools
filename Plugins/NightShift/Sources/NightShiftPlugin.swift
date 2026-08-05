@@ -43,6 +43,10 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     private enum ActionID {
         static let setEnabled = "set-enabled"
     }
+
+    private enum ErrorState {
+        case toggleFailed
+    }
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -58,7 +62,16 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     private let localization: PluginLocalization
     private let controller: any NightShiftControlling
     private var isEnabled: Bool
-    private var lastErrorMessage: String?
+    private var lastErrorState: ErrorState?
+
+    private var lastErrorMessage: String? {
+        switch lastErrorState {
+        case .toggleFailed:
+            localization.string("error.toggleFailed", defaultValue: "切换夜览失败")
+        case nil:
+            nil
+        }
+    }
 
     init(
         controller: any NightShiftControlling = CBNightShiftController(),
@@ -99,12 +112,22 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
         [
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
-                title: "设置夜览",
-                description: metadata.defaultDescription,
-                keywords: ["夜览", "蓝光", "色温"],
+                title: localization.string("metadata.title", defaultValue: "夜览"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "减少夜间蓝光"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "夜览"),
+                    localization.string("metadata.description", defaultValue: "减少夜间蓝光"),
+                ],
                 systemImage: metadata.iconName,
                 parameters: [
-                    ActionParameterDefinition(id: "enabled", title: "夜览", kind: .boolean),
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string("metadata.title", defaultValue: "夜览"),
+                        kind: .boolean
+                    ),
                 ],
                 externalInvocationPolicy: .allowed,
                 capabilities: [.background, .foregroundInteractive]
@@ -114,8 +137,14 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
-            ActionCatalogEntry(reference: actionReference(enabled: true), title: "启用夜览"),
-            ActionCatalogEntry(reference: actionReference(enabled: false), title: "停用夜览"),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.enable.title", defaultValue: "启用夜览")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.disable.title", defaultValue: "停用夜览")
+            ),
         ]
     }
 
@@ -142,12 +171,16 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
-            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = setNightShift(enabled)
         let message = lastErrorMessage
+        let failureMessage = message
+            ?? localization.string("error.toggleFailed", defaultValue: "切换夜览失败")
         return ActionExecutionHandle {
-            succeeded ? .succeeded() : .failed(message: message ?? "切换夜览失败。")
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
         }
     }
 
@@ -165,11 +198,11 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
         let success = controller.setEnabled(enable)
         if success {
             isEnabled = enable
-            lastErrorMessage = nil
+            lastErrorState = nil
             onStateChange?()
         } else {
             logger.error("Failed to \(enable ? "enable" : "disable", privacy: .public) Night Shift")
-            lastErrorMessage = localization.string("error.toggleFailed", defaultValue: "切换夜览失败")
+            lastErrorState = .toggleFailed
             onStateChange?()
         }
         return success

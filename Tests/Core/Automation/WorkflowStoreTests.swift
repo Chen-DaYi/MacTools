@@ -166,6 +166,353 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertEqual(recovered.history().count, WorkflowStore.maximumHistoryCount)
     }
 
+    func testLegacyChineseHistoryRelocalizesAfterSwitchAndRelaunch() throws {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(originalPreference) }
+        let store = try makeStore()
+        let reference = ActionReference(
+            key: ActionKey(providerID: "localized-parameterized", actionID: "show-grid"),
+            parameters: try ActionParameterSet(["enabled": .boolean(true)])
+        )
+        let step = WorkflowStep(reference: reference)
+        let workflow = try store.upsert(
+            WorkflowDefinition(name: "Legacy", steps: [step])
+        ).get()
+        XCTAssertTrue(
+            store.record(
+                WorkflowRun(
+                    workflowID: workflow.id,
+                    workflowName: workflow.name,
+                    source: .manual,
+                    finishedAt: .now,
+                    status: .failed,
+                    stepResults: [
+                        WorkflowStepRunResult(
+                            stepID: step.id,
+                            actionKey: reference.key,
+                            title: "操作网格",
+                            startedAt: .now,
+                            finishedAt: .now,
+                            status: .failed,
+                            message: "操作未能完成。"
+                        ),
+                    ],
+                    summary: "工作流已完成，但部分步骤失败。"
+                )
+            )
+        )
+
+        PluginRuntimeLocalization.source.setPreference("en")
+        let reloaded = WorkflowStore(
+            userDefaults: try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        )
+        let run = try XCTUnwrap(reloaded.history().first)
+        let provider = WorkflowStoreTestProvider()
+        let registry = ActionRegistry()
+        synchronizeLocalizedParameterizedAction(
+            provider: provider,
+            reference: reference,
+            registry: registry
+        )
+        XCTAssertEqual(run.stepResults.first?.titleSource, .action)
+        XCTAssertEqual(
+            run.stepResults.first?.actionReference,
+            ActionReference(key: reference.key, schemaVersion: reference.schemaVersion)
+        )
+        XCTAssertEqual(
+            WorkflowHistoryPresentation.actionTitle(
+                for: try XCTUnwrap(run.stepResults.first),
+                registry: registry
+            ),
+            "Action Grid"
+        )
+        XCTAssertEqual(run.stepResults.first?.localizedMessage, "The action could not be completed.")
+        XCTAssertEqual(run.localizedSummary, "The workflow completed, but some steps failed.")
+
+        PluginRuntimeLocalization.source.setPreference("ar")
+        synchronizeLocalizedParameterizedAction(
+            provider: provider,
+            reference: reference,
+            registry: registry
+        )
+        let relaunchedInArabic = WorkflowStore(
+            userDefaults: try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        )
+        let arabicRun = try XCTUnwrap(relaunchedInArabic.history().first)
+        XCTAssertEqual(arabicRun.stepResults.first?.localizedMessage, "لا يمكن إكمال العملية.")
+        XCTAssertEqual(
+            WorkflowHistoryPresentation.actionTitle(
+                for: try XCTUnwrap(arabicRun.stepResults.first),
+                registry: registry
+            ),
+            "شبكة الإجراءات"
+        )
+    }
+
+    func testHistoryMigrationRedactsPreviouslyPersistedSensitiveReference() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let secret = "history-migration-secret-\(UUID().uuidString)"
+        let reference = ActionReference(
+            key: ActionKey(providerID: "sensitive-history", actionID: "authenticate"),
+            parameters: try ActionParameterSet(["token": .string(secret)])
+        )
+        let step = WorkflowStep(reference: reference)
+        let workflow = try store.upsert(
+            WorkflowDefinition(name: "Sensitive", steps: [step])
+        ).get()
+        let legacyRun = WorkflowRun(
+            workflowID: workflow.id,
+            workflowName: workflow.name,
+            source: .manual,
+            finishedAt: .now,
+            status: .succeeded,
+            stepResults: [
+                WorkflowStepRunResult(
+                    stepID: step.id,
+                    actionKey: reference.key,
+                    title: "Authenticate \(secret)",
+                    titleSource: .action,
+                    actionReference: reference,
+                    startedAt: .now,
+                    finishedAt: .now,
+                    status: .succeeded
+                ),
+            ]
+        )
+        defaults.set(
+            try JSONEncoder().encode(
+                WorkflowHistoryEnvelopeFixture(
+                    formatVersion: WorkflowRun.currentFormatVersion,
+                    runs: [legacyRun]
+                )
+            ),
+            forKey: "automation.history.v1"
+        )
+        XCTAssertTrue(
+            String(
+                decoding: try XCTUnwrap(defaults.data(forKey: "automation.history.v1")),
+                as: UTF8.self
+            ).contains(secret)
+        )
+
+        let migratedStore = WorkflowStore(userDefaults: defaults)
+        let migratedRun = try XCTUnwrap(migratedStore.history().first)
+        XCTAssertEqual(
+            migratedRun.stepResults.first?.actionReference,
+            ActionReference(key: reference.key, schemaVersion: reference.schemaVersion)
+        )
+        XCTAssertEqual(migratedRun.stepResults.first?.title, reference.key.id)
+        XCTAssertFalse(
+            String(
+                decoding: try XCTUnwrap(defaults.data(forKey: "automation.history.v1")),
+                as: UTF8.self
+            ).contains(secret)
+        )
+    }
+
+    func testOrphanedLegacyHistoryRedactsUnknownTitleAndUsesSafeDefinitionPresentation() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let secret = "orphaned-history-secret-\(UUID().uuidString)"
+        let key = ActionKey(providerID: "orphaned-history", actionID: "authenticate")
+        let legacyRun = WorkflowRun(
+            workflowID: UUID(),
+            workflowName: "Deleted workflow",
+            source: .manual,
+            finishedAt: .now,
+            status: .succeeded,
+            stepResults: [
+                WorkflowStepRunResult(
+                    stepID: UUID(),
+                    actionKey: key,
+                    title: "Authenticate \(secret)",
+                    titleSource: .custom,
+                    startedAt: .now,
+                    finishedAt: .now,
+                    status: .succeeded
+                ),
+            ]
+        )
+        defaults.set(
+            try JSONEncoder().encode(
+                WorkflowHistoryEnvelopeFixture(
+                    formatVersion: WorkflowRun.currentFormatVersion,
+                    runs: [legacyRun]
+                )
+            ),
+            forKey: "automation.history.v1"
+        )
+
+        let store = WorkflowStore(userDefaults: defaults)
+        let run = try XCTUnwrap(store.history().first)
+        let result = try XCTUnwrap(run.stepResults.first)
+        XCTAssertEqual(result.titleSource, .action)
+        XCTAssertEqual(result.title, key.id)
+        XCTAssertEqual(result.actionReference, ActionReference(key: key))
+        XCTAssertFalse(
+            String(
+                decoding: try XCTUnwrap(defaults.data(forKey: "automation.history.v1")),
+                as: UTF8.self
+            ).contains(secret)
+        )
+
+        let provider = WorkflowStoreTestProvider()
+        let registry = ActionRegistry()
+        let liveReference = ActionReference(
+            key: key,
+            parameters: try ActionParameterSet(["token": .string("live-only-secret")])
+        )
+        registry.synchronize([
+            ActionProviderRegistration(
+                providerID: key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [
+                    ActionDefinition(
+                        key: key,
+                        title: "Authenticate",
+                        description: "",
+                        systemImage: "key",
+                        parameters: [
+                            ActionParameterDefinition(
+                                id: "token",
+                                title: "Token",
+                                kind: .string,
+                                privacy: .sensitive
+                            ),
+                        ]
+                    ),
+                ],
+                catalogEntries: [
+                    ActionCatalogEntry(reference: liveReference, title: "Sensitive preset"),
+                ],
+                availability: { _ in .available },
+                begin: { _ in
+                    .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            ),
+        ])
+        XCTAssertEqual(
+            WorkflowHistoryPresentation.actionTitle(for: result, registry: registry),
+            "Authenticate"
+        )
+    }
+
+    func testLegacyHistoryTrustsOnlyTitleMatchingSurvivingCustomLabel() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let key = ActionKey(providerID: "custom-label-history", actionID: "run")
+        let step = WorkflowStep(reference: ActionReference(key: key), label: "Safe custom label")
+        let workflow = try store.upsert(
+            WorkflowDefinition(name: "Custom labels", steps: [step])
+        ).get()
+        let matching = WorkflowStepRunResult(
+            stepID: step.id,
+            actionKey: key,
+            title: "Safe custom label",
+            titleSource: .custom,
+            startedAt: .now,
+            finishedAt: .now,
+            status: .succeeded
+        )
+        let mismatched = WorkflowStepRunResult(
+            stepID: step.id,
+            actionKey: key,
+            title: "parameter-derived-title",
+            titleSource: .custom,
+            startedAt: .now,
+            finishedAt: .now,
+            status: .succeeded
+        )
+        defaults.set(
+            try JSONEncoder().encode(
+                WorkflowHistoryEnvelopeFixture(
+                    formatVersion: WorkflowRun.currentFormatVersion,
+                    runs: [
+                        WorkflowRun(
+                            workflowID: workflow.id,
+                            workflowName: workflow.name,
+                            source: .manual,
+                            finishedAt: .now,
+                            status: .succeeded,
+                            stepResults: [matching, mismatched]
+                        ),
+                    ]
+                )
+            ),
+            forKey: "automation.history.v1"
+        )
+
+        let migrated = try XCTUnwrap(WorkflowStore(userDefaults: defaults).history().first)
+        XCTAssertEqual(migrated.stepResults[0].titleSource, .custom)
+        XCTAssertEqual(migrated.stepResults[0].title, "Safe custom label")
+        XCTAssertEqual(migrated.stepResults[1].titleSource, .action)
+        XCTAssertEqual(migrated.stepResults[1].title, key.id)
+        XCTAssertFalse(
+            String(
+                decoding: try XCTUnwrap(defaults.data(forKey: "automation.history.v1")),
+                as: UTF8.self
+            ).contains("parameter-derived-title")
+        )
+    }
+
+    func testHistoryMigrationScopesDuplicateStepIDsToTheirWorkflow() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let sharedStepID = UUID()
+        let firstKey = ActionKey(providerID: "duplicate-step-history", actionID: "first")
+        let secondKey = ActionKey(providerID: "duplicate-step-history", actionID: "second")
+        let firstStep = WorkflowStep(
+            id: sharedStepID,
+            reference: ActionReference(key: firstKey),
+            label: "First label"
+        )
+        let secondStep = WorkflowStep(
+            id: sharedStepID,
+            reference: ActionReference(key: secondKey),
+            label: "Second label"
+        )
+        _ = try store.upsert(
+            WorkflowDefinition(name: "First workflow", steps: [firstStep])
+        ).get()
+        let secondWorkflow = try store.upsert(
+            WorkflowDefinition(name: "Second workflow", steps: [secondStep])
+        ).get()
+        let run = WorkflowRun(
+            workflowID: secondWorkflow.id,
+            workflowName: secondWorkflow.name,
+            source: .manual,
+            finishedAt: .now,
+            status: .succeeded,
+            stepResults: [
+                WorkflowStepRunResult(
+                    stepID: sharedStepID,
+                    actionKey: secondKey,
+                    title: "Second label",
+                    titleSource: .custom,
+                    startedAt: .now,
+                    finishedAt: .now,
+                    status: .succeeded
+                ),
+            ]
+        )
+        defaults.set(
+            try JSONEncoder().encode(
+                WorkflowHistoryEnvelopeFixture(
+                    formatVersion: WorkflowRun.currentFormatVersion,
+                    runs: [run]
+                )
+            ),
+            forKey: "automation.history.v1"
+        )
+
+        let migrated = try XCTUnwrap(WorkflowStore(userDefaults: defaults).history().first)
+        XCTAssertEqual(migrated.stepResults.first?.titleSource, .custom)
+        XCTAssertEqual(migrated.stepResults.first?.title, "Second label")
+        XCTAssertEqual(migrated.stepResults.first?.actionReference, ActionReference(key: secondKey))
+    }
+
     func testPortableExportRejectsSensitiveAndLocalOnlyParameters() throws {
         let store = try makeStore()
         let registry = ActionRegistry()
@@ -266,6 +613,45 @@ final class WorkflowStoreTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         return WorkflowStore(userDefaults: defaults)
+    }
+
+    private func synchronizeLocalizedParameterizedAction(
+        provider: WorkflowStoreTestProvider,
+        reference: ActionReference,
+        registry: ActionRegistry
+    ) {
+        let title = FeatureL10n.string("操作网格")
+        registry.synchronize([
+            ActionProviderRegistration(
+                providerID: reference.key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [
+                    ActionDefinition(
+                        key: reference.key,
+                        title: title,
+                        description: title,
+                        systemImage: "square.grid.2x2",
+                        parameters: [
+                            ActionParameterDefinition(
+                                id: "enabled",
+                                title: FeatureL10n.string("启用"),
+                                kind: .boolean
+                            ),
+                        ]
+                    ),
+                ],
+                catalogEntries: [ActionCatalogEntry(reference: reference, title: title)],
+                availability: { _ in .available },
+                begin: { _ in
+                    .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            ),
+        ])
+    }
+
+    private struct WorkflowHistoryEnvelopeFixture: Encodable {
+        let formatVersion: Int
+        let runs: [WorkflowRun]
     }
 }
 

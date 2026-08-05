@@ -90,14 +90,29 @@ final class LockScreenPlugin:
         [
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: "execute"),
-                title: metadata.title,
-                description: metadata.defaultDescription,
-                keywords: ["锁屏", "隐私", "安全"],
+                title: localization.string("metadata.title", defaultValue: "锁定屏幕"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "立即锁定屏幕"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "锁定屏幕"),
+                    localization.string("metadata.description", defaultValue: "立即锁定屏幕"),
+                ],
                 systemImage: metadata.iconName,
                 confirmation: ActionConfirmation(
-                    title: "锁定屏幕？",
-                    message: "此运行链接将立即锁定屏幕。",
-                    confirmButtonTitle: "锁定"
+                    title: localization.string(
+                        "action.confirmation.title",
+                        defaultValue: "锁定屏幕？"
+                    ),
+                    message: localization.string(
+                        "action.confirmation.message",
+                        defaultValue: "此运行链接将立即锁定屏幕。"
+                    ),
+                    confirmButtonTitle: localization.string(
+                        "action.confirmation.confirm",
+                        defaultValue: "锁定"
+                    )
                 ),
                 externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive]

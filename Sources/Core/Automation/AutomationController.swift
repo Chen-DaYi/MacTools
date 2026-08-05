@@ -4,13 +4,27 @@ import MacToolsPluginKit
 
 @MainActor
 final class AutomationController: ObservableObject {
+    private enum ErrorState: Equatable {
+        case cannotDeleteRelatedRules
+        case cannotDeleteWorkflow
+        case cannotMoveWorkflow
+        case workflowNotFound
+        case workflowStore(WorkflowStoreError)
+        case ruleStore(AutomationRuleStoreError)
+        case workflowStart(WorkflowStartError)
+    }
+
     nonisolated static let providerID = "automation"
 
     @Published private(set) var workflows: [WorkflowDefinition] = []
     @Published private(set) var rules: [AutomationRule] = []
     @Published private(set) var history: [WorkflowRun] = []
     @Published private(set) var activeRunIDs: Set<UUID> = []
-    @Published private(set) var lastErrorMessage: String?
+    @Published private var lastError: ErrorState?
+
+    var lastErrorMessage: String? {
+        lastError.map(localizedMessage(for:))
+    }
 
     private let store: WorkflowStore
     private let ruleStore: AutomationRuleStore
@@ -95,14 +109,14 @@ final class AutomationController: ObservableObject {
         let existingRules = ruleStore.rules()
         let retainedRules = existingRules.filter { $0.workflowID != id }
         guard retainedRules == existingRules || ruleStore.replace(retainedRules) else {
-            lastErrorMessage = "无法删除相关自动规则。"
+            lastError = .cannotDeleteRelatedRules
             return false
         }
         guard store.delete(id: id) else {
             if retainedRules != existingRules {
                 _ = ruleStore.replace(existingRules)
             }
-            lastErrorMessage = "无法删除工作流。"
+            lastError = .cannotDeleteWorkflow
             return false
         }
         runsToCancel.forEach(cancel(runID:))
@@ -112,7 +126,7 @@ final class AutomationController: ObservableObject {
 
     func moveWorkflow(id: UUID, offset: Int) {
         guard store.move(id: id, offset: offset) else {
-            lastErrorMessage = "无法调整工作流顺序。"
+            lastError = .cannotMoveWorkflow
             return
         }
         finishDefinitionMutation()
@@ -161,7 +175,7 @@ final class AutomationController: ObservableObject {
     }
 
     func triggerAvailability(for kind: AutomationTriggerKind) -> AutomationTriggerAvailability {
-        runtime?.availability(for: kind) ?? .unavailable("触发器服务未启动。")
+        runtime?.availability(for: kind) ?? .unavailable(FeatureL10n.string("触发器服务未启动。"))
     }
 
     func requestCalendarAccess() async {
@@ -257,7 +271,7 @@ final class AutomationController: ObservableObject {
             reloadRuntimeSnapshots()
             return execution.runID
         case let .failure(error):
-            lastErrorMessage = message(for: error)
+            lastError = .workflowStart(error)
             return nil
         }
     }
@@ -296,9 +310,12 @@ final class AutomationController: ObservableObject {
         let definitions = enabled.map { workflow in
             ActionDefinition(
                 key: workflow.actionKey,
-                title: "运行“\(workflow.name)”",
-                description: "依次执行 \(workflow.steps.count) 个工作流步骤。",
-                keywords: ["工作流", "自动化", workflow.name],
+                title: FeatureL10n.format("运行“%@”", workflow.name),
+                description: FeatureL10n.format(
+                    "依次执行 %d 个工作流步骤。",
+                    workflow.steps.count
+                ),
+                keywords: [FeatureL10n.string("工作流"), FeatureL10n.string("自动化"), workflow.name],
                 systemImage: workflow.systemImage,
                 externalInvocationPolicy: .allowed,
                 capabilities: [.background, .foregroundInteractive, .cancellable],
@@ -308,8 +325,11 @@ final class AutomationController: ObservableObject {
         let catalogEntries = enabled.map { workflow in
             ActionCatalogEntry(
                 reference: workflow.actionReference,
-                title: "运行“\(workflow.name)”",
-                subtitle: "自动化 · \(workflow.steps.count) 个步骤"
+                title: FeatureL10n.format("运行“%@”", workflow.name),
+                subtitle: FeatureL10n.format(
+                    "自动化 · %d 个步骤",
+                    workflow.steps.count
+                )
             )
         }
         return ActionProviderRegistration(
@@ -319,12 +339,12 @@ final class AutomationController: ObservableObject {
             catalogEntries: catalogEntries,
             availability: { [weak self] reference in
                 self?.workflowActionAvailability(reference)
-                    ?? .unavailable("自动化服务不可用。")
+                    ?? .unavailable(FeatureL10n.string("自动化服务不可用。"))
             },
             begin: { [weak self] invocation in
                 guard let self,
                       let workflowID = self.workflowID(for: invocation.reference.key) else {
-                    return .failure(.providerFailure("找不到工作流。"))
+                    return .failure(.providerFailure(FeatureL10n.string("找不到工作流。")))
                 }
                 let source = WorkflowRunSource.publishedAction(invocation.source)
                 switch self.runner.makeExecutionHandle(
@@ -372,7 +392,7 @@ final class AutomationController: ObservableObject {
         mutation: (inout WorkflowDefinition) -> Void
     ) {
         guard var workflow = store.workflow(id: id) else {
-            lastErrorMessage = "找不到工作流。"
+            lastError = .workflowNotFound
             return
         }
         mutation(&workflow)
@@ -398,13 +418,13 @@ final class AutomationController: ObservableObject {
     }
 
     private func finishDefinitionMutation() {
-        lastErrorMessage = nil
+        lastError = nil
         reloadAll()
         onCatalogChange?()
     }
 
     private func finishRuleMutation() {
-        lastErrorMessage = nil
+        lastError = nil
         rules = ruleStore.rules()
         runtime?.refreshProviders()
     }
@@ -424,31 +444,31 @@ final class AutomationController: ObservableObject {
         guard let currentWorkflowID = workflowID(for: reference.key),
               let workflow = store.workflow(id: currentWorkflowID),
               workflow.isEnabled else {
-            return .unavailable("工作流已停用或不存在。")
+            return .unavailable(FeatureL10n.string("工作流已停用或不存在。"))
         }
         guard !workflow.steps.isEmpty else {
-            return .unavailable("工作流尚未添加步骤。")
+            return .unavailable(FeatureL10n.string("工作流尚未添加步骤。"))
         }
         for step in workflow.steps {
             if step.reference.key == workflow.actionKey {
-                return .unavailable("工作流不能调用自身。")
+                return .unavailable(FeatureL10n.string("工作流不能调用自身。"))
             }
             if step.reference.key.providerID == Self.providerID {
                 guard let nestedID = workflowID(for: step.reference.key),
                       let nested = store.workflow(id: nestedID),
                       nested.isEnabled,
                       !nested.steps.isEmpty else {
-                    return .unavailable("嵌套工作流不可用。")
+                    return .unavailable(FeatureL10n.string("嵌套工作流不可用。"))
                 }
                 continue
             }
             guard case let .success(reference) = registry.migrate(step.reference),
                   case .success = registry.registeredAction(for: reference) else {
-                return .unavailable("工作流包含不可用操作。")
+                return .unavailable(FeatureL10n.string("工作流包含不可用操作。"))
             }
             let availability = registry.availability(for: reference)
             if !availability.isAvailable {
-                return .unavailable(availability.reason ?? "工作流包含不可用操作。")
+                return .unavailable(availability.reason ?? FeatureL10n.string("工作流包含不可用操作。"))
             }
         }
         return .available
@@ -463,32 +483,51 @@ final class AutomationController: ObservableObject {
     }
 
     private func record(_ error: WorkflowStoreError) {
-        lastErrorMessage = switch error {
-        case let .invalidWorkflow(reason): "工作流无效：\(reason)"
-        case .workflowNotFound: "找不到工作流。"
-        case .maximumWorkflowCountReached: "工作流数量已达上限。"
-        case .persistenceFailed: "无法保存工作流。"
-        case .unsafeForExport: "工作流包含不可安全导出的参数。"
-        case .invalidImport: "工作流文件无效。"
-        }
+        lastError = .workflowStore(error)
     }
 
     private func record(_ error: AutomationRuleStoreError) {
-        lastErrorMessage = switch error {
-        case let .invalidRule(reason): "自动规则无效：\(reason)"
-        case .ruleNotFound: "找不到自动规则。"
-        case .maximumRuleCountReached: "自动规则数量已达上限。"
-        case .persistenceFailed: "无法保存自动规则。"
+        lastError = .ruleStore(error)
+    }
+
+    private func localizedMessage(for state: ErrorState) -> String {
+        switch state {
+        case .cannotDeleteRelatedRules:
+            FeatureL10n.string("无法删除相关自动规则。")
+        case .cannotDeleteWorkflow:
+            FeatureL10n.string("无法删除工作流。")
+        case .cannotMoveWorkflow:
+            FeatureL10n.string("无法调整工作流顺序。")
+        case .workflowNotFound:
+            FeatureL10n.string("找不到工作流。")
+        case let .workflowStore(error):
+            switch error {
+        case let .invalidWorkflow(reason): FeatureL10n.format("工作流无效：%@", reason)
+        case .workflowNotFound: FeatureL10n.string("找不到工作流。")
+        case .maximumWorkflowCountReached: FeatureL10n.string("工作流数量已达上限。")
+        case .persistenceFailed: FeatureL10n.string("无法保存工作流。")
+        case .unsafeForExport: FeatureL10n.string("工作流包含不可安全导出的参数。")
+        case .invalidImport: FeatureL10n.string("工作流文件无效。")
+            }
+        case let .ruleStore(error):
+            switch error {
+        case let .invalidRule(reason): FeatureL10n.format("自动规则无效：%@", reason)
+        case .ruleNotFound: FeatureL10n.string("找不到自动规则。")
+        case .maximumRuleCountReached: FeatureL10n.string("自动规则数量已达上限。")
+        case .persistenceFailed: FeatureL10n.string("无法保存自动规则。")
+            }
+        case let .workflowStart(error):
+            message(for: error)
         }
     }
 
     private func message(for error: WorkflowStartError) -> String {
         switch error {
-        case .workflowNotFound: "找不到工作流。"
-        case .workflowDisabled: "工作流已停用。"
-        case .emptyWorkflow: "工作流尚未添加步骤。"
-        case .recursiveInvocation: "检测到递归工作流调用。"
-        case .maximumDepthExceeded: "工作流嵌套层级已达上限。"
+        case .workflowNotFound: FeatureL10n.string("找不到工作流。")
+        case .workflowDisabled: FeatureL10n.string("工作流已停用。")
+        case .emptyWorkflow: FeatureL10n.string("工作流尚未添加步骤。")
+        case .recursiveInvocation: FeatureL10n.string("检测到递归工作流调用。")
+        case .maximumDepthExceeded: FeatureL10n.string("工作流嵌套层级已达上限。")
         }
     }
 }

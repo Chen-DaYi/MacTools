@@ -753,6 +753,7 @@ final class PluginHost: ObservableObject {
         syncPluginManagementState()
         localizationRevision &+= 1
         rebuildDerivedState()
+        syncGlobalShortcuts()
     }
 
     func refreshDisplayTopology() {
@@ -2475,11 +2476,14 @@ final class PluginHost: ObservableObject {
         case "mactools":
             return "MacTools"
         case AutomationController.providerID:
-            return "自动化"
+            return FeatureL10n.string("自动化")
         default:
-            return activePlugins.first {
+            guard let metadata = activePlugins.first(where: {
                 $0.metadata.id == providerID
-            }?.metadata.title ?? providerID
+            })?.metadata else {
+                return providerID
+            }
+            return localizedMetadata(for: metadata).title
         }
     }
 
@@ -2566,7 +2570,7 @@ final class PluginHost: ObservableObject {
                 guard let self,
                       let action = AppShortcutAction(rawValue: invocation.reference.key.actionID),
                       let appPresentationHandler = self.appPresentationHandler else {
-                    return .failure(.providerFailure("MacTools 尚未准备完成。"))
+                    return .failure(.providerFailure(FeatureL10n.string("MacTools 尚未准备完成。")))
                 }
                 appPresentationHandler(action.presentationRequest)
                 return .success(ActionExecutionHandle(operation: { .succeeded() }))
@@ -2589,13 +2593,13 @@ final class PluginHost: ObservableObject {
                 guard let self,
                       let plugin,
                       let provider = plugin as? any PluginActionProviding else {
-                    return .unavailable("插件不可用。")
+                    return .unavailable(FeatureL10n.string("插件不可用。"))
                 }
                 return self.guardedValue(
                     for: plugin,
                     operation: "read action availability",
                     provider.actionAvailability(for: reference)
-                ) ?? .unavailable("插件不可用。")
+                ) ?? .unavailable(FeatureL10n.string("插件不可用。"))
             },
             migrate: { [weak self, weak plugin] reference, schemaVersion in
                 guard let self,
@@ -2617,7 +2621,7 @@ final class PluginHost: ObservableObject {
                       let plugin,
                       let provider = plugin as? any PluginActionProviding,
                       !self.isPluginIsolated(plugin) else {
-                    return .failure(.providerFailure("插件不可用。"))
+                    return .failure(.providerFailure(FeatureL10n.string("插件不可用。")))
                 }
 
                 let result = PluginInvocationGuard.value(operation: "begin action") {
@@ -2639,6 +2643,7 @@ final class PluginHost: ObservableObject {
         definitions commandDefinitions: [PluginCommandDefinition]
     ) -> ActionProviderRegistration {
         let providerID = plugin.metadata.id
+        let providerTitle = localizedMetadata(for: plugin.metadata).title
         let definitions = commandDefinitions.map { command in
             ActionDefinition(
                 key: ActionKey(providerID: providerID, actionID: command.id),
@@ -2667,7 +2672,7 @@ final class PluginHost: ObservableObject {
                 ActionCatalogEntry(
                     reference: ActionReference(key: $0.key),
                     title: $0.title,
-                    subtitle: plugin.metadata.title
+                    subtitle: providerTitle
                 )
             },
             availability: { _ in .available },
@@ -2683,13 +2688,13 @@ final class PluginHost: ObservableObject {
                           operation: "revalidate legacy command action",
                           provider.commandDefinitions
                       ) ?? []).contains(expectedDefinition) else {
-                    return .failure(.providerFailure("操作不可用。"))
+                    return .failure(.providerFailure(FeatureL10n.string("操作不可用。")))
                 }
 
                 guard self.guardPluginCall(plugin, operation: "perform legacy command action", {
                     provider.handleCommand(id: expectedDefinition.id)
                 }) else {
-                    return .failure(.providerFailure("插件执行失败。"))
+                    return .failure(.providerFailure(FeatureL10n.string("插件执行失败。")))
                 }
                 return .success(ActionExecutionHandle(operation: { .succeeded() }))
             }
@@ -2938,6 +2943,7 @@ final class PluginHost: ObservableObject {
 
     private func shortcutDescriptors() -> [ShortcutDescriptor] {
         orderedCorePlugins().flatMap { plugin in
+            let metadata = localizedMetadata(for: plugin.metadata)
             let definitions = guardedValue(
                 for: plugin,
                 operation: "read shortcut definitions",
@@ -2950,8 +2956,8 @@ final class PluginHost: ObservableObject {
                         pluginID: plugin.metadata.id,
                         shortcutDefinitionID: definition.id
                     ),
-                    pluginID: plugin.metadata.id,
-                    pluginTitle: plugin.metadata.title,
+                    pluginID: metadata.id,
+                    pluginTitle: metadata.title,
                     definition: definition,
                     plugin: plugin
                 )
@@ -3825,7 +3831,12 @@ final class PluginHost: ObservableObject {
                 description: action.definition.description,
                 permissionSummary: {
                     let titles = actionPermissionTitles(for: entry.reference)
-                    return titles.isEmpty ? nil : "所需权限：\(titles.joined(separator: "、"))"
+                    return titles.isEmpty
+                        ? nil
+                        : FeatureL10n.format(
+                            "所需权限：%@",
+                            FeatureL10n.joined(titles)
+                        )
                 }(),
                 systemImage: action.definition.systemImage,
                 bindingText: assignmentItem?.bindingText ?? "",
@@ -3846,7 +3857,7 @@ final class PluginHost: ObservableObject {
                 ownerTitle: actionOwnerTitle(
                     providerID: item.assignment.reference.key.providerID
                 ),
-                description: "操作提供方暂时不可用；快捷键分配已保留。",
+                description: FeatureL10n.string("操作提供方暂时不可用；快捷键分配已保留。"),
                 permissionSummary: nil,
                 systemImage: "puzzlepiece.extension",
                 bindingText: item.bindingText,
@@ -3868,20 +3879,23 @@ final class PluginHost: ObservableObject {
         case let .conflict(ownerDescription):
             .conflicted(ownerDescription)
         case let .registrationFailed(code):
-            .conflicted("系统注册失败（\(code)）。")
+            .conflicted(FeatureL10n.format("系统注册失败（%d）。", code))
         case .invalidBinding:
-            .conflicted("快捷键无效。")
+            .conflicted(FeatureL10n.string("快捷键无效。"))
         }
     }
 
     private func actionOwnerTitle(providerID: String) -> String {
         switch providerID {
         case "mactools":
-            "MacTools"
+            return "MacTools"
         case AutomationController.providerID:
-            "自动化"
+            return FeatureL10n.string("自动化")
         default:
-            corePlugin(for: providerID)?.metadata.title ?? providerID
+            guard let metadata = corePlugin(for: providerID)?.metadata else {
+                return providerID
+            }
+            return localizedMetadata(for: metadata).title
         }
     }
 

@@ -16,6 +16,54 @@ final class AutomationRuntimeTests: XCTestCase {
         super.tearDown()
     }
 
+    func testSkippedRunSummaryRelocalizesAfterLanguageSwitchAndRelaunch() throws {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(originalPreference) }
+        PluginRuntimeLocalization.source.setPreference("zh-Hans")
+        let fixture = try makeFixture()
+        _ = try fixture.ruleStore.upsert(
+            AutomationRule(
+                name: "仅接电时",
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available)),
+                conditions: [.power(PowerAutomationCondition(source: .adapter))]
+            )
+        ).get()
+        fixture.snapshot.snapshotValue.powerSource = .battery
+        fixture.runtime.start()
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .wifi, date: fixture.date)
+        )
+        let initialRun = try XCTUnwrap(fixture.workflowStore.history().first)
+        XCTAssertNil(initialRun.summary)
+        XCTAssertEqual(initialRun.automationSkippedSummary?.reason, .powerSourceMismatch)
+        XCTAssertEqual(
+            initialRun.localizedSummary,
+            "规则“仅接电时”未运行：当前电源来源不匹配。"
+        )
+
+        PluginRuntimeLocalization.source.setPreference("en")
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let englishRun = try XCTUnwrap(
+            WorkflowStore(userDefaults: defaults).history().first
+        )
+        XCTAssertEqual(
+            englishRun.localizedSummary,
+            "Rule “仅接电时” did not run: The current power source does not match."
+        )
+
+        PluginRuntimeLocalization.source.setPreference("ar")
+        let arabicRun = try XCTUnwrap(
+            WorkflowStore(userDefaults: defaults).history().first
+        )
+        XCTAssertEqual(
+            withoutBidirectionalIsolation(try XCTUnwrap(arabicRun.localizedSummary)),
+            "القاعدة \"仅接电时\" ليست قيد التشغيل: مصدر الطاقة الحالي غير متطابق."
+        )
+    }
+
     func testEachTriggerProviderStartsSameWorkflowThroughGenericRuntime() throws {
         let fixture = try makeFixture()
         let date = fixture.date
@@ -70,7 +118,11 @@ final class AutomationRuntimeTests: XCTestCase {
         let skipped = try XCTUnwrap(fixture.workflowStore.history().first)
         XCTAssertEqual(skipped.status, .skipped)
         XCTAssertEqual(skipped.source, .automatic(ruleID: rule.id, triggerKind: "network"))
-        XCTAssertTrue(skipped.summary?.contains("当前电源来源不匹配") == true)
+        XCTAssertTrue(
+            skipped.localizedSummary?.contains(
+                FeatureL10n.string("当前电源来源不匹配。").dropLast()
+            ) == true
+        )
 
         _ = fixture.starter.makeExecutionHandle(
             workflowID: fixture.workflow.id,
@@ -102,7 +154,17 @@ final class AutomationRuntimeTests: XCTestCase {
         )
 
         XCTAssertEqual(fixture.starter.starts.count, 1)
-        XCTAssertTrue(fixture.workflowStore.history().first?.summary?.contains("上一次运行尚未结束") == true)
+        XCTAssertTrue(
+            fixture.workflowStore.history().first?.localizedSummary?.contains(
+                FeatureL10n.string("该规则的上一次运行尚未结束。").dropLast()
+            ) == true
+        )
+    }
+
+    private func withoutBidirectionalIsolation(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\u{2068}", with: "")
+            .replacingOccurrences(of: "\u{2069}", with: "")
     }
 
     func testProviderAvailabilityAndRefreshAreInspectable() throws {

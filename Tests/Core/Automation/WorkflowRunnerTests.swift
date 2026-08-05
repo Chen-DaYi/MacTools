@@ -40,7 +40,7 @@ final class WorkflowRunnerTests: XCTestCase {
         let result = await execution.actionHandle.result()
         let run = try XCTUnwrap(harness.store.history(workflowID: workflow.id).first)
 
-        XCTAssertEqual(result, .failed(message: "部分步骤失败。"))
+        XCTAssertEqual(result, .failed(message: FeatureL10n.string("部分步骤失败。")))
         XCTAssertEqual(harness.provider.invocations.map(\.reference.key.actionID), ["first", "second"])
         XCTAssertEqual(harness.sleeper.requestedSeconds, [0.5])
         XCTAssertEqual(run.status, .failed)
@@ -48,6 +48,73 @@ final class WorkflowRunnerTests: XCTestCase {
         XCTAssertFalse(
             String(decoding: try JSONEncoder().encode(run), as: UTF8.self)
                 .contains("provider-private-detail")
+        )
+    }
+
+    func testExecutedSensitiveParametersAreRedactedFromPersistedHistory() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let registry = ActionRegistry()
+        let provider = WorkflowRunnerTestProvider(actionIDs: [], timeout: 30)
+        let key = ActionKey(providerID: "sensitive-history", actionID: "authenticate")
+        let secret = "history-execution-secret-\(UUID().uuidString)"
+        let reference = ActionReference(
+            key: key,
+            parameters: try ActionParameterSet(["token": .string(secret)])
+        )
+        let definition = ActionDefinition(
+            key: key,
+            title: "Authenticate",
+            description: "",
+            systemImage: "key",
+            parameters: [
+                ActionParameterDefinition(
+                    id: "token",
+                    title: "Token",
+                    kind: .string,
+                    privacy: .sensitive
+                ),
+            ],
+            capabilities: [.background]
+        )
+        registry.synchronize([
+            ActionProviderRegistration(
+                providerID: key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [definition],
+                catalogEntries: [
+                    ActionCatalogEntry(reference: reference, title: "Authenticate \(secret)"),
+                ],
+                availability: { _ in .available },
+                begin: { _ in
+                    .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            ),
+        ])
+        let executor = ActionExecutor(registry: registry)
+        let runner = WorkflowRunner(store: store, registry: registry, executor: executor)
+        let workflow = try saveWorkflow(
+            in: store,
+            steps: [WorkflowStep(reference: reference)]
+        )
+
+        let execution = try runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .manual,
+            mode: .foreground
+        ).get()
+        _ = await execution.actionHandle.result()
+        let run = try XCTUnwrap(store.history(workflowID: workflow.id).first)
+
+        XCTAssertEqual(
+            run.stepResults.first?.actionReference,
+            ActionReference(key: key, schemaVersion: reference.schemaVersion)
+        )
+        XCTAssertFalse(
+            String(
+                decoding: try XCTUnwrap(defaults.data(forKey: "automation.history.v1")),
+                as: UTF8.self
+            ).contains(secret)
         )
     }
 
@@ -119,7 +186,10 @@ final class WorkflowRunnerTests: XCTestCase {
         harness.provider.resumeNonCooperativeActions()
         let run = try XCTUnwrap(harness.store.history(workflowID: workflow.id).first)
 
-        XCTAssertEqual(result, .failed(message: "工作流在失败步骤处停止。"))
+        XCTAssertEqual(
+            result,
+            .failed(message: FeatureL10n.string("工作流在失败步骤处停止。"))
+        )
         XCTAssertEqual(run.stepResults.first?.status, .timedOut)
         XCTAssertTrue(harness.provider.cancelledActionIDs.contains("slow"))
     }
@@ -182,7 +252,9 @@ final class WorkflowRunnerTests: XCTestCase {
             return XCTFail("Expected recursive workflow failure, got \(outcome)")
         }
         let runs = harness.store.history()
-        XCTAssertTrue(runs.contains { $0.summary == "检测到递归工作流调用。" })
+        XCTAssertTrue(runs.contains {
+            $0.summary == FeatureL10n.string("检测到递归工作流调用。")
+        })
         XCTAssertLessThanOrEqual(runs.count, 3)
     }
 

@@ -156,7 +156,11 @@ final class LaunchpadPlugin:
                     "shortcut.toggle.description",
                     defaultValue: "唤出或收起应用网格。"
                 ),
-                keywords: ["启动台", "应用", "Launchpad"],
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "启动台"),
+                    localization.string("shortcut.toggle.title", defaultValue: "打开启动台"),
+                    "Launchpad",
+                ],
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .allowed,
                 capabilities: [.foregroundInteractive]

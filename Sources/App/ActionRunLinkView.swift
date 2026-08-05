@@ -23,7 +23,7 @@ struct ActionRunLinkControl: View {
             case let .available(representation, presetID):
                 availableContent(representation, presetID: presetID)
             case .needsPreset:
-                Button("创建运行链接…") {
+                Button(FeatureL10n.string("创建运行链接…")) {
                     switch pluginHost.createActionRunLink(for: reference) {
                     case let .success(representation):
                         copy(representation.url)
@@ -57,7 +57,7 @@ struct ActionRunLinkControl: View {
                 Button {
                     isExpanded.toggle()
                 } label: {
-                    Label("运行链接", systemImage: isExpanded ? "chevron.down" : "chevron.right")
+                    Label(FeatureL10n.string("运行链接"), systemImage: isExpanded ? "chevron.down" : "chevron.right")
                         .font(PluginSettingsTheme.Typography.rowDescription)
                 }
                 .buttonStyle(.plain)
@@ -68,7 +68,7 @@ struct ActionRunLinkControl: View {
                     copy(representation.url)
                 } label: {
                     Label(
-                        copiedValue == representation.url ? "已复制" : "复制",
+                        copiedValue == representation.url ? FeatureL10n.string("已复制") : FeatureL10n.string("复制"),
                         systemImage: copiedValue == representation.url ? "checkmark" : "doc.on.doc"
                     )
                 }
@@ -79,16 +79,16 @@ struct ActionRunLinkControl: View {
 
             if isExpanded {
                 runLinkValueRow(
-                    title: "运行链接",
+                    title: FeatureL10n.string("运行链接"),
                     value: representation.url
                 )
                 runLinkValueRow(
-                    title: "终端命令",
+                    title: FeatureL10n.string("终端命令"),
                     value: representation.terminalCommand
                 )
 
                 if presetID != nil {
-                    Button("删除预设") {
+                    Button(FeatureL10n.string("删除预设")) {
                         pluginHost.deleteActionRunLinkPreset(for: reference)
                     }
                     .buttonStyle(.bordered)
@@ -119,7 +119,7 @@ struct ActionRunLinkControl: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .help("复制\(title)")
+            .help(FeatureL10n.format("复制%@", title))
         }
         .padding(8)
         .background(
@@ -143,19 +143,19 @@ struct ActionRunLinkControl: View {
     private func message(for error: ActionInvocationPresetError) -> String {
         switch error {
         case .unknownAction:
-            "找不到对应操作。"
+            FeatureL10n.string("找不到对应操作。")
         case .parameterlessAction:
-            "此操作可直接使用运行链接。"
+            FeatureL10n.string("此操作可直接使用运行链接。")
         case .externalInvocationUnavailable:
-            "此操作不能通过运行链接调用。"
+            FeatureL10n.string("此操作不能通过运行链接调用。")
         case .sensitiveParametersUnsupported:
-            "包含敏感参数的操作不能创建运行链接。"
+            FeatureL10n.string("包含敏感参数的操作不能创建运行链接。")
         case .maximumPresetCountReached:
-            "运行链接预设数量已达上限。"
+            FeatureL10n.string("运行链接预设数量已达上限。")
         case .persistenceFailed:
-            "无法保存运行链接预设。"
+            FeatureL10n.string("无法保存运行链接预设。")
         case .unavailablePreset:
-            "运行链接预设不可用。"
+            FeatureL10n.string("运行链接预设不可用。")
         }
     }
 }
@@ -169,8 +169,8 @@ struct ActionRunLinkCopyButton: View {
         switch pluginHost.actionRunLinkPresentation(for: reference) {
         case let .available(representation, _):
             Menu {
-                Button("复制运行链接") { copy(representation.url) }
-                Button("复制终端命令") { copy(representation.terminalCommand) }
+                Button(FeatureL10n.string("复制运行链接")) { copy(representation.url) }
+                Button(FeatureL10n.string("复制终端命令")) { copy(representation.terminalCommand) }
             } label: {
                 Image(systemName: didCopy ? "checkmark" : "link")
             } primaryAction: {
@@ -179,7 +179,7 @@ struct ActionRunLinkCopyButton: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help(representation.url)
-            .accessibilityLabel("复制运行链接")
+            .accessibilityLabel(FeatureL10n.string("复制运行链接"))
         case .needsPreset:
             Button {
                 if case let .success(representation) = pluginHost.createActionRunLink(
@@ -191,8 +191,8 @@ struct ActionRunLinkCopyButton: View {
                 Image(systemName: "link.badge.plus")
             }
             .buttonStyle(.plain)
-            .help("创建并复制运行链接")
-            .accessibilityLabel("创建并复制运行链接")
+            .help(FeatureL10n.string("创建并复制运行链接"))
+            .accessibilityLabel(FeatureL10n.string("创建并复制运行链接"))
         case let .unavailable(reason):
             Image(systemName: "link.badge.plus")
                 .foregroundStyle(.tertiary)

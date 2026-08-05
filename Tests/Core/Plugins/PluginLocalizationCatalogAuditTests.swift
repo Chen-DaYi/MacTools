@@ -74,6 +74,12 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         "shortcuts.openCommandPalette.title",
     ]
 
+    private let pluginKitActionLocalizationKeys = [
+        "action.error.failed",
+        "action.error.invalidParameters",
+        "action.error.unavailable",
+    ]
+
     func testPluginStaticLocalizationKeysCoverAllSupportedLanguages() throws {
         var failures: [String] = []
 
@@ -90,6 +96,12 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
                         pluginName: plugin.lastPathComponent,
                         failures: &failures
                     )
+                    validateFormatSpecifiers(
+                        source: key,
+                        entry: catalog[key],
+                        key: "\(plugin.lastPathComponent).\(key)",
+                        failures: &failures
+                    )
                 }
             }
 
@@ -100,6 +112,60 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
                     pluginName: plugin.lastPathComponent,
                     failures: &failures
                 )
+            }
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testPluginActionCatalogTitlesAreNotHardCodedInChinese() throws {
+        let expression = try NSRegularExpression(
+            pattern: #"ActionCatalogEntry\s*\([\s\S]{0,400}?title\s*:\s*\"[^\"]*[\p{Han}]"#
+        )
+        var failures: [String] = []
+
+        for plugin in try pluginDirectories() {
+            for sourceFile in try files(
+                withExtension: "swift",
+                in: plugin.appending(path: "Sources")
+            ) {
+                let source = try String(contentsOf: sourceFile, encoding: .utf8)
+                let range = NSRange(source.startIndex..., in: source)
+                if expression.firstMatch(in: source, range: range) != nil {
+                    failures.append(
+                        "\(plugin.lastPathComponent)/\(sourceFile.lastPathComponent): action catalog titles must use plugin localization"
+                    )
+                }
+            }
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testPluginActionDefinitionsDoNotExposeHardCodedChinese() throws {
+        let patterns = [
+            #"ActionDefinition\s*\([\s\S]{0,500}?\btitle\s*:\s*\"[^\"]*[\p{Han}]"#,
+            #"ActionDefinition\s*\([\s\S]{0,700}?\bdescription\s*:\s*\"[^\"]*[\p{Han}]"#,
+            #"ActionParameterDefinition\s*\([\s\S]{0,250}?\btitle\s*:\s*\"[^\"]*[\p{Han}]"#,
+            #"ActionConfirmation\s*\([\s\S]{0,500}?(?:title|message|confirmButtonTitle)\s*:\s*\"[^\"]*[\p{Han}]"#,
+            #"\.unavailable\s*\(\s*\"[^\"]*[\p{Han}]"#,
+            #"\.failed\s*\(\s*message\s*:\s*\"[^\"]*[\p{Han}]"#,
+        ].map { try! NSRegularExpression(pattern: $0) }
+        var failures: [String] = []
+
+        for plugin in try pluginDirectories() {
+            for sourceFile in try files(
+                withExtension: "swift",
+                in: plugin.appending(path: "Sources")
+            ) {
+                let source = try String(contentsOf: sourceFile, encoding: .utf8)
+                guard source.contains("ActionDefinition(") else { continue }
+                let range = NSRange(source.startIndex..., in: source)
+                if patterns.contains(where: { $0.firstMatch(in: source, range: range) != nil }) {
+                    failures.append(
+                        "\(plugin.lastPathComponent)/\(sourceFile.lastPathComponent): action definitions, parameters, confirmations, availability, and failures must use runtime localization"
+                    )
+                }
             }
         }
 
@@ -275,6 +341,66 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
     }
 
+    func testPluginKitActionLocalizationKeysCoverAllSupportedLanguages() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "MacToolsPluginKit")
+            .appending(path: "Resources")
+            .appending(path: "Localizable.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        guard let strings = catalog["strings"] as? [String: [String: Any]] else {
+            throw AuditError.invalidCatalog(catalogURL.path)
+        }
+
+        var failures: [String] = []
+        for key in pluginKitActionLocalizationKeys {
+            validate(key: key, in: strings, pluginName: "PluginKit Actions", failures: &failures)
+        }
+
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
+    func testFeatureUILocalizationKeysCoverAllSupportedLanguages() throws {
+        let catalogURL = repositoryRoot
+            .appending(path: "Sources")
+            .appending(path: "Resources")
+            .appending(path: "Localization")
+            .appending(path: "FeatureUI.xcstrings")
+        let catalog = try jsonObject(at: catalogURL)
+        guard let strings = catalog["strings"] as? [String: [String: Any]] else {
+            throw AuditError.invalidCatalog(catalogURL.path)
+        }
+
+        let sourceFiles = try files(
+            withExtension: "swift",
+            in: repositoryRoot.appending(path: "Sources")
+        )
+        let referencedKeys = try sourceFiles.reduce(into: Set<String>()) { result, url in
+            result.formUnion(featureSourceLocalizationKeys(
+                in: try String(contentsOf: url, encoding: .utf8)
+            ))
+        }
+
+        var failures: [String] = []
+        for key in referencedKeys.sorted() {
+            validate(key: key, in: strings, pluginName: "Feature UI", failures: &failures)
+            validateFormatSpecifiers(
+                source: key,
+                entry: strings[key],
+                key: key,
+                failures: &failures
+            )
+        }
+
+        XCTAssertFalse(referencedKeys.isEmpty, "Feature UI: no localization keys were discovered")
+        XCTAssertEqual(
+            Set(strings.keys),
+            referencedKeys,
+            "FeatureUI.xcstrings must contain exactly the source-keyed strings used by FeatureL10n"
+        )
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+    }
+
     func testUnifiedSearchLocalizationKeysCoverAllSupportedLanguages() throws {
         let localizationDirectory = repositoryRoot
             .appending(path: "Sources")
@@ -372,6 +498,41 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         }
     }
 
+    private func validateFormatSpecifiers(
+        source: String,
+        entry: [String: Any]?,
+        key: String,
+        failures: inout [String]
+    ) {
+        let expected = formatSpecifiers(in: source)
+        guard !expected.isEmpty else { return }
+        guard let localizations = entry?["localizations"] as? [String: Any] else { return }
+
+        for language in supportedLanguages {
+            guard
+                let localization = localizations[language] as? [String: Any],
+                let stringUnit = localization["stringUnit"] as? [String: Any],
+                let value = stringUnit["value"] as? String
+            else {
+                continue
+            }
+            let actual = formatSpecifiers(in: value)
+            if actual != expected {
+                failures.append(
+                    "Feature UI: \(key) has format specifiers \(actual) for \(language), expected \(expected)"
+                )
+            }
+        }
+    }
+
+    private func formatSpecifiers(in value: String) -> [String] {
+        let expression = try! NSRegularExpression(pattern: #"%(?:\d+\$)?[@d]|%%"#)
+        let range = NSRange(value.startIndex..., in: value)
+        return expression.matches(in: value, range: range).compactMap { match in
+            Range(match.range, in: value).map { String(value[$0]) }
+        }.sorted()
+    }
+
     private func containsTranslatedValue(in value: Any) -> Bool {
         if let dictionary = value as? [String: Any] {
             if
@@ -432,11 +593,41 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
             pattern: #"(?:\b(?:self\.)?[A-Za-z_]\w*|PluginLocalization\([^\n]*\))\.(?:string|format|search|searchFormat|searchPluralFormat)\s*\(\s*\"([^\"]+)\"\s*,\s*defaultValue\s*:"#
         )
         let range = NSRange(source.startIndex..., in: source)
-        return Set(expression.matches(in: source, range: range).compactMap { match in
+        var keys: Set<String> = Set(expression.matches(in: source, range: range).compactMap { match -> String? in
             guard let keyRange = Range(match.range(at: 1), in: source) else {
                 return nil
             }
             return String(source[keyRange])
+        })
+        keys.formUnion(pluginSourceLocalizationKeys(in: source))
+        return keys
+    }
+
+    private func featureSourceLocalizationKeys(in source: String) -> Set<String> {
+        sourceLocalizationKeys(
+            in: source,
+            pattern: #"FeatureL10n\.(?:string|format)\s*\(\s*"((?:\\.|[^"\\])*)""#
+        )
+    }
+
+    private func pluginSourceLocalizationKeys(in source: String) -> Set<String> {
+        sourceLocalizationKeys(
+            in: source,
+            pattern: #"(?<![A-Za-z])localized(?:Format)?\s*\(\s*"((?:\\.|[^"\\])*)""#
+        )
+    }
+
+    private func sourceLocalizationKeys(in source: String, pattern: String) -> Set<String> {
+        let expression = try! NSRegularExpression(pattern: pattern)
+        let range = NSRange(source.startIndex..., in: source)
+        return Set(expression.matches(in: source, range: range).compactMap { match in
+            guard let keyRange = Range(match.range(at: 1), in: source) else {
+                return nil
+            }
+            let escapedValue = String(source[keyRange])
+            let jsonString = "\"\(escapedValue)\""
+            return (try? JSONDecoder().decode(String.self, from: Data(jsonString.utf8)))
+                ?? escapedValue
         })
     }
 

@@ -89,6 +89,11 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
         static let setEnabled = "set-enabled"
     }
 
+    private enum ErrorState {
+        case muteFailed
+        case unmuteFailed
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -107,7 +112,18 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
     private let localization: PluginLocalization
     private let controller: any MicrophoneControlling
     private var isMuted: Bool = false
-    private var lastErrorMessage: String?
+    private var lastErrorState: ErrorState?
+
+    private var lastErrorMessage: String? {
+        switch lastErrorState {
+        case .muteFailed:
+            localization.string("error.muteFailed", defaultValue: "静音操作失败")
+        case .unmuteFailed:
+            localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
+        case nil:
+            nil
+        }
+    }
 
     init(
         controller: any MicrophoneControlling = CoreAudioMicrophoneController(),
@@ -155,16 +171,38 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
                     "action.setMute.title",
                     defaultValue: "设置麦克风静音"
                 ),
-                description: metadata.defaultDescription,
-                keywords: ["麦克风", "静音", "输入", "隐私"],
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "快速切换麦克风静音"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "麦克风静音"),
+                    localization.string("metadata.description", defaultValue: "快速切换麦克风静音"),
+                ],
                 systemImage: metadata.iconName,
                 parameters: [
-                    ActionParameterDefinition(id: "enabled", title: "静音", kind: .boolean),
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: localization.string(
+                            "action.setMute.title",
+                            defaultValue: "设置麦克风静音"
+                        ),
+                        kind: .boolean
+                    ),
                 ],
                 confirmation: ActionConfirmation(
-                    title: "确认更改麦克风状态",
-                    message: "外部运行链接将更改默认麦克风的静音状态。",
-                    confirmButtonTitle: "继续"
+                    title: localization.string(
+                        "action.confirmation.title",
+                        defaultValue: "确认更改麦克风状态"
+                    ),
+                    message: localization.string(
+                        "action.confirmation.message",
+                        defaultValue: "外部运行链接将更改默认麦克风的静音状态。"
+                    ),
+                    confirmButtonTitle: localization.string(
+                        "action.confirmation.confirm",
+                        defaultValue: "继续"
+                    )
                 ),
                 externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive]
@@ -174,8 +212,14 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
-            ActionCatalogEntry(reference: actionReference(enabled: true), title: "麦克风静音"),
-            ActionCatalogEntry(reference: actionReference(enabled: false), title: "恢复麦克风"),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: localization.string("action.mute.title", defaultValue: "麦克风静音")
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: localization.string("action.unmute.title", defaultValue: "恢复麦克风")
+            ),
         ]
     }
 
@@ -202,12 +246,16 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
-            return ActionExecutionHandle { .failed(message: "操作参数无效。") }
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = applyMute(enabled)
         let message = lastErrorMessage
+        let failureMessage = message
+            ?? localization.string("error.muteFailed", defaultValue: "静音操作失败")
         return ActionExecutionHandle {
-            succeeded ? .succeeded() : .failed(message: message ?? "麦克风操作失败。")
+            succeeded
+                ? .succeeded()
+                : .failed(message: failureMessage)
         }
     }
 
@@ -225,12 +273,10 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
         let success = controller.setMuteState(muted)
         if success {
             isMuted = muted
-            lastErrorMessage = nil
+            lastErrorState = nil
         } else {
             logger.error("Failed to set mute to \(muted, privacy: .public)")
-            lastErrorMessage = muted
-                ? localization.string("error.muteFailed", defaultValue: "静音操作失败")
-                : localization.string("error.unmuteFailed", defaultValue: "取消静音失败")
+            lastErrorState = muted ? .muteFailed : .unmuteFailed
         }
         onStateChange?()
         return success

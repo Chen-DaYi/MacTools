@@ -44,13 +44,13 @@ final class ActionRunLinkService {
 
     func presentation(for reference: ActionReference) -> ActionRunLinkPresentation {
         guard case let .success(action) = registry.registeredAction(for: reference) else {
-            return .unavailable("操作提供方当前不可用。")
+            return .unavailable(FeatureL10n.string("操作提供方当前不可用。"))
         }
         guard action.catalogEntry != nil else {
-            return .unavailable("此操作尚未发布到操作目录。")
+            return .unavailable(FeatureL10n.string("此操作尚未发布到操作目录。"))
         }
         guard action.definition.externalInvocationPolicy != .unavailable else {
-            return .unavailable("此操作不能通过运行链接调用。")
+            return .unavailable(FeatureL10n.string("此操作不能通过运行链接调用。"))
         }
 
         if action.definition.parameters.isEmpty {

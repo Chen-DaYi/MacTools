@@ -11,7 +11,13 @@ struct ResolvedActionGridEntry: Identifiable, Equatable {
     let availability: ActionAvailability
 
     var accessibilityLabel: String {
-        "\(title)，\(ownerTitle)，\(availability.isAvailable ? "可用" : (availability.reason ?? "不可用"))"
+        FeatureL10n.joined([
+            title,
+            ownerTitle,
+            availability.isAvailable
+                ? FeatureL10n.string("可用")
+                : (availability.reason ?? FeatureL10n.string("不可用")),
+        ])
     }
 }
 
@@ -123,6 +129,7 @@ final class ActionGridOverlayModel: ObservableObject {
 
     private let resolver: (ActionGridPresentationEntry) -> ResolvedActionGridEntry
     private let executor: (ActionReference) async -> ActionExecutionOutcome
+    private var sourceEntries: [ActionGridPresentationEntry] = []
     var onSuccessfulExecution: (() -> Void)?
 
     init(
@@ -136,9 +143,14 @@ final class ActionGridOverlayModel: ObservableObject {
     var columns: Int { ActionGridOverlayGeometry.columnCount(for: entries.count) }
 
     func update(_ entries: [ActionGridPresentationEntry]) {
-        self.entries = entries.map(resolver)
+        sourceEntries = entries
+        refreshLocalization()
         selectedIndex = min(selectedIndex, max(0, entries.count - 1))
         feedback = nil
+    }
+
+    func refreshLocalization() {
+        entries = sourceEntries.map(resolver)
     }
 
     func move(_ direction: ActionGridKeyboardDirection) {
@@ -165,7 +177,7 @@ final class ActionGridOverlayModel: ObservableObject {
     func activate(_ entry: ResolvedActionGridEntry) {
         guard !isExecuting else { return }
         guard entry.availability.isAvailable else {
-            feedback = entry.availability.reason ?? "操作不可用。"
+            feedback = entry.availability.reason ?? FeatureL10n.string("操作不可用。")
             return
         }
         isExecuting = true
@@ -180,7 +192,7 @@ final class ActionGridOverlayModel: ObservableObject {
             case let .completed(.failed(message)):
                 feedback = message
             case .completed(.cancelled):
-                feedback = "操作已取消。"
+                feedback = FeatureL10n.string("操作已取消。")
             case let .rejected(rejection):
                 feedback = Self.message(for: rejection)
             }
@@ -189,18 +201,18 @@ final class ActionGridOverlayModel: ObservableObject {
 
     private static func message(for rejection: ActionExecutionRejection) -> String {
         switch rejection {
-        case .unknownAction: "操作不存在。"
-        case let .invalidParameters(reason): "操作参数无效：\(reason)"
-        case let .unavailable(reason): reason ?? "操作不可用。"
-        case .backgroundExecutionUnsupported: "操作不能在后台运行。"
-        case .foregroundExecutionUnsupported: "操作不能以交互方式运行。"
-        case .externalInvocationUnavailable: "操作不允许外部调用。"
-        case .confirmationUnavailable: "无法显示操作确认。"
-        case .confirmationDenied: "操作未获确认。"
-        case .confirmationTimedOut: "操作确认已超时。"
-        case .providerChanged: "操作提供者已发生变化，请重试。"
+        case .unknownAction: FeatureL10n.string("找不到对应操作。")
+        case let .invalidParameters(reason): FeatureL10n.format("操作参数无效：%@", reason)
+        case let .unavailable(reason): reason ?? FeatureL10n.string("操作不可用。")
+        case .backgroundExecutionUnsupported: FeatureL10n.string("操作不能在后台运行。")
+        case .foregroundExecutionUnsupported: FeatureL10n.string("操作不能以交互方式运行。")
+        case .externalInvocationUnavailable: FeatureL10n.string("此操作不允许从外部调用。")
+        case .confirmationUnavailable: FeatureL10n.string("无法显示操作确认。")
+        case .confirmationDenied: FeatureL10n.string("操作已取消。")
+        case .confirmationTimedOut: FeatureL10n.string("确认已超时。")
+        case .providerChanged: FeatureL10n.string("操作提供方已发生变化，请重试。")
         case let .providerFailure(message): message
-        case .executionTimedOut: "操作执行超时。"
+        case .executionTimedOut: FeatureL10n.string("操作超时。")
         }
     }
 }
@@ -252,10 +264,10 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
                     return ResolvedActionGridEntry(
                         id: entry.id,
                         reference: entry.reference,
-                        title: entry.customTitle ?? "不可用操作",
+                        title: entry.customTitle ?? FeatureL10n.string("操作不可用。"),
                         ownerTitle: entry.reference.key.providerID,
                         systemImage: "questionmark.square.dashed",
-                        availability: .unavailable("操作提供者不可用。")
+                        availability: .unavailable(FeatureL10n.string("操作提供方当前不可用。"))
                     )
                 }
                 let ownerTitle = pluginHost.actionSurfaceOwnerTitle(
@@ -272,7 +284,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
             },
             executor: { [weak pluginHost] reference in
                 guard let pluginHost else {
-                    return .rejected(.unavailable("MacTools 不可用。"))
+                    return .rejected(.unavailable(FeatureL10n.string("操作提供方当前不可用。")))
                 }
                 return await pluginHost.actionExecutor.execute(
                     ActionInvocation(reference: reference, source: .actionGrid, mode: .foreground)
@@ -316,7 +328,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         )
         panel.delegate = self
         panel.identifier = Self.panelIdentifier
-        panel.setAccessibilityLabel("操作网格")
+        panel.setAccessibilityLabel(FeatureL10n.string("操作网格"))
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -326,7 +338,10 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.keyEventHandler = { [weak self] event in self?.processKeyEvent(event) ?? false }
         panel.contentView = NSHostingView(
-            rootView: ActionGridOverlayView(model: model, onDismiss: { [weak self] in self?.close() })
+            rootView: ActionGridOverlayRootView(
+                model: model,
+                onDismiss: { [weak self] in self?.close() }
+            )
         )
         previousApplication = NSWorkspace.shared.frontmostApplication == .current
             ? nil
@@ -405,6 +420,28 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     }
 }
 
+struct ActionGridOverlayRootView: View {
+    @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
+    @ObservedObject var model: ActionGridOverlayModel
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ActionGridOverlayView(model: model, onDismiss: onDismiss)
+            .environment(\.locale, PluginRuntimeLocalization.locale)
+            .environment(
+                \.layoutDirection,
+                Self.layoutDirection(for: PluginRuntimeLocalization.locale)
+            )
+            .onChange(of: runtimeLocale.revision) { _, _ in
+                model.refreshLocalization()
+            }
+    }
+
+    static func layoutDirection(for locale: Locale) -> LayoutDirection {
+        locale.language.characterDirection == .rightToLeft ? .rightToLeft : .leftToRight
+    }
+}
+
 private struct ActionGridOverlayView: View {
     @ObservedObject var model: ActionGridOverlayModel
     let onDismiss: () -> Void
@@ -432,7 +469,11 @@ private struct ActionGridOverlayView: View {
                             Text(entry.title)
                                 .font(.headline)
                                 .lineLimit(1)
-                            Text(entry.availability.isAvailable ? entry.ownerTitle : (entry.availability.reason ?? "不可用"))
+                            Text(
+                                entry.availability.isAvailable
+                                    ? entry.ownerTitle
+                                    : (entry.availability.reason ?? FeatureL10n.string("不可用"))
+                            )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -443,7 +484,7 @@ private struct ActionGridOverlayView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(model.isExecuting)
-                    .accessibilityLabel("\(index + 1)，\(entry.accessibilityLabel)")
+                    .accessibilityLabel(FeatureL10n.joined([String(index + 1), entry.accessibilityLabel]))
                 }
             }
             if let feedback = model.feedback {
@@ -473,7 +514,7 @@ private struct ActionGridOverlayView: View {
             value: model.selectedIndex
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("操作网格")
+        .accessibilityLabel(FeatureL10n.string("操作网格"))
     }
 
     private func tileBackground(selected: Bool) -> some View {
