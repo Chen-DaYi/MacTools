@@ -89,6 +89,86 @@ final class AutomationControllerTests: XCTestCase {
         controller.deleteRule(id: first.id)
         XCTAssertEqual(controller.rules(workflowID: workflow.id).map(\.id), [second.id])
     }
+
+    func testDeletingWorkflowAlsoDeletesItsRulesAcrossRelaunch() throws {
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let executor = ActionExecutor(registry: registry)
+        let workflowStore = WorkflowStore(userDefaults: defaults)
+        let ruleStore = AutomationRuleStore(userDefaults: defaults)
+        let controller = AutomationController(
+            store: workflowStore,
+            ruleStore: ruleStore,
+            registry: registry,
+            executor: executor
+        )
+        let deleted = try XCTUnwrap(controller.createWorkflow())
+        let retained = try XCTUnwrap(controller.createWorkflow())
+        _ = try XCTUnwrap(controller.createRule(workflowID: deleted.id))
+        let retainedRule = try XCTUnwrap(controller.createRule(workflowID: retained.id))
+
+        controller.deleteWorkflow(id: deleted.id)
+
+        XCTAssertNil(workflowStore.workflow(id: deleted.id))
+        XCTAssertEqual(ruleStore.rules().map(\.id), [retainedRule.id])
+        let reloadedRules = AutomationRuleStore(userDefaults: defaults).rules()
+        XCTAssertEqual(reloadedRules.map(\.id), [retainedRule.id])
+    }
+
+    func testMoveWorkflowUpdatesPublishedOrderAndPersists() throws {
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let controller = AutomationController(
+            store: WorkflowStore(userDefaults: defaults),
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let first = try XCTUnwrap(controller.createWorkflow())
+        let second = try XCTUnwrap(controller.createWorkflow())
+
+        controller.moveWorkflow(id: second.id, offset: -1)
+
+        XCTAssertEqual(controller.workflows.map(\.id), [second.id, first.id])
+        XCTAssertEqual(
+            WorkflowStore(userDefaults: defaults).workflows().map(\.id),
+            [second.id, first.id]
+        )
+    }
+
+    func testActiveRunCanBeCancelledThroughControllerSurface() async throws {
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let provider = CancellableAutomationControllerTestProvider()
+        registry.synchronize([provider.registration])
+        let controller = AutomationController(
+            store: WorkflowStore(userDefaults: defaults),
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let workflow = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: workflow.id, reference: provider.reference)
+        let runID = try XCTUnwrap(controller.startWorkflow(id: workflow.id))
+
+        for _ in 0 ..< 100 where controller.activeRunIDs(for: workflow.id).isEmpty {
+            await Task.yield()
+        }
+        XCTAssertEqual(controller.activeRunIDs(for: workflow.id), [runID])
+
+        controller.cancel(runID: runID)
+        for _ in 0 ..< 100 where controller.activeRunIDs.contains(runID) {
+            await Task.yield()
+        }
+
+        XCTAssertFalse(controller.activeRunIDs.contains(runID))
+        XCTAssertEqual(controller.recentRuns(workflowID: workflow.id).first?.status, .cancelled)
+        XCTAssertEqual(provider.cancelCount, 1)
+    }
 }
 
 @MainActor
@@ -116,6 +196,46 @@ private final class AutomationControllerTestProvider {
             begin: { [weak self] _ in
                 self?.invocationCount += 1
                 return .success(ActionExecutionHandle(operation: { .succeeded() }))
+            }
+        )
+    }
+}
+
+@MainActor
+private final class CancellableAutomationControllerTestProvider {
+    let reference = ActionReference(
+        key: ActionKey(providerID: "automation-controller-tests", actionID: "wait")
+    )
+    private(set) var cancelCount = 0
+
+    var registration: ActionProviderRegistration {
+        let definition = ActionDefinition(
+            key: reference.key,
+            title: "等待",
+            description: "",
+            systemImage: "hourglass",
+            capabilities: [.background, .foregroundInteractive, .cancellable]
+        )
+        return ActionProviderRegistration(
+            providerID: reference.key.providerID,
+            identity: ObjectIdentifier(self),
+            definitions: [definition],
+            catalogEntries: [ActionCatalogEntry(reference: reference, title: "等待")],
+            availability: { _ in .available },
+            begin: { [weak self] _ in
+                .success(
+                    ActionExecutionHandle(
+                        operation: {
+                            do {
+                                try await Task.sleep(for: .seconds(60))
+                                return .succeeded()
+                            } catch {
+                                return .cancelled
+                            }
+                        },
+                        cancel: { self?.cancelCount += 1 }
+                    )
+                )
             }
         )
     }

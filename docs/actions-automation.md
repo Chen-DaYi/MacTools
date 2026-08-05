@@ -15,7 +15,7 @@ Unavailable references are retained by shortcut assignments, workflows, presets,
 
 ## Automation boundaries
 
-Workflows can be created, renamed, duplicated, enabled or disabled, reordered, and deleted independently from automatic rules. Manual Run and Test ignore rule-specific conditions. Enabled workflows publish stable `automation/workflow.<uuid>` actions, so Unified Search, global shortcuts, Run Links, and Action Grid need no workflow-specific dispatch path.
+Workflows can be created, renamed, duplicated, enabled or disabled, reordered, run, tested, stopped, and deleted. Automatic rules are managed separately; deleting a workflow explicitly removes its attached rules so enabled orphan triggers cannot remain hidden. Manual Run and Test ignore rule-specific conditions. Enabled workflows publish stable `automation/workflow.<uuid>` actions, so Unified Search, global shortcuts, Run Links, and Action Grid need no workflow-specific dispatch path.
 
 Automatic rules use one trigger and zero or more conditions:
 
@@ -37,4 +37,4 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
   -derivedDataPath build/DerivedData test -quiet
 ```
 
-The test suite covers registry revisions and migration; parameter validation; executor safety, confirmation, cancellation, and timeout behavior; shortcut persistence/conflicts/registration/reentrancy; Run Link parsing, queue bounds, presets, feedback, and privacy; workflow editing, recovery, execution, recursion, and history; all trigger/condition families with injected providers; and Action Grid storage, migration, geometry, keyboard mapping, accessibility labels, repeat presentation, unavailable actions, and shared execution.
+The test suite covers registry revisions and migration; parameter validation; executor safety, confirmation, cancellation, and timeout behavior; shortcut persistence/conflicts/registration/reentrancy and unavailable-provider visibility; Run Link parsing, queue bounds, presets, feedback, and privacy; workflow editing, ordering, rule cleanup, recovery, cancellation, execution, recursion, startup sequencing, and history; all trigger/condition families with injected providers; and Action Grid storage, migration, geometry, keyboard mapping, distinct accessible controls, repeat presentation, unavailable actions, and shared execution.

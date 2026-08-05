@@ -66,14 +66,19 @@ struct AutomationSettingsView: View {
                 ContentUnavailableView("尚无工作流", systemImage: "bolt.slash")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(automation.workflows, selection: $selectedWorkflowID) { workflow in
-                    WorkflowCollectionRow(
-                        automation: automation,
-                        workflow: workflow,
-                        ruleCount: automation.rules(workflowID: workflow.id).count,
-                        lastRun: automation.recentRuns(workflowID: workflow.id, limit: 1).first
-                    )
-                    .tag(workflow.id)
+                List(selection: $selectedWorkflowID) {
+                    ForEach(Array(automation.workflows.enumerated()), id: \.element.id) {
+                        index, workflow in
+                        WorkflowCollectionRow(
+                            automation: automation,
+                            workflow: workflow,
+                            ruleCount: automation.rules(workflowID: workflow.id).count,
+                            lastRun: automation.recentRuns(workflowID: workflow.id, limit: 1).first,
+                            canMoveUp: index > 0,
+                            canMoveDown: index + 1 < automation.workflows.count
+                        )
+                        .tag(workflow.id)
+                    }
                 }
                 .listStyle(.sidebar)
             }
@@ -101,12 +106,15 @@ private struct WorkflowCollectionRow: View {
     let workflow: WorkflowDefinition
     let ruleCount: Int
     let lastRun: WorkflowRun?
+    let canMoveUp: Bool
+    let canMoveDown: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: workflow.systemImage)
                 .foregroundStyle(workflow.isEnabled ? Color.accentColor : .secondary)
                 .frame(width: 20)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(workflow.name)
@@ -118,6 +126,8 @@ private struct WorkflowCollectionRow: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(workflow.name)，\(summary)")
 
             Button {
                 _ = automation.startWorkflow(id: workflow.id)
@@ -127,10 +137,22 @@ private struct WorkflowCollectionRow: View {
             .buttonStyle(.plain)
             .disabled(!workflow.isEnabled || workflow.steps.isEmpty)
             .help("运行工作流")
+            .accessibilityLabel("运行“\(workflow.name)”")
+
+            Menu {
+                Button("上移") { automation.moveWorkflow(id: workflow.id, offset: -1) }
+                    .disabled(!canMoveUp)
+                Button("下移") { automation.moveWorkflow(id: workflow.id, offset: 1) }
+                    .disabled(!canMoveDown)
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("调整“\(workflow.name)”的顺序")
         }
         .padding(.vertical, 3)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(workflow.name)，\(summary)")
+        .accessibilityElement(children: .contain)
     }
 
     private var summary: String {
@@ -167,12 +189,13 @@ private struct WorkflowDetailView: View {
         }
         .alert("删除工作流？", isPresented: $pendingDelete) {
             Button("删除", role: .destructive) {
-                automation.deleteWorkflow(id: workflow.id)
-                onDeleted()
+                if automation.deleteWorkflow(id: workflow.id) {
+                    onDeleted()
+                }
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("保存的快捷键、运行链接和网格条目会保留，并显示为不可用。")
+            Text("相关自动规则会一并删除。保存的快捷键、运行链接和网格条目会保留，并显示为不可用。")
         }
     }
 
@@ -203,19 +226,29 @@ private struct WorkflowDetailView: View {
                 )
                 .toggleStyle(.switch)
 
-                Button("测试") {
-                    _ = automation.startWorkflow(id: workflow.id, test: true)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(workflow.steps.isEmpty)
+                if activeWorkflowRunIDs.isEmpty {
+                    Button("测试") {
+                        _ = automation.startWorkflow(id: workflow.id, test: true)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(workflow.steps.isEmpty)
 
-                Button("运行") {
-                    _ = automation.startWorkflow(id: workflow.id)
+                    Button("运行") {
+                        _ = automation.startWorkflow(id: workflow.id)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(!workflow.isEnabled || workflow.steps.isEmpty)
+                } else {
+                    Button("停止", role: .destructive) {
+                        activeWorkflowRunIDs.forEach(automation.cancel(runID:))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .help("停止当前工作流运行")
+                    .accessibilityIdentifier("mactools.automation.stop")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(!workflow.isEnabled || workflow.steps.isEmpty)
 
                 Menu {
                     Button("创建副本") { _ = automation.duplicateWorkflow(id: workflow.id) }
@@ -234,6 +267,10 @@ private struct WorkflowDetailView: View {
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
         .pluginSettingsCardBackground(.host)
+    }
+
+    private var activeWorkflowRunIDs: [UUID] {
+        automation.activeRunIDs(for: workflow.id)
     }
 
     private var stepsSection: some View {

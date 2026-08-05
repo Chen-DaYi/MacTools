@@ -37,6 +37,9 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
     private var actionGridOverlayController: ActionGridOverlayController?
+    private lazy var automationStartupCoordinator = AutomationStartupCoordinator { [weak self] in
+        self?.pluginHost.automationController.startAutomaticRules()
+    }
     private lazy var runLinkExecutionCoordinator = RunLinkExecutionCoordinator(
         registry: pluginHost.actionRegistry,
         executor: pluginHost.actionExecutor,
@@ -69,7 +72,6 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         pluginHost.installActionGridPresenter { [weak actionGridOverlayController] entries in
             actionGridOverlayController?.present(entries: entries) ?? false
         }
-        pluginHost.automationController.startAutomaticRules()
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,
             windowRouter: windowRouter,
@@ -107,7 +109,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
                 currentAppVersion: currentAppVersion
             )
-            activateAppURLRouter()
+            completeBootstrap()
             return
         }
 
@@ -115,19 +117,27 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             currentAppVersion: currentAppVersion
         ) else {
             pluginHost.loadDynamicPluginsIfNeeded()
-            activateAppURLRouter()
+            completeBootstrap()
             return
         }
 
         Task { @MainActor in
-            let updateSucceeded = await pluginHost.automaticUpdateInstalledPluginsBeforeLoading()
-            if updateSucceeded {
-                pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
-                    currentAppVersion: currentAppVersion
-                )
+            await automationStartupCoordinator.startAfterActionRegistryPreparation {
+                let updateSucceeded = await pluginHost
+                    .automaticUpdateInstalledPluginsBeforeLoading()
+                if updateSucceeded {
+                    pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
+                        currentAppVersion: currentAppVersion
+                    )
+                }
             }
             activateAppURLRouter()
         }
+    }
+
+    private func completeBootstrap() {
+        automationStartupCoordinator.actionRegistryDidBecomeReady()
+        activateAppURLRouter()
     }
 
     private func activateAppURLRouter() {
@@ -142,5 +152,34 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
                 await self?.runLinkExecutionCoordinator.execute(request)
             }
         )
+    }
+}
+
+/// Keeps one-shot automation events from observing an incomplete action registry
+/// while installed dynamic plugins are still loading or updating.
+@MainActor
+final class AutomationStartupCoordinator {
+    private let startAutomaticRules: () -> Void
+    private(set) var hasStarted = false
+    private(set) var isPreparing = false
+
+    init(startAutomaticRules: @escaping () -> Void) {
+        self.startAutomaticRules = startAutomaticRules
+    }
+
+    func actionRegistryDidBecomeReady() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        startAutomaticRules()
+    }
+
+    func startAfterActionRegistryPreparation(
+        _ prepare: @MainActor () async -> Void
+    ) async {
+        guard !hasStarted, !isPreparing else { return }
+        isPreparing = true
+        await prepare()
+        isPreparing = false
+        actionRegistryDidBecomeReady()
     }
 }

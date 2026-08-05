@@ -24,6 +24,7 @@ final class WorkflowRunner {
     private let now: () -> Date
     private var cancelledRunIDs: Set<UUID> = []
     private(set) var activeRunIDs: Set<UUID> = []
+    private var executionHandles: [UUID: ActionExecutionHandle] = [:]
 
     var onRunChange: (() -> Void)?
 
@@ -73,11 +74,13 @@ final class WorkflowRunner {
                 self?.cancelledRunIDs.insert(runID)
             }
         )
+        executionHandles[runID] = actionHandle
         return .success(WorkflowExecutionHandle(runID: runID, actionHandle: actionHandle))
     }
 
     func cancel(runID: UUID) {
         cancelledRunIDs.insert(runID)
+        executionHandles[runID]?.cancel()
     }
 
     private func execute(
@@ -86,6 +89,10 @@ final class WorkflowRunner {
         source: WorkflowRunSource,
         mode: ActionExecutionMode
     ) async -> ActionExecutionResult {
+        defer {
+            cancelledRunIDs.remove(runID)
+            executionHandles.removeValue(forKey: runID)
+        }
         guard let workflow = store.workflow(id: workflowID) else {
             return .failed(message: "找不到工作流。")
         }
@@ -138,7 +145,6 @@ final class WorkflowRunner {
 
         defer {
             activeRunIDs.remove(runID)
-            cancelledRunIDs.remove(runID)
             onRunChange?()
         }
 

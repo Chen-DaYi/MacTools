@@ -4,6 +4,28 @@ import XCTest
 
 @MainActor
 final class ActionGridPluginTests: XCTestCase {
+    func testSettingsRowExposesDistinctAccessibleOperations() {
+        let accessibility = ActionGridEntryAccessibility(
+            title: "锁定屏幕",
+            owner: "MacTools",
+            availability: "可用"
+        )
+
+        XCTAssertEqual(accessibility.summaryLabel, "锁定屏幕，MacTools，可用")
+        XCTAssertEqual(accessibility.settingsLabel, "设置“锁定屏幕”")
+        XCTAssertEqual(accessibility.replaceLabel, "替换“锁定屏幕”")
+        XCTAssertEqual(accessibility.removeLabel, "移除“锁定屏幕”")
+        XCTAssertEqual(
+            Set([
+                accessibility.summaryLabel,
+                accessibility.settingsLabel,
+                accessibility.replaceLabel,
+                accessibility.removeLabel,
+            ]).count,
+            4
+        )
+    }
+
     func testShowActionIsForegroundOnlyExternallyEligibleAndPresentsSavedEntries() async throws {
         let storage = ActionGridTestStorage()
         let plugin = ActionGridPlugin(

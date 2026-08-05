@@ -288,6 +288,50 @@ final class PluginHostActionRegistryTests: XCTestCase {
         XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
     }
 
+    func testMissingProviderShortcutRemainsVisibleUnavailableAndAssigned() throws {
+        let suiteName = "PluginHostActionRegistryTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let plugin = NativeActionTestPlugin()
+        let binding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_U),
+            modifiers: [.command, .option]
+        )
+        let firstHost = PluginHost(
+            plugins: [plugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(
+                userDefaults: defaults
+            ),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        )
+        let reference = ActionReference(key: plugin.definition.key)
+        XCTAssertEqual(firstHost.setActionShortcutBinding(binding, to: reference), .success)
+
+        let reloadedHost = PluginHost(
+            plugins: [],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(
+                userDefaults: defaults
+            ),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        )
+        let item = try XCTUnwrap(
+            reloadedHost.actionShortcutCatalogItems.first { $0.reference == reference }
+        )
+
+        XCTAssertEqual(item.bindingText, ShortcutFormatter.displayString(for: binding))
+        XCTAssertEqual(item.status, .unavailable("操作不可用。"))
+        XCTAssertFalse(item.canAssign)
+        XCTAssertEqual(
+            reloadedHost.shortcutAssignmentService.assignment(for: reference)?.binding,
+            binding
+        )
+    }
+
     private func shortcutItem(in host: PluginHost) throws -> ShortcutSettingsItem {
         try XCTUnwrap(host.shortcutItems.first(where: {
             $0.id == ActionBackedShortcutTestPlugin.shortcutItemID

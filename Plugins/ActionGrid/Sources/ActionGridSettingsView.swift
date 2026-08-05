@@ -102,23 +102,38 @@ struct ActionGridSettingsView: View {
 
     private func entryRow(_ entry: ActionGridEntry) -> some View {
         let item = plugin.item(for: entry.reference)
+        let title = entry.customTitle ?? item?.title ?? "不可用操作"
+        let owner = item?.ownerTitle ?? "提供者缺失"
+        let availability = item.map {
+            $0.availability.isAvailable ? "可用" : ($0.availability.reason ?? "不可用")
+        } ?? "重新安装后会自动恢复"
+        let accessibility = ActionGridEntryAccessibility(
+            title: title,
+            owner: owner,
+            availability: availability
+        )
         return HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Image(systemName: item?.systemImage ?? "questionmark.square.dashed")
                 .frame(width: 24)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.customTitle ?? item?.title ?? "不可用操作")
+                Text(title)
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                Text(item.map { "\($0.ownerTitle) · \($0.availability.isAvailable ? "可用" : ($0.availability.reason ?? "不可用"))" } ?? "提供者缺失；重新安装后会自动恢复")
+                Text("\(owner) · \(availability)")
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(item?.availability.isAvailable == true ? Color.secondary : Color.red)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibility.summaryLabel)
             if item?.canOpenOwner == true {
                 Button("设置") {
                     plugin.openOwner(for: entry.reference)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(accessibility.settingsLabel)
+                .accessibilityHint("打开操作提供者设置")
             }
             Menu("替换") {
                 ForEach(plugin.catalogItems(excluding: entry.id)) { replacement in
@@ -130,19 +145,33 @@ struct ActionGridSettingsView: View {
                 }
             }
             .menuStyle(.borderlessButton)
+            .accessibilityLabel(accessibility.replaceLabel)
+            .accessibilityHint("选择其他操作替换此条目")
             Button(role: .destructive) {
                 if store.remove(id: entry.id) { plugin.notifyMutation() }
             } label: {
                 Image(systemName: "trash")
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(accessibility.removeLabel)
+            .accessibilityHint("从操作网格移除此条目")
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.customTitle ?? item?.title ?? "不可用操作")，\(item?.ownerTitle ?? "提供者缺失")，\(item?.availability.reason ?? "可用")")
+        .accessibilityElement(children: .contain)
     }
 
     private var previewColumns: [GridItem] {
         let count = max(1, store.entries.count)
         return Array(repeating: GridItem(.flexible(), spacing: 8), count: count <= 6 ? 2 : 3)
     }
+}
+
+struct ActionGridEntryAccessibility: Equatable {
+    let title: String
+    let owner: String
+    let availability: String
+
+    var summaryLabel: String { "\(title)，\(owner)，\(availability)" }
+    var settingsLabel: String { "设置“\(title)”" }
+    var replaceLabel: String { "替换“\(title)”" }
+    var removeLabel: String { "移除“\(title)”" }
 }

@@ -3773,7 +3773,8 @@ final class PluginHost: ObservableObject {
     }
 
     private func buildActionShortcutCatalogItems() -> [ActionShortcutCatalogItem] {
-        actionCatalogEntries.compactMap { entry in
+        var items: [ActionShortcutCatalogItem] = actionCatalogEntries.compactMap {
+            entry -> ActionShortcutCatalogItem? in
             guard case let .success(action) = actionRegistry.registeredAction(
                 for: entry.reference
             ) else {
@@ -3786,35 +3787,16 @@ final class PluginHost: ObservableObject {
             )
             let status: ActionShortcutCatalogStatus
             if let assignmentItem {
-                switch assignmentItem.state {
-                case .registered:
-                    status = .assigned
-                case let .unavailable(reason):
-                    status = .unavailable(reason)
-                case let .conflict(ownerDescription):
-                    status = .conflicted(ownerDescription)
-                case let .registrationFailed(code):
-                    status = .conflicted("系统注册失败（\(code)）。")
-                case .invalidBinding:
-                    status = .conflicted("快捷键无效。")
-                }
+                status = actionShortcutCatalogStatus(for: assignmentItem.state)
             } else if availability.isAvailable {
                 status = .unassigned
             } else {
                 status = .unavailable(availability.reason)
             }
-
-            let ownerTitle: String
-            if entry.reference.key.providerID == "mactools" {
-                ownerTitle = "MacTools"
-            } else {
-                ownerTitle = corePlugin(for: entry.reference.key.providerID)?.metadata.title
-                    ?? entry.reference.key.providerID
-            }
             return ActionShortcutCatalogItem(
                 reference: entry.reference,
                 title: entry.title,
-                ownerTitle: ownerTitle,
+                ownerTitle: actionOwnerTitle(providerID: entry.reference.key.providerID),
                 description: action.definition.description,
                 permissionSummary: {
                     let titles = actionPermissionTitles(for: entry.reference)
@@ -3826,6 +3808,55 @@ final class PluginHost: ObservableObject {
                 canAssign: availability.isAvailable
                     && action.definition.capabilities.contains(.foregroundInteractive)
             )
+        }
+
+        let catalogReferences = Set(items.map(\.reference))
+        items.append(contentsOf: shortcutAssignmentService.settingsItems.compactMap { item in
+            guard !catalogReferences.contains(item.assignment.reference) else {
+                return nil
+            }
+            return ActionShortcutCatalogItem(
+                reference: item.assignment.reference,
+                title: item.title,
+                ownerTitle: actionOwnerTitle(
+                    providerID: item.assignment.reference.key.providerID
+                ),
+                description: "操作提供方暂时不可用；快捷键分配已保留。",
+                permissionSummary: nil,
+                systemImage: "puzzlepiece.extension",
+                bindingText: item.bindingText,
+                status: actionShortcutCatalogStatus(for: item.state),
+                canAssign: false
+            )
+        })
+        return items
+    }
+
+    private func actionShortcutCatalogStatus(
+        for state: ActionShortcutRegistrationState
+    ) -> ActionShortcutCatalogStatus {
+        switch state {
+        case .registered:
+            .assigned
+        case let .unavailable(reason):
+            .unavailable(reason)
+        case let .conflict(ownerDescription):
+            .conflicted(ownerDescription)
+        case let .registrationFailed(code):
+            .conflicted("系统注册失败（\(code)）。")
+        case .invalidBinding:
+            .conflicted("快捷键无效。")
+        }
+    }
+
+    private func actionOwnerTitle(providerID: String) -> String {
+        switch providerID {
+        case "mactools":
+            "MacTools"
+        case AutomationController.providerID:
+            "自动化"
+        default:
+            corePlugin(for: providerID)?.metadata.title ?? providerID
         }
     }
 

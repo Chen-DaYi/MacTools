@@ -134,6 +134,21 @@ final class WorkflowStore {
         return upsert(copy)
     }
 
+    @discardableResult
+    func move(id: UUID, offset: Int) -> Bool {
+        var stored = workflows()
+        guard let source = stored.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+        let destination = source + offset
+        guard stored.indices.contains(destination) else {
+            return false
+        }
+        let workflow = stored.remove(at: source)
+        stored.insert(workflow, at: destination)
+        return replaceWorkflows(stored)
+    }
+
     private func byteLimited(_ value: String, maximumByteCount: Int) -> String {
         var result = ""
         for character in value {

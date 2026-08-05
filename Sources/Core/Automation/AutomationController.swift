@@ -89,8 +89,28 @@ final class AutomationController: ObservableObject {
         }
     }
 
-    func deleteWorkflow(id: UUID) {
+    @discardableResult
+    func deleteWorkflow(id: UUID) -> Bool {
+        let existingRules = ruleStore.rules()
+        let retainedRules = existingRules.filter { $0.workflowID != id }
+        guard retainedRules == existingRules || ruleStore.replace(retainedRules) else {
+            lastErrorMessage = "无法删除相关自动规则。"
+            return false
+        }
         guard store.delete(id: id) else {
+            if retainedRules != existingRules {
+                _ = ruleStore.replace(existingRules)
+            }
+            lastErrorMessage = "无法删除工作流。"
+            return false
+        }
+        finishDefinitionMutation()
+        return true
+    }
+
+    func moveWorkflow(id: UUID, offset: Int) {
+        guard store.move(id: id, offset: offset) else {
+            lastErrorMessage = "无法调整工作流顺序。"
             return
         }
         finishDefinitionMutation()
@@ -242,7 +262,12 @@ final class AutomationController: ObservableObject {
 
     func cancel(runID: UUID) {
         runner.cancel(runID: runID)
-        startedHandles[runID]?.cancel()
+    }
+
+    func activeRunIDs(for workflowID: UUID) -> [UUID] {
+        history.compactMap { run in
+            run.workflowID == workflowID && activeRunIDs.contains(run.id) ? run.id : nil
+        }
     }
 
     func recentRuns(workflowID: UUID, limit: Int = 20) -> [WorkflowRun] {

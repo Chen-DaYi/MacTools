@@ -44,6 +44,21 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertNotNil(store.workflow(id: duplicate.id))
     }
 
+    func testWorkflowOrderMovesAndPersistsAcrossReload() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let first = try store.create(name: "第一").get()
+        let second = try store.create(name: "第二").get()
+        let third = try store.create(name: "第三").get()
+
+        XCTAssertTrue(store.move(id: third.id, offset: -1))
+        XCTAssertEqual(store.workflows().map(\.id), [first.id, third.id, second.id])
+        XCTAssertFalse(store.move(id: first.id, offset: -1))
+
+        let reloaded = WorkflowStore(userDefaults: defaults)
+        XCTAssertEqual(reloaded.workflows().map(\.id), [first.id, third.id, second.id])
+    }
+
     func testInvalidAndCorruptPayloadsFailClosedWithoutDeletingStoredBytes() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let key = "automation.workflows.v1"

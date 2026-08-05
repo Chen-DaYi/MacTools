@@ -49,7 +49,7 @@
 | Window Switcher | Replace or customize the window-switching shortcut with direct cycling or a fixed key-selection window for running windows; click a key hint to record a stable letter, digit, or Command-key binding. |
 | App Shortcuts | Bind global shortcuts to common apps; pressing a shortcut opens or activates the app, and hides it if it is already frontmost. |
 | Actions & Shortcuts | Discover published MacTools and plugin actions in Unified Search or a central settings page, run them through one guarded executor, and assign conflict-checked global shortcuts from either surface. |
-| Automation | Build reusable named workflows from published actions, run or test them manually, inspect bounded per-step history, and attach schedule, calendar, app, power, display, or network rules with explicit conditions. |
+| Automation | Build and reorder reusable named workflows from published actions, run, test, or stop them manually, inspect bounded per-step history, and attach schedule, calendar, app, power, display, or network rules with explicit conditions. |
 | Action Grid | Configure up to nine favorite actions or workflows in an optional pointer-first grid with keyboard, number-key, multi-display, and VoiceOver support. |
 | Run Links | Copy stable `mactools://app/actions/...` links—or local preset links for parameterized actions—to invoke eligible actions and workflows from launchers, Apple Shortcuts, scripts, or documents with normal safety checks. |
 | Auto Input | Remember the last input source used in each app, restore it when returning, and optionally assign fixed input sources. |
