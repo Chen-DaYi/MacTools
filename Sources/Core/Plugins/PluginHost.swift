@@ -307,6 +307,9 @@ final class PluginHost: ObservableObject {
     let dynamicPluginManager: DynamicPluginManager?
     private let pluginCatalogManager: PluginCatalogManager?
 
+    private(set) lazy var actionRegistry = ActionRegistry()
+    private(set) lazy var actionExecutor = ActionExecutor(registry: actionRegistry)
+
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
     private var dynamicPluginCategoriesByID: [String: String?] = [:]
@@ -354,6 +357,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
     @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
     @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
+    @Published private(set) var actionCatalogEntries: [ActionCatalogEntry] = []
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
@@ -2014,6 +2018,8 @@ final class PluginHost: ObservableObject {
             }
         }
 
+        synchronizeActionRegistry()
+
         pluginConfigurationItems = buildPluginConfigurationItems(
             settingsCards: settingsCards,
             permissionCards: permissionCards,
@@ -2099,6 +2105,194 @@ final class PluginHost: ObservableObject {
         pluginStateChangeRebuildTask?.cancel()
         pluginStateChangeRebuildTask = nil
         dirtyPluginIDs.removeAll()
+    }
+
+    private func synchronizeActionRegistry() {
+        var registrations = [hostActionRegistration()]
+
+        for plugin in orderedCorePlugins() {
+            if let provider = plugin as? any PluginActionProviding {
+                let definitions = guardedValue(
+                    for: plugin,
+                    operation: "read action definitions",
+                    provider.actionDefinitions
+                ) ?? []
+                let catalogEntries = guardedValue(
+                    for: plugin,
+                    operation: "read action catalog entries",
+                    provider.actionCatalogEntries
+                ) ?? []
+                registrations.append(
+                    actionRegistration(
+                        for: plugin,
+                        definitions: definitions,
+                        catalogEntries: catalogEntries
+                    )
+                )
+            } else if let commandProvider = plugin as? any PluginCommandProviding {
+                let definitions = guardedValue(
+                    for: plugin,
+                    operation: "read legacy command definitions for actions",
+                    commandProvider.commandDefinitions
+                ) ?? []
+                registrations.append(
+                    legacyCommandActionRegistration(
+                        for: plugin,
+                        definitions: definitions
+                    )
+                )
+            }
+        }
+
+        actionRegistry.synchronize(registrations)
+        actionCatalogEntries = actionRegistry.catalogEntries
+    }
+
+    private func hostActionRegistration() -> ActionProviderRegistration {
+        let providerID = "mactools"
+        let definitions = AppShortcutAction.allCases.map { action in
+            ActionDefinition(
+                key: ActionKey(providerID: providerID, actionID: action.rawValue),
+                title: action.title,
+                description: action.description,
+                systemImage: action.systemImage,
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive]
+            )
+        }
+        return ActionProviderRegistration(
+            providerID: providerID,
+            identity: ObjectIdentifier(self),
+            definitions: definitions,
+            catalogEntries: definitions.map {
+                ActionCatalogEntry(
+                    reference: ActionReference(key: $0.key),
+                    title: $0.title,
+                    subtitle: "MacTools"
+                )
+            },
+            availability: { [weak self] _ in
+                self?.appPresentationHandler == nil
+                    ? .unavailable("MacTools 尚未准备完成。")
+                    : .available
+            },
+            begin: { [weak self] invocation in
+                guard let self,
+                      let action = AppShortcutAction(rawValue: invocation.reference.key.actionID),
+                      let appPresentationHandler = self.appPresentationHandler else {
+                    return .failure(.providerFailure("MacTools 尚未准备完成。"))
+                }
+                appPresentationHandler(action.presentationRequest)
+                return .success(ActionExecutionHandle(operation: { .succeeded() }))
+            }
+        )
+    }
+
+    private func actionRegistration(
+        for plugin: any MacToolsPlugin,
+        definitions: [ActionDefinition],
+        catalogEntries: [ActionCatalogEntry]
+    ) -> ActionProviderRegistration {
+        let providerID = plugin.metadata.id
+        return ActionProviderRegistration(
+            providerID: providerID,
+            identity: ObjectIdentifier(plugin),
+            definitions: definitions,
+            catalogEntries: catalogEntries,
+            availability: { [weak self, weak plugin] reference in
+                guard let self,
+                      let plugin,
+                      let provider = plugin as? any PluginActionProviding else {
+                    return .unavailable("插件不可用。")
+                }
+                return self.guardedValue(
+                    for: plugin,
+                    operation: "read action availability",
+                    provider.actionAvailability(for: reference)
+                ) ?? .unavailable("插件不可用。")
+            },
+            begin: { [weak self, weak plugin] invocation in
+                guard let self,
+                      let plugin,
+                      let provider = plugin as? any PluginActionProviding,
+                      !self.isPluginIsolated(plugin) else {
+                    return .failure(.providerFailure("插件不可用。"))
+                }
+
+                let result = PluginInvocationGuard.value(operation: "begin action") {
+                    try provider.beginAction(invocation)
+                }
+                switch result {
+                case let .success(handle):
+                    return .success(handle)
+                case let .failure(failure):
+                    self.isolatePlugin(plugin, operation: "begin action", failure: failure)
+                    return .failure(.providerFailure(failure.localizedDescription))
+                }
+            }
+        )
+    }
+
+    private func legacyCommandActionRegistration(
+        for plugin: any MacToolsPlugin,
+        definitions commandDefinitions: [PluginCommandDefinition]
+    ) -> ActionProviderRegistration {
+        let providerID = plugin.metadata.id
+        let definitions = commandDefinitions.map { command in
+            ActionDefinition(
+                key: ActionKey(providerID: providerID, actionID: command.id),
+                title: command.title,
+                description: command.description,
+                keywords: command.keywords,
+                systemImage: command.systemImage,
+                risk: command.confirmation == nil ? .safe : .confirmationRequired,
+                confirmation: command.confirmation.map {
+                    ActionConfirmation(
+                        title: $0.title,
+                        message: $0.message,
+                        confirmButtonTitle: $0.confirmButtonTitle
+                    )
+                },
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.background, .foregroundInteractive]
+            )
+        }
+
+        return ActionProviderRegistration(
+            providerID: providerID,
+            identity: ObjectIdentifier(plugin),
+            definitions: definitions,
+            catalogEntries: definitions.map {
+                ActionCatalogEntry(
+                    reference: ActionReference(key: $0.key),
+                    title: $0.title,
+                    subtitle: plugin.metadata.title
+                )
+            },
+            availability: { _ in .available },
+            begin: { [weak self, weak plugin] invocation in
+                guard let self,
+                      let plugin,
+                      let provider = plugin as? any PluginCommandProviding,
+                      let expectedDefinition = commandDefinitions.first(where: {
+                          $0.id == invocation.reference.key.actionID
+                      }),
+                      (self.guardedValue(
+                          for: plugin,
+                          operation: "revalidate legacy command action",
+                          provider.commandDefinitions
+                      ) ?? []).contains(expectedDefinition) else {
+                    return .failure(.providerFailure("操作不可用。"))
+                }
+
+                guard self.guardPluginCall(plugin, operation: "perform legacy command action", {
+                    provider.handleCommand(id: expectedDefinition.id)
+                }) else {
+                    return .failure(.providerFailure("插件执行失败。"))
+                }
+                return .success(ActionExecutionHandle(operation: { .succeeded() }))
+            }
+        )
     }
 
     private func guardedValue<T>(

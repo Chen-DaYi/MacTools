@@ -1,0 +1,253 @@
+import Combine
+import Foundation
+import MacToolsPluginKit
+
+enum ActionRegistryIssue: Error, Equatable {
+    case invalidProviderID(String)
+    case duplicateProviderID(String)
+    case invalidDefinition(ActionKey, String)
+    case duplicateDefinition(ActionKey)
+    case invalidCatalogEntry(ActionReference, String)
+    case duplicateCatalogEntry(ActionReference)
+}
+
+enum ActionRegistryError: Error, Equatable {
+    case unknownAction(ActionKey)
+    case invalidParameters(String)
+    case providerChanged
+    case providerFailure(String)
+}
+
+struct RegisteredAction: Equatable {
+    let definition: ActionDefinition
+    let catalogEntry: ActionCatalogEntry?
+    let providerGeneration: UInt64
+}
+
+@MainActor
+struct ActionProviderRegistration {
+    let providerID: String
+    let identity: ObjectIdentifier
+    let definitions: [ActionDefinition]
+    let catalogEntries: [ActionCatalogEntry]
+    let availability: (ActionReference) -> ActionAvailability
+    let begin: (ActionInvocation) -> Result<ActionExecutionHandle, ActionRegistryError>
+}
+
+@MainActor
+final class ActionRegistry: ObservableObject {
+    private struct ProviderState {
+        let registration: ActionProviderRegistration
+        let generation: UInt64
+    }
+
+    @Published private(set) var catalogEntries: [ActionCatalogEntry] = []
+    @Published private(set) var issues: [ActionRegistryIssue] = []
+
+    private var providers: [String: ProviderState] = [:]
+    private var definitions: [ActionKey: ActionDefinition] = [:]
+    private var catalogByReference: [ActionReference: ActionCatalogEntry] = [:]
+    private var nextGeneration: UInt64 = 1
+
+    @discardableResult
+    func synchronize(_ registrations: [ActionProviderRegistration]) -> [ActionRegistryIssue] {
+        var nextProviders: [String: ProviderState] = [:]
+        var nextDefinitions: [ActionKey: ActionDefinition] = [:]
+        var nextCatalog: [ActionReference: ActionCatalogEntry] = [:]
+        var nextCatalogOrder: [ActionCatalogEntry] = []
+        var collectedIssues: [ActionRegistryIssue] = []
+
+        for registration in registrations {
+            guard Self.isValidIdentifier(registration.providerID) else {
+                collectedIssues.append(.invalidProviderID(registration.providerID))
+                continue
+            }
+            guard nextProviders[registration.providerID] == nil else {
+                collectedIssues.append(.duplicateProviderID(registration.providerID))
+                continue
+            }
+
+            let generation: UInt64
+            if let existing = providers[registration.providerID],
+               existing.registration.identity == registration.identity,
+               existing.registration.definitions == registration.definitions,
+               existing.registration.catalogEntries == registration.catalogEntries {
+                generation = existing.generation
+            } else {
+                generation = nextGeneration
+                nextGeneration &+= 1
+            }
+
+            var acceptedDefinitions: [ActionDefinition] = []
+            for definition in registration.definitions {
+                if let reason = Self.validationFailure(
+                    for: definition,
+                    expectedProviderID: registration.providerID
+                ) {
+                    collectedIssues.append(.invalidDefinition(definition.key, reason))
+                    continue
+                }
+                guard nextDefinitions[definition.key] == nil else {
+                    collectedIssues.append(.duplicateDefinition(definition.key))
+                    continue
+                }
+                nextDefinitions[definition.key] = definition
+                acceptedDefinitions.append(definition)
+            }
+
+            let acceptedKeys = Set(acceptedDefinitions.map(\.key))
+            var acceptedCatalog: [ActionCatalogEntry] = []
+            for entry in registration.catalogEntries {
+                guard acceptedKeys.contains(entry.reference.key),
+                      let definition = nextDefinitions[entry.reference.key] else {
+                    collectedIssues.append(
+                        .invalidCatalogEntry(entry.reference, "missing-definition")
+                    )
+                    continue
+                }
+                if let reason = Self.parameterValidationFailure(
+                    entry.reference.parameters,
+                    for: definition
+                ) {
+                    collectedIssues.append(.invalidCatalogEntry(entry.reference, reason))
+                    continue
+                }
+                guard nextCatalog[entry.reference] == nil else {
+                    collectedIssues.append(.duplicateCatalogEntry(entry.reference))
+                    continue
+                }
+                nextCatalog[entry.reference] = entry
+                nextCatalogOrder.append(entry)
+                acceptedCatalog.append(entry)
+            }
+
+            nextProviders[registration.providerID] = ProviderState(
+                registration: ActionProviderRegistration(
+                    providerID: registration.providerID,
+                    identity: registration.identity,
+                    definitions: acceptedDefinitions,
+                    catalogEntries: acceptedCatalog,
+                    availability: registration.availability,
+                    begin: registration.begin
+                ),
+                generation: generation
+            )
+        }
+
+        providers = nextProviders
+        definitions = nextDefinitions
+        catalogByReference = nextCatalog
+        catalogEntries = nextCatalogOrder
+        issues = collectedIssues
+        return collectedIssues
+    }
+
+    func registeredAction(for reference: ActionReference) -> Result<RegisteredAction, ActionRegistryError> {
+        guard let definition = definitions[reference.key],
+              let provider = providers[reference.key.providerID] else {
+            return .failure(.unknownAction(reference.key))
+        }
+        if let reason = Self.parameterValidationFailure(reference.parameters, for: definition) {
+            return .failure(.invalidParameters(reason))
+        }
+        return .success(
+            RegisteredAction(
+                definition: definition,
+                catalogEntry: catalogByReference[reference],
+                providerGeneration: provider.generation
+            )
+        )
+    }
+
+    func availability(for reference: ActionReference) -> ActionAvailability {
+        guard case .success = registeredAction(for: reference),
+              let provider = providers[reference.key.providerID] else {
+            return .unavailable("操作不可用。")
+        }
+        return provider.registration.availability(reference)
+    }
+
+    func begin(
+        _ invocation: ActionInvocation,
+        expectedProviderGeneration: UInt64
+    ) -> Result<ActionExecutionHandle, ActionRegistryError> {
+        guard case let .success(action) = registeredAction(for: invocation.reference),
+              let provider = providers[invocation.reference.key.providerID] else {
+            return .failure(.unknownAction(invocation.reference.key))
+        }
+        guard action.providerGeneration == expectedProviderGeneration else {
+            return .failure(.providerChanged)
+        }
+        return provider.registration.begin(invocation)
+    }
+
+    static func parameterValidationFailure(
+        _ parameters: ActionParameterSet,
+        for definition: ActionDefinition
+    ) -> String? {
+        let schemaByID = Dictionary(uniqueKeysWithValues: definition.parameters.map { ($0.id, $0) })
+        guard schemaByID.count == definition.parameters.count else {
+            return "duplicate-parameter-schema"
+        }
+
+        for entry in parameters.entries {
+            guard let parameter = schemaByID[entry.name] else {
+                return "unknown-parameter:\(entry.name)"
+            }
+            guard parameter.kind.accepts(entry.value) else {
+                return "wrong-parameter-type:\(entry.name)"
+            }
+        }
+
+        let suppliedNames = Set(parameters.entries.map(\.name))
+        if let missing = definition.parameters.first(where: {
+            $0.isRequired && !suppliedNames.contains($0.id)
+        }) {
+            return "missing-parameter:\(missing.id)"
+        }
+        return nil
+    }
+
+    private static func validationFailure(
+        for definition: ActionDefinition,
+        expectedProviderID: String
+    ) -> String? {
+        guard definition.key.providerID == expectedProviderID else {
+            return "provider-mismatch"
+        }
+        guard isValidIdentifier(definition.key.actionID) else {
+            return "invalid-action-id"
+        }
+        guard !definition.title.isEmpty, !definition.systemImage.isEmpty else {
+            return "missing-presentation"
+        }
+        guard Set(definition.parameters.map(\.id)).count == definition.parameters.count,
+              definition.parameters.allSatisfy({ isValidIdentifier($0.id) }) else {
+            return "invalid-parameter-schema"
+        }
+        guard definition.risk != .confirmationRequired || definition.confirmation != nil else {
+            return "missing-confirmation"
+        }
+        guard definition.capabilities.contains(.background)
+            || definition.capabilities.contains(.foregroundInteractive) else {
+            return "missing-execution-mode"
+        }
+        if let timeout = definition.executionTimeoutSeconds,
+           (!timeout.isFinite || timeout <= 0 || timeout > 86_400) {
+            return "invalid-timeout"
+        }
+        return nil
+    }
+
+    private static func isValidIdentifier(_ value: String) -> Bool {
+        guard !value.isEmpty, value.utf8.count <= 128 else {
+            return false
+        }
+        return value.unicodeScalars.allSatisfy { scalar in
+            CharacterSet.alphanumerics.contains(scalar)
+                || scalar == "."
+                || scalar == "_"
+                || scalar == "-"
+        }
+    }
+}
