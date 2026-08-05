@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "action.setMute.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعيين كتم صوت النظام" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Systemstummschaltung festlegen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Set System Mute" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Configurar silencio del sistema" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Régler le silence du système" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "システムのミュートを設定" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "시스템 음소거 설정" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Definir silêncio do sistema" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Настроить отключение звука системы" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设置系统静音" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "設定系統靜音" } }
+      }
+    },
     "metadata.title": {
       "extractionState": "manual",
       "localizations": {

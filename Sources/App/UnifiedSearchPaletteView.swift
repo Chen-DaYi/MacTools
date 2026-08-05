@@ -587,6 +587,18 @@ struct UnifiedSearchPaletteView: View {
                 pluginHost: pluginHost,
                 reference: reference
             )
+
+            if pluginHost.canPresentActionOwner(for: reference) {
+                Button {
+                    pluginHost.presentActionOwner(for: reference)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("打开所属功能的设置")
+                .accessibilityLabel("打开所属功能的设置")
+            }
         }
     }
 

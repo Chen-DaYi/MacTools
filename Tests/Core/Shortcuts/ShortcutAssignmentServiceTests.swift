@@ -130,6 +130,28 @@ final class ShortcutAssignmentServiceTests: XCTestCase {
         XCTAssertEqual(harness.service.settingsItems.first?.state, .registered)
     }
 
+    func testBindingRevisionChangesOnlyWhenPublishedAssignmentStateChanges() throws {
+        let harness = try makeHarness()
+        let initialRevision = harness.service.revision
+
+        harness.service.synchronize(reservedRegistrations: [], reservedOwnerDescriptions: [:])
+        XCTAssertEqual(harness.service.revision, initialRevision)
+
+        XCTAssertEqual(
+            harness.service.assign(harness.bindings[0], to: harness.references[0]),
+            .success
+        )
+        let assignedRevision = harness.service.revision
+        XCTAssertEqual(assignedRevision, initialRevision + 1)
+
+        harness.service.synchronize(reservedRegistrations: [], reservedOwnerDescriptions: [:])
+        XCTAssertEqual(harness.service.revision, assignedRevision)
+
+        harness.registry.synchronize([])
+        harness.service.synchronize(reservedRegistrations: [], reservedOwnerDescriptions: [:])
+        XCTAssertEqual(harness.service.revision, assignedRevision + 1)
+    }
+
     func testLegacyMigrationIsIdempotentAndClearsSourceOnlyAfterPersistence() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = ActionShortcutAssignmentStore(userDefaults: defaults)

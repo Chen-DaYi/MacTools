@@ -318,6 +318,17 @@ private struct ActionShortcutCatalogRow: View {
                 reference: item.reference
             )
             .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
+
+            if pluginHost.canPresentActionOwner(for: item.reference) {
+                Button {
+                    pluginHost.presentActionOwner(for: item.reference)
+                } label: {
+                    Label("打开所属功能的设置", systemImage: "gearshape")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
+            }
         }
         .pluginSettingsListRowPadding(interactive: true)
     }
@@ -353,7 +364,9 @@ private struct ActionShortcutCatalogRow: View {
     private var supportingText: String {
         switch item.status {
         case .assigned, .unassigned:
-            item.description
+            [item.description, item.permissionSummary]
+                .compactMap { $0 }
+                .joined(separator: " · ")
         case let .conflicted(owner):
             "与“\(owner)”冲突。"
         case let .unavailable(reason):

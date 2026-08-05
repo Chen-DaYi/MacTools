@@ -46,6 +46,10 @@ final class ActionGridPluginTests: XCTestCase {
         XCTAssertEqual(presented.map(\.reference), [target])
         XCTAssertTrue(plugin.openOwner(for: target))
         XCTAssertEqual(openedOwner, target)
+        XCTAssertEqual(
+            plugin.actionSurfaceAssignmentSummary(for: target)?.detail,
+            "第 1 个条目"
+        )
     }
 
     func testShowActionIsUnavailableWithoutEntriesOrHostPresenterAndSelfEntryIsNeverPresented() async throws {

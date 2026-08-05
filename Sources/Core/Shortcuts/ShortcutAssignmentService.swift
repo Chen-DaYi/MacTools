@@ -49,6 +49,7 @@ struct ActionShortcutCatalogItem: Identifiable, Equatable {
     let title: String
     let ownerTitle: String
     let description: String
+    let permissionSummary: String?
     let systemImage: String
     let bindingText: String
     let status: ActionShortcutCatalogStatus
@@ -85,6 +86,7 @@ final class ShortcutAssignmentService {
     private var referencesByShortcutID: [String: ActionReference] = [:]
 
     private(set) var settingsItems: [ActionShortcutSettingsItem] = []
+    private(set) var revision: UInt64 = 0
 
     init(
         registry: ActionRegistry,
@@ -302,7 +304,7 @@ final class ShortcutAssignmentService {
         }
 
         referencesByShortcutID = references
-        settingsItems = records.map { record in
+        let nextSettingsItems = records.map { record in
             let entry = try? registry.registeredAction(for: record.reference).get()
             return ActionShortcutSettingsItem(
                 assignment: record,
@@ -310,6 +312,10 @@ final class ShortcutAssignmentService {
                 subtitle: entry?.catalogEntry?.subtitle,
                 state: states[record.id] ?? .unavailable(reason: nil)
             )
+        }
+        if settingsItems != nextSettingsItems {
+            settingsItems = nextSettingsItems
+            revision &+= 1
         }
     }
 

@@ -472,6 +472,13 @@ public protocol PluginActionProviding: AnyObject {
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle
 }
 
+/// Optional action-to-permission mapping used by discovery surfaces. Providers
+/// retain ownership of live permission state and final execution validation.
+@MainActor
+public protocol PluginActionPermissionProviding: AnyObject {
+    func permissionRequirementIDs(for actionKey: ActionKey) -> [String]
+}
+
 public struct LegacyActionShortcutAssignment: Hashable, Codable, Sendable {
     public let reference: ActionReference
     public let binding: ShortcutBinding

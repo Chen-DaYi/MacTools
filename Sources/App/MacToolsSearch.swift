@@ -482,7 +482,11 @@ enum MacToolsSearchIndexBuilder {
                 : pluginTitlesByID[entry.reference.key.providerID]
                     ?? entry.reference.key.providerID
             let subtitle = entry.subtitle.map { "\(ownerTitle) · \($0)" } ?? ownerTitle
-            let detail = [action.definition.description, availability.reason]
+            let permissionTitles = pluginHost.actionPermissionTitles(for: entry.reference)
+            let permissionSummary = permissionTitles.isEmpty
+                ? nil
+                : "所需权限：\(permissionTitles.joined(separator: "、"))"
+            let detail = [action.definition.description, permissionSummary, availability.reason]
                 .compactMap { $0 }
                 .filter { !$0.isEmpty }
                 .joined(separator: " · ")

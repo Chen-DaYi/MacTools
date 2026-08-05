@@ -101,3 +101,31 @@ public protocol ActionGridHostContextConsuming: AnyObject {
 public extension ActionGridHostContextConsuming {
     func actionSurfaceCatalogDidChange() {}
 }
+
+public struct ActionSurfaceAssignmentSummary: Identifiable, Hashable, Sendable {
+    public let surfaceID: String
+    public let surfaceTitle: String
+    public let systemImage: String
+    public let detail: String
+
+    public init(
+        surfaceID: String,
+        surfaceTitle: String,
+        systemImage: String,
+        detail: String
+    ) {
+        self.surfaceID = surfaceID
+        self.surfaceTitle = surfaceTitle
+        self.systemImage = systemImage
+        self.detail = detail
+    }
+
+    public var id: String { surfaceID }
+}
+
+@MainActor
+public protocol ActionSurfaceAssignmentSummarizing: AnyObject {
+    func actionSurfaceAssignmentSummary(
+        for reference: ActionReference
+    ) -> ActionSurfaceAssignmentSummary?
+}

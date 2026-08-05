@@ -314,6 +314,24 @@ private struct WorkflowDetailView: View {
                     pluginHost: pluginHost,
                     reference: workflow.actionReference
                 )
+                ForEach(
+                    pluginHost.actionSurfaceAssignmentSummaries(
+                        for: workflow.actionReference
+                    )
+                ) { summary in
+                    HStack {
+                        Label(
+                            "\(summary.surfaceTitle)：\(summary.detail)",
+                            systemImage: summary.systemImage
+                        )
+                        Spacer()
+                        Button("配置") {
+                            pluginHost.presentPluginConfiguration(pluginID: summary.surfaceID)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
                 Text("手势与操作网格由各自的功能页面管理。")
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)

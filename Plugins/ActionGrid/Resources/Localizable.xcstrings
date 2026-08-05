@@ -1,0 +1,70 @@
+{
+  "sourceLanguage": "zh-Hans",
+  "strings": {
+    "action.show.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "افتح شبكة الإجراءات بالقرب من المؤشر." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Öffnet das Aktionsraster neben dem Zeiger." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open Action Grid near the pointer." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abre la cuadrícula de acciones junto al puntero." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrez la grille d’actions près du pointeur." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ポインタの近くにアクショングリッドを開きます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "포인터 근처에서 동작 그리드를 엽니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abra a grade de ações perto do cursor." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открывает сетку действий рядом с указателем." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在指针附近打开操作网格。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在指標附近開啟操作網格。" } }
+      }
+    },
+    "action.show.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "إظهار شبكة الإجراءات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Aktionsraster anzeigen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show Action Grid" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Mostrar cuadrícula de acciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Afficher la grille d’actions" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アクショングリッドを表示" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "동작 그리드 표시" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Mostrar grade de ações" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Показать сетку действий" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示操作网格" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "顯示操作網格" } }
+      }
+    },
+    "metadata.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "افتح شبكة إجراءات مفضلة بالقرب من المؤشر" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Bevorzugte Aktionen neben dem Zeiger öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open favorite actions near the pointer" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abre acciones favoritas junto al puntero" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrez vos actions favorites près du pointeur" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ポインタの近くでお気に入りのアクションを開く" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "포인터 근처에서 즐겨찾기 동작 열기" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Abra ações favoritas perto do cursor" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Открывайте избранные действия рядом с указателем" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在指针附近打开常用操作网格" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在指標附近開啟常用操作網格" } }
+      }
+    },
+    "metadata.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "شبكة الإجراءات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Aktionsraster" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Action Grid" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Cuadrícula de acciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Grille d’actions" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アクショングリッド" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "동작 그리드" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Grade de ações" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Сетка действий" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "操作网格" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "操作網格" } }
+      }
+    }
+  },
+  "version": "1.0"
+}

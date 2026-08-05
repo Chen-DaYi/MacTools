@@ -320,6 +320,7 @@ final class PluginHost: ObservableObject {
     let actionRunLinkService: ActionRunLinkService
     let automationController: AutomationController
     private var actionGridPresentationHandler: (([ActionGridPresentationEntry]) -> Bool)?
+    private var activeActionShortcutReferences: Set<ActionReference> = []
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
@@ -371,6 +372,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
     @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
     @Published private(set) var actionCatalogEntries: [ActionCatalogEntry] = []
+    @Published private(set) var shortcutBindingRevision: UInt64 = 0
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
@@ -1021,6 +1023,7 @@ final class PluginHost: ObservableObject {
         )
         switch result {
         case .success:
+            rebuildDerivedState()
             syncGlobalShortcuts()
         case .failure:
             break
@@ -1032,6 +1035,7 @@ final class PluginHost: ObservableObject {
         guard shortcutAssignmentService.clear(reference) else {
             return
         }
+        rebuildDerivedState()
         syncGlobalShortcuts()
     }
 
@@ -1043,6 +1047,28 @@ final class PluginHost: ObservableObject {
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         actionRegistry.availability(for: reference)
+    }
+
+    func actionPermissionTitles(for reference: ActionReference) -> [String] {
+        guard let plugin = corePlugin(for: reference.key.providerID),
+              let provider = plugin as? any PluginActionPermissionProviding,
+              let permissionIDs = guardedValue(
+                  for: plugin,
+                  operation: "read action permission requirements",
+                  provider.permissionRequirementIDs(for: reference.key)
+              ),
+              let requirements = guardedValue(
+                  for: plugin,
+                  operation: "read permission requirements",
+                  plugin.permissionRequirements
+              ) else {
+            return []
+        }
+        let requirementsByID = Dictionary(
+            requirements.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return permissionIDs.compactMap { requirementsByID[$0]?.title }
     }
 
     func actionRunLinkPresentation(
@@ -1672,7 +1698,10 @@ final class PluginHost: ObservableObject {
                 self?.requestPermissionGuidance(forPluginID: pluginID, permissionID: permissionID)
             }
             plugin.shortcutBindingResolver = { [weak self] shortcutDefinitionID in
-                self?.resolvedBinding(forPluginID: pluginID, shortcutDefinitionID: shortcutDefinitionID)
+                self?.legacyResolvedBinding(
+                    forPluginID: pluginID,
+                    shortcutDefinitionID: shortcutDefinitionID
+                )
             }
             if let anchorable = plugin as? any DropZoneAnchorProviding {
                 anchorable.anchorRectProvider = { [weak self] in
@@ -2096,6 +2125,12 @@ final class PluginHost: ObservableObject {
         shortcutItems = shortcutDescriptors.map { descriptor in
             let customization = shortcutStore.customization(for: descriptor.itemID)
             let binding = resolvedBinding(for: descriptor)
+            let usesDefaultValue: Bool
+            if actionReference(for: descriptor) != nil {
+                usesDefaultValue = binding == descriptor.definition.defaultBinding
+            } else {
+                usesDefaultValue = customization == .inheritDefault
+            }
 
             return ShortcutSettingsItem(
                 id: descriptor.itemID,
@@ -2106,7 +2141,7 @@ final class PluginHost: ObservableObject {
                 bindingText: ShortcutFormatter.displayString(for: binding),
                 isRequired: descriptor.definition.isRequired,
                 canClear: !descriptor.definition.isRequired && binding != nil,
-                usesDefaultValue: customization == .inheritDefault,
+                usesDefaultValue: usesDefaultValue,
                 errorMessage: shortcutErrors[descriptor.itemID]
                     ?? binding.flatMap {
                         MacToolsReservedShortcutBindings.validationError(for: $0)?
@@ -2385,13 +2420,28 @@ final class PluginHost: ObservableObject {
         return true
     }
 
-    private func canPresentActionOwner(for reference: ActionReference) -> Bool {
+    func canPresentActionOwner(for reference: ActionReference) -> Bool {
         guard appPresentationHandler != nil else { return false }
         switch reference.key.providerID {
         case "mactools", AutomationController.providerID:
             return true
         case let pluginID:
             return pluginConfigurationItems.contains(where: { $0.id == pluginID })
+        }
+    }
+
+    func actionSurfaceAssignmentSummaries(
+        for reference: ActionReference
+    ) -> [ActionSurfaceAssignmentSummary] {
+        activePlugins.compactMap { plugin in
+            guard let provider = plugin as? any ActionSurfaceAssignmentSummarizing else {
+                return nil
+            }
+            return guardedOptionalValue(
+                for: plugin,
+                operation: "read action surface assignment",
+                provider.actionSurfaceAssignmentSummary(for: reference)
+            )
         }
     }
 
@@ -3225,10 +3275,46 @@ final class PluginHost: ObservableObject {
     }
 
     private func resolvedBinding(for descriptor: ShortcutDescriptor) -> ShortcutBinding? {
+        if let reference = actionReference(for: descriptor) {
+            return shortcutAssignmentService.assignment(for: reference)?.binding
+        }
+        return legacyResolvedBinding(for: descriptor)
+    }
+
+    private func legacyResolvedBinding(for descriptor: ShortcutDescriptor) -> ShortcutBinding? {
         shortcutStore.resolvedBinding(
             for: descriptor.itemID,
             default: descriptor.definition.defaultBinding
         )
+    }
+
+    /// Global, optional plugin shortcuts that point at a published parameterless action are
+    /// aliases of that action assignment. The old `ShortcutStore` remains readable only for
+    /// one-shot migration; all subsequent edits and registrations use the action store.
+    private func actionReference(for descriptor: ShortcutDescriptor) -> ActionReference? {
+        guard descriptor.definition.scope == .global,
+              !descriptor.definition.isRequired else {
+            return nil
+        }
+        let key = ActionKey(
+            providerID: descriptor.pluginID,
+            actionID: descriptor.definition.actionID
+        )
+        guard let definition = actionRegistry.definition(for: key),
+              definition.parameters.isEmpty,
+              definition.capabilities.contains(.foregroundInteractive) else {
+            return nil
+        }
+        let reference = ActionReference(
+            key: key,
+            schemaVersion: definition.parameterSchemaVersion
+        )
+        guard actionRegistry.catalogEntries.contains(where: {
+            $0.reference == reference
+        }) else {
+            return nil
+        }
+        return reference
     }
 
     private func resolvedAppShortcutBinding(for action: AppShortcutAction) -> ShortcutBinding? {
@@ -3272,14 +3358,17 @@ final class PluginHost: ObservableObject {
         ).localizedDescription
     }
 
-    private func resolvedBinding(forPluginID pluginID: String, shortcutDefinitionID: String) -> ShortcutBinding? {
+    private func legacyResolvedBinding(
+        forPluginID pluginID: String,
+        shortcutDefinitionID: String
+    ) -> ShortcutBinding? {
         guard let descriptor = shortcutDescriptors().first(where: {
             $0.pluginID == pluginID && $0.definition.id == shortcutDefinitionID
         }) else {
             return nil
         }
 
-        return resolvedBinding(for: descriptor)
+        return legacyResolvedBinding(for: descriptor)
     }
 
     private func applyImportedShortcutCustomizations(
@@ -3490,6 +3579,34 @@ final class PluginHost: ObservableObject {
         _ customization: ShortcutCustomization,
         for descriptor: ShortcutDescriptor
     ) -> String? {
+        if let reference = actionReference(for: descriptor) {
+            let binding = ShortcutStore.resolve(
+                customization: customization,
+                defaultBinding: descriptor.definition.defaultBinding
+            )
+            let result: ActionShortcutMutationResult
+            if let binding {
+                result = shortcutAssignmentService.assign(binding, to: reference)
+            } else {
+                shortcutAssignmentService.clear(reference)
+                result = .success
+            }
+
+            switch result {
+            case .success:
+                shortcutStore.setCustomization(.cleared, for: descriptor.itemID)
+                notifyShortcutBindingChange(for: descriptor, binding: binding)
+                shortcutErrors.removeValue(forKey: descriptor.itemID)
+                rebuildDerivedState()
+                syncGlobalShortcuts()
+                return nil
+            case let .failure(error):
+                shortcutErrors[descriptor.itemID] = error.localizedDescription
+                rebuildDerivedState()
+                return error.localizedDescription
+            }
+        }
+
         do {
             try validateShortcutCustomization(customization, for: descriptor)
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
@@ -3621,7 +3738,8 @@ final class PluginHost: ObservableObject {
     private func syncGlobalShortcuts() {
         let descriptors = shortcutDescriptors()
         let registrations = descriptors.compactMap { descriptor -> GlobalShortcutManager.Registration? in
-            guard descriptor.definition.scope == .global else {
+            guard descriptor.definition.scope == .global,
+                  actionReference(for: descriptor) == nil else {
                 return nil
             }
 
@@ -3640,7 +3758,7 @@ final class PluginHost: ObservableObject {
         }
 
         let ownerDescriptions = Dictionary(
-            descriptors.map {
+            descriptors.filter { actionReference(for: $0) == nil }.map {
                 ($0.itemID, "\($0.pluginTitle) · \($0.definition.title)")
             },
             uniquingKeysWith: { first, _ in first }
@@ -3650,6 +3768,7 @@ final class PluginHost: ObservableObject {
             reservedOwnerDescriptions: ownerDescriptions
         )
         actionShortcutItems = shortcutAssignmentService.settingsItems
+        shortcutBindingRevision = shortcutAssignmentService.revision
         actionShortcutCatalogItems = buildActionShortcutCatalogItems()
     }
 
@@ -3697,6 +3816,10 @@ final class PluginHost: ObservableObject {
                 title: entry.title,
                 ownerTitle: ownerTitle,
                 description: action.definition.description,
+                permissionSummary: {
+                    let titles = actionPermissionTitles(for: entry.reference)
+                    return titles.isEmpty ? nil : "所需权限：\(titles.joined(separator: "、"))"
+                }(),
                 systemImage: action.definition.systemImage,
                 bindingText: assignmentItem?.bindingText ?? "",
                 status: status,
@@ -3708,8 +3831,12 @@ final class PluginHost: ObservableObject {
 
     private func handleShortcutTrigger(shortcutID: String) {
         if let reference = shortcutAssignmentService.reference(forShortcutID: shortcutID) {
+            guard activeActionShortcutReferences.insert(reference).inserted else {
+                return
+            }
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                defer { activeActionShortcutReferences.remove(reference) }
                 _ = await actionExecutor.execute(
                     ActionInvocation(
                         reference: reference,

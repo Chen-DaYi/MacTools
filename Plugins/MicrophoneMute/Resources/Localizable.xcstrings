@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "action.setMute.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعيين كتم الميكروفون" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Mikrofonstummschaltung festlegen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Set Microphone Mute" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Configurar silencio del micrófono" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Régler le silence du microphone" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "マイクのミュートを設定" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "마이크 음소거 설정" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Definir silêncio do microfone" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Настроить отключение микрофона" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设置麦克风静音" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "設定麥克風靜音" } }
+      }
+    },
     "metadata.title": {
       "extractionState": "manual",
       "localizations": {

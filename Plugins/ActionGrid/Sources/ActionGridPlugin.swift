@@ -13,7 +13,12 @@ private struct ActionGridPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [ActionGridPlugin(context: context)]
+        [
+            ActionGridPlugin(
+                context: context,
+                localization: PluginLocalization(bundle: context.resourceBundle)
+            ),
+        ]
     }
 }
 
@@ -22,18 +27,12 @@ final class ActionGridPlugin:
     MacToolsPlugin,
     PluginActionProviding,
     ActionGridHostContextConsuming,
+    ActionSurfaceAssignmentSummarizing,
     PluginPortablePreferencesProviding
 {
     static let showActionKey = ActionKey(providerID: "action-grid", actionID: "show")
 
-    let metadata = PluginMetadata(
-        id: "action-grid",
-        title: "操作网格",
-        iconName: "square.grid.3x3",
-        iconTint: Color(nsColor: .systemTeal),
-        order: 74,
-        defaultDescription: "在指针附近打开常用操作网格"
-    )
+    let metadata: PluginMetadata
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -47,9 +46,26 @@ final class ActionGridPlugin:
     }
 
     let store: ActionGridStore
+    private let localization: PluginLocalization
 
-    init(context: PluginRuntimeContext) {
+    init(
+        context: PluginRuntimeContext,
+        localization: PluginLocalization? = nil
+    ) {
+        let localization = localization ?? PluginLocalization(bundle: context.resourceBundle)
+        self.localization = localization
         self.store = ActionGridStore(storage: context.storage)
+        self.metadata = PluginMetadata(
+            id: "action-grid",
+            title: localization.string("metadata.title", defaultValue: "操作网格"),
+            iconName: "square.grid.3x3",
+            iconTint: Color(nsColor: .systemTeal),
+            order: 74,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "在指针附近打开常用操作网格"
+            )
+        )
     }
 
     var configuration: PluginConfiguration? {
@@ -66,9 +82,15 @@ final class ActionGridPlugin:
         [
             ActionDefinition(
                 key: Self.showActionKey,
-                title: "显示操作网格",
-                description: "在指针附近打开操作网格。",
-                keywords: ["操作", "网格", "启动器"],
+                title: localization.string(
+                    "action.show.title",
+                    defaultValue: "显示操作网格"
+                ),
+                description: localization.string(
+                    "action.show.description",
+                    defaultValue: "在指针附近打开操作网格。"
+                ),
+                keywords: ["操作", "网格", "启动器", "action", "grid", "launcher"],
                 systemImage: metadata.iconName,
                 externalInvocationPolicy: .allowed,
                 capabilities: [.foregroundInteractive],
@@ -152,6 +174,20 @@ final class ActionGridPlugin:
         let selected = Set(result)
         result.append(contentsOf: items.lazy.filter { $0.isSafe && !selected.contains($0.reference) }.map(\.reference))
         return Array(result.prefix(6))
+    }
+
+    func actionSurfaceAssignmentSummary(
+        for reference: ActionReference
+    ) -> ActionSurfaceAssignmentSummary? {
+        guard let index = store.entries.firstIndex(where: { $0.reference == reference }) else {
+            return nil
+        }
+        return ActionSurfaceAssignmentSummary(
+            surfaceID: metadata.id,
+            surfaceTitle: metadata.title,
+            systemImage: metadata.iconName,
+            detail: "第 \(index + 1) 个条目"
+        )
     }
 
     func notifyMutation() {

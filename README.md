@@ -48,6 +48,10 @@
 | Translator | Translate the currently selected text with a global shortcut; the first version supports OpenAI-compatible services, automatic language selection, and a source editor whose actions stay clear of multi-line text. |
 | Window Switcher | Replace or customize the window-switching shortcut with direct cycling or a fixed key-selection window for running windows; click a key hint to record a stable letter, digit, or Command-key binding. |
 | App Shortcuts | Bind global shortcuts to common apps; pressing a shortcut opens or activates the app, and hides it if it is already frontmost. |
+| Actions & Shortcuts | Discover published MacTools and plugin actions in Unified Search or a central settings page, run them through one guarded executor, and assign conflict-checked global shortcuts from either surface. |
+| Automation | Build reusable named workflows from published actions, run or test them manually, inspect bounded per-step history, and attach schedule, calendar, app, power, display, or network rules with explicit conditions. |
+| Action Grid | Configure up to nine favorite actions or workflows in an optional pointer-first grid with keyboard, number-key, multi-display, and VoiceOver support. |
+| Run Links | Copy stable `mactools://app/actions/...` links—or local preset links for parameterized actions—to invoke eligible actions and workflows from launchers, Apple Shortcuts, scripts, or documents with normal safety checks. |
 | Auto Input | Remember the last input source used in each app, restore it when returning, and optionally assign fixed input sources. |
 | Launchpad | Summon an app grid in fullscreen or a compact window, with instant search, horizontal paging, keyboard navigation, drag-to-stack folders with inline rename (click an open folder's title, or right-click a folder to rename/dissolve), an adjustable glass background (clear/standard/deep presets or a custom material + dimming, with a live preview in settings), adjustable appearance (icon size 48–96 pt with rows/columns adapting, optional icons-only mode that hides app names, label appearance presets (color: automatic/light/dark/accent, weight, and a size tier that scales with the icon — shared by app names and the open-folder title), and a compact-window size slider — the compact panel now scales with the screen instead of capping at 960×680, so any display whose usable area exceeds ~1333×829 pt renders a larger panel than before, including modern built-in laptop screens (~13% on a 14″ MacBook Pro); all previewed live by a layout thumbnail in settings that mirrors the real grid math), a global shortcut, and IME-composition safety. |
 | Finder Right Click | Add Finder context menu actions: new folder, new file (.txt / .md / .json), open in Terminal, open with a configurable app list, copy selected item names, and copy absolute / relative / shell-escaped paths / file:// URLs for selected items or the current folder when clicking the background — each item toggleable in Settings. |
@@ -70,7 +74,7 @@
 
 > **Right-click action:** You can use Option + left-click on the MacTools icon to trigger the right-click action.
 
-> **Deep links:** Open Settings, installed plugin settings, Dashboard, Feature Panel, or unified search through the navigation-only [`mactools://app/...` URL API](docs/url-scheme.md).
+> **Deep links and Run Links:** Open MacTools surfaces or invoke explicitly eligible actions and workflows through the guarded [`mactools://app/...` URL API](docs/url-scheme.md).
 
 ## Supported Languages
 

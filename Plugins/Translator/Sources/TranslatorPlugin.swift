@@ -28,6 +28,7 @@ final class TranslatorPlugin:
     PluginPrimaryPanel,
     PluginConfigurationPresenting,
     PluginActionProviding,
+    PluginActionPermissionProviding,
     PluginLegacyActionShortcutProviding
 {
     private enum APIKeyState: Equatable {
@@ -248,6 +249,21 @@ final class TranslatorPlugin:
     }
 
     func legacyActionShortcutsDidMigrate() {}
+
+    func permissionRequirementIDs(for actionKey: ActionKey) -> [String] {
+        guard actionKey.providerID == metadata.id else { return [] }
+        return switch actionKey.actionID {
+        case TranslatorConstants.ActionID.selectTranslation:
+            [
+                TranslatorConstants.PermissionID.accessibility,
+                TranslatorConstants.PermissionID.automation,
+            ]
+        case TranslatorConstants.ActionID.screenshotTranslation:
+            [TranslatorConstants.PermissionID.screenRecording]
+        default:
+            []
+        }
+    }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         guard isShortcutEnabled else {

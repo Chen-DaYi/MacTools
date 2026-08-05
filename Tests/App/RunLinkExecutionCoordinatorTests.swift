@@ -67,6 +67,24 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
         )
     }
 
+    func testSystemFeedbackUsesOneVisibleAccessibleHUDWithoutNotificationPermission() {
+        let presenter = SystemRunLinkFeedbackPresenter(dismissDelay: .seconds(30))
+        defer { presenter.dismiss() }
+
+        presenter.present(
+            RunLinkExecutionFeedback(tone: .success, title: "完成", message: "操作成功。")
+        )
+        presenter.present(
+            RunLinkExecutionFeedback(tone: .failure, title: "失败", message: "操作不可用。")
+        )
+
+        let panels = NSApp.windows.filter {
+            $0.identifier == SystemRunLinkFeedbackPresenter.panelIdentifier && $0.isVisible
+        }
+        XCTAssertEqual(panels.count, 1)
+        XCTAssertEqual(panels.first?.accessibilityLabel(), "失败，操作不可用。")
+    }
+
     private struct Setup {
         let provider: ActionExecutorTestProvider
         let reference: ActionReference

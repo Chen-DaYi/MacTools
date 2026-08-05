@@ -3,13 +3,49 @@
   "displayName": "操作网格",
   "summary": "在指针附近打开用户配置的常用操作网格。",
   "localizedMetadata": {
+    "ar": {
+      "displayName": "شبكة الإجراءات",
+      "summary": "افتح شبكة إجراءات مفضلة يحددها المستخدم بالقرب من المؤشر."
+    },
+    "de": {
+      "displayName": "Aktionsraster",
+      "summary": "Öffnet ein benutzerdefiniertes Raster bevorzugter Aktionen neben dem Zeiger."
+    },
     "en": {
       "displayName": "Action Grid",
       "summary": "Open a user-configured grid of favorite actions near the pointer."
     },
+    "es": {
+      "displayName": "Cuadrícula de acciones",
+      "summary": "Abre una cuadrícula de acciones favoritas configurada por el usuario junto al puntero."
+    },
+    "fr": {
+      "displayName": "Grille d’actions",
+      "summary": "Ouvrez près du pointeur une grille d’actions favorites configurée par l’utilisateur."
+    },
+    "ja": {
+      "displayName": "アクショングリッド",
+      "summary": "ポインタの近くに、ユーザーが設定したお気に入りのアクションを表示します。"
+    },
+    "ko": {
+      "displayName": "동작 그리드",
+      "summary": "포인터 근처에 사용자가 구성한 즐겨찾기 동작 그리드를 엽니다."
+    },
+    "pt": {
+      "displayName": "Grade de ações",
+      "summary": "Abra perto do cursor uma grade de ações favoritas configurada pelo usuário."
+    },
+    "ru": {
+      "displayName": "Сетка действий",
+      "summary": "Открывает рядом с указателем настроенную пользователем сетку избранных действий."
+    },
     "zh-Hans": {
       "displayName": "操作网格",
       "summary": "在指针附近打开用户配置的常用操作网格。"
+    },
+    "zh-Hant": {
+      "displayName": "操作網格",
+      "summary": "在指標附近開啟使用者設定的常用操作網格。"
     }
   },
   "version": "1.0.0",

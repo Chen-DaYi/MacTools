@@ -152,6 +152,16 @@ MacTools automatically indexes a plugin's configuration page, declarative settin
 
 Commands are never inferred from panel buttons. A plugin must explicitly conform to `PluginCommandProviding` and publish only actions that are safe and useful in the global palette. Commands that need an extra user decision should provide confirmation metadata. Destructive actions should remain in their contextual plugin UI unless their complete safety flow can be represented by that confirmation.
 
+New executable capabilities should use `PluginActionProviding` rather than adding new legacy commands or shortcut-owned callbacks. Publish stable `ActionKey` values, versioned parameter schemas, availability snapshots, risk/confirmation policy, external-invocation policy, execution capabilities, and bounded timeouts. If discovery surfaces should name system permissions before execution, also implement `PluginActionPermissionProviding` and map each action to IDs declared by `permissionRequirements`.
+
+Ordinary action shortcuts are owned by the host's `ShortcutAssignmentService`. A plugin may declare or migrate a default binding, but it must not persist or register a second binding for the same action. Workflows, Run Links, and Action Grid also retain `ActionReference` values and invoke through the host executor. See [Actions, Automation, Run Links, and Action Grid](../actions-automation.md) for the ownership and verification contract.
+
+Action Grid is the reference implementation for an optional action surface. Its package can be built independently with:
+
+```bash
+make build-plugin PLUGIN=ActionGrid
+```
+
 ## Install Location
 
 Installed plugins are copied into:

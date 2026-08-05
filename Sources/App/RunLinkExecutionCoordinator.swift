@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import UserNotifications
+import SwiftUI
 import MacToolsPluginKit
 
 struct RunLinkExecutionFeedback: Equatable, Sendable {
@@ -21,19 +21,115 @@ protocol RunLinkFeedbackPresenting: AnyObject {
 
 @MainActor
 final class SystemRunLinkFeedbackPresenter: RunLinkFeedbackPresenting {
+    static let panelIdentifier = NSUserInterfaceItemIdentifier("mactools.run-link.feedback")
+
+    private let dismissDelay: Duration
+    private var panel: NSPanel?
+    private var dismissTask: Task<Void, Never>?
+
+    init(dismissDelay: Duration = .seconds(4)) {
+        self.dismissDelay = dismissDelay
+    }
+
     func present(_ feedback: RunLinkExecutionFeedback) {
-        let content = UNMutableNotificationContent()
-        content.title = feedback.title
-        content.body = feedback.message
-        if feedback.tone == .failure {
-            content.sound = .default
-        }
-        let request = UNNotificationRequest(
-            identifier: "mactools.run-link.\(UUID().uuidString)",
-            content: content,
-            trigger: nil
+        guard let screen = NSScreen.main else { return }
+        let size = NSSize(width: 360, height: 86)
+        let visibleFrame = screen.visibleFrame
+        let frame = NSRect(
+            x: visibleFrame.maxX - size.width - 18,
+            y: visibleFrame.maxY - size.height - 18,
+            width: size.width,
+            height: size.height
         )
-        UNUserNotificationCenter.current().add(request)
+        let panel: NSPanel
+        if let existing = self.panel {
+            panel = existing
+            panel.setFrame(frame, display: true)
+        } else {
+            panel = NSPanel(
+                contentRect: frame,
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false,
+                screen: screen
+            )
+            panel.identifier = Self.panelIdentifier
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = true
+            panel.hidesOnDeactivate = false
+            panel.isReleasedWhenClosed = false
+            panel.level = .statusBar
+            panel.collectionBehavior = [
+                .canJoinAllSpaces,
+                .fullScreenAuxiliary,
+                .transient,
+                .ignoresCycle,
+            ]
+            self.panel = panel
+        }
+        panel.setAccessibilityLabel("\(feedback.title)，\(feedback.message)")
+        panel.contentView = NSHostingView(
+            rootView: RunLinkFeedbackView(feedback: feedback)
+        )
+        panel.orderFrontRegardless()
+
+        dismissTask?.cancel()
+        dismissTask = Task { @MainActor [weak self, dismissDelay] in
+            try? await Task.sleep(for: dismissDelay)
+            guard !Task.isCancelled else { return }
+            self?.dismiss()
+        }
+    }
+
+    func dismiss() {
+        dismissTask?.cancel()
+        dismissTask = nil
+        panel?.orderOut(nil)
+        panel?.close()
+        panel = nil
+    }
+
+    isolated deinit {
+        dismissTask?.cancel()
+        panel?.close()
+    }
+}
+
+private struct RunLinkFeedbackView: View {
+    let feedback: RunLinkExecutionFeedback
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: feedback.tone == .success
+                ? "checkmark.circle.fill"
+                : "exclamationmark.triangle.fill")
+                .font(.title2)
+                .foregroundStyle(feedback.tone == .success ? Color.green : Color.red)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(feedback.title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Text(feedback.message)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .frame(width: 360, height: 86)
+        .background {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(
+                    reduceTransparency
+                        ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
+                        : AnyShapeStyle(.regularMaterial)
+                )
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(feedback.title)，\(feedback.message)")
     }
 }
 
