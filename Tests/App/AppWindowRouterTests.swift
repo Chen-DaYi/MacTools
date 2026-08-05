@@ -612,6 +612,43 @@ final class AppWindowRouterTests: XCTestCase {
         router.settingsWindow?.close()
     }
 
+    func testExplicitGeneralAndAboutRequestsSelectTheirSettingsDestinations() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.presentSettings(.about)
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .about)
+
+        router.presentSettings(.general)
+        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .general)
+
+        router.settingsWindow?.close()
+    }
+
+    func testExplicitSettingsRequestsDismissUnifiedSearchInArrivalOrder() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+
+        router.showUnifiedSearch()
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+
+        router.presentSettings(.general)
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+
+        router.showUnifiedSearch()
+        router.presentSettings(.settings)
+        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+
+        router.settingsWindow?.close()
+    }
+
     private func makeRouter(
         defaults: UserDefaults,
         appUpdater: AppUpdater? = nil
