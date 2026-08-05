@@ -57,6 +57,7 @@ extension FeatureSettingsPane {
     ) -> [FeatureSettingsPane] {
         [
             .actionsAndShortcuts,
+            .automation,
             .dashboardLayout,
             .featurePanelLayout,
             .marketplace

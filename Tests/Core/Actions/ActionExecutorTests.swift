@@ -168,6 +168,38 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(approved, .completed(.succeeded()))
         XCTAssertEqual(provider.beginCount, 1)
     }
+
+    func testCancellationReturnsPromptlyForNonCooperativeOperation() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(timeout: nil)
+        provider.operation = {
+            await withCheckedContinuation { continuation in
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(5))
+                    continuation.resume(returning: .succeeded())
+                }
+            }
+        }
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(registry: registry)
+        let task = Task { @MainActor in
+            await executor.execute(
+                ActionInvocation(
+                    reference: ActionReference(key: definition.key),
+                    source: .workflow,
+                    mode: .background
+                )
+            )
+        }
+        await Task.yield()
+
+        task.cancel()
+        let outcome = await task.value
+
+        XCTAssertEqual(outcome, .completed(.cancelled))
+        XCTAssertTrue(provider.didCancel)
+    }
 }
 
 @MainActor

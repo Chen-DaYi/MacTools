@@ -26,6 +26,24 @@ final class ApprovedActionConfirmationService: ActionConfirmationRequesting {
     }
 }
 
+@MainActor
+final class ActionConfirmationRouter: ActionConfirmationRequesting {
+    typealias Handler = @MainActor @Sendable (ActionConfirmationRequest) async -> Bool
+
+    private var handler: Handler?
+
+    func setHandler(_ handler: Handler?) {
+        self.handler = handler
+    }
+
+    func confirm(_ request: ActionConfirmationRequest) async -> Bool {
+        guard let handler else {
+            return false
+        }
+        return await handler(request)
+    }
+}
+
 enum ActionExecutionRejection: Error, Equatable {
     case unknownAction(ActionKey)
     case invalidParameters(String)
@@ -48,14 +66,55 @@ enum ActionExecutionOutcome: Equatable {
 
 @MainActor
 final class ActionExecutor {
+    @MainActor
+    private final class Race<Value: Sendable> {
+        private var resolution: Value?
+        private var continuation: CheckedContinuation<Value, Never>?
+        private var tasks: [Task<Void, Never>] = []
+
+        func add(_ task: Task<Void, Never>) {
+            guard resolution == nil else {
+                task.cancel()
+                return
+            }
+            tasks.append(task)
+        }
+
+        func resolve(_ value: Value) {
+            guard resolution == nil else {
+                return
+            }
+            resolution = value
+            continuation?.resume(returning: value)
+            continuation = nil
+            tasks.forEach { $0.cancel() }
+            tasks.removeAll()
+        }
+
+        func wait() async -> Value {
+            if let resolution {
+                return resolution
+            }
+            return await withCheckedContinuation { continuation in
+                if let resolution {
+                    continuation.resume(returning: resolution)
+                } else {
+                    self.continuation = continuation
+                }
+            }
+        }
+    }
+
     private enum ConfirmationRace: Sendable {
         case response(Bool)
         case timedOut
+        case cancelled
     }
 
     private enum ExecutionRace: Sendable {
         case result(ActionExecutionResult)
         case timedOut
+        case cancelled
     }
 
     private let registry: ActionRegistry
@@ -76,6 +135,9 @@ final class ActionExecutor {
         _ invocation: ActionInvocation,
         confirmationService overrideConfirmationService: (any ActionConfirmationRequesting)? = nil
     ) async -> ActionExecutionOutcome {
+        guard !Task.isCancelled else {
+            return .completed(.cancelled)
+        }
         let initial: RegisteredAction
         switch registry.registeredAction(for: invocation.reference) {
         case let .success(action):
@@ -113,7 +175,13 @@ final class ActionExecutor {
                 return .rejected(.confirmationDenied)
             case .timedOut:
                 return .rejected(.confirmationTimedOut)
+            case .cancelled:
+                return .completed(.cancelled)
             }
+        }
+
+        guard !Task.isCancelled else {
+            return .completed(.cancelled)
         }
 
         let revalidated: RegisteredAction
@@ -143,16 +211,18 @@ final class ActionExecutor {
             return .rejected(Self.rejection(for: error))
         }
 
-        guard let seconds = revalidated.definition.executionTimeoutSeconds else {
-            return .completed(await handle.result())
+        let timeout = revalidated.definition.executionTimeoutSeconds.map {
+            Duration.seconds($0)
         }
-
-        switch await executionResult(handle: handle, timeout: .seconds(seconds)) {
+        switch await executionResult(handle: handle, timeout: timeout) {
         case let .result(result):
             return .completed(result)
         case .timedOut:
             handle.cancel()
             return .rejected(.executionTimedOut)
+        case .cancelled:
+            handle.cancel()
+            return .completed(.cancelled)
         }
     }
 
@@ -180,38 +250,44 @@ final class ActionExecutor {
         _ request: ActionConfirmationRequest,
         using confirmationService: any ActionConfirmationRequesting
     ) async -> ConfirmationRace {
-        return await withTaskGroup(of: ConfirmationRace.self) { group in
-            group.addTask {
-                .response(await confirmationService.confirm(request))
-            }
-            group.addTask { [confirmationTimeout] in
-                try? await Task.sleep(for: confirmationTimeout)
-                return .timedOut
-            }
-            let result = await group.next() ?? .timedOut
-            group.cancelAll()
-            return result
+        let race = Race<ConfirmationRace>()
+        race.add(Task { @MainActor in
+            let response = await confirmationService.confirm(request)
+            race.resolve(.response(response))
+        })
+        race.add(Task { @MainActor [confirmationTimeout] in
+            do {
+                try await Task.sleep(for: confirmationTimeout)
+                race.resolve(.timedOut)
+            } catch {}
+        })
+        return await withTaskCancellationHandler {
+            await race.wait()
+        } onCancel: {
+            Task { @MainActor in race.resolve(.cancelled) }
         }
     }
 
     private func executionResult(
         handle: ActionExecutionHandle,
-        timeout: Duration
+        timeout: Duration?
     ) async -> ExecutionRace {
-        return await withTaskGroup(of: ExecutionRace.self) { group in
-            group.addTask {
-                .result(await handle.result())
-            }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                return .timedOut
-            }
-            let result = await group.next() ?? .timedOut
-            if case .timedOut = result {
-                handle.cancel()
-            }
-            group.cancelAll()
-            return result
+        let race = Race<ExecutionRace>()
+        race.add(Task { @MainActor in
+            race.resolve(.result(await handle.result()))
+        })
+        if let timeout {
+            race.add(Task { @MainActor in
+                do {
+                    try await Task.sleep(for: timeout)
+                    race.resolve(.timedOut)
+                } catch {}
+            })
+        }
+        return await withTaskCancellationHandler {
+            await race.wait()
+        } onCancel: {
+            Task { @MainActor in race.resolve(.cancelled) }
         }
     }
 

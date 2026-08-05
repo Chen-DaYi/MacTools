@@ -1304,6 +1304,14 @@ private struct FeatureSettingsSidebar: View {
             )
             .tag(pane)
             .id(pane)
+        case .automation:
+            FeatureSettingsSidebarRow(
+                title: "自动化",
+                systemImage: "bolt.horizontal.circle",
+                iconTint: .indigo
+            )
+            .tag(pane)
+            .id(pane)
         case .dashboardLayout:
             FeatureSettingsSidebarRow(
                 title: AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘"),
@@ -1482,6 +1490,8 @@ private struct FeatureSettingsDetailPane: View {
         switch selectedPane {
         case .actionsAndShortcuts:
             ActionShortcutSettingsView(pluginHost: pluginHost)
+        case .automation:
+            AutomationSettingsView(pluginHost: pluginHost)
         case .dashboardLayout:
             SurfaceLayoutSettingsView(
                 navigationCoordinator: navigationCoordinator,

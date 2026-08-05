@@ -11,6 +11,7 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
             ),
             [
                 .actionsAndShortcuts,
+                .automation,
                 .dashboardLayout,
                 .featurePanelLayout,
                 .marketplace,

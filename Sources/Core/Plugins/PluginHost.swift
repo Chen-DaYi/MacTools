@@ -5,6 +5,7 @@ import MacToolsPluginKit
 
 enum FeatureSettingsPane: Hashable {
     case actionsAndShortcuts
+    case automation
     case dashboardLayout
     case featurePanelLayout
     case marketplace
@@ -99,7 +100,7 @@ private extension FeatureSettingsPane {
 
     var landingPage: PluginSettingsLandingPage? {
         switch self {
-        case .actionsAndShortcuts:
+        case .actionsAndShortcuts, .automation:
             nil
         case .dashboardLayout:
             .dashboard
@@ -311,10 +312,12 @@ final class PluginHost: ObservableObject {
     private let pluginCatalogManager: PluginCatalogManager?
     let actionRegistry: ActionRegistry
     let actionExecutor: ActionExecutor
+    let actionConfirmationService: ActionConfirmationRouter
     private let actionShortcutStore: ActionShortcutAssignmentStore
     let shortcutAssignmentService: ShortcutAssignmentService
     private let actionPresetStore: ActionInvocationPresetStore
     let actionRunLinkService: ActionRunLinkService
+    let automationController: AutomationController
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
@@ -451,8 +454,14 @@ final class PluginHost: ObservableObject {
         let actionPresetStore = ActionInvocationPresetStore(
             userDefaults: shortcutStore.userDefaults
         )
+        let actionConfirmationService = ActionConfirmationRouter()
+        let actionExecutor = ActionExecutor(
+            registry: actionRegistry,
+            confirmationService: actionConfirmationService
+        )
         self.actionRegistry = actionRegistry
-        self.actionExecutor = ActionExecutor(registry: actionRegistry)
+        self.actionConfirmationService = actionConfirmationService
+        self.actionExecutor = actionExecutor
         self.actionShortcutStore = actionShortcutStore
         self.actionPresetStore = actionPresetStore
         self.shortcutAssignmentService = ShortcutAssignmentService(
@@ -465,6 +474,15 @@ final class PluginHost: ObservableObject {
             presetStore: actionPresetStore,
             scheme: actionURLScheme
         )
+        self.automationController = AutomationController(
+            store: WorkflowStore(userDefaults: shortcutStore.userDefaults),
+            registry: actionRegistry,
+            executor: actionExecutor
+        )
+
+        self.automationController.onCatalogChange = { [weak self] in
+            self?.rebuildDerivedState()
+        }
 
         configureCallbacks(for: self.builtInPlugins)
 
@@ -1104,7 +1122,7 @@ final class PluginHost: ObservableObject {
     @discardableResult
     func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) -> Bool {
         switch pane {
-        case .actionsAndShortcuts, .dashboardLayout, .featurePanelLayout, .marketplace:
+        case .actionsAndShortcuts, .automation, .dashboardLayout, .featurePanelLayout, .marketplace:
             if let landingPage = pane.landingPage {
                 pluginDisplayPreferencesStore.setLastPluginSettingsLandingPage(landingPage)
             }
@@ -2232,7 +2250,10 @@ final class PluginHost: ObservableObject {
     }
 
     private func synchronizeActionRegistry() {
-        var registrations = [hostActionRegistration()]
+        var registrations = [
+            hostActionRegistration(),
+            automationController.actionRegistration(),
+        ]
 
         for plugin in orderedCorePlugins() {
             if let provider = plugin as? any PluginActionProviding {
@@ -2269,6 +2290,7 @@ final class PluginHost: ObservableObject {
         }
 
         actionRegistry.synchronize(registrations)
+        automationController.migrateReferencesIfNeeded()
         migrateLegacyAppActionShortcutsIfNeeded()
         migrateLegacyPluginActionShortcutsIfNeeded()
         actionCatalogEntries = actionRegistry.catalogEntries

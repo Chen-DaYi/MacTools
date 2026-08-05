@@ -40,9 +40,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         registry: pluginHost.actionRegistry,
         executor: pluginHost.actionExecutor,
         runLinkService: pluginHost.actionRunLinkService,
-        confirmationService: AppActionConfirmationService { [weak self] in
-            self?.windowRouter?.windowForActionConfirmation()
-        },
+        confirmationService: pluginHost.actionConfirmationService,
         feedbackPresenter: SystemRunLinkFeedbackPresenter()
     )
 
@@ -59,6 +57,12 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             launchAtLoginController: launchAtLoginController
         )
         self.windowRouter = windowRouter
+        let actionConfirmationService = AppActionConfirmationService { [weak self] in
+            self?.windowRouter?.windowForActionConfirmation()
+        }
+        pluginHost.actionConfirmationService.setHandler { request in
+            await actionConfirmationService.confirm(request)
+        }
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,
             windowRouter: windowRouter,
