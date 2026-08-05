@@ -1,0 +1,154 @@
+{
+  "formatVersion": 1,
+  "issueScope": [247, 249, 250, 251],
+  "packs": [
+    {
+      "id": "baseline",
+      "title": "Cross-surface happy path",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [247, 249, 250, 251],
+      "checkpoints": [
+        "marketplace-visible",
+        "actions-shortcuts-visible",
+        "workflow-visible",
+        "workflow-run-succeeded",
+        "run-link-executed",
+        "action-grid-visible",
+        "launchpad-visible",
+        "calculator-automation-triggered",
+        "shortcut-control-command-3",
+        "shortcut-control-command-4",
+        "relaunch-persistence"
+      ]
+    },
+    {
+      "id": "shortcut-lifecycle",
+      "title": "Shortcut assignment and conflict lifecycle",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [249],
+      "checkpoints": [
+        "shortcut-conflict-visible",
+        "shortcut-conflict-replaced",
+        "shortcut-cleared",
+        "shortcut-cross-surface-synchronized"
+      ]
+    },
+    {
+      "id": "workflow-resilience",
+      "title": "Workflow failure, cancellation, and safety",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [247],
+      "checkpoints": [
+        "workflow-continue-on-error",
+        "workflow-stop-on-error",
+        "workflow-cancelled-during-delay",
+        "workflow-unavailable-preserved"
+      ]
+    },
+    {
+      "id": "automation-conditions",
+      "title": "Multiple automatic rules and condition outcomes",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [247],
+      "checkpoints": [
+        "multiple-rules-visible",
+        "calculator-condition-skipped",
+        "textedit-automation-triggered"
+      ]
+    },
+    {
+      "id": "run-link-security",
+      "title": "Run Link copy, confirmation, presets, and rejection",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [251],
+      "checkpoints": [
+        "run-link-copy-url",
+        "run-link-copy-terminal",
+        "run-link-parameterized-preset",
+        "run-link-confirmation-denied",
+        "run-link-invalid-rejected",
+        "run-link-cold-launch-ordered"
+      ]
+    },
+    {
+      "id": "action-grid-interactions",
+      "title": "Nine-entry Action Grid configuration and input",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [250],
+      "checkpoints": [
+        "grid-nine-entry-layout",
+        "grid-configuration-lifecycle",
+        "grid-workflow-executed",
+        "grid-unavailable-kept-open",
+        "grid-keyboard-navigation",
+        "grid-number-selection",
+        "grid-outside-dismissal",
+        "grid-repeated-invocation-single-overlay"
+      ]
+    },
+    {
+      "id": "localization-host-commands",
+      "title": "Localization and merged Command-K host commands",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [249, 250],
+      "checkpoints": [
+        "localization-english",
+        "localization-chinese",
+        "localization-arabic-rtl",
+        "command-k-appearance-roundtrip",
+        "command-k-plugin-visibility-roundtrip"
+      ]
+    },
+    {
+      "id": "stability-and-migration",
+      "title": "Dashboard responsiveness and plugin migration",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [],
+      "checkpoints": [
+        "dashboard-bluetooth-responsive",
+        "dashboard-stress-responsive",
+        "plugin-migration-isolated-tests"
+      ]
+    },
+    {
+      "id": "trackpad-automated",
+      "title": "Trackpad settings and injected logic coverage",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [],
+      "checkpoints": [
+        "trackpad-settings-visible",
+        "trackpad-automated-tests"
+      ]
+    },
+    {
+      "id": "permission-and-recording",
+      "title": "Stable identity permission persistence and evidence",
+      "phase": "post-permission",
+      "required": true,
+      "issues": [249, 250],
+      "checkpoints": [
+        "rebuild-permission-persistence",
+        "screencast-captured"
+      ]
+    },
+    {
+      "id": "trackpad-hardware",
+      "title": "Physical trackpad verification",
+      "phase": "post-permission",
+      "required": false,
+      "issues": [],
+      "checkpoints": [
+        "trackpad-physical-gesture-verification"
+      ]
+    }
+  ]
+}

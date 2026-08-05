@@ -37,8 +37,9 @@ PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/do
 E2E_SCRIPT := scripts/e2e/mactools-e2e.sh
 E2E_SESSION ?=
 E2E_DURATION ?= 90
+E2E_PACK ?=
 
-.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open e2e-preflight e2e-prepare e2e-resume e2e-rebuild e2e-audit e2e-record e2e-collect e2e-restore e2e-self-test clean release release-local
+.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -153,6 +154,14 @@ e2e-preflight:
 e2e-prepare:
 	@$(E2E_SCRIPT) prepare
 
+e2e-upgrade:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) upgrade "$(E2E_SESSION)"
+
+e2e-reseed:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) reseed "$(E2E_SESSION)"
+
 e2e-resume:
 	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
 	@$(E2E_SCRIPT) resume "$(E2E_SESSION)"
@@ -165,9 +174,21 @@ e2e-audit:
 	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
 	@$(E2E_SCRIPT) audit "$(E2E_SESSION)"
 
+e2e-scenarios:
+	@$(E2E_SCRIPT) scenarios "$(E2E_PACK)"
+
 e2e-record:
 	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
 	@$(E2E_SCRIPT) record "$(E2E_SESSION)" "$(E2E_DURATION)"
+
+e2e-record-pack:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@test -n "$(E2E_PACK)" || (echo "Pass E2E_PACK=<scenario-pack-id>"; exit 1)
+	@$(E2E_SCRIPT) record-pack "$(E2E_SESSION)" "$(E2E_PACK)" "$(E2E_DURATION)"
+
+e2e-verify-code:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) verify-code "$(E2E_SESSION)"
 
 e2e-collect:
 	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)

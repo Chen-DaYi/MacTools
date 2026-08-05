@@ -209,64 +209,21 @@ private struct WorkflowDetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Image(systemName: workflow.systemImage)
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 34)
-
-                TextField(
-                    FeatureL10n.string("工作流名称"),
-                    text: Binding(
-                        get: { workflow.name },
-                        set: { automation.renameWorkflow(id: workflow.id, name: $0) }
-                    )
-                )
-                .font(PluginSettingsTheme.Typography.pageTitle)
-                .textFieldStyle(.plain)
-
-                Toggle(
-                    FeatureL10n.string("启用"),
-                    isOn: Binding(
-                        get: { workflow.isEnabled },
-                        set: { automation.setWorkflowEnabled($0, id: workflow.id) }
-                    )
-                )
-                .toggleStyle(.switch)
-
-                if activeWorkflowRunIDs.isEmpty {
-                    Button(FeatureL10n.string("测试")) {
-                        _ = automation.startWorkflow(id: workflow.id, test: true)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(workflow.steps.isEmpty)
-
-                    Button(FeatureL10n.string("运行")) {
-                        _ = automation.startWorkflow(id: workflow.id)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(!workflow.isEnabled || workflow.steps.isEmpty)
-                } else {
-                    Button(FeatureL10n.string("停止"), role: .destructive) {
-                        activeWorkflowRunIDs.forEach(automation.cancel(runID:))
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .help(FeatureL10n.string("停止当前工作流运行"))
-                    .accessibilityIdentifier("mactools.automation.stop")
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    workflowIdentity
+                        .frame(minWidth: 240, maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
+                    headerControls
                 }
 
-                Menu {
-                    Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateWorkflow(id: workflow.id) }
-                    Divider()
-                    Button(FeatureL10n.string("删除"), role: .destructive) { pendingDelete = true }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    workflowIdentity
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        headerControls
+                    }
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
             }
 
             Text(FeatureL10n.string("按顺序运行多个操作；每个步骤都会重新检查可用性、权限和确认要求。"))
@@ -275,6 +232,80 @@ private struct WorkflowDetailView: View {
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
         .pluginSettingsCardBackground(.host)
+    }
+
+    private var workflowIdentity: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: workflow.systemImage)
+                .font(.title2)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 34)
+
+            TextField(
+                FeatureL10n.string("工作流名称"),
+                text: Binding(
+                    get: { workflow.name },
+                    set: { automation.renameWorkflow(id: workflow.id, name: $0) }
+                )
+            )
+            .font(PluginSettingsTheme.Typography.pageTitle)
+            .textFieldStyle(.plain)
+            .lineLimit(1)
+            .layoutPriority(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var headerControls: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            Toggle(
+                FeatureL10n.string("启用"),
+                isOn: Binding(
+                    get: { workflow.isEnabled },
+                    set: { automation.setWorkflowEnabled($0, id: workflow.id) }
+                )
+            )
+            .toggleStyle(.switch)
+            .fixedSize()
+
+            if activeWorkflowRunIDs.isEmpty {
+                Button(FeatureL10n.string("测试")) {
+                    _ = automation.startWorkflow(id: workflow.id, test: true)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(workflow.steps.isEmpty)
+                .fixedSize()
+
+                Button(FeatureL10n.string("运行")) {
+                    _ = automation.startWorkflow(id: workflow.id)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(!workflow.isEnabled || workflow.steps.isEmpty)
+                .fixedSize()
+            } else {
+                Button(FeatureL10n.string("停止"), role: .destructive) {
+                    activeWorkflowRunIDs.forEach(automation.cancel(runID:))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .fixedSize()
+                .help(FeatureL10n.string("停止当前工作流运行"))
+                .accessibilityIdentifier("mactools.automation.stop")
+            }
+
+            Menu {
+                Button(FeatureL10n.string("创建副本")) { _ = automation.duplicateWorkflow(id: workflow.id) }
+                Divider()
+                Button(FeatureL10n.string("删除"), role: .destructive) { pendingDelete = true }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var activeWorkflowRunIDs: [UUID] {

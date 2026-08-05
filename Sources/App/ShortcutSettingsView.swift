@@ -144,15 +144,12 @@ struct ActionShortcutSettingsView: View {
     }
 
     private var controls: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                searchField
-                filterPicker
-            }
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            searchField
 
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                searchField
+            HStack(spacing: 0) {
                 filterPicker
+                Spacer(minLength: 0)
             }
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
@@ -173,6 +170,7 @@ struct ActionShortcutSettingsView: View {
             }
         }
         .pickerStyle(.segmented)
+        .labelsHidden()
         .frame(minWidth: 320, idealWidth: 380, maxWidth: 420)
     }
 

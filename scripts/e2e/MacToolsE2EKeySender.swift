@@ -4,11 +4,15 @@ import Foundation
 private enum ShortcutName: String {
     case openSettings = "open-settings"
     case actionGrid = "action-grid"
+    case dashboard = "dashboard"
+    case safeWorkflow = "safe-workflow"
 
     var keyCode: CGKeyCode {
         switch self {
         case .openSettings: 20
         case .actionGrid: 21
+        case .dashboard: 23
+        case .safeWorkflow: 22
         }
     }
 }
@@ -83,7 +87,7 @@ do {
             throw NSError(
                 domain: "MacToolsE2EKeySender",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Expected open-settings or action-grid."]
+                userInfo: [NSLocalizedDescriptionKey: "Expected open-settings, action-grid, dashboard, or safe-workflow."]
             )
         }
         try describe(shortcut)
@@ -92,7 +96,7 @@ do {
             throw NSError(
                 domain: "MacToolsE2EKeySender",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Expected open-settings or action-grid."]
+                userInfo: [NSLocalizedDescriptionKey: "Expected open-settings, action-grid, dashboard, or safe-workflow."]
             )
         }
         try send(shortcut)
@@ -100,7 +104,7 @@ do {
         throw NSError(
             domain: "MacToolsE2EKeySender",
             code: 2,
-            userInfo: [NSLocalizedDescriptionKey: "Usage: MacToolsE2EKeySender.swift <check|describe|send> [open-settings|action-grid]"]
+            userInfo: [NSLocalizedDescriptionKey: "Usage: MacToolsE2EKeySender.swift <check|describe|send> [open-settings|action-grid|dashboard|safe-workflow]"]
         )
     }
 } catch {

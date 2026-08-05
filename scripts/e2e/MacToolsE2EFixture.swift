@@ -127,7 +127,14 @@ private enum AutomationTrigger: Codable {
     case application(ApplicationAutomationTrigger)
 }
 
-private struct EmptyAutomationCondition: Codable {}
+private struct FrontmostApplicationCondition: Codable {
+    let bundleIdentifier: String
+    let isExcluded: Bool
+}
+
+private enum AutomationCondition: Codable {
+    case frontmostApplication(FrontmostApplicationCondition)
+}
 
 private struct AutomationRule: Codable {
     let formatVersion: Int
@@ -136,7 +143,7 @@ private struct AutomationRule: Codable {
     let workflowID: UUID
     let isEnabled: Bool
     let trigger: AutomationTrigger
-    let conditions: [EmptyAutomationCondition]
+    let conditions: [AutomationCondition]
     let createdAt: Date
     let updatedAt: Date
 }
@@ -164,24 +171,37 @@ private struct AuditReport: Codable {
     let shortcutCount: Int
     let hasOpenSettingsShortcut: Bool
     let hasActionGridShortcut: Bool
+    let hasDashboardShortcut: Bool
+    let hasWorkflowShortcut: Bool
     let workflowCount: Int
+    let workflowNames: [String]
+    let workflowStepCounts: [String: Int]
+    let hasDisplaySleepWorkflowStep: Bool
     let workflowName: String?
     let workflowStepCount: Int
     let automationWorkflowName: String?
     let automationWorkflowStepCount: Int
     let automationWorkflowIsIdempotent: Bool
+    let systemMuteValue: Bool?
     let systemMuteStatePreserved: Bool
     let ruleCount: Int
+    let ruleNames: [String]
     let calculatorRuleEnabled: Bool
+    let calculatorSkipRuleEnabled: Bool
+    let textEditRuleEnabled: Bool
     let actionGridEntryCount: Int
     let actionGridActionIDs: [String]
+    let actionGridReferences: [String]
+    let hasUnavailableGridEntry: Bool
+    let language: String?
+    let appearance: String?
     let workflowHistoryCount: Int
     let latestWorkflowStatus: String?
     let latestWorkflowSource: String?
 }
 
 private enum Fixture {
-    static let version = 2
+    static let version = 4
     static let markerKey = "mactools.e2e.fixture-version"
     static let shortcutKey = "action-shortcuts.assignments"
     static let workflowKey = "automation.workflows.v1"
@@ -194,7 +214,12 @@ private enum Fixture {
 
     static let workflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000247")!
     static let automationWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000248")!
+    static let continueWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000260")!
+    static let stopWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000261")!
+    static let delayWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000262")!
     static let ruleID = UUID(uuidString: "00000000-0000-4000-8000-000000000249")!
+    static let calculatorSkipRuleID = UUID(uuidString: "00000000-0000-4000-8000-000000000280")!
+    static let textEditRuleID = UUID(uuidString: "00000000-0000-4000-8000-000000000281")!
     static let timestamp = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
     static let openSettings = ActionReference(
@@ -205,6 +230,10 @@ private enum Fixture {
         providerID: "mactools",
         actionID: "app.toggle-dashboard"
     )
+    static let toggleFeaturePanel = ActionReference(
+        providerID: "mactools",
+        actionID: "app.toggle-feature-panel"
+    )
     static let showActionGrid = ActionReference(
         providerID: "action-grid",
         actionID: "show"
@@ -213,6 +242,17 @@ private enum Fixture {
         providerID: "launchpad",
         actionID: "toggleLaunchpad"
     )
+    static let missingAction = ActionReference(
+        providerID: "e2e-missing-provider",
+        actionID: "not-installed"
+    )
+
+    static func workflowAction(_ id: UUID) -> ActionReference {
+        ActionReference(
+            providerID: "automation",
+            actionID: "workflow.\(id.uuidString.lowercased())"
+        )
+    }
 
     static func preserveSystemMute(_ isMuted: Bool) -> ActionReference {
         ActionReference(
@@ -231,6 +271,16 @@ private enum Fixture {
         id: UUID(uuidString: "00000000-0000-4000-8000-000000000251")!,
         reference: showActionGrid,
         binding: ShortcutBinding(keyCode: 21, modifiers: 3)
+    )
+    static let dashboardShortcut = ShortcutAssignment(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000264")!,
+        reference: toggleDashboard,
+        binding: ShortcutBinding(keyCode: 23, modifiers: 3)
+    )
+    static let workflowShortcut = ShortcutAssignment(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000265")!,
+        reference: workflowAction(workflowID),
+        binding: ShortcutBinding(keyCode: 22, modifiers: 3)
     )
 
     static let workflow = WorkflowDefinition(
@@ -287,6 +337,84 @@ private enum Fixture {
         )
     }
 
+    static let continueWorkflow = WorkflowDefinition(
+        formatVersion: 1,
+        id: continueWorkflowID,
+        name: "E2E Continue After Missing Action",
+        systemImage: "arrow.right.circle",
+        isEnabled: true,
+        steps: [
+            WorkflowStep(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000270")!,
+                reference: openSettings,
+                label: "Open Settings Before Failure",
+                delaySeconds: 0,
+                errorPolicy: "stop"
+            ),
+            WorkflowStep(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000271")!,
+                reference: missingAction,
+                label: "Unavailable Provider Continues",
+                delaySeconds: 0,
+                errorPolicy: "continueRunning"
+            ),
+            WorkflowStep(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000272")!,
+                reference: openSettings,
+                label: "Open Settings After Failure",
+                delaySeconds: 0,
+                errorPolicy: "stop"
+            ),
+        ],
+        createdAt: timestamp,
+        updatedAt: timestamp
+    )
+
+    static let stopWorkflow = WorkflowDefinition(
+        formatVersion: 1,
+        id: stopWorkflowID,
+        name: "E2E Stop On Missing Action",
+        systemImage: "stop.circle",
+        isEnabled: true,
+        steps: [
+            WorkflowStep(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000273")!,
+                reference: missingAction,
+                label: "Unavailable Provider Stops",
+                delaySeconds: 0,
+                errorPolicy: "stop"
+            ),
+            WorkflowStep(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000274")!,
+                reference: toggleDashboard,
+                label: "Must Be Skipped",
+                delaySeconds: 0,
+                errorPolicy: "stop"
+            ),
+        ],
+        createdAt: timestamp,
+        updatedAt: timestamp
+    )
+
+    static let delayWorkflow = WorkflowDefinition(
+        formatVersion: 1,
+        id: delayWorkflowID,
+        name: "E2E Cancellable Delay",
+        systemImage: "timer",
+        isEnabled: true,
+        steps: [
+            WorkflowStep(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000275")!,
+                reference: openSettings,
+                label: "Cancel During Ten Second Delay",
+                delaySeconds: 10,
+                errorPolicy: "stop"
+            ),
+        ],
+        createdAt: timestamp,
+        updatedAt: timestamp
+    )
+
     static let rule = AutomationRule(
         formatVersion: 1,
         id: ruleID,
@@ -297,6 +425,47 @@ private enum Fixture {
             ApplicationAutomationTrigger(
                 event: .activates,
                 bundleIdentifier: "com.apple.calculator"
+            )
+        ),
+        conditions: [],
+        createdAt: timestamp,
+        updatedAt: timestamp
+    )
+
+    static let calculatorSkipRule = AutomationRule(
+        formatVersion: 1,
+        id: calculatorSkipRuleID,
+        name: "E2E Calculator Condition Skip",
+        workflowID: automationWorkflowID,
+        isEnabled: true,
+        trigger: .application(
+            ApplicationAutomationTrigger(
+                event: .activates,
+                bundleIdentifier: "com.apple.calculator"
+            )
+        ),
+        conditions: [
+            .frontmostApplication(
+                FrontmostApplicationCondition(
+                    bundleIdentifier: "com.example.never-frontmost",
+                    isExcluded: false
+                )
+            ),
+        ],
+        createdAt: timestamp,
+        updatedAt: timestamp
+    )
+
+    static let textEditRule = AutomationRule(
+        formatVersion: 1,
+        id: textEditRuleID,
+        name: "E2E TextEdit Activation",
+        workflowID: automationWorkflowID,
+        isEnabled: true,
+        trigger: .application(
+            ApplicationAutomationTrigger(
+                event: .activates,
+                bundleIdentifier: "com.apple.TextEdit"
             )
         ),
         conditions: [],
@@ -315,7 +484,43 @@ private enum Fixture {
             reference: toggleLaunchpad,
             customTitle: "Launchpad"
         ),
+        ActionGridEntry(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000300")!,
+            reference: toggleDashboard,
+            customTitle: "Dashboard"
+        ),
+        ActionGridEntry(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000301")!,
+            reference: toggleFeaturePanel,
+            customTitle: "Feature Panel"
+        ),
+        ActionGridEntry(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000302")!,
+            reference: workflowAction(workflowID),
+            customTitle: "Safe Workflow"
+        ),
+        ActionGridEntry(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000303")!,
+            reference: workflowAction(automationWorkflowID),
+            customTitle: "Background Workflow"
+        ),
+        ActionGridEntry(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000304")!,
+            reference: workflowAction(continueWorkflowID),
+            customTitle: "Continue Workflow"
+        ),
+        ActionGridEntry(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000305")!,
+            reference: workflowAction(stopWorkflowID),
+            customTitle: "Stop Workflow"
+        ),
+        ActionGridEntry(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000306")!,
+            reference: missingAction,
+            customTitle: "Unavailable Action"
+        ),
     ]
+
 }
 
 private enum SystemAudioMuteState {
@@ -408,7 +613,12 @@ private func seed(bundleIdentifier: String, allowRealDomain: Bool) throws {
     }
 
     var shortcuts = loadShortcutPayload(from: defaults).assignments
-    let fixtureShortcuts = [Fixture.openSettingsShortcut, Fixture.actionGridShortcut]
+    let fixtureShortcuts = [
+        Fixture.openSettingsShortcut,
+        Fixture.actionGridShortcut,
+        Fixture.dashboardShortcut,
+        Fixture.workflowShortcut,
+    ]
     let fixtureReferences = Set(fixtureShortcuts.map(\.reference))
     let fixtureBindings = Set(fixtureShortcuts.map(\.binding))
     shortcuts.removeAll {
@@ -423,12 +633,21 @@ private func seed(bundleIdentifier: String, allowRealDomain: Bool) throws {
     defaults.set(
         try encode(WorkflowEnvelope(
             formatVersion: 1,
-            workflows: [Fixture.workflow, Fixture.automationWorkflow(systemMuted: systemMuted)]
+            workflows: [
+                Fixture.workflow,
+                Fixture.automationWorkflow(systemMuted: systemMuted),
+                Fixture.continueWorkflow,
+                Fixture.stopWorkflow,
+                Fixture.delayWorkflow,
+            ]
         )),
         forKey: Fixture.workflowKey
     )
     defaults.set(
-        try encode(AutomationRuleEnvelope(formatVersion: 1, rules: [Fixture.rule])),
+        try encode(AutomationRuleEnvelope(
+            formatVersion: 1,
+            rules: [Fixture.rule, Fixture.calculatorSkipRule, Fixture.textEditRule]
+        )),
         forKey: Fixture.ruleKey
     )
     defaults.set(
@@ -475,6 +694,13 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
     let hasActionGridShortcut = shortcuts.contains {
         $0.reference == Fixture.showActionGrid && $0.binding == Fixture.actionGridShortcut.binding
     }
+    let hasDashboardShortcut = shortcuts.contains {
+        $0.reference == Fixture.toggleDashboard && $0.binding == Fixture.dashboardShortcut.binding
+    }
+    let hasWorkflowShortcut = shortcuts.contains {
+        $0.reference == Fixture.workflowAction(Fixture.workflowID)
+            && $0.binding == Fixture.workflowShortcut.binding
+    }
     let workflow = workflows.first { $0.id == Fixture.workflowID }
     let automationWorkflow = workflows.first { $0.id == Fixture.automationWorkflowID }
     let automationMuteSetting: Bool? = {
@@ -507,16 +733,85 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         guard case let .application(trigger) = $0.trigger else { return false }
         return trigger.bundleIdentifier == "com.apple.calculator" && trigger.event == .activates
     }
+    let calculatorSkipRuleEnabled = rules.contains {
+        guard $0.id == Fixture.calculatorSkipRuleID,
+              $0.workflowID == Fixture.automationWorkflowID,
+              $0.isEnabled else {
+            return false
+        }
+        guard case let .application(trigger) = $0.trigger,
+              trigger.bundleIdentifier == "com.apple.calculator",
+              trigger.event == .activates,
+              $0.conditions.count == 1,
+              case let .frontmostApplication(condition) = $0.conditions[0] else {
+            return false
+        }
+        return condition.bundleIdentifier == "com.example.never-frontmost"
+            && !condition.isExcluded
+    }
+    let textEditRuleEnabled = rules.contains {
+        guard $0.id == Fixture.textEditRuleID,
+              $0.workflowID == Fixture.automationWorkflowID,
+              $0.isEnabled,
+              $0.conditions.isEmpty else {
+            return false
+        }
+        guard case let .application(trigger) = $0.trigger else { return false }
+        return trigger.bundleIdentifier == "com.apple.TextEdit" && trigger.event == .activates
+    }
     let actionIDs = actionGridEntries.map { $0.reference.key.actionID }
+    let actionGridReferences = actionGridEntries.map {
+        "\($0.reference.key.providerID)/\($0.reference.key.actionID)"
+    }
+    let expectedWorkflowIDs: Set<UUID> = [
+        Fixture.workflowID,
+        Fixture.automationWorkflowID,
+        Fixture.continueWorkflowID,
+        Fixture.stopWorkflowID,
+        Fixture.delayWorkflowID,
+    ]
+    let hasDisplaySleepWorkflowStep = workflows.contains { workflow in
+        workflow.steps.contains {
+            $0.reference.key == ActionKey(providerID: "display-sleep", actionID: "execute")
+        }
+    }
+    let workflowsAreComplete = Set(workflows.map(\.id)) == expectedWorkflowIDs
+        && workflows.first(where: { $0.id == Fixture.continueWorkflowID })?.steps.count == 3
+        && workflows.first(where: { $0.id == Fixture.continueWorkflowID })?
+            .steps.contains(where: {
+                $0.reference == Fixture.missingAction && $0.errorPolicy == "continueRunning"
+            }) == true
+        && workflows.first(where: { $0.id == Fixture.stopWorkflowID })?.steps.count == 2
+        && workflows.first(where: { $0.id == Fixture.stopWorkflowID })?
+            .steps.first?.reference == Fixture.missingAction
+        && workflows.first(where: { $0.id == Fixture.delayWorkflowID })?
+            .steps.first?.delaySeconds == 10
+    let language = defaults.string(forKey: Fixture.languageKey)
+    let appearance = defaults.string(forKey: Fixture.appearanceKey)
+    let expectedGridReferences = Fixture.actionGridEntries.map(\.reference)
+    let hasUnavailableGridEntry = actionGridEntries.contains {
+        $0.reference == Fixture.missingAction
+    }
     let valid = defaults.integer(forKey: Fixture.markerKey) == Fixture.version
         && hasOpenSettingsShortcut
         && hasActionGridShortcut
-        && workflows.count == 2
+        && hasDashboardShortcut
+        && hasWorkflowShortcut
+        && workflows.count == 5
+        && workflowsAreComplete
+        && !hasDisplaySleepWorkflowStep
         && workflow?.steps.count == 3
         && automationWorkflowIsIdempotent
         && systemMuteStatePreserved
         && calculatorRuleEnabled
-        && actionGridEntries.count == 2
+        && calculatorSkipRuleEnabled
+        && textEditRuleEnabled
+        && rules.count == 3
+        && actionGridEntries.map(\.reference) == expectedGridReferences
+        && actionGridEntries.count == 9
+        && hasUnavailableGridEntry
+        && language == "en"
+        && appearance == "light"
 
     return AuditReport(
         bundleIdentifier: bundleIdentifier,
@@ -525,17 +820,32 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         shortcutCount: shortcuts.count,
         hasOpenSettingsShortcut: hasOpenSettingsShortcut,
         hasActionGridShortcut: hasActionGridShortcut,
+        hasDashboardShortcut: hasDashboardShortcut,
+        hasWorkflowShortcut: hasWorkflowShortcut,
         workflowCount: workflows.count,
+        workflowNames: workflows.map(\.name),
+        workflowStepCounts: Dictionary(
+            uniqueKeysWithValues: workflows.map { ($0.name, $0.steps.count) }
+        ),
+        hasDisplaySleepWorkflowStep: hasDisplaySleepWorkflowStep,
         workflowName: workflow?.name,
         workflowStepCount: workflow?.steps.count ?? 0,
         automationWorkflowName: automationWorkflow?.name,
         automationWorkflowStepCount: automationWorkflow?.steps.count ?? 0,
         automationWorkflowIsIdempotent: automationWorkflowIsIdempotent,
+        systemMuteValue: automationMuteSetting,
         systemMuteStatePreserved: systemMuteStatePreserved,
         ruleCount: rules.count,
+        ruleNames: rules.map(\.name),
         calculatorRuleEnabled: calculatorRuleEnabled,
+        calculatorSkipRuleEnabled: calculatorSkipRuleEnabled,
+        textEditRuleEnabled: textEditRuleEnabled,
         actionGridEntryCount: actionGridEntries.count,
         actionGridActionIDs: actionIDs,
+        actionGridReferences: actionGridReferences,
+        hasUnavailableGridEntry: hasUnavailableGridEntry,
+        language: language,
+        appearance: appearance,
         workflowHistoryCount: historyRuns.count,
         latestWorkflowStatus: latestHistory?["status"] as? String,
         latestWorkflowSource: latestHistory?["source"].map { String(describing: $0) }

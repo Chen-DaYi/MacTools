@@ -6,12 +6,15 @@ SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h:h}"
 FIXTURE_TOOL="$SCRIPT_DIR/MacToolsE2EFixture.swift"
 KEY_SENDER_TOOL="$SCRIPT_DIR/MacToolsE2EKeySender.swift"
+CAPTURE_RECT_TOOL="$SCRIPT_DIR/MacToolsE2ECaptureRect.swift"
+SCENARIO_MANIFEST="$SCRIPT_DIR/scenarios.json"
 HARNESS_PATH="$SCRIPT_DIR/mactools-e2e.sh"
 APP_PATH="${MACTOOLS_E2E_APP_PATH:-$HOME/Applications/MacTools Dev.app}"
 PLUGIN_INSTALL_DIR="${MACTOOLS_E2E_PLUGIN_DIR:-$HOME/Library/Application Support/MacTools Dev/Plugins/Installed}"
 ARTIFACT_ROOT="${MACTOOLS_E2E_ARTIFACT_ROOT:-$REPO_ROOT/build/E2EArtifacts}"
 BUILT_APP_PATH="$REPO_ROOT/build/DerivedData/Build/Products/Debug/${APP_PATH:t}"
 PYTHON3="${PYTHON3:-/usr/bin/python3}"
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 if [[ -n "${DEVELOPER_DIR:-}" ]]; then
     E2E_DEVELOPER_DIR="$DEVELOPER_DIR"
@@ -27,12 +30,17 @@ usage() {
     print -r -- "Commands:"
     print -r -- "  preflight [output.json]               Verify stable app, signing, plugins, and tools"
     print -r -- "  prepare                               Back up preferences, seed safe fixtures, and launch"
+    print -r -- "  upgrade <session-dir>                 Reset checkpoints and install the latest fixture"
+    print -r -- "  reseed <session-dir>                  Reset fixture state without replacing its backup"
     print -r -- "  resume <session-dir>                  Revalidate and reopen a prepared session"
     print -r -- "  rebuild <session-dir> [--dry-run]     Rebuild and replace the stable signed app"
     print -r -- "  audit <session-dir>                   Save and validate fixture state"
     print -r -- "  checkpoint <session-dir> <name> <pass|fail|pending> [detail]"
-    print -r -- "  shortcut <session-dir> <open-settings|action-grid> [--dry-run]"
+    print -r -- "  shortcut <session-dir> <open-settings|action-grid|dashboard|safe-workflow> [--dry-run]"
     print -r -- "  record <session-dir> [seconds] [--dry-run]"
+    print -r -- "  record-pack <session-dir> <pack-id> [seconds] [--dry-run]"
+    print -r -- "  verify-code <session-dir> [--dry-run]   Run migration and injected-trackpad suites"
+    print -r -- "  scenarios [pack-id]                   Print all scenario packs or one pack"
     print -r -- "  collect <session-dir>                 Build report.json and diagnostic artifacts"
     print -r -- "  restore <session-dir>                 Restore preferences and relaunch the app"
     print -r -- "  self-test                             Validate the fixture tool in an isolated domain"
@@ -73,9 +81,21 @@ key_sender_tool() {
     env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swift "$KEY_SENDER_TOOL" "$@"
 }
 
+capture_rect_tool() {
+    env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swift "$CAPTURE_RECT_TOOL" "$@"
+}
+
 matching_pids() {
     local executable
     executable="$(app_executable)"
+    pgrep -f -x "$executable" || true
+}
+
+matching_built_pids() {
+    [[ -d "$BUILT_APP_PATH" ]] || return 0
+    local executable_name executable
+    executable_name="$(plist_value "$BUILT_APP_PATH/Contents/Info.plist" CFBundleExecutable)"
+    executable="$BUILT_APP_PATH/Contents/MacOS/$executable_name"
     pgrep -f -x "$executable" || true
 }
 
@@ -97,6 +117,43 @@ stop_app() {
     return 1
 }
 
+stop_built_app() {
+    local output
+    output="$(matching_built_pids)"
+    [[ -n "$output" ]] || return 0
+
+    local -a pids
+    pids=("${(@f)output}")
+    /bin/kill -TERM -- "${pids[@]}"
+
+    local attempt
+    for attempt in {1..50}; do
+        [[ -z "$(matching_built_pids)" ]] && return 0
+        sleep 0.1
+    done
+    print -u2 -r -- "error: Derived Data MacTools test host did not terminate gracefully"
+    return 1
+}
+
+restore_stable_launch_services_registration() {
+    [[ -x "$LSREGISTER" ]] || {
+        print -u2 -r -- "error: lsregister is unavailable at $LSREGISTER"
+        return 1
+    }
+    if [[ -d "$BUILT_APP_PATH" ]]; then
+        "$LSREGISTER" -u "$BUILT_APP_PATH" >/dev/null 2>&1 || true
+    fi
+    "$LSREGISTER" -f "$APP_PATH" >/dev/null
+}
+
+restore_stable_app_after_code_verification() {
+    stop_built_app || true
+    restore_stable_launch_services_registration || true
+    if [[ -z "$(matching_pids)" ]]; then
+        /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+    fi
+}
+
 expected_team_identifier() {
     if [[ -n "${MACTOOLS_E2E_TEAM_ID:-}" ]]; then
         print -r -- "$MACTOOLS_E2E_TEAM_ID"
@@ -116,11 +173,13 @@ write_preflight_json() {
     local plugin_count="$6"
     local process_count="$7"
     local event_posting_access="$8"
-    local passed="$9"
+    local conflicting_process_count="$9"
+    local passed="${10}"
 
     mkdir -p "${output_path:h}"
     "$PYTHON3" - "$output_path" "$APP_PATH" "$bundle_id" "$team_id" "$expected_team_id" \
-        "$authority" "$plugin_count" "$process_count" "$event_posting_access" "$passed" <<'PY'
+        "$authority" "$plugin_count" "$process_count" "$event_posting_access" \
+        "$conflicting_process_count" "$passed" <<'PY'
 import json
 import sys
 from datetime import datetime, timezone
@@ -135,6 +194,7 @@ from datetime import datetime, timezone
     plugin_count,
     process_count,
     event_posting_access,
+    conflicting_process_count,
     passed,
 ) = sys.argv[1:]
 payload = {
@@ -147,6 +207,7 @@ payload = {
     "authority": authority,
     "installedPluginCount": int(plugin_count),
     "matchingProcessCount": int(process_count),
+    "derivedDataProcessCount": int(conflicting_process_count),
     "eventPostingAccess": event_posting_access == "true",
     "recorder": "/usr/sbin/screencapture",
     "transcoder": "/opt/homebrew/bin/ffmpeg",
@@ -181,6 +242,12 @@ preflight() {
     if [[ -n "$process_output" ]]; then
         process_count="$(print -r -- "$process_output" | wc -l | tr -d ' ')"
     fi
+    local conflicting_process_count=0
+    local conflicting_process_output
+    conflicting_process_output="$(matching_built_pids)"
+    if [[ -n "$conflicting_process_output" ]]; then
+        conflicting_process_count="$(print -r -- "$conflicting_process_output" | wc -l | tr -d ' ')"
+    fi
     local event_posting_access=false
     if key_sender_tool check >/dev/null 2>&1; then
         event_posting_access=true
@@ -197,14 +264,18 @@ preflight() {
     [[ "$APP_PATH" != *"/build/"* ]] || failures+=("app path is not stable")
     (( plugin_count > 0 )) || failures+=("no installed Debug plugin packages were found")
     (( process_count <= 1 )) || failures+=("more than one stable-path app instance is running")
+    (( conflicting_process_count == 0 )) \
+        || failures+=("a Derived Data MacTools test host is still running")
     [[ -x /usr/sbin/screencapture ]] || failures+=("screencapture is unavailable")
+    [[ -f "$CAPTURE_RECT_TOOL" ]] || failures+=("private capture rectangle helper is unavailable")
     [[ -x /opt/homebrew/bin/ffmpeg ]] || failures+=("ffmpeg is unavailable")
 
     local passed=true
     (( ${#failures[@]} == 0 )) || passed=false
     write_preflight_json \
         "$output_path" "$bundle_id" "$team_id" "$expected_team" "$authority" \
-        "$plugin_count" "$process_count" "$event_posting_access" "$passed"
+        "$plugin_count" "$process_count" "$event_posting_access" \
+        "$conflicting_process_count" "$passed"
 
     print -r -- "App: $APP_PATH"
     print -r -- "Bundle: $bundle_id"
@@ -212,6 +283,7 @@ preflight() {
     print -r -- "Authority: $authority"
     print -r -- "Installed plugins: $plugin_count"
     print -r -- "Running instances: $process_count"
+    print -r -- "Derived Data test hosts: $conflicting_process_count"
     print -r -- "Synthetic shortcut access: $event_posting_access"
     print -r -- "Report: $output_path"
 
@@ -271,27 +343,43 @@ write_session_metadata() {
 
 write_pending_checkpoints() {
     local output="$1"
-    "$PYTHON3" - "$output" <<'PY'
+    "$PYTHON3" - "$output" "$SCENARIO_MANIFEST" <<'PY'
 import json
 import sys
 
+with open(sys.argv[2], encoding="utf-8") as handle:
+    manifest = json.load(handle)
 names = [
-    "marketplace-visible",
-    "actions-shortcuts-visible",
-    "workflow-visible",
-    "workflow-run-succeeded",
-    "run-link-executed",
-    "action-grid-visible",
-    "launchpad-visible",
-    "calculator-automation-triggered",
-    "shortcut-control-command-3",
-    "shortcut-control-command-4",
-    "relaunch-persistence",
-    "rebuild-permission-persistence",
+    name
+    for pack in manifest["packs"]
+    if pack["required"]
+    for name in pack["checkpoints"]
 ]
+if len(names) != len(set(names)):
+    raise SystemExit("scenario manifest contains duplicate checkpoint names")
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump({name: {"status": "pending", "detail": ""} for name in names}, handle, indent=2, sort_keys=True)
     handle.write("\n")
+PY
+}
+
+print_scenarios() {
+    local pack_id="${1:-}"
+    "$PYTHON3" - "$SCENARIO_MANIFEST" "$pack_id" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    manifest = json.load(handle)
+pack_id = sys.argv[2]
+if not pack_id:
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    raise SystemExit(0)
+for pack in manifest["packs"]:
+    if pack["id"] == pack_id:
+        print(json.dumps(pack, indent=2, sort_keys=True))
+        raise SystemExit(0)
+raise SystemExit(f"unknown scenario pack: {pack_id}")
 PY
 }
 
@@ -460,6 +548,52 @@ prepare() {
     print -r -- "$session_dir"
 }
 
+reseed_session() {
+    local session_dir="$1"
+    [[ -f "$session_dir/session.plist" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    local prepared_app_path bundle_id
+    prepared_app_path="$(session_value "$session_dir" appPath)"
+    bundle_id="$(session_value "$session_dir" bundleIdentifier)"
+    [[ "$prepared_app_path" == "$APP_PATH" ]] || {
+        print -u2 -r -- "error: session app path $prepared_app_path does not match $APP_PATH"
+        return 1
+    }
+
+    stop_app
+    local stamp evidence_path
+    stamp="$(date -u +%Y%m%d-%H%M%S)"
+    evidence_path="$session_dir/fixture.reseed-$stamp.json"
+    fixture_tool seed --bundle-id "$bundle_id" --allow-real-domain >"$evidence_path"
+    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+
+    local attempt
+    for attempt in {1..100}; do
+        [[ -n "$(matching_pids)" ]] && break
+        sleep 0.1
+    done
+    local process_count
+    process_count="$(matching_pids | wc -l | tr -d ' ')"
+    [[ "$process_count" == 1 ]] || {
+        print -u2 -r -- "error: expected one stable-path process after reseed, found $process_count"
+        return 1
+    }
+    print -r -- "Reseeded E2E fixture: $evidence_path"
+}
+
+upgrade_session() {
+    local session_dir="$1"
+    [[ -f "$session_dir/session.plist" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    write_pending_checkpoints "$session_dir/ui-checkpoints.json"
+    reseed_session "$session_dir"
+    print -r -- "Reset required checkpoints from $SCENARIO_MANIFEST"
+}
+
 session_value() {
     plist_value "$1/session.plist" "$2"
 }
@@ -492,6 +626,8 @@ from datetime import datetime, timezone
 path, name, status, detail = sys.argv[1:]
 with open(path, encoding="utf-8") as handle:
     payload = json.load(handle)
+if name not in payload:
+    raise SystemExit(f"unknown checkpoint: {name}")
 payload[name] = {
     "status": status,
     "detail": detail,
@@ -534,6 +670,7 @@ record_session() {
     local session_dir="$1"
     local duration="${2:-90}"
     local mode="${3:-}"
+    local label="${4:-}"
     [[ "$duration" == <-> ]] && (( duration >= 1 && duration <= 600 )) || {
         print -u2 -r -- "error: recording duration must be between 1 and 600 seconds"
         return 1
@@ -542,22 +679,131 @@ record_session() {
         print -u2 -r -- "error: invalid E2E session directory $session_dir"
         return 1
     }
-    local mov="$session_dir/screencast.mov"
-    local mp4="$session_dir/screencast.mp4"
-    print -r -- "/usr/sbin/screencapture -v -V$duration -D1 -C -k -x '$mov'"
+    if [[ -n "$label" && "$label" == *[^a-z0-9-]* ]]; then
+        print -u2 -r -- "error: recording label must contain only lowercase letters, digits, and hyphens"
+        return 1
+    fi
+    local base_name="screencast"
+    [[ -z "$label" ]] || base_name="screencast.$label"
+    local mov="$session_dir/$base_name.mov"
+    local mp4="$session_dir/$base_name.mp4"
+    local temporary_mov="$session_dir/.$base_name.$$.mov"
+    local temporary_mp4="$session_dir/.$base_name.$$.mp4"
+    if [[ "$mode" == --dry-run ]]; then
+        print -r -- "/usr/sbin/screencapture -v -V$duration -R<visible-MacTools-window> -C -k -x '$mov'"
+        return 0
+    fi
+
+    local process_output process_id capture_rect
+    process_output="$(matching_pids)"
+    [[ "$(print -r -- "$process_output" | wc -l | tr -d ' ')" == 1 ]] || {
+        print -u2 -r -- "error: expected exactly one stable MacTools process before recording"
+        return 1
+    }
+    process_id="${process_output%%$'\n'*}"
+    capture_rect="$(capture_rect_tool "$process_id")" || return 1
+    [[ "$capture_rect" == <->,<->,<->,<-> ]] || {
+        print -u2 -r -- "error: invalid private capture rectangle: $capture_rect"
+        return 1
+    }
+
+    print -r -- "/usr/sbin/screencapture -v -V$duration -R$capture_rect -C -k -x '$mov'"
+    rm -f -- "$temporary_mov" "$temporary_mp4"
+    if ! /usr/sbin/screencapture -v "-V$duration" "-R$capture_rect" -C -k -x "$temporary_mov"; then
+        rm -f -- "$temporary_mov" "$temporary_mp4"
+        return 1
+    fi
+    if ! /opt/homebrew/bin/ffmpeg -hide_banner -loglevel error -y -i "$temporary_mov" \
+        -an -c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p \
+        -movflags +faststart "$temporary_mp4"; then
+        rm -f -- "$temporary_mov" "$temporary_mp4"
+        return 1
+    fi
+    mv -f -- "$temporary_mov" "$mov"
+    mv -f -- "$temporary_mp4" "$mp4"
+    shasum -a 256 "$mov" "$mp4" >"$session_dir/$base_name.sha256"
+}
+
+record_pack_session() {
+    local session_dir="$1"
+    local pack_id="$2"
+    local duration="${3:-90}"
+    local mode="${4:-}"
+    print_scenarios "$pack_id" >/dev/null
+    record_session "$session_dir" "$duration" "$mode" "$pack_id"
+    if [[ "$mode" != --dry-run ]]; then
+        checkpoint "$session_dir" screencast-captured pass \
+            "Recorded scenario pack $pack_id"
+    fi
+}
+
+verify_code_session() {
+    local session_dir="$1"
+    local mode="${2:-}"
+    [[ -f "$session_dir/session.plist" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    require_app
+
+    local -a common_args
+    common_args=(
+        -project "$REPO_ROOT/MacTools.xcodeproj"
+        -scheme MacTools
+        -configuration Debug
+        -derivedDataPath "$REPO_ROOT/build/DerivedData"
+        test
+        -quiet
+    )
+    print -r -- "Run PluginCatalogManagerTests with xcodebuild"
+    print -r -- "Run the six injected Trackpad Gestures test classes with xcodebuild"
     if [[ "$mode" == --dry-run ]]; then
         return 0
     fi
 
-    /usr/sbin/screencapture -v "-V$duration" -D1 -C -k -x "$mov"
-    /opt/homebrew/bin/ffmpeg -hide_banner -loglevel error -y -i "$mov" \
-        -an -c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p \
-        -movflags +faststart "$mp4"
-    shasum -a 256 "$mov" "$mp4" >"$session_dir/screencast.sha256"
+    local result=0
+    stop_app
+    trap 'restore_stable_app_after_code_verification' EXIT
+    stop_built_app
+    restore_stable_launch_services_registration
+    if env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcodebuild "${common_args[@]}" \
+        -only-testing:MacToolsTests/PluginCatalogManagerTests \
+        2>&1 | tee "$session_dir/code-verification.migration.log"; then
+        checkpoint "$session_dir" plugin-migration-isolated-tests pass \
+            "PluginCatalogManagerTests passed"
+    else
+        checkpoint "$session_dir" plugin-migration-isolated-tests fail \
+            "See code-verification.migration.log"
+        result=1
+    fi
+    stop_built_app
+    restore_stable_launch_services_registration
+
+    if env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcodebuild "${common_args[@]}" \
+        -only-testing:MacToolsTests/TrackpadTypingSuppressionGateTests \
+        -only-testing:MacToolsTests/TrackpadMiddleClickArbiterTests \
+        -only-testing:MacToolsTests/TrackpadMiddleClickCoordinatorTests \
+        -only-testing:MacToolsTests/TrackpadGestureStoreTests \
+        -only-testing:MacToolsTests/TrackpadGesturesPluginTests \
+        -only-testing:MacToolsTests/TrackpadGestureRecognizerTests \
+        2>&1 | tee "$session_dir/code-verification.trackpad.log"; then
+        checkpoint "$session_dir" trackpad-automated-tests pass \
+            "Injected Trackpad Gestures suites passed"
+    else
+        checkpoint "$session_dir" trackpad-automated-tests fail \
+            "See code-verification.trackpad.log"
+        result=1
+    fi
+    stop_built_app
+    restore_stable_launch_services_registration
+    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+    trap - EXIT
+    return "$result"
 }
 
 collect_session() {
     local session_dir="$1"
+    preflight "$session_dir/preflight.json" >/dev/null || true
     audit_session "$session_dir" >/dev/null
     codesign -dv --verbose=4 "$APP_PATH" >"$session_dir/signature.txt" 2>&1
     codesign -d -r- "$APP_PATH" >"$session_dir/designated-requirement.txt" 2>&1
@@ -565,14 +811,17 @@ collect_session() {
     /usr/bin/log show --last 5m --style compact --predicate 'process == "MacTools Dev"' \
         2>/dev/null | tail -2000 >"$session_dir/app.log" || true
 
-    "$PYTHON3" - "$session_dir" <<'PY'
+    "$PYTHON3" - "$session_dir" "$SCENARIO_MANIFEST" <<'PY'
 import hashlib
 import json
+import glob
 import os
 import sys
 from datetime import datetime, timezone
 
 session = sys.argv[1]
+with open(sys.argv[2], encoding="utf-8") as handle:
+    scenario_manifest = json.load(handle)
 def load(name):
     with open(os.path.join(session, name), encoding="utf-8") as handle:
         return json.load(handle)
@@ -581,8 +830,8 @@ fixture = load("fixture.audit.json")
 preflight = load("preflight.json")
 checkpoints = load("ui-checkpoints.json")
 recordings = {}
-for name in ("screencast.mov", "screencast.mp4"):
-    path = os.path.join(session, name)
+for path in sorted(glob.glob(os.path.join(session, "screencast*.mov")) + glob.glob(os.path.join(session, "screencast*.mp4"))):
+    name = os.path.basename(path)
     if os.path.isfile(path):
         digest = hashlib.sha256()
         with open(path, "rb") as handle:
@@ -590,15 +839,56 @@ for name in ("screencast.mov", "screencast.mp4"):
                 digest.update(chunk)
         recordings[name] = {"bytes": os.path.getsize(path), "sha256": digest.hexdigest()}
 
+def hashed_artifacts(pattern):
+    artifacts = {}
+    for path in sorted(glob.glob(os.path.join(session, pattern))):
+        if not os.path.isfile(path):
+            continue
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        artifacts[os.path.basename(path)] = {
+            "bytes": os.path.getsize(path),
+            "sha256": digest.hexdigest(),
+        }
+    return artifacts
+
+screenshots = hashed_artifacts("screenshot*.png")
+code_verification_logs = hashed_artifacts("code-verification.*.log")
+
 statuses = [item["status"] for item in checkpoints.values()]
+required_packs = [pack for pack in scenario_manifest["packs"] if pack["required"]]
+required_checkpoint_names = [
+    name for pack in required_packs for name in pack["checkpoints"]
+]
+scenario_coverage = {}
+for pack in scenario_manifest["packs"]:
+    pack_statuses = {
+        name: checkpoints.get(name, {"status": "not-required"})["status"]
+        for name in pack["checkpoints"]
+    }
+    scenario_coverage[pack["id"]] = {
+        "title": pack["title"],
+        "phase": pack["phase"],
+        "required": pack["required"],
+        "checkpoints": pack_statuses,
+        "passed": bool(pack_statuses)
+            and all(status == "pass" for status in pack_statuses.values()),
+    }
 payload = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
     "preflight": preflight,
     "fixture": fixture,
     "uiCheckpoints": checkpoints,
+    "scenarioManifestVersion": scenario_manifest["formatVersion"],
+    "scenarioCoverage": scenario_coverage,
     "recordings": recordings,
+    "screenshots": screenshots,
+    "codeVerificationLogs": code_verification_logs,
     "passed": preflight.get("passed", False)
         and fixture.get("valid", False)
+        and set(checkpoints) == set(required_checkpoint_names)
         and bool(statuses)
         and all(status == "pass" for status in statuses),
 }
@@ -653,6 +943,14 @@ case "$command" in
     prepare)
         prepare
         ;;
+    upgrade)
+        [[ $# -ge 2 ]] || { usage; exit 1; }
+        upgrade_session "$2"
+        ;;
+    reseed)
+        [[ $# -ge 2 ]] || { usage; exit 1; }
+        reseed_session "$2"
+        ;;
     resume)
         [[ $# -ge 2 ]] || { usage; exit 1; }
         resume_session "$2"
@@ -676,6 +974,17 @@ case "$command" in
     record)
         [[ $# -ge 2 ]] || { usage; exit 1; }
         record_session "$2" "${3:-90}" "${4:-}"
+        ;;
+    record-pack)
+        [[ $# -ge 3 ]] || { usage; exit 1; }
+        record_pack_session "$2" "$3" "${4:-90}" "${5:-}"
+        ;;
+    verify-code)
+        [[ $# -ge 2 ]] || { usage; exit 1; }
+        verify_code_session "$2" "${3:-}"
+        ;;
+    scenarios)
+        print_scenarios "${2:-}"
         ;;
     collect)
         [[ $# -ge 2 ]] || { usage; exit 1; }
