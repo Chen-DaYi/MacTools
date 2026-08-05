@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import MicrophoneMutePlugin
 
 @MainActor
@@ -42,5 +43,21 @@ final class MicrophoneMutePluginTests: XCTestCase {
 
         XCTAssertFalse(plugin.primaryPanelState.isOn)
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testActionCatalogProvidesIdempotentMuteChoicesAndRunLinkConfirmation() async throws {
+        let plugin = MicrophoneMutePlugin(controller: MockController(muteState: false))
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["麦克风静音", "恢复麦克风"])
+        XCTAssertEqual(plugin.actionDefinitions.first?.externalInvocationPolicy, .confirmAlways)
+        XCTAssertNotNil(plugin.actionDefinitions.first?.confirmation)
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(plugin.primaryPanelState.isOn)
     }
 }

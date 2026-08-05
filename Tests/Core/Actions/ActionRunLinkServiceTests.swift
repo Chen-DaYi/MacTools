@@ -136,6 +136,29 @@ final class ActionRunLinkServiceTests: XCTestCase {
         )
     }
 
+    func testPresetReferenceMigratesAndPersistsBeforeResolution() throws {
+        let key = ActionKey(providerID: "test-provider", actionID: "migrated")
+        let current = ActionReference(key: key, schemaVersion: 2)
+        let setup = try makeService(
+            reference: current,
+            schemaVersion: 2,
+            migrate: { reference, version in
+                ActionReference(
+                    key: reference.key,
+                    schemaVersion: version,
+                    parameters: reference.parameters
+                )
+            }
+        )
+        let preset = ActionInvocationPreset(
+            reference: ActionReference(key: key, schemaVersion: 1)
+        )
+        XCTAssertTrue(setup.store.replaceAll([preset]))
+
+        XCTAssertEqual(setup.service.resolve(.preset(preset.id)), .success(current))
+        XCTAssertEqual(setup.store.preset(id: preset.id)?.reference, current)
+    }
+
     private struct Setup {
         let registry: ActionRegistry
         let registration: ActionProviderRegistration
@@ -147,13 +170,18 @@ final class ActionRunLinkServiceTests: XCTestCase {
     private func makeService(
         reference: ActionReference,
         scheme: String = "mactools",
+        schemaVersion: Int = 1,
         parameterDefinitions: [ActionParameterDefinition] = [],
         externalPolicy: ActionExternalInvocationPolicy = .allowed,
-        publish: Bool = true
+        publish: Bool = true,
+        migrate: @escaping (ActionReference, Int) -> ActionReference? = { reference, version in
+            reference.schemaVersion == version ? reference : nil
+        }
     ) throws -> Setup {
         let registry = ActionRegistry()
         let definition = ActionDefinition(
             key: reference.key,
+            parameterSchemaVersion: schemaVersion,
             title: "测试操作",
             description: "测试运行链接",
             systemImage: "link",
@@ -169,6 +197,7 @@ final class ActionRunLinkServiceTests: XCTestCase {
                 ? [ActionCatalogEntry(reference: reference, title: definition.title)]
                 : [],
             availability: { _ in .available },
+            migrate: migrate,
             begin: { _ in
                 .success(ActionExecutionHandle(operation: { .succeeded() }))
             }

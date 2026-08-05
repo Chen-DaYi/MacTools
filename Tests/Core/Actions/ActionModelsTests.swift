@@ -3,6 +3,18 @@ import MacToolsPluginKit
 import XCTest
 
 final class ActionModelsTests: XCTestCase {
+    func testLegacyActionReferenceDecodesAsSchemaVersionOne() throws {
+        let payload = Data(
+            #"{"key":{"providerID":"test-provider","actionID":"toggle"},"parameters":[]}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(ActionReference.self, from: payload)
+        let encoded = try JSONEncoder().encode(decoded)
+
+        XCTAssertEqual(decoded.schemaVersion, 1)
+        XCTAssertTrue(String(decoding: encoded, as: UTF8.self).contains("schemaVersion"))
+    }
+
     func testParameterSetCanonicalizesOrderAndRoundTripsDeterministically() throws {
         let first = try ActionParameterSet(entries: [
             .init(name: "target", value: .string("internal")),

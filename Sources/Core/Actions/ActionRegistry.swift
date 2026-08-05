@@ -13,6 +13,9 @@ enum ActionRegistryIssue: Error, Equatable {
 
 enum ActionRegistryError: Error, Equatable {
     case unknownAction(ActionKey)
+    case schemaVersionMismatch(ActionKey, expected: Int, actual: Int)
+    case migrationUnavailable(ActionKey, from: Int, to: Int)
+    case invalidMigration(ActionKey)
     case invalidParameters(String)
     case providerChanged
     case providerFailure(String)
@@ -31,7 +34,28 @@ struct ActionProviderRegistration {
     let definitions: [ActionDefinition]
     let catalogEntries: [ActionCatalogEntry]
     let availability: (ActionReference) -> ActionAvailability
+    let migrate: (ActionReference, Int) -> ActionReference?
     let begin: (ActionInvocation) -> Result<ActionExecutionHandle, ActionRegistryError>
+
+    init(
+        providerID: String,
+        identity: ObjectIdentifier,
+        definitions: [ActionDefinition],
+        catalogEntries: [ActionCatalogEntry],
+        availability: @escaping (ActionReference) -> ActionAvailability,
+        migrate: @escaping (ActionReference, Int) -> ActionReference? = { reference, version in
+            reference.schemaVersion == version ? reference : nil
+        },
+        begin: @escaping (ActionInvocation) -> Result<ActionExecutionHandle, ActionRegistryError>
+    ) {
+        self.providerID = providerID
+        self.identity = identity
+        self.definitions = definitions
+        self.catalogEntries = catalogEntries
+        self.availability = availability
+        self.migrate = migrate
+        self.begin = begin
+    }
 }
 
 @MainActor
@@ -43,6 +67,8 @@ final class ActionRegistry: ObservableObject {
 
     @Published private(set) var catalogEntries: [ActionCatalogEntry] = []
     @Published private(set) var issues: [ActionRegistryIssue] = []
+    @Published private(set) var catalogRevision: UInt64 = 0
+    @Published private(set) var availabilityRevision: UInt64 = 0
 
     private var providers: [String: ProviderState] = [:]
     private var definitions: [ActionKey: ActionDefinition] = [:]
@@ -51,6 +77,8 @@ final class ActionRegistry: ObservableObject {
 
     @discardableResult
     func synchronize(_ registrations: [ActionProviderRegistration]) -> [ActionRegistryIssue] {
+        let previousDefinitions = definitions
+        let previousCatalogEntries = catalogEntries
         var nextProviders: [String: ProviderState] = [:]
         var nextDefinitions: [ActionKey: ActionDefinition] = [:]
         var nextCatalog: [ActionReference: ActionCatalogEntry] = [:]
@@ -105,6 +133,12 @@ final class ActionRegistry: ObservableObject {
                     )
                     continue
                 }
+                guard entry.reference.schemaVersion == definition.parameterSchemaVersion else {
+                    collectedIssues.append(
+                        .invalidCatalogEntry(entry.reference, "schema-version-mismatch")
+                    )
+                    continue
+                }
                 if let reason = Self.parameterValidationFailure(
                     entry.reference.parameters,
                     for: definition
@@ -128,6 +162,7 @@ final class ActionRegistry: ObservableObject {
                     definitions: acceptedDefinitions,
                     catalogEntries: acceptedCatalog,
                     availability: registration.availability,
+                    migrate: registration.migrate,
                     begin: registration.begin
                 ),
                 generation: generation
@@ -139,6 +174,9 @@ final class ActionRegistry: ObservableObject {
         catalogByReference = nextCatalog
         catalogEntries = nextCatalogOrder
         issues = collectedIssues
+        if previousDefinitions != nextDefinitions || previousCatalogEntries != nextCatalogOrder {
+            catalogRevision &+= 1
+        }
         return collectedIssues
     }
 
@@ -146,6 +184,15 @@ final class ActionRegistry: ObservableObject {
         guard let definition = definitions[reference.key],
               let provider = providers[reference.key.providerID] else {
             return .failure(.unknownAction(reference.key))
+        }
+        guard reference.schemaVersion == definition.parameterSchemaVersion else {
+            return .failure(
+                .schemaVersionMismatch(
+                    reference.key,
+                    expected: definition.parameterSchemaVersion,
+                    actual: reference.schemaVersion
+                )
+            )
         }
         if let reason = Self.parameterValidationFailure(reference.parameters, for: definition) {
             return .failure(.invalidParameters(reason))
@@ -161,6 +208,40 @@ final class ActionRegistry: ObservableObject {
 
     func definition(for key: ActionKey) -> ActionDefinition? {
         definitions[key]
+    }
+
+    func migrate(_ reference: ActionReference) -> Result<ActionReference, ActionRegistryError> {
+        guard let definition = definitions[reference.key],
+              let provider = providers[reference.key.providerID] else {
+            return .failure(.unknownAction(reference.key))
+        }
+        let targetVersion = definition.parameterSchemaVersion
+        guard reference.schemaVersion != targetVersion else {
+            if let reason = Self.parameterValidationFailure(reference.parameters, for: definition) {
+                return .failure(.invalidParameters(reason))
+            }
+            return .success(reference)
+        }
+        guard reference.schemaVersion < targetVersion,
+              let migrated = provider.registration.migrate(reference, targetVersion) else {
+            return .failure(
+                .migrationUnavailable(
+                    reference.key,
+                    from: reference.schemaVersion,
+                    to: targetVersion
+                )
+            )
+        }
+        guard migrated.key == reference.key,
+              migrated.schemaVersion == targetVersion,
+              Self.parameterValidationFailure(migrated.parameters, for: definition) == nil else {
+            return .failure(.invalidMigration(reference.key))
+        }
+        return .success(migrated)
+    }
+
+    func invalidateAvailability() {
+        availabilityRevision &+= 1
     }
 
     func availability(for reference: ActionReference) -> ActionAvailability {
@@ -218,6 +299,9 @@ final class ActionRegistry: ObservableObject {
     ) -> String? {
         guard definition.key.providerID == expectedProviderID else {
             return "provider-mismatch"
+        }
+        guard definition.parameterSchemaVersion > 0 else {
+            return "invalid-schema-version"
         }
         guard isValidIdentifier(definition.key.actionID) else {
             return "invalid-action-id"

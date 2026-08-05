@@ -96,7 +96,10 @@ final class ActionRunLinkService {
             guard definition.parameters.isEmpty else {
                 return .failure(.parameterizedDirectAction)
             }
-            reference = ActionReference(key: key)
+            reference = ActionReference(
+                key: key,
+                schemaVersion: definition.parameterSchemaVersion
+            )
             guard case let .success(action) = registry.registeredAction(for: reference) else {
                 return .failure(.unknownAction)
             }
@@ -107,7 +110,15 @@ final class ActionRunLinkService {
             guard let preset = presetStore.preset(id: id) else {
                 return .failure(.unavailablePreset)
             }
-            reference = preset.reference
+            switch registry.migrate(preset.reference) {
+            case let .success(migrated):
+                reference = migrated
+                guard presetStore.updateReference(id: id, reference: migrated) else {
+                    return .failure(.unavailablePreset)
+                }
+            case .failure:
+                return .failure(.unknownAction)
+            }
             guard case let .success(action) = registry.registeredAction(for: reference),
                   action.catalogEntry != nil else {
                 return .failure(.unknownAction)

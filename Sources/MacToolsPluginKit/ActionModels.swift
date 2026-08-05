@@ -272,6 +272,7 @@ public struct ActionConfirmation: Hashable, Codable, Sendable {
 
 public struct ActionDefinition: Hashable, Codable, Sendable, Identifiable {
     public let key: ActionKey
+    public let parameterSchemaVersion: Int
     public let title: String
     public let description: String
     public let keywords: [String]
@@ -285,6 +286,7 @@ public struct ActionDefinition: Hashable, Codable, Sendable, Identifiable {
 
     public init(
         key: ActionKey,
+        parameterSchemaVersion: Int = 1,
         title: String,
         description: String,
         keywords: [String] = [],
@@ -297,6 +299,7 @@ public struct ActionDefinition: Hashable, Codable, Sendable, Identifiable {
         executionTimeoutSeconds: Double? = 30
     ) {
         self.key = key
+        self.parameterSchemaVersion = parameterSchemaVersion
         self.title = title
         self.description = description
         self.keywords = keywords
@@ -316,11 +319,37 @@ public struct ActionDefinition: Hashable, Codable, Sendable, Identifiable {
 
 public struct ActionReference: Hashable, Codable, Sendable, Identifiable {
     public let key: ActionKey
+    public let schemaVersion: Int
     public let parameters: ActionParameterSet
 
-    public init(key: ActionKey, parameters: ActionParameterSet = .empty) {
+    private enum CodingKeys: String, CodingKey {
+        case key
+        case schemaVersion
+        case parameters
+    }
+
+    public init(
+        key: ActionKey,
+        schemaVersion: Int = 1,
+        parameters: ActionParameterSet = .empty
+    ) {
         self.key = key
+        self.schemaVersion = schemaVersion
         self.parameters = parameters
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        key = try container.decode(ActionKey.self, forKey: .key)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        parameters = try container.decode(ActionParameterSet.self, forKey: .parameters)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(key, forKey: .key)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(parameters, forKey: .parameters)
     }
 
     public var id: ActionReference {
@@ -436,6 +465,10 @@ public protocol PluginActionProviding: AnyObject {
     var actionCatalogEntries: [ActionCatalogEntry] { get }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability
+    func migrateActionReference(
+        _ reference: ActionReference,
+        toSchemaVersion schemaVersion: Int
+    ) -> ActionReference?
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle
 }
 
@@ -470,7 +503,10 @@ public extension PluginActionProviding {
                 return nil
             }
             return ActionCatalogEntry(
-                reference: ActionReference(key: definition.key),
+                reference: ActionReference(
+                    key: definition.key,
+                    schemaVersion: definition.parameterSchemaVersion
+                ),
                 title: definition.title
             )
         }
@@ -478,5 +514,15 @@ public extension PluginActionProviding {
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         .available
+    }
+
+    func migrateActionReference(
+        _ reference: ActionReference,
+        toSchemaVersion schemaVersion: Int
+    ) -> ActionReference? {
+        guard reference.schemaVersion == schemaVersion else {
+            return nil
+        }
+        return reference
     }
 }

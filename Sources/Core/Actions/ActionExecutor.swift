@@ -219,6 +219,8 @@ final class ActionExecutor {
         switch error {
         case let .unknownAction(key):
             return .unknownAction(key)
+        case .schemaVersionMismatch, .migrationUnavailable, .invalidMigration:
+            return .invalidParameters("action-schema-version")
         case let .invalidParameters(reason):
             return .invalidParameters(reason)
         case .providerChanged:

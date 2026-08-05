@@ -561,6 +561,7 @@ final class PluginHost: ObservableObject {
             }
         }
 
+        actionRegistry.invalidateAvailability()
         rebuildDerivedState()
         syncGlobalShortcuts()
     }
@@ -2219,6 +2220,7 @@ final class PluginHost: ObservableObject {
                 return
             }
 
+            actionRegistry.invalidateAvailability()
             rebuildDerivedState(dirtyPluginIDs: pluginIDs)
         }
     }
@@ -2385,6 +2387,21 @@ final class PluginHost: ObservableObject {
                     operation: "read action availability",
                     provider.actionAvailability(for: reference)
                 ) ?? .unavailable("插件不可用。")
+            },
+            migrate: { [weak self, weak plugin] reference, schemaVersion in
+                guard let self,
+                      let plugin,
+                      let provider = plugin as? any PluginActionProviding else {
+                    return nil
+                }
+                return self.guardedOptionalValue(
+                    for: plugin,
+                    operation: "migrate action reference",
+                    provider.migrateActionReference(
+                        reference,
+                        toSchemaVersion: schemaVersion
+                    )
+                )
             },
             begin: { [weak self, weak plugin] invocation in
                 guard let self,

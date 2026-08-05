@@ -145,6 +145,27 @@ final class ActionInvocationPresetStore {
     }
 
     @discardableResult
+    func updateReference(id: UUID, reference: ActionReference) -> Bool {
+        var stored = presets()
+        guard let index = stored.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+        if stored[index].reference == reference {
+            return true
+        }
+        guard !stored.contains(where: { $0.id != id && $0.reference == reference }) else {
+            return false
+        }
+        stored[index] = ActionInvocationPreset(
+            id: stored[index].id,
+            reference: reference,
+            createdAt: stored[index].createdAt,
+            formatVersion: stored[index].formatVersion
+        )
+        return replaceAll(stored)
+    }
+
+    @discardableResult
     func replaceAll(_ presets: [ActionInvocationPreset]) -> Bool {
         guard presets.count <= Self.maximumPresetCount,
               Set(presets.map(\.id)).count == presets.count,

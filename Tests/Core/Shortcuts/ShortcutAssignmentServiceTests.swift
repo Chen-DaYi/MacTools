@@ -154,6 +154,62 @@ final class ShortcutAssignmentServiceTests: XCTestCase {
         XCTAssertEqual(store.assignments().map(\.binding), [binding])
     }
 
+    func testStoredActionReferenceMigratesBeforeRegistration() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = ActionShortcutAssignmentStore(userDefaults: defaults)
+        let key = ActionKey(providerID: "shortcut-tests", actionID: "migrated")
+        let legacy = ActionReference(key: key, schemaVersion: 1)
+        let current = ActionReference(key: key, schemaVersion: 2)
+        let binding = ShortcutBinding(keyCode: 10, modifiers: [.command, .option])
+        XCTAssertTrue(
+            store.replaceAll([
+                ActionShortcutAssignmentRecord(reference: legacy, binding: binding),
+            ])
+        )
+        let registry = ActionRegistry()
+        let provider = ShortcutActionTestProvider()
+        let definition = ActionDefinition(
+            key: key,
+            parameterSchemaVersion: 2,
+            title: "迁移操作",
+            description: "测试迁移",
+            systemImage: "bolt",
+            externalInvocationPolicy: .allowed,
+            capabilities: [.background, .foregroundInteractive]
+        )
+        registry.synchronize([
+            ActionProviderRegistration(
+                providerID: key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [definition],
+                catalogEntries: [ActionCatalogEntry(reference: current, title: "迁移操作")],
+                availability: { _ in .available },
+                migrate: { reference, version in
+                    ActionReference(
+                        key: reference.key,
+                        schemaVersion: version,
+                        parameters: reference.parameters
+                    )
+                },
+                begin: { _ in
+                    .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            ),
+        ])
+        let registrar = FakeCarbonHotKeyRegistrar()
+        let service = ShortcutAssignmentService(
+            registry: registry,
+            store: store,
+            shortcutManager: GlobalShortcutManager(registrar: registrar)
+        )
+
+        service.synchronize(reservedRegistrations: [], reservedOwnerDescriptions: [:])
+
+        XCTAssertEqual(service.assignments.first?.reference, current)
+        XCTAssertEqual(service.settingsItems.first?.state, .registered)
+        XCTAssertEqual(registrar.registeredBindings, [binding])
+    }
+
     private func makeHarness() throws -> ShortcutServiceHarness {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)

@@ -202,6 +202,7 @@ final class ShortcutAssignmentService {
     func replaceAllForImport(
         _ records: [ActionShortcutAssignmentRecord]
     ) -> ActionShortcutMutationResult {
+        let records = migratedAssignments(records)
         var seenBindings: [ShortcutBinding: ActionShortcutAssignmentRecord] = [:]
         for record in records {
             guard record.binding.isValid,
@@ -240,7 +241,7 @@ final class ShortcutAssignmentService {
         self.reservedRegistrations = reservedRegistrations
         self.reservedOwnerDescriptions = reservedOwnerDescriptions
 
-        let records = store.assignments()
+        let records = migrateStoredAssignmentsIfPossible()
         var registrations = reservedRegistrations
         var references: [String: ActionReference] = [:]
         var states: [UUID: ActionShortcutRegistrationState] = [:]
@@ -310,6 +311,40 @@ final class ShortcutAssignmentService {
                 state: states[record.id] ?? .unavailable(reason: nil)
             )
         }
+    }
+
+    private func migrateStoredAssignmentsIfPossible() -> [ActionShortcutAssignmentRecord] {
+        let stored = store.assignments()
+        let migrated = migratedAssignments(stored)
+        guard migrated != stored else {
+            return stored
+        }
+        return store.replaceAll(migrated) ? migrated : stored
+    }
+
+    private func migratedAssignments(
+        _ records: [ActionShortcutAssignmentRecord]
+    ) -> [ActionShortcutAssignmentRecord] {
+        var result = records
+        var claimedReferences = Set(records.map(\.reference))
+        for index in result.indices {
+            let original = result[index]
+            guard case let .success(migrated) = registry.migrate(original.reference),
+                  migrated != original.reference else {
+                continue
+            }
+            claimedReferences.remove(original.reference)
+            guard claimedReferences.insert(migrated).inserted else {
+                claimedReferences.insert(original.reference)
+                continue
+            }
+            result[index] = ActionShortcutAssignmentRecord(
+                id: original.id,
+                reference: migrated,
+                binding: original.binding
+            )
+        }
+        return result
     }
 
     private func title(for reference: ActionReference) -> String {

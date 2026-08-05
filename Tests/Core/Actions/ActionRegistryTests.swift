@@ -107,6 +107,93 @@ final class ActionRegistryTests: XCTestCase {
 
         XCTAssertEqual(Set(registry.catalogEntries), Set([internalDisplay, externalDisplay]))
     }
+
+    func testRegistryMigratesOlderReferencesAndRejectsFutureOrInvalidMigrations() throws {
+        let registry = ActionRegistry()
+        let provider = ActionRegistryTestProvider()
+        let definition = makeActionDefinition(
+            parameterSchemaVersion: 2,
+            parameters: [
+                ActionParameterDefinition(id: "enabled", title: "启用", kind: .boolean),
+            ]
+        )
+        let currentReference = ActionReference(
+            key: definition.key,
+            schemaVersion: 2,
+            parameters: try ActionParameterSet(["enabled": .boolean(true)])
+        )
+        registry.synchronize([
+            provider.registration(
+                definitions: [definition],
+                catalogEntries: [ActionCatalogEntry(reference: currentReference, title: "启用")],
+                migrate: { reference, targetVersion in
+                    guard reference.schemaVersion == 1, targetVersion == 2 else { return nil }
+                    return ActionReference(
+                        key: reference.key,
+                        schemaVersion: targetVersion,
+                        parameters: try! ActionParameterSet(["enabled": .boolean(true)])
+                    )
+                }
+            ),
+        ])
+        let legacyReference = ActionReference(key: definition.key, schemaVersion: 1)
+        let futureReference = ActionReference(key: definition.key, schemaVersion: 3)
+
+        XCTAssertEqual(registry.migrate(legacyReference), .success(currentReference))
+        XCTAssertEqual(
+            registry.registeredAction(for: legacyReference),
+            .failure(.schemaVersionMismatch(definition.key, expected: 2, actual: 1))
+        )
+        XCTAssertEqual(
+            registry.migrate(futureReference),
+            .failure(.migrationUnavailable(definition.key, from: 3, to: 2))
+        )
+
+        registry.synchronize([
+            provider.registration(
+                definitions: [definition],
+                catalogEntries: [ActionCatalogEntry(reference: currentReference, title: "启用")],
+                migrate: { reference, _ in reference }
+            ),
+        ])
+        XCTAssertEqual(
+            registry.migrate(legacyReference),
+            .failure(.invalidMigration(definition.key))
+        )
+    }
+
+    func testCatalogAndAvailabilityRevisionsAdvanceIndependently() {
+        let registry = ActionRegistry()
+        let provider = ActionRegistryTestProvider()
+        let definition = makeActionDefinition()
+        let registration = provider.registration(
+            definitions: [definition],
+            catalogEntries: []
+        )
+
+        registry.synchronize([registration])
+        let catalogRevision = registry.catalogRevision
+        let availabilityRevision = registry.availabilityRevision
+        registry.synchronize([registration])
+        registry.invalidateAvailability()
+
+        XCTAssertEqual(registry.catalogRevision, catalogRevision)
+        XCTAssertEqual(registry.availabilityRevision, availabilityRevision + 1)
+
+        let renamed = ActionDefinition(
+            key: definition.key,
+            title: "新标题",
+            description: definition.description,
+            systemImage: definition.systemImage,
+            externalInvocationPolicy: definition.externalInvocationPolicy,
+            capabilities: definition.capabilities
+        )
+        registry.synchronize([
+            provider.registration(definitions: [renamed], catalogEntries: []),
+        ])
+        XCTAssertEqual(registry.catalogRevision, catalogRevision + 1)
+        XCTAssertEqual(registry.availabilityRevision, availabilityRevision + 1)
+    }
 }
 
 @MainActor
@@ -116,7 +203,10 @@ final class ActionRegistryTestProvider {
 
     func registration(
         definitions: [ActionDefinition],
-        catalogEntries: [ActionCatalogEntry]
+        catalogEntries: [ActionCatalogEntry],
+        migrate: @escaping (ActionReference, Int) -> ActionReference? = { reference, version in
+            reference.schemaVersion == version ? reference : nil
+        }
     ) -> ActionProviderRegistration {
         ActionProviderRegistration(
             providerID: "test-provider",
@@ -126,6 +216,7 @@ final class ActionRegistryTestProvider {
             availability: { [weak self] _ in
                 self?.availability ?? .unavailable("missing")
             },
+            migrate: migrate,
             begin: { [weak self] _ in
                 guard let self else {
                     return .failure(.providerFailure("missing"))
@@ -140,6 +231,7 @@ final class ActionRegistryTestProvider {
 }
 
 func makeActionDefinition(
+    parameterSchemaVersion: Int = 1,
     parameters: [ActionParameterDefinition] = [],
     risk: ActionRisk = .safe,
     confirmation: ActionConfirmation? = nil,
@@ -149,6 +241,7 @@ func makeActionDefinition(
 ) -> ActionDefinition {
     ActionDefinition(
         key: ActionKey(providerID: "test-provider", actionID: "toggle"),
+        parameterSchemaVersion: parameterSchemaVersion,
         title: "切换",
         description: "切换测试状态",
         systemImage: "switch.2",
