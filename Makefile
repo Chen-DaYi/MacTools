@@ -34,8 +34,11 @@ PLUGIN_RELEASE_CATALOG ?= $(PLUGIN_RELEASE_DIST_DIR)/catalog.json
 PLUGIN_KIT_VERSION ?= $(shell $(PYTHON3) -c 'import glob,json; versions={json.load(open(path, encoding="utf-8"))["pluginKitVersion"] for path in glob.glob("Plugins/*/plugin.json")}; print(next(iter(versions)) if len(versions) == 1 else "")')
 PLUGIN_RELEASE_SIGNED_CATALOG ?= $(if $(filter 2,$(PLUGIN_KIT_VERSION)),docs/plugins/catalog.json,docs/plugins/v$(PLUGIN_KIT_VERSION)/catalog.json)
 PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
+E2E_SCRIPT := scripts/e2e/mactools-e2e.sh
+E2E_SESSION ?=
+E2E_DURATION ?= 90
 
-.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open clean release release-local
+.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open e2e-preflight e2e-prepare e2e-resume e2e-rebuild e2e-audit e2e-record e2e-collect e2e-restore e2e-self-test clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -143,6 +146,39 @@ run: sync-debug-plugins generate-icon-gallery
 
 run-open: build
 	@open -n -W "$(APP_PATH)"
+
+e2e-preflight:
+	@$(E2E_SCRIPT) preflight
+
+e2e-prepare:
+	@$(E2E_SCRIPT) prepare
+
+e2e-resume:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) resume "$(E2E_SESSION)"
+
+e2e-rebuild:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) rebuild "$(E2E_SESSION)"
+
+e2e-audit:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) audit "$(E2E_SESSION)"
+
+e2e-record:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) record "$(E2E_SESSION)" "$(E2E_DURATION)"
+
+e2e-collect:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) collect "$(E2E_SESSION)"
+
+e2e-restore:
+	@test -n "$(E2E_SESSION)" || (echo "Pass E2E_SESSION=/absolute/path/to/session"; exit 1)
+	@$(E2E_SCRIPT) restore "$(E2E_SESSION)"
+
+e2e-self-test:
+	@$(E2E_SCRIPT) self-test
 
 clean:
 	@rm -rf build $(PROJECT_FILE) $(WORKSPACE_FILE) "$(GENERATED_PLUGIN_PROJECT_CONFIG)"
