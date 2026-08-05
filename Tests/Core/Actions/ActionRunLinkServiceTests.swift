@@ -89,6 +89,28 @@ final class ActionRunLinkServiceTests: XCTestCase {
         )
     }
 
+    func testConfirmAlwaysActionWithoutConfirmationMetadataNeverPublishesRunLink() throws {
+        let reference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "unsafe-link")
+        )
+        let setup = try makeService(
+            reference: reference,
+            externalPolicy: .confirmAlways
+        )
+
+        XCTAssertTrue(setup.issues.contains(
+            .invalidDefinition(reference.key, "missing-confirmation")
+        ))
+        XCTAssertEqual(
+            setup.service.presentation(for: reference),
+            .unavailable("操作提供方当前不可用。")
+        )
+        XCTAssertEqual(
+            setup.service.resolve(.direct(reference.key)),
+            .failure(.unknownAction)
+        )
+    }
+
     func testPresetRetainsMissingProviderAndRecoversWhenProviderReturns() throws {
         let reference = ActionReference(
             key: ActionKey(providerID: "test-provider", actionID: "parameterized"),
@@ -162,6 +184,7 @@ final class ActionRunLinkServiceTests: XCTestCase {
     private struct Setup {
         let registry: ActionRegistry
         let registration: ActionProviderRegistration
+        let issues: [ActionRegistryIssue]
         let store: ActionInvocationPresetStore
         let service: ActionRunLinkService
         let defaults: UserDefaults
@@ -172,6 +195,7 @@ final class ActionRunLinkServiceTests: XCTestCase {
         scheme: String = "mactools",
         schemaVersion: Int = 1,
         parameterDefinitions: [ActionParameterDefinition] = [],
+        confirmation: ActionConfirmation? = nil,
         externalPolicy: ActionExternalInvocationPolicy = .allowed,
         publish: Bool = true,
         migrate: @escaping (ActionReference, Int) -> ActionReference? = { reference, version in
@@ -186,6 +210,7 @@ final class ActionRunLinkServiceTests: XCTestCase {
             description: "测试运行链接",
             systemImage: "link",
             parameters: parameterDefinitions,
+            confirmation: confirmation,
             externalInvocationPolicy: externalPolicy,
             capabilities: [.background, .foregroundInteractive]
         )
@@ -202,7 +227,7 @@ final class ActionRunLinkServiceTests: XCTestCase {
                 .success(ActionExecutionHandle(operation: { .succeeded() }))
             }
         )
-        registry.synchronize([registration])
+        let issues = registry.synchronize([registration])
         let suite = "ActionRunLinkServiceTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
@@ -210,6 +235,7 @@ final class ActionRunLinkServiceTests: XCTestCase {
         return Setup(
             registry: registry,
             registration: registration,
+            issues: issues,
             store: store,
             service: ActionRunLinkService(
                 registry: registry,

@@ -40,6 +40,30 @@ final class ActionRegistryTests: XCTestCase {
         )
     }
 
+    func testRegistryRejectsConfirmAlwaysDefinitionWithoutConfirmationMetadata() {
+        let registry = ActionRegistry()
+        let provider = ActionRegistryTestProvider()
+        let definition = makeActionDefinition(externalPolicy: .confirmAlways)
+
+        let issues = registry.synchronize([
+            provider.registration(
+                definitions: [definition],
+                catalogEntries: [
+                    ActionCatalogEntry(
+                        reference: ActionReference(key: definition.key),
+                        title: definition.title
+                    ),
+                ]
+            ),
+        ])
+
+        XCTAssertTrue(issues.contains(
+            .invalidDefinition(definition.key, "missing-confirmation")
+        ))
+        XCTAssertNil(registry.definition(for: definition.key))
+        XCTAssertTrue(registry.catalogEntries.isEmpty)
+    }
+
     func testRegistryRetainsGenerationForIdenticalProviderAndInvalidatesChangedProvider() {
         let registry = ActionRegistry()
         let provider = ActionRegistryTestProvider()

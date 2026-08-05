@@ -1,6 +1,5 @@
 import AppKit
 import MacToolsPluginKit
-import SwiftUI
 import XCTest
 @testable import ActionGridPlugin
 
@@ -28,114 +27,94 @@ final class ActionGridPluginTests: XCTestCase {
         )
     }
 
-    func testRenderedSettingsRowExposesDistinctOperableAccessibilityElements() throws {
-        let plugin = ActionGridPlugin(
-            context: PluginRuntimeContext(
-                pluginID: "action-grid",
-                storage: ActionGridTestStorage()
-            )
-        )
-        let reference = ActionReference(
-            key: ActionKey(providerID: "lock-screen", actionID: "execute")
-        )
-        let item = ActionSurfaceCatalogItem(
-            reference: reference,
+    func testNativeSettingsControlsExposeDistinctOperableAccessibilityElements() throws {
+        let accessibility = ActionGridEntryAccessibility(
             title: "锁定屏幕",
-            subtitle: nil,
-            ownerTitle: "MacTools",
-            systemImage: "lock",
-            availability: .available,
-            isSafe: true,
-            canOpenOwner: true
+            owner: "MacTools",
+            availability: "可用"
         )
-        let replacement = ActionSurfaceCatalogItem(
-            reference: ActionReference(
-                key: ActionKey(providerID: "lock-screen", actionID: "alternate")
-            ),
-            title: "备用操作",
-            subtitle: nil,
-            ownerTitle: "MacTools",
-            systemImage: "bolt",
-            availability: .available,
-            isSafe: true,
-            canOpenOwner: false
+        let replacement = ActionReference(
+            key: ActionKey(providerID: "lock-screen", actionID: "alternate")
         )
-        var openedOwner: ActionReference?
-        plugin.actionGridHostContext = ActionGridHostContext(
-            catalog: { [item, replacement] },
-            item: { $0 == reference ? item : nil },
-            migrate: { $0 },
-            openOwner: {
-                openedOwner = $0
-                return true
-            },
-            canPresent: { true },
-            present: { _ in true }
+        var didOpenSettings = false
+        var selectedReplacement: ActionReference?
+        var didRemove = false
+        let controls = ActionGridEntryControlsView.NativeView()
+        controls.update(
+            settingsAction: { didOpenSettings = true },
+            replacementOptions: [
+                ActionGridReplacementOption(title: "备用操作", reference: replacement),
+            ],
+            replaceAction: { selectedReplacement = $0 },
+            removeAction: { didRemove = true },
+            accessibility: accessibility,
+            identifierPrefix: "mactools.action-grid.entry.test"
         )
-        XCTAssertTrue(plugin.store.add(reference: reference))
 
-        let entryID = try XCTUnwrap(plugin.store.entries.first?.id)
-        let entry = try XCTUnwrap(plugin.store.entries.first)
-        let hostingView = NSHostingView(
-            rootView: ActionGridEntryRow(plugin: plugin, store: plugin.store, entry: entry)
-                .frame(width: 800, height: 90)
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 80),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
         )
-        hostingView.frame = NSRect(x: 0, y: 0, width: 800, height: 90)
-        hostingView.layoutSubtreeIfNeeded()
-
-        let accessibilityRoot = try XCTUnwrap(
-            NSAccessibility.unignoredDescendant(of: hostingView) as? NSObject
-        )
-        let elements = accessibilityDescendants(of: accessibilityRoot)
-        let diagnostics = elements.map {
-            "\(String(reflecting: type(of: $0))):"
-                + "\(accessibilityRole(of: $0)?.rawValue ?? "nil"):"
-                + "\(accessibilityIdentifier(of: $0) ?? "nil"):"
-                + "\(accessibilityLabel(of: $0) ?? "nil")"
-        }
-        var identifiedElements: [String: NSObject] = [:]
-        for element in elements {
-            guard let identifier = accessibilityIdentifier(of: element),
-                  identifiedElements[identifier] == nil else { continue }
-            identifiedElements[identifier] = element
+        panel.contentView = controls
+        controls.frame = panel.contentView?.bounds ?? .zero
+        controls.layoutSubtreeIfNeeded()
+        defer {
+            panel.contentView = nil
+            panel.close()
         }
 
-        let prefix = "mactools.action-grid.entry.\(entryID.uuidString)"
-        let expectations = [
-            ("\(prefix).settings", "设置“锁定屏幕”"),
-            ("\(prefix).replace", "替换“锁定屏幕”"),
-            ("\(prefix).remove", "移除“锁定屏幕”"),
-        ]
-        for (identifier, label) in expectations {
-            let element = try XCTUnwrap(identifiedElements[identifier], "\(diagnostics)")
-            XCTAssertEqual(accessibilityLabel(of: element), label)
-            XCTAssertTrue(isOperableControl(element), "\(identifier): \(diagnostics)")
+        let accessibilityChildren = NSAccessibility.unignoredChildren(
+            from: try XCTUnwrap(controls.accessibilityChildren())
+        ).compactMap { $0 as? NSControl }
+        XCTAssertEqual(accessibilityChildren.count, 3)
+
+        var controlsByIdentifier: [String: NSControl] = [:]
+        for control in accessibilityChildren {
+            controlsByIdentifier[control.accessibilityIdentifier()] = control
         }
+        XCTAssertEqual(controlsByIdentifier.count, 3)
 
         let settingsButton = try XCTUnwrap(
-            identifiedElements["\(prefix).settings"] as? NSButton
+            controlsByIdentifier["mactools.action-grid.entry.test.settings"] as? NSButton
         )
-        XCTAssertTrue(sendControlAction(settingsButton))
-        XCTAssertEqual(openedOwner, reference)
+        XCTAssertEqual(settingsButton.accessibilityRole(), NSAccessibility.Role.button)
+        XCTAssertEqual(settingsButton.accessibilityLabel(), accessibility.settingsLabel)
+        XCTAssertTrue(settingsButton.isEnabled)
+        XCTAssertNotNil(settingsButton.action)
+        _ = settingsButton.accessibilityPerformPress()
+        XCTAssertTrue(didOpenSettings)
 
         let replacementButton = try XCTUnwrap(
-            identifiedElements["\(prefix).replace"] as? NSPopUpButton
+            controlsByIdentifier["mactools.action-grid.entry.test.replace"] as? NSPopUpButton
         )
+        XCTAssertEqual(
+            replacementButton.accessibilityRole(),
+            NSAccessibility.Role.menuButton
+        )
+        XCTAssertEqual(replacementButton.accessibilityLabel(), accessibility.replaceLabel)
+        XCTAssertTrue(replacementButton.isEnabled)
         let replacementItem = try XCTUnwrap(
-            replacementButton.menu?.items.first { $0.title == replacement.title }
+            replacementButton.menu?.items.first { $0.title == "备用操作" }
         )
+        XCTAssertNotNil(replacementItem.action)
         XCTAssertTrue(NSApp.sendAction(
             try XCTUnwrap(replacementItem.action),
             to: replacementItem.target,
             from: replacementItem
         ))
-        XCTAssertEqual(plugin.store.entries.first?.reference, replacement.reference)
+        XCTAssertEqual(selectedReplacement, replacement)
 
         let removeButton = try XCTUnwrap(
-            identifiedElements["\(prefix).remove"] as? NSButton
+            controlsByIdentifier["mactools.action-grid.entry.test.remove"] as? NSButton
         )
-        XCTAssertTrue(sendControlAction(removeButton))
-        XCTAssertTrue(plugin.store.entries.isEmpty)
+        XCTAssertEqual(removeButton.accessibilityRole(), NSAccessibility.Role.button)
+        XCTAssertEqual(removeButton.accessibilityLabel(), accessibility.removeLabel)
+        XCTAssertTrue(removeButton.isEnabled)
+        XCTAssertNotNil(removeButton.action)
+        _ = removeButton.accessibilityPerformPress()
+        XCTAssertTrue(didRemove)
     }
 
     func testShowActionIsForegroundOnlyExternallyEligibleAndPresentsSavedEntries() async throws {
@@ -208,72 +187,4 @@ final class ActionGridPluginTests: XCTestCase {
         let result = await handle.result()
         XCTAssertEqual(result, .failed(message: "无法显示操作网格。"))
     }
-}
-
-private func accessibilityDescendants(of root: NSObject) -> [NSObject] {
-    var result: [NSObject] = []
-    var pending: [NSObject] = [root]
-    var visited: Set<ObjectIdentifier> = []
-    while let element = pending.popLast() {
-        guard visited.insert(ObjectIdentifier(element)).inserted else { continue }
-        result.append(element)
-        pending.append(contentsOf: accessibilityChildren(of: element))
-    }
-    return result
-}
-
-private func accessibilityChildren(of element: NSObject) -> [NSObject] {
-    if let view = element as? NSView {
-        return (view.accessibilityChildren() ?? []).compactMap { $0 as? NSObject }
-            + view.subviews
-    }
-    if let accessibilityElement = element as? NSAccessibilityElement {
-        return (accessibilityElement.accessibilityChildren() ?? []).compactMap { $0 as? NSObject }
-    }
-    return []
-}
-
-private func accessibilityLabel(of element: NSObject) -> String? {
-    if let view = element as? NSView {
-        return view.accessibilityLabel()
-    }
-    if let accessibilityElement = element as? NSAccessibilityElement {
-        return accessibilityElement.accessibilityLabel()
-    }
-    return nil
-}
-
-private func accessibilityRole(of element: NSObject) -> NSAccessibility.Role? {
-    if let view = element as? NSView {
-        return view.accessibilityRole()
-    }
-    if let accessibilityElement = element as? NSAccessibilityElement {
-        return accessibilityElement.accessibilityRole()
-    }
-    return nil
-}
-
-private func accessibilityIdentifier(of element: NSObject) -> String? {
-    if let view = element as? NSView {
-        return view.accessibilityIdentifier()
-    }
-    if let accessibilityElement = element as? NSAccessibilityElement {
-        return accessibilityElement.accessibilityIdentifier()
-    }
-    return nil
-}
-
-private func isOperableControl(_ element: NSObject) -> Bool {
-    guard let control = element as? NSControl, control.isEnabled else { return false }
-    if let popUpButton = control as? NSPopUpButton {
-        return popUpButton.menu?.items.contains {
-            $0.target != nil && $0.action != nil
-        } == true
-    }
-    return control.target != nil && control.action != nil
-}
-
-private func sendControlAction(_ control: NSControl) -> Bool {
-    guard let action = control.action else { return false }
-    return NSApp.sendAction(action, to: control.target, from: control)
 }

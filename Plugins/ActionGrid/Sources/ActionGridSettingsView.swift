@@ -162,7 +162,6 @@ struct ActionGridEntryRow: View {
             )
             .fixedSize(horizontal: true, vertical: false)
         }
-        .accessibilityElement(children: .contain)
     }
 }
 
@@ -179,106 +178,143 @@ struct ActionGridEntryControlsView: NSViewRepresentable {
     let accessibility: ActionGridEntryAccessibility
     let identifierPrefix: String
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSStackView {
-        let settingsButton = NSButton(
-            title: "设置",
-            target: context.coordinator,
-            action: #selector(Coordinator.openSettings)
-        )
-        settingsButton.bezelStyle = .rounded
-        settingsButton.controlSize = .small
-
-        let replacementButton = NSPopUpButton(frame: .zero, pullsDown: true)
-        replacementButton.bezelStyle = .rounded
-        replacementButton.controlSize = .small
-
-        let removeButton = NSButton(
-            image: NSImage(systemSymbolName: "trash", accessibilityDescription: nil) ?? NSImage(),
-            target: context.coordinator,
-            action: #selector(Coordinator.remove)
-        )
-        removeButton.bezelStyle = .inline
-        removeButton.isBordered = false
-        removeButton.controlSize = .small
-        removeButton.contentTintColor = .systemRed
-
-        let stack = NSStackView(views: [settingsButton, replacementButton, removeButton])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = PluginSettingsTheme.Spacing.rowContentControl
-        stack.setHuggingPriority(.required, for: .horizontal)
-
-        context.coordinator.settingsButton = settingsButton
-        context.coordinator.replacementButton = replacementButton
-        context.coordinator.removeButton = removeButton
-        updateNSView(stack, context: context)
-        return stack
+    func makeNSView(context: Context) -> NativeView {
+        NativeView()
     }
 
-    func updateNSView(_ nsView: NSStackView, context: Context) {
-        let coordinator = context.coordinator
-        coordinator.settingsAction = settingsAction
-        coordinator.replaceAction = replaceAction
-        coordinator.removeAction = removeAction
-        coordinator.replacementOptions = replacementOptions
-
-        coordinator.settingsButton?.isHidden = settingsAction == nil
-        configure(
-            coordinator.settingsButton,
-            label: accessibility.settingsLabel,
-            help: "打开操作提供者设置",
-            identifier: "\(identifierPrefix).settings"
+    func updateNSView(_ nsView: NativeView, context: Context) {
+        nsView.update(
+            settingsAction: settingsAction,
+            replacementOptions: replacementOptions,
+            replaceAction: replaceAction,
+            removeAction: removeAction,
+            accessibility: accessibility,
+            identifierPrefix: identifierPrefix
         )
-        configure(
-            coordinator.replacementButton,
-            label: accessibility.replaceLabel,
-            help: "选择其他操作替换此条目",
-            identifier: "\(identifierPrefix).replace"
-        )
-        configure(
-            coordinator.removeButton,
-            label: accessibility.removeLabel,
-            help: "从操作网格移除此条目",
-            identifier: "\(identifierPrefix).remove"
-        )
-
-        let menu = NSMenu()
-        menu.addItem(withTitle: "替换", action: nil, keyEquivalent: "")
-        for (index, option) in replacementOptions.enumerated() {
-            let item = NSMenuItem(
-                title: option.title,
-                action: #selector(Coordinator.replace(_:)),
-                keyEquivalent: ""
-            )
-            item.target = coordinator
-            item.tag = index
-            menu.addItem(item)
-        }
-        coordinator.replacementButton?.menu = menu
-        coordinator.replacementButton?.isEnabled = !replacementOptions.isEmpty
     }
 
-    private func configure(
-        _ element: NSView?,
-        label: String,
-        help: String,
-        identifier: String
-    ) {
-        element?.setAccessibilityLabel(label)
-        element?.setAccessibilityHelp(help)
-        element?.setAccessibilityIdentifier(identifier)
-    }
-
-    final class Coordinator: NSObject {
-        weak var settingsButton: NSButton?
-        weak var replacementButton: NSPopUpButton?
-        weak var removeButton: NSButton?
+    final class NativeView: NSStackView {
+        let settingsButton: NSButton
+        let replacementButton: NSPopUpButton
+        let removeButton: NSButton
         var settingsAction: (() -> Void)?
         var replaceAction: ((ActionReference) -> Void)?
         var removeAction: (() -> Void)?
         var replacementOptions: [ActionGridReplacementOption] = []
+
+        override init(frame frameRect: NSRect) {
+            settingsButton = NSButton(title: "设置", target: nil, action: nil)
+            replacementButton = NSPopUpButton(frame: .zero, pullsDown: true)
+            removeButton = NSButton(
+                image: NSImage(
+                    systemSymbolName: "trash",
+                    accessibilityDescription: nil
+                ) ?? NSImage(),
+                target: nil,
+                action: nil
+            )
+            super.init(frame: frameRect)
+
+            settingsButton.target = self
+            settingsButton.action = #selector(openSettings)
+            settingsButton.bezelStyle = .rounded
+            settingsButton.controlSize = .small
+
+            replacementButton.bezelStyle = .rounded
+            replacementButton.controlSize = .small
+
+            removeButton.target = self
+            removeButton.action = #selector(remove)
+            removeButton.bezelStyle = .inline
+            removeButton.isBordered = false
+            removeButton.controlSize = .small
+            removeButton.contentTintColor = .systemRed
+
+            setViews([settingsButton, replacementButton, removeButton], in: .leading)
+            orientation = .horizontal
+            alignment = .centerY
+            spacing = PluginSettingsTheme.Spacing.rowContentControl
+            setHuggingPriority(.required, for: .horizontal)
+            setAccessibilityElement(false)
+        }
+
+        convenience init() {
+            self.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        func update(
+            settingsAction: (() -> Void)?,
+            replacementOptions: [ActionGridReplacementOption],
+            replaceAction: @escaping (ActionReference) -> Void,
+            removeAction: @escaping () -> Void,
+            accessibility: ActionGridEntryAccessibility,
+            identifierPrefix: String
+        ) {
+            self.settingsAction = settingsAction
+            self.replaceAction = replaceAction
+            self.removeAction = removeAction
+            self.replacementOptions = replacementOptions
+
+            settingsButton.isHidden = settingsAction == nil
+            configure(
+                settingsButton,
+                role: .button,
+                label: accessibility.settingsLabel,
+                help: "打开操作提供者设置",
+                identifier: "\(identifierPrefix).settings"
+            )
+            configure(
+                replacementButton,
+                role: .menuButton,
+                label: accessibility.replaceLabel,
+                help: "选择其他操作替换此条目",
+                identifier: "\(identifierPrefix).replace"
+            )
+            configure(
+                removeButton,
+                role: .button,
+                label: accessibility.removeLabel,
+                help: "从操作网格移除此条目",
+                identifier: "\(identifierPrefix).remove"
+            )
+
+            let menu = NSMenu()
+            menu.addItem(withTitle: "替换", action: nil, keyEquivalent: "")
+            for (index, option) in replacementOptions.enumerated() {
+                let item = NSMenuItem(
+                    title: option.title,
+                    action: #selector(replace(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.tag = index
+                menu.addItem(item)
+            }
+            replacementButton.menu = menu
+            replacementButton.isEnabled = !replacementOptions.isEmpty
+            setAccessibilityChildren(
+                [settingsButton, replacementButton, removeButton].filter { !$0.isHidden }
+            )
+        }
+
+        private func configure(
+            _ element: NSView,
+            role: NSAccessibility.Role,
+            label: String,
+            help: String,
+            identifier: String
+        ) {
+            element.setAccessibilityElement(true)
+            element.setAccessibilityRole(role)
+            element.setAccessibilityLabel(label)
+            element.setAccessibilityHelp(help)
+            element.setAccessibilityIdentifier(identifier)
+        }
 
         @objc func openSettings() {
             settingsAction?()

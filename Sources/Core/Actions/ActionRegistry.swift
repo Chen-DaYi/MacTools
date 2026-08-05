@@ -313,7 +313,9 @@ final class ActionRegistry: ObservableObject {
               definition.parameters.allSatisfy({ isValidIdentifier($0.id) }) else {
             return "invalid-parameter-schema"
         }
-        guard definition.risk != .confirmationRequired || definition.confirmation != nil else {
+        let requiresConfirmation = definition.risk == .confirmationRequired
+            || definition.externalInvocationPolicy == .confirmAlways
+        guard !requiresConfirmation || definition.confirmation != nil else {
             return "missing-confirmation"
         }
         guard definition.capabilities.contains(.background)
