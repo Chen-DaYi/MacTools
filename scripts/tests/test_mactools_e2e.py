@@ -619,6 +619,10 @@ class MacToolsE2ETests(unittest.TestCase):
     def test_code_verification_has_a_non_mutating_dry_run(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             pathlib.Path(temporary_directory, "session.plist").touch()
+            environment = os.environ.copy()
+            environment["MACTOOLS_E2E_APP_PATH"] = str(
+                pathlib.Path(temporary_directory, "Missing MacTools.app")
+            )
             result = subprocess.run(
                 [
                     str(E2E_SCRIPT),
@@ -627,6 +631,7 @@ class MacToolsE2ETests(unittest.TestCase):
                     "--dry-run",
                 ],
                 cwd=REPO_ROOT,
+                env=environment,
                 check=True,
                 capture_output=True,
                 text=True,

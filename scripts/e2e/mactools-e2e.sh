@@ -1271,7 +1271,6 @@ verify_code_session() {
         print -u2 -r -- "error: invalid E2E session directory $session_dir"
         return 1
     }
-    require_app
 
     local -a common_args
     common_args=(
@@ -1288,6 +1287,7 @@ verify_code_session() {
     if [[ "$mode" == --dry-run ]]; then
         return 0
     fi
+    require_app
 
     local result=0
     stop_app
