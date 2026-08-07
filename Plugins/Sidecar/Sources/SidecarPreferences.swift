@@ -190,6 +190,20 @@ final class SidecarPreferencesStore: ObservableObject {
         normalizeAndPersistShortcuts(persistWhenUnchanged: true)
     }
 
+    func clearLegacyShortcuts() {
+        var updatedDevices = devices
+        for index in updatedDevices.indices {
+            updatedDevices[index].shortcut = nil
+            updatedDevices[index].hasShortcutConfiguration = false
+        }
+        devices = updatedDevices
+        disconnectAllShortcut = nil
+        connectFirstAvailableShortcut = nil
+        persistDevices()
+        persistShortcut(nil, forKey: StorageKey.disconnectAllShortcut)
+        persistShortcut(nil, forKey: StorageKey.connectFirstAvailableShortcut)
+    }
+
     func move(deviceID: String, before beforeDeviceID: String?) {
         guard let sourceIndex = devices.firstIndex(where: { $0.id == deviceID }) else { return }
         var updated = devices

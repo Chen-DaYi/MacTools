@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 @testable import HideNotchPlugin
 
@@ -106,5 +107,36 @@ final class HideNotchPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "已开启")
         XCTAssertFalse(plugin.primaryPanelState.isEnabled)
+    }
+
+    func testCanonicalActionUsesTheWallpaperController() async throws {
+        let controller = MockHideNotchWallpaperController()
+        controller.snapshotValue = HideNotchSnapshot(
+            hasSupportedDisplay: true,
+            supportedDisplayCount: 1,
+            managedDisplayCount: 0,
+            unsupportedVisibleDisplayCount: 0,
+            pendingRestoreCount: 0,
+            isEnabled: false,
+            isProcessing: false,
+            isAwaitingDisplay: false,
+            errorMessage: nil
+        )
+        let plugin = HideNotchPlugin(controller: controller)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(controller.setEnabledCalls, [true])
+    }
+
+    func testCanonicalActionIsUnavailableWithoutANotchDisplay() throws {
+        let plugin = HideNotchPlugin(controller: MockHideNotchWallpaperController())
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
     }
 }

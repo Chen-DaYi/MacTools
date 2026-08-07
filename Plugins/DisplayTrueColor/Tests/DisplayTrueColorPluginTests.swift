@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import DisplayTrueColorPlugin
 
 @MainActor
@@ -45,6 +46,28 @@ final class DisplayTrueColorPluginTests: XCTestCase {
         plugin.refresh()
 
         XCTAssertTrue(plugin.primaryPanelState.isOn)
+    }
+
+    func testCanonicalActionUsesTheTrueToneClient() async throws {
+        let client = MockTrueToneClient(isSupported: true, isEnabled: false)
+        let plugin = DisplayTrueColorPlugin(client: client)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(client.lastSetEnabled, true)
+    }
+
+    func testCanonicalActionIsUnavailableOnUnsupportedHardware() throws {
+        let plugin = DisplayTrueColorPlugin(
+            client: MockTrueToneClient(isSupported: false, isEnabled: nil)
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
     }
 }
 

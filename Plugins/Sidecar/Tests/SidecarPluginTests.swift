@@ -4,6 +4,88 @@ import MacToolsPluginKit
 
 @MainActor
 final class SidecarPluginTests: XCTestCase {
+    func testPublishesGlobalAndPerDeviceCanonicalActions() throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let plugin = makePlugin(service: service)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "sidecar", storage: InMemoryPluginStorage()))
+
+        XCTAssertEqual(plugin.actionDefinitions.count, 3)
+        XCTAssertTrue(plugin.actionDefinitions.contains {
+            $0.key.actionID == "connect-first-available"
+        })
+        XCTAssertTrue(plugin.actionDefinitions.contains {
+            $0.key.actionID == "disconnect-all"
+        })
+        let deviceAction = try XCTUnwrap(plugin.actionDefinitions.first {
+            $0.title.contains("My iPad")
+        })
+        XCTAssertEqual(plugin.actionAvailability(for: ActionReference(key: deviceAction.key)), .available)
+    }
+
+    func testCanonicalConnectActionWaitsForTheSidecarRequestResult() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let plugin = makePlugin(service: service)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "sidecar", storage: InMemoryPluginStorage()))
+        let reference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+        )
+
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        ))
+        let resultTask = Task { await handle.result() }
+        for _ in 0 ..< 20 where service.operations.isEmpty {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(service.operations, ["connect:ipad-1"])
+        service.complete(.success(()))
+        let result = await resultTask.value
+        XCTAssertEqual(result, .succeeded())
+    }
+
+    func testLegacySidecarShortcutsMigrateToCanonicalActionReferences() {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let store = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        store.reconcile(with: service.reachableDevices())
+        let connectBinding = ShortcutBinding(keyCode: 0, modifiers: [.command])
+        let deviceBinding = ShortcutBinding(keyCode: 1, modifiers: [.command])
+        store.updateConnectFirstAvailableShortcut(connectBinding)
+        store.updateShortcut(deviceBinding, for: "ipad-1")
+        let plugin = makePlugin(service: service, preferences: store)
+        plugin.shortcutBindingResolver = { definitionID in
+            switch definitionID {
+            case "connect-first-available": connectBinding
+            case "device.ipad-1": deviceBinding
+            default: nil
+            }
+        }
+
+        let assignments = plugin.legacyActionShortcutAssignments
+
+        XCTAssertEqual(assignments.count, 2)
+        XCTAssertTrue(assignments.contains {
+            $0.reference.key.actionID == "connect-first-available"
+                && $0.binding == connectBinding
+        })
+        XCTAssertTrue(assignments.contains {
+            $0.reference.key.actionID.hasPrefix("device.")
+                && $0.binding == deviceBinding
+        })
+
+        plugin.legacyActionShortcutsDidMigrate()
+        XCTAssertNil(store.connectFirstAvailableShortcut)
+        XCTAssertNil(store.preference(for: "ipad-1")?.shortcut)
+    }
+
     func testSidecarDeviceIdentifierAcceptsUUIDAndStringValues() {
         let uuid = UUID(uuidString: "9DFBEA6D-4DCF-431D-B7A0-A74F26231DAF")!
 

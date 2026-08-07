@@ -38,7 +38,19 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+        static let setLimit = "set-limit"
+        static let hold = "hold"
+        static let resume = "resume"
+        static let discharge = "discharge"
+    }
+
+    private enum ActionParameterID {
+        static let enabled = "enabled"
+        static let limit = "limit"
+    }
 
     // MARK: Metadata
 
@@ -105,6 +117,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
         // reset by firmware across sleep/hibernation, so on launch we
         // re-apply whatever the user last had configured.
         if store.isEnabled {
+            capabilities = writer.probeCapabilities()
             startActiveMonitoring()
             applyCurrentMode(reason: "activate")
         }
@@ -140,6 +153,124 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "battery", "charge"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: ActionParameterID.enabled,
+                        title: metadata.title,
+                        kind: .boolean
+                    ),
+                ],
+                confirmation: actionConfirmation,
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setLimit),
+                title: localization.string("settings.limit.title", defaultValue: "充电上限"),
+                description: localization.string(
+                    "settings.limit.description",
+                    defaultValue: "设置电池停止充电的目标百分比。"
+                ),
+                keywords: [metadata.title, "battery", "limit"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: ActionParameterID.limit,
+                        title: localization.string("settings.limit.target", defaultValue: "目标上限"),
+                        kind: .integer
+                    ),
+                ],
+                confirmation: actionConfirmation,
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            batteryModeActionDefinition(
+                actionID: ActionID.hold,
+                title: localization.string("panel.action.stopCharging", defaultValue: "停止充电"),
+                systemImage: "bolt.slash.fill"
+            ),
+            batteryModeActionDefinition(
+                actionID: ActionID.resume,
+                title: localization.string("panel.action.startCharging", defaultValue: "开始充电"),
+                systemImage: "bolt.fill"
+            ),
+            batteryModeActionDefinition(
+                actionID: ActionID.discharge,
+                title: localization.format(
+                    "panel.action.dischargeToLimit",
+                    defaultValue: "强制放电至 %d%%",
+                    store.limitPercent
+                ),
+                systemImage: "minus.circle",
+                risk: .confirmationRequired
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        var entries = [
+            ActionCatalogEntry(
+                reference: enabledActionReference(true),
+                title: localization.string("panel.action.enable", defaultValue: "启用充电上限")
+            ),
+            ActionCatalogEntry(
+                reference: enabledActionReference(false),
+                title: localization.string("panel.action.disable", defaultValue: "停用充电上限")
+            ),
+        ]
+        entries += [50, 60, 70, 80, 90, 100].map { limit in
+            ActionCatalogEntry(
+                reference: limitActionReference(limit),
+                title: "\(localization.string("settings.limit.title", defaultValue: "充电上限")) · \(limit)%"
+            )
+        }
+        entries += actionDefinitions
+            .filter { [ActionID.hold, ActionID.resume, ActionID.discharge].contains($0.key.actionID) }
+            .map {
+                ActionCatalogEntry(reference: ActionReference(key: $0.key), title: $0.title)
+            }
+        return entries
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard batterySnapshot.hasBattery else {
+            return .unavailable(localization.string("panel.subtitle.noBattery", defaultValue: "未检测到电池"))
+        }
+        guard writer.isHelperAvailable else {
+            return .unavailable(localization.string(
+                "panel.action.missingHelper",
+                defaultValue: "电池控制组件缺失"
+            ))
+        }
+
+        switch reference.key.actionID {
+        case ActionID.setEnabled, ActionID.setLimit:
+            return .available
+        case ActionID.hold, ActionID.resume:
+            return store.isEnabled ? .available : .unavailable(
+                localization.string("panel.action.enable", defaultValue: "启用充电上限")
+            )
+        case ActionID.discharge:
+            guard store.isEnabled,
+                  capabilities.canForceDischarge,
+                  let level = batterySnapshot.levelPercent,
+                  level > store.limitPercent else {
+                return .unavailable(PluginKitLocalization.actionUnavailable)
+            }
+            return .available
+        default:
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+    }
 
     var configuration: PluginConfiguration? {
         PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
@@ -178,6 +309,48 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let availability = actionAvailability(for: invocation.reference)
+        guard availability.isAvailable else {
+            return ActionExecutionHandle {
+                .failed(message: availability.reason ?? PluginKitLocalization.actionUnavailable)
+            }
+        }
+
+        let succeeded: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.setEnabled:
+            guard case let .boolean(enabled)? = invocation.reference.parameters[ActionParameterID.enabled] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            if store.isEnabled != enabled {
+                handleEnableToggle(enabled)
+            }
+            succeeded = store.isEnabled == enabled && lastErrorMessage == nil
+        case ActionID.setLimit:
+            guard case let .integer(limit)? = invocation.reference.parameters[ActionParameterID.limit],
+                  limit >= BatteryChargeLimits.minimumPercent,
+                  limit <= BatteryChargeLimits.maximumPercent else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            handleLimitChange(Int(limit))
+            succeeded = store.limitPercent == Int(limit) && lastErrorMessage == nil
+        case ActionID.hold:
+            succeeded = setModeFromAction(.holdAtLimit)
+        case ActionID.resume:
+            succeeded = setModeFromAction(.charging)
+        case ActionID.discharge:
+            succeeded = setModeFromAction(.discharging)
+        default:
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+
+        let failureMessage = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
+        return ActionExecutionHandle {
+            succeeded ? .succeeded() : .failed(message: failureMessage)
+        }
+    }
 
     // MARK: - User Actions
 
@@ -273,6 +446,55 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel {
             applyCurrentMode(reason: "user-start-discharge")
         }
         onStateChange?()
+    }
+
+    private var actionConfirmation: ActionConfirmation {
+        ActionConfirmation(
+            title: metadata.title,
+            message: metadata.defaultDescription,
+            confirmButtonTitle: metadata.title
+        )
+    }
+
+    private func batteryModeActionDefinition(
+        actionID: String,
+        title: String,
+        systemImage: String,
+        risk: ActionRisk = .safe
+    ) -> ActionDefinition {
+        ActionDefinition(
+            key: ActionKey(providerID: metadata.id, actionID: actionID),
+            title: title,
+            description: metadata.defaultDescription,
+            keywords: [metadata.title, title, "battery", "charge"],
+            systemImage: systemImage,
+            risk: risk,
+            confirmation: actionConfirmation,
+            externalInvocationPolicy: .confirmAlways,
+            capabilities: [.background, .foregroundInteractive]
+        )
+    }
+
+    private func enabledActionReference(_ enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet([ActionParameterID.enabled: .boolean(enabled)])
+        )
+    }
+
+    private func limitActionReference(_ limit: Int) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setLimit),
+            parameters: try! ActionParameterSet([ActionParameterID.limit: .integer(Int64(limit))])
+        )
+    }
+
+    @discardableResult
+    private func setModeFromAction(_ mode: BatteryChargeMode) -> Bool {
+        guard store.isEnabled else { return false }
+        store.setMode(mode)
+        applyCurrentMode(reason: "canonical-action")
+        return store.mode == mode && lastErrorMessage == nil
     }
 
     // MARK: - State Application

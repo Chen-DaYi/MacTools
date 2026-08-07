@@ -53,6 +53,45 @@ private final class WindowSwitcherMemoryStorage: PluginStorage {
 
 @MainActor
 final class WindowSwitcherPluginTests: XCTestCase {
+    func testPublishesForegroundCanonicalActionWithAccessibilityRequirement() throws {
+        let plugin = WindowSwitcherPlugin(
+            context: PluginRuntimeContext(
+                pluginID: WindowSwitcherConstants.pluginID,
+                storage: WindowSwitcherMemoryStorage()
+            ),
+            accessibilityTrusted: { true }
+        )
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first)
+
+        XCTAssertEqual(definition.key.actionID, WindowSwitcherConstants.shortcutActionID)
+        XCTAssertEqual(definition.capabilities, [.foregroundInteractive])
+        XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
+        XCTAssertEqual(
+            plugin.permissionRequirementIDs(for: definition.key),
+            [WindowSwitcherConstants.accessibilityPermissionID]
+        )
+        XCTAssertEqual(
+            plugin.actionAvailability(for: ActionReference(key: definition.key)),
+            .available
+        )
+    }
+
+    func testCanonicalActionIsUnavailableWhenWindowSwitcherIsDisabled() throws {
+        let plugin = WindowSwitcherPlugin(
+            context: PluginRuntimeContext(
+                pluginID: WindowSwitcherConstants.pluginID,
+                storage: WindowSwitcherMemoryStorage()
+            ),
+            accessibilityTrusted: { true }
+        )
+        plugin.store.setEnabled(false)
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first)
+
+        XCTAssertFalse(
+            plugin.actionAvailability(for: ActionReference(key: definition.key)).isAvailable
+        )
+    }
+
     func testWorkspaceNotificationHopsSafelyToMainActor() async {
         let center = NotificationCenter()
         let catalog = WindowSwitcherAppCatalog(notificationCenter: center)

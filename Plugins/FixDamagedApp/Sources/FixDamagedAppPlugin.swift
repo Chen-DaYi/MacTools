@@ -25,7 +25,12 @@ private struct FixDamagedAppPluginProvider: PluginProvider {
 // MARK: - Plugin
 
 @MainActor
-final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorProviding {
+final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorProviding,
+    PluginActionProviding
+{
+    private enum ActionID {
+        static let chooseApp = "choose-app"
+    }
 
     // MARK: Metadata
 
@@ -55,6 +60,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     /// Drag pasteboard change count captured at mouseDown to identify a new drag session.
     private var dragSessionPasteboardChangeCount: Int = Int.min
     private let localization: PluginLocalization
+    private let chooseAppOverride: (() -> Void)?
 
     // MARK: DropZoneAnchorProviding
 
@@ -85,11 +91,29 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.chooseApp),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "app", "quarantine"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive]
+            ),
+        ]
+    }
+
     // MARK: Init
 
-    init(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "fix-damaged-app")) {
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "fix-damaged-app"),
+        chooseAppOverride: (() -> Void)? = nil
+    ) {
         let localization = PluginLocalization(bundle: context.resourceBundle)
         self.localization = localization
+        self.chooseAppOverride = chooseAppOverride
         self.storage = context.storage
         self.metadata = PluginMetadata(
             id: "fix-damaged-app",
@@ -174,6 +198,23 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
         PluginPermissionState(isGranted: true, footnote: nil)
     }
 
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key.actionID == ActionID.chooseApp else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        return fixState == .running
+            ? .unavailable(localization.string("panel.subtitle.running", defaultValue: "修复中…"))
+            : .available
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key.actionID == ActionID.chooseApp else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        chooseApp()
+        return ActionExecutionHandle { .succeeded() }
+    }
+
     // MARK: Private
 
     private func handleControlAction(controlID: String) {
@@ -206,6 +247,10 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     }
 
     private func chooseApp() {
+        if let chooseAppOverride {
+            chooseAppOverride()
+            return
+        }
         let panel = NSOpenPanel()
         panel.title = localization.string("openPanel.title", defaultValue: "选择要修复的应用")
         panel.message = localization.string("openPanel.message", defaultValue: "选择显示「已损坏」或「不受信任」的应用")

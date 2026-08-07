@@ -212,6 +212,23 @@ final class AutoInputPluginPanelTests: XCTestCase {
         XCTAssertFalse(pluginWithRule.primaryPanelState.isOn)
         XCTAssertEqual(pluginWithRule.primaryPanelState.subtitle, "已暂停")
     }
+
+    func testCanonicalActionCanPauseAutoInput() async throws {
+        let storage = AutoInputMemoryStorage()
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
+            sourceController: FakeAutoInputSourceController(sources: [], currentSourceID: nil),
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.last?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+    }
 }
 
 private func makeRule(bundleID: String, sourceID: String) -> AutoInputRule {

@@ -19,7 +19,13 @@ private struct AutoInputPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicationActivityStateHandling {
+final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicationActivityStateHandling,
+    PluginActionProviding
+{
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+    }
+
     let metadata: PluginMetadata
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -94,6 +100,40 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         }
     }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: "enabled",
+                        title: metadata.title,
+                        kind: .boolean
+                    ),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.remembering", defaultValue: "自动记忆已开启"))"
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.paused", defaultValue: "已暂停"))"
+            ),
+        ]
+    }
+
     func activate(context: PluginRuntimeContext) {
         controller.start()
     }
@@ -108,9 +148,16 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
 
     func handleAction(_ action: PluginPanelAction) {
         guard case let .setSwitch(value) = action else { return }
-        store.setEnabled(value)
-        controller.configurationDidChange()
-        onStateChange?()
+        setEnabled(value)
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key.actionID == ActionID.setEnabled,
+              case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        setEnabled(enabled)
+        return ActionExecutionHandle { .succeeded() }
     }
 
     func applicationActivityStateDidChange(_ state: PluginApplicationActivityState) {
@@ -132,5 +179,18 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             return localization.string("panel.subtitle.remembering", defaultValue: "自动记忆已开启")
         }
         return localization.string("panel.subtitle.noRules", defaultValue: "暂无切换规则")
+    }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private func setEnabled(_ enabled: Bool) {
+        store.setEnabled(enabled)
+        controller.configurationDidChange()
+        onStateChange?()
     }
 }

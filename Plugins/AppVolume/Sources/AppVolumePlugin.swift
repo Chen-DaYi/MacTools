@@ -24,7 +24,16 @@ private struct AppVolumePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setVolume = "set-volume"
+    }
+
+    private enum ActionParameterID {
+        static let application = "application"
+        static let volume = "volume"
+    }
+
     private enum ControlID {
         static let volumePrefix = "application-volume."
         static let openPermission = "open-system-audio-permission"
@@ -133,6 +142,67 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setVolume),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "volume", "audio", "mute"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: ActionParameterID.application,
+                        title: metadata.title,
+                        kind: .string,
+                        portability: .localOnly
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.volume,
+                        title: metadata.title,
+                        kind: .double
+                    ),
+                ],
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        snapshot.applications.flatMap { application in
+            [0.0, 1.0].map { gain in
+                ActionCatalogEntry(
+                    reference: volumeActionReference(applicationID: application.id, gain: gain),
+                    title: "\(application.displayName) · \(Int(gain * 100))%",
+                    subtitle: metadata.title
+                )
+            }
+        }
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard router.isSupported else {
+            return .unavailable(localization.string(
+                "panel.subtitle.unsupported",
+                defaultValue: "需要 macOS 15 或更高版本"
+            ))
+        }
+        guard actionTarget(for: reference) != nil else {
+            return .unavailable(localization.string(
+                "panel.subtitle.empty",
+                defaultValue: "暂无正在播放音频的应用"
+            ))
+        }
+        guard accessState != .requesting else {
+            return .unavailable(localization.string(
+                "permission.status.requesting",
+                defaultValue: "正在请求"
+            ))
+        }
+        return .available
+    }
+
     func activate(context: PluginRuntimeContext) {
         monitor.start()
     }
@@ -231,6 +301,17 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
 
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard let target = actionTarget(for: invocation.reference) else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+
+        return ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return await self.setVolume(target.gain, for: target.applicationID)
+        }
+    }
+
     // MARK: - Snapshot and routing
 
     private func receive(_ snapshot: AudioApplicationSnapshot) {
@@ -261,6 +342,64 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel {
         case .unknown, .requesting, .denied:
             break
         }
+    }
+
+    private func volumeActionReference(applicationID: String, gain: Double) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setVolume),
+            parameters: try! ActionParameterSet([
+                ActionParameterID.application: .string(applicationID),
+                ActionParameterID.volume: .double(gain),
+            ])
+        )
+    }
+
+    private func actionTarget(
+        for reference: ActionReference
+    ) -> (applicationID: String, gain: Double)? {
+        guard reference.key.actionID == ActionID.setVolume,
+              case let .string(applicationID)? = reference.parameters[ActionParameterID.application],
+              case let .double(gain)? = reference.parameters[ActionParameterID.volume],
+              gain >= 0,
+              gain <= 1,
+              snapshot.applications.contains(where: { $0.id == applicationID }) else {
+            return nil
+        }
+        return (applicationID, gain)
+    }
+
+    private func setVolume(_ gain: Double, for applicationID: String) async -> ActionExecutionResult {
+        guard snapshot.applications.contains(where: { $0.id == applicationID }) else {
+            return .failed(message: localization.string(
+                "panel.subtitle.empty",
+                defaultValue: "暂无正在播放音频的应用"
+            ))
+        }
+
+        if !Self.isUnity(gain), accessState != .granted {
+            accessState = .requesting
+            onStateChange?()
+            let granted = await router.requestSystemAudioAccess()
+            guard !Task.isCancelled else {
+                accessState = .unknown
+                onStateChange?()
+                return .cancelled
+            }
+            accessState = granted ? .granted : .denied
+            guard granted else {
+                onStateChange?()
+                return .failed(message: localization.string(
+                    "permission.systemAudio.footnote.denied",
+                    defaultValue: "前往系统设置 → 隐私与安全性 → 屏幕与系统音频录制，授权 MacTools。"
+                ))
+            }
+        }
+
+        volumes[applicationID] = gain
+        saveVolumes()
+        applyCurrentTargets()
+        onStateChange?()
+        return .succeeded()
     }
 
     private func requestAccess(force: Bool, openSettingsOnFailure: Bool) {

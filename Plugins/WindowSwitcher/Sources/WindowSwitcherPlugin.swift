@@ -24,7 +24,8 @@ private struct WindowSwitcherPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing, PluginShortcutEventHandling {
+final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing,
+    PluginShortcutEventHandling, PluginActionProviding, PluginActionPermissionProviding {
     private enum Session {
         case direct(entries: [WindowSwitcherAppEntry], selectedIndex: Int)
         case keyWindow(entries: [WindowSwitcherAppEntry])
@@ -143,6 +144,77 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
                 settingsControlSystemImage: "command"
             ),
         ]
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: WindowSwitcherConstants.shortcutActionID
+                ),
+                title: localization.string(
+                    "shortcut.switcher.title",
+                    defaultValue: "窗口切换"
+                ),
+                description: localization.string(
+                    "shortcut.switcher.description",
+                    defaultValue: "显示或切换正在运行的窗口。"
+                ),
+                keywords: [metadata.title, "Window Switcher"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive]
+            ),
+        ]
+    }
+
+    func permissionRequirementIDs(for actionKey: ActionKey) -> [String] {
+        actionKey == actionDefinitions.first?.key
+            ? [WindowSwitcherConstants.accessibilityPermissionID]
+            : []
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key == actionDefinitions.first?.key else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        guard store.configuration.isEnabled else {
+            return .unavailable(localization.string(
+                "settings.status.disabled.description",
+                defaultValue: "窗口切换已停用。"
+            ))
+        }
+        guard isAccessibilityGranted else {
+            return .unavailable(localization.string(
+                "error.accessibilityRequired",
+                defaultValue: "窗口切换需要辅助功能权限，请先前往设置完成授权。"
+            ))
+        }
+        return .available
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let availability = actionAvailability(for: invocation.reference)
+        guard availability.isAvailable else {
+            return ActionExecutionHandle {
+                .failed(message: availability.reason ?? PluginKitLocalization.actionUnavailable)
+            }
+        }
+        // Canonical actions have no key-up phase. Always open the interactive
+        // chooser instead of starting a direct-cycle session that could never commit.
+        beginKeyWindowSession()
+        let succeeded: Bool
+        if case .keyWindow? = session {
+            succeeded = true
+        } else {
+            succeeded = false
+        }
+        return ActionExecutionHandle {
+            succeeded
+                ? .succeeded()
+                : .failed(message: PluginKitLocalization.actionUnavailable)
+        }
     }
 
     var configuration: PluginConfiguration? {

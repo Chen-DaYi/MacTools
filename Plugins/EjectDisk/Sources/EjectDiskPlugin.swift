@@ -19,7 +19,13 @@ private struct EjectDiskPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling {
+final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
+    PluginActionProviding
+{
+    private enum ActionID {
+        static let ejectAll = "eject-all"
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -77,6 +83,36 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurf
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.ejectAll),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "disk", "eject", "volume"],
+                systemImage: metadata.iconName,
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: metadata.title,
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: localization.string("panel.button.eject", defaultValue: "推出")
+                ),
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.background, .foregroundInteractive, .cancellable],
+                executionTimeoutSeconds: 60
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key.actionID == ActionID.ejectAll else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        return isDetecting || isEjecting
+            ? .unavailable(subtitle)
+            : .available
+    }
+
     func refresh() {}
 
     func deactivate(reason _: PluginDeactivationReason) {
@@ -121,6 +157,17 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurf
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key.actionID == ActionID.ejectAll else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+
+        return ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return await self.performCanonicalEject()
+        }
+    }
 
     // MARK: - Private
 
@@ -222,6 +269,58 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurf
                 errorMessages.joined(separator: "\n")
             )
         return EjectOutcome(failedVolumes: failedVolumes, errorMessage: errorMessage)
+    }
+
+    private func performCanonicalEject() async -> ActionExecutionResult {
+        guard !isDetecting, !isEjecting else {
+            return .failed(message: subtitle)
+        }
+
+        isDetecting = true
+        lastErrorMessage = nil
+        onStateChange?()
+
+        let volumes: [EjectableVolume]
+        do {
+            volumes = try await discoverVolumes()
+        } catch {
+            isDetecting = false
+            lastErrorMessage = error.localizedDescription
+            onStateChange?()
+            return .failed(message: error.localizedDescription)
+        }
+
+        guard !Task.isCancelled else {
+            isDetecting = false
+            onStateChange?()
+            return .cancelled
+        }
+
+        isDetecting = false
+        ejectableVolumes = volumes
+        guard !volumes.isEmpty else {
+            onStateChange?()
+            return .succeeded(message: localization.string(
+                "panel.subtitle.none",
+                defaultValue: "无可推出的磁盘"
+            ))
+        }
+
+        isEjecting = true
+        onStateChange?()
+        let outcome = await executeEjectAll(volumes)
+        ejectableVolumes = outcome.failedVolumes
+        isEjecting = false
+        lastErrorMessage = outcome.errorMessage
+        onStateChange?()
+
+        if Task.isCancelled {
+            return .cancelled
+        }
+        if let errorMessage = outcome.errorMessage {
+            return .failed(message: errorMessage)
+        }
+        return .succeeded()
     }
 }
 

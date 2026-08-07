@@ -32,7 +32,16 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling {
+final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
+    PluginActionProviding
+{
+    private enum ActionID {
+        static let applyPreset = "apply-preset"
+    }
+
+    private enum ActionParameterID {
+        static let preset = "preset"
+    }
 
     // MARK: Metadata
 
@@ -141,6 +150,48 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.applyPreset),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "fan", "preset", "RPM"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: ActionParameterID.preset,
+                        title: metadata.title,
+                        kind: .string
+                    ),
+                ],
+                confirmation: ActionConfirmation(
+                    title: metadata.title,
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: metadata.title
+                ),
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        presetStore.allPresets.map { preset in
+            ActionCatalogEntry(
+                reference: presetActionReference(presetID: preset.id),
+                title: "\(metadata.title) · \(preset.displayName(localization: localization))"
+            )
+        }
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard preset(for: reference) != nil else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        return .available
+    }
+
     var configuration: PluginConfiguration? {
         PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
             FanControlPresetManagerView(
@@ -193,6 +244,18 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
 
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard let preset = preset(for: invocation.reference) else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        presetStore.setActivePreset(id: preset.id)
+        let succeeded = applyActivePreset()
+        let failureMessage = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
+        return ActionExecutionHandle {
+            succeeded ? .succeeded() : .failed(message: failureMessage)
+        }
+    }
+
     // MARK: - PluginPanelSurfaceLifecycleHandling
 
     func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
@@ -237,7 +300,8 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         }
     }
 
-    private func applyActivePreset() {
+    @discardableResult
+    private func applyActivePreset() -> Bool {
         let preset = presetStore.activePreset
         let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
         let result = smcWriter.apply(strategy: preset.strategy, snapshot: snapshot)
@@ -249,6 +313,24 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
             lastErrorMessage = nil
         }
         onStateChange?()
+        return result == nil
+    }
+
+    private func presetActionReference(presetID: String) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.applyPreset),
+            parameters: try! ActionParameterSet([
+                ActionParameterID.preset: .string(presetID),
+            ])
+        )
+    }
+
+    private func preset(for reference: ActionReference) -> FanPreset? {
+        guard reference.key.actionID == ActionID.applyPreset,
+              case let .string(presetID)? = reference.parameters[ActionParameterID.preset] else {
+            return nil
+        }
+        return presetStore.allPresets.first(where: { $0.id == presetID })
     }
 
     // MARK: - Monitoring

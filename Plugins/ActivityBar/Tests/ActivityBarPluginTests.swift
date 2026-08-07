@@ -65,6 +65,19 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.socketServer.stopCallCount, 0)
     }
 
+    func testCanonicalTrackingActionUsesThePanelMutationPath() async throws {
+        let harness = makeHarness()
+        let reference = try XCTUnwrap(harness.plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await harness.plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(harness.controller.isTrackingEnabled)
+        XCTAssertEqual(harness.inputMonitor.startCallCount, 1)
+    }
+
     func testActivateStartsInstalledHookSocketWithoutInputTracking() {
         let storage = ActivityBarMemoryStorage()
         storage.set("2026-05-18 09:00", forKey: "activity-bar.hooks.installed-at")

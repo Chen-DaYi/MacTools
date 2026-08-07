@@ -158,6 +158,8 @@ New executable capabilities should use `PluginActionProviding` rather than addin
 
 Ordinary action shortcuts are owned by the host's `ShortcutAssignmentService`. A plugin may declare or migrate a default binding, but it must not persist or register a second binding for the same action. Workflows, Run Links, and Action Grid also retain `ActionReference` values and invoke through the host executor. See [Actions, Automation, Run Links, and Action Grid](../actions-automation.md) for the ownership and verification contract.
 
+The current migration coverage, intentional exclusions, and design-first backlog are tracked in [Canonical action provider coverage](action-provider-coverage.md). Consult that inventory before adding a new plugin-only command or shortcut so reusable operations remain available consistently across shortcuts, gestures, Action Grid, Automation, Unified Search, and eligible Run Links.
+
 Action Grid is the reference implementation for an optional action surface. Its package can be built independently with:
 
 ```bash

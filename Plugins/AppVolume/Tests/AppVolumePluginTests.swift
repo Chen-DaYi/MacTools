@@ -146,6 +146,51 @@ final class AppVolumePluginTests: XCTestCase {
         XCTAssertTrue(plugin.permissionRequirements.isEmpty)
     }
 
+    func testCanonicalActionsPublishMuteAndFullVolumeForEachPlayingApp() {
+        let monitor = AppVolumeMonitorMock()
+        let plugin = makePlugin(monitor: monitor)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "app-volume"))
+        monitor.send(snapshot(applications: [
+            application(id: "com.example.music", name: "Music", objectID: 91),
+        ]))
+
+        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["Music · 0%", "Music · 100%"])
+        XCTAssertEqual(plugin.actionDefinitions.first?.externalInvocationPolicy, .unavailable)
+    }
+
+    func testCanonicalMuteRequestsAccessAndRoutesTheTarget() async throws {
+        let monitor = AppVolumeMonitorMock()
+        let router = AppVolumeRouterMock(accessResult: true)
+        let plugin = makePlugin(monitor: monitor, router: router)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "app-volume"))
+        monitor.send(snapshot(applications: [
+            application(id: "com.example.music", name: "Music", objectID: 92),
+        ]))
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(router.accessRequestCount, 1)
+        XCTAssertEqual(router.lastTargets.first?.gain, 0)
+    }
+
+    func testCanonicalActionBecomesUnavailableWhenTheAppStopsPlaying() throws {
+        let monitor = AppVolumeMonitorMock()
+        let plugin = makePlugin(monitor: monitor)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "app-volume"))
+        monitor.send(snapshot(applications: [
+            application(id: "com.example.music", name: "Music", objectID: 93),
+        ]))
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        monitor.send(snapshot(applications: []))
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+    }
+
     private func makePlugin(
         storage: AppVolumeStorageMock? = nil,
         monitor: AppVolumeMonitorMock? = nil,

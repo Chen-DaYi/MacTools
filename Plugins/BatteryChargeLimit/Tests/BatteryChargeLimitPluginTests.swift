@@ -296,6 +296,66 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
         XCTAssertTrue(writer.dischargeCalls.contains(true))
     }
 
+    func testCanonicalActionsPublishLimitsAndExplicitModes() {
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 90)))
+        plugin.refresh()
+
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), [
+            "set-enabled", "set-limit", "hold", "resume", "discharge",
+        ])
+        XCTAssertTrue(plugin.actionCatalogEntries.contains(where: { $0.title.contains("80%") }))
+        XCTAssertEqual(
+            plugin.actionDefinitions.first(where: { $0.key.actionID == "discharge" })?.risk,
+            .confirmationRequired
+        )
+    }
+
+    func testCanonicalEnableAndLimitActionsUseExistingMutationPaths() async throws {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)), writer: writer)
+        plugin.refresh()
+        let enable = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.reference.key.actionID == "set-enabled" })?.reference
+        )
+        let limit = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.title.contains("70%") })?.reference
+        )
+
+        let enableResult = try await plugin.beginAction(
+            ActionInvocation(reference: enable, source: .test, mode: .background)
+        ).result()
+        let limitResult = try await plugin.beginAction(
+            ActionInvocation(reference: limit, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(enableResult, .succeeded())
+        XCTAssertEqual(limitResult, .succeeded())
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertEqual(plugin.store.limitPercent, 70)
+        XCTAssertTrue(writer.inhibitCalls.contains(70))
+    }
+
+    func testCanonicalDischargeRequiresEnabledSupportedState() async throws {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 90)), writer: writer)
+        plugin.refresh()
+        let discharge = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.reference.key.actionID == "discharge" })?.reference
+        )
+
+        XCTAssertFalse(plugin.actionAvailability(for: discharge).isAvailable)
+
+        plugin.handleAction(.invokeAction(controlID: "battery-enable-action"))
+        XCTAssertTrue(plugin.actionAvailability(for: discharge).isAvailable)
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: discharge, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(plugin.store.mode, .discharging)
+        XCTAssertTrue(writer.dischargeCalls.contains(true))
+    }
+
     func testForceDischargeStopsWhenReachingLimit() {
         let writer = MockBatteryWriter()
         let reader = MockBatteryReader(snapshot: makeSnapshot(level: 90))

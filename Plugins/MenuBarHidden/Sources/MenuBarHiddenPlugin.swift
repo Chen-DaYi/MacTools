@@ -28,9 +28,14 @@ private struct MenuBarHiddenPluginProvider: PluginProvider {
 final class MenuBarHiddenPlugin: MacToolsPlugin,
     PluginPrimaryPanel,
     PluginComponentPanel,
+    PluginActionProviding,
     MenuBarHostStatusItemRecovering,
     PluginPanelSurfaceLifecycleHandling
 {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -258,6 +263,36 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "menu bar"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(id: "enabled", title: metadata.title, kind: .boolean),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.enabled", defaultValue: "已开启"))"
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.disabled", defaultValue: "已关闭"))"
+            ),
+        ]
+    }
+
     var configuration: PluginConfiguration? {
         PluginConfiguration(description: metadata.defaultDescription, prefersFullHeight: false) { [controller] _ in
             MenuBarHiddenSettingsView(controller: controller)
@@ -271,6 +306,15 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
         controller.isEnabled = enabled
     }
 
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key.actionID == ActionID.setEnabled,
+              case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        controller.isEnabled = enabled
+        return ActionExecutionHandle { .succeeded() }
+    }
+
     // MARK: - Component panel
 
     func makeView(context: PluginComponentContext) -> AnyView {
@@ -279,6 +323,13 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
                 controller: controller,
                 context: context
             )
+        )
+    }
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
         )
     }
 }

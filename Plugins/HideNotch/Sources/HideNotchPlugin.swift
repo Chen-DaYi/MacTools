@@ -18,7 +18,11 @@ private struct HideNotchPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+    private enum ActionID {
+        static let setEnabled = "set-enabled"
+    }
+
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -100,6 +104,50 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "notch"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(id: "enabled", title: metadata.title, kind: .boolean),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: actionReference(enabled: true),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.enabled", defaultValue: "已开启"))"
+            ),
+            ActionCatalogEntry(
+                reference: actionReference(enabled: false),
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.closing", defaultValue: "正在关闭"))"
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        let snapshot = controller.snapshot()
+        guard snapshot.hasSupportedDisplay || snapshot.isEnabled else {
+            return .unavailable(localization.string(
+                "panel.subtitle.noSupportedDisplay",
+                defaultValue: "未检测到刘海屏"
+            ))
+        }
+        guard !snapshot.isProcessing else {
+            return .unavailable(localization.string("panel.subtitle.closing", defaultValue: "正在关闭"))
+        }
+        return .available
+    }
+
     func refresh() {
         controller.refresh()
     }
@@ -113,6 +161,22 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
         onStateChange?()
     }
 
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key.actionID == ActionID.setEnabled,
+              case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+        }
+        let availability = actionAvailability(for: invocation.reference)
+        guard availability.isAvailable else {
+            return ActionExecutionHandle {
+                .failed(message: availability.reason ?? PluginKitLocalization.actionUnavailable)
+            }
+        }
+        controller.setEnabled(enabled)
+        onStateChange?()
+        return ActionExecutionHandle { .succeeded() }
+    }
+
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)
     }
@@ -120,4 +184,11 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+
+    private func actionReference(enabled: Bool) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
+            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
 }

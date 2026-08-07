@@ -136,6 +136,39 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertEqual(writer.appliedStrategies, [.fullSpeed, .auto])
     }
 
+    func testCanonicalActionsPublishAndApplyEveryFanPreset() async throws {
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+        let custom = plugin.presetStore.addCustomPreset()
+        plugin.presetStore.updateCustomPresetRPM(id: custom.id, rpm: 3800)
+
+        XCTAssertEqual(plugin.actionCatalogEntries.count, 3)
+        let customReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.title.contains(custom.name) })?.reference
+        )
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: customReference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(plugin.presetStore.activePresetID, custom.id)
+        XCTAssertEqual(writer.appliedStrategy, .fixed(rpm: 3800))
+        XCTAssertEqual(plugin.actionDefinitions.first?.externalInvocationPolicy, .confirmAlways)
+    }
+
+    func testDeletedCustomPresetActionBecomesUnavailable() throws {
+        let plugin = makePlugin()
+        let custom = plugin.presetStore.addCustomPreset()
+        let reference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: { $0.title.contains(custom.name) })?.reference
+        )
+
+        plugin.presetStore.deleteCustomPreset(id: custom.id)
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+    }
+
     func testMonitoringOnlyPublishesMeaningfulSnapshotChanges() async throws {
         let firstSnapshot = FanSnapshot(
             fanCount: 1,

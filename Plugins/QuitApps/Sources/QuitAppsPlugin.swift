@@ -24,7 +24,12 @@ private struct QuitAppsPluginProvider: PluginProvider {
 // MARK: - Plugin
 
 @MainActor
-final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorProviding {
+final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorProviding,
+    PluginActionProviding
+{
+    private enum ActionID {
+        static let chooseApps = "choose-apps"
+    }
 
     // MARK: Metadata
 
@@ -49,12 +54,22 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
         category: "QuitAppsPlugin"
     )
     private let localization: PluginLocalization
+    private let runningAppCountProvider: () -> Int
+    private let selectionPresenter: (() -> Void)?
     private var selectionWindow: QuitAppsSelectionWindow?
     private var runningAppCount: Int = 0
     private var appObservers: [NSObjectProtocol] = []
 
-    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+    init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        runningAppCountProvider: @escaping () -> Int = {
+            QuitAppsApplicationCatalog.currentApplicationCount()
+        },
+        selectionPresenter: (() -> Void)? = nil
+    ) {
         self.localization = localization
+        self.runningAppCountProvider = runningAppCountProvider
+        self.selectionPresenter = selectionPresenter
         self.metadata = PluginMetadata(
             id: "quit-apps",
             title: localization.string("metadata.title", defaultValue: "退出应用"),
@@ -97,6 +112,29 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.chooseApps),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "quit", "apps"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive]
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key.actionID == ActionID.chooseApps else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        return runningAppCount > 0
+            ? .available
+            : .unavailable(localization.string("panel.subtitle.none", defaultValue: "无正在运行的应用"))
+    }
+
     // MARK: Lifecycle
 
     func activate(context: PluginRuntimeContext) {
@@ -130,18 +168,25 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
         PluginPermissionState(isGranted: true, footnote: nil)
     }
 
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let availability = actionAvailability(for: invocation.reference)
+        guard availability.isAvailable else {
+            return ActionExecutionHandle {
+                .failed(message: availability.reason ?? PluginKitLocalization.actionUnavailable)
+            }
+        }
+        showSelectionWindow()
+        return ActionExecutionHandle { .succeeded() }
+    }
+
     // MARK: Private – App Count
 
     private func refreshRunningAppCount() {
-        let count = Self.countUserFacingApps()
+        let count = runningAppCountProvider()
         if runningAppCount != count {
             runningAppCount = count
             onStateChange?()
         }
-    }
-
-    private static func countUserFacingApps() -> Int {
-        QuitAppsApplicationCatalog.currentApplicationCount()
     }
 
     private func setupAppObservers() {
@@ -173,6 +218,10 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
     // MARK: Private – Window
 
     private func showSelectionWindow() {
+        if let selectionPresenter {
+            selectionPresenter()
+            return
+        }
         if let existing = selectionWindow, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)

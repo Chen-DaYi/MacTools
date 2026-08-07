@@ -21,12 +21,15 @@ private struct PhysicalCleanModePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing {
+final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing,
+    PluginActionProviding, PluginActionPermissionProviding
+{
     private enum StorageKey {
         static let legacyEnabledState = "feature.cleanModeEnabled"
     }
 
     private enum ActionID {
+        static let enter = "enter"
         static let exitPhysicalCleanMode = "exitPhysicalCleanMode"
     }
 
@@ -55,6 +58,8 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
 
     private let storage: PluginStorage
     private let localization: PluginLocalization
+    private let accessibilityReader: @MainActor () -> Bool
+    private let accessibilityRequester: @MainActor (Bool) -> Bool
     private let logger = PhysicalCleanModeLog.plugin
     private var isAccessibilityGranted: Bool
     private var lastErrorKey: String?
@@ -63,10 +68,14 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "physical-clean-mode"),
-        userDefaults: UserDefaults? = nil
+        userDefaults: UserDefaults? = nil,
+        accessibilityReader: @escaping @MainActor () -> Bool = AccessibilityCheck.isTrusted,
+        accessibilityRequester: @escaping @MainActor (Bool) -> Bool = AccessibilityCheck.requestTrust
     ) {
         let localization = PluginLocalization(bundle: context.resourceBundle)
         self.localization = localization
+        self.accessibilityReader = accessibilityReader
+        self.accessibilityRequester = accessibilityRequester
         self.storage = userDefaults.map {
             UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
         } ?? context.storage
@@ -81,7 +90,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
                 defaultValue: "屏幕全黑并临时禁用键盘输入"
             )
         )
-        self.isAccessibilityGranted = AccessibilityCheck.isTrusted()
+        self.isAccessibilityGranted = accessibilityReader()
 
         storage.migrateValueIfNeeded(
             fromLegacyKey: StorageKey.legacyEnabledState,
@@ -146,9 +155,50 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         ]
     }
 
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.enter),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "clean", "keyboard"],
+                systemImage: metadata.iconName,
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: metadata.title,
+                    message: metadata.defaultDescription,
+                    confirmButtonTitle: metadata.title
+                ),
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive]
+            ),
+        ]
+    }
+
+    func permissionRequirementIDs(for actionKey: ActionKey) -> [String] {
+        actionKey.actionID == ActionID.enter ? [PermissionID.accessibility] : []
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key.actionID == ActionID.enter else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        guard session == nil else {
+            return .unavailable(panelSubtitle)
+        }
+        guard isAccessibilityGranted else {
+            return .unavailable(localizedErrorMessage(for: "error.accessibilityRequired"))
+        }
+        guard let exitBinding = shortcutBindingResolver?(ShortcutID.exitPhysicalCleanMode),
+              exitBinding.isValid else {
+            return .unavailable(localizedErrorMessage(for: "error.invalidExitShortcut"))
+        }
+        return .available
+    }
+
     func refresh() {
         let previousAccessState = isAccessibilityGranted
-        isAccessibilityGranted = AccessibilityCheck.isTrusted()
+        isAccessibilityGranted = accessibilityReader()
 
         if isAccessibilityGranted {
             clearErrorIfKey("error.accessibilityRequired")
@@ -216,6 +266,21 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         session?.requestStop(reason: .userRequested)
     }
 
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let availability = actionAvailability(for: invocation.reference)
+        guard availability.isAvailable else {
+            return ActionExecutionHandle {
+                .failed(message: availability.reason ?? PluginKitLocalization.actionUnavailable)
+            }
+        }
+        enablePhysicalCleanModeIfPossible()
+        let succeeded = session != nil
+        let failureMessage = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
+        return ActionExecutionHandle {
+            succeeded ? .succeeded() : .failed(message: failureMessage)
+        }
+    }
+
     private var panelSubtitle: String {
         if let session {
             return localization.format(
@@ -236,7 +301,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         if PhysicalCleanModeLog.isVerboseLoggingEnabled {
             logger.debug("request accessibility permission showSettingsGuidance=\(showSettingsGuidance, privacy: .public)")
         }
-        isAccessibilityGranted = AccessibilityCheck.requestTrust(prompt: true)
+        isAccessibilityGranted = accessibilityRequester(true)
 
         if isAccessibilityGranted {
             clearError()
@@ -267,7 +332,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
     }
 
     private func enablePhysicalCleanModeIfPossible() {
-        isAccessibilityGranted = AccessibilityCheck.isTrusted()
+        isAccessibilityGranted = accessibilityReader()
 
         guard isAccessibilityGranted else {
             requestAccessibilityPermission(showSettingsGuidance: true)

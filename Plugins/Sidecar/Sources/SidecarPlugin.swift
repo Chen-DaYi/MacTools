@@ -38,6 +38,32 @@ private enum SidecarShortcutID {
 
 }
 
+private enum SidecarActionID {
+    static let connectFirstAvailable = "connect-first-available"
+    static let disconnectAll = "disconnect-all"
+    static let devicePrefix = "device."
+
+    static func device(_ deviceID: String) -> String {
+        let normalized = deviceID.lowercased()
+        if normalized.utf8.count <= 96,
+           normalized.unicodeScalars.allSatisfy({ scalar in
+               CharacterSet.alphanumerics.contains(scalar)
+                   || scalar == "."
+                   || scalar == "_"
+                   || scalar == "-"
+           }) {
+            return devicePrefix + normalized
+        }
+
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in deviceID.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 0x100000001b3
+        }
+        return devicePrefix + String(format: "%016llx", hash)
+    }
+}
+
 private struct SidecarSwitchRequest {
     let source: SidecarDevice
     let target: SidecarDevice
@@ -46,7 +72,8 @@ private struct SidecarSwitchRequest {
 
 @MainActor
 final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
-    PluginPortablePreferencesProviding, PluginShortcutBindingChangeHandling {
+    PluginPortablePreferencesProviding, PluginShortcutBindingChangeHandling, PluginActionProviding,
+    PluginLegacyActionShortcutProviding {
     let metadata: PluginMetadata
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -75,6 +102,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     private var deviceRefreshTask: Task<Void, Never>?
     private var followUpRefreshTask: Task<Void, Never>?
     private var switchRequest: SidecarSwitchRequest?
+    private var actionCompletion: ((ActionExecutionResult) -> Void)?
     private var disconnectAllRemainingCount = 0
     private var disconnectAllErrorMessage: String?
     private var isActive = false
@@ -162,6 +190,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         let globalDefinitions = [
             shortcutDefinition(
                 id: SidecarShortcutID.connectFirstAvailable,
+                actionID: SidecarActionID.connectFirstAvailable,
                 title: localization.string(
                     "settings.connectFirstAvailable.title",
                     defaultValue: "连接第一个可用显示器"
@@ -176,6 +205,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             ),
             shortcutDefinition(
                 id: SidecarShortcutID.disconnectAll,
+                actionID: SidecarActionID.disconnectAll,
                 title: localization.string("settings.disconnectAll.title", defaultValue: "断开所有已连接设备"),
                 description: localization.string(
                     "settings.disconnectAll.description",
@@ -194,6 +224,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             .map { preference in
                 shortcutDefinition(
                     id: SidecarShortcutID.device(preference.id),
+                    actionID: SidecarActionID.device(preference.id),
                     title: preference.name,
                     description: localization.string(
                         "settings.shortcutAction.help",
@@ -206,6 +237,161 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             }
 
         return globalDefinitions + deviceDefinitions
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        let globalActions = [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: SidecarActionID.connectFirstAvailable),
+                title: localization.string(
+                    "settings.connectFirstAvailable.title",
+                    defaultValue: "连接第一个可用显示器"
+                ),
+                description: localization.string(
+                    "settings.connectFirstAvailable.description",
+                    defaultValue: "按上方的可用显示器优先级连接第一个设备。"
+                ),
+                keywords: [metadata.title, "Sidecar"],
+                systemImage: "display.badge.plus",
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive],
+                executionTimeoutSeconds: 20
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: SidecarActionID.disconnectAll),
+                title: localization.string(
+                    "settings.disconnectAll.title",
+                    defaultValue: "断开所有已连接设备"
+                ),
+                description: localization.string(
+                    "settings.disconnectAll.description",
+                    defaultValue: "只会断开 Sidecar 明确报告为已连接的显示器。"
+                ),
+                keywords: [metadata.title, "Sidecar"],
+                systemImage: "display.badge.minus",
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive],
+                executionTimeoutSeconds: 20
+            ),
+        ]
+
+        return globalActions + preferences.devices.map { preference in
+            ActionDefinition(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: SidecarActionID.device(preference.id)
+                ),
+                title: deviceActionTitle(for: preference),
+                description: localization.string(
+                    "settings.shortcutAction.help",
+                    defaultValue: "此设备快捷键执行的操作"
+                ),
+                keywords: [metadata.title, preference.name, "Sidecar"],
+                systemImage: deviceActionIcon(for: preference.shortcutAction),
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive],
+                executionTimeoutSeconds: 20
+            )
+        }
+    }
+
+    var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] {
+        shortcutDefinitions.compactMap { definition in
+            guard let binding = shortcutBindingResolver?(definition.id) else {
+                return nil
+            }
+            return LegacyActionShortcutAssignment(
+                reference: ActionReference(
+                    key: ActionKey(providerID: metadata.id, actionID: definition.actionID)
+                ),
+                binding: binding,
+                legacyShortcutDefinitionID: definition.id
+            )
+        }
+    }
+
+    func legacyActionShortcutsDidMigrate() {
+        preferences.clearLegacyShortcuts()
+        onStateChange?()
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard isActive else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        guard case .available = service.availability else {
+            return .unavailable(unsupportedMessageForCurrentService())
+        }
+        guard !isOperationPending else {
+            return .unavailable(operation.map(operationSubtitle) ?? PluginKitLocalization.actionUnavailable)
+        }
+
+        switch reference.key.actionID {
+        case SidecarActionID.connectFirstAvailable:
+            guard !devices.contains(where: { $0.connectionState == .connected }) else {
+                return .unavailable(localization.string(
+                    "shortcut.error.displayAlreadyConnected",
+                    defaultValue: "已有 Sidecar 显示器连接；请使用设备的“切换”操作"
+                ))
+            }
+            guard let device = orderedDevices.first(where: { $0.connectionState == .disconnected }) else {
+                return .unavailable(localization.string(
+                    "shortcut.error.noAvailableDevices",
+                    defaultValue: "没有可连接的 Sidecar 显示器"
+                ))
+            }
+            return supports(connectAction(for: device))
+                ? .available
+                : .unavailable(localizedErrorMessage(for: .operationUnavailable))
+
+        case SidecarActionID.disconnectAll:
+            return devices.contains(where: { $0.connectionState == .connected })
+                ? .available
+                : .unavailable(localization.string(
+                    "shortcut.error.noConnectedDevices",
+                    defaultValue: "没有已连接的 Sidecar 显示器可断开"
+                ))
+
+        default:
+            guard let preference = preference(forActionID: reference.key.actionID),
+                  let device = devices.first(where: { $0.id == preference.id }) else {
+                return .unavailable(localizedErrorMessage(for: .deviceUnavailable))
+            }
+            switch preference.shortcutAction {
+            case .connect:
+                guard device.connectionState == .disconnected else {
+                    return .unavailable(localization.string(
+                        "shortcut.error.stateUnknown",
+                        defaultValue: "无法确定此 Sidecar 显示器的连接状态"
+                    ))
+                }
+                return supports(connectAction(for: device))
+                    ? .available
+                    : .unavailable(localizedErrorMessage(for: .operationUnavailable))
+            case .disconnect:
+                return device.connectionState == .connected
+                    ? .available
+                    : .unavailable(localization.string(
+                        "shortcut.error.notConnected",
+                        defaultValue: "该 Sidecar 显示器当前未连接"
+                    ))
+            case .toggle:
+                return device.connectionState == .unknown
+                    ? .unavailable(localization.string(
+                        "shortcut.error.stateUnknown",
+                        defaultValue: "无法确定此 Sidecar 显示器的连接状态"
+                    ))
+                    : .available
+            }
+        }
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        let actionID = invocation.reference.key.actionID
+        return ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return await self.executeCanonicalAction(actionID: actionID)
+        }
     }
 
     var configuration: PluginConfiguration? {
@@ -251,6 +437,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operationToken = nil
         terminalFeedbackDate = nil
         switchRequest = nil
+        completeCanonicalAction(.cancelled)
     }
 
     func refresh() {
@@ -400,6 +587,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             operationFeedbackTask?.cancel()
             operationFeedbackTask = nil
             switchRequest = nil
+            completeCanonicalAction(.failed(message: localizedErrorMessage(for: .deviceUnavailable)))
         }
         clearCompletedOperationIfSnapshotConfirmsIt()
         if notify && changed {
@@ -698,9 +886,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             disconnectAllConnectedDevices()
             return
         }
-        guard id.hasPrefix(SidecarShortcutID.devicePrefix) else { return }
-        let deviceID = String(id.dropFirst(SidecarShortcutID.devicePrefix.count))
-        guard let preference = preferences.preference(for: deviceID) else { return }
+        guard let preference = preference(forActionID: id) ?? legacyPreference(forShortcutID: id) else {
+            return
+        }
+        let deviceID = preference.id
         guard let device = devices.first(where: { $0.id == deviceID }) else {
             presentShortcutFailure(
                 action: preference.shortcutAction == .disconnect ? .disconnect : .connect,
@@ -761,6 +950,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         markTerminalFeedback()
         scheduleOperationFeedbackDismissal()
         onStateChange?()
+        completeCanonicalAction(.failed(message: message))
     }
 
     private func disconnectAllConnectedDevices() {
@@ -801,6 +991,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             self?.markTerminalFeedback()
             self?.scheduleOperationFeedbackDismissal()
             self?.onStateChange?()
+            self?.completeCanonicalAction(.failed(message: self?.localization.string(
+                "panel.error.timeout",
+                defaultValue: "Sidecar 操作超时"
+            ) ?? PluginKitLocalization.actionUnavailable))
         }
         onStateChange?()
 
@@ -895,20 +1089,22 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             logger.info("Sidecar switch disconnected source=\(switchRequest.source.name, privacy: .public)")
             startSwitchConnect(switchRequest)
         case .failure:
+            let message = localization.format(
+                "panel.error.switchDisconnectFailed",
+                defaultValue: "无法断开 %@，因此无法切换到 %@",
+                switchRequest.source.name,
+                switchRequest.target.name
+            )
             operation = .failed(
                 .connect,
                 deviceName: switchRequest.target.name,
-                message: localization.format(
-                    "panel.error.switchDisconnectFailed",
-                    defaultValue: "无法断开 %@，因此无法切换到 %@",
-                    switchRequest.source.name,
-                    switchRequest.target.name
-                )
+                message: message
             )
             operationDeviceID = switchRequest.target.id
             markTerminalFeedback()
             scheduleOperationFeedbackDismissal()
             onStateChange?()
+            completeCanonicalAction(.failed(message: message))
         }
     }
 
@@ -942,8 +1138,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         if let disconnectAllErrorMessage {
             operation = .failed(.disconnect, deviceName: target, message: disconnectAllErrorMessage)
             self.disconnectAllErrorMessage = nil
+            completeCanonicalAction(.failed(message: disconnectAllErrorMessage))
         } else {
             operation = .succeeded(.disconnect, deviceName: target)
+            completeCanonicalAction(.succeeded())
         }
         markTerminalFeedback()
         refreshDevices(notify: false)
@@ -1006,6 +1204,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         switch result {
         case .success:
             operation = .succeeded(action, deviceName: device.name)
+            completeCanonicalAction(.succeeded())
             logger.info("Sidecar operation completed action=\(String(describing: action), privacy: .public) device=\(device.name, privacy: .public)")
         case let .failure(error):
             let underlyingMessage = localizedErrorMessage(for: error)
@@ -1022,6 +1221,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 message = underlyingMessage
             }
             operation = .failed(action, deviceName: device.name, message: message)
+            completeCanonicalAction(.failed(message: message))
             logger.error("Sidecar operation failed action=\(String(describing: action), privacy: .public) reason=\(message, privacy: .public)")
         }
         markTerminalFeedback()
@@ -1038,6 +1238,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operationToken = nil
         timeoutTask = nil
         operation = .timedOut(action, deviceName: device.name)
+        completeCanonicalAction(.failed(message: localization.string(
+            "panel.error.timeout",
+            defaultValue: "Sidecar 操作超时"
+        )))
         markTerminalFeedback()
         logger.error("Sidecar operation timed out action=\(String(describing: action), privacy: .public) device=\(device.name, privacy: .public)")
         scheduleOperationFeedbackDismissal()
@@ -1270,6 +1474,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
 
     private func shortcutDefinition(
         id: String,
+        actionID: String,
         title: String,
         description: String,
         defaultBinding: ShortcutBinding?,
@@ -1280,7 +1485,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             id: id,
             title: title,
             description: description,
-            actionID: id,
+            actionID: actionID,
             scope: .global,
             defaultBinding: defaultBinding,
             isRequired: false,
@@ -1290,5 +1495,87 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             settingsControlTitle: nil,
             settingsControlSystemImage: nil
         )
+    }
+
+    private func preference(forActionID actionID: String) -> SidecarDevicePreference? {
+        preferences.devices.first { SidecarActionID.device($0.id) == actionID }
+    }
+
+    private func legacyPreference(forShortcutID shortcutID: String) -> SidecarDevicePreference? {
+        guard shortcutID.hasPrefix(SidecarShortcutID.devicePrefix) else { return nil }
+        return preferences.preference(
+            for: String(shortcutID.dropFirst(SidecarShortcutID.devicePrefix.count))
+        )
+    }
+
+    private func deviceActionTitle(for preference: SidecarDevicePreference) -> String {
+        let actionTitle = switch preference.shortcutAction {
+        case .toggle:
+            localization.string("settings.shortcutAction.toggle", defaultValue: "切换")
+        case .connect:
+            preference.transport == .wiredOnly
+                ? localization.string("panel.action.wiredConnect", defaultValue: "仅通过有线连接")
+                : localization.string("panel.action.connect", defaultValue: "连接")
+        case .disconnect:
+            localization.string("panel.action.disconnect", defaultValue: "断开连接")
+        }
+        return "\(preference.name) · \(actionTitle)"
+    }
+
+    private func deviceActionIcon(for action: SidecarShortcutAction) -> String {
+        switch action {
+        case .toggle: "rectangle.2.swap"
+        case .connect: "display.badge.plus"
+        case .disconnect: "display.badge.minus"
+        }
+    }
+
+    private func unsupportedMessageForCurrentService() -> String {
+        if case let .unsupported(reason) = service.availability {
+            return unsupportedMessage(for: reason)
+        }
+        return PluginKitLocalization.actionUnavailable
+    }
+
+    private func executeCanonicalAction(actionID: String) async -> ActionExecutionResult {
+        let reference = ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: actionID)
+        )
+        let availability = actionAvailability(for: reference)
+        guard availability.isAvailable else {
+            return .failed(message: availability.reason ?? PluginKitLocalization.actionUnavailable)
+        }
+        guard actionCompletion == nil else {
+            return .failed(message: PluginKitLocalization.actionUnavailable)
+        }
+
+        return await withCheckedContinuation { continuation in
+            actionCompletion = { result in
+                continuation.resume(returning: result)
+            }
+
+            switch actionID {
+            case SidecarActionID.connectFirstAvailable:
+                connectFirstAvailableDevice()
+            case SidecarActionID.disconnectAll:
+                disconnectAllConnectedDevices()
+            default:
+                guard let preference = preference(forActionID: actionID) else {
+                    completeCanonicalAction(.failed(message: PluginKitLocalization.actionUnavailable))
+                    return
+                }
+                handleConfiguredShortcut(id: SidecarShortcutID.device(preference.id))
+            }
+
+            if !isOperationPending, actionCompletion != nil {
+                completeCanonicalAction(.failed(message: PluginKitLocalization.actionUnavailable))
+            }
+        }
+    }
+
+    private func completeCanonicalAction(_ result: ActionExecutionResult) {
+        guard let completion = actionCompletion else { return }
+        actionCompletion = nil
+        completion(result)
     }
 }
