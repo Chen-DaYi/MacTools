@@ -28,10 +28,8 @@ final class AccessibilityPermissionObserver: AccessibilityPermissionObserving {
         startPolling()
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            pollingTimer?.invalidate()
-        }
+    isolated deinit {
+        pollingTimer?.invalidate()
     }
 
     // MARK: - Private

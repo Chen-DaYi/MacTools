@@ -6,11 +6,11 @@ final class TrackpadTypingSuppressionGateTests: XCTestCase {
         let gate = TrackpadTypingSuppressionGate()
 
         gate.observeKeyDown(keyCode: 0, at: 1.0)
-        XCTAssertTrue(gate.shouldSuppress(at: 10.0), "a held key has no timeout")
+        XCTAssertTrue(gate.shouldSuppress(at: 4.9))
 
-        gate.observeKeyUp(keyCode: 0, at: 10.0)
-        XCTAssertTrue(gate.shouldSuppress(at: 10.399))
-        XCTAssertFalse(gate.shouldSuppress(at: 10.4))
+        gate.observeKeyUp(keyCode: 0, at: 4.9)
+        XCTAssertTrue(gate.shouldSuppress(at: 5.299))
+        XCTAssertFalse(gate.shouldSuppress(at: 5.301))
     }
 
     func testRepeatedAndOverlappingKeysExtendSuppressionUntilEveryKeyIsReleased() {
@@ -26,6 +26,25 @@ final class TrackpadTypingSuppressionGateTests: XCTestCase {
         gate.observeKeyUp(keyCode: 1, at: 5.0)
         XCTAssertTrue(gate.shouldSuppress(at: 5.199))
         XCTAssertFalse(gate.shouldSuppress(at: 5.2))
+    }
+
+    func testMissedKeyUpCannotSuppressGesturesForever() {
+        let gate = TrackpadTypingSuppressionGate()
+
+        gate.observeKeyDown(keyCode: 0, at: 1.0)
+
+        XCTAssertTrue(gate.shouldSuppress(at: 5.999))
+        XCTAssertFalse(gate.shouldSuppress(at: 6.0))
+    }
+
+    func testRepeatedKeyDownRefreshesHeldKeyLifetime() {
+        let gate = TrackpadTypingSuppressionGate()
+
+        gate.observeKeyDown(keyCode: 0, at: 1.0)
+        gate.observeKeyDown(keyCode: 0, at: 5.0)
+
+        XCTAssertTrue(gate.shouldSuppress(at: 9.999))
+        XCTAssertFalse(gate.shouldSuppress(at: 10.0))
     }
 
     func testDisablingAndResettingClearHeldKeyState() {

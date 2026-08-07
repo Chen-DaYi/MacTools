@@ -38,7 +38,8 @@ private struct TrackpadGestureReadinessError: LocalizedError {
 @MainActor
 final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     AccessibilityPermissionRefreshing, PluginConfigurationPresenting,
-    PluginFeatureExtractionReadinessProviding {
+    PluginFeatureExtractionReadinessProviding, TrackpadActionHostContextConsuming,
+    PluginPortablePreferencesProviding {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -51,6 +52,13 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestConfigurationPresentation: (() -> Void)?
+    var trackpadActionHostContext: TrackpadActionHostContext? {
+        didSet {
+            if let trackpadActionHostContext {
+                _ = store.migrateActions(using: trackpadActionHostContext)
+            }
+        }
+    }
 
     let store: TrackpadGestureStore
 
@@ -123,7 +131,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             order: 57,
             defaultDescription: resolvedLocalization.string(
                 "metadata.description",
-                defaultValue: "将触控板手势映射为快捷键或中键点击"
+                defaultValue: "将触控板手势映射为 MacTools 操作、快捷键或中键点击"
             )
         )
 
@@ -208,6 +216,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             return AnyView(TrackpadGesturesSettingsView(
                 store: self.store,
                 localization: self.localization,
+                actionHostContext: self.trackpadActionHostContext,
                 onChange: { [weak self] in self?.configurationDidChange() },
                 onSetTesting: { [weak self] enabled in self?.setTesting(enabled) }
             ))
@@ -316,7 +325,11 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
            clickResolution == .middleClick {
             return
         }
-        actionExecutor.execute(mapping.action)
+        if case let .action(reference) = mapping.action {
+            trackpadActionHostContext?.execute(reference)
+        } else {
+            actionExecutor.execute(mapping.action)
+        }
     }
 
     private func refreshPermissionsAndApply() {
@@ -346,7 +359,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.refreshPermissionsAndApply()
                 self.onStateChange?()
@@ -398,9 +411,11 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
                 switch mapping.action {
                 case .middleClick:
                     return (mapping.gesture, .middleClick)
+                case .action where mapping.gesture.tipTapConfiguration != nil:
+                    return (mapping.gesture, .consume)
                 case .keyboardShortcut where mapping.gesture.tipTapConfiguration != nil:
                     return (mapping.gesture, .consume)
-                case .keyboardShortcut:
+                case .action, .keyboardShortcut:
                     return nil
                 }
             })
@@ -463,5 +478,22 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             return localization.string("panel.subtitle.needsPermission", defaultValue: "需要完成权限设置")
         }
         return localization.format("panel.subtitle.enabledCountFormat", defaultValue: "%d 个手势已启用", count)
+    }
+
+    func trackpadActionCatalogDidChange() {
+        guard let trackpadActionHostContext else { return }
+        if store.migrateActions(using: trackpadActionHostContext) {
+            onStateChange?()
+        }
+    }
+
+    func makePortablePreferencesBackup() -> Data? {
+        store.portableBackup()
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        if store.restorePortableBackup(data) {
+            configurationDidChange()
+        }
     }
 }

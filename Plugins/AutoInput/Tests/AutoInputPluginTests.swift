@@ -155,6 +155,34 @@ final class AutoInputControllerTests: XCTestCase {
 }
 
 @MainActor
+final class AutoInputApplicationMonitorTests: XCTestCase {
+    func testWorkspaceActivationHopsSafelyToMainActor() async {
+        let notificationCenter = NotificationCenter()
+        let monitor = WorkspaceAutoInputApplicationMonitor(
+            notificationCenter: notificationCenter
+        )
+        let activated = expectation(description: "application activation delivered")
+        monitor.onApplicationActivated = { application in
+            XCTAssertTrue(Thread.isMainThread)
+            XCTAssertEqual(application.bundleIdentifier, NSRunningApplication.current.bundleIdentifier)
+            activated.fulfill()
+        }
+        monitor.start()
+        defer { monitor.stop() }
+
+        notificationCenter.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [
+                NSWorkspace.applicationUserInfoKey: NSRunningApplication.current,
+            ]
+        )
+
+        await fulfillment(of: [activated], timeout: 1)
+    }
+}
+
+@MainActor
 final class AutoInputPluginPanelTests: XCTestCase {
     func testPanelReflectsDefaultsRulesAndPause() {
         let storage = AutoInputMemoryStorage()

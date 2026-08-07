@@ -319,7 +319,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
+                DispatchQueue.main.async { [weak self] in
                     self?.settingsWindow?.title = Self.settingsWindowTitle
                     self?.commandPalettePanel?.setAccessibilityTitle(Self.commandPaletteWindowTitle)
                     self?.commandPaletteState?.refreshLocalization()
@@ -330,7 +330,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 self?.dismissCommandPalette()
             }
         }
@@ -571,6 +571,12 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         case let .pluginConfiguration(pluginID):
             pendingAppUpdateVersion = nil
             settingsNavigationCoordinator?.navigate(to: .plugins(.configuration(pluginID)))
+        case let .automationWorkflow(workflowID):
+            pendingAppUpdateVersion = nil
+            _ = settingsNavigationCoordinator?.navigateFromSearch(
+                to: .plugins(.automation),
+                target: .automation(.init(workflowID: workflowID))
+            )
         case let .feature(pane):
             pendingAppUpdateVersion = nil
             settingsNavigationCoordinator?.navigate(to: .plugins(pane))
@@ -600,8 +606,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private func clearAutomaticInitialFocusAfterPresentation(in window: NSWindow) {
         // SwiftUI assigns an initial responder after installing the visible hierarchy.
         // Wait for that pass, then leave focus entry to Tab or an explicit search request.
-        Task { @MainActor [weak self, weak window] in
-            await Task.yield()
+        DispatchQueue.main.async { [weak self, weak window] in
             guard
                 let self,
                 let window,

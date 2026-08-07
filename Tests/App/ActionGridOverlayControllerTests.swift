@@ -28,8 +28,34 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
 
         XCTAssertTrue(visible.insetBy(dx: 9, dy: 9).contains(frame))
-        XCTAssertEqual(ActionGridOverlayGeometry.columnCount(for: 6), 2)
+        XCTAssertEqual(ActionGridOverlayGeometry.columnCount(for: 6), 3)
         XCTAssertEqual(ActionGridOverlayGeometry.columnCount(for: 7), 3)
+    }
+
+    func testGeometryPlacesCenterCellAtPointerWhenDisplayHasRoom() {
+        let visible = CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        let pointer = CGPoint(x: 720, y: 450)
+        let frame = ActionGridOverlayGeometry.targetFrame(
+            pointer: pointer,
+            visibleFrame: visible,
+            itemCount: 9
+        )
+
+        XCTAssertEqual(frame.midX, pointer.x, accuracy: 0.001)
+        XCTAssertEqual(frame.midY, pointer.y, accuracy: 0.001)
+    }
+
+    func testGeometryMovesRelativeToPointerToRemainFullyVisible() {
+        let visible = CGRect(x: 1_000, y: 200, width: 700, height: 500)
+        let frame = ActionGridOverlayGeometry.targetFrame(
+            pointer: CGPoint(x: visible.maxX - 1, y: visible.maxY - 1),
+            visibleFrame: visible,
+            itemCount: 9
+        )
+
+        XCTAssertEqual(frame.maxX, visible.maxX - 10, accuracy: 0.001)
+        XCTAssertEqual(frame.maxY, visible.maxY - 10, accuracy: 0.001)
+        XCTAssertTrue(visible.insetBy(dx: 9, dy: 9).contains(frame))
     }
 
     func testKeyboardNavigationUsesStableRowMajorPositions() {
@@ -43,6 +69,120 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertEqual(ActionGridKeyCommand.resolve(keyCode: 123, characters: nil), .move(.left))
         XCTAssertEqual(ActionGridKeyCommand.resolve(keyCode: 0, characters: "7"), .select(7))
         XCTAssertNil(ActionGridKeyCommand.resolve(keyCode: 0, characters: "0"))
+    }
+
+    func testKeyboardNavigationPreservesSparseGridSlots() {
+        let occupied: Set<Int> = [0, 2, 7]
+
+        XCTAssertEqual(
+            ActionGridKeyboardNavigation.nextOccupiedSlot(
+                from: 0,
+                direction: .right,
+                occupiedSlots: occupied
+            ),
+            2
+        )
+        XCTAssertEqual(
+            ActionGridKeyboardNavigation.nextOccupiedSlot(
+                from: 7,
+                direction: .up,
+                occupiedSlots: occupied
+            ),
+            7
+        )
+        XCTAssertEqual(
+            ActionGridKeyboardNavigation.nextOccupiedSlot(
+                from: 2,
+                direction: .left,
+                occupiedSlots: occupied
+            ),
+            0
+        )
+    }
+
+    func testKeyboardNavigationPrefersCenterThenNearestOccupiedSlot() {
+        XCTAssertEqual(
+            ActionGridKeyboardNavigation.preferredInitialSlot(
+                occupiedSlots: [0, 1, 4, 8]
+            ),
+            4
+        )
+        XCTAssertEqual(
+            ActionGridKeyboardNavigation.preferredInitialSlot(
+                occupiedSlots: [0, 1, 8]
+            ),
+            1
+        )
+        XCTAssertEqual(
+            ActionGridKeyboardNavigation.preferredInitialSlot(occupiedSlots: []),
+            0
+        )
+    }
+
+    func testModelSelectsCenterEntryWhenPresentedAndInsideFolders() {
+        let reference = ActionReference(key: ActionKey(providerID: "provider", actionID: "run"))
+        let model = ActionGridOverlayModel(
+            resolver: { entry in
+                ResolvedActionGridEntry(
+                    id: entry.id,
+                    reference: entry.reference,
+                    title: entry.customTitle ?? entry.id,
+                    ownerTitle: "Owner",
+                    systemImage: "bolt",
+                    availability: .available,
+                    children: entry.children
+                )
+            },
+            executor: { _ in .completed(.succeeded()) }
+        )
+        let children = [
+            ActionGridPresentationEntry(id: "child-top", reference: reference, slotIndex: 0),
+            ActionGridPresentationEntry(id: "child-center", reference: reference, slotIndex: 4),
+        ]
+        model.update([
+            ActionGridPresentationEntry(id: "top", reference: reference, slotIndex: 0),
+            ActionGridPresentationEntry(
+                id: "folder",
+                folderTitle: "Folder",
+                children: children,
+                slotIndex: 4
+            ),
+        ])
+
+        XCTAssertEqual(model.selectedIndex, 4)
+        model.activateSelected()
+        XCTAssertEqual(model.navigationTitle, "Folder")
+        XCTAssertEqual(model.selectedIndex, 4)
+    }
+
+    func testPointerActivationWaitsForGestureReleaseGracePeriod() {
+        let presentedAt: TimeInterval = 10
+
+        XCTAssertFalse(ActionGridPointerActivationPolicy.acceptsPointerEvent(
+            eventUptime: presentedAt,
+            presentationUptime: presentedAt,
+            source: .globalShortcut
+        ))
+        XCTAssertFalse(ActionGridPointerActivationPolicy.acceptsPointerEvent(
+            eventUptime: presentedAt + 0.34,
+            presentationUptime: presentedAt,
+            source: .globalShortcut
+        ))
+        XCTAssertTrue(ActionGridPointerActivationPolicy.acceptsPointerEvent(
+            eventUptime: presentedAt + 0.36,
+            presentationUptime: presentedAt,
+            source: .globalShortcut
+        ))
+        XCTAssertFalse(ActionGridPointerActivationPolicy.acceptsPointerEvent(
+            eventUptime: presentedAt + 0.79,
+            presentationUptime: presentedAt,
+            source: .trackpadGesture
+        ))
+        XCTAssertTrue(ActionGridPointerActivationPolicy.acceptsPointerEvent(
+            eventUptime: presentedAt + 0.81,
+            presentationUptime: presentedAt,
+            source: .trackpadGesture
+        ))
     }
 
     func testAccessibilityLabelIncludesOwnerAvailabilityAndDisabledReason() {
@@ -97,6 +237,26 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
     }
 
+    func testRepeatedCloseAndPresentationKeepsOneLiveOverlayPanel() throws {
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let entry = ActionGridPresentationEntry(
+            id: "one",
+            reference: ActionReference(key: ActionKey(providerID: "missing", actionID: "run"))
+        )
+
+        for _ in 0 ..< 20 {
+            XCTAssertTrue(controller.present(entries: [entry]))
+            controller.close(restoringFocus: false)
+        }
+
+        XCTAssertFalse(controller.isShown)
+        XCTAssertTrue(NSApp.windows.filter {
+            $0.identifier == ActionGridOverlayController.panelIdentifier && $0.isVisible
+        }.isEmpty)
+    }
+
     func testPresentedPanelSupportsSpacesAndEscapeDismissal() throws {
         let host = makePluginHostForTests(plugins: [])
         let controller = ActionGridOverlayController(pluginHost: host)
@@ -142,6 +302,47 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         controller.dismissIfPointerIsOutside(
             CGPoint(x: frame.maxX + 1, y: frame.maxY + 1)
         )
+        XCTAssertFalse(controller.isShown)
+    }
+
+    func testDashboardActionExecutesThroughOverlayAndDismisses() async throws {
+        let host = makePluginHostForTests(plugins: [])
+        var presentationRequests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { presentationRequests.append($0) }
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let entry = ActionGridPresentationEntry(
+            id: "dashboard",
+            reference: ActionReference(
+                key: ActionKey(
+                    providerID: "mactools",
+                    actionID: AppShortcutAction.toggleDashboard.rawValue
+                )
+            )
+        )
+
+        XCTAssertTrue(controller.present(entries: [entry]))
+        let enter = try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: "\r",
+                charactersIgnoringModifiers: "\r",
+                isARepeat: false,
+                keyCode: 36
+            )
+        )
+        XCTAssertTrue(controller.processKeyEvent(enter))
+
+        for _ in 0 ..< 50 where presentationRequests.isEmpty || controller.isShown {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(presentationRequests, [.toggleDashboard])
         XCTAssertFalse(controller.isShown)
     }
 
@@ -219,8 +420,8 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
         model.onSuccessfulExecution = { dismissed = true }
         model.update([
-            ActionGridPresentationEntry(id: "unavailable", reference: reference),
-            ActionGridPresentationEntry(id: "available", reference: reference),
+            ActionGridPresentationEntry(id: "unavailable", reference: reference, slotIndex: 4),
+            ActionGridPresentationEntry(id: "available", reference: reference, slotIndex: 1),
         ])
 
         model.activateSelected()
@@ -234,6 +435,57 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         }
         XCTAssertEqual(executionCount, 1)
         XCTAssertTrue(dismissed)
+    }
+
+    func testFolderNavigationStaysInOverlayAndDoesNotExecuteFolderSentinel() {
+        let actionReference = ActionReference(
+            key: ActionKey(providerID: "lock-screen", actionID: "lock")
+        )
+        let child = ActionGridPresentationEntry(id: "lock", reference: actionReference)
+        let folder = ActionGridPresentationEntry(
+            id: "system",
+            folderTitle: "System",
+            children: [child]
+        )
+        var executed: [ActionReference] = []
+        let model = ActionGridOverlayModel(
+            resolver: { entry in
+                if let children = entry.children {
+                    return ResolvedActionGridEntry(
+                        id: entry.id,
+                        reference: entry.reference,
+                        title: entry.customTitle ?? "Folder",
+                        ownerTitle: "Folder",
+                        systemImage: "folder.fill",
+                        availability: .available,
+                        children: children
+                    )
+                }
+                return ResolvedActionGridEntry(
+                    id: entry.id,
+                    reference: entry.reference,
+                    title: "Lock Screen",
+                    ownerTitle: "System",
+                    systemImage: "lock",
+                    availability: .available
+                )
+            },
+            executor: {
+                executed.append($0)
+                return .completed(.succeeded())
+            }
+        )
+        model.update([folder])
+
+        model.activateSelected()
+        XCTAssertEqual(model.navigationTitle, "System")
+        XCTAssertEqual(model.entries.map(\.title), ["Lock Screen"])
+        XCTAssertTrue(executed.isEmpty)
+
+        XCTAssertTrue(model.navigateBack())
+        XCTAssertNil(model.navigationTitle)
+        XCTAssertEqual(model.entries.map(\.title), ["System"])
+        XCTAssertFalse(model.navigateBack())
     }
 
     private func testEntry() -> ActionGridPresentationEntry {

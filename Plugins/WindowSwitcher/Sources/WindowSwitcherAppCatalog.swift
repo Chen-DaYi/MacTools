@@ -16,8 +16,13 @@ final class WindowSwitcherAppCatalog {
     private static let axTimeout: Float = 0.2
     private static let minimumWindowSize = CGSize(width: 80, height: 60)
 
+    private let notificationCenter: NotificationCenter
     private var mruIDs: [String] = []
     private var observers: [NSObjectProtocol] = []
+
+    init(notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+        self.notificationCenter = notificationCenter
+    }
 
     func start() {
         guard observers.isEmpty else {
@@ -26,7 +31,6 @@ final class WindowSwitcherAppCatalog {
         }
 
         refreshFrontmostApplication()
-        let notificationCenter = NSWorkspace.shared.notificationCenter
         let activated = notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
@@ -40,7 +44,7 @@ final class WindowSwitcherAppCatalog {
                 appID = nil
             }
 
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self, appID] in
                 if let appID {
                     self?.recordActivationID(appID)
                 }
@@ -53,7 +57,7 @@ final class WindowSwitcherAppCatalog {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self] in
                 self?.onChange?()
             }
         }
@@ -66,7 +70,7 @@ final class WindowSwitcherAppCatalog {
             let appID = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)
                 .map(Self.identifier(for:))
 
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self, appID] in
                 if let appID {
                     self?.removeApplicationID(appID)
                 }
@@ -78,7 +82,6 @@ final class WindowSwitcherAppCatalog {
     }
 
     func stop() {
-        let notificationCenter = NSWorkspace.shared.notificationCenter
         for observer in observers {
             notificationCenter.removeObserver(observer)
         }

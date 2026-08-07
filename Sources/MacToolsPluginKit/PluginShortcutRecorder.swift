@@ -3,6 +3,7 @@ import SwiftUI
 
 public enum PluginShortcutRecordingResult: Equatable {
     case accepted
+    case pendingConfirmation
     case rejected(String)
 
     public static func from(errorMessage: String?) -> PluginShortcutRecordingResult {
@@ -441,7 +442,7 @@ private struct PluginShortcutRecorderPopoverAnchor: NSViewRepresentable {
             guard binding.isValid else { return nil }
 
             switch onRecord?(binding) ?? .accepted {
-            case .accepted:
+            case .accepted, .pendingConfirmation:
                 committed = true
                 close()
             case let .rejected(message):

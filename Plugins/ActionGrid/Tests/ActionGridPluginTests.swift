@@ -205,6 +205,7 @@ final class ActionGridPluginTests: XCTestCase {
         )
         let target = ActionReference(key: ActionKey(providerID: "target", actionID: "run"))
         var presented: [ActionGridPresentationEntry] = []
+        var presentationSource: ActionExecutionSource?
         var openedOwner: ActionReference?
         plugin.actionGridHostContext = ActionGridHostContext(
             catalog: { [] },
@@ -215,12 +216,13 @@ final class ActionGridPluginTests: XCTestCase {
                 return true
             },
             canPresent: { true },
-            present: {
-                presented = $0
+            present: { entries, source in
+                presented = entries
+                presentationSource = source
                 return true
             }
         )
-        XCTAssertTrue(plugin.store.add(reference: target))
+        XCTAssertTrue(plugin.store.add(reference: target, in: nil, at: 8))
         let definition = try XCTUnwrap(plugin.actionDefinitions.first)
 
         XCTAssertEqual(definition.key, ActionGridPlugin.showActionKey)
@@ -231,18 +233,20 @@ final class ActionGridPluginTests: XCTestCase {
         let handle = try plugin.beginAction(
             ActionInvocation(
                 reference: ActionReference(key: definition.key),
-                source: .globalShortcut,
+                source: .trackpadGesture,
                 mode: .foreground
             )
         )
         let result = await handle.result()
         XCTAssertEqual(result, .succeeded())
         XCTAssertEqual(presented.map(\.reference), [target])
+        XCTAssertEqual(presented.map(\.slotIndex), [8])
+        XCTAssertEqual(presentationSource, .trackpadGesture)
         XCTAssertTrue(plugin.openOwner(for: target))
         XCTAssertEqual(openedOwner, target)
         XCTAssertEqual(
             plugin.actionSurfaceAssignmentSummary(for: target)?.detail,
-            "第 1 个条目"
+            "第 9 个条目"
         )
     }
 
@@ -258,7 +262,7 @@ final class ActionGridPluginTests: XCTestCase {
             item: { _ in nil },
             migrate: { $0 },
             canPresent: { true },
-            present: { _ in XCTFail("Presenter should not be called"); return false }
+            present: { _, _ in XCTFail("Presenter should not be called"); return false }
         )
         XCTAssertTrue(plugin.store.add(reference: showReference))
         XCTAssertFalse(plugin.actionAvailability(for: showReference).isAvailable)

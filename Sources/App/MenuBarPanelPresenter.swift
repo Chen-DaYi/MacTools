@@ -198,7 +198,7 @@ final class MenuBarPanelPresenter: NSObject {
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
+                DispatchQueue.main.async { [weak self] in
                     self?.refreshLocalization()
                 }
             }
@@ -338,8 +338,7 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private func scheduleComponentViewPrewarm() {
-        Task { @MainActor [weak self] in
-            await Task.yield()
+        DispatchQueue.main.async { [weak self] in
             guard let self else {
                 return
             }
@@ -438,8 +437,7 @@ final class MenuBarPanelPresenter: NSObject {
         NSApplication.shared.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
 
-        Task { @MainActor [weak popover] in
-            await Task.yield()
+        DispatchQueue.main.async { [weak popover] in
             guard let popover, popover.isShown else {
                 return
             }
@@ -466,7 +464,7 @@ final class MenuBarPanelPresenter: NSObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 self?.applyCurrentAppearance()
             }
         }
@@ -477,7 +475,7 @@ final class MenuBarPanelPresenter: NSObject {
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
+                DispatchQueue.main.async { [weak self] in
                     self?.refreshHeightForVisiblePanel()
                 }
             }
@@ -487,7 +485,7 @@ final class MenuBarPanelPresenter: NSObject {
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
+                DispatchQueue.main.async { [weak self] in
                     self?.refreshHeightForVisiblePanel()
                 }
             }
@@ -547,8 +545,7 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private func scheduleHeightRefresh(for tab: MenuBarPanelTab) {
-        Task { @MainActor [weak self] in
-            await Task.yield()
+        DispatchQueue.main.async { [weak self] in
             guard let self, self.popover.isShown else {
                 return
             }

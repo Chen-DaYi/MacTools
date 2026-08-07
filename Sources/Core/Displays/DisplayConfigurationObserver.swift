@@ -39,18 +39,16 @@ final class SystemDisplayConfigurationObserver: DisplayConfigurationObserving {
         }
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            if isRegisteredForCGDisplayChanges {
-                CGDisplayRemoveReconfigurationCallback(
-                    Self.displayReconfigurationCallback,
-                    Unmanaged.passUnretained(self).toOpaque()
-                )
-            }
+    isolated deinit {
+        if isRegisteredForCGDisplayChanges {
+            CGDisplayRemoveReconfigurationCallback(
+                Self.displayReconfigurationCallback,
+                Unmanaged.passUnretained(self).toOpaque()
+            )
+        }
 
-            if let screenParametersObserver {
-                notificationCenter.removeObserver(screenParametersObserver)
-            }
+        if let screenParametersObserver {
+            notificationCenter.removeObserver(screenParametersObserver)
         }
     }
 
@@ -71,7 +69,7 @@ final class SystemDisplayConfigurationObserver: DisplayConfigurationObserving {
             .fromOpaque(userInfo)
             .takeUnretainedValue()
 
-        Task { @MainActor [weak observer] in
+        DispatchQueue.main.async { [weak observer] in
             observer?.onConfigurationChange?()
         }
     }

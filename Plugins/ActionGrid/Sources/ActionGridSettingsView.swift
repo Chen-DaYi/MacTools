@@ -2,15 +2,30 @@ import AppKit
 import MacToolsPluginKit
 import SwiftUI
 
+enum ActionGridDragPayload {
+    private static let prefix = "mactools-action-grid:"
+
+    static func encode(_ entryID: UUID) -> String {
+        "\(prefix)\(entryID.uuidString)"
+    }
+
+    static func decode(_ payload: String?) -> UUID? {
+        guard let payload, payload.hasPrefix(prefix) else { return nil }
+        return UUID(uuidString: String(payload.dropFirst(prefix.count)))
+    }
+}
+
 struct ActionGridSettingsView: View {
     let plugin: ActionGridPlugin
     @ObservedObject var store: ActionGridStore
     @State private var confirmingReset = false
+    @State private var folderPath: [UUID] = []
+    @State private var editorRequest: ActionGridEditorRequest?
+    @State private var dropTargetSlot: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            preview
-            entriesSection
+            gridEditor
             if let error = store.loadError {
                 Label(
                     plugin.localizedFormat("无法读取已保存的网格：%@", error),
@@ -30,91 +45,633 @@ struct ActionGridSettingsView: View {
         } message: {
             Text(plugin.localized("这会替换当前条目，并使用一组安全的建议操作。"))
         }
-    }
-
-    private var preview: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(plugin.localized("预览"), systemImage: "square.grid.3x3")
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .foregroundStyle(.secondary)
-            LazyVGrid(columns: previewColumns, spacing: 8) {
-                ForEach(store.entries) { entry in
-                    let item = plugin.item(for: entry.reference)
-                    VStack(spacing: 6) {
-                        Image(systemName: item?.systemImage ?? "questionmark.square.dashed")
-                            .font(.title2)
-                        Text(entry.customTitle ?? item?.title ?? plugin.localized("不可用操作"))
-                            .font(PluginSettingsTheme.Typography.rowTitle)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 72)
-                    .foregroundStyle(item?.availability.isAvailable == true ? .primary : .secondary)
-                    .background(PluginSettingsTheme.Palette.nativeCardBackground, in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card))
-                }
-            }
-            if store.entries.isEmpty {
-                ContentUnavailableView(
-                    plugin.localized("网格为空"),
-                    systemImage: "square.grid.3x3",
-                    description: Text(plugin.localized("添加最多九个操作。"))
+        .sheet(item: $editorRequest, onDismiss: { editorRequest = nil }) { request in
+            switch request {
+            case let .action(actionRequest):
+                ActionGridActionEditorSheet(
+                    plugin: plugin,
+                    store: store,
+                    folderID: currentFolderID,
+                    request: actionRequest,
+                    onDismiss: dismissEditor
                 )
-                    .frame(maxWidth: .infinity, minHeight: 130)
-                    .pluginSettingsCardBackground(.host)
+            case let .folder(folderRequest):
+                ActionGridFolderEditorSheet(
+                    plugin: plugin,
+                    store: store,
+                    folderID: currentFolderID,
+                    request: folderRequest,
+                    onDismiss: dismissEditor
+                )
             }
+        }
+        .onChange(of: folderPath) { _, _ in
+            dropTargetSlot = nil
+        }
+        .onDisappear {
+            dropTargetSlot = nil
         }
     }
 
-    private var entriesSection: some View {
+    private var gridEditor: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack {
-                Label(plugin.localized("条目"), systemImage: "list.bullet")
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                if !folderPath.isEmpty {
+                    Button {
+                        folderPath.removeLast()
+                    } label: {
+                        Label(plugin.localized("返回"), systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                Label(currentTitle, systemImage: currentFolderID == nil ? "square.grid.3x3" : "folder.fill")
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.secondary)
+
                 Spacer()
-                addMenu
+
+                Button {
+                    guard let slot = store.firstAvailableSlot(in: currentFolderID) else { return }
+                    presentEditor(.action(ActionGridActionEditorRequest(
+                        entryID: nil,
+                        targetSlot: slot,
+                        allowsFolder: folderPath.count < ActionGridStore.maximumFolderDepth
+                    )))
+                } label: {
+                    Label(plugin.localized("添加"), systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(currentEntries.count >= ActionGridStore.maximumEntryCount)
+
                 Button(plugin.localized("重置")) { confirmingReset = true }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .disabled(currentFolderID != nil)
             }
-            List {
-                ForEach(store.entries) { entry in
-                    entryRow(entry)
-                }
-                .onMove { offsets, destination in
-                    if store.move(fromOffsets: offsets, toOffset: destination) {
-                        plugin.notifyMutation()
+
+            LazyVGrid(columns: gridColumns, spacing: 10) {
+                ForEach(0 ..< ActionGridStore.maximumEntryCount, id: \.self) { index in
+                    if let entry = store.entry(at: index, in: currentFolderID) {
+                        entryCell(entry, index: index)
+                    } else {
+                        emptyCell(index: index)
                     }
                 }
             }
-            .frame(minHeight: 230)
-            .listStyle(.inset)
+            .padding(12)
+            .pluginSettingsCardBackground(.host)
+
+            if let dropTargetSlot {
+                Label(
+                    dropStatus(for: dropTargetSlot),
+                    systemImage: dropStatusImage(for: dropTargetSlot)
+                )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(Color.accentColor)
+                    .contentTransition(.numericText())
+                    .accessibilityAddTraits(.updatesFrequently)
+            } else {
+                Text(plugin.localized("拖动单元格可重新排序。选择操作可原位编辑；选择文件夹可打开下一级网格。"))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
-    private var addMenu: some View {
-        Menu {
-            ForEach(plugin.catalogItems()) { item in
-                Button(item.subtitle.map { "\(item.title) — \($0)" } ?? item.title) {
-                    if store.add(reference: item.reference) {
-                        plugin.notifyMutation()
-                    }
-                }
+    private func entryCell(_ entry: ActionGridEntry, index: Int) -> some View {
+        let item = entry.folder == nil ? plugin.item(for: entry.reference) : nil
+        let title = entry.customTitle
+            ?? item?.title
+            ?? plugin.localized("不可用操作")
+        let image = entry.folder?.systemImage
+            ?? item?.systemImage
+            ?? "questionmark.square.dashed"
+
+        return Button {
+            if entry.folder != nil {
+                folderPath.append(entry.id)
+            } else {
+                presentEditor(.action(ActionGridActionEditorRequest(
+                    entryID: entry.id,
+                    targetSlot: entry.slot,
+                    allowsFolder: false
+                )))
             }
         } label: {
-            Label(plugin.localized("添加操作"), systemImage: "plus")
+            VStack(spacing: 7) {
+                Image(systemName: image)
+                    .font(.title2)
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                Text(entry.folder != nil
+                    ? plugin.localized("文件夹")
+                    : (item?.ownerTitle ?? plugin.localized("提供者缺失")))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, minHeight: 104)
+            .contentShape(Rectangle())
+            .background(
+                PluginSettingsTheme.Palette.nativeCardBackground,
+                in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
+            )
+            .overlay {
+                dropTargetOverlay(index: index, destinationTitle: title)
+            }
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .disabled(store.entries.count >= ActionGridStore.maximumEntryCount || plugin.catalogItems().isEmpty)
+        .buttonStyle(.plain)
+        .scaleEffect(dropTargetSlot == index ? 0.97 : 1)
+        .draggable(dragPayload(for: entry.id)) {
+            dragPreview(title: title, image: image, isFolder: entry.folder != nil)
+        }
+        .dropDestination(for: String.self) { payloads, _ in
+            guard let entryID = entryID(from: payloads.first) else { return false }
+            return performDrop(entryID, at: index)
+        } isTargeted: { isTargeted in
+            updateDropTarget(index: index, isTargeted: isTargeted)
+        }
+        .animation(.easeOut(duration: 0.14), value: dropTargetSlot)
+        .contextMenu {
+            if entry.folder != nil {
+                Button(plugin.localized("重命名")) {
+                    presentEditor(.folder(ActionGridFolderEditorRequest(entryID: entry.id)))
+                }
+                Divider()
+            } else if item?.canOpenOwner == true {
+                Button(plugin.localized("设置")) {
+                    _ = plugin.openOwner(for: entry.reference)
+                }
+                Divider()
+            }
+            Button(plugin.localized("删除"), role: .destructive) {
+                if store.remove(id: entry.id) { plugin.notifyMutation() }
+            }
+        }
+        .accessibilityLabel(title)
+        .accessibilityHint(entry.folder != nil ? plugin.localized("打开文件夹") : plugin.localized("编辑操作"))
+        .accessibilityAction(named: plugin.localized("上移")) {
+            moveEntry(at: index, offset: -1)
+        }
+        .accessibilityAction(named: plugin.localized("下移")) {
+            moveEntry(at: index, offset: 1)
+        }
     }
 
-    private func entryRow(_ entry: ActionGridEntry) -> some View {
-        ActionGridEntryRow(plugin: plugin, store: store, entry: entry)
+    private func emptyCell(index: Int) -> some View {
+        Button {
+            presentEditor(.action(ActionGridActionEditorRequest(
+                entryID: nil,
+                targetSlot: index,
+                allowsFolder: folderPath.count < ActionGridStore.maximumFolderDepth
+            )))
+        } label: {
+            VStack(spacing: 7) {
+                Image(systemName: "plus")
+                    .font(.title2)
+                Text(plugin.localized("添加"))
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+            }
+            .frame(maxWidth: .infinity, minHeight: 104)
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+            .background(
+                PluginSettingsTheme.Palette.fieldBackground,
+                in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
+            )
+            .overlay {
+                dropTargetOverlay(index: index, destinationTitle: nil)
+            }
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(dropTargetSlot == index ? 0.97 : 1)
+        .dropDestination(for: String.self) { payloads, _ in
+            guard let entryID = entryID(from: payloads.first) else { return false }
+            return performDrop(entryID, at: index)
+        } isTargeted: { isTargeted in
+            updateDropTarget(index: index, isTargeted: isTargeted)
+        }
+        .animation(.easeOut(duration: 0.14), value: dropTargetSlot)
+        .accessibilityLabel(plugin.localizedFormat("添加第 %d 个单元格", index + 1))
     }
 
-    private var previewColumns: [GridItem] {
-        let count = max(1, store.entries.count)
-        return Array(repeating: GridItem(.flexible(), spacing: 8), count: count <= 6 ? 2 : 3)
+    private func dragPayload(for entryID: UUID) -> String {
+        ActionGridDragPayload.encode(entryID)
+    }
+
+    private func entryID(from payload: String?) -> UUID? {
+        ActionGridDragPayload.decode(payload)
+    }
+
+    private func updateDropTarget(index: Int, isTargeted: Bool) {
+        if isTargeted {
+            dropTargetSlot = index
+        } else if dropTargetSlot == index {
+            dropTargetSlot = nil
+        }
+    }
+
+    private func performDrop(_ entryID: UUID, at slot: Int) -> Bool {
+        guard let source = currentEntries.first(where: { $0.id == entryID }) else {
+            return false
+        }
+        guard source.slot != slot else { return true }
+        let didMove = withAnimation(.easeInOut(duration: 0.2)) {
+            store.move(entryID: entryID, toIndex: slot, in: currentFolderID)
+        }
+        guard didMove else {
+            return false
+        }
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        plugin.notifyMutation()
+        return true
+    }
+
+    @ViewBuilder
+    private func dropTargetOverlay(index: Int, destinationTitle: String?) -> some View {
+        if dropTargetSlot == index {
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
+                .fill(Color.accentColor.opacity(0.14))
+                .overlay {
+                    RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
+                        .stroke(Color.accentColor, lineWidth: 2.5)
+                }
+                .overlay {
+                    VStack(spacing: 5) {
+                        Image(systemName: destinationTitle == nil
+                            ? "arrow.down.to.line.compact"
+                            : "arrow.triangle.swap")
+                            .font(.title2.weight(.semibold))
+                        Text(destinationTitle == nil
+                            ? plugin.localized("移动到这里")
+                            : plugin.localized("交换位置"))
+                            .font(PluginSettingsTheme.Typography.statusBadge)
+                    }
+                    .foregroundStyle(Color.accentColor)
+                }
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func dragPreview(title: String, image: String, isFolder: Bool) -> some View {
+        VStack(spacing: 7) {
+            Image(systemName: image)
+                .font(.title2)
+            Text(title)
+                .font(PluginSettingsTheme.Typography.rowTitle)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            Text(isFolder ? plugin.localized("文件夹") : plugin.localized("操作"))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: 168, height: 104)
+        .background(
+            PluginSettingsTheme.Palette.nativeCardBackground,
+            in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
+                .stroke(Color.accentColor.opacity(0.55), lineWidth: 1.5)
+        }
+        .shadow(color: .black.opacity(0.20), radius: 14, y: 8)
+        .opacity(0.94)
+    }
+
+    private func dropStatus(for targetSlot: Int) -> String {
+        if let destination = store.entry(at: targetSlot, in: currentFolderID) {
+            let destinationTitle = destination.customTitle
+                ?? plugin.item(for: destination.reference)?.title
+                ?? plugin.localized("不可用操作")
+            return plugin.localizedFormat("松开以与“%@”交换位置", destinationTitle)
+        }
+        return plugin.localizedFormat("松开以移动到第 %d 个单元格", targetSlot + 1)
+    }
+
+    private func dropStatusImage(for targetSlot: Int) -> String {
+        return store.entry(at: targetSlot, in: currentFolderID) == nil
+            ? "arrow.down.to.line.compact"
+            : "arrow.triangle.swap"
+    }
+
+    private func moveEntry(at index: Int, offset: Int) {
+        guard let entry = store.entry(at: index, in: currentFolderID),
+              store.move(entryID: entry.id, toIndex: index + offset, in: currentFolderID) else {
+            return
+        }
+        plugin.notifyMutation()
+    }
+
+    private var currentFolderID: UUID? { folderPath.last }
+
+    private var currentEntries: [ActionGridEntry] {
+        store.entries(in: currentFolderID)
+    }
+
+    private var currentTitle: String {
+        guard let currentFolderID else { return plugin.localized("操作网格") }
+        return store.folderEntry(id: currentFolderID)?.customTitle ?? plugin.localized("文件夹")
+    }
+
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+    }
+
+    private func presentEditor(_ request: ActionGridEditorRequest) {
+        editorRequest = nil
+        DispatchQueue.main.async {
+            editorRequest = request
+        }
+    }
+
+    private func dismissEditor() {
+        editorRequest = nil
+    }
+}
+
+private struct ActionGridActionEditorRequest: Identifiable {
+    let id = UUID()
+    let entryID: UUID?
+    let targetSlot: Int?
+    let allowsFolder: Bool
+}
+
+private struct ActionGridFolderEditorRequest: Identifiable {
+    let id = UUID()
+    let entryID: UUID?
+}
+
+private enum ActionGridEditorRequest: Identifiable {
+    case action(ActionGridActionEditorRequest)
+    case folder(ActionGridFolderEditorRequest)
+
+    var id: UUID {
+        switch self {
+        case let .action(request): request.id
+        case let .folder(request): request.id
+        }
+    }
+}
+
+private enum ActionGridAddKind: String, CaseIterable, Identifiable {
+    case action
+    case folder
+
+    var id: String { rawValue }
+}
+
+private struct ActionGridActionEditorSheet: View {
+    private enum Field: Hashable {
+        case search
+        case title
+    }
+
+    let plugin: ActionGridPlugin
+    @ObservedObject var store: ActionGridStore
+    let folderID: UUID?
+    let request: ActionGridActionEditorRequest
+    let onDismiss: () -> Void
+
+    @State private var query = ""
+    @State private var selectedReference: ActionReference?
+    @State private var customTitle = ""
+    @State private var addKind: ActionGridAddKind = .action
+    @FocusState private var focusedField: Field?
+
+    init(
+        plugin: ActionGridPlugin,
+        store: ActionGridStore,
+        folderID: UUID?,
+        request: ActionGridActionEditorRequest,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.plugin = plugin
+        self.store = store
+        self.folderID = folderID
+        self.request = request
+        self.onDismiss = onDismiss
+        let entry = request.entryID.flatMap(store.folderEntry(id:))
+        _selectedReference = State(initialValue: entry?.reference)
+        _customTitle = State(initialValue: entry?.customTitle ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(editorTitle)
+                .font(PluginSettingsTheme.Typography.pageTitle)
+
+            if request.entryID == nil, request.allowsFolder {
+                Picker("", selection: $addKind) {
+                    Text(plugin.localized("添加操作")).tag(ActionGridAddKind.action)
+                    Text(plugin.localized("新建文件夹")).tag(ActionGridAddKind.folder)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+            }
+
+            if addKind == .action || request.entryID != nil {
+                TextField(plugin.localized("搜索操作"), text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .search)
+
+                TextField(titleFieldPlaceholder, text: $customTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .title)
+
+                List(filteredItems, selection: $selectedReference) { item in
+                    HStack(spacing: 10) {
+                        Image(systemName: item.systemImage)
+                            .frame(width: 22)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.title)
+                            Text(item.ownerTitle)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if !item.isSafe {
+                            Image(systemName: "exclamationmark.shield")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .tag(item.reference)
+                }
+                .frame(minHeight: 300)
+            } else {
+                TextField(titleFieldPlaceholder, text: $customTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .title)
+
+                ContentUnavailableView(
+                    plugin.localized("新建文件夹"),
+                    systemImage: "folder.badge.plus"
+                )
+                .frame(maxWidth: .infinity, minHeight: 300)
+            }
+
+            HStack {
+                if let entryID = request.entryID {
+                    Button(plugin.localized("删除"), role: .destructive) {
+                        if store.remove(id: entryID) { plugin.notifyMutation() }
+                        onDismiss()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Spacer()
+                Button(plugin.localized("取消"), action: onDismiss)
+                    .buttonStyle(.bordered)
+                Button(plugin.localized("保存"), action: save)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSave)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.small)
+        }
+        .padding(PluginSettingsTheme.Spacing.pagePadding)
+        .frame(minWidth: 520, minHeight: 500)
+        .onAppear {
+            DispatchQueue.main.async {
+                focusedField = addKind == .action || request.entryID != nil ? .search : .title
+            }
+        }
+        .onChange(of: addKind) { _, kind in
+            focusedField = kind == .action ? .search : .title
+        }
+    }
+
+    private var filteredItems: [ActionSurfaceCatalogItem] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return plugin.catalogItems(excluding: request.entryID, in: folderID).filter { item in
+            query.isEmpty || [item.title, item.subtitle, item.ownerTitle]
+                .compactMap { $0 }
+                .contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
+    private var editorTitle: String {
+        if request.entryID != nil { return plugin.localized("编辑操作") }
+        return addKind == .folder
+            ? plugin.localized("新建文件夹")
+            : plugin.localized("添加操作")
+    }
+
+    private var titleFieldPlaceholder: String {
+        addKind == .folder && request.entryID == nil
+            ? plugin.localized("文件夹名称")
+            : plugin.localized("自定义名称（可选）")
+    }
+
+    private var canSave: Bool {
+        if request.entryID != nil || addKind == .action {
+            return selectedReference != nil
+        }
+        return !customTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func save() {
+        let saved: Bool
+        if let entryID = request.entryID {
+            guard let selectedReference else { return }
+            saved = store.replace(id: entryID, reference: selectedReference)
+            if saved {
+                _ = store.setCustomTitle(id: entryID, title: customTitle)
+            }
+        } else if addKind == .folder {
+            saved = store.addFolder(
+                title: customTitle,
+                in: folderID,
+                at: request.targetSlot
+            )
+        } else {
+            guard let selectedReference else { return }
+            saved = store.add(
+                reference: selectedReference,
+                in: folderID,
+                at: request.targetSlot
+            )
+            if saved,
+               let slot = request.targetSlot,
+               let entryID = store.entry(at: slot, in: folderID)?.id {
+                _ = store.setCustomTitle(id: entryID, title: customTitle)
+            }
+        }
+        if saved {
+            plugin.notifyMutation()
+            onDismiss()
+        }
+    }
+}
+
+private struct ActionGridFolderEditorSheet: View {
+    let plugin: ActionGridPlugin
+    @ObservedObject var store: ActionGridStore
+    let folderID: UUID?
+    let request: ActionGridFolderEditorRequest
+    let onDismiss: () -> Void
+
+    @State private var title: String
+
+    init(
+        plugin: ActionGridPlugin,
+        store: ActionGridStore,
+        folderID: UUID?,
+        request: ActionGridFolderEditorRequest,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.plugin = plugin
+        self.store = store
+        self.folderID = folderID
+        self.request = request
+        self.onDismiss = onDismiss
+        _title = State(
+            initialValue: request.entryID.flatMap(store.folderEntry(id:))?.customTitle ?? ""
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(request.entryID == nil ? plugin.localized("新建文件夹") : plugin.localized("重命名文件夹"))
+                .font(PluginSettingsTheme.Typography.pageTitle)
+            TextField(plugin.localized("文件夹名称"), text: $title)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                if let entryID = request.entryID {
+                    Button(plugin.localized("删除"), role: .destructive) {
+                        if store.remove(id: entryID) { plugin.notifyMutation() }
+                        onDismiss()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Spacer()
+                Button(plugin.localized("取消"), action: onDismiss)
+                    .buttonStyle(.bordered)
+                Button(plugin.localized("保存"), action: save)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.small)
+        }
+        .padding(PluginSettingsTheme.Spacing.pagePadding)
+        .frame(width: 420)
+    }
+
+    private func save() {
+        let saved: Bool
+        if let entryID = request.entryID {
+            saved = store.setCustomTitle(id: entryID, title: title)
+        } else {
+            saved = store.addFolder(title: title, in: folderID)
+        }
+        if saved {
+            plugin.notifyMutation()
+            onDismiss()
+        }
     }
 }
 

@@ -1,6 +1,15 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "%d 个步骤 · %d 条规则 · %@": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"%d خطوات · %d قواعد · %@"}},"de":{"stringUnit":{"state":"translated","value":"%d Schritte · %d Regeln · %@"}},"en":{"stringUnit":{"state":"translated","value":"%d steps · %d rules · %@"}},"es":{"stringUnit":{"state":"translated","value":"%d pasos · %d reglas · %@"}},"fr":{"stringUnit":{"state":"translated","value":"%d étapes · %d règles · %@"}},"ja":{"stringUnit":{"state":"translated","value":"%dステップ・%dルール・%@"}},"ko":{"stringUnit":{"state":"translated","value":"%d단계 · 규칙 %d개 · %@"}},"pt":{"stringUnit":{"state":"translated","value":"%d etapas · %d regras · %@"}},"ru":{"stringUnit":{"state":"translated","value":"Шагов: %d · правил: %d · %@"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"%d 个步骤 · %d 条规则 · %@"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"%d 個步驟 · %d 條規則 · %@"}}}},
+    "全局快捷键": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"اختصار عام"}},"de":{"stringUnit":{"state":"translated","value":"Globaler Kurzbefehl"}},"en":{"stringUnit":{"state":"translated","value":"Global Shortcut"}},"es":{"stringUnit":{"state":"translated","value":"Atajo global"}},"fr":{"stringUnit":{"state":"translated","value":"Raccourci global"}},"ja":{"stringUnit":{"state":"translated","value":"グローバルショートカット"}},"ko":{"stringUnit":{"state":"translated","value":"전역 단축키"}},"pt":{"stringUnit":{"state":"translated","value":"Atalho global"}},"ru":{"stringUnit":{"state":"translated","value":"Глобальное сочетание клавиш"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"全局快捷键"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"全域快速鍵"}}}},
+    "手动": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"يدوي"}},"de":{"stringUnit":{"state":"translated","value":"Manuell"}},"en":{"stringUnit":{"state":"translated","value":"Manual"}},"es":{"stringUnit":{"state":"translated","value":"Manual"}},"fr":{"stringUnit":{"state":"translated","value":"Manuel"}},"ja":{"stringUnit":{"state":"translated","value":"手動"}},"ko":{"stringUnit":{"state":"translated","value":"수동"}},"pt":{"stringUnit":{"state":"translated","value":"Manual"}},"ru":{"stringUnit":{"state":"translated","value":"Вручную"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"手动"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"手動"}}}},
+    "打开文件夹": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"فتح المجلد"}},"de":{"stringUnit":{"state":"translated","value":"Ordner öffnen"}},"en":{"stringUnit":{"state":"translated","value":"Open Folder"}},"es":{"stringUnit":{"state":"translated","value":"Abrir carpeta"}},"fr":{"stringUnit":{"state":"translated","value":"Ouvrir le dossier"}},"ja":{"stringUnit":{"state":"translated","value":"フォルダを開く"}},"ko":{"stringUnit":{"state":"translated","value":"폴더 열기"}},"pt":{"stringUnit":{"state":"translated","value":"Abrir pasta"}},"ru":{"stringUnit":{"state":"translated","value":"Открыть папку"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"打开文件夹"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"打開資料夾"}}}},
+    "执行前需要确认。": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"يلزم التأكيد قبل التشغيل."}},"de":{"stringUnit":{"state":"translated","value":"Vor der Ausführung ist eine Bestätigung erforderlich."}},"en":{"stringUnit":{"state":"translated","value":"Confirmation is required before running."}},"es":{"stringUnit":{"state":"translated","value":"Se requiere confirmación antes de ejecutar."}},"fr":{"stringUnit":{"state":"translated","value":"Une confirmation est requise avant l’exécution."}},"ja":{"stringUnit":{"state":"translated","value":"実行前に確認が必要です。"}},"ko":{"stringUnit":{"state":"translated","value":"실행 전에 확인이 필요합니다."}},"pt":{"stringUnit":{"state":"translated","value":"É necessária confirmação antes de executar."}},"ru":{"stringUnit":{"state":"translated","value":"Перед запуском требуется подтверждение."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"执行前需要确认。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"執行前需要確認。"}}}},
+    "文件夹": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"مجلد"}},"de":{"stringUnit":{"state":"translated","value":"Ordner"}},"en":{"stringUnit":{"state":"translated","value":"Folder"}},"es":{"stringUnit":{"state":"translated","value":"Carpeta"}},"fr":{"stringUnit":{"state":"translated","value":"Dossier"}},"ja":{"stringUnit":{"state":"translated","value":"フォルダ"}},"ko":{"stringUnit":{"state":"translated","value":"폴더"}},"pt":{"stringUnit":{"state":"translated","value":"Pasta"}},"ru":{"stringUnit":{"state":"translated","value":"Папка"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"文件夹"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"資料夾"}}}},
+    "统一搜索": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"البحث الموحّد"}},"de":{"stringUnit":{"state":"translated","value":"Einheitliche Suche"}},"en":{"stringUnit":{"state":"translated","value":"Unified Search"}},"es":{"stringUnit":{"state":"translated","value":"Búsqueda unificada"}},"fr":{"stringUnit":{"state":"translated","value":"Recherche unifiée"}},"ja":{"stringUnit":{"state":"translated","value":"統合検索"}},"ko":{"stringUnit":{"state":"translated","value":"통합 검색"}},"pt":{"stringUnit":{"state":"translated","value":"Busca unificada"}},"ru":{"stringUnit":{"state":"translated","value":"Единый поиск"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"统一搜索"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"統一搜尋"}}}},
+    "触控板手势": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"إيماءة لوحة التتبع"}},"de":{"stringUnit":{"state":"translated","value":"Trackpad-Geste"}},"en":{"stringUnit":{"state":"translated","value":"Trackpad Gesture"}},"es":{"stringUnit":{"state":"translated","value":"Gesto del trackpad"}},"fr":{"stringUnit":{"state":"translated","value":"Geste du trackpad"}},"ja":{"stringUnit":{"state":"translated","value":"トラックパッドジェスチャ"}},"ko":{"stringUnit":{"state":"translated","value":"트랙패드 제스처"}},"pt":{"stringUnit":{"state":"translated","value":"Gesto do trackpad"}},"ru":{"stringUnit":{"state":"translated","value":"Жест трекпада"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"触控板手势"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"觸控板手勢"}}}},
+    "返回": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"رجوع"}},"de":{"stringUnit":{"state":"translated","value":"Zurück"}},"en":{"stringUnit":{"state":"translated","value":"Back"}},"es":{"stringUnit":{"state":"translated","value":"Volver"}},"fr":{"stringUnit":{"state":"translated","value":"Retour"}},"ja":{"stringUnit":{"state":"translated","value":"戻る"}},"ko":{"stringUnit":{"state":"translated","value":"뒤로"}},"pt":{"stringUnit":{"state":"translated","value":"Voltar"}},"ru":{"stringUnit":{"state":"translated","value":"Назад"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"返回"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"返回"}}}},
     "日历事件开始": {
       "extractionState": "manual",
       "localizations": {
@@ -4164,77 +4173,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "建立並複製運行連結"
-          }
-        }
-      }
-    },
-    "创建运行链接…": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "إنشاء رابط تشغيل…"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ausführungslink erstellen…"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Create Run Link…"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Crear enlace de ejecución…"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Créer un lien d’exécution…"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "実行リンクを作成…"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "실행 링크 생성…"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Criar link de execução…"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Создать ссылку запуска…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "创建运行链接…"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "建立執行連結…"
           }
         }
       }

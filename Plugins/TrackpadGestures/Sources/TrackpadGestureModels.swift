@@ -81,15 +81,18 @@ enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 enum TrackpadGestureAction: Codable, Equatable, Sendable {
+    case action(ActionReference)
     case keyboardShortcut(ShortcutBinding)
     case middleClick
 
     private enum CodingKeys: String, CodingKey {
         case kind
+        case reference
         case shortcut
     }
 
     private enum Kind: String, Codable {
+        case action
         case keyboardShortcut
         case middleClick
     }
@@ -97,6 +100,8 @@ enum TrackpadGestureAction: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         switch try container.decode(Kind.self, forKey: .kind) {
+        case .action:
+            self = .action(try container.decode(ActionReference.self, forKey: .reference))
         case .keyboardShortcut:
             self = .keyboardShortcut(try container.decode(ShortcutBinding.self, forKey: .shortcut))
         case .middleClick:
@@ -107,6 +112,9 @@ enum TrackpadGestureAction: Codable, Equatable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
+        case let .action(reference):
+            try container.encode(Kind.action, forKey: .kind)
+            try container.encode(reference, forKey: .reference)
         case let .keyboardShortcut(shortcut):
             try container.encode(Kind.keyboardShortcut, forKey: .kind)
             try container.encode(shortcut, forKey: .shortcut)
@@ -161,6 +169,15 @@ struct LegacyMiddleClickPreferences: Codable, Equatable, Sendable {
 
 @MainActor
 final class TrackpadGestureStore: ObservableObject {
+    private struct PortableBackup: Codable {
+        let formatVersion: Int
+        let mappings: [TrackpadGestureMapping]
+        let ignoresGesturesWhileTyping: Bool
+        let typingGracePeriod: TimeInterval
+    }
+
+    private static let portableBackupFormatVersion = 1
+    private static let maximumPortableBackupByteCount = 256 * 1_024
     private struct LegacyMiddleClickMigrationRecord: Codable {
         let preferences: LegacyMiddleClickPreferences
         let mappingID: UUID?
@@ -295,6 +312,56 @@ final class TrackpadGestureStore: ObservableObject {
         storage.set(clamped, forKey: Key.typingGracePeriod)
     }
 
+    @discardableResult
+    func migrateActions(using context: TrackpadActionHostContext) -> Bool {
+        var updated = mappings
+        var changed = false
+        for index in updated.indices {
+            guard case let .action(reference) = updated[index].action,
+                  let migrated = context.migrate(reference),
+                  migrated != reference else {
+                continue
+            }
+            updated[index].action = .action(migrated)
+            changed = true
+        }
+        guard changed else { return false }
+        mappings = Self.normalized(updated)
+        persist()
+        return true
+    }
+
+    func portableBackup() -> Data? {
+        let backup = PortableBackup(
+            formatVersion: Self.portableBackupFormatVersion,
+            mappings: mappings,
+            ignoresGesturesWhileTyping: ignoresGesturesWhileTyping,
+            typingGracePeriod: typingGracePeriod
+        )
+        guard let data = try? encoder.encode(backup),
+              data.count <= Self.maximumPortableBackupByteCount else {
+            return nil
+        }
+        return data
+    }
+
+    @discardableResult
+    func restorePortableBackup(_ data: Data) -> Bool {
+        guard data.count <= Self.maximumPortableBackupByteCount,
+              let backup = try? JSONDecoder().decode(PortableBackup.self, from: data),
+              backup.formatVersion == Self.portableBackupFormatVersion,
+              backup.mappings == Self.normalized(backup.mappings) else {
+            return false
+        }
+        mappings = backup.mappings
+        ignoresGesturesWhileTyping = backup.ignoresGesturesWhileTyping
+        typingGracePeriod = TrackpadTypingSuppressionGate.clamped(backup.typingGracePeriod)
+        persist()
+        storage.set(ignoresGesturesWhileTyping, forKey: Key.ignoreWhileTyping)
+        storage.set(typingGracePeriod, forKey: Key.typingGracePeriod)
+        return true
+    }
+
     private func migrateLegacyMiddleClickIfNeeded(_ legacy: LegacyMiddleClickPreferences?) {
         guard let legacy else {
             return
@@ -386,6 +453,8 @@ final class TrackpadGestureStore: ObservableObject {
 
     private static func isValid(_ mapping: TrackpadGestureMapping) -> Bool {
         return switch mapping.action {
+        case .action:
+            true
         case let .keyboardShortcut(binding):
             binding.isValid
         case .middleClick:

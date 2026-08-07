@@ -1,6 +1,13 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "action.macToolsAction": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"إجراء MacTools"}},"de":{"stringUnit":{"state":"translated","value":"MacTools-Aktion"}},"en":{"stringUnit":{"state":"translated","value":"MacTools Action"}},"es":{"stringUnit":{"state":"translated","value":"Acción de MacTools"}},"fr":{"stringUnit":{"state":"translated","value":"Action MacTools"}},"ja":{"stringUnit":{"state":"translated","value":"MacToolsアクション"}},"ko":{"stringUnit":{"state":"translated","value":"MacTools 동작"}},"pt":{"stringUnit":{"state":"translated","value":"Ação do MacTools"}},"ru":{"stringUnit":{"state":"translated","value":"Действие MacTools"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"MacTools 操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"MacTools 操作"}}}},
+    "editor.action.choose": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"اختيار إجراء"}},"de":{"stringUnit":{"state":"translated","value":"Aktion auswählen"}},"en":{"stringUnit":{"state":"translated","value":"Choose Action"}},"es":{"stringUnit":{"state":"translated","value":"Elegir acción"}},"fr":{"stringUnit":{"state":"translated","value":"Choisir une action"}},"ja":{"stringUnit":{"state":"translated","value":"アクションを選択"}},"ko":{"stringUnit":{"state":"translated","value":"동작 선택"}},"pt":{"stringUnit":{"state":"translated","value":"Escolher ação"}},"ru":{"stringUnit":{"state":"translated","value":"Выбрать действие"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"选择操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"選擇操作"}}}},
+    "editor.action.inputGroup": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"الإدخال"}},"de":{"stringUnit":{"state":"translated","value":"Eingabe"}},"en":{"stringUnit":{"state":"translated","value":"Input"}},"es":{"stringUnit":{"state":"translated","value":"Entrada"}},"fr":{"stringUnit":{"state":"translated","value":"Entrée"}},"ja":{"stringUnit":{"state":"translated","value":"入力"}},"ko":{"stringUnit":{"state":"translated","value":"입력"}},"pt":{"stringUnit":{"state":"translated","value":"Entrada"}},"ru":{"stringUnit":{"state":"translated","value":"Ввод"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"输入"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"輸入"}}}},
+    "editor.action.empty": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"لا توجد إجراءات مطابقة"}},"de":{"stringUnit":{"state":"translated","value":"Keine passenden Aktionen"}},"en":{"stringUnit":{"state":"translated","value":"No Matching Actions"}},"es":{"stringUnit":{"state":"translated","value":"No hay acciones coincidentes"}},"fr":{"stringUnit":{"state":"translated","value":"Aucune action correspondante"}},"ja":{"stringUnit":{"state":"translated","value":"一致するアクションがありません"}},"ko":{"stringUnit":{"state":"translated","value":"일치하는 동작 없음"}},"pt":{"stringUnit":{"state":"translated","value":"Nenhuma ação correspondente"}},"ru":{"stringUnit":{"state":"translated","value":"Нет подходящих действий"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有匹配的操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"沒有符合的操作"}}}},
+    "editor.action.search": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"البحث عن إجراءات"}},"de":{"stringUnit":{"state":"translated","value":"Aktionen suchen"}},"en":{"stringUnit":{"state":"translated","value":"Search Actions"}},"es":{"stringUnit":{"state":"translated","value":"Buscar acciones"}},"fr":{"stringUnit":{"state":"translated","value":"Rechercher des actions"}},"ja":{"stringUnit":{"state":"translated","value":"アクションを検索"}},"ko":{"stringUnit":{"state":"translated","value":"동작 검색"}},"pt":{"stringUnit":{"state":"translated","value":"Buscar ações"}},"ru":{"stringUnit":{"state":"translated","value":"Поиск действий"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"搜索操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"搜尋操作"}}}},
+    "editor.action.unavailable": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"إجراء MacTools غير متاح"}},"de":{"stringUnit":{"state":"translated","value":"MacTools-Aktion nicht verfügbar"}},"en":{"stringUnit":{"state":"translated","value":"Unavailable MacTools Action"}},"es":{"stringUnit":{"state":"translated","value":"Acción de MacTools no disponible"}},"fr":{"stringUnit":{"state":"translated","value":"Action MacTools indisponible"}},"ja":{"stringUnit":{"state":"translated","value":"利用できないMacToolsアクション"}},"ko":{"stringUnit":{"state":"translated","value":"사용할 수 없는 MacTools 동작"}},"pt":{"stringUnit":{"state":"translated","value":"Ação do MacTools indisponível"}},"ru":{"stringUnit":{"state":"translated","value":"Недоступное действие MacTools"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"不可用的 MacTools 操作"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"不可用的 MacTools 操作"}}}},
+    "editor.error.actionRequired": {"localizations":{"ar":{"stringUnit":{"state":"translated","value":"اختر إجراءً."}},"de":{"stringUnit":{"state":"translated","value":"Wähle eine Aktion aus."}},"en":{"stringUnit":{"state":"translated","value":"Choose an action."}},"es":{"stringUnit":{"state":"translated","value":"Elige una acción."}},"fr":{"stringUnit":{"state":"translated","value":"Choisissez une action."}},"ja":{"stringUnit":{"state":"translated","value":"アクションを選択してください。"}},"ko":{"stringUnit":{"state":"translated","value":"동작을 선택하십시오."}},"pt":{"stringUnit":{"state":"translated","value":"Escolha uma ação."}},"ru":{"stringUnit":{"state":"translated","value":"Выберите действие."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"请选择一个操作。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"請選擇一個操作。"}}}},
     "metadata.title": {
       "localizations": {
         "en": {
@@ -76,67 +83,67 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Map trackpad gestures to keyboard shortcuts or middle clicks."
+            "value": "Map trackpad gestures to MacTools actions, keyboard shortcuts, or middle clicks."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将触控板手势映射为快捷键或中键点击"
+            "value": "将触控板手势映射为 MacTools 操作、快捷键或中键点击"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "قم بتعيين إيماءات لوحة التتبع على اختصارات لوحة المفاتيح أو النقرات الوسطى."
+            "value": "عيّن إيماءات لوحة التتبع لإجراءات MacTools أو اختصارات لوحة المفاتيح أو النقرات الوسطى."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ordnen Sie Trackpad-Gesten Tastaturkürzeln oder Mittelklicks zu."
+            "value": "Ordnen Sie Trackpad-Gesten MacTools-Aktionen, Tastaturkürzeln oder Mittelklicks zu."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Asigne gestos del trackpad a atajos de teclado o clics centrales."
+            "value": "Asigne gestos del trackpad a acciones de MacTools, atajos de teclado o clics centrales."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mappez les gestes du trackpad sur les raccourcis clavier ou les clics du milieu."
+            "value": "Associez les gestes du trackpad aux actions MacTools, aux raccourcis clavier ou aux clics du milieu."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "トラックパッドのジェスチャをキーボード ショートカットまたは中クリックにマップします。"
+            "value": "トラックパッドジェスチャをMacToolsアクション、キーボードショートカット、または中クリックに割り当てます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "트랙패드 제스처를 키보드 단축키 또는 가운데 클릭에 매핑합니다."
+            "value": "트랙패드 제스처를 MacTools 동작, 키보드 단축키 또는 가운데 클릭에 매핑합니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mapeie gestos do trackpad para atalhos de teclado ou cliques do meio."
+            "value": "Mapeie gestos do trackpad para ações do MacTools, atalhos de teclado ou cliques do meio."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Сопоставьте жесты трекпада с сочетаниями клавиш или средним щелчком мыши."
+            "value": "Назначьте жестам трекпада действия MacTools, сочетания клавиш или средний щелчок мыши."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "將觸控板手勢對應到鍵盤快速鍵或中鍵點選。"
+            "value": "將觸控板手勢對應到 MacTools 操作、鍵盤快速鍵或中鍵點選。"
           }
         }
       }

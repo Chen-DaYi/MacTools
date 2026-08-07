@@ -9,6 +9,8 @@ final class AppURLRouterTests: XCTestCase {
             ("settings", .settings(.root)),
             ("settings/general", .settings(.general)),
             ("settings/about", .settings(.about)),
+            ("settings/features/actions-and-shortcuts", .settings(.actionsAndShortcuts)),
+            ("settings/features/automation", .settings(.automation)),
             ("settings/plugins/marketplace", .settings(.pluginMarketplace)),
             ("settings/plugins/fan-control", .settings(.pluginConfiguration("fan-control"))),
             ("panels/dashboard", .panel(.dashboard)),

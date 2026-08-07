@@ -3,6 +3,14 @@ import XCTest
 @testable import MacToolsPluginKit
 
 final class ShortcutBindingTests: XCTestCase {
+    func testPendingConfirmationIsDistinctFromRejectedRecording() {
+        XCTAssertEqual(PluginShortcutRecordingResult.pendingConfirmation, .pendingConfirmation)
+        XCTAssertNotEqual(
+            PluginShortcutRecordingResult.pendingConfirmation,
+            .rejected("Requires confirmation")
+        )
+    }
+
     func testF1ThroughF12AreValidWithoutModifiers() {
         let functionKeyCodes = [
             kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6,

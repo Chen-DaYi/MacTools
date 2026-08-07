@@ -125,6 +125,7 @@ struct UnifiedSearchTextField: NSViewRepresentable {
     enum Command: Equatable {
         case moveSelection(Int)
         case submit
+        case openOwner
         case cancel
     }
 
@@ -139,7 +140,10 @@ struct UnifiedSearchTextField: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+        let field = SearchTextField()
+        field.onOpenOwner = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.onCommand(.openOwner)
+        }
         field.delegate = context.coordinator
         field.isBezeled = false
         field.drawsBackground = false
@@ -165,7 +169,8 @@ struct UnifiedSearchTextField: NSViewRepresentable {
 
     static func command(
         for selector: Selector,
-        hasMarkedText: Bool
+        hasMarkedText: Bool,
+        modifierFlags: NSEvent.ModifierFlags = []
     ) -> Command? {
         guard !hasMarkedText else {
             return nil
@@ -176,12 +181,42 @@ struct UnifiedSearchTextField: NSViewRepresentable {
             return .moveSelection(1)
         case #selector(NSResponder.moveUp(_:)):
             return .moveSelection(-1)
+        case #selector(NSResponder.insertTab(_:)):
+            return .moveSelection(1)
+        case #selector(NSResponder.insertBacktab(_:)):
+            return .moveSelection(-1)
         case #selector(NSResponder.insertNewline(_:)):
-            return .submit
+            return modifierFlags.contains(.command) ? .openOwner : .submit
+        case #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+            return .openOwner
         case #selector(NSResponder.cancelOperation(_:)):
             return .cancel
         default:
             return nil
+        }
+    }
+
+    static func isOpenOwnerKeyEquivalent(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> Bool {
+        let flags = modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return flags.contains(.command) && (keyCode == 36 || keyCode == 76)
+    }
+
+    @MainActor
+    final class SearchTextField: NSTextField {
+        var onOpenOwner: (() -> Void)?
+
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            if UnifiedSearchTextField.isOpenOwnerKeyEquivalent(
+                keyCode: event.keyCode,
+                modifierFlags: event.modifierFlags
+            ) {
+                onOpenOwner?()
+                return true
+            }
+            return super.performKeyEquivalent(with: event)
         }
     }
 
@@ -209,7 +244,8 @@ struct UnifiedSearchTextField: NSViewRepresentable {
         ) -> Bool {
             guard let command = UnifiedSearchTextField.command(
                 for: selector,
-                hasMarkedText: textView.hasMarkedText()
+                hasMarkedText: textView.hasMarkedText(),
+                modifierFlags: NSApp.currentEvent?.modifierFlags ?? []
             ) else {
                 return false
             }
@@ -668,7 +704,7 @@ struct UnifiedSearchPaletteView: View {
                             binding: binding,
                             ownerDescription: ownerDescription
                         )
-                        return .rejected(FeatureL10n.string("需要确认后替换现有快捷键。"))
+                        return .pendingConfirmation
                     case let .failure(error):
                         return .rejected(error.localizedDescription)
                     }
@@ -732,7 +768,7 @@ struct UnifiedSearchPaletteView: View {
             Text(
                 AppL10n.search(
                     "search.footer.keyboard",
-                    defaultValue: "↑↓ 选择　↩ 打开　⌘1–9 快速打开"
+                    defaultValue: "↑↓/Tab 选择　↩ 打开　⌘↩ 设置　⌘1–9 快速打开"
                 )
             )
         }
@@ -866,9 +902,23 @@ struct UnifiedSearchPaletteView: View {
             moveSelection(by: offset)
         case .submit:
             activateSelectedResult()
+        case .openOwner:
+            openSelectedResultOwner()
         case .cancel:
             actions.dismiss()
         }
+    }
+
+    private func openSelectedResultOwner() {
+        guard
+            let selectedResult,
+            case let .executeAction(reference) = selectedResult.action,
+            pluginHost.canPresentActionOwner(for: reference)
+        else {
+            return
+        }
+
+        _ = pluginHost.presentActionOwner(for: reference)
     }
 
     private func handleQuickSelectionRequest(

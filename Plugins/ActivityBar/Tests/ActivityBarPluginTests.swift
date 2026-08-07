@@ -218,21 +218,18 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.storage.setCallCount(forKey: "activity-bar.input.days.v1"), 1)
     }
 
-    func testAppTerminationFlushesPendingInputStats() {
+    func testHostShutdownFlushesPendingInputStats() {
         let harness = makeHarness()
 
         harness.inputMonitor.emit(.keystroke(app: "Terminal"))
-        NotificationCenter.default.post(
-            name: NSApplication.willTerminateNotification,
-            object: nil
-        )
+        harness.plugin.deactivate(reason: .hostShutdown)
 
         let reloaded = ActivityBarStatsStore(storage: harness.storage)
 
         XCTAssertEqual(reloaded.today.totalInputs, 1)
     }
 
-    func testAppTerminationFlushesActiveCodingDuration() {
+    func testHostShutdownFlushesActiveCodingDuration() {
         let storage = ActivityBarMemoryStorage()
         var now = activityBarTestDate(hour: 10)
         let codingStats = ActivityBarCodingSessionStore(
@@ -255,10 +252,7 @@ final class ActivityBarPluginTests: XCTestCase {
         )
 
         now = now.addingTimeInterval(10)
-        NotificationCenter.default.post(
-            name: NSApplication.willTerminateNotification,
-            object: nil
-        )
+        harness.plugin.deactivate(reason: .hostShutdown)
 
         let reloaded = ActivityBarCodingSessionStore(
             storage: harness.storage,

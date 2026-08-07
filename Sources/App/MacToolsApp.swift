@@ -71,8 +71,8 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         }
         let actionGridOverlayController = ActionGridOverlayController(pluginHost: pluginHost)
         self.actionGridOverlayController = actionGridOverlayController
-        pluginHost.installActionGridPresenter { [weak actionGridOverlayController] entries in
-            actionGridOverlayController?.present(entries: entries) ?? false
+        pluginHost.installActionGridPresenter { [weak actionGridOverlayController] entries, source in
+            actionGridOverlayController?.present(entries: entries, source: source) ?? false
         }
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,

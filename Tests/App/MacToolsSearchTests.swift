@@ -422,12 +422,28 @@ final class MacToolsSearchTests: XCTestCase {
                 "navigation.dashboard",
                 "navigation.feature-panel",
                 "navigation.actions-and-shortcuts",
+                "navigation.automation",
                 "navigation.marketplace",
                 "navigation.general",
                 "navigation.about"
             ]
         )
         XCTAssertTrue(results.allSatisfy { $0.kind == .navigation })
+    }
+
+    func testFeatureNavigationUsesRuntimeLocalizedTitles() {
+        let index = MacToolsSearchIndexBuilder.build(
+            pluginHost: makePluginHostForTests(plugins: [])
+        )
+
+        XCTAssertEqual(
+            index.results(matching: FeatureL10n.string("操作与快捷键")).first?.id,
+            "navigation.actions-and-shortcuts"
+        )
+        XCTAssertEqual(
+            index.results(matching: FeatureL10n.string("自动化")).first?.id,
+            "navigation.automation"
+        )
     }
 
     func testPresentationOrderMatchesVisibleGroupsAndQuickSelectionNumbers() {
@@ -452,6 +468,56 @@ final class MacToolsSearchTests: XCTestCase {
             MacToolsSearchPresentation.quickSelectionNumber(
                 for: "missing",
                 in: ordered
+            )
+        )
+    }
+
+    func testUnifiedSearchFieldKeepsKeyboardNavigationInsideThePalette() {
+        XCTAssertEqual(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertTab(_:)),
+                hasMarkedText: false
+            ),
+            .moveSelection(1)
+        )
+        XCTAssertEqual(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertBacktab(_:)),
+                hasMarkedText: false
+            ),
+            .moveSelection(-1)
+        )
+        XCTAssertEqual(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertNewline(_:)),
+                hasMarkedText: false,
+                modifierFlags: .command
+            ),
+            .openOwner
+        )
+        XCTAssertEqual(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)),
+                hasMarkedText: false
+            ),
+            .openOwner
+        )
+        XCTAssertTrue(UnifiedSearchTextField.isOpenOwnerKeyEquivalent(
+            keyCode: 36,
+            modifierFlags: .command
+        ))
+        XCTAssertTrue(UnifiedSearchTextField.isOpenOwnerKeyEquivalent(
+            keyCode: 76,
+            modifierFlags: [.command, .shift]
+        ))
+        XCTAssertFalse(UnifiedSearchTextField.isOpenOwnerKeyEquivalent(
+            keyCode: 36,
+            modifierFlags: []
+        ))
+        XCTAssertNil(
+            UnifiedSearchTextField.command(
+                for: #selector(NSResponder.insertTab(_:)),
+                hasMarkedText: true
             )
         )
     }

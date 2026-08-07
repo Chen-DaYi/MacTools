@@ -19,6 +19,7 @@ enum SettingsPresentationRequest: Equatable {
     case appUpdate
     case pluginMarketplace
     case pluginConfiguration(String)
+    case automationWorkflow(UUID)
     case feature(FeatureSettingsPane)
 }
 
@@ -99,6 +100,17 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
             return .toggleDashboard
         case .toggleFeaturePanel:
             return .toggleFeaturePanel
+        }
+    }
+
+    var settingsPresentationRequest: SettingsPresentationRequest {
+        switch self {
+        case .openSettings, .openCommandPalette:
+            .general
+        case .toggleDashboard:
+            .feature(.dashboardLayout)
+        case .toggleFeaturePanel:
+            .feature(.featurePanelLayout)
         }
     }
 
@@ -345,7 +357,10 @@ final class PluginHost: ObservableObject {
     private let actionPresetStore: ActionInvocationPresetStore
     let actionRunLinkService: ActionRunLinkService
     let automationController: AutomationController
-    private var actionGridPresentationHandler: (([ActionGridPresentationEntry]) -> Bool)?
+    private var actionGridPresentationHandler: ((
+        [ActionGridPresentationEntry],
+        ActionExecutionSource
+    ) -> Bool)?
     private var activeActionShortcutReferences: Set<ActionReference> = []
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
@@ -398,6 +413,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
     @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
     @Published private(set) var actionCatalogEntries: [ActionCatalogEntry] = []
+    @Published private(set) var actionRegistryIssues: [ActionRegistryIssue] = []
     @Published private(set) var shortcutBindingRevision: UInt64 = 0
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
@@ -617,7 +633,9 @@ final class PluginHost: ObservableObject {
         syncGlobalShortcuts()
     }
 
-    func makePreferencesBackup() -> PreferencesBackup {
+    func makePreferencesBackup(
+        selection requestedSelection: PreferencesBackupSelection? = nil
+    ) -> PreferencesBackup {
         let shortcutDescriptors = shortcutDescriptors()
         var shortcutCustomizations = shortcutStore.customizations(
             for: shortcutDescriptors.map(\.itemID)
@@ -628,6 +646,10 @@ final class PluginHost: ObservableObject {
             }
         }
 
+        let automationSnapshot = automationController.preferencesBackupSnapshot()
+        let portablePreferences = portablePluginPreferences()
+        let selection = requestedSelection
+            ?? .all(pluginPreferenceIDs: Set(portablePreferences.keys))
         return PreferencesBackup(
             application: preferencesBackupStore.applicationPreferences(),
             pluginDisplay: pluginDisplayPreferencesStore.backupSnapshot(
@@ -635,13 +657,24 @@ final class PluginHost: ObservableObject {
                 dashboardDefaultPluginIDs: defaultPluginIDs(for: .dashboard),
                 featurePanelDefaultPluginIDs: defaultPluginIDs(for: .featurePanel)
             ),
-            shortcutCustomizations: shortcutCustomizations,
-            actionShortcutAssignments: shortcutAssignmentService.assignments,
-            pluginPreferences: portablePluginPreferences()
+            shortcutCustomizations: selection.includesShortcuts ? shortcutCustomizations : [:],
+            actionShortcutAssignments: selection.includesShortcuts
+                ? shortcutAssignmentService.assignments
+                : [],
+            pluginPreferences: portablePreferences.filter {
+                selection.pluginPreferenceIDs.contains($0.key)
+            },
+            actionInvocationPresets: selection.includesRunLinks ? actionPresetStore.presets() : [],
+            workflows: selection.includesAutomation ? automationSnapshot.workflows : [],
+            automationRules: selection.includesAutomation ? automationSnapshot.rules : [],
+            selection: selection
         )
     }
 
-    func preferencesImportPreview(for backup: PreferencesBackup) throws -> PreferencesImportPreview {
+    func preferencesImportPreview(
+        for backup: PreferencesBackup,
+        selection: PreferencesBackupSelection? = nil
+    ) throws -> PreferencesImportPreview {
         try PreferencesImportPreview.make(
             backup: backup,
             availablePluginIDs: Set(defaultPluginIDs),
@@ -650,15 +683,17 @@ final class PluginHost: ObservableObject {
             ),
             availableActionReferences: Set(actionCatalogEntries.map(\.reference)),
             pluginManagementItems: pluginManagementItems,
+            selection: selection,
             applicationPreferencesAreValid: preferencesBackupStore.validates
         )
     }
 
     func importPreferences(
         _ backup: PreferencesBackup,
-        installingMissingPluginIDs requestedPluginIDs: Set<String>
+        installingMissingPluginIDs requestedPluginIDs: Set<String>,
+        selection: PreferencesBackupSelection? = nil
     ) async throws -> PreferencesImportResult {
-        let preview = try preferencesImportPreview(for: backup)
+        let preview = try preferencesImportPreview(for: backup, selection: selection)
         let installablePluginIDs = Set(preview.installablePlugins.map(\.id))
         var installedPluginIDs: [String] = []
         var pluginInstallationFailures: [String: String] = [:]
@@ -676,7 +711,7 @@ final class PluginHost: ObservableObject {
             loadDynamicPluginsIfNeeded()
         }
 
-        var result = try importPreferences(backup)
+        var result = try importPreferences(backup, selection: selection)
         result = PreferencesImportResult(
             installedPluginIDs: installedPluginIDs,
             pluginInstallationFailures: pluginInstallationFailures,
@@ -685,45 +720,69 @@ final class PluginHost: ObservableObject {
         return result
     }
 
-    func importPreferences(_ backup: PreferencesBackup) throws -> PreferencesImportResult {
-        _ = try preferencesImportPreview(for: backup)
-        preferencesBackupStore.apply(backup.application)
+    func importPreferences(
+        _ backup: PreferencesBackup,
+        selection requestedSelection: PreferencesBackupSelection? = nil
+    ) throws -> PreferencesImportResult {
+        let selection = requestedSelection ?? backup.effectiveSelection
+        _ = try preferencesImportPreview(for: backup, selection: selection)
+        if selection.includesApplicationPreferences {
+            preferencesBackupStore.apply(backup.application)
+        }
 
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            backup.pluginDisplay.orderedPluginIDs,
-            defaultPluginIDs: defaultPluginIDs
-        )
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            backup.pluginDisplay.dashboardOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
-            for: .dashboard,
-            defaultPluginIDs: defaultPluginIDs(for: .dashboard)
-        )
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            backup.pluginDisplay.featurePanelOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
-            for: .featurePanel,
-            defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
-        )
-        // A legacy backup has one global checkbox. Map it to both supported
-        // surfaces; current backups restore the two independent values.
-        pluginDisplayPreferencesStore.setHiddenPluginIDs(
-            Set(backup.pluginDisplay.dashboardHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
-            for: .dashboard,
-            defaultPluginIDs: defaultPluginIDs(for: .dashboard)
-        )
-        pluginDisplayPreferencesStore.setHiddenPluginIDs(
-            Set(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
-            for: .featurePanel,
-            defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
-        )
+        if selection.includesPluginLayout {
+            pluginDisplayPreferencesStore.setOrderedPluginIDs(
+                backup.pluginDisplay.orderedPluginIDs,
+                defaultPluginIDs: defaultPluginIDs
+            )
+            pluginDisplayPreferencesStore.setOrderedPluginIDs(
+                backup.pluginDisplay.dashboardOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
+                for: .dashboard,
+                defaultPluginIDs: defaultPluginIDs(for: .dashboard)
+            )
+            pluginDisplayPreferencesStore.setOrderedPluginIDs(
+                backup.pluginDisplay.featurePanelOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
+                for: .featurePanel,
+                defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
+            )
+            // A legacy backup has one global checkbox. Map it to both supported
+            // surfaces; current backups restore the two independent values.
+            pluginDisplayPreferencesStore.setHiddenPluginIDs(
+                Set(backup.pluginDisplay.dashboardHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
+                for: .dashboard,
+                defaultPluginIDs: defaultPluginIDs(for: .dashboard)
+            )
+            pluginDisplayPreferencesStore.setHiddenPluginIDs(
+                Set(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
+                for: .featurePanel,
+                defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
+            )
+        }
 
-        restorePortablePluginPreferences(backup.pluginPreferences)
-        var shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)
-        if !backup.actionShortcutAssignments.isEmpty {
+        restorePortablePluginPreferences(backup.pluginPreferences.filter {
+            selection.pluginPreferenceIDs.contains($0.key)
+        })
+        var shortcutErrors: [String: String] = [:]
+        if selection.includesShortcuts {
+            shortcutErrors = applyImportedShortcutCustomizations(backup.shortcutCustomizations)
+        }
+        if selection.includesShortcuts, !backup.actionShortcutAssignments.isEmpty {
             if case let .failure(error) = shortcutAssignmentService.replaceAllForImport(
                 backup.actionShortcutAssignments
             ) {
                 shortcutErrors["action-shortcuts"] = error.localizedDescription
             }
+        }
+        if selection.includesRunLinks,
+           let presets = backup.actionInvocationPresets,
+           !actionPresetStore.replaceAll(presets) {
+            shortcutErrors["run-links"] = FeatureL10n.string("无法保存运行链接预设。")
+        }
+        if selection.includesAutomation,
+           let workflows = backup.workflows,
+           let rules = backup.automationRules,
+           !automationController.restorePreferences(workflows: workflows, rules: rules) {
+            shortcutErrors["automation"] = FeatureL10n.string("无法保存工作流。")
         }
 
         rebuildDerivedState()
@@ -1148,7 +1207,7 @@ final class PluginHost: ObservableObject {
     }
 
     func installActionGridPresenter(
-        _ presenter: @escaping ([ActionGridPresentationEntry]) -> Bool
+        _ presenter: @escaping ([ActionGridPresentationEntry], ActionExecutionSource) -> Bool
     ) {
         actionGridPresentationHandler = presenter
         actionRegistry.invalidateAvailability()
@@ -1746,6 +1805,9 @@ final class PluginHost: ObservableObject {
             }
             if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
                 actionGridConsumer.actionGridHostContext = makeActionGridHostContext()
+            }
+            if let trackpadActionConsumer = plugin as? any TrackpadActionHostContextConsuming {
+                trackpadActionConsumer.trackpadActionHostContext = makeTrackpadActionHostContext()
             }
             if let activityStateHandling = plugin as? any PluginApplicationActivityStateHandling {
                 guardPluginCall(plugin, operation: "set application activity state") {
@@ -2370,14 +2432,71 @@ final class PluginHost: ObservableObject {
             }
         }
 
-        actionRegistry.synchronize(registrations)
+        let issues = actionRegistry.synchronize(registrations)
+        actionRegistryIssues = issues
+        if issues.isEmpty {
+            AppLog.pluginHost.info(
+                "Action registry synchronized providers=\(registrations.count, privacy: .public) catalog=\(self.actionRegistry.catalogEntries.count, privacy: .public) issues=0"
+            )
+        } else {
+            let summary = actionRegistryIssueSummary(issues)
+            AppLog.pluginHost.error(
+                "Action registry rejected \(issues.count, privacy: .public) item(s): \(summary, privacy: .public)"
+            )
+        }
         automationController.migrateReferencesIfNeeded()
         migrateLegacyAppActionShortcutsIfNeeded()
         migrateLegacyPluginActionShortcutsIfNeeded()
         actionCatalogEntries = actionRegistry.catalogEntries
+        actionShortcutCatalogItems = buildActionShortcutCatalogItems()
         for plugin in activePlugins {
             (plugin as? any ActionGridHostContextConsuming)?.actionSurfaceCatalogDidChange()
+            (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionCatalogDidChange()
         }
+    }
+
+    private func actionRegistryIssueSummary(_ issues: [ActionRegistryIssue]) -> String {
+        var counts: [String: Int] = [:]
+        for issue in issues {
+            let category = switch issue {
+            case .invalidProviderID: "invalid-provider-id"
+            case .duplicateProviderID: "duplicate-provider-id"
+            case .invalidDefinition: "invalid-definition"
+            case .duplicateDefinition: "duplicate-definition"
+            case .invalidCatalogEntry: "invalid-catalog-entry"
+            case .duplicateCatalogEntry: "duplicate-catalog-entry"
+            }
+            counts[category, default: 0] += 1
+        }
+        return counts.keys.sorted().map { key in
+            "\(key)=\(counts[key, default: 0])"
+        }.joined(separator: ",")
+    }
+
+    private func makeTrackpadActionHostContext() -> TrackpadActionHostContext {
+        TrackpadActionHostContext(
+            catalog: { [weak self] in self?.actionSurfaceCatalogItems() ?? [] },
+            item: { [weak self] reference in self?.actionSurfaceItem(for: reference) },
+            migrate: { [weak self] reference in
+                guard let self,
+                      case let .success(migrated) = self.actionRegistry.migrate(reference) else {
+                    return nil
+                }
+                return migrated
+            },
+            execute: { [weak self] reference in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    _ = await self.actionExecutor.execute(
+                        ActionInvocation(
+                            reference: reference,
+                            source: .trackpadGesture,
+                            mode: .foreground
+                        )
+                    )
+                }
+            }
+        )
     }
 
     private func makeActionGridHostContext() -> ActionGridHostContext {
@@ -2395,19 +2514,34 @@ final class PluginHost: ObservableObject {
                 self?.presentActionOwner(for: reference) ?? false
             },
             canPresent: { [weak self] in self?.actionGridPresentationHandler != nil },
-            present: { [weak self] entries in
+            present: { [weak self] entries, source in
                 guard let self,
                       (1 ... 9).contains(entries.count),
                       Set(entries.map(\.id)).count == entries.count,
-                      Set(entries.map(\.reference)).count == entries.count,
-                      entries.allSatisfy({
-                          $0.reference.key != ActionKey(providerID: "action-grid", actionID: "show")
-                      }) else {
+                      Self.validateActionGridPresentationEntries(entries) else {
                     return false
                 }
-                return self.actionGridPresentationHandler?(entries) ?? false
+                return self.actionGridPresentationHandler?(entries, source) ?? false
             }
         )
+    }
+
+    private static func validateActionGridPresentationEntries(
+        _ entries: [ActionGridPresentationEntry],
+        depth: Int = 0
+    ) -> Bool {
+        guard depth <= ActionGridPresentationLimits.maximumFolderDepth,
+              entries.count <= ActionGridPresentationLimits.maximumEntriesPerGrid,
+              Set(entries.map(\.id)).count == entries.count else {
+            return false
+        }
+        return entries.allSatisfy { entry in
+            if let children = entry.children {
+                return entry.customTitle?.isEmpty == false
+                    && validateActionGridPresentationEntries(children, depth: depth + 1)
+            }
+            return entry.reference.key != ActionKey(providerID: "action-grid", actionID: "show")
+        }
     }
 
     private func actionSurfaceCatalogItems() -> [ActionSurfaceCatalogItem] {
@@ -2438,9 +2572,20 @@ final class PluginHost: ObservableObject {
         guard let appPresentationHandler else { return false }
         switch reference.key.providerID {
         case "mactools":
-            appPresentationHandler(.settings(.feature(.actionsAndShortcuts)))
+            guard let action = AppShortcutAction(rawValue: reference.key.actionID) else {
+                return false
+            }
+            appPresentationHandler(.settings(action.settingsPresentationRequest))
         case AutomationController.providerID:
-            appPresentationHandler(.settings(.feature(.automation)))
+            if reference.key.actionID.hasPrefix("workflow."),
+               let workflowID = UUID(
+                uuidString: String(reference.key.actionID.dropFirst("workflow.".count))
+               ),
+               automationController.workflows.contains(where: { $0.id == workflowID }) {
+                appPresentationHandler(.settings(.automationWorkflow(workflowID)))
+            } else {
+                appPresentationHandler(.settings(.feature(.automation)))
+            }
         case let pluginID:
             rebuildDerivedState()
             guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
@@ -2454,7 +2599,9 @@ final class PluginHost: ObservableObject {
     func canPresentActionOwner(for reference: ActionReference) -> Bool {
         guard appPresentationHandler != nil else { return false }
         switch reference.key.providerID {
-        case "mactools", AutomationController.providerID:
+        case "mactools":
+            return AppShortcutAction(rawValue: reference.key.actionID) != nil
+        case AutomationController.providerID:
             return true
         case let pluginID:
             return pluginConfigurationItems.contains(where: { $0.id == pluginID })
@@ -2900,11 +3047,18 @@ final class PluginHost: ObservableObject {
                 return nil
             }
 
+            let configurationDescription = configurations.first?.description
+                ?? descriptor.metadata.defaultDescription
+
             return PluginConfigurationItem(
                 id: pluginID,
                 pluginID: pluginID,
                 title: descriptor.metadata.title,
-                description: configurations.first?.description ?? descriptor.metadata.defaultDescription,
+                description: localizedDescription(
+                    configurationDescription,
+                    pluginMetadata: descriptor.plugin.metadata,
+                    localizedMetadata: descriptor.metadata
+                ),
                 iconName: descriptor.metadata.iconName,
                 iconTint: descriptor.metadata.iconTint,
                 settingsCards: matchingSettingsCards,

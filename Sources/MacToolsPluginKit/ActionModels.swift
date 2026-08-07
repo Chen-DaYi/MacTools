@@ -395,6 +395,7 @@ public enum ActionExecutionSource: String, Hashable, Codable, Sendable {
     case runLink
     case workflow
     case actionGrid
+    case trackpadGesture
     case manual
     case test
 }

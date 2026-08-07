@@ -7,6 +7,8 @@ enum AppDeepLink: Equatable {
         case root
         case general
         case about
+        case actionsAndShortcuts
+        case automation
         case pluginMarketplace
         case pluginConfiguration(String)
     }
@@ -28,6 +30,10 @@ enum AppDeepLink: Equatable {
             return .settings(.general)
         case .settings(.about):
             return .settings(.about)
+        case .settings(.actionsAndShortcuts):
+            return .settings(.feature(.actionsAndShortcuts))
+        case .settings(.automation):
+            return .settings(.feature(.automation))
         case .settings(.pluginMarketplace):
             return .settings(.pluginMarketplace)
         case let .settings(.pluginConfiguration(pluginID)):
@@ -180,6 +186,10 @@ enum AppDeepLinkParser {
             return .success(.navigation(.settings(.general)))
         case ["settings", "about"]:
             return .success(.navigation(.settings(.about)))
+        case ["settings", "features", "actions-and-shortcuts"]:
+            return .success(.navigation(.settings(.actionsAndShortcuts)))
+        case ["settings", "features", "automation"]:
+            return .success(.navigation(.settings(.automation)))
         case ["settings", "plugins", "marketplace"]:
             return .success(.navigation(.settings(.pluginMarketplace)))
         case let components where components.count == 3

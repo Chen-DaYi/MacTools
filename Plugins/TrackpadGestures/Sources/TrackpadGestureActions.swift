@@ -9,10 +9,14 @@ protocol TrackpadGestureActionExecuting: AnyObject {
 }
 
 final class TrackpadGestureActionExecutor: TrackpadGestureActionExecuting {
-    static let keyboardEventMarker: Int64 = 0x4D_54_4B_45_59_42_4F_41
+    nonisolated static let keyboardEventMarker: Int64 = 0x4D_54_4B_45_59_42_4F_41
 
     func execute(_ action: TrackpadGestureAction) {
         switch action {
+        case .action:
+            // Canonical MacTools actions are executed by the injected host
+            // context so they share availability, confirmation, and logging.
+            break
         case let .keyboardShortcut(binding):
             postShortcut(binding)
         case .middleClick:

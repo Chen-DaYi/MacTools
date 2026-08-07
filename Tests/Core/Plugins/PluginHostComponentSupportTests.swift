@@ -475,6 +475,56 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertTrue(host.featureManagementItems.isEmpty)
     }
 
+    func testDynamicPluginConfigurationUsesLocalizedManifestSummaryForDefaultDescription() {
+        let preferenceKey = PluginRuntimeLocalization.preferenceUserDefaultsKey
+        let previousPreference = UserDefaults.standard.object(forKey: preferenceKey)
+        UserDefaults.standard.set("zh-Hans", forKey: preferenceKey)
+        defer {
+            if let previousPreference {
+                UserDefaults.standard.set(previousPreference, forKey: preferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preferenceKey)
+            }
+        }
+
+        let plugin = MockComponentPanelPlugin(
+            id: "localized",
+            configuration: PluginConfiguration(description: "Component localized") { _ in
+                Text("Settings")
+            }
+        )
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        let store = PluginPackageStore(
+            rootDirectory: rootDirectory,
+            userDefaults: UserDefaults(suiteName: suiteName)!,
+            hostVersion: "1.0.0"
+        )
+        _ = installTestPluginPackage(
+            id: "localized",
+            bundleName: "Localized.bundle",
+            capabilities: .init(componentPanel: true, configuration: true),
+            localizedMetadata: [
+                "zh-Hans": PluginLocalizedMetadata(
+                    displayName: "本地化插件",
+                    summary: "本地化说明"
+                ),
+            ],
+            store: store
+        )
+        let loader = StubDynamicPluginLoader { records in
+            records.map { record in
+                DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
+            }
+        }
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
+        let host = makeHost(plugins: [], dynamicPluginManager: manager)
+
+        XCTAssertEqual(host.pluginConfigurationItems.first?.title, "本地化插件")
+        XCTAssertEqual(host.pluginConfigurationItems.first?.description, "本地化说明")
+    }
+
     func testDeferredDynamicLoadingMigratesLegacyOrderIntoBothSurfaces() throws {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -654,6 +704,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         id: String,
         bundleName: String,
         capabilities: PluginPackageManifest.Capabilities = .init(),
+        localizedMetadata: [String: PluginLocalizedMetadata]? = nil,
         store: PluginPackageStore
     ) -> PluginPackageRecord {
         let sourceURL = store.rootDirectory
@@ -669,7 +720,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
             version: "1.0.0",
             minHostVersion: "0.1.0",
             bundleRelativePath: bundleName,
-            capabilities: capabilities
+            capabilities: capabilities,
+            localizedMetadata: localizedMetadata
         )
         let data = try? JSONEncoder().encode(manifest)
         try? data?.write(to: sourceURL.appendingPathComponent("plugin.json"))

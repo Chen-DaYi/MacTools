@@ -53,7 +53,7 @@ final class CarbonAutoInputSourceCatalog: AutoInputSourceControlling {
         ]
         observers = names.map { name in
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
+                DispatchQueue.main.async {
                     self?.refresh()
                     self?.onSourcesChanged?()
                 }
@@ -68,7 +68,12 @@ final class CarbonAutoInputSourceCatalog: AutoInputSourceControlling {
     }
 
     func refresh() {
-        let list = TISCreateInputSourceList(nil, false).takeRetainedValue() as! [TISInputSource]
+        let rawList = TISCreateInputSourceList(nil, false).takeRetainedValue()
+        guard let list = rawList as? [TISInputSource] else {
+            sourceReferences = [:]
+            sources = []
+            return
+        }
         var nextReferences: [String: TISInputSource] = [:]
         var nextSources: [AutoInputSource] = []
 

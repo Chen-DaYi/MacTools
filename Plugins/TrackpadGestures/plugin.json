@@ -1,51 +1,51 @@
 {
   "id": "trackpad-gestures",
   "displayName": "触控板手势",
-  "summary": "将自定义触控板手势映射为快捷键或中键点击",
+  "summary": "将自定义触控板手势映射为 MacTools 操作、快捷键或中键点击",
   "localizedMetadata": {
     "ar": {
       "displayName": "إيماءات لوحة التتبع",
-      "summary": "تعيين إيماءات لوحة التتبع للاختصارات أو النقر الأوسط."
+      "summary": "تعيين إيماءات لوحة التتبع لإجراءات MacTools أو الاختصارات أو النقر الأوسط."
     },
     "de": {
       "displayName": "Trackpad-Gesten",
-      "summary": "Trackpad-Gesten Tastenkürzeln oder Mittelklicks zuordnen."
+      "summary": "Trackpad-Gesten MacTools-Aktionen, Tastenkürzeln oder Mittelklicks zuordnen."
     },
     "en": {
       "displayName": "Trackpad Gestures",
-      "summary": "Map custom trackpad gestures to shortcuts or middle clicks."
+      "summary": "Map trackpad gestures to MacTools actions, shortcuts, or middle clicks."
     },
     "es": {
       "displayName": "Gestos del trackpad",
-      "summary": "Asigna gestos del trackpad a atajos o clics centrales."
+      "summary": "Asigna gestos del trackpad a acciones de MacTools, atajos o clics centrales."
     },
     "fr": {
       "displayName": "Gestes du trackpad",
-      "summary": "Associez les gestes du trackpad à des raccourcis ou des clics du milieu."
+      "summary": "Associez les gestes du trackpad à des actions MacTools, des raccourcis ou des clics du milieu."
     },
     "ja": {
       "displayName": "トラックパッドジェスチャ",
-      "summary": "トラックパッドジェスチャをショートカットや中クリックに割り当てます。"
+      "summary": "トラックパッドジェスチャをMacToolsアクション、ショートカット、または中クリックに割り当てます。"
     },
     "ko": {
       "displayName": "트랙패드 제스처",
-      "summary": "트랙패드 제스처를 단축키 또는 가운데 클릭에 매핑합니다."
+      "summary": "트랙패드 제스처를 MacTools 동작, 단축키 또는 가운데 클릭에 매핑합니다."
     },
     "pt": {
       "displayName": "Gestos do trackpad",
-      "summary": "Mapeie gestos do trackpad para atalhos ou cliques do meio."
+      "summary": "Mapeie gestos do trackpad para ações do MacTools, atalhos ou cliques do meio."
     },
     "ru": {
       "displayName": "Жесты трекпада",
-      "summary": "Назначайте жестам трекпада сочетания клавиш или средний щелчок."
+      "summary": "Назначайте жестам трекпада действия MacTools, сочетания клавиш или средний щелчок."
     },
     "zh-Hans": {
       "displayName": "触控板手势",
-      "summary": "将自定义触控板手势映射为快捷键或中键点击"
+      "summary": "将自定义触控板手势映射为 MacTools 操作、快捷键或中键点击"
     },
     "zh-Hant": {
       "displayName": "觸控板手勢",
-      "summary": "將自訂觸控板手勢對應為快速鍵或中鍵點按"
+      "summary": "將自訂觸控板手勢對應為 MacTools 操作、快速鍵或中鍵點按"
     }
   },
   "version": "1.0.0",

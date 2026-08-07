@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import XCTest
 import MacToolsPluginKit
@@ -52,6 +53,22 @@ private final class WindowSwitcherMemoryStorage: PluginStorage {
 
 @MainActor
 final class WindowSwitcherPluginTests: XCTestCase {
+    func testWorkspaceNotificationHopsSafelyToMainActor() async {
+        let center = NotificationCenter()
+        let catalog = WindowSwitcherAppCatalog(notificationCenter: center)
+        let changed = expectation(description: "catalog reports a workspace change")
+        catalog.onChange = {
+            XCTAssertTrue(Thread.isMainThread)
+            changed.fulfill()
+        }
+        catalog.start()
+
+        center.post(name: NSWorkspace.didLaunchApplicationNotification, object: nil)
+
+        await fulfillment(of: [changed], timeout: 1)
+        catalog.stop()
+    }
+
     func testModePersists() {
         let storage = WindowSwitcherMemoryStorage()
         let store = WindowSwitcherStore(storage: storage)

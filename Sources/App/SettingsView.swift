@@ -23,6 +23,7 @@ struct SettingsView: View {
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     let appearanceUserDefaults: UserDefaults
     @StateObject private var uninstallConfirmationSession = PluginUninstallConfirmationSession()
+    @State private var selectedSettingsDestination: SettingsDestination = .general
     var showDashboard: () -> Void = {}
     var showFeaturePanel: () -> Void = {}
 
@@ -34,7 +35,7 @@ struct SettingsView: View {
         )
 
         return ZStack {
-            TabView(selection: settingsDestinationBinding) {
+            TabView(selection: $selectedSettingsDestination) {
                 GeneralSettingsView(
                     pluginHost: pluginHost,
                     navigationCoordinator: navigationCoordinator,
@@ -106,6 +107,26 @@ struct SettingsView: View {
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
         .animation(.easeOut(duration: 0.14), value: navigationCoordinator.isUnifiedSearchPresented)
+        .onAppear {
+            selectedSettingsDestination = navigationCoordinator.destination.settingsDestination
+        }
+        .onChange(of: navigationCoordinator.destination.settingsDestination) { _, destination in
+            if selectedSettingsDestination != destination {
+                selectedSettingsDestination = destination
+            }
+        }
+        .onChange(of: selectedSettingsDestination) { _, destination in
+            // SwiftUI owns the TabView binding. Route the resulting selection
+            // change through an explicit actor hop instead of reading a
+            // MainActor object from a Binding getter during AppKit layout.
+            Task { @MainActor [navigationCoordinator] in
+                guard navigationCoordinator.destination.settingsDestination != destination else {
+                    return
+                }
+                await Task.yield()
+                navigationCoordinator.selectSettingsDestination(destination)
+            }
+        }
     }
 
     private var layoutDirection: LayoutDirection {
@@ -114,24 +135,6 @@ struct SettingsView: View {
             : .leftToRight
     }
 
-    private var settingsDestinationBinding: Binding<SettingsDestination> {
-        Binding(
-            get: { navigationCoordinator.destination.settingsDestination },
-            set: { destination in
-                guard destination != navigationCoordinator.destination.settingsDestination else {
-                    return
-                }
-
-                // TabView writes its selection during the same update pass in
-                // which it swaps the page. Defer the observable navigation
-                // change so SwiftUI does not publish from inside that pass.
-                Task { @MainActor in
-                    await Task.yield()
-                    navigationCoordinator.selectSettingsDestination(destination)
-                }
-            }
-        )
-    }
 }
 
 // AppWindowRouter hosts Settings in an AppKit NSWindow, so scene-level SwiftUI
@@ -317,12 +320,15 @@ struct GeneralSettingsView: View {
                 }
 
                 Section {
-                    AppearanceSettingsRow(selection: appearancePreferenceBinding)
+                    AppearanceSettingsRow(
+                        selectionRawValue: $appearancePreferenceRawValue,
+                        userDefaults: appearanceUserDefaults
+                    )
                         .generalSettingsSearchAnchor(
                             target: .appearance,
                             activeTarget: activeSearchTarget
                         )
-                    LanguageSettingsRow(selection: languagePreferenceBinding)
+                    LanguageSettingsRow(selectionRawValue: $languagePreferenceRawValue)
                         .generalSettingsSearchAnchor(
                             target: .language,
                             activeTarget: activeSearchTarget
@@ -340,7 +346,7 @@ struct GeneralSettingsView: View {
                         target: .menuBarIcon,
                         activeTarget: activeSearchTarget
                     )
-                    MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
+                    MenuBarClickBehaviorSettingsRow(selectionRawValue: $clickBehaviorRawValue)
                         .generalSettingsSearchAnchor(
                             target: .menuBarClickBehavior,
                             activeTarget: activeSearchTarget
@@ -389,36 +395,6 @@ struct GeneralSettingsView: View {
                 }
                 activeSearchTarget = nil
             }
-        }
-    }
-
-    private var appearancePreferenceBinding: Binding<AppAppearancePreference> {
-        Binding {
-            AppAppearancePreference(rawValue: appearancePreferenceRawValue) ?? .system
-        } set: { preference in
-            preference.storeAndApply(in: appearanceUserDefaults)
-        }
-    }
-
-    private var languagePreferenceBinding: Binding<AppLanguagePreference> {
-        Binding {
-            AppLanguagePreference(rawValue: languagePreferenceRawValue) ?? .system
-        } set: { preference in
-            let oldPreference = AppLanguagePreference(rawValue: languagePreferenceRawValue) ?? .system
-            guard oldPreference != preference else {
-                return
-            }
-
-            languagePreferenceRawValue = preference.rawValue
-            preference.store()
-        }
-    }
-
-    private var clickBehaviorBinding: Binding<MenuBarClickBehaviorPreference> {
-        Binding {
-            MenuBarClickBehaviorPreference(rawValue: clickBehaviorRawValue) ?? .standard
-        } set: { preference in
-            clickBehaviorRawValue = preference.rawValue
         }
     }
 
@@ -618,6 +594,9 @@ private struct PendingPreferencesImport: Identifiable {
 private struct PreferencesBackupSettingsRow: View {
     @ObservedObject var pluginHost: PluginHost
     @State private var pendingImport: PendingPreferencesImport?
+    @State private var isChoosingExport = false
+    @State private var exportSelection = PreferencesBackupSelection.all(pluginPreferenceIDs: [])
+    @State private var exportPluginOptions: [PreferencesPluginOption] = []
     @State private var alertMessage: String?
     @State private var isPreparingImport = false
     @State private var isImporting = false
@@ -640,7 +619,7 @@ private struct PreferencesBackupSettingsRow: View {
 
                 Text(AppL10n.preferencesBackup(
                     "preferencesBackup.description",
-                    defaultValue: "包含应用偏好、插件显示顺序、快捷键和支持导出的插件设置；不会包含权限、缓存、凭证或其他私有数据。"
+                    defaultValue: "包含应用偏好、插件布局、快捷键、工作流、自动化规则、已保存的运行链接和支持导出的插件设置；不包含权限、缓存、凭证或运行历史。"
                 ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
@@ -664,13 +643,26 @@ private struct PreferencesBackupSettingsRow: View {
         .sheet(item: $pendingImport) { pending in
             PreferencesImportPreviewSheet(
                 preview: pending.preview,
+                pluginOptions: pluginOptions(for: Set(pending.backup.pluginPreferences.keys)),
                 isImporting: isImporting,
                 onCancel: { pendingImport = nil },
-                onImport: { selectedPluginIDs in
+                onImport: { selectedPluginIDs, selection in
                     importPreferences(
                         pending.backup,
-                        installingMissingPluginIDs: selectedPluginIDs
+                        installingMissingPluginIDs: selectedPluginIDs,
+                        selection: selection
                     )
+                }
+            )
+        }
+        .sheet(isPresented: $isChoosingExport) {
+            PreferencesExportSelectionSheet(
+                selection: $exportSelection,
+                pluginOptions: exportPluginOptions,
+                onCancel: { isChoosingExport = false },
+                onExport: {
+                    isChoosingExport = false
+                    savePreferences(selection: exportSelection)
                 }
             )
         }
@@ -692,6 +684,13 @@ private struct PreferencesBackupSettingsRow: View {
     }
 
     private func exportPreferences() {
+        let backup = pluginHost.makePreferencesBackup()
+        exportSelection = .all(pluginPreferenceIDs: Set(backup.pluginPreferences.keys))
+        exportPluginOptions = pluginOptions(for: Set(backup.pluginPreferences.keys))
+        isChoosingExport = true
+    }
+
+    private func savePreferences(selection: PreferencesBackupSelection) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
@@ -703,7 +702,9 @@ private struct PreferencesBackupSettingsRow: View {
         }
 
         do {
-            try pluginHost.makePreferencesBackup().encodedJSON().write(to: url, options: .atomic)
+            try pluginHost.makePreferencesBackup(selection: selection)
+                .encodedJSON()
+                .write(to: url, options: .atomic)
             alertMessage = AppL10n.preferencesBackup("preferencesBackup.exported", defaultValue: "偏好设置已导出。")
         } catch {
             alertMessage = preferencesBackupErrorMessage(error)
@@ -740,7 +741,8 @@ private struct PreferencesBackupSettingsRow: View {
 
     private func importPreferences(
         _ backup: PreferencesBackup,
-        installingMissingPluginIDs pluginIDs: Set<String>
+        installingMissingPluginIDs pluginIDs: Set<String>,
+        selection: PreferencesBackupSelection
     ) {
         Task { @MainActor in
             isImporting = true
@@ -749,7 +751,8 @@ private struct PreferencesBackupSettingsRow: View {
             do {
                 let result = try await pluginHost.importPreferences(
                     backup,
-                    installingMissingPluginIDs: pluginIDs
+                    installingMissingPluginIDs: pluginIDs,
+                    selection: selection
                 )
                 pendingImport = nil
                 let importedMessage = AppL10n.preferencesBackup(
@@ -778,6 +781,17 @@ private struct PreferencesBackupSettingsRow: View {
         }
     }
 
+    private func pluginOptions(for pluginIDs: Set<String>) -> [PreferencesPluginOption] {
+        let titles = Dictionary(
+            pluginHost.pluginManagementItems.map { ($0.id, $0.title) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return pluginIDs.map { id in
+            PreferencesPluginOption(id: id, title: titles[id] ?? id)
+        }
+        .sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+    }
+
     private func preferencesBackupErrorMessage(_ error: Error) -> String {
         switch error as? PreferencesBackupError {
         case let .unsupportedFormatVersion(version):
@@ -803,6 +817,175 @@ private struct PreferencesBackupSettingsRow: View {
     }
 }
 
+private struct PreferencesPluginOption: Identifiable, Equatable {
+    let id: String
+    let title: String
+}
+
+private struct PreferencesExportSelectionSheet: View {
+    @Binding var selection: PreferencesBackupSelection
+    let pluginOptions: [PreferencesPluginOption]
+    let onCancel: () -> Void
+    let onExport: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(AppL10n.preferencesBackup(
+                "preferencesBackup.exportSelection.title",
+                defaultValue: "选择要导出的偏好设置"
+            ))
+            .font(PluginSettingsTheme.Typography.pageTitle)
+
+            Text(AppL10n.preferencesBackup(
+                "preferencesBackup.selection.description",
+                defaultValue: "仅导出所选类别。导入时还可以再次选择要恢复的内容。"
+            ))
+            .font(PluginSettingsTheme.Typography.rowDescription)
+            .foregroundStyle(.secondary)
+
+            PreferencesSelectionFields(
+                selection: $selection,
+                pluginOptions: pluginOptions
+            )
+
+            HStack {
+                Spacer()
+                Button(AppL10n.settings("common.cancel", defaultValue: "取消"), action: onCancel)
+                    .buttonStyle(.bordered)
+                Button(AppL10n.preferencesBackup(
+                    "preferencesBackup.exportSelection.confirm",
+                    defaultValue: "继续导出…"
+                ), action: onExport)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selection.isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 520)
+    }
+}
+
+private struct PreferencesSelectionFields: View {
+    @Binding var selection: PreferencesBackupSelection
+    let pluginOptions: [PreferencesPluginOption]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            selectionRow(
+                title: AppL10n.preferencesBackup(
+                    "preferencesBackup.preview.application",
+                    defaultValue: "应用偏好"
+                ),
+                description: AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.application.description",
+                    defaultValue: "外观、语言和菜单栏点击方式；不包含权限、登录项或凭证。"
+                ),
+                isOn: $selection.includesApplicationPreferences
+            )
+            selectionRow(
+                title: AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.pluginLayout",
+                    defaultValue: "插件布局与可见性"
+                ),
+                description: AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.pluginLayout.description",
+                    defaultValue: "恢复仪表盘和功能面板中的插件顺序与可见性；缺失插件需要另外安装。"
+                ),
+                isOn: $selection.includesPluginLayout
+            )
+            selectionRow(
+                title: AppL10n.preferencesBackup(
+                    "preferencesBackup.preview.shortcuts",
+                    defaultValue: "快捷键"
+                ),
+                description: AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.shortcuts.description",
+                    defaultValue: "恢复应用和操作快捷键；插件操作还需要对应插件及其设置。"
+                ),
+                isOn: $selection.includesShortcuts
+            )
+            selectionRow(
+                title: AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.automation",
+                    defaultValue: "工作流与自动化规则"
+                ),
+                description: AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.automation.description",
+                    defaultValue: "保留工作流标识和直接 Run Link；工作流步骤仍需要对应插件及其设置。"
+                ),
+                isOn: $selection.includesAutomation
+            )
+            selectionRow(
+                title: AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.runLinks",
+                    defaultValue: "已保存的 Run Link"
+                ),
+                description: AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.runLinks.description",
+                    defaultValue: "参数化操作的已保存链接；工作流链接随“工作流与自动化规则”一起恢复。"
+                ),
+                isOn: $selection.includesRunLinks
+            )
+
+            if !pluginOptions.isEmpty {
+                Divider()
+                Text(AppL10n.preferencesBackup(
+                    "preferencesBackup.preview.plugins",
+                    defaultValue: "插件设置"
+                ))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text(AppL10n.preferencesBackup(
+                    "preferencesBackup.selection.plugins.description",
+                    defaultValue: "仅包含插件声明为可移植的设置。脚本文本等敏感内容仍需在对应插件中单独允许备份。"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(pluginOptions) { plugin in
+                    Toggle(plugin.title, isOn: pluginSelectionBinding(plugin.id))
+                        .toggleStyle(.checkbox)
+                        .padding(.leading, 18)
+                }
+            }
+        }
+        .toggleStyle(.checkbox)
+        .font(PluginSettingsTheme.Typography.rowTitle)
+        .padding(16)
+        .pluginSettingsCardBackground(.host)
+    }
+
+    private func selectionRow(
+        title: String,
+        description: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+                Text(description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func pluginSelectionBinding(_ pluginID: String) -> Binding<Bool> {
+        Binding {
+            selection.pluginPreferenceIDs.contains(pluginID)
+        } set: { selected in
+            if selected {
+                selection.pluginPreferenceIDs.insert(pluginID)
+            } else {
+                selection.pluginPreferenceIDs.remove(pluginID)
+            }
+        }
+    }
+}
+
 enum PreferencesBackupExportFileName {
     static func make(date: Date = .now, timeZone: TimeZone = .current) -> String {
         let formatter = DateFormatter()
@@ -816,10 +999,29 @@ enum PreferencesBackupExportFileName {
 
 private struct PreferencesImportPreviewSheet: View {
     let preview: PreferencesImportPreview
+    let pluginOptions: [PreferencesPluginOption]
     let isImporting: Bool
     let onCancel: () -> Void
-    let onImport: (Set<String>) -> Void
+    let onImport: (Set<String>, PreferencesBackupSelection) -> Void
     @State private var selectedInstallablePluginIDs: Set<String> = []
+    @State private var selection: PreferencesBackupSelection
+
+    init(
+        preview: PreferencesImportPreview,
+        pluginOptions: [PreferencesPluginOption],
+        isImporting: Bool,
+        onCancel: @escaping () -> Void,
+        onImport: @escaping (Set<String>, PreferencesBackupSelection) -> Void
+    ) {
+        self.preview = preview
+        self.pluginOptions = pluginOptions
+        self.isImporting = isImporting
+        self.onCancel = onCancel
+        self.onImport = onImport
+        var availableSelection = preview.selection
+        availableSelection.pluginPreferenceIDs.formIntersection(pluginOptions.map(\.id))
+        _selection = State(initialValue: availableSelection)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -831,35 +1033,10 @@ private struct PreferencesImportPreviewSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                GridRow {
-                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.application", defaultValue: "应用偏好"))
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text(AppL10n.preferencesBackup(
-                        "preferencesBackup.preview.applicationSummary",
-                        defaultValue: "应用外观、语言和状态栏点击行为"
-                    ))
-                }
-                GridRow {
-                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.plugins", defaultValue: "插件设置"))
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text(AppL10n.preferencesBackupFormat(
-                        "preferencesBackup.preview.pluginsCount",
-                        defaultValue: "%d 个可用插件",
-                        preview.pluginCount
-                    ))
-                }
-                GridRow {
-                    Text(AppL10n.preferencesBackup("preferencesBackup.preview.shortcuts", defaultValue: "快捷键"))
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                    Text(AppL10n.preferencesBackupFormat(
-                        "preferencesBackup.preview.shortcutsCount",
-                        defaultValue: "%d 项自定义",
-                        preview.shortcutCount
-                    ))
-                }
-            }
-            .font(PluginSettingsTheme.Typography.rowDescription)
+            PreferencesSelectionFields(
+                selection: $selection,
+                pluginOptions: pluginOptions
+            )
 
             Text(AppL10n.preferencesBackup(
                 "preferencesBackup.preview.replaceNotice",
@@ -918,10 +1095,10 @@ private struct PreferencesImportPreviewSheet: View {
                     .buttonStyle(.bordered)
                     .disabled(isImporting)
                 Button(confirmTitle) {
-                    onImport(selectedInstallablePluginIDs)
+                    onImport(selectedInstallablePluginIDs, selection)
                 }
                     .buttonStyle(.borderedProminent)
-                    .disabled(isImporting)
+                    .disabled(isImporting || selection.isEmpty)
             }
 
             if isImporting {
@@ -954,7 +1131,7 @@ private struct PreferencesImportPreviewSheet: View {
 
         return AppL10n.preferencesBackup(
             "preferencesBackup.description",
-            defaultValue: "备份包含应用偏好、插件显示顺序和快捷键；不会包含权限、缓存或插件私有数据。"
+            defaultValue: "包含应用偏好、插件布局、快捷键、工作流、自动化规则、已保存的运行链接和支持导出的插件设置；不包含权限、缓存、凭证或运行历史。"
         )
     }
 
@@ -972,16 +1149,9 @@ private struct PreferencesImportPreviewSheet: View {
 }
 
 private struct MenuBarClickBehaviorSettingsRow: View {
-    @Binding var selection: MenuBarClickBehaviorPreference
+    @Binding var selectionRawValue: String
+    @State private var isSwapped = false
     @State private var toggleID = UUID()
-
-    private var isSwapped: Binding<Bool> {
-        Binding {
-            selection.isSwapped
-        } set: { enabled in
-            selection = enabled ? .swapped : .standard
-        }
-    }
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -1015,7 +1185,7 @@ private struct MenuBarClickBehaviorSettingsRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Toggle(AppL10n.settings("menuBarClick.toggle", defaultValue: "交换左键与右键功能"), isOn: isSwapped)
+            Toggle(AppL10n.settings("menuBarClick.toggle", defaultValue: "交换左键与右键功能"), isOn: $isSwapped)
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .id(toggleID)
@@ -1025,15 +1195,35 @@ private struct MenuBarClickBehaviorSettingsRow: View {
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help(AppL10n.settings("menuBarClick.help", defaultValue: "开启后左键打开功能面板，右键功能打开仪表盘"))
         .onAppear {
+            isSwapped = resolvedSelection.isSwapped
             DispatchQueue.main.async {
                 toggleID = UUID()
             }
         }
+        .onChange(of: isSwapped) { _, isSwapped in
+            let rawValue = isSwapped
+                ? MenuBarClickBehaviorPreference.swapped.rawValue
+                : MenuBarClickBehaviorPreference.standard.rawValue
+            if selectionRawValue != rawValue {
+                selectionRawValue = rawValue
+            }
+        }
+        .onChange(of: selectionRawValue) { _, _ in
+            let storedValue = resolvedSelection.isSwapped
+            if isSwapped != storedValue {
+                isSwapped = storedValue
+            }
+        }
+    }
+
+    private var resolvedSelection: MenuBarClickBehaviorPreference {
+        MenuBarClickBehaviorPreference(rawValue: selectionRawValue) ?? .standard
     }
 }
 
 private struct AppearanceSettingsRow: View {
-    @Binding var selection: AppAppearancePreference
+    @Binding var selectionRawValue: String
+    let userDefaults: UserDefaults
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -1058,10 +1248,10 @@ private struct AppearanceSettingsRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Picker(AppL10n.settings("appearance.picker", defaultValue: "外观"), selection: $selection) {
+            Picker(AppL10n.settings("appearance.picker", defaultValue: "外观"), selection: $selectionRawValue) {
                 ForEach(AppAppearancePreference.allCases) { preference in
                     Text(preference.title)
-                        .tag(preference)
+                        .tag(preference.rawValue)
                 }
             }
             .pickerStyle(.segmented)
@@ -1071,11 +1261,18 @@ private struct AppearanceSettingsRow: View {
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help(AppL10n.settings("appearance.help", defaultValue: "设置应用外观"))
+        .onChange(of: selectionRawValue) { _, rawValue in
+            guard let preference = AppAppearancePreference(rawValue: rawValue) else {
+                selectionRawValue = AppAppearancePreference.system.rawValue
+                return
+            }
+            preference.storeAndApply(in: userDefaults)
+        }
     }
 }
 
 private struct LanguageSettingsRow: View {
-    @Binding var selection: AppLanguagePreference
+    @Binding var selectionRawValue: String
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -1101,10 +1298,10 @@ private struct LanguageSettingsRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Picker(AppL10n.settings("language.picker", defaultValue: "语言"), selection: $selection) {
+            Picker(AppL10n.settings("language.picker", defaultValue: "语言"), selection: $selectionRawValue) {
                 ForEach(AppLanguagePreference.allCases) { preference in
                     Text(preference.pickerTitle)
-                        .tag(preference)
+                        .tag(preference.rawValue)
                 }
             }
             .pickerStyle(.menu)
@@ -1115,6 +1312,13 @@ private struct LanguageSettingsRow: View {
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help(AppL10n.settings("language.help", defaultValue: "设置应用语言"))
+        .onChange(of: selectionRawValue) { _, rawValue in
+            guard let preference = AppLanguagePreference(rawValue: rawValue) else {
+                selectionRawValue = AppLanguagePreference.system.rawValue
+                return
+            }
+            preference.store()
+        }
     }
 }
 
@@ -1534,7 +1738,10 @@ private struct FeatureSettingsDetailPane: View {
         case .actionsAndShortcuts:
             ActionShortcutSettingsView(pluginHost: pluginHost)
         case .automation:
-            AutomationSettingsView(pluginHost: pluginHost)
+            AutomationSettingsView(
+                pluginHost: pluginHost,
+                navigationCoordinator: navigationCoordinator
+            )
         case .dashboardLayout:
             SurfaceLayoutSettingsView(
                 navigationCoordinator: navigationCoordinator,

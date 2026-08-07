@@ -12,6 +12,7 @@ enum ActionRunLinkClipboard {
 struct ActionRunLinkControl: View {
     @ObservedObject var pluginHost: PluginHost
     let reference: ActionReference
+    var displaysUnavailableReason = true
 
     @State private var isExpanded = false
     @State private var copiedValue: String?
@@ -23,20 +24,28 @@ struct ActionRunLinkControl: View {
             case let .available(representation, presetID):
                 availableContent(representation, presetID: presetID)
             case .needsPreset:
-                Button(FeatureL10n.string("创建运行链接…")) {
-                    switch pluginHost.createActionRunLink(for: reference) {
-                    case let .success(representation):
-                        copy(representation.url)
-                    case let .failure(error):
-                        errorMessage = message(for: error)
+                VStack(alignment: .leading, spacing: 4) {
+                    Button(FeatureL10n.string("创建并复制运行链接")) {
+                        switch pluginHost.createActionRunLink(for: reference) {
+                        case let .success(representation):
+                            copy(representation.url)
+                        case let .failure(error):
+                            errorMessage = message(for: error)
+                        }
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Text(FeatureL10n.string("此操作需要使用已保存的运行链接预设。"))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             case let .unavailable(reason):
-                Label(reason, systemImage: "link.badge.plus")
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
+                if displaysUnavailableReason {
+                    Label(reason, systemImage: "link.badge.plus")
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if let errorMessage {

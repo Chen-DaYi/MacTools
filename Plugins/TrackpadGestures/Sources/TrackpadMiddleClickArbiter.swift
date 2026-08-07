@@ -542,8 +542,12 @@ struct TrackpadMiddleClickArbiter: Sendable {
     }
 }
 
-@MainActor
-final class TrackpadMiddleClickCoordinator {
+/// Synchronously processes events delivered by a CGEvent tap installed on the
+/// main CFRunLoop. Its methods are called only from the main thread, including
+/// expiration work scheduled on DispatchQueue.main, but it intentionally does
+/// not use MainActor isolation because CFRunLoop callbacks do not carry Swift
+/// executor metadata.
+final class TrackpadMiddleClickCoordinator: @unchecked Sendable {
     static let replayMarker: Int64 = 0x4D_54_4D_49_44_44_4C_45
 
     private var arbiter = TrackpadMiddleClickArbiter()
@@ -551,29 +555,29 @@ final class TrackpadMiddleClickCoordinator {
     private var bufferedEvents: [CGEvent] = []
     private var expirationWorkItem: DispatchWorkItem?
     private let clock: @Sendable () -> TimeInterval
-    private let synthesizeMiddleClick: @Sendable @MainActor () -> Void
-    private let releaseMiddleButton: @Sendable @MainActor () -> Void
-    private let postEvent: @Sendable @MainActor (CGEvent) -> Void
+    private let synthesizeMiddleClick: () -> Void
+    private let releaseMiddleButton: () -> Void
+    private let postEvent: (CGEvent) -> Void
     private let candidateTimeline: TrackpadMiddleClickCandidateTimeline
-    private let eventOrigin: @Sendable @MainActor (CGEvent) -> TrackpadMiddleClickArbiter.NativeEventOrigin
+    private let eventOrigin: (CGEvent) -> TrackpadMiddleClickArbiter.NativeEventOrigin
 
     init(
         clock: @escaping @Sendable () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime
         },
-        synthesizeMiddleClick: @escaping @Sendable @MainActor () -> Void = {
-            TrackpadGestureActionExecutor().execute(.middleClick)
+        synthesizeMiddleClick: @escaping () -> Void = {
+            TrackpadMiddleClickEventPoster.postClick()
         },
-        releaseMiddleButton: @escaping @Sendable @MainActor () -> Void = {
+        releaseMiddleButton: @escaping () -> Void = {
             TrackpadMiddleClickEventPoster.postButtonUp(
                 eventSourceMarker: TrackpadMiddleClickCoordinator.replayMarker
             )
         },
-        postEvent: @escaping @Sendable @MainActor (CGEvent) -> Void = {
+        postEvent: @escaping (CGEvent) -> Void = {
             $0.post(tap: .cghidEventTap)
         },
         candidateTimeline: TrackpadMiddleClickCandidateTimeline = .init(),
-        eventOrigin: @escaping @Sendable @MainActor (CGEvent) -> TrackpadMiddleClickArbiter.NativeEventOrigin = { _ in
+        eventOrigin: @escaping (CGEvent) -> TrackpadMiddleClickArbiter.NativeEventOrigin = { _ in
             // Public CGEvent metadata does not expose a trustworthy hardware device identifier.
             // The coordinator infers trackpad origin only during one unambiguous contact episode;
             // otherwise unknown input passes through.

@@ -264,11 +264,11 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     }
 
     private func startDragMonitoring() {
-        // Global NSEvent monitors fire on the main thread. Run synchronously with
-        // `MainActor.assumeIsolated` so multiple events cannot pass the `isDragPanelShowing`
-        // check while queued through async Tasks.
+        // Global NSEvent monitor callbacks are foreign to Swift concurrency even when AppKit
+        // happens to invoke them on the main thread. Deliver them through the main queue instead
+        // of asserting MainActor isolation from the callback.
         mouseDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
-            MainActor.assumeIsolated {
+            DispatchQueue.main.async {
                 self?.isMouseButtonDown = true
                 // Capture the current drag pasteboard version; only a later changeCount indicates
                 // that a real drag started.
@@ -276,12 +276,12 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
             }
         }
         dragMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDragged]) { [weak self] _ in
-            MainActor.assumeIsolated {
+            DispatchQueue.main.async {
                 self?.handleGlobalDrag()
             }
         }
         mouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
-            MainActor.assumeIsolated {
+            DispatchQueue.main.async {
                 self?.isMouseButtonDown = false
                 self?.handleGlobalMouseUp()
             }

@@ -545,8 +545,16 @@ final class DynamicPluginManager: ObservableObject {
             )
         }
         for plugin in plugins {
-            try (plugin as! any PluginFeatureExtractionReadinessProviding)
-                .validateFeatureExtractionReadiness()
+            guard let readinessProvider = plugin as? any PluginFeatureExtractionReadinessProviding else {
+                throw DynamicPluginManagerOperationError.pluginRuntimeValidationFailed(
+                    pluginID,
+                    AppL10n.plugins(
+                        "plugin.error.dynamic.runtimeValidationReadinessUnsupported",
+                        defaultValue: "插件不支持功能迁移就绪检查。"
+                    )
+                )
+            }
+            try readinessProvider.validateFeatureExtractionReadiness()
         }
     }
 

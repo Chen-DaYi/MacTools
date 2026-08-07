@@ -164,12 +164,12 @@ struct FixDropZoneView: View {
         }
     }
 
+    @MainActor
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
         // Mark pending before the async URL load finishes so the mouseUp monitor does not
-        // misclassify the panel as idle and close it. SwiftUI invokes this drop callback
-        // on the main thread, so `assumeIsolated` is safe here.
-        MainActor.assumeIsolated { viewModel.beginDrop() }
+        // misclassify the panel as idle and close it.
+        viewModel.beginDrop()
         _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
             guard
                 let data,

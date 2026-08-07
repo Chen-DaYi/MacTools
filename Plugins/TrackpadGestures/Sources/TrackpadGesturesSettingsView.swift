@@ -5,6 +5,7 @@ import MacToolsPluginKit
 struct TrackpadGesturesSettingsView: View {
     @ObservedObject var store: TrackpadGestureStore
     let localization: PluginLocalization
+    let actionHostContext: TrackpadActionHostContext?
     let onChange: () -> Void
     let onSetTesting: (Bool) -> Void
 
@@ -22,6 +23,7 @@ struct TrackpadGesturesSettingsView: View {
                 draft: draft,
                 store: store,
                 localization: localization,
+                actionHostContext: actionHostContext,
                 onCancel: { editingDraft = nil },
                 onDelete: store.mappings.contains(where: { $0.id == draft.id }) ? {
                     store.delete(id: draft.id)
@@ -351,7 +353,7 @@ struct TrackpadGesturesSettingsView: View {
                         Text(mapping.gesture.title(localization: localization))
                             .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                             .lineLimit(1)
-                        Text(mapping.action.title(localization: localization))
+                        Text(mappingActionTitle(mapping.action))
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -372,7 +374,7 @@ struct TrackpadGesturesSettingsView: View {
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel(gestureTitle)
-            .accessibilityValue(mapping.action.title(localization: localization))
+            .accessibilityValue(mappingActionTitle(mapping.action))
             .accessibilityHint(editTitle)
             .onHover { hovering in
                 TrackpadSettingsCursor.update(isHovering: hovering)
@@ -487,9 +489,22 @@ struct TrackpadGesturesSettingsView: View {
         }
         editingDraft = TrackpadGestureMappingDraft(gesture: gesture)
     }
+
+    private func mappingActionTitle(_ action: TrackpadGestureAction) -> String {
+        if case let .action(reference) = action {
+            return actionHostContext?.item(for: reference)?.title
+                ?? localization.string(
+                    "editor.action.unavailable",
+                    defaultValue: "不可用的 MacTools 操作"
+                )
+        }
+        return action.title(localization: localization)
+    }
 }
 
-private enum TrackpadGestureEditorActionKind: String, CaseIterable, Identifiable {
+private enum TrackpadGestureEditorActionKind: String, Identifiable {
+    case none
+    case action
     case keyboardShortcut
     case middleClick
 
@@ -500,13 +515,15 @@ private struct TrackpadGestureMappingDraft: Identifiable {
     let id: UUID
     var gesture: TrackpadGesture
     var actionKind: TrackpadGestureEditorActionKind
+    var actionReference: ActionReference?
     var shortcut: ShortcutBinding?
     var isEnabled: Bool
 
     init(gesture: TrackpadGesture) {
         self.id = UUID()
         self.gesture = gesture
-        self.actionKind = .keyboardShortcut
+        self.actionKind = .none
+        self.actionReference = nil
         self.shortcut = nil
         self.isEnabled = true
     }
@@ -516,11 +533,17 @@ private struct TrackpadGestureMappingDraft: Identifiable {
         self.gesture = mapping.gesture
         self.isEnabled = mapping.isEnabled
         switch mapping.action {
+        case let .action(reference):
+            self.actionKind = .action
+            self.actionReference = reference
+            self.shortcut = nil
         case let .keyboardShortcut(shortcut):
             self.actionKind = .keyboardShortcut
+            self.actionReference = nil
             self.shortcut = shortcut
         case .middleClick:
             self.actionKind = .middleClick
+            self.actionReference = nil
             self.shortcut = nil
         }
     }
@@ -528,6 +551,11 @@ private struct TrackpadGestureMappingDraft: Identifiable {
     var mapping: TrackpadGestureMapping? {
         let action: TrackpadGestureAction
         switch actionKind {
+        case .none:
+            return nil
+        case .action:
+            guard let actionReference else { return nil }
+            action = .action(actionReference)
         case .keyboardShortcut:
             guard let shortcut, shortcut.isValid else { return nil }
             action = .keyboardShortcut(shortcut)
@@ -546,6 +574,7 @@ private struct TrackpadGestureMappingDraft: Identifiable {
 private struct TrackpadGestureEditor: View {
     @ObservedObject var store: TrackpadGestureStore
     let localization: PluginLocalization
+    let actionHostContext: TrackpadActionHostContext?
     let onCancel: () -> Void
     let onDelete: (() -> Void)?
     let onSave: (TrackpadGestureMapping) -> Void
@@ -556,6 +585,7 @@ private struct TrackpadGestureEditor: View {
         draft: TrackpadGestureMappingDraft,
         store: TrackpadGestureStore,
         localization: PluginLocalization,
+        actionHostContext: TrackpadActionHostContext?,
         onCancel: @escaping () -> Void,
         onDelete: (() -> Void)?,
         onSave: @escaping (TrackpadGestureMapping) -> Void
@@ -563,6 +593,7 @@ private struct TrackpadGestureEditor: View {
         _draft = State(initialValue: draft)
         self.store = store
         self.localization = localization
+        self.actionHostContext = actionHostContext
         self.onCancel = onCancel
         self.onDelete = onDelete
         self.onSave = onSave
@@ -615,17 +646,13 @@ private struct TrackpadGestureEditor: View {
                         title: localization.string("editor.action.title", defaultValue: "操作"),
                         icon: "arrow.right.circle"
                     ) {
-                        Picker(
-                            localization.string("editor.action.title", defaultValue: "操作"),
-                            selection: $draft.actionKind
-                        ) {
-                            Text(localization.string("action.shortcut", defaultValue: "键盘快捷键"))
-                                .tag(TrackpadGestureEditorActionKind.keyboardShortcut)
-                            Text(localization.string("action.middleClick", defaultValue: "鼠标中键"))
-                                .tag(TrackpadGestureEditorActionKind.middleClick)
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(minWidth: 300, idealWidth: 340, maxWidth: 380)
+                        TrackpadUnifiedActionPickerControl(
+                            localization: localization,
+                            context: actionHostContext,
+                            actionKind: $draft.actionKind,
+                            actionReference: $draft.actionReference,
+                            shortcut: $draft.shortcut
+                        )
 
                         if draft.actionKind == .keyboardShortcut {
                             PluginShortcutRecorder(
@@ -726,10 +753,22 @@ private struct TrackpadGestureEditor: View {
                 defaultValue: "该手势已配置，请选择其他手势。"
             )
         }
+        if draft.actionKind == .none {
+            return localization.string(
+                "editor.error.actionRequired",
+                defaultValue: "请选择一个操作。"
+            )
+        }
         if draft.actionKind == .keyboardShortcut, draft.shortcut == nil {
             return localization.string(
                 "editor.error.shortcutRequired",
                 defaultValue: "请录制一个键盘快捷键。"
+            )
+        }
+        if draft.actionKind == .action, draft.actionReference == nil {
+            return localization.string(
+                "editor.error.actionRequired",
+                defaultValue: "请选择一个操作。"
             )
         }
         return nil
@@ -760,6 +799,316 @@ private struct TrackpadGestureEditor: View {
             defaultValue: "此快捷键也用于：%@。允许重复使用。",
             gestureTitles.joined(separator: ", ")
         )
+    }
+}
+
+private struct TrackpadActionPickerGroup: Identifiable {
+    let title: String
+    let items: [ActionSurfaceCatalogItem]
+
+    var id: String { title }
+}
+
+private enum TrackpadInputActionChoice: String, CaseIterable, Identifiable {
+    case keyboardShortcut
+    case middleClick
+
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .keyboardShortcut: "keyboard"
+        case .middleClick: "computermouse"
+        }
+    }
+
+    func title(localization: PluginLocalization) -> String {
+        switch self {
+        case .keyboardShortcut:
+            localization.string("action.shortcut", defaultValue: "键盘快捷键")
+        case .middleClick:
+            localization.string("action.middleClick", defaultValue: "鼠标中键")
+        }
+    }
+}
+
+private struct TrackpadUnifiedActionPickerControl: View {
+    let localization: PluginLocalization
+    let context: TrackpadActionHostContext?
+    @Binding var actionKind: TrackpadGestureEditorActionKind
+    @Binding var actionReference: ActionReference?
+    @Binding var shortcut: ShortcutBinding?
+
+    @State private var isPresented = false
+    @State private var query = ""
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                Image(systemName: selectedSystemImage)
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(actionKind == .none ? Color.secondary : Color.accentColor)
+                    .frame(width: 30, height: 30)
+                    .background(Color.accentColor.opacity(actionKind == .none ? 0.06 : 0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selectedTitle)
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if let selectedSubtitle {
+                        Text(selectedSubtitle)
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(minWidth: 340, idealWidth: 390, maxWidth: 440, minHeight: 52)
+            .contentShape(Rectangle())
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control))
+            .overlay {
+                RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            pickerContent
+        }
+        .accessibilityIdentifier("mactools.trackpad.action-picker")
+        .accessibilityLabel(localization.string("editor.action.title", defaultValue: "操作"))
+        .accessibilityValue(selectedTitle)
+    }
+
+    private var pickerContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField(
+                localization.string("editor.action.search", defaultValue: "搜索操作"),
+                text: $query
+            )
+            .textFieldStyle(.roundedBorder)
+            .accessibilityIdentifier("mactools.trackpad.action-picker.search")
+
+            Divider()
+
+            if !hasResults {
+                ContentUnavailableView(
+                    localization.string("editor.action.empty", defaultValue: "没有匹配的操作"),
+                    systemImage: "magnifyingglass"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        if !filteredInputActions.isEmpty {
+                            pickerGroup(
+                                title: localization.string(
+                                    "editor.action.inputGroup",
+                                    defaultValue: "输入"
+                                )
+                            ) {
+                                ForEach(filteredInputActions) { choice in
+                                    inputActionRow(choice)
+                                }
+                            }
+                        }
+
+                        ForEach(groups) { group in
+                            pickerGroup(title: group.title) {
+                                ForEach(group.items) { item in
+                                    macToolsActionRow(item)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 460, height: 500)
+    }
+
+    private var selectedItem: ActionSurfaceCatalogItem? {
+        guard actionKind == .action, let actionReference else { return nil }
+        return context?.item(for: actionReference)
+    }
+
+    private var selectedTitle: String {
+        switch actionKind {
+        case .none:
+            localization.string("editor.action.choose", defaultValue: "选择操作…")
+        case .action:
+            selectedItem?.title ?? localization.string(
+                "editor.action.unavailable",
+                defaultValue: "不可用的 MacTools 操作"
+            )
+        case .keyboardShortcut:
+            localization.string("action.shortcut", defaultValue: "键盘快捷键")
+        case .middleClick:
+            localization.string("action.middleClick", defaultValue: "鼠标中键")
+        }
+    }
+
+    private var selectedSubtitle: String? {
+        switch actionKind {
+        case .none, .middleClick:
+            nil
+        case .action:
+            selectedItem?.ownerTitle
+        case .keyboardShortcut:
+            shortcut.map(ShortcutFormatter.displayString(for:))
+                ?? localization.string("editor.shortcut.unset", defaultValue: "未设置")
+        }
+    }
+
+    private var selectedSystemImage: String {
+        switch actionKind {
+        case .none: "bolt.circle"
+        case .action: selectedItem?.systemImage ?? "questionmark.square.dashed"
+        case .keyboardShortcut: TrackpadInputActionChoice.keyboardShortcut.systemImage
+        case .middleClick: TrackpadInputActionChoice.middleClick.systemImage
+        }
+    }
+
+    private var hasResults: Bool {
+        !filteredInputActions.isEmpty || !groups.isEmpty
+    }
+
+    private var filteredInputActions: [TrackpadInputActionChoice] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return TrackpadInputActionChoice.allCases.filter { choice in
+            normalizedQuery.isEmpty
+                || choice.title(localization: localization)
+                    .localizedCaseInsensitiveContains(normalizedQuery)
+        }
+    }
+
+    private var groups: [TrackpadActionPickerGroup] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = (context?.catalog ?? []).filter { item in
+            guard item.availability.isAvailable else { return false }
+            guard !normalizedQuery.isEmpty else { return true }
+            return [item.title, item.subtitle, item.ownerTitle]
+                .compactMap { $0 }
+                .contains { $0.localizedCaseInsensitiveContains(normalizedQuery) }
+        }
+        let grouped = Dictionary(grouping: items, by: \.ownerTitle)
+        return grouped.keys.sorted {
+            $0.localizedStandardCompare($1) == .orderedAscending
+        }.map { owner in
+            TrackpadActionPickerGroup(title: owner, items: grouped[owner] ?? [])
+        }
+    }
+
+    @ViewBuilder
+    private func pickerGroup<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    private func inputActionRow(_ choice: TrackpadInputActionChoice) -> some View {
+        Button {
+            actionReference = nil
+            switch choice {
+            case .keyboardShortcut:
+                actionKind = .keyboardShortcut
+            case .middleClick:
+                actionKind = .middleClick
+                shortcut = nil
+            }
+            isPresented = false
+        } label: {
+            pickerRow(
+                title: choice.title(localization: localization),
+                subtitle: choice == .keyboardShortcut
+                    ? shortcut.map(ShortcutFormatter.displayString(for:))
+                    : nil,
+                systemImage: choice.systemImage,
+                isSafe: true,
+                isSelected: isSelected(choice)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func macToolsActionRow(_ item: ActionSurfaceCatalogItem) -> some View {
+        Button {
+            actionKind = .action
+            actionReference = item.reference
+            shortcut = nil
+            isPresented = false
+        } label: {
+            pickerRow(
+                title: item.title,
+                subtitle: item.subtitle,
+                systemImage: item.systemImage,
+                isSafe: item.isSafe,
+                isSelected: actionKind == .action && actionReference == item.reference
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!item.availability.isAvailable)
+    }
+
+    private func pickerRow(
+        title: String,
+        subtitle: String?,
+        systemImage: String,
+        isSafe: Bool,
+        isSelected: Bool
+    ) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: systemImage)
+                .frame(width: 20)
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .foregroundStyle(.primary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !isSafe {
+                Image(systemName: "exclamationmark.shield")
+                    .foregroundStyle(.orange)
+            }
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+    }
+
+    private func isSelected(_ choice: TrackpadInputActionChoice) -> Bool {
+        switch choice {
+        case .keyboardShortcut: actionKind == .keyboardShortcut
+        case .middleClick: actionKind == .middleClick
+        }
     }
 }
 
@@ -876,6 +1225,8 @@ extension TrackpadGesture {
 extension TrackpadGestureAction {
     func title(localization: PluginLocalization) -> String {
         switch self {
+        case .action:
+            localization.string("action.macToolsAction", defaultValue: "MacTools 操作")
         case let .keyboardShortcut(binding):
             localization.format(
                 "action.shortcutFormat",

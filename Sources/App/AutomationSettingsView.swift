@@ -1,14 +1,20 @@
+import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
 struct AutomationSettingsView: View {
     @ObservedObject private var pluginHost: PluginHost
     @ObservedObject private var automation: AutomationController
+    @ObservedObject private var navigationCoordinator: SettingsNavigationCoordinator
     @State private var selectedWorkflowID: UUID?
 
-    init(pluginHost: PluginHost) {
+    init(
+        pluginHost: PluginHost,
+        navigationCoordinator: SettingsNavigationCoordinator
+    ) {
         self.pluginHost = pluginHost
         self.automation = pluginHost.automationController
+        self.navigationCoordinator = navigationCoordinator
     }
 
     var body: some View {
@@ -34,9 +40,15 @@ struct AutomationSettingsView: View {
             }
         }
         .background(SettingsStyle.contentBackground)
-        .onAppear(perform: selectInitialWorkflowIfNeeded)
+        .onAppear {
+            selectInitialWorkflowIfNeeded()
+            handleNavigationRevealRequest(navigationCoordinator.searchRevealRequest)
+        }
         .onChange(of: automation.workflows.map(\.id)) { _, _ in
             selectInitialWorkflowIfNeeded()
+        }
+        .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
+            handleNavigationRevealRequest(request)
         }
         .accessibilityIdentifier("mactools.automation")
     }
@@ -99,6 +111,19 @@ struct AutomationSettingsView: View {
         }
         selectedWorkflowID = automation.workflows.first?.id
     }
+
+    private func handleNavigationRevealRequest(_ request: SettingsSearchRevealRequest?) {
+        guard
+            let request,
+            case let .automation(target) = request.target,
+            automation.workflows.contains(where: { $0.id == target.workflowID })
+        else {
+            return
+        }
+
+        selectedWorkflowID = target.workflowID
+        navigationCoordinator.clearSearchRevealRequest(request)
+    }
 }
 
 private struct WorkflowCollectionRow: View {
@@ -111,10 +136,17 @@ private struct WorkflowCollectionRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: workflow.systemImage)
-                .foregroundStyle(workflow.isEnabled ? Color.accentColor : .secondary)
-                .frame(width: 20)
-                .accessibilityHidden(true)
+            Group {
+                if isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: workflow.systemImage)
+                        .foregroundStyle(workflow.isEnabled ? Color.accentColor : .secondary)
+                }
+            }
+            .frame(width: 20)
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(workflow.name)
@@ -130,14 +162,22 @@ private struct WorkflowCollectionRow: View {
             .accessibilityLabel("\(workflow.name)，\(summary)")
 
             Button {
-                _ = automation.startWorkflow(id: workflow.id)
+                if isRunning {
+                    automation.activeRunIDs(for: workflow.id).forEach(automation.cancel(runID:))
+                } else {
+                    _ = automation.startWorkflow(id: workflow.id)
+                }
             } label: {
-                Image(systemName: "play.fill")
+                Image(systemName: isRunning ? "stop.fill" : "play.fill")
             }
             .buttonStyle(.plain)
-            .disabled(!workflow.isEnabled || workflow.steps.isEmpty)
-            .help(FeatureL10n.string("运行工作流"))
-            .accessibilityLabel(FeatureL10n.format("运行“%@”", workflow.name))
+            .disabled(!isRunning && (!workflow.isEnabled || workflow.steps.isEmpty))
+            .help(isRunning ? FeatureL10n.string("停止当前工作流运行") : FeatureL10n.string("运行工作流"))
+            .accessibilityLabel(
+                isRunning
+                    ? FeatureL10n.string("停止当前工作流运行")
+                    : FeatureL10n.format("运行“%@”", workflow.name)
+            )
 
             Menu {
                 Button(FeatureL10n.string("上移")) { automation.moveWorkflow(id: workflow.id, offset: -1) }
@@ -156,6 +196,14 @@ private struct WorkflowCollectionRow: View {
     }
 
     private var summary: String {
+        if isRunning {
+            return FeatureL10n.format(
+                "%d 个步骤 · %d 条规则 · %@",
+                workflow.steps.count,
+                ruleCount,
+                FeatureL10n.string("运行中")
+            )
+        }
         let state = workflow.isEnabled ? FeatureL10n.string("已启用") : FeatureL10n.string("已停用")
         let last = lastRun.map {
             FeatureL10n.format(" · 上次%@", runStatusTitle($0.status))
@@ -167,6 +215,10 @@ private struct WorkflowCollectionRow: View {
             state,
             last
         )
+    }
+
+    private var isRunning: Bool {
+        !automation.activeRunIDs(for: workflow.id).isEmpty
     }
 }
 
@@ -352,21 +404,13 @@ private struct WorkflowDetailView: View {
     }
 
     private var actionPicker: some View {
-        Menu {
-            ForEach(pluginHost.actionCatalogEntries.filter {
-                $0.reference.key != workflow.actionKey
-            }) { entry in
-                Button {
-                    automation.addStep(workflowID: workflow.id, reference: entry.reference)
-                } label: {
-                    Text(entry.subtitle.map { "\(entry.title) — \($0)" } ?? entry.title)
-                }
+        WorkflowActionPicker(
+            pluginHost: pluginHost,
+            excluding: workflow.actionKey,
+            select: {
+                automation.addStep(workflowID: workflow.id, reference: $0)
             }
-        } label: {
-            Label(FeatureL10n.string("添加操作"), systemImage: "plus")
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        )
         .disabled(workflow.steps.count >= WorkflowDefinition.maximumStepCount)
     }
 
@@ -488,6 +532,203 @@ private struct WorkflowDetailView: View {
                 }
                 .pluginSettingsCardBackground(.host)
             }
+        }
+    }
+}
+
+private enum WorkflowActionPickerFilter: String, CaseIterable, Identifiable {
+    case available
+    case all
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .available: FeatureL10n.string("可用")
+        case .all: FeatureL10n.string("全部")
+        }
+    }
+}
+
+private struct WorkflowActionPickerItem: Identifiable {
+    let entry: ActionCatalogEntry
+    let ownerTitle: String
+    let systemImage: String
+    let availability: ActionAvailability
+    let requiresConfirmation: Bool
+
+    var id: ActionReference { entry.reference }
+}
+
+private struct WorkflowActionPickerGroup: Identifiable {
+    let providerID: String
+    let title: String
+    let items: [WorkflowActionPickerItem]
+
+    var id: String { providerID }
+}
+
+private struct WorkflowActionPicker: View {
+    @ObservedObject var pluginHost: PluginHost
+    let excluding: ActionKey
+    let select: (ActionReference) -> Void
+
+    @State private var isPresented = false
+    @State private var query = ""
+    @State private var filter: WorkflowActionPickerFilter = .available
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Label(FeatureL10n.string("添加操作"), systemImage: "plus")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            pickerContent
+        }
+        .accessibilityIdentifier("mactools.automation.add-action")
+    }
+
+    private var pickerContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField(FeatureL10n.string("搜索操作、插件或快捷键"), text: $query)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("mactools.automation.action-picker.search")
+
+            Picker(FeatureL10n.string("筛选"), selection: $filter) {
+                ForEach(WorkflowActionPickerFilter.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            Divider()
+
+            if groups.isEmpty {
+                ContentUnavailableView(
+                    FeatureL10n.string("没有匹配的操作"),
+                    systemImage: "magnifyingglass",
+                    description: Text(FeatureL10n.string("调整搜索词或筛选条件后重试。"))
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(groups) { group in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(group.title)
+                                    .font(PluginSettingsTheme.Typography.sectionTitle)
+                                    .foregroundStyle(.secondary)
+
+                                ForEach(group.items) { item in
+                                    Button {
+                                        select(item.entry.reference)
+                                        isPresented = false
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            Image(systemName: item.systemImage)
+                                                .frame(width: 22)
+                                                .foregroundStyle(item.availability.isAvailable ? Color.accentColor : .secondary)
+
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(item.entry.title)
+                                                    .font(PluginSettingsTheme.Typography.rowTitle)
+                                                    .foregroundStyle(.primary)
+                                                    .lineLimit(1)
+                                                if let subtitle = item.entry.subtitle {
+                                                    Text(subtitle)
+                                                        .font(PluginSettingsTheme.Typography.rowDescription)
+                                                        .foregroundStyle(.secondary)
+                                                        .lineLimit(1)
+                                                }
+                                            }
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                                            if item.requiresConfirmation {
+                                                Image(systemName: "exclamationmark.shield")
+                                                    .foregroundStyle(.orange)
+                                                    .help(FeatureL10n.string("执行前需要确认。"))
+                                            }
+
+                                            if !item.availability.isAvailable {
+                                                Image(systemName: "exclamationmark.triangle.fill")
+                                                    .foregroundStyle(.orange)
+                                                    .help(item.availability.reason ?? FeatureL10n.string("不可用"))
+                                            }
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(!item.availability.isAvailable)
+                                    .accessibilityIdentifier(
+                                        "mactools.automation.action-picker.\(item.entry.reference.key.id)"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 470, height: 500)
+    }
+
+    private var groups: [WorkflowActionPickerGroup] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = pluginHost.actionCatalogEntries.compactMap { entry -> WorkflowActionPickerItem? in
+            guard entry.reference.key != excluding,
+                  case let .success(action) = pluginHost.actionRegistry.registeredAction(
+                      for: entry.reference
+                  ) else {
+                return nil
+            }
+            let availability = pluginHost.actionAvailability(for: entry.reference)
+            guard filter == .all || availability.isAvailable else {
+                return nil
+            }
+            let ownerTitle = pluginHost.actionSurfaceOwnerTitle(
+                providerID: entry.reference.key.providerID
+            )
+            guard normalizedQuery.isEmpty || [
+                entry.title,
+                entry.subtitle,
+                ownerTitle,
+                action.definition.description,
+            ].compactMap({ $0 }).contains(where: {
+                $0.localizedCaseInsensitiveContains(normalizedQuery)
+            }) else {
+                return nil
+            }
+            return WorkflowActionPickerItem(
+                entry: entry,
+                ownerTitle: ownerTitle,
+                systemImage: action.definition.systemImage,
+                availability: availability,
+                requiresConfirmation: action.definition.risk == .confirmationRequired
+            )
+        }
+
+        var providerOrder: [String] = []
+        var grouped: [String: [WorkflowActionPickerItem]] = [:]
+        for item in items {
+            let providerID = item.entry.reference.key.providerID
+            if grouped[providerID] == nil {
+                providerOrder.append(providerID)
+            }
+            grouped[providerID, default: []].append(item)
+        }
+        return providerOrder.compactMap { providerID in
+            guard let items = grouped[providerID], let first = items.first else { return nil }
+            return WorkflowActionPickerGroup(
+                providerID: providerID,
+                title: first.ownerTitle,
+                items: items
+            )
         }
     }
 }
@@ -1260,6 +1501,27 @@ private struct WorkflowRunRow: View {
     var body: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Label(WorkflowRunPresentation.sourceTitle(run.source), systemImage: "arrow.triangle.branch")
+                    Spacer()
+                    Text(WorkflowRunPresentation.durationTitle(run))
+                    Button {
+                        ActionRunLinkClipboard.copy(
+                            WorkflowRunPresentation.diagnosticText(
+                                run,
+                                registry: pluginHost.actionRegistry
+                            )
+                        )
+                    } label: {
+                        Label(FeatureL10n.string("复制"), systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("mactools.automation.run.\(run.id.uuidString).copy")
+                }
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+
                 ForEach(run.stepResults) { result in
                     HStack {
                         Image(systemName: stepStatusImage(result.status))
@@ -1299,6 +1561,69 @@ private struct WorkflowRunRow: View {
         .pluginSettingsListRowPadding(interactive: true)
     }
 
+}
+
+@MainActor
+enum WorkflowRunPresentation {
+    static func sourceTitle(_ source: WorkflowRunSource) -> String {
+        switch source {
+        case .manual:
+            FeatureL10n.string("手动")
+        case .test:
+            FeatureL10n.string("测试")
+        case let .publishedAction(actionSource):
+            switch actionSource {
+            case .globalShortcut: FeatureL10n.string("全局快捷键")
+            case .runLink: FeatureL10n.string("运行链接")
+            case .actionGrid: FeatureL10n.string("操作网格")
+            case .trackpadGesture: FeatureL10n.string("触控板手势")
+            case .unifiedSearch: FeatureL10n.string("统一搜索")
+            case .workflow: FeatureL10n.string("工作流")
+            case .manual: FeatureL10n.string("手动")
+            case .test: FeatureL10n.string("测试")
+            }
+        case .automatic:
+            FeatureL10n.string("自动规则")
+        }
+    }
+
+    static func durationTitle(_ run: WorkflowRun) -> String {
+        guard let finishedAt = run.finishedAt else {
+            return FeatureL10n.string("运行中")
+        }
+        let seconds = max(0, finishedAt.timeIntervalSince(run.startedAt))
+        return Duration.seconds(seconds).formatted(
+            .units(allowed: [.minutes, .seconds], width: .abbreviated, maximumUnitCount: 2)
+        )
+    }
+
+    static func diagnosticText(
+        _ run: WorkflowRun,
+        registry: ActionRegistry
+    ) -> String {
+        let formatter = ISO8601DateFormatter()
+        var lines = [
+            "Workflow: \(run.workflowName)",
+            "Run ID: \(run.id.uuidString.lowercased())",
+            "Status: \(run.status.rawValue)",
+            "Source: \(sourceTitle(run.source))",
+            "Started: \(formatter.string(from: run.startedAt))",
+            "Finished: \(run.finishedAt.map(formatter.string(from:)) ?? "-")",
+            "Duration: \(durationTitle(run))",
+        ]
+        if let summary = run.localizedSummary, !summary.isEmpty {
+            lines.append("Summary: \(summary)")
+        }
+        for (index, result) in run.stepResults.enumerated() {
+            let title = WorkflowHistoryPresentation.actionTitle(for: result, registry: registry)
+            var line = "Step \(index + 1): \(title) [\(result.status.rawValue)]"
+            if let message = result.localizedMessage, !message.isEmpty {
+                line += " — \(message)"
+            }
+            lines.append(line)
+        }
+        return lines.joined(separator: "\n")
+    }
 }
 
 @MainActor

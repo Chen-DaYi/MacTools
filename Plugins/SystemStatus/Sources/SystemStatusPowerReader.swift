@@ -41,10 +41,19 @@ final class SystemStatusCPUPowerReader {
             return nil
         }
 
-        let items = rawItems as! CFArray
+        let rawItemsReference = rawItems as CFTypeRef
+        guard CFGetTypeID(rawItemsReference) == CFArrayGetTypeID() else {
+            return nil
+        }
+        let items = unsafeDowncast(rawItemsReference, to: CFArray.self)
         var cpuEnergyJoules: Double?
         for index in 0..<CFArrayGetCount(items) {
-            let item = unsafeBitCast(CFArrayGetValueAtIndex(items, index), to: CFDictionary.self)
+            let rawItem = CFArrayGetValueAtIndex(items, index)
+            let itemReference = unsafeBitCast(rawItem, to: CFTypeRef.self)
+            guard CFGetTypeID(itemReference) == CFDictionaryGetTypeID() else {
+                continue
+            }
+            let item = unsafeDowncast(itemReference, to: CFDictionary.self)
             guard
                 let group = functions.channelGetGroup(item)?.takeUnretainedValue() as String?,
                 group == "Energy Model",

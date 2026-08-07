@@ -61,7 +61,9 @@ final class LaunchpadFloatingIconWindowPresenter: LaunchpadFloatingIconPresentin
             ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.34, 1.18, 0.5, 1)
             window.animator().setFrame(screenRect, display: true)
         }, completionHandler: {
-            MainActor.assumeIsolated(completion)
+            DispatchQueue.main.async {
+                completion()
+            }
         })
     }
 
@@ -211,7 +213,11 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// deterministically (no sleeping, design §10).
     var settleTimeoutScheduler: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> DispatchWorkItem =
         { delay, work in
-            let item = DispatchWorkItem { MainActor.assumeIsolated(work) }
+            let item = DispatchWorkItem {
+                DispatchQueue.main.async {
+                    work()
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
             return item
         }
@@ -222,7 +228,9 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// blanks the slot for a frame before the cell's first paint (the merge-folder flicker).
     /// The icon sits exactly on the slot, so the extra frame is invisible. Tests run it inline.
     var settleDismissScheduler: @MainActor (@escaping @MainActor () -> Void) -> Void = { work in
-        DispatchQueue.main.async { MainActor.assumeIsolated(work) }
+        DispatchQueue.main.async {
+            work()
+        }
     }
 
     /// Synchronous mouseUp data path, injected by the overlay controller (it owns both the
@@ -240,7 +248,9 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// mode timer starves during direct drags); tests return nil and pump `tickDwell()` manually.
     var dwellTimerFactory: @MainActor (@escaping @MainActor () -> Void) -> Timer? = { tick in
         let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { _ in
-            MainActor.assumeIsolated(tick)
+            DispatchQueue.main.async {
+                tick()
+            }
         }
         RunLoop.main.add(timer, forMode: .eventTracking)
         RunLoop.main.add(timer, forMode: .common)

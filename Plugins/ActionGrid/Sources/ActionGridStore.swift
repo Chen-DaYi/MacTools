@@ -8,19 +8,71 @@ struct ActionGridEntry: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     var reference: ActionReference
     var customTitle: String?
+    var folder: ActionGridFolder?
+    /// Zero-based position in the containing 3×3 grid. Optional only so
+    /// layouts written before format version 3 can be decoded and migrated.
+    var slot: Int?
 
-    init(id: UUID = UUID(), reference: ActionReference, customTitle: String? = nil) {
+    init(
+        id: UUID = UUID(),
+        reference: ActionReference,
+        customTitle: String? = nil,
+        folder: ActionGridFolder? = nil,
+        slot: Int? = nil
+    ) {
         self.id = id
         self.reference = reference
         self.customTitle = customTitle
+        self.folder = folder
+        self.slot = slot
+    }
+
+    static func folder(
+        id: UUID = UUID(),
+        title: String,
+        systemImage: String = "folder.fill",
+        slot: Int? = nil
+    ) -> ActionGridEntry {
+        ActionGridEntry(
+            id: id,
+            reference: ActionReference(
+                key: ActionKey(
+                    providerID: ActionGridStore.folderProviderID,
+                    actionID: id.uuidString.lowercased()
+                )
+            ),
+            customTitle: title,
+            folder: ActionGridFolder(systemImage: systemImage),
+            slot: slot
+        )
     }
 
     var presentationEntry: ActionGridPresentationEntry {
-        ActionGridPresentationEntry(
+        if let folder {
+            return ActionGridPresentationEntry(
+                id: id.uuidString.lowercased(),
+                folderTitle: customTitle ?? "Folder",
+                systemImage: folder.systemImage,
+                children: folder.entries.map(\.presentationEntry),
+                slotIndex: slot
+            )
+        }
+        return ActionGridPresentationEntry(
             id: id.uuidString.lowercased(),
             reference: reference,
-            customTitle: customTitle
+            customTitle: customTitle,
+            slotIndex: slot
         )
+    }
+}
+
+struct ActionGridFolder: Codable, Equatable, Sendable {
+    var systemImage: String
+    var entries: [ActionGridEntry]
+
+    init(systemImage: String = "folder.fill", entries: [ActionGridEntry] = []) {
+        self.systemImage = systemImage
+        self.entries = entries
     }
 }
 
@@ -31,9 +83,12 @@ final class ActionGridStore: ObservableObject {
         let entries: [ActionGridEntry]
     }
 
-    static let currentFormatVersion = 1
+    static let currentFormatVersion = 3
     static let maximumEntryCount = 9
+    static let maximumFolderDepth = 3
+    static let maximumTotalEntryCount = 128
     static let maximumPayloadByteCount = 64 * 1_024
+    nonisolated static let folderProviderID = "action-grid.folder"
     private static let storageKey = "layout.v1"
 
     @Published private(set) var entries: [ActionGridEntry] = []
@@ -50,60 +105,148 @@ final class ActionGridStore: ObservableObject {
 
     @discardableResult
     func add(reference: ActionReference) -> Bool {
-        guard entries.count < Self.maximumEntryCount,
-              !entries.contains(where: { $0.reference == reference }) else {
+        add(reference: reference, in: nil)
+    }
+
+    @discardableResult
+    func add(reference: ActionReference, in folderID: UUID?) -> Bool {
+        add(reference: reference, in: folderID, at: nil)
+    }
+
+    @discardableResult
+    func add(reference: ActionReference, in folderID: UUID?, at requestedSlot: Int?) -> Bool {
+        updateEntries(in: folderID) { entries in
+            guard let slot = Self.availableSlot(requestedSlot, in: entries),
+                  !entries.contains(where: { $0.folder == nil && $0.reference == reference }) else {
+                return false
+            }
+            entries.append(ActionGridEntry(reference: reference, slot: slot))
+            Self.sortBySlot(&entries)
+            return true
+        }
+    }
+
+    @discardableResult
+    func addFolder(title: String, in folderID: UUID?) -> Bool {
+        addFolder(title: title, in: folderID, at: nil)
+    }
+
+    @discardableResult
+    func addFolder(title: String, in folderID: UUID?, at requestedSlot: Int?) -> Bool {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty,
+              title.utf8.count <= ActionGridEntry.maximumCustomTitleByteCount else {
             return false
         }
-        var updated = entries
-        updated.append(ActionGridEntry(reference: reference))
-        return replace(updated)
+        return updateEntries(in: folderID) { entries in
+            guard let slot = Self.availableSlot(requestedSlot, in: entries) else { return false }
+            entries.append(.folder(title: title, slot: slot))
+            Self.sortBySlot(&entries)
+            return true
+        }
     }
 
     @discardableResult
     func replace(id: UUID, reference: ActionReference) -> Bool {
-        guard let index = entries.firstIndex(where: { $0.id == id }),
-              !entries.enumerated().contains(where: { $0.offset != index && $0.element.reference == reference }) else {
-            return false
+        updateContainingEntries(entryID: id) { entries, index in
+            guard entries[index].folder == nil,
+                  !entries.enumerated().contains(where: {
+                      $0.offset != index && $0.element.folder == nil && $0.element.reference == reference
+                  }) else {
+                return false
+            }
+            entries[index].reference = reference
+            return true
         }
-        var updated = entries
-        updated[index].reference = reference
-        return replace(updated)
     }
 
     @discardableResult
     func setCustomTitle(id: UUID, title: String?) -> Bool {
-        guard let index = entries.firstIndex(where: { $0.id == id }) else { return false }
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        var updated = entries
-        updated[index].customTitle = trimmed?.isEmpty == false ? trimmed : nil
-        return replace(updated)
+        guard (trimmed?.utf8.count ?? 0) <= ActionGridEntry.maximumCustomTitleByteCount else {
+            return false
+        }
+        return updateContainingEntries(entryID: id) { entries, index in
+            if entries[index].folder != nil, trimmed?.isEmpty != false {
+                return false
+            }
+            entries[index].customTitle = trimmed?.isEmpty == false ? trimmed : nil
+            return true
+        }
     }
 
     @discardableResult
     func remove(id: UUID) -> Bool {
-        var updated = entries
-        let oldCount = updated.count
-        updated.removeAll { $0.id == id }
-        return oldCount != updated.count && replace(updated)
+        updateContainingEntries(entryID: id) { entries, index in
+            entries.remove(at: index)
+            return true
+        }
     }
 
     @discardableResult
     func move(fromOffsets: IndexSet, toOffset: Int) -> Bool {
-        guard fromOffsets.allSatisfy(entries.indices.contains),
-              (0 ... entries.count).contains(toOffset) else {
-            return false
+        move(fromOffsets: fromOffsets, toOffset: toOffset, in: nil)
+    }
+
+    @discardableResult
+    func move(fromOffsets: IndexSet, toOffset: Int, in folderID: UUID?) -> Bool {
+        updateEntries(in: folderID) { entries in
+            guard fromOffsets.allSatisfy(entries.indices.contains),
+                  (0 ... entries.count).contains(toOffset) else {
+                return false
+            }
+            let occupiedSlots = entries.compactMap(\.slot).sorted()
+            entries.move(fromOffsets: fromOffsets, toOffset: toOffset)
+            guard entries.count == occupiedSlots.count else { return false }
+            for index in entries.indices {
+                entries[index].slot = occupiedSlots[index]
+            }
+            return true
         }
-        var updated = entries
-        updated.move(fromOffsets: fromOffsets, toOffset: toOffset)
-        return replace(updated)
+    }
+
+    @discardableResult
+    func move(entryID: UUID, toIndex: Int, in folderID: UUID?) -> Bool {
+        updateEntries(in: folderID) { entries in
+            guard (0 ..< Self.maximumEntryCount).contains(toIndex),
+                  let source = entries.firstIndex(where: { $0.id == entryID }),
+                  let sourceSlot = entries[source].slot,
+                  sourceSlot != toIndex else {
+                return false
+            }
+            if let destination = entries.firstIndex(where: { $0.slot == toIndex }) {
+                entries[destination].slot = sourceSlot
+            }
+            entries[source].slot = toIndex
+            Self.sortBySlot(&entries)
+            return true
+        }
+    }
+
+    func entries(in folderID: UUID?) -> [ActionGridEntry] {
+        guard let folderID else { return entries }
+        return (folder(with: folderID, in: entries)?.entries ?? [])
+            .sorted(by: Self.slotOrder)
+    }
+
+    func entry(at slot: Int, in folderID: UUID?) -> ActionGridEntry? {
+        entries(in: folderID).first { $0.slot == slot }
+    }
+
+    func firstAvailableSlot(in folderID: UUID?) -> Int? {
+        Self.availableSlot(nil, in: entries(in: folderID))
+    }
+
+    func folderEntry(id: UUID) -> ActionGridEntry? {
+        entry(with: id, in: entries)
     }
 
     @discardableResult
     func reset(to references: [ActionReference]) -> Bool {
         var seen = Set<ActionReference>()
-        let entries = references.prefix(Self.maximumEntryCount).compactMap { reference -> ActionGridEntry? in
+        let entries = references.prefix(Self.maximumEntryCount).enumerated().compactMap { index, reference -> ActionGridEntry? in
             guard seen.insert(reference).inserted else { return nil }
-            return ActionGridEntry(reference: reference)
+            return ActionGridEntry(reference: reference, slot: index)
         }
         return replace(entries)
     }
@@ -111,15 +254,7 @@ final class ActionGridStore: ObservableObject {
     @discardableResult
     func migrate(using context: ActionGridHostContext) -> Bool {
         var updated = entries
-        var changed = false
-        for index in updated.indices {
-            guard let migrated = context.migrate(updated[index].reference),
-                  migrated != updated[index].reference else {
-                continue
-            }
-            updated[index].reference = migrated
-            changed = true
-        }
+        let changed = migrate(entries: &updated, using: context)
         return changed && replace(updated)
     }
 
@@ -134,11 +269,14 @@ final class ActionGridStore: ObservableObject {
     func restorePortableBackup(_ data: Data) -> Bool {
         guard data.count <= Self.maximumPayloadByteCount,
               let envelope = try? decoder.decode(Envelope.self, from: data),
-              envelope.formatVersion == Self.currentFormatVersion,
-              validate(envelope.entries) else {
+              (1 ... Self.currentFormatVersion).contains(envelope.formatVersion),
+              let restoredEntries = normalizedEntries(
+                  envelope.entries,
+                  permitsLegacySlots: envelope.formatVersion < 3
+              ) else {
             return false
         }
-        return replace(envelope.entries)
+        return replace(restoredEntries)
     }
 
     @discardableResult
@@ -165,23 +303,243 @@ final class ActionGridStore: ObservableObject {
         }
         guard data.count <= Self.maximumPayloadByteCount,
               let envelope = try? decoder.decode(Envelope.self, from: data),
-              envelope.formatVersion == Self.currentFormatVersion,
-              validate(envelope.entries) else {
+              (1 ... Self.currentFormatVersion).contains(envelope.formatVersion),
+              let decodedEntries = normalizedEntries(
+                  envelope.entries,
+                  permitsLegacySlots: envelope.formatVersion < 3
+              ) else {
             entries = []
             loadError = "invalid-grid-layout"
             return
         }
-        entries = envelope.entries
+        if envelope.formatVersion < Self.currentFormatVersion {
+            _ = replace(decodedEntries)
+            return
+        }
+        entries = decodedEntries.sorted(by: Self.slotOrder)
         loadError = nil
     }
 
     private func validate(_ entries: [ActionGridEntry]) -> Bool {
-        entries.count <= Self.maximumEntryCount
-            && Set(entries.map(\.id)).count == entries.count
-            && Set(entries.map(\.reference)).count == entries.count
-            && entries.allSatisfy {
-                ($0.customTitle?.utf8.count ?? 0) <= ActionGridEntry.maximumCustomTitleByteCount
+        var seenIDs = Set<UUID>()
+        var totalCount = 0
+        return validate(
+            entries,
+            depth: 0,
+            seenIDs: &seenIDs,
+            totalCount: &totalCount
+        )
+    }
+
+    private func validate(
+        _ entries: [ActionGridEntry],
+        depth: Int,
+        seenIDs: inout Set<UUID>,
+        totalCount: inout Int
+    ) -> Bool {
+        guard depth <= Self.maximumFolderDepth,
+              entries.count <= Self.maximumEntryCount else {
+            return false
+        }
+        var actionReferences = Set<ActionReference>()
+        var occupiedSlots = Set<Int>()
+        for entry in entries {
+            totalCount += 1
+            guard totalCount <= Self.maximumTotalEntryCount,
+                  seenIDs.insert(entry.id).inserted,
+                  let slot = entry.slot,
+                  (0 ..< Self.maximumEntryCount).contains(slot),
+                  occupiedSlots.insert(slot).inserted,
+                  (entry.customTitle?.utf8.count ?? 0) <= ActionGridEntry.maximumCustomTitleByteCount else {
+                return false
             }
+            if let folder = entry.folder {
+                guard entry.reference.key.providerID == Self.folderProviderID,
+                      entry.customTitle?.isEmpty == false,
+                      !folder.systemImage.isEmpty,
+                      folder.systemImage.utf8.count <= 128,
+                      validate(
+                          folder.entries,
+                          depth: depth + 1,
+                          seenIDs: &seenIDs,
+                          totalCount: &totalCount
+                      ) else {
+                    return false
+                }
+            } else if !actionReferences.insert(entry.reference).inserted {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func normalizedEntries(
+        _ source: [ActionGridEntry],
+        permitsLegacySlots: Bool
+    ) -> [ActionGridEntry]? {
+        var entries = source
+        guard normalizeSlots(&entries, permitsLegacySlots: permitsLegacySlots),
+              validate(entries) else {
+            return nil
+        }
+        return entries
+    }
+
+    private func normalizeSlots(
+        _ entries: inout [ActionGridEntry],
+        permitsLegacySlots: Bool
+    ) -> Bool {
+        guard entries.count <= Self.maximumEntryCount else { return false }
+        var occupied = Set<Int>()
+        for index in entries.indices {
+            let requested = entries[index].slot
+            if let requested,
+               (0 ..< Self.maximumEntryCount).contains(requested),
+               occupied.insert(requested).inserted {
+                // Keep a valid explicit slot.
+            } else if permitsLegacySlots,
+                      let slot = (0 ..< Self.maximumEntryCount).first(where: { !occupied.contains($0) }) {
+                entries[index].slot = slot
+                occupied.insert(slot)
+            } else {
+                return false
+            }
+            if var folder = entries[index].folder {
+                guard normalizeSlots(&folder.entries, permitsLegacySlots: permitsLegacySlots) else {
+                    return false
+                }
+                entries[index].folder = folder
+            }
+        }
+        Self.sortBySlot(&entries)
+        return true
+    }
+
+    private static func availableSlot(
+        _ requested: Int?,
+        in entries: [ActionGridEntry]
+    ) -> Int? {
+        guard entries.count < maximumEntryCount else { return nil }
+        let occupied = Set(entries.compactMap(\.slot))
+        if let requested {
+            guard (0 ..< maximumEntryCount).contains(requested),
+                  !occupied.contains(requested) else {
+                return nil
+            }
+            return requested
+        }
+        return (0 ..< maximumEntryCount).first { !occupied.contains($0) }
+    }
+
+    private static func sortBySlot(_ entries: inout [ActionGridEntry]) {
+        entries.sort(by: slotOrder)
+    }
+
+    private static func slotOrder(_ lhs: ActionGridEntry, _ rhs: ActionGridEntry) -> Bool {
+        (lhs.slot ?? maximumEntryCount) < (rhs.slot ?? maximumEntryCount)
+    }
+
+    @discardableResult
+    private func updateEntries(
+        in folderID: UUID?,
+        _ update: (inout [ActionGridEntry]) -> Bool
+    ) -> Bool {
+        var updated = entries
+        let changed: Bool
+        if let folderID {
+            changed = updateFolderEntries(folderID: folderID, entries: &updated, update: update)
+        } else {
+            changed = update(&updated)
+        }
+        return changed && replace(updated)
+    }
+
+    @discardableResult
+    private func updateContainingEntries(
+        entryID: UUID,
+        _ update: (inout [ActionGridEntry], Int) -> Bool
+    ) -> Bool {
+        var updated = entries
+        guard updateContainingEntries(entryID: entryID, entries: &updated, update: update) else {
+            return false
+        }
+        return replace(updated)
+    }
+
+    private func updateFolderEntries(
+        folderID: UUID,
+        entries: inout [ActionGridEntry],
+        update: (inout [ActionGridEntry]) -> Bool
+    ) -> Bool {
+        for index in entries.indices {
+            guard var folder = entries[index].folder else { continue }
+            if entries[index].id == folderID {
+                guard update(&folder.entries) else { return false }
+                entries[index].folder = folder
+                return true
+            }
+            if updateFolderEntries(folderID: folderID, entries: &folder.entries, update: update) {
+                entries[index].folder = folder
+                return true
+            }
+        }
+        return false
+    }
+
+    private func updateContainingEntries(
+        entryID: UUID,
+        entries: inout [ActionGridEntry],
+        update: (inout [ActionGridEntry], Int) -> Bool
+    ) -> Bool {
+        if let index = entries.firstIndex(where: { $0.id == entryID }) {
+            return update(&entries, index)
+        }
+        for index in entries.indices {
+            guard var folder = entries[index].folder else { continue }
+            if updateContainingEntries(entryID: entryID, entries: &folder.entries, update: update) {
+                entries[index].folder = folder
+                return true
+            }
+        }
+        return false
+    }
+
+    private func folder(with id: UUID, in entries: [ActionGridEntry]) -> ActionGridFolder? {
+        guard let entry = entry(with: id, in: entries) else { return nil }
+        return entry.folder
+    }
+
+    private func entry(with id: UUID, in entries: [ActionGridEntry]) -> ActionGridEntry? {
+        for entry in entries {
+            if entry.id == id { return entry }
+            if let nested = entry.folder.flatMap({ self.entry(with: id, in: $0.entries) }) {
+                return nested
+            }
+        }
+        return nil
+    }
+
+    private func migrate(
+        entries: inout [ActionGridEntry],
+        using context: ActionGridHostContext
+    ) -> Bool {
+        var changed = false
+        for index in entries.indices {
+            if var folder = entries[index].folder {
+                if migrate(entries: &folder.entries, using: context) {
+                    entries[index].folder = folder
+                    changed = true
+                }
+                continue
+            }
+            guard let migrated = context.migrate(entries[index].reference),
+                  migrated != entries[index].reference else {
+                continue
+            }
+            entries[index].reference = migrated
+            changed = true
+        }
+        return changed
     }
 }
 

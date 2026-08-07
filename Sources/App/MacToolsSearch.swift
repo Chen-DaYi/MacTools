@@ -253,15 +253,21 @@ enum MacToolsSearchIndexBuilder {
         var items: [MacToolsSearchResult] = [
             navigationResult(
                 id: "navigation.actions-and-shortcuts",
-                title: AppL10n.settings("actions.title", defaultValue: "操作与快捷键"),
+                title: FeatureL10n.string("操作与快捷键"),
                 subtitle: AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools"),
-                detail: AppL10n.settings(
-                    "actions.description",
-                    defaultValue: "查找操作并统一管理全局快捷键。"
-                ),
+                detail: FeatureL10n.string("查找 MacTools 与插件操作，并在同一个冲突空间中管理全局快捷键。"),
                 systemImage: "command",
                 destination: .plugins(.actionsAndShortcuts),
                 suggestionPriority: 2
+            ),
+            navigationResult(
+                id: "navigation.automation",
+                title: FeatureL10n.string("自动化"),
+                subtitle: AppL10n.search("search.subtitle.macTools", defaultValue: "MacTools"),
+                detail: FeatureL10n.string("创建工作流后，可组合多个 MacTools 操作。"),
+                systemImage: "bolt.horizontal.circle",
+                destination: .plugins(.automation),
+                suggestionPriority: 3
             ),
             navigationResult(
                 id: "navigation.general",
@@ -273,7 +279,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "gearshape",
                 destination: .general,
-                suggestionPriority: 4
+                suggestionPriority: 5
             ),
             navigationResult(
                 id: "navigation.dashboard",
@@ -309,7 +315,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "shippingbox",
                 destination: .plugins(.marketplace),
-                suggestionPriority: 3
+                suggestionPriority: 4
             ),
             navigationResult(
                 id: "navigation.about",
@@ -321,7 +327,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 systemImage: "info.circle",
                 destination: .about,
-                suggestionPriority: 5
+                suggestionPriority: 6
             )
         ]
 
@@ -695,7 +701,7 @@ enum MacToolsSearchIndexBuilder {
                 ),
                 detail: AppL10n.preferencesBackup(
                     "preferencesBackup.description",
-                    defaultValue: "包含应用偏好、插件显示顺序、快捷键和支持导出的插件设置；不会包含权限、缓存、凭证或其他私有数据。"
+                    defaultValue: "包含应用偏好、插件布局、快捷键、工作流、自动化规则、已保存的运行链接和支持导出的插件设置；不包含权限、缓存、凭证或运行历史。"
                 ),
                 keywords: [
                     AppL10n.preferencesBackup(

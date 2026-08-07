@@ -210,15 +210,32 @@ struct ActionShortcutSettingsView: View {
 
     private func actionGroup(_ group: ActionShortcutGroup) -> some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(group.title, systemImage: group.providerID == "mactools" ? "hammer" : "puzzlepiece.extension")
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .foregroundStyle(.secondary)
+            HStack {
+                Label(group.title, systemImage: group.providerID == "mactools" ? "hammer" : "puzzlepiece.extension")
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if group.providerID != "mactools",
+                   let reference = group.items.first?.reference,
+                   pluginHost.canPresentActionOwner(for: reference) {
+                    Button {
+                        pluginHost.presentActionOwner(for: reference)
+                    } label: {
+                        Label(FeatureL10n.string("打开所属功能的设置"), systemImage: "gearshape")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
                     ActionShortcutCatalogRow(
                         pluginHost: pluginHost,
                         item: item,
+                        displaysOwnerSettings: group.providerID == "mactools",
                         onRecord: { binding in record(binding, for: item) },
                         onClear: { pluginHost.clearActionShortcut(for: item.reference) }
                     )
@@ -244,7 +261,7 @@ struct ActionShortcutSettingsView: View {
                 binding: binding,
                 ownerDescription: ownerDescription
             )
-            return .rejected(FeatureL10n.string("需要确认后替换现有快捷键。"))
+            return .pendingConfirmation
         case let .failure(error):
             return .rejected(error.localizedDescription)
         }
@@ -265,6 +282,7 @@ private struct ActionShortcutCatalogRow: View {
 
     @ObservedObject var pluginHost: PluginHost
     let item: ActionShortcutCatalogItem
+    let displaysOwnerSettings: Bool
     let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
     let onClear: () -> Void
 
@@ -316,11 +334,13 @@ private struct ActionShortcutCatalogRow: View {
 
             ActionRunLinkControl(
                 pluginHost: pluginHost,
-                reference: item.reference
+                reference: item.reference,
+                displaysUnavailableReason: false
             )
             .padding(.leading, 24 + PluginSettingsTheme.Spacing.rowContentControl)
 
-            if pluginHost.canPresentActionOwner(for: item.reference) {
+            if displaysOwnerSettings,
+               pluginHost.canPresentActionOwner(for: item.reference) {
                 Button {
                     pluginHost.presentActionOwner(for: item.reference)
                 } label: {

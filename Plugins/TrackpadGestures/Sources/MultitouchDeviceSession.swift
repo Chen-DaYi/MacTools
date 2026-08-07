@@ -7,16 +7,124 @@ import IOKit
 import MultitouchSupport
 import OSLog
 
-private struct SendableEventTapResult: @unchecked Sendable {
-    let value: Unmanaged<CGEvent>?
-}
-
 @MainActor
 protocol MultitouchFrameListening: AnyObject {
     var deviceCount: Int { get }
     @discardableResult
     func start(handler: @escaping @Sendable (TrackpadContactFrame) -> Void) -> Bool
     func stop()
+}
+
+@MainActor
+protocol TrackpadListenerLeaseManaging: AnyObject {
+    var shouldRetryAfterFailedAcquisition: Bool { get }
+    func acquire() -> Bool
+    func release()
+}
+
+struct TrackpadListenerProcessPolicy {
+    static func allowsAcquisition(
+        isDisabledByEnvironment: Bool,
+        bundleIdentifier: String,
+        currentBundleURL: URL,
+        productName: String,
+        homeDirectory: URL,
+        fileExists: (String) -> Bool
+    ) -> Bool {
+        guard !isDisabledByEnvironment else { return false }
+
+        let isDevelopmentApp = bundleIdentifier.hasSuffix(".dev")
+            || productName.hasSuffix(" Dev")
+        guard isDevelopmentApp else { return true }
+
+        let installedBundleURL = homeDirectory
+            .appendingPathComponent("Applications", isDirectory: true)
+            .appendingPathComponent("\(productName).app", isDirectory: true)
+        guard fileExists(installedBundleURL.path) else {
+            // Keep direct Xcode runs usable before the developer has installed a stable Debug app.
+            return true
+        }
+
+        return installedBundleURL.resolvingSymlinksInPath().standardizedFileURL
+            == currentBundleURL.resolvingSymlinksInPath().standardizedFileURL
+    }
+}
+
+@MainActor
+final class TrackpadInterprocessListenerLease: TrackpadListenerLeaseManaging {
+    static let disabledEnvironmentKey = "MACTOOLS_DISABLE_TRACKPAD_LISTENER"
+
+    private let lockPath: String
+    private let isAcquisitionAllowed: Bool
+    private var fileDescriptor: Int32 = -1
+    var shouldRetryAfterFailedAcquisition: Bool { isAcquisitionAllowed }
+
+    init(
+        bundleIdentifier: String = Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
+        temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+        isAcquisitionAllowed: Bool? = nil
+    ) {
+        lockPath = temporaryDirectory
+            .appendingPathComponent("\(bundleIdentifier).trackpad-gestures.listener.lock")
+            .path
+        self.isAcquisitionAllowed = isAcquisitionAllowed ?? Self.defaultAcquisitionPolicy(
+            bundleIdentifier: bundleIdentifier
+        )
+    }
+
+    deinit {
+        if fileDescriptor >= 0 {
+            _ = flock(fileDescriptor, LOCK_UN)
+            Darwin.close(fileDescriptor)
+        }
+    }
+
+    func acquire() -> Bool {
+        guard isAcquisitionAllowed else { return false }
+        guard fileDescriptor < 0 else { return true }
+        let descriptor = Darwin.open(
+            lockPath,
+            O_CREAT | O_RDWR | O_CLOEXEC,
+            S_IRUSR | S_IWUSR
+        )
+        guard descriptor >= 0 else { return false }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            Darwin.close(descriptor)
+            return false
+        }
+        fileDescriptor = descriptor
+        return true
+    }
+
+    func release() {
+        guard fileDescriptor >= 0 else { return }
+        _ = flock(fileDescriptor, LOCK_UN)
+        Darwin.close(fileDescriptor)
+        fileDescriptor = -1
+    }
+
+    private static func defaultAcquisitionPolicy(bundleIdentifier: String) -> Bool {
+        let productName = (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? Bundle.main.bundleURL.deletingPathExtension().lastPathComponent
+        return TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: ProcessInfo.processInfo.environment[
+                disabledEnvironmentKey
+            ] == "1",
+            bundleIdentifier: bundleIdentifier,
+            currentBundleURL: Bundle.main.bundleURL,
+            productName: productName,
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+            fileExists: FileManager.default.fileExists(atPath:)
+        )
+    }
+}
+
+@MainActor
+private final class TrackpadInProcessListenerLease: TrackpadListenerLeaseManaging {
+    var shouldRetryAfterFailedAcquisition: Bool { true }
+    func acquire() -> Bool { true }
+    func release() {}
 }
 
 final class MultitouchFrameCallbackGate: @unchecked Sendable {
@@ -123,14 +231,38 @@ final class TrackpadContactOccupancyTracker: @unchecked Sendable {
     }
 }
 
-final class MultitouchSupportRuntime: @unchecked Sendable {
+final class TrackpadRecognitionDeliveryRelay: @unchecked Sendable {
+    typealias Handler = @Sendable (TrackpadGesture, UInt64, UInt64) -> Void
+
+    private let lock = NSLock()
+    private var handler: Handler?
+
+    func activate(_ handler: @escaping Handler) {
+        lock.withLock { self.handler = handler }
+    }
+
+    func deliver(_ gesture: TrackpadGesture, deviceID: UInt64, generation: UInt64) {
+        let handler = lock.withLock { handler }
+        handler?(gesture, deviceID, generation)
+    }
+}
+
+protocol MultitouchRuntimeProviding: AnyObject {
+    func createDeviceList() -> [MTDevice]
+    func register(_ device: MTDevice, callback: MTFrameCallbackFunction) -> Bool
+    func unregister(_ device: MTDevice, callback: MTFrameCallbackFunction)
+    func start(_ device: MTDevice)
+    func stop(_ device: MTDevice)
+    func release(_ device: MTDevice)
+}
+
+final class MultitouchSupportRuntime: MultitouchRuntimeProviding, @unchecked Sendable {
     typealias CreateDeviceListFunction = @convention(c) () -> Unmanaged<CFMutableArray>?
     typealias RegisterCallbackFunction = @convention(c) (MTDevice, MTFrameCallbackFunction) -> Bool
     typealias UnregisterCallbackFunction = @convention(c) (MTDevice, MTFrameCallbackFunction) -> Bool
     typealias StartDeviceFunction = @convention(c) (MTDevice, Int32) -> Void
     typealias StopDeviceFunction = @convention(c) (MTDevice) -> Void
     typealias ReleaseDeviceFunction = @convention(c) (MTDevice) -> Void
-    typealias IsDeviceRunningFunction = @convention(c) (MTDevice) -> Bool
 
     private static let frameworkPath =
         "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
@@ -142,7 +274,6 @@ final class MultitouchSupportRuntime: @unchecked Sendable {
     private let startDeviceFunction: StartDeviceFunction
     private let stopDeviceFunction: StopDeviceFunction
     private let releaseDeviceFunction: ReleaseDeviceFunction
-    private let isDeviceRunningFunction: IsDeviceRunningFunction
 
     static func load() -> MultitouchSupportRuntime? {
         guard let handle = dlopen(frameworkPath, RTLD_LAZY | RTLD_LOCAL) else {
@@ -160,10 +291,7 @@ final class MultitouchSupportRuntime: @unchecked Sendable {
             ),
             let startDevice: StartDeviceFunction = loadSymbol("MTDeviceStart", from: handle),
             let stopDevice: StopDeviceFunction = loadSymbol("MTDeviceStop", from: handle),
-            let releaseDevice: ReleaseDeviceFunction = loadSymbol("MTDeviceRelease", from: handle),
-            let isDeviceRunning: IsDeviceRunningFunction = loadSymbol(
-                "MTDeviceIsRunning", from: handle
-            )
+            let releaseDevice: ReleaseDeviceFunction = loadSymbol("MTDeviceRelease", from: handle)
         else {
             dlclose(handle)
             return nil
@@ -175,8 +303,7 @@ final class MultitouchSupportRuntime: @unchecked Sendable {
             unregisterCallbackFunction: unregisterCallback,
             startDeviceFunction: startDevice,
             stopDeviceFunction: stopDevice,
-            releaseDeviceFunction: releaseDevice,
-            isDeviceRunningFunction: isDeviceRunning
+            releaseDeviceFunction: releaseDevice
         )
     }
 
@@ -195,8 +322,7 @@ final class MultitouchSupportRuntime: @unchecked Sendable {
         unregisterCallbackFunction: UnregisterCallbackFunction,
         startDeviceFunction: StartDeviceFunction,
         stopDeviceFunction: StopDeviceFunction,
-        releaseDeviceFunction: ReleaseDeviceFunction,
-        isDeviceRunningFunction: IsDeviceRunningFunction
+        releaseDeviceFunction: ReleaseDeviceFunction
     ) {
         self.libraryHandle = libraryHandle
         self.createDeviceListFunction = createDeviceListFunction
@@ -205,7 +331,6 @@ final class MultitouchSupportRuntime: @unchecked Sendable {
         self.startDeviceFunction = startDeviceFunction
         self.stopDeviceFunction = stopDeviceFunction
         self.releaseDeviceFunction = releaseDeviceFunction
-        self.isDeviceRunningFunction = isDeviceRunningFunction
     }
 
     deinit {
@@ -235,22 +360,23 @@ final class MultitouchSupportRuntime: @unchecked Sendable {
     func release(_ device: MTDevice) {
         releaseDeviceFunction(device)
     }
-
-    func isRunning(_ device: MTDevice) -> Bool {
-        isDeviceRunningFunction(device)
-    }
 }
 
 @MainActor
 final class MultitouchDeviceDriver: MultitouchFrameListening, @unchecked Sendable {
     private var devices: [MTDevice] = []
-    private let runtime: MultitouchSupportRuntime?
+    private let runtime: (any MultitouchRuntimeProviding)?
     nonisolated private let callbackRegistry = MultitouchFrameCallbackGate()
+
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
+        category: "MultitouchDeviceDriver"
+    )
 
     nonisolated private static let activeDriverLock = NSLock()
     nonisolated(unsafe) private static var activeDriver: MultitouchDeviceDriver?
 
-    init(runtime: MultitouchSupportRuntime? = .load()) {
+    init(runtime: (any MultitouchRuntimeProviding)? = MultitouchSupportRuntime.load()) {
         self.runtime = runtime
     }
 
@@ -291,12 +417,19 @@ final class MultitouchDeviceDriver: MultitouchFrameListening, @unchecked Sendabl
 
     @discardableResult
     func start(handler: @escaping @Sendable (TrackpadContactFrame) -> Void) -> Bool {
-        guard let runtime else { return false }
+        guard let runtime else {
+            logger.error("multitouch runtime is unavailable")
+            return false
+        }
         if let previous = Self.takeActiveDriver(), previous !== self {
             previous.stop()
         }
         stop()
         devices = runtime.createDeviceList()
+        guard !devices.isEmpty else {
+            logger.error("multitouch runtime returned no devices")
+            return false
+        }
         let deviceIDs = Set(devices.map(Self.deviceID))
         callbackRegistry.activate(
             deviceIDs: deviceIDs,
@@ -307,16 +440,18 @@ final class MultitouchDeviceDriver: MultitouchFrameListening, @unchecked Sendabl
         )
         Self.setActiveDriver(self)
         for device in devices {
+            // MTDeviceStart is asynchronous on newer macOS releases, so an immediate
+            // MTDeviceIsRunning check can be false even when frames arrive normally. Callback
+            // registration itself is synchronous and authoritative: accepting a failed
+            // registration would leave the session looking active while receiving no frames.
             guard runtime.register(device, callback: Self.touchCallback) else {
+                logger.error("failed to register multitouch callback")
                 stop()
                 return false
             }
             runtime.start(device)
-            guard runtime.isRunning(device) else {
-                stop()
-                return false
-            }
         }
+        logger.info("registered multitouch callbacks deviceCount=\(self.devices.count, privacy: .public)")
         return true
     }
 
@@ -400,29 +535,22 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
     var deviceCount: Int { driver.deviceCount }
 
     private let driver: any MultitouchFrameListening
+    private let listenerLease: any TrackpadListenerLeaseManaging
     nonisolated private let middleClickCandidateTimeline: TrackpadMiddleClickCandidateTimeline
-    private let middleClickCoordinator: TrackpadMiddleClickCoordinator
+    // The CGEvent tap is delivered synchronously by the main CFRunLoop. That
+    // callback runs on the main thread, but it is not entered through Swift's
+    // MainActor executor on newer macOS releases. Keep the event processor
+    // nonisolated so it can return the native event synchronously without an
+    // unsafe MainActor.assumeIsolated hop.
+    nonisolated private let middleClickCoordinator: TrackpadMiddleClickCoordinator
     private var nativeClickResolutions: [TrackpadGesture: TrackpadNativeClickResolution] = [:]
     nonisolated private let typingSuppressionGate = TrackpadTypingSuppressionGate()
-    nonisolated private let recognitionGeneration = TrackpadGestureRecognitionGeneration()
+    nonisolated private let recognitionGeneration: TrackpadGestureRecognitionGeneration
     nonisolated private let frameDeliveryGate = MultitouchFrameDeliveryGate()
     nonisolated private let contactOccupancyTracker = TrackpadContactOccupancyTracker()
     nonisolated private let frameIngestionClock: @Sendable () -> TimeInterval
     nonisolated private let recognitionBeforeFrameProcessing: (@Sendable () -> Void)?
-    private lazy var recognitionWorker = TrackpadGestureRecognitionWorker(
-        generation: recognitionGeneration,
-        beforeFrameProcessing: recognitionBeforeFrameProcessing
-    ) { [weak self] gesture, deviceID, generation in
-        Task { @MainActor [weak self] in
-            guard let self,
-                  self.isActive,
-                  self.recognitionGeneration.isCurrent(generation)
-            else {
-                return
-            }
-            self.onRecognized?(gesture, deviceID)
-        }
-    }
+    nonisolated private let recognitionWorker: TrackpadGestureRecognitionWorker
 
     private var configuredGestures = Set<TrackpadGesture>()
     private var isActivationRequested = false
@@ -448,6 +576,7 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
 
     init(
         driver: (any MultitouchFrameListening)? = nil,
+        listenerLease: (any TrackpadListenerLeaseManaging)? = nil,
         testEventTapStart: (@MainActor () -> Bool)? = nil,
         testEventTapStop: (@MainActor () -> Void)? = nil,
         deviceChangeRestartDelay: TimeInterval = 2,
@@ -455,24 +584,40 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         middleClickClock: @escaping @Sendable () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime
         },
-        synthesizeMiddleClick: @escaping @Sendable @MainActor () -> Void = {
-            TrackpadGestureActionExecutor().execute(.middleClick)
+        synthesizeMiddleClick: @escaping () -> Void = {
+            TrackpadMiddleClickEventPoster.postClick()
         },
-        releaseMiddleButton: @escaping @Sendable @MainActor () -> Void = {
+        releaseMiddleButton: @escaping () -> Void = {
             TrackpadMiddleClickEventPoster.postButtonUp(
                 eventSourceMarker: TrackpadMiddleClickCoordinator.replayMarker
             )
         },
-        postMiddleClickEvent: @escaping @Sendable @MainActor (CGEvent) -> Void = {
+        postMiddleClickEvent: @escaping (CGEvent) -> Void = {
             $0.post(tap: .cghidEventTap)
         },
-        middleClickEventOrigin: @escaping @Sendable @MainActor (CGEvent) -> TrackpadMiddleClickArbiter.NativeEventOrigin = { _ in
+        middleClickEventOrigin: @escaping (CGEvent) -> TrackpadMiddleClickArbiter.NativeEventOrigin = { _ in
             .unknown
         }
     ) {
         let candidateTimeline = TrackpadMiddleClickCandidateTimeline()
+        let recognitionGeneration = TrackpadGestureRecognitionGeneration()
+        let recognitionDeliveryRelay = TrackpadRecognitionDeliveryRelay()
+        let recognitionWorker = TrackpadGestureRecognitionWorker(
+            generation: recognitionGeneration,
+            beforeFrameProcessing: recognitionBeforeFrameProcessing
+        ) { gesture, deviceID, generation in
+            recognitionDeliveryRelay.deliver(
+                gesture,
+                deviceID: deviceID,
+                generation: generation
+            )
+        }
         self.driver = driver ?? MultitouchDeviceDriver()
+        self.listenerLease = listenerLease
+            ?? (driver == nil ? TrackpadInterprocessListenerLease() : TrackpadInProcessListenerLease())
         middleClickCandidateTimeline = candidateTimeline
+        self.recognitionGeneration = recognitionGeneration
+        self.recognitionWorker = recognitionWorker
         frameIngestionClock = middleClickClock
         self.recognitionBeforeFrameProcessing = recognitionBeforeFrameProcessing
         middleClickCoordinator = TrackpadMiddleClickCoordinator(
@@ -486,6 +631,16 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         self.testEventTapStart = testEventTapStart
         self.testEventTapStop = testEventTapStop
         self.deviceChangeRestartDelay = deviceChangeRestartDelay
+        recognitionDeliveryRelay.activate { [weak self] gesture, deviceID, generation in
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      self.isActive,
+                      self.recognitionGeneration.isCurrent(generation) else {
+                    return
+                }
+                self.onRecognized?(gesture, deviceID)
+            }
+        }
     }
 
     @discardableResult
@@ -500,8 +655,17 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         if isActive {
             return true
         }
+        guard listenerLease.acquire() else {
+            logger.error("multitouch listener is unavailable to this MacTools process")
+            onAvailabilityChange?(false)
+            if listenerLease.shouldRetryAfterFailedAcquisition {
+                scheduleRestart(after: Self.recoveryRetryDelay, reason: "listenerLeaseRetry")
+            }
+            return false
+        }
         guard startEventTap() else {
             logger.error("failed to create event-tap lifecycle monitor")
+            listenerLease.release()
             onAvailabilityChange?(false)
             scheduleRestart(after: Self.recoveryRetryDelay, reason: "initialRetry")
             return false
@@ -510,6 +674,7 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         guard startDriver() else {
             logger.error("failed to register or start multitouch contact callbacks")
             stopEventTap()
+            listenerLease.release()
             onAvailabilityChange?(false)
             scheduleRestart(after: Self.recoveryRetryDelay, reason: "driverRetry")
             return false
@@ -565,6 +730,7 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         invalidateDriverCallbacks()
         driver.stop()
         stopEventTap()
+        listenerLease.release()
         middleClickCoordinator.reset()
         typingSuppressionGate.reset()
         recognitionWorker.configure(gestures: [], reset: true)
@@ -597,7 +763,7 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
                 .takeUnretainedValue()
 
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                Task { @MainActor in
+                DispatchQueue.main.async {
                     session.middleClickCoordinator.reset()
                     session.typingSuppressionGate.reset()
                     session.reenableEventTap()
@@ -605,9 +771,7 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
                 return Unmanaged.passUnretained(event)
             }
 
-            return MainActor.assumeIsolated {
-                SendableEventTapResult(value: session.handleEventTapEvent(type: type, event: event))
-            }.value
+            return session.handleEventTapEvent(type: type, event: event)
         }
 
         guard let tap = CGEvent.tapCreate(
@@ -666,8 +830,15 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         driver.stop()
         stopEventTap()
         recognitionWorker.configure(gestures: configuredGestures, reset: true)
+        guard listenerLease.acquire() else {
+            logger.error("multitouch listener lease is owned by another MacTools process")
+            onAvailabilityChange?(false)
+            scheduleRestart(after: Self.recoveryRetryDelay, reason: "listenerLeaseRetry")
+            return
+        }
         guard startEventTap() else {
             logger.error("event tap could not be restored")
+            listenerLease.release()
             onAvailabilityChange?(false)
             scheduleRestart(after: Self.recoveryRetryDelay, reason: "eventTapRetry")
             return
@@ -675,6 +846,7 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         guard startDriver() else {
             logger.error("multitouch contact callbacks could not be restored")
             stopEventTap()
+            listenerLease.release()
             onAvailabilityChange?(false)
             scheduleRestart(after: Self.recoveryRetryDelay, reason: "driverRetry")
             return
@@ -725,7 +897,10 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         }
     }
 
-    private func handleEventTapEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    private nonisolated func handleEventTapEvent(
+        type: CGEventType,
+        event: CGEvent
+    ) -> Unmanaged<CGEvent>? {
         if type == .keyDown || type == .keyUp {
             if event.getIntegerValueField(.eventSourceUserData)
                 == TrackpadGestureActionExecutor.keyboardEventMarker {
@@ -773,7 +948,7 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 self?.scheduleRestart(after: Self.wakeRestartDelay, reason: "systemWake")
             }
         }

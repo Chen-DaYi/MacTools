@@ -115,7 +115,7 @@ final class ActionGridPlugin:
         guard reference.key == Self.showActionKey else {
             return .unavailable(localized("操作不可用。"))
         }
-        guard store.entries.contains(where: { $0.reference.key != Self.showActionKey }) else {
+        guard !presentationEntries(store.entries).isEmpty else {
             return .unavailable(localized("请先配置操作网格。"))
         }
         guard actionGridHostContext?.canPresent == true else {
@@ -132,10 +132,9 @@ final class ActionGridPlugin:
                         ?? PluginKitLocalization.actionUnavailable
                 )
             }
-            let entries = self.store.entries
-                .filter { $0.reference.key != Self.showActionKey }
-                .map(\.presentationEntry)
-            guard !entries.isEmpty, context.present(entries: entries) else {
+            let entries = self.presentationEntries(self.store.entries)
+            guard !entries.isEmpty,
+                  context.present(entries: entries, source: invocation.source) else {
                 return .failed(message: self.localized("无法显示操作网格。"))
             }
             return .succeeded()
@@ -159,11 +158,15 @@ final class ActionGridPlugin:
         }
     }
 
-    func catalogItems(excluding entryID: UUID? = nil) -> [ActionSurfaceCatalogItem] {
-        actionGridHostContext?.catalog.filter { item in
+    func catalogItems(
+        excluding entryID: UUID? = nil,
+        in folderID: UUID? = nil
+    ) -> [ActionSurfaceCatalogItem] {
+        let currentEntries = store.entries(in: folderID)
+        return actionGridHostContext?.catalog.filter { item in
             guard item.reference.key != Self.showActionKey else { return false }
-            return !store.entries.contains { entry in
-                entry.id != entryID && entry.reference == item.reference
+            return !currentEntries.contains { entry in
+                entry.folder == nil && entry.id != entryID && entry.reference == item.reference
             }
         } ?? []
     }
@@ -194,15 +197,49 @@ final class ActionGridPlugin:
     func actionSurfaceAssignmentSummary(
         for reference: ActionReference
     ) -> ActionSurfaceAssignmentSummary? {
-        guard let index = store.entries.firstIndex(where: { $0.reference == reference }) else {
+        guard let path = assignmentPath(for: reference, in: store.entries) else {
             return nil
         }
         return ActionSurfaceAssignmentSummary(
             surfaceID: metadata.id,
             surfaceTitle: localization.string("metadata.title", defaultValue: "操作网格"),
             systemImage: metadata.iconName,
-            detail: localizedFormat("第 %d 个条目", index + 1)
+            detail: path
         )
+    }
+
+    private func presentationEntries(
+        _ entries: [ActionGridEntry]
+    ) -> [ActionGridPresentationEntry] {
+        entries.compactMap { entry in
+            if let folder = entry.folder {
+                return ActionGridPresentationEntry(
+                    id: entry.id.uuidString.lowercased(),
+                    folderTitle: entry.customTitle ?? localized("文件夹"),
+                    systemImage: folder.systemImage,
+                    children: presentationEntries(folder.entries),
+                    slotIndex: entry.slot
+                )
+            }
+            guard entry.reference.key != Self.showActionKey else { return nil }
+            return entry.presentationEntry
+        }
+    }
+
+    private func assignmentPath(
+        for reference: ActionReference,
+        in entries: [ActionGridEntry]
+    ) -> String? {
+        for (index, entry) in entries.enumerated() {
+            if entry.folder == nil, entry.reference == reference {
+                return localizedFormat("第 %d 个条目", (entry.slot ?? index) + 1)
+            }
+            if let folder = entry.folder,
+               let nested = assignmentPath(for: reference, in: folder.entries) {
+                return "\(entry.customTitle ?? localized("文件夹")) › \(nested)"
+            }
+        }
+        return nil
     }
 
     func localized(_ source: String) -> String {

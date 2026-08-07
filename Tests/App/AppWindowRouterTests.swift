@@ -122,6 +122,29 @@ final class AppWindowRouterTests: XCTestCase {
         router.settingsWindow?.close()
     }
 
+    func testWorkflowPresentationRoutesToTheExactAutomationEditor() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var createdWorkflow: WorkflowDefinition?
+        let router = makeRouter(defaults: defaults) { host in
+            createdWorkflow = host.automationController.createWorkflow()
+        }
+        let workflow = try XCTUnwrap(createdWorkflow)
+
+        router.presentSettings(.automationWorkflow(workflow.id))
+
+        XCTAssertEqual(
+            router.settingsNavigationCoordinator?.destination,
+            .plugins(.automation)
+        )
+        XCTAssertNil(
+            router.settingsNavigationCoordinator?.searchRevealRequest,
+            "The visible Automation editor should consume the exact workflow reveal request."
+        )
+        router.settingsWindow?.close()
+    }
+
     private func settleWindowLayout(_ window: NSWindow) async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async {
@@ -670,7 +693,8 @@ final class AppWindowRouterTests: XCTestCase {
 
     private func makeRouter(
         defaults: UserDefaults,
-        appUpdater: AppUpdater? = nil
+        appUpdater: AppUpdater? = nil,
+        configureHost: (PluginHost) -> Void = { _ in }
     ) -> AppWindowRouter {
         let host = PluginHost(
             plugins: [],
@@ -679,6 +703,7 @@ final class AppWindowRouterTests: XCTestCase {
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
+        configureHost(host)
         return AppWindowRouter(
             pluginHost: host,
             appUpdater: appUpdater ?? AppUpdater(startingUpdater: false),

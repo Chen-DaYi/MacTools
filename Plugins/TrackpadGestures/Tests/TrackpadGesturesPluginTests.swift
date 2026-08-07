@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 import MacToolsPluginKit
+import MultitouchSupport
 @testable import TrackpadGesturesPlugin
 
 @MainActor
@@ -66,6 +67,45 @@ private final class TrackpadFrameDeliveryBarrier: @unchecked Sendable {
 
     func recordReset() {
         lock.withLock { storedEvents.append("reset") }
+    }
+}
+
+private final class FakeMultitouchRuntime: MultitouchRuntimeProviding {
+    private let retainedDevices: [NSObject]
+    var registerSucceeds = true
+    private(set) var registerCount = 0
+    private(set) var unregisterCount = 0
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+    private(set) var releaseCount = 0
+
+    init(deviceCount: Int) {
+        retainedDevices = (0 ..< deviceCount).map { _ in NSObject() }
+    }
+
+    func createDeviceList() -> [MTDevice] {
+        retainedDevices.map { unsafeBitCast($0, to: MTDevice.self) }
+    }
+
+    func register(_ device: MTDevice, callback: MTFrameCallbackFunction) -> Bool {
+        registerCount += 1
+        return registerSucceeds
+    }
+
+    func unregister(_ device: MTDevice, callback: MTFrameCallbackFunction) {
+        unregisterCount += 1
+    }
+
+    func start(_ device: MTDevice) {
+        startCount += 1
+    }
+
+    func stop(_ device: MTDevice) {
+        stopCount += 1
+    }
+
+    func release(_ device: MTDevice) {
+        releaseCount += 1
     }
 }
 
@@ -231,6 +271,28 @@ private final class MockMultitouchFrameListener: MultitouchFrameListening {
 }
 
 @MainActor
+private final class MockTrackpadListenerLease: TrackpadListenerLeaseManaging {
+    var acquireSucceeds = true
+    var shouldRetryAfterFailedAcquisition = true
+    private(set) var acquireCount = 0
+    private(set) var releaseCount = 0
+    private var isHeld = false
+
+    func acquire() -> Bool {
+        acquireCount += 1
+        guard acquireSucceeds else { return false }
+        isHeld = true
+        return true
+    }
+
+    func release() {
+        guard isHeld else { return }
+        isHeld = false
+        releaseCount += 1
+    }
+}
+
+@MainActor
 final class TrackpadGestureStoreTests: XCTestCase {
     func testTypingProtectionDefaultsPersistAndClampGracePeriod() {
         let storage = TrackpadGestureMemoryStorage()
@@ -274,6 +336,47 @@ final class TrackpadGestureStoreTests: XCTestCase {
 
         reloaded.delete(id: mapping.id)
         XCTAssertTrue(TrackpadGestureStore(storage: storage, legacyMiddleClick: nil).mappings.isEmpty)
+    }
+
+    func testMacToolsActionPersistsMigratesAndPortableBackupRoundTrips() throws {
+        let storage = TrackpadGestureMemoryStorage()
+        let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let original = ActionReference(
+            key: ActionKey(providerID: "example", actionID: "run"),
+            schemaVersion: 1
+        )
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .fourFingerLongTouch,
+            action: .action(original)
+        )))
+
+        let reloaded = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reloaded.mapping(for: .fourFingerLongTouch)?.action, .action(original))
+        let context = TrackpadActionHostContext(
+            catalog: { [] },
+            item: { _ in nil },
+            migrate: { reference in
+                ActionReference(
+                    key: reference.key,
+                    schemaVersion: 2,
+                    parameters: reference.parameters
+                )
+            },
+            execute: { _ in }
+        )
+        XCTAssertTrue(reloaded.migrateActions(using: context))
+        guard case let .action(migrated)? = reloaded.mapping(for: .fourFingerLongTouch)?.action else {
+            return XCTFail("Expected a canonical action mapping")
+        }
+        XCTAssertEqual(migrated.schemaVersion, 2)
+
+        let backup = try XCTUnwrap(reloaded.portableBackup())
+        let restored = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        XCTAssertTrue(restored.restorePortableBackup(backup))
+        XCTAssertEqual(restored.mappings, reloaded.mappings)
     }
 
     func testDuplicateGestureIsRejectedEvenWhenExistingMappingIsDisabled() {
@@ -530,6 +633,35 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(driver.deviceCount, 0)
     }
 
+    func testMultitouchDriverStartsEveryDiscoveredDeviceWithoutSynchronousStatusCheck() {
+        let runtime = FakeMultitouchRuntime(deviceCount: 2)
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+
+        XCTAssertTrue(driver.start { _ in })
+        XCTAssertEqual(driver.deviceCount, 2)
+        XCTAssertEqual(runtime.registerCount, 2)
+        XCTAssertEqual(runtime.startCount, 2)
+
+        driver.stop()
+        XCTAssertEqual(runtime.unregisterCount, 2)
+        XCTAssertEqual(runtime.stopCount, 2)
+        XCTAssertEqual(runtime.releaseCount, 2)
+    }
+
+    func testMultitouchDriverFailsClosedWhenCallbackRegistrationFails() {
+        let runtime = FakeMultitouchRuntime(deviceCount: 1)
+        runtime.registerSucceeds = false
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+
+        XCTAssertFalse(driver.start { _ in })
+        XCTAssertEqual(driver.deviceCount, 0)
+        XCTAssertEqual(runtime.registerCount, 1)
+        XCTAssertEqual(runtime.startCount, 0)
+        XCTAssertEqual(runtime.unregisterCount, 1)
+        XCTAssertEqual(runtime.stopCount, 1)
+        XCTAssertEqual(runtime.releaseCount, 1)
+    }
+
     func testMetadataAndEmptyState() {
         let plugin = makePlugin().plugin
         XCTAssertEqual(plugin.metadata.id, "trackpad-gestures")
@@ -560,6 +692,34 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         )
         XCTAssertEqual(fixture.session.typingProtectionUpdates.last?.0, true)
         XCTAssertEqual(fixture.session.typingProtectionUpdates.last?.1, 0.4)
+    }
+
+    func testMacToolsActionUsesSharedHostExecutorAndConsumesTipTapClick() {
+        let fixture = makePlugin()
+        let reference = ActionReference(
+            key: ActionKey(providerID: "action-grid", actionID: "show")
+        )
+        var executed: [ActionReference] = []
+        fixture.plugin.trackpadActionHostContext = TrackpadActionHostContext(
+            catalog: { [] },
+            item: { _ in nil },
+            migrate: { $0 },
+            execute: { executed.append($0) }
+        )
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .tipTapRightOneFixed,
+            action: .action(reference)
+        )))
+
+        fixture.plugin.configurationDidChange()
+        fixture.session.recognize(.tipTapRightOneFixed)
+
+        XCTAssertEqual(executed, [reference])
+        XCTAssertTrue(fixture.executor.actions.isEmpty)
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.tipTapRightOneFixed],
+            .consume
+        )
     }
 
     func testConfiguredDoubleTapExecutesItsAction() {
@@ -763,14 +923,22 @@ final class TrackpadGesturesPluginTests: XCTestCase {
 
         inputMonitoringGranted.value = true
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        await Task.yield()
+        await drainMainQueue()
         XCTAssertTrue(fixture.session.isActive)
 
         inputMonitoringGranted.value = false
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        await Task.yield()
+        await drainMainQueue()
         XCTAssertFalse(fixture.session.isActive)
         fixture.plugin.deactivate(reason: .disabled)
+    }
+
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
+        }
     }
 
     func testDeactivationStopsListenerAndClearsTestMode() {
@@ -818,6 +986,154 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(driver.stopCount, 2)
         XCTAssertEqual(tapStarts, 3)
         XCTAssertEqual(tapStops, 2)
+        session.deactivate()
+    }
+
+    func testInterprocessListenerLeaseAllowsOnlyOneOwner() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TrackpadListenerLeaseTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let first = TrackpadInterprocessListenerLease(
+            bundleIdentifier: "test.mactools",
+            temporaryDirectory: directory,
+            isAcquisitionAllowed: true
+        )
+        let second = TrackpadInterprocessListenerLease(
+            bundleIdentifier: "test.mactools",
+            temporaryDirectory: directory,
+            isAcquisitionAllowed: true
+        )
+
+        XCTAssertTrue(first.acquire())
+        XCTAssertFalse(second.acquire())
+        first.release()
+        XCTAssertTrue(second.acquire())
+        second.release()
+    }
+
+    func testInterprocessListenerLeaseNeverLetsATestHostOwnTheProductionListener() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TrackpadListenerTestHostLeaseTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let testHostLease = TrackpadInterprocessListenerLease(
+            bundleIdentifier: "test.mactools",
+            temporaryDirectory: directory,
+            isAcquisitionAllowed: false
+        )
+        let installedAppLease = TrackpadInterprocessListenerLease(
+            bundleIdentifier: "test.mactools",
+            temporaryDirectory: directory,
+            isAcquisitionAllowed: true
+        )
+
+        XCTAssertFalse(testHostLease.acquire())
+        XCTAssertTrue(installedAppLease.acquire())
+        installedAppLease.release()
+    }
+
+    func testListenerProcessPolicyPrefersTheStableInstalledDebugApp() {
+        let home = URL(fileURLWithPath: "/Users/developer", isDirectory: true)
+        let installedApp = home.appendingPathComponent(
+            "Applications/MacTools Dev.app",
+            isDirectory: true
+        )
+        let staleBuild = URL(fileURLWithPath: "/repo/build/Debug/MacTools Dev.app")
+
+        XCTAssertFalse(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: false,
+            bundleIdentifier: "com.example.mactools.dev",
+            currentBundleURL: staleBuild,
+            productName: "MacTools Dev",
+            homeDirectory: home,
+            fileExists: { $0 == installedApp.path }
+        ))
+        XCTAssertTrue(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: false,
+            bundleIdentifier: "com.example.mactools.dev",
+            currentBundleURL: installedApp,
+            productName: "MacTools Dev",
+            homeDirectory: home,
+            fileExists: { $0 == installedApp.path }
+        ))
+    }
+
+    func testListenerProcessPolicyDoesNotChangeProductionOrFirstRunBehavior() {
+        let home = URL(fileURLWithPath: "/Users/developer", isDirectory: true)
+        let buildApp = URL(fileURLWithPath: "/repo/build/Debug/MacTools.app")
+
+        XCTAssertTrue(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: false,
+            bundleIdentifier: "com.example.mactools",
+            currentBundleURL: buildApp,
+            productName: "MacTools",
+            homeDirectory: home,
+            fileExists: { _ in true }
+        ))
+        XCTAssertTrue(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: false,
+            bundleIdentifier: "com.example.mactools.dev",
+            currentBundleURL: buildApp,
+            productName: "MacTools Dev",
+            homeDirectory: home,
+            fileExists: { _ in false }
+        ))
+        XCTAssertFalse(TrackpadListenerProcessPolicy.allowsAcquisition(
+            isDisabledByEnvironment: true,
+            bundleIdentifier: "com.example.mactools",
+            currentBundleURL: buildApp,
+            productName: "MacTools",
+            homeDirectory: home,
+            fileExists: { _ in false }
+        ))
+    }
+
+    func testSessionWaitsForExclusiveListenerLeaseBeforeStartingDeviceCallbacks() {
+        let driver = MockMultitouchFrameListener()
+        let lease = MockTrackpadListenerLease()
+        lease.acquireSucceeds = false
+        var tapStarts = 0
+        var availability: [Bool] = []
+        let session = MultitouchDeviceSession(
+            driver: driver,
+            listenerLease: lease,
+            testEventTapStart: { tapStarts += 1; return true },
+            testEventTapStop: {}
+        )
+        session.onAvailabilityChange = { availability.append($0) }
+
+        XCTAssertFalse(session.activate(gestures: [.threeFingerTap]))
+        XCTAssertEqual(driver.startCount, 0)
+        XCTAssertEqual(tapStarts, 0)
+        XCTAssertEqual(availability, [false])
+
+        lease.acquireSucceeds = true
+        session.restartImmediatelyForTests()
+
+        XCTAssertTrue(session.isActive)
+        XCTAssertEqual(driver.startCount, 1)
+        XCTAssertEqual(tapStarts, 1)
+        XCTAssertEqual(availability, [false, true])
+        session.deactivate()
+        XCTAssertEqual(lease.releaseCount, 1)
+    }
+
+    func testSessionReleasesExclusiveListenerLeaseWhenStartupFails() {
+        let driver = MockMultitouchFrameListener()
+        driver.startSucceeds = false
+        let lease = MockTrackpadListenerLease()
+        let session = MultitouchDeviceSession(
+            driver: driver,
+            listenerLease: lease,
+            testEventTapStart: { true },
+            testEventTapStop: {}
+        )
+
+        XCTAssertFalse(session.activate(gestures: [.threeFingerTap]))
+        XCTAssertEqual(lease.acquireCount, 1)
+        XCTAssertEqual(lease.releaseCount, 1)
         session.deactivate()
     }
 

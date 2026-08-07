@@ -134,6 +134,13 @@ final class GlobalShortcutManager {
         installHandlerIfNeeded()
     }
 
+    isolated deinit {
+        unregisterAll()
+        if let handlerRef {
+            RemoveEventHandler(handlerRef)
+        }
+    }
+
     @discardableResult
     func updateBindings(
         _ registrations: [Registration]
@@ -312,7 +319,11 @@ final class GlobalShortcutManager {
         let manager = Unmanaged<GlobalShortcutManager>.fromOpaque(userData).takeUnretainedValue()
         let isReleased = GetEventKind(event) == UInt32(kEventHotKeyReleased)
 
-        Task { @MainActor in
+        // Carbon invokes this C callback outside Swift concurrency. Scheduling a
+        // main-queue block avoids carrying that foreign callback's executor state
+        // into SwiftUI presentation, while the strong capture keeps the manager
+        // alive until delivery finishes.
+        DispatchQueue.main.async {
             manager.dispatchShortcut(carbonID: hotKeyID.id, isReleased: isReleased)
         }
 

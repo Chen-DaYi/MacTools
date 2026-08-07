@@ -1,11 +1,43 @@
 import Carbon
 import MacToolsPluginKit
+@testable import SavedScriptsPlugin
 import SwiftUI
 import XCTest
 @testable import MacTools
 
 @MainActor
 final class PluginHostActionRegistryTests: XCTestCase {
+    func testSavedScriptWithoutLocalConfirmationStillPublishesWhenRunLinksAreEnabled() throws {
+        let suiteName = "PluginHostActionRegistryTests.saved-scripts.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let plugin = SavedScriptsPlugin(context: PluginRuntimeContext(
+            pluginID: "saved-scripts",
+            storage: UserDefaultsPluginStorage(
+                pluginID: "saved-scripts",
+                userDefaults: defaults
+            )
+        ))
+        let script = try plugin.store.save(SavedScript(
+            name: "Test Script",
+            kind: .zsh,
+            source: "echo test",
+            confirmOutsideManager: false,
+            allowExternalInvocation: true
+        )).get()
+
+        let host = makePluginHostForTests(plugins: [plugin])
+        let published = host.actionCatalogEntries.first {
+            $0.reference.key == ActionKey(
+                providerID: "saved-scripts",
+                actionID: script.actionID
+            )
+        }
+
+        XCTAssertEqual(published?.title, "Test Script")
+        XCTAssertTrue(host.actionRegistryIssues.isEmpty)
+    }
+
     func testHostPublishesNativeLegacyAndApplicationActionsThroughOneRegistry() async {
         let native = NativeActionTestPlugin()
         let legacy = LegacyActionTestPlugin()
@@ -14,6 +46,7 @@ final class PluginHostActionRegistryTests: XCTestCase {
         host.appPresentationHandler = { presentationRequests.append($0) }
 
         let catalogKeys = Set(host.actionCatalogEntries.map(\.reference.key))
+        XCTAssertTrue(host.actionRegistryIssues.isEmpty)
         XCTAssertTrue(catalogKeys.contains(native.definition.key))
         XCTAssertTrue(
             catalogKeys.contains(ActionKey(providerID: legacy.metadata.id, actionID: "sleep"))
@@ -65,6 +98,36 @@ final class PluginHostActionRegistryTests: XCTestCase {
         XCTAssertEqual(presentationRequests, [.settings(.settings)])
     }
 
+    func testPluginStateChangeRefreshesDynamicActionShortcutCatalog() async {
+        let plugin = NativeActionTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let addedDefinition = ActionDefinition(
+            key: ActionKey(providerID: plugin.metadata.id, actionID: "added-later"),
+            title: "Added Later",
+            description: "A dynamically added action.",
+            systemImage: "plus"
+        )
+
+        XCTAssertFalse(host.actionShortcutCatalogItems.contains {
+            $0.reference.key == addedDefinition.key
+        })
+
+        plugin.additionalDefinitions = [addedDefinition]
+        plugin.onStateChange?()
+        for _ in 0 ..< 100 where !host.actionShortcutCatalogItems.contains(where: {
+            $0.reference.key == addedDefinition.key
+        }) {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(
+            host.actionShortcutCatalogItems.first(where: {
+                $0.reference.key == addedDefinition.key
+            })?.title,
+            "Added Later"
+        )
+    }
+
     func testNativeProviderAvailabilityIsEvaluatedAtExecutionTime() async {
         let plugin = NativeActionTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
@@ -87,11 +150,24 @@ final class PluginHostActionRegistryTests: XCTestCase {
         var requests: [AppPresentationRequest] = []
         host.appPresentationHandler = { requests.append($0) }
 
-        XCTAssertTrue(
-            host.presentActionOwner(
-                for: ActionReference(key: ActionKey(providerID: "mactools", actionID: "test"))
+        XCTAssertTrue(host.presentActionOwner(for: ActionReference(
+            key: ActionKey(
+                providerID: "mactools",
+                actionID: AppShortcutAction.toggleDashboard.rawValue
             )
-        )
+        )))
+        XCTAssertTrue(host.presentActionOwner(for: ActionReference(
+            key: ActionKey(
+                providerID: "mactools",
+                actionID: AppShortcutAction.toggleFeaturePanel.rawValue
+            )
+        )))
+        XCTAssertTrue(host.presentActionOwner(for: ActionReference(
+            key: ActionKey(
+                providerID: "mactools",
+                actionID: AppShortcutAction.openSettings.rawValue
+            )
+        )))
         XCTAssertTrue(
             host.presentActionOwner(
                 for: ActionReference(
@@ -107,10 +183,22 @@ final class PluginHostActionRegistryTests: XCTestCase {
         XCTAssertEqual(
             requests,
             [
-                .settings(.feature(.actionsAndShortcuts)),
+                .settings(.feature(.dashboardLayout)),
+                .settings(.feature(.featurePanelLayout)),
+                .settings(.general),
                 .settings(.feature(.automation)),
             ]
         )
+    }
+
+    func testWorkflowActionOwnerNavigationPreservesTheExactWorkflow() throws {
+        let host = makePluginHostForTests(plugins: [])
+        let workflow = try XCTUnwrap(host.automationController.createWorkflow())
+        var requests: [AppPresentationRequest] = []
+        host.appPresentationHandler = { requests.append($0) }
+
+        XCTAssertTrue(host.presentActionOwner(for: workflow.actionReference))
+        XCTAssertEqual(requests, [.settings(.automationWorkflow(workflow.id))])
     }
 
     func testActionShortcutSuppressesRecursiveSyntheticRetrigger() async throws {
@@ -552,6 +640,7 @@ private final class NativeActionTestPlugin:
     var beginCount = 0
     var summarizedReference: ActionReference?
     var permissionTitles = ["测试权限"]
+    var additionalDefinitions: [ActionDefinition] = []
     var operation: @MainActor @Sendable () async -> ActionExecutionResult = {
         .succeeded(message: "native")
     }
@@ -577,7 +666,7 @@ private final class NativeActionTestPlugin:
     )
 
     var actionDefinitions: [ActionDefinition] {
-        [definition]
+        [definition] + additionalDefinitions
     }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
