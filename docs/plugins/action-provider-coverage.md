@@ -13,30 +13,28 @@ The following plugin source directories publish canonical actions:
 - Display and workspace control: `Appearance`, `DisplayBrightness`, `DisplayResolution`, `DisplaySleep`, `DisplayTrueColor`, `HideNotch`, `NightShift`, `Sidecar`, `StageManager`.
 - Menu bar and Dock control: `AutoHideDock`, `AutoHideMenuBar`, `MenuBarHidden`.
 - System and device control: `BatteryChargeLimit`, `FanControl`, `KeepAwake`, `LockScreen`, `MicrophoneMute`, `SystemMute`.
-- Productivity and maintenance: `ActivityBar`, `ClipboardClear`, `EjectDisk`, `EmptyTrash`, `FixDamagedApp`, `Launchpad`, `PhysicalCleanMode`, `QuitApps`, `Translator`.
+- Productivity and maintenance: `ActivityBar`, `ClipboardClear`, `DiskClean`, `EjectDisk`, `EmptyTrash`, `FixDamagedApp`, `Homebrew`, `IPOverview`, `LaunchControl`, `Launchpad`, `PhysicalCleanMode`, `QuitApps`, `Translator`, `XcodeClean`.
 
 Parameterized actions publish concrete catalog entries rather than asking each action surface to construct parameters. For example, Sidecar publishes per-device entries, Display Resolution publishes current display modes, App Volume publishes current audio apps, Battery Charge Limit publishes useful limit presets, and Fan Control publishes saved presets. Availability is resolved again at execution time so stale hardware, processes, or configuration fail safely.
 
 Operations that eject storage, empty Trash, clear the clipboard, change hardware management, or enter a physical clean session preserve confirmation or foreground-only requirements. Machine-local parameters are marked local-only, and actions that require an interactive chooser or key lifecycle do not expose Run Links.
 
+The maintenance providers use deliberately narrow contracts:
+
+- Disk Clean and Xcode Clean expose only a foreground **scan and review** action. It opens the owning settings page and starts a scan; deletion still requires the plugin's existing selection, safety validation, and confirmation flow.
+- Homebrew exposes update, upgrade-all, doctor, and cleanup. Upgrade-all and cleanup retain confirmation, every command reports its real completion result, and none can be invoked through a Run Link.
+- Launch Items exposes start, stop, and restart only for user-owned items that the user has marked as favorites. Item IDs are local-only, stop/restart require confirmation, and stale or no-longer-favorite targets become unavailable.
+- IP Check exposes refreshed copy actions for local and public IPv4 addresses. Keep Awake exposes useful timed sessions, Activity Stats exposes its existing reset flow with confirmation, Display Brightness exposes guarded built-in-display disable/restore operations, and App Volume includes a 50% preset.
+
 ## Intentionally specialized or non-operational
 
 These plugins should not publish a canonical action merely to appear in action pickers:
 
-- `Calendar`, `DeviceBattery`, `IPOverview`, and `SystemStatus` primarily present information.
+- `Calendar`, `DeviceBattery`, and `SystemStatus` primarily present information without a stable repeatable mutation. Calendar's selected-date context belongs in its view, while app launching is already covered by App Hotkeys.
+- `MouseEnhancer` and `ZshConfig` are configuration editors; runnable shell tasks belong in Saved Scripts.
 - `RightClick` extends Finder context menus rather than representing one repeatable operation.
 - `TrackpadGestures` is an input surface that consumes canonical actions; it is not itself an action provider.
-- `ZshConfig` manages configuration whose edits require contextual review.
 
 Specialized shortcuts may remain when their input lifecycle cannot be represented by one invocation. Window Switcher keeps its press, release, and repeat shortcut behavior in addition to a canonical action that opens the interactive chooser. Physical Clean Mode keeps its emergency exit binding separate from the canonical enter action.
 
-## Design-first backlog
-
-The following plugins contain useful operations but need a narrower action contract before migration:
-
-- `DiskClean` and `XcodeClean`: publish saved, reviewed cleanup plans rather than a broad one-click deletion action.
-- `Homebrew`: publish explicit package/service operations with target identity, progress, and confirmation rather than mirroring every UI button.
-- `LaunchControl`: publish saved launch-agent operations only after privilege, ownership, and stale-target behavior are explicit.
-- `MouseEnhancer`: keep device and scrolling configuration in settings unless a clear repeatable operation emerges.
-
-When one of these contracts is designed, prefer stable readable action IDs, concrete catalog entries, live availability checks, bounded execution, and the narrowest external invocation policy that preserves the plugin's existing safety boundary.
+This inventory covers every current plugin directory. New plugins should either implement `PluginActionProviding` for stable repeatable operations or add an explicit rationale here. Prefer stable readable action IDs, concrete catalog entries, live availability checks, bounded execution, and the narrowest external invocation policy that preserves the plugin's existing safety boundary.

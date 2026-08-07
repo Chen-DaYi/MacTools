@@ -632,46 +632,66 @@ public final class HomebrewController: ObservableObject {
         completion: @escaping @MainActor (Bool) -> Void
     ) {
         guard isBrewAvailable, !isBusy else { return }
+        prepareCommand(name: name, args: args)
+
+        Task { [self] in
+            let success = await executePreparedCommand(args: args)
+            finishCommand()
+            completion(success)
+        }
+    }
+
+    func runMaintenanceAction(name: String, args: [String]) async -> Bool {
+        guard isBrewAvailable, !isBusy else { return false }
+        prepareCommand(name: name, args: args)
+        let success = await executePreparedCommand(args: args)
+        finishCommand()
+        return success
+    }
+
+    private func prepareCommand(name: String, args: [String]) {
         isBusy = true
         currentOperationName = name
         clearLogs()
         appendLog("[Command] brew \(args.joined(separator: " "))")
-        
-        Task { [self] in
-            let success: Bool
-            do {
-                let status = try await runner.run(
-                    executable: brewPath,
-                    arguments: args,
-                    onOutput: { [weak self] text in
-                        self?.appendLog(text)
-                    },
-                    onError: { [weak self] text in
-                        self?.appendLog(text, isError: true)
-                    }
-                )
-                
-                success = (status == 0)
-                appendLog(
-                    success
-                        ? localization.string("log.command.completed", defaultValue: "[System] 操作成功完成")
-                        : localization.format("log.command.failedStatus", defaultValue: "[System] 操作失败，错误码：%d", status),
-                    isError: !success
-                )
-            } catch {
-                appendLog(localization.format(
-                    "log.command.failed",
-                    defaultValue: "[System] 执行命令出错：%@",
-                    error.localizedDescription
-                ), isError: true)
-                success = false
-            }
-            
-            isBusy = false
-            currentOperationName = ""
-            onStateChange?()
-            completion(success)
+        onStateChange?()
+    }
+
+    private func executePreparedCommand(args: [String]) async -> Bool {
+        do {
+            let status = try await runner.run(
+                executable: brewPath,
+                arguments: args,
+                onOutput: { [weak self] text in
+                    self?.appendLog(text)
+                },
+                onError: { [weak self] text in
+                    self?.appendLog(text, isError: true)
+                }
+            )
+
+            let success = status == 0
+            appendLog(
+                success
+                    ? localization.string("log.command.completed", defaultValue: "[System] 操作成功完成")
+                    : localization.format("log.command.failedStatus", defaultValue: "[System] 操作失败，错误码：%d", status),
+                isError: !success
+            )
+            return success
+        } catch {
+            appendLog(localization.format(
+                "log.command.failed",
+                defaultValue: "[System] 执行命令出错：%@",
+                error.localizedDescription
+            ), isError: true)
+            return false
         }
+    }
+
+    private func finishCommand() {
+        isBusy = false
+        currentOperationName = ""
+        onStateChange?()
     }
     
     public func cancelCurrentOperation() {

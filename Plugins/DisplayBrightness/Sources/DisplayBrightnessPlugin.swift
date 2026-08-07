@@ -132,6 +132,8 @@ final class DisplayBrightnessPlugin:
         static let brightnessControlSuffix = ".brightness"
         static let disableBuiltInDisplayControlID = "built-in-display-disable"
         static let restoreBuiltInDisplayControlID = "built-in-display-restore"
+        static let disableBuiltInDisplayActionID = "disable-built-in-display"
+        static let restoreBuiltInDisplayActionID = "restore-built-in-display"
         static let shortcutGroupID = "display-brightness.shortcuts"
     }
 
@@ -243,7 +245,7 @@ final class DisplayBrightnessPlugin:
     }
 
     var actionDefinitions: [ActionDefinition] {
-        [DisplayBrightnessShortcutDirection.decrease, .increase].map { direction in
+        let brightnessActions = [DisplayBrightnessShortcutDirection.decrease, .increase].map { direction in
             let title = localization.format(
                 "shortcut.titleFormat",
                 defaultValue: "%@亮度",
@@ -266,23 +268,111 @@ final class DisplayBrightnessPlugin:
                 capabilities: [.background, .foregroundInteractive]
             )
         }
+        return brightnessActions + [
+            ActionDefinition(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: Constants.disableBuiltInDisplayActionID
+                ),
+                title: localization.string(
+                    "displayDisable.action.disable",
+                    defaultValue: "关闭内建显示屏"
+                ),
+                description: localization.string(
+                    "displayDisable.message.needsExternalDisplay",
+                    defaultValue: "连接外接显示器后可关闭内建显示屏"
+                ),
+                keywords: [metadata.title, "display", "disable"],
+                systemImage: "display",
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: localization.string(
+                        "displayDisable.action.disable",
+                        defaultValue: "关闭内建显示屏"
+                    ),
+                    message: localization.string(
+                        "displayDisable.message.needsExternalDisplay",
+                        defaultValue: "连接外接显示器后可关闭内建显示屏"
+                    ),
+                    confirmButtonTitle: localization.string(
+                        "displayDisable.action.disable",
+                        defaultValue: "关闭内建显示屏"
+                    )
+                ),
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: Constants.restoreBuiltInDisplayActionID
+                ),
+                title: localization.string(
+                    "displayDisable.action.restore",
+                    defaultValue: "恢复内建显示屏"
+                ),
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, "display", "restore"],
+                systemImage: "display",
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
     }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
-        guard Self.shortcutDirection(for: reference.key.actionID) != nil else {
+        if Self.shortcutDirection(for: reference.key.actionID) != nil {
+            return controller.snapshot().displays.isEmpty
+                ? .unavailable(
+                    localization.string(
+                        "action.unavailable.noDisplays",
+                        defaultValue: "未检测到可调节亮度的显示器。"
+                    )
+                )
+                : .available
+        }
+
+        displayDisableCoordinator.refreshSnapshot()
+        let snapshot = displayDisableCoordinator.snapshot
+        switch reference.key.actionID {
+        case Constants.disableBuiltInDisplayActionID:
+            return snapshot.isDisableAllowed
+                ? .available
+                : .unavailable(snapshot.message ?? PluginKitLocalization.actionUnavailable)
+        case Constants.restoreBuiltInDisplayActionID:
+            return snapshot.isRestoreAllowed
+                ? .available
+                : .unavailable(snapshot.message ?? PluginKitLocalization.actionUnavailable)
+        default:
             return .unavailable(PluginKitLocalization.actionUnavailable)
         }
-        return controller.snapshot().displays.isEmpty
-            ? .unavailable(
-                localization.string(
-                    "action.unavailable.noDisplays",
-                    defaultValue: "未检测到可调节亮度的显示器。"
-                )
-            )
-            : .available
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        if invocation.reference.key.actionID == Constants.disableBuiltInDisplayActionID {
+            let coordinator = displayDisableCoordinator
+            return ActionExecutionHandle { [weak self, coordinator] in
+                await coordinator.disableBuiltInDisplay()
+                self?.onStateChange?()
+                let snapshot = coordinator.snapshot
+                return snapshot.status == .disabled
+                    ? .succeeded()
+                    : .failed(message: snapshot.message ?? PluginKitLocalization.actionUnavailable)
+            }
+        }
+        if invocation.reference.key.actionID == Constants.restoreBuiltInDisplayActionID {
+            let coordinator = displayDisableCoordinator
+            return ActionExecutionHandle { [weak self, coordinator] in
+                coordinator.restoreBuiltInDisplay()
+                self?.onStateChange?()
+                let snapshot = coordinator.snapshot
+                if snapshot.status == .failed || snapshot.isRestoreAllowed {
+                    return .failed(message: snapshot.message ?? PluginKitLocalization.actionUnavailable)
+                }
+                return .succeeded()
+            }
+        }
+
         guard let direction = Self.shortcutDirection(for: invocation.reference.key.actionID) else {
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionUnavailable) }
         }

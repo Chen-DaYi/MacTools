@@ -78,6 +78,27 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.inputMonitor.startCallCount, 1)
     }
 
+    func testCanonicalResetActionRequiresConfirmationAndClearsToday() async throws {
+        let harness = makeHarness()
+        harness.controller.setTrackingEnabled(true)
+        harness.inputMonitor.emit(.keystroke(app: "Terminal"))
+        let entry = try XCTUnwrap(
+            harness.plugin.actionCatalogEntries.first { $0.reference.key.actionID == "reset-today" }
+        )
+        let definition = try XCTUnwrap(
+            harness.plugin.actionDefinitions.first { $0.key.actionID == "reset-today" }
+        )
+
+        XCTAssertEqual(definition.risk, .confirmationRequired)
+        XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
+        let result = try await harness.plugin.beginAction(
+            ActionInvocation(reference: entry.reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 0)
+    }
+
     func testActivateStartsInstalledHookSocketWithoutInputTracking() {
         let storage = ActivityBarMemoryStorage()
         storage.set("2026-05-18 09:00", forKey: "activity-bar.hooks.installed-at")

@@ -71,6 +71,36 @@ final class HomebrewPluginTests: XCTestCase {
         XCTAssertEqual(plugin.metadata.id, "homebrew")
         XCTAssertEqual(plugin.metadata.title, "Homebrew")
     }
+
+    func testCanonicalMaintenanceActionsAreBoundedAndReportCommandCompletion() async throws {
+        let runner = FakeHomebrewCommandRunner()
+        let controller = HomebrewController(runner: runner)
+        controller.isBrewAvailable = true
+        controller.brewPath = "/opt/homebrew/bin/brew"
+        let plugin = HomebrewPlugin(controller: controller, localization: PluginLocalization(bundle: .main))
+
+        XCTAssertEqual(
+            plugin.actionDefinitions.map(\.key.actionID),
+            ["update", "upgrade-all", "doctor", "cleanup"]
+        )
+        XCTAssertEqual(plugin.actionDefinitions.map(\.externalInvocationPolicy), Array(repeating: .unavailable, count: 4))
+        XCTAssertEqual(plugin.actionDefinitions.map(\.risk), [.safe, .confirmationRequired, .safe, .confirmationRequired])
+        XCTAssertTrue(plugin.actionDefinitions.allSatisfy { $0.executionTimeoutSeconds == 7_200 })
+
+        let doctor = try XCTUnwrap(plugin.actionDefinitions.first { $0.key.actionID == "doctor" })
+        let handle = try plugin.beginAction(
+            ActionInvocation(
+                reference: ActionReference(key: doctor.key),
+                source: .actionGrid,
+                mode: .background
+            )
+        )
+
+        let result = await handle.result()
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(runner.runCalls, [["doctor"]])
+        XCTAssertFalse(controller.isBusy)
+    }
     
     func testPanelUsesManageButton() {
         let runner = FakeHomebrewCommandRunner()

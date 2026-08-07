@@ -65,7 +65,11 @@ private struct DiskCleanPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
+final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting, PluginActionProviding {
+    private enum ActionID {
+        static let scanAndReview = "scan-and-review"
+    }
+
     enum ControlID {
         static let scan = "disk-clean-scan"
         static let clean = "disk-clean-clean"
@@ -165,6 +169,62 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+    var actionDefinitions: [ActionDefinition] {
+        let scanTitle = localization.string("panel.action.scan", defaultValue: "扫描")
+        let reviewTitle = localization.string("panel.action.openDetails", defaultValue: "打开详情")
+        return [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.scanAndReview),
+                title: "\(metadata.title) · \(scanTitle)",
+                description: "\(metadata.defaultDescription) · \(reviewTitle)",
+                keywords: [metadata.title, scanTitle, reviewTitle],
+                systemImage: "magnifyingglass",
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive, .cancellable],
+                executionTimeoutSeconds: 600
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key.actionID == ActionID.scanAndReview else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        return controller.snapshot.canScan
+            ? .available
+            : .unavailable(controller.snapshot.errorMessage ?? PluginKitLocalization.actionUnavailable)
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key.actionID == ActionID.scanAndReview else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionUnavailable) }
+        }
+        let controller = controller
+        return ActionExecutionHandle(
+            operation: { [weak self] in
+                guard let self else { return .cancelled }
+                guard controller.snapshot.canScan else {
+                    return .failed(
+                        message: controller.snapshot.errorMessage ?? PluginKitLocalization.actionUnavailable
+                    )
+                }
+                self.requestConfigurationPresentation?()
+                controller.scan()
+                while controller.snapshot.isBusy {
+                    if Task.isCancelled { return .cancelled }
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                if let errorMessage = controller.snapshot.errorMessage {
+                    return .failed(message: errorMessage)
+                }
+                return .succeeded()
+            },
+            cancel: {
+                controller.cancelCurrentOperation()
+            }
+        )
+    }
+
     var configuration: PluginConfiguration? {
         guard let controller = controller as? DiskCleanController else {
             return nil

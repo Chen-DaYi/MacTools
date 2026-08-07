@@ -133,12 +133,33 @@ final class KeepAwakePreferenceTests: XCTestCase {
         ).result()
 
         XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), [
-            "启用阻止休眠",
+            "启用阻止休眠 · 永不",
             "停用阻止休眠",
+            "阻止休眠 · 30min",
+            "阻止休眠 · 1h",
+            "阻止休眠 · 2h",
+            "阻止休眠 · 5h",
         ])
         XCTAssertEqual(result, .succeeded())
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertEqual(factory.sessions.count, 1)
+    }
+
+    func testDurationActionsStartBoundedKeepAwakeSessions() async throws {
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
+        let oneHour = try XCTUnwrap(
+            plugin.actionCatalogEntries.first { $0.title == "阻止休眠 · 1h" }?.reference
+        )
+        let before = Date()
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: oneHour, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        let endDate = try XCTUnwrap(factory.sessions.first?.startedConfigurations.last?.endDate)
+        XCTAssertEqual(endDate.timeIntervalSince(before), 60 * 60, accuracy: 2)
     }
 
     func testBehaviorCanBeChangedWhileRunning() {

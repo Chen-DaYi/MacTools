@@ -21,8 +21,10 @@ final class LaunchControlController: ObservableObject {
         favoritesStore: LaunchControlFavoritesStore? = nil,
         notesStore: LaunchControlNotesStore? = nil,
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control"),
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        initialSnapshot: LaunchControlSnapshot = LaunchControlSnapshot()
     ) {
+        self.snapshot = initialSnapshot
         self.runner = runner
         self.favoritesStore = favoritesStore ?? LaunchControlFavoritesStore(context: context)
         self.notesStore = notesStore ?? LaunchControlNotesStore(context: context)
@@ -114,7 +116,7 @@ final class LaunchControlController: ObservableObject {
     }
 
     func bootstrap(_ item: LaunchControlItem) {
-        performManagedAction(
+        scheduleManagedAction(
             item: item,
             title: actionTitle(.bootstrap),
             arguments: ["bootstrap", item.launchctlDomain, item.plistURL.path]
@@ -122,7 +124,7 @@ final class LaunchControlController: ObservableObject {
     }
 
     func bootout(_ item: LaunchControlItem) {
-        performManagedAction(
+        scheduleManagedAction(
             item: item,
             title: actionTitle(.bootout),
             arguments: ["bootout", item.launchctlDomain, item.plistURL.path]
@@ -130,7 +132,7 @@ final class LaunchControlController: ObservableObject {
     }
 
     func enable(_ item: LaunchControlItem) {
-        performManagedAction(
+        scheduleManagedAction(
             item: item,
             title: actionTitle(.enable),
             arguments: ["enable", "\(item.launchctlDomain)/\(item.label)"]
@@ -138,7 +140,7 @@ final class LaunchControlController: ObservableObject {
     }
 
     func disable(_ item: LaunchControlItem) {
-        performManagedAction(
+        scheduleManagedAction(
             item: item,
             title: actionTitle(.disable),
             arguments: ["disable", "\(item.launchctlDomain)/\(item.label)"]
@@ -146,7 +148,7 @@ final class LaunchControlController: ObservableObject {
     }
 
     func start(_ item: LaunchControlItem) {
-        performManagedAction(
+        scheduleManagedAction(
             item: item,
             title: actionTitle(.start),
             arguments: ["kickstart", "\(item.launchctlDomain)/\(item.label)"]
@@ -154,7 +156,7 @@ final class LaunchControlController: ObservableObject {
     }
 
     func stop(_ item: LaunchControlItem) {
-        performManagedAction(
+        scheduleManagedAction(
             item: item,
             title: actionTitle(.stop),
             arguments: ["kill", "TERM", "\(item.launchctlDomain)/\(item.label)"]
@@ -162,7 +164,7 @@ final class LaunchControlController: ObservableObject {
     }
 
     func restart(_ item: LaunchControlItem) {
-        performManagedAction(
+        scheduleManagedAction(
             item: item,
             title: actionTitle(.restart),
             arguments: ["kickstart", "-k", "\(item.launchctlDomain)/\(item.label)"]
@@ -256,18 +258,56 @@ final class LaunchControlController: ObservableObject {
         }
     }
 
-    private func performManagedAction(
+    func performManagedActionAndWait(
+        _ action: LaunchControlManagedAction,
+        item: LaunchControlItem
+    ) async -> Bool {
+        let arguments: [String]
+        switch action {
+        case .start:
+            arguments = ["kickstart", "\(item.launchctlDomain)/\(item.label)"]
+        case .stop:
+            arguments = ["kill", "TERM", "\(item.launchctlDomain)/\(item.label)"]
+        case .restart:
+            arguments = ["kickstart", "-k", "\(item.launchctlDomain)/\(item.label)"]
+        case .bootstrap:
+            arguments = ["bootstrap", item.launchctlDomain, item.plistURL.path]
+        case .bootout:
+            arguments = ["bootout", item.launchctlDomain, item.plistURL.path]
+        case .enable:
+            arguments = ["enable", "\(item.launchctlDomain)/\(item.label)"]
+        case .disable:
+            arguments = ["disable", "\(item.launchctlDomain)/\(item.label)"]
+        }
+        return await performManagedAction(
+            item: item,
+            title: actionTitle(action),
+            arguments: arguments
+        )
+    }
+
+    private func scheduleManagedAction(
         item: LaunchControlItem,
         title: String,
         arguments: [String]
     ) {
+        Task { [weak self] in
+            _ = await self?.performManagedAction(item: item, title: title, arguments: arguments)
+        }
+    }
+
+    private func performManagedAction(
+        item: LaunchControlItem,
+        title: String,
+        arguments: [String]
+    ) async -> Bool {
         guard item.canManage else {
             snapshot.operationMessage = localization.string(
                 "controller.operation.readOnly",
                 defaultValue: "系统或全局启动项默认只读，避免误操作。"
             )
             onStateChange?()
-            return
+            return false
         }
 
         snapshot.operationMessage = localization.format(
@@ -279,49 +319,49 @@ final class LaunchControlController: ObservableObject {
         snapshot.errorMessage = nil
         onStateChange?()
 
-        Task { [weak self, runner] in
-            let result: Result<LaunchControlCommandResult, Error> = await Task.detached(priority: .userInitiated) {
-                do {
-                    return .success(try runner.runLaunchctl(arguments: arguments))
-                } catch {
-                    return .failure(error)
-                }
-            }.value
-
-            guard let self else { return }
-
-            switch result {
-            case let .success(commandResult) where commandResult.exitCode == 0:
-                self.snapshot.operationMessage = self.localization.format(
-                    "controller.operation.completed",
-                    defaultValue: "%@完成",
-                    title
-                )
-                self.refresh()
-            case let .success(commandResult):
-                let message = commandResult.combinedOutput
-                self.snapshot.operationMessage = self.localization.format(
-                    "controller.operation.failed",
-                    defaultValue: "%@失败",
-                    title
-                )
-                self.snapshot.errorMessage = message.isEmpty
-                    ? self.localization.format(
-                        "controller.operation.exitCode",
-                        defaultValue: "launchctl 返回退出码 %d",
-                        commandResult.exitCode
-                    )
-                    : message
-                self.onStateChange?()
-            case let .failure(error):
-                self.snapshot.operationMessage = self.localization.format(
-                    "controller.operation.failed",
-                    defaultValue: "%@失败",
-                    title
-                )
-                self.snapshot.errorMessage = error.localizedDescription
-                self.onStateChange?()
+        let runner = runner
+        let result: Result<LaunchControlCommandResult, Error> = await Task.detached(priority: .userInitiated) {
+            do {
+                return .success(try runner.runLaunchctl(arguments: arguments))
+            } catch {
+                return .failure(error)
             }
+        }.value
+
+        switch result {
+        case let .success(commandResult) where commandResult.exitCode == 0:
+            snapshot.operationMessage = localization.format(
+                "controller.operation.completed",
+                defaultValue: "%@完成",
+                title
+            )
+            refresh()
+            return true
+        case let .success(commandResult):
+            let message = commandResult.combinedOutput
+            snapshot.operationMessage = localization.format(
+                "controller.operation.failed",
+                defaultValue: "%@失败",
+                title
+            )
+            snapshot.errorMessage = message.isEmpty
+                ? localization.format(
+                    "controller.operation.exitCode",
+                    defaultValue: "launchctl 返回退出码 %d",
+                    commandResult.exitCode
+                )
+                : message
+            onStateChange?()
+            return false
+        case let .failure(error):
+            snapshot.operationMessage = localization.format(
+                "controller.operation.failed",
+                defaultValue: "%@失败",
+                title
+            )
+            snapshot.errorMessage = error.localizedDescription
+            onStateChange?()
+            return false
         }
     }
 

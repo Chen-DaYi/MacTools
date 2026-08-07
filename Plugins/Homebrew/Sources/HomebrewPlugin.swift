@@ -24,7 +24,14 @@ private struct HomebrewPluginProvider: PluginProvider {
 }
 
 @MainActor
-public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
+public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting, PluginActionProviding {
+    private enum ActionID {
+        static let update = "update"
+        static let upgradeAll = "upgrade-all"
+        static let doctor = "doctor"
+        static let cleanup = "cleanup"
+    }
+
     public enum ControlID {
         static let manage = "execute"
     }
@@ -96,6 +103,96 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
     public var permissionRequirements: [PluginPermissionRequirement] { [] }
     public var settingsSections: [PluginSettingsSection] { [] }
     public var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+    public var actionDefinitions: [ActionDefinition] {
+        [
+            maintenanceDefinition(
+                id: ActionID.update,
+                titleKey: "detail.diagnostics.update.title",
+                title: "更新软件源",
+                descriptionKey: "detail.diagnostics.update.desc",
+                description: "同步 Homebrew formula 和 cask 列表。",
+                systemImage: "arrow.clockwise.circle.fill"
+            ),
+            maintenanceDefinition(
+                id: ActionID.upgradeAll,
+                titleKey: "detail.diagnostics.upgrade.title",
+                title: "更新所有包",
+                descriptionKey: "detail.diagnostics.upgrade.desc",
+                description: "更新当前检测到的过期包。",
+                systemImage: "arrow.up.circle.fill",
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: localization.string("detail.confirm.upgradeAll.title", defaultValue: "确认更新所有包？"),
+                    message: localization.string(
+                        "detail.confirm.upgradeAll.message",
+                        defaultValue: "将执行 brew upgrade，更新所有可升级的 Homebrew 包。此操作可能修改已安装软件。"
+                    ),
+                    confirmButtonTitle: localization.string("detail.confirm.upgradeAll.button", defaultValue: "更新全部")
+                )
+            ),
+            maintenanceDefinition(
+                id: ActionID.doctor,
+                titleKey: "detail.diagnostics.doctor.title",
+                title: "运行诊断",
+                descriptionKey: "detail.diagnostics.doctor.desc",
+                description: "检查环境变量、权限和构建路径。",
+                systemImage: "heart.text.square.fill"
+            ),
+            maintenanceDefinition(
+                id: ActionID.cleanup,
+                titleKey: "detail.diagnostics.cleanup.title",
+                title: "清理缓存",
+                descriptionKey: "detail.diagnostics.cleanup.desc",
+                description: "移除旧版本下载和缓存。",
+                systemImage: "trash.circle.fill",
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: localization.string("detail.confirm.cleanup.title", defaultValue: "确认清理 Homebrew 缓存？"),
+                    message: localization.string(
+                        "detail.confirm.cleanup.message",
+                        defaultValue: "将执行 brew cleanup，删除 Homebrew 旧版本和下载缓存。"
+                    ),
+                    confirmButtonTitle: localization.string("detail.confirm.cleanup.button", defaultValue: "清理")
+                )
+            ),
+        ]
+    }
+
+    public func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard actionDefinitions.contains(where: { $0.key == reference.key }) else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        guard controller.isBrewAvailable else {
+            return .unavailable(localization.string(
+                "panel.error.brewPathRequired",
+                defaultValue: "需要配置 brew 路径"
+            ))
+        }
+        return controller.isBusy
+            ? .unavailable(controller.currentOperationName)
+            : .available
+    }
+
+    public func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard let command = maintenanceCommand(for: invocation.reference.key.actionID) else {
+            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionUnavailable) }
+        }
+        let controller = controller
+        return ActionExecutionHandle(
+            operation: {
+                let success = await controller.runMaintenanceAction(name: command.name, args: command.arguments)
+                if Task.isCancelled {
+                    return .cancelled
+                }
+                return success
+                    ? .succeeded()
+                    : .failed(message: controller.logs.last(where: \.isError)?.text ?? PluginKitLocalization.actionUnavailable)
+            },
+            cancel: {
+                controller.cancelCurrentOperation()
+            }
+        )
+    }
 
     public var configuration: PluginConfiguration? {
         let controller = self.controller
@@ -149,6 +246,58 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
             requestConfigurationPresentation?()
         default:
             break
+        }
+    }
+
+    private func maintenanceDefinition(
+        id: String,
+        titleKey: String,
+        title: String,
+        descriptionKey: String,
+        description: String,
+        systemImage: String,
+        risk: ActionRisk = .safe,
+        confirmation: ActionConfirmation? = nil
+    ) -> ActionDefinition {
+        let localizedTitle = localization.string(titleKey, defaultValue: title)
+        return ActionDefinition(
+            key: ActionKey(providerID: metadata.id, actionID: id),
+            title: localizedTitle,
+            description: localization.string(descriptionKey, defaultValue: description),
+            keywords: [metadata.title, localizedTitle, "brew", "Homebrew"],
+            systemImage: systemImage,
+            risk: risk,
+            confirmation: confirmation,
+            externalInvocationPolicy: .unavailable,
+            capabilities: [.background, .foregroundInteractive, .cancellable],
+            executionTimeoutSeconds: 7_200
+        )
+    }
+
+    private func maintenanceCommand(for actionID: String) -> (name: String, arguments: [String])? {
+        switch actionID {
+        case ActionID.update:
+            return (
+                localization.string("operation.updateBrew", defaultValue: "正在更新 Homebrew 源..."),
+                ["update"]
+            )
+        case ActionID.upgradeAll:
+            return (
+                localization.string("operation.upgradeAll", defaultValue: "正在更新所有包..."),
+                ["upgrade"]
+            )
+        case ActionID.doctor:
+            return (
+                localization.string("operation.doctor", defaultValue: "正在运行 Homebrew 诊断..."),
+                ["doctor"]
+            )
+        case ActionID.cleanup:
+            return (
+                localization.string("operation.cleanup", defaultValue: "正在清理 Homebrew 缓存..."),
+                ["cleanup"]
+            )
+        default:
+            return nil
         }
     }
 }

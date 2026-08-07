@@ -26,6 +26,32 @@ final class XcodeCleanPluginTests: XCTestCase {
         XCTAssertEqual(controller.scanCallCount, 1)
     }
 
+    func testCanonicalActionOpensReviewAndStartsScanWithoutCleaning() async throws {
+        let controller = FakeXcodeCleanController()
+        let plugin = makePlugin(controller: controller)
+        var presentationRequests = 0
+        plugin.requestConfigurationPresentation = { presentationRequests += 1 }
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first)
+
+        XCTAssertEqual(definition.key.actionID, "scan-and-review")
+        XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
+        XCTAssertEqual(definition.risk, .safe)
+
+        let handle = try plugin.beginAction(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .actionGrid,
+                mode: .foreground
+            )
+        )
+
+        let result = await handle.result()
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(presentationRequests, 1)
+        XCTAssertEqual(controller.scanCallCount, 1)
+        XCTAssertTrue(controller.cleanSelectedCalls.isEmpty)
+    }
+
     func testInvokingCleanPresentsConfirmationWithCleanableCandidates() {
         let controller = FakeXcodeCleanController()
         let allowedCandidate = XcodeCleanCandidate(

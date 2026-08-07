@@ -4,6 +4,52 @@ import MacToolsPluginKit
 
 @MainActor
 final class IPOverviewPluginTests: XCTestCase {
+    func testCanonicalCopyActionsRefreshAndCopyCurrentAddresses() async throws {
+        let pasteboard = NSPasteboard(name: .init("IPOverviewPluginTests.\(UUID().uuidString)"))
+        let snapshot = IPOverviewSnapshot(
+            publicIPv4: IPOverviewPublicIPResult(
+                family: .ipv4,
+                ip: "203.0.113.8",
+                source: "Test"
+            ),
+            publicIPv6: nil,
+            localAddresses: [
+                IPOverviewLocalAddress(
+                    id: "en0-192.168.1.10",
+                    interfaceName: "en0",
+                    address: "192.168.1.10",
+                    family: .ipv4
+                ),
+            ],
+            geoInfoByIP: [:],
+            sourceResults: [],
+            lastUpdated: Date(),
+            errorMessage: nil,
+            isRefreshing: false
+        )
+        let provider = IPOverviewProviderSpy(publicSnapshot: snapshot)
+        let viewModel = IPOverviewViewModel(
+            provider: provider,
+            storage: IPOverviewPluginTestStorage(),
+            pasteboard: pasteboard
+        )
+        let plugin = IPOverviewPlugin(viewModel: viewModel)
+
+        XCTAssertEqual(plugin.actionCatalogEntries.count, 2)
+        for (reference, expected) in zip(
+            plugin.actionCatalogEntries.map(\.reference),
+            ["192.168.1.10", "203.0.113.8"]
+        ) {
+            let result = try await plugin.beginAction(
+                ActionInvocation(reference: reference, source: .test, mode: .background)
+            ).result()
+            XCTAssertEqual(result, .succeeded())
+            XCTAssertEqual(pasteboard.string(forType: .string), expected)
+        }
+        let callCounts = await provider.callCounts()
+        XCTAssertEqual(callCounts.addresses, 2)
+    }
+
     func testPrimaryPanelButtonRequestsConfigurationPresentation() {
         let viewModel = IPOverviewViewModel(storage: IPOverviewPluginTestStorage())
         let plugin = IPOverviewPlugin(viewModel: viewModel)

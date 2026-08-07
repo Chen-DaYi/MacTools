@@ -171,7 +171,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         snapshot.applications.flatMap { application in
-            [0.0, 1.0].map { gain in
+            [0.0, 0.5, 1.0].map { gain in
                 ActionCatalogEntry(
                     reference: volumeActionReference(applicationID: application.id, gain: gain),
                     title: "\(application.displayName) · \(Int(gain * 100))%",

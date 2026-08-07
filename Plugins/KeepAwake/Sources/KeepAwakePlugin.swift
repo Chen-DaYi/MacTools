@@ -94,6 +94,12 @@ final class KeepAwakePlugin:
 
     private enum ActionID {
         static let setEnabled = "set-enabled"
+        static let startForDuration = "start-for-duration"
+    }
+
+    private enum ActionParameterID {
+        static let enabled = "enabled"
+        static let durationSeconds = "duration-seconds"
     }
 
     private enum VirtualDisplayIdentity {
@@ -300,9 +306,28 @@ final class KeepAwakePlugin:
                 systemImage: metadata.iconName,
                 parameters: [
                     ActionParameterDefinition(
-                        id: "enabled",
+                        id: ActionParameterID.enabled,
                         title: localization.string("metadata.title", defaultValue: "阻止休眠"),
                         kind: .boolean
+                    ),
+                ],
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.startForDuration),
+                title: localization.string("metadata.title", defaultValue: "阻止休眠"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "保持 Mac 唤醒；可选保持屏幕常亮或让屏幕工具继续工作。MacBook 合盖运行要求连接电源"
+                ),
+                keywords: [metadata.title, "30min", "1h", "2h", "5h"],
+                systemImage: metadata.iconName,
+                parameters: [
+                    ActionParameterDefinition(
+                        id: ActionParameterID.durationSeconds,
+                        title: metadata.title,
+                        kind: .integer
                     ),
                 ],
                 externalInvocationPolicy: .allowed,
@@ -312,16 +337,23 @@ final class KeepAwakePlugin:
     }
 
     var actionCatalogEntries: [ActionCatalogEntry] {
-        [
+        var entries = [
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
-                title: localization.string("action.enable.title", defaultValue: "启用阻止休眠")
+                title: "\(localization.string("action.enable.title", defaultValue: "启用阻止休眠")) · \(localization.string("panel.duration.forever", defaultValue: "永不"))"
             ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: false),
                 title: localization.string("action.disable.title", defaultValue: "停用阻止休眠")
             ),
         ]
+        entries += [DurationPreset.thirtyMinutes, .oneHour, .twoHours, .fiveHours].map { preset in
+            ActionCatalogEntry(
+                reference: durationActionReference(preset),
+                title: "\(metadata.title) · \(durationTitle(preset))"
+            )
+        }
+        return entries
     }
 
     var settingsSearchEntries: [PluginSettingsSearchEntry] {
@@ -462,11 +494,26 @@ final class KeepAwakePlugin:
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+        let shouldBeEnabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.setEnabled:
+            guard case let .boolean(enabled)? = invocation.reference.parameters[ActionParameterID.enabled] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            shouldBeEnabled = enabled
+            setKeepAwakeEnabled(enabled)
+        case ActionID.startForDuration:
+            guard case let .integer(seconds)? = invocation.reference.parameters[ActionParameterID.durationSeconds],
+                  let preset = durationPreset(seconds: seconds) else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            shouldBeEnabled = true
+            startKeepAwake(durationPreset: preset)
+        default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
-        setKeepAwakeEnabled(enabled)
-        let failedMessage = enabled && session == nil
+
+        let failedMessage = shouldBeEnabled && session == nil
             ? localization.string("error.enableFailed", defaultValue: "无法启用阻止休眠。")
             : nil
         return ActionExecutionHandle {
@@ -480,8 +527,33 @@ final class KeepAwakePlugin:
     private func actionReference(enabled: Bool) -> ActionReference {
         ActionReference(
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
-            parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+            parameters: try! ActionParameterSet([ActionParameterID.enabled: .boolean(enabled)])
         )
+    }
+
+    private func durationActionReference(_ preset: DurationPreset) -> ActionReference {
+        ActionReference(
+            key: ActionKey(providerID: metadata.id, actionID: ActionID.startForDuration),
+            parameters: try! ActionParameterSet([
+                ActionParameterID.durationSeconds: .integer(Int64(preset.timeInterval ?? 0)),
+            ])
+        )
+    }
+
+    private func durationPreset(seconds: Int64) -> DurationPreset? {
+        [DurationPreset.thirtyMinutes, .oneHour, .twoHours, .fiveHours].first {
+            Int64($0.timeInterval ?? 0) == seconds
+        }
+    }
+
+    private func durationTitle(_ preset: DurationPreset) -> String {
+        switch preset {
+        case .forever: localization.string("panel.duration.forever", defaultValue: "永不")
+        case .thirtyMinutes: "30min"
+        case .oneHour: "1h"
+        case .twoHours: "2h"
+        case .fiveHours: "5h"
+        }
     }
 
     private var panelSubtitle: String {
@@ -569,6 +641,12 @@ final class KeepAwakePlugin:
         }
 
         selectedDurationPreset = .forever
+        lastErrorMessage = nil
+        applyKeepAwakeConfiguration()
+    }
+
+    private func startKeepAwake(durationPreset: DurationPreset) {
+        selectedDurationPreset = durationPreset
         lastErrorMessage = nil
         applyKeepAwakeConfiguration()
     }

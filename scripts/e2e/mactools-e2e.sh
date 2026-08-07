@@ -1282,7 +1282,7 @@ verify_code_session() {
         -quiet
     )
     print -r -- "Run PluginCatalogManagerTests with xcodebuild"
-    print -r -- "Run action-registry core coverage and all 15 native action-provider suites with xcodebuild"
+    print -r -- "Run action-registry core coverage and native action-provider suites with xcodebuild"
     print -r -- "Run the six injected Trackpad Gestures test classes with xcodebuild"
     if [[ "$mode" == --dry-run ]]; then
         return 0
@@ -1314,23 +1314,45 @@ verify_code_session() {
         -only-testing:MacToolsTests/AutomationControllerTests \
         -only-testing:MacToolsTests/PluginHostActionRegistryTests \
         -only-testing:MacToolsTests/ActionGridPluginTests \
+        -only-testing:MacToolsTests/ActivityBarPluginTests \
         -only-testing:MacToolsTests/AppearancePluginTests \
         -only-testing:MacToolsTests/AppHotkeyPluginTests \
+        -only-testing:MacToolsTests/AppVolumePluginTests \
         -only-testing:MacToolsTests/AutoHideDockPluginTests \
         -only-testing:MacToolsTests/AutoHideMenuBarPluginTests \
+        -only-testing:MacToolsTests/AutoInputPluginPanelTests \
+        -only-testing:MacToolsTests/BatteryChargeLimitPluginTests \
+        -only-testing:MacToolsTests/ClipboardClearPluginTests \
+        -only-testing:MacToolsTests/DiskCleanPluginTests \
         -only-testing:MacToolsTests/DisplayBrightnessPluginTests \
+        -only-testing:MacToolsTests/DisplayResolutionPluginTests \
         -only-testing:MacToolsTests/DisplaySleepPluginTests \
+        -only-testing:MacToolsTests/DisplayTrueColorPluginTests \
+        -only-testing:MacToolsTests/EjectDiskPluginTests \
+        -only-testing:MacToolsTests/EmptyTrashPluginTests \
+        -only-testing:MacToolsTests/FanControlPluginTests \
+        -only-testing:MacToolsTests/FixDamagedAppPluginTests \
+        -only-testing:MacToolsTests/HideNotchPluginTests \
+        -only-testing:MacToolsTests/HomebrewPluginTests \
+        -only-testing:MacToolsTests/IPOverviewPluginTests \
         -only-testing:MacToolsTests/KeepAwakePreferenceTests \
+        -only-testing:MacToolsTests/LaunchControlCanonicalActionTests \
         -only-testing:MacToolsTests/LaunchpadPluginActionTests \
         -only-testing:MacToolsTests/LockScreenPluginTests \
         -only-testing:MacToolsTests/MicrophoneMutePluginTests \
         -only-testing:MacToolsTests/NightShiftPluginTests \
+        -only-testing:MacToolsTests/PhysicalCleanModePluginTests \
+        -only-testing:MacToolsTests/QuitAppsPluginTests \
         -only-testing:MacToolsTests/SavedScriptsPluginTests \
+        -only-testing:MacToolsTests/SidecarPluginTests \
+        -only-testing:MacToolsTests/StageManagerPluginTests \
         -only-testing:MacToolsTests/SystemMutePluginTests \
         -only-testing:MacToolsTests/TranslatorPluginTests \
+        -only-testing:MacToolsTests/WindowSwitcherPluginTests \
+        -only-testing:MacToolsTests/XcodeCleanPluginTests \
         2>&1 | tee "$session_dir/code-verification.action-registry.log"; then
         checkpoint "$session_dir" action-registry-health pass \
-            "Core registry coverage and all native action-provider suites passed"
+            "Core registry coverage and native action-provider suites passed"
     else
         checkpoint "$session_dir" action-registry-health fail \
             "See code-verification.action-registry.log"
