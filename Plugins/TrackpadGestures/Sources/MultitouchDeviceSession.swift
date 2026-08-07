@@ -242,8 +242,8 @@ final class TrackpadRecognitionDeliveryRelay: @unchecked Sendable {
     }
 
     func deliver(_ gesture: TrackpadGesture, deviceID: UInt64, generation: UInt64) {
-        let handler = lock.withLock { handler }
-        handler?(gesture, deviceID, generation)
+        let currentHandler: Handler? = lock.withLock { self.handler }
+        currentHandler?(gesture, deviceID, generation)
     }
 }
 
