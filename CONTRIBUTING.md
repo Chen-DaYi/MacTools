@@ -12,7 +12,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 ## Development Environment
 - Xcode and `xcodegen` are required. The project supports macOS 14.0 and later.
 - First-time setup: run `make setup`, then edit `LocalConfig.xcconfig` and fill in `DEVELOPMENT_TEAM` and `BUNDLE_IDENTIFIER_PREFIX`.
-- Common commands: `make generate` generates the Xcode project, `make build` validates compilation, and `make run` runs the app locally.
+- Common commands: `make generate` generates the Xcode project, `make build` validates compilation, and `make run` installs the verified Debug bundle at `~/Applications/MacTools Dev.app` before running it locally.
 - Plugin development: `make run` incrementally builds the app and plugins, then syncs the latest Debug plugin packages to the local development marketplace. A full sync moves packages absent from the current checkout into the recoverable Debug quarantine; a filtered `PLUGIN=...` sync leaves unrelated packages untouched. `make sync-debug-plugins` only syncs already built plugins. `make build-plugin` is reserved for validating dynamic plugin packages or release flows; to build one plugin, run `make build-plugin PLUGIN=calendar`.
 - Do not commit local or generated files: `MacTools.xcodeproj`, `MacTools.xcworkspace`, `LocalConfig.xcconfig`, `build/`, or `scripts/release.local.env`.
 

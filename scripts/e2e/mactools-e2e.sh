@@ -7,6 +7,8 @@ REPO_ROOT="${SCRIPT_DIR:h:h}"
 FIXTURE_TOOL="$SCRIPT_DIR/MacToolsE2EFixture.swift"
 KEY_SENDER_TOOL="$SCRIPT_DIR/MacToolsE2EKeySender.swift"
 CAPTURE_RECT_TOOL="$SCRIPT_DIR/MacToolsE2ECaptureRect.swift"
+PRIVACY_HELPER_SOURCE="$SCRIPT_DIR/MacToolsE2EPrivacyHelper.swift"
+PRIVACY_RECORDER_SOURCE="$SCRIPT_DIR/MacToolsE2ERecorder.swift"
 SCENARIO_MANIFEST="$SCRIPT_DIR/scenarios.json"
 HARNESS_PATH="$SCRIPT_DIR/mactools-e2e.sh"
 APP_PATH="${MACTOOLS_E2E_APP_PATH:-$HOME/Applications/MacTools Dev.app}"
@@ -37,8 +39,15 @@ usage() {
     print -r -- "  audit <session-dir>                   Save and validate fixture state"
     print -r -- "  checkpoint <session-dir> <name> <pass|fail|pending> [detail]"
     print -r -- "  shortcut <session-dir> <open-settings|action-grid|dashboard|safe-workflow> [--dry-run]"
+    print -r -- "  pointer-click <session-dir> <reference-width> <reference-height> <x> <y> [--dry-run]"
+    print -r -- "  input-select-all <session-dir> [--dry-run]"
+    print -r -- "  input-text <session-dir> <text> [--dry-run]"
+    print -r -- "  privacy-helper <session-dir> <primary|secondary> [--dry-run]"
     print -r -- "  record <session-dir> [seconds] [--dry-run]"
     print -r -- "  record-pack <session-dir> <pack-id> [seconds] [--dry-run]"
+    print -r -- "  wait-recording-ready <session-dir> [label] [seconds]"
+    print -r -- "  start-recording <session-dir> [label]"
+    print -r -- "  stop-recording <session-dir> [label]"
     print -r -- "  verify-code <session-dir> [--dry-run]   Run migration and injected-trackpad suites"
     print -r -- "  scenarios [pack-id]                   Print all scenario packs or one pack"
     print -r -- "  collect <session-dir>                 Build report.json and diagnostic artifacts"
@@ -83,6 +92,214 @@ key_sender_tool() {
 
 capture_rect_tool() {
     env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swift "$CAPTURE_RECT_TOOL" "$@"
+}
+
+privacy_recorder_binary() {
+    local session_dir="$1"
+    print -r -- "$session_dir/privacy-recorder/MacToolsE2ERecorder"
+}
+
+build_privacy_recorder() {
+    local session_dir="$1"
+    [[ -f "$PRIVACY_RECORDER_SOURCE" ]] || {
+        print -u2 -r -- "error: application-filtered recorder source is unavailable"
+        return 1
+    }
+    local binary
+    binary="$(privacy_recorder_binary "$session_dir")"
+    mkdir -p "${binary:h}"
+    env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swiftc \
+        -parse-as-library -suppress-warnings \
+        -framework AppKit -framework AVFoundation -framework ScreenCaptureKit \
+        "$PRIVACY_RECORDER_SOURCE" -o "$binary"
+    /usr/bin/codesign --force --sign - "$binary"
+}
+
+ensure_privacy_recorder() {
+    local session_dir="$1"
+    local binary
+    binary="$(privacy_recorder_binary "$session_dir")"
+    if [[ ! -x "$binary" || "$PRIVACY_RECORDER_SOURCE" -nt "$binary" ]]; then
+        build_privacy_recorder "$session_dir"
+    fi
+}
+
+privacy_recorder_tool() {
+    local session_dir="$1"
+    shift
+    "$(privacy_recorder_binary "$session_dir")" "$@"
+}
+
+input_driver_binary() {
+    local session_dir="$1"
+    print -r -- "$session_dir/input-driver/MacToolsE2EInputDriver"
+}
+
+build_input_driver() {
+    local session_dir="$1"
+    local binary
+    binary="$(input_driver_binary "$session_dir")"
+    mkdir -p "${binary:h}"
+    env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swiftc \
+        -framework ApplicationServices -framework CoreGraphics \
+        "$KEY_SENDER_TOOL" -o "$binary"
+    /usr/bin/codesign --force --sign - "$binary"
+}
+
+ensure_input_driver() {
+    local session_dir="$1"
+    local binary
+    binary="$(input_driver_binary "$session_dir")"
+    if [[ ! -x "$binary" || "$KEY_SENDER_TOOL" -nt "$binary" ]]; then
+        build_input_driver "$session_dir"
+    fi
+}
+
+input_driver_tool() {
+    local session_dir="$1"
+    shift
+    "$(input_driver_binary "$session_dir")" "$@"
+}
+
+privacy_helper_app_path() {
+    local session_dir="$1"
+    local variant="$2"
+    print -r -- "$session_dir/privacy-helpers/MacTools E2E ${variant:u} Helper.app"
+}
+
+build_privacy_helpers() {
+    local session_dir="$1"
+    [[ -f "$PRIVACY_HELPER_SOURCE" ]] || {
+        print -u2 -r -- "error: privacy-safe helper source is unavailable"
+        return 1
+    }
+    local helper_root="$session_dir/privacy-helpers"
+    local executable="$helper_root/MacToolsE2EPrivacyHelper"
+    mkdir -p "$helper_root"
+    env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swiftc \
+        -parse-as-library -framework AppKit "$PRIVACY_HELPER_SOURCE" -o "$executable"
+
+    local variant app bundle_id title accent
+    for variant in primary secondary backdrop; do
+        app="$(privacy_helper_app_path "$session_dir" "$variant")"
+        if [[ "$variant" == primary ]]; then
+            bundle_id="com.jennymedia.mactools.e2e-helper.primary"
+            title="MacTools E2E Primary Helper"
+            accent="orange"
+        elif [[ "$variant" == secondary ]]; then
+            bundle_id="com.jennymedia.mactools.e2e-helper.secondary"
+            title="MacTools E2E Secondary Helper"
+            accent="blue"
+        else
+            bundle_id="com.jennymedia.mactools.e2e-helper.backdrop"
+            title="MacTools E2E Privacy Backdrop"
+            accent="blue"
+        fi
+        mkdir -p "$app/Contents/MacOS"
+        /usr/bin/ditto "$executable" "$app/Contents/MacOS/MacToolsE2EPrivacyHelper"
+        "$PYTHON3" - "$app/Contents/Info.plist" "$bundle_id" "$title" "$accent" <<'PY'
+import plistlib
+import sys
+
+path, bundle_id, title, accent = sys.argv[1:]
+payload = {
+    "CFBundleDevelopmentRegion": "en",
+    "CFBundleDisplayName": title,
+    "CFBundleExecutable": "MacToolsE2EPrivacyHelper",
+    "CFBundleIdentifier": bundle_id,
+    "CFBundleInfoDictionaryVersion": "6.0",
+    "CFBundleName": title,
+    "CFBundlePackageType": "APPL",
+    "CFBundleShortVersionString": "1.0",
+    "CFBundleVersion": "1",
+    "LSMinimumSystemVersion": "14.0",
+    "MacToolsE2EAccent": accent,
+    "MacToolsE2ETitle": title,
+    "NSHighResolutionCapable": True,
+}
+with open(path, "wb") as handle:
+    plistlib.dump(payload, handle)
+PY
+        /usr/bin/codesign --force --sign - "$app"
+        "$LSREGISTER" -f "$app"
+    done
+}
+
+ensure_privacy_helpers() {
+    local session_dir="$1"
+    local primary secondary backdrop
+    primary="$(privacy_helper_app_path "$session_dir" primary)"
+    secondary="$(privacy_helper_app_path "$session_dir" secondary)"
+    backdrop="$(privacy_helper_app_path "$session_dir" backdrop)"
+    if [[ ! -d "$primary" || ! -d "$secondary" || ! -d "$backdrop" ]]; then
+        build_privacy_helpers "$session_dir"
+        return
+    fi
+    "$LSREGISTER" -f "$primary"
+    "$LSREGISTER" -f "$secondary"
+    "$LSREGISTER" -f "$backdrop"
+}
+
+recording_visibility_state_path() {
+    local session_dir="$1"
+    print -r -- "$session_dir/privacy-recorder/hidden-application-pids.txt"
+}
+
+restore_recording_visibility() {
+    local session_dir="$1"
+    local state_path executable
+    state_path="$(recording_visibility_state_path "$session_dir")"
+    executable="$(privacy_helper_app_path "$session_dir" backdrop)/Contents/MacOS/MacToolsE2EPrivacyHelper"
+    if [[ -s "$state_path" && -x "$executable" ]]; then
+        "$executable" --restore-visibility "$state_path"
+    fi
+    rm -f -- "$state_path"
+}
+
+stop_privacy_helpers() {
+    local session_dir="$1"
+    local variant app executable output
+    local cleanup_failed=false
+    for variant in primary secondary backdrop; do
+        app="$(privacy_helper_app_path "$session_dir" "$variant")"
+        executable="$app/Contents/MacOS/MacToolsE2EPrivacyHelper"
+        output="$(/bin/ps -axo pid=,command= | awk -v executable="$executable" '
+            {
+                pid = $1
+                sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", $0)
+                if ($0 == executable || index($0, executable " ") == 1) print pid
+            }
+        ')"
+        if [[ -n "$output" ]]; then
+            local -a helper_pids
+            helper_pids=("${(@f)output}")
+            /bin/kill -TERM -- "${helper_pids[@]}"
+            local attempt=0
+            for attempt in {1..50}; do
+                local still_running=false
+                local helper_pid=""
+                for helper_pid in "${helper_pids[@]}"; do
+                    if /bin/kill -0 "$helper_pid" >/dev/null 2>&1; then
+                        still_running=true
+                        break
+                    fi
+                done
+                [[ "$still_running" == false ]] && break
+                sleep 0.1
+            done
+            for helper_pid in "${helper_pids[@]}"; do
+                if /bin/kill -0 "$helper_pid" >/dev/null 2>&1; then
+                    cleanup_failed=true
+                    /bin/kill -KILL "$helper_pid" >/dev/null 2>&1 || true
+                fi
+            done
+        fi
+    done
+    sleep 0.25
+    [[ "$cleanup_failed" == false ]] \
+        || print -u2 -r -- "warning: privacy helper required forced termination"
+    restore_recording_visibility "$session_dir"
+    return 0
 }
 
 matching_pids() {
@@ -174,12 +391,13 @@ write_preflight_json() {
     local process_count="$7"
     local event_posting_access="$8"
     local conflicting_process_count="$9"
-    local passed="${10}"
+    local trackpad_listener_lease_owned="${10}"
+    local passed="${11}"
 
     mkdir -p "${output_path:h}"
     "$PYTHON3" - "$output_path" "$APP_PATH" "$bundle_id" "$team_id" "$expected_team_id" \
         "$authority" "$plugin_count" "$process_count" "$event_posting_access" \
-        "$conflicting_process_count" "$passed" <<'PY'
+        "$conflicting_process_count" "$trackpad_listener_lease_owned" "$passed" <<'PY'
 import json
 import sys
 from datetime import datetime, timezone
@@ -195,8 +413,10 @@ from datetime import datetime, timezone
     process_count,
     event_posting_access,
     conflicting_process_count,
+    trackpad_listener_lease_owned,
     passed,
 ) = sys.argv[1:]
+listener_owned = trackpad_listener_lease_owned == "true"
 payload = {
     "timestamp": datetime.now(timezone.utc).isoformat(),
     "passed": passed == "true",
@@ -209,9 +429,20 @@ payload = {
     "matchingProcessCount": int(process_count),
     "derivedDataProcessCount": int(conflicting_process_count),
     "eventPostingAccess": event_posting_access == "true",
-    "recorder": "/usr/sbin/screencapture",
+    "recorder": "scripts/e2e/MacToolsE2ERecorder.swift",
+    "recorderPrivacyFilter": "application-allowlist",
+    "recorderEnvironmentPreparation": "hide-and-restore-unrelated-regular-apps",
     "transcoder": "/opt/homebrew/bin/ffmpeg",
-    "permissionState": "pending-user-grant",
+    "permissionState": "granted" if listener_owned else "unverified",
+    "permissionEvidence": {
+        "trackpadListenerLeaseOwnedByStableApp": listener_owned,
+        "meaning": (
+            "The active Trackpad Gestures listener starts only after MacTools observes both "
+            "Accessibility and Input Monitoring permission."
+            if listener_owned
+            else "No active Trackpad Gestures listener was observed; this does not prove denial."
+        ),
+    },
 }
 with open(output_path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -252,6 +483,20 @@ preflight() {
     if key_sender_tool check >/dev/null 2>&1; then
         event_posting_access=true
     fi
+    local trackpad_listener_lease_owned=false
+    local listener_lock="${TMPDIR:-/tmp}"
+    listener_lock="${listener_lock%/}/$bundle_id.trackpad-gestures.listener.lock"
+    if [[ -f "$listener_lock" && -n "$process_output" ]]; then
+        local listener_owners
+        listener_owners="$(/usr/sbin/lsof -t -- "$listener_lock" 2>/dev/null || true)"
+        local stable_pid
+        for stable_pid in "${(@f)process_output}"; do
+            if print -r -- "$listener_owners" | grep -q -x "$stable_pid"; then
+                trackpad_listener_lease_owned=true
+                break
+            fi
+        done
+    fi
 
     local -a failures
     failures=()
@@ -266,8 +511,8 @@ preflight() {
     (( process_count <= 1 )) || failures+=("more than one stable-path app instance is running")
     (( conflicting_process_count == 0 )) \
         || failures+=("a Derived Data MacTools test host is still running")
-    [[ -x /usr/sbin/screencapture ]] || failures+=("screencapture is unavailable")
     [[ -f "$CAPTURE_RECT_TOOL" ]] || failures+=("private capture rectangle helper is unavailable")
+    [[ -f "$PRIVACY_RECORDER_SOURCE" ]] || failures+=("application-filtered recorder is unavailable")
     [[ -x /opt/homebrew/bin/ffmpeg ]] || failures+=("ffmpeg is unavailable")
 
     local passed=true
@@ -275,7 +520,7 @@ preflight() {
     write_preflight_json \
         "$output_path" "$bundle_id" "$team_id" "$expected_team" "$authority" \
         "$plugin_count" "$process_count" "$event_posting_access" \
-        "$conflicting_process_count" "$passed"
+        "$conflicting_process_count" "$trackpad_listener_lease_owned" "$passed"
 
     print -r -- "App: $APP_PATH"
     print -r -- "Bundle: $bundle_id"
@@ -285,6 +530,7 @@ preflight() {
     print -r -- "Running instances: $process_count"
     print -r -- "Derived Data test hosts: $conflicting_process_count"
     print -r -- "Synthetic shortcut access: $event_posting_access"
+    print -r -- "Trackpad listener permission evidence: $trackpad_listener_lease_owned"
     print -r -- "Report: $output_path"
 
     if [[ "$passed" != true ]]; then
@@ -352,7 +598,6 @@ with open(sys.argv[2], encoding="utf-8") as handle:
 names = [
     name
     for pack in manifest["packs"]
-    if pack["required"]
     for name in pack["checkpoints"]
 ]
 if len(names) != len(set(names)):
@@ -383,6 +628,73 @@ raise SystemExit(f"unknown scenario pack: {pack_id}")
 PY
 }
 
+recording_start_route() {
+    local pack_id="$1"
+    "$PYTHON3" - "$SCENARIO_MANIFEST" "$pack_id" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    manifest = json.load(handle)
+for pack in manifest["packs"]:
+    if pack["id"] == sys.argv[2]:
+        print(pack.get("recordingStartRoute", "settings/features/automation"))
+        raise SystemExit(0)
+raise SystemExit(f"unknown scenario pack: {sys.argv[2]}")
+PY
+}
+
+recording_marker_path() {
+    local session_dir="${1:A}"
+    local label="${2:-}"
+    local marker="$3"
+    local base_name="screencast"
+    [[ -z "$label" ]] || base_name="screencast.$label"
+    print -r -- "$session_dir/privacy-recorder/$base_name.$marker"
+}
+
+wait_recording_ready() {
+    local session_dir="$1"
+    local label="${2:-}"
+    local timeout="${3:-15}"
+    [[ "$timeout" == <-> ]] && (( timeout >= 1 && timeout <= 60 )) || {
+        print -u2 -r -- "error: ready timeout must be between 1 and 60 seconds"
+        return 1
+    }
+    local ready_marker
+    ready_marker="$(recording_marker_path "$session_dir" "$label" ready)"
+    local attempt
+    for (( attempt = 1; attempt <= timeout * 10; attempt++ )); do
+        if [[ -f "$ready_marker" ]]; then
+            print -r -- "recording-ready=$ready_marker"
+            return 0
+        fi
+        sleep 0.1
+    done
+    print -u2 -r -- "error: recorder did not become ready within $timeout seconds"
+    return 1
+}
+
+start_recording() {
+    local session_dir="$1"
+    local label="${2:-}"
+    local start_marker
+    start_marker="$(recording_marker_path "$session_dir" "$label" start)"
+    mkdir -p "${start_marker:h}"
+    /usr/bin/touch "$start_marker"
+    print -r -- "recording-start-requested=$start_marker"
+}
+
+stop_recording() {
+    local session_dir="$1"
+    local label="${2:-}"
+    local stop_marker
+    stop_marker="$(recording_marker_path "$session_dir" "$label" stop)"
+    mkdir -p "${stop_marker:h}"
+    /usr/bin/touch "$stop_marker"
+    print -r -- "recording-stop-requested=$stop_marker"
+}
+
 resume_session() {
     local session_dir="$1"
     [[ -f "$session_dir/session.plist" ]] || {
@@ -396,6 +708,7 @@ resume_session() {
         return 1
     }
 
+    ensure_privacy_helpers "$session_dir"
     preflight "$session_dir/preflight.json"
     audit_session "$session_dir" >/dev/null
     /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
@@ -514,6 +827,8 @@ prepare() {
         "$session_dir/session.plist" "$bundle_id" "$extension_id" \
         "$had_preferences" "$had_extension_preferences"
     write_pending_checkpoints "$session_dir/ui-checkpoints.json"
+    build_privacy_helpers "$session_dir"
+    build_privacy_recorder "$session_dir"
 
     if ! fixture_tool seed --bundle-id "$bundle_id" --allow-real-domain >"$session_dir/fixture.seed.json"; then
         restore_domain "$bundle_id" "$had_preferences" "$session_dir/preferences.before.plist"
@@ -563,6 +878,8 @@ reseed_session() {
     }
 
     stop_app
+    stop_privacy_helpers "$session_dir"
+    ensure_privacy_helpers "$session_dir"
     local stamp evidence_path
     stamp="$(date -u +%Y%m%d-%H%M%S)"
     evidence_path="$session_dir/fixture.reseed-$stamp.json"
@@ -618,15 +935,27 @@ checkpoint() {
         print -u2 -r -- "error: checkpoint status must be pass, fail, or pending"
         return 1
     }
-    "$PYTHON3" - "$session_dir/ui-checkpoints.json" "$name" "$checkpoint_status" "$detail" <<'PY'
+    "$PYTHON3" - \
+        "$session_dir/ui-checkpoints.json" \
+        "$session_dir/report.json" \
+        "$SCENARIO_MANIFEST" \
+        "$name" "$checkpoint_status" "$detail" <<'PY'
 import json
+import os
 import sys
 from datetime import datetime, timezone
 
-path, name, status, detail = sys.argv[1:]
+path, report_path, manifest_path, name, status, detail = sys.argv[1:]
 with open(path, encoding="utf-8") as handle:
     payload = json.load(handle)
-if name not in payload:
+with open(manifest_path, encoding="utf-8") as handle:
+    manifest = json.load(handle)
+known_names = {
+    checkpoint
+    for pack in manifest["packs"]
+    for checkpoint in pack["checkpoints"]
+}
+if name not in known_names:
     raise SystemExit(f"unknown checkpoint: {name}")
 payload[name] = {
     "status": status,
@@ -637,6 +966,47 @@ payload[name] = {
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
     handle.write("\n")
+
+if os.path.isfile(report_path):
+    with open(report_path, encoding="utf-8") as handle:
+        report = json.load(handle)
+    scenario_coverage = {}
+    for pack in manifest["packs"]:
+        pack_statuses = {
+            checkpoint: payload.get(checkpoint, {"status": "not-required"})["status"]
+            for checkpoint in pack["checkpoints"]
+        }
+        scenario_coverage[pack["id"]] = {
+            "title": pack["title"],
+            "phase": pack["phase"],
+            "required": pack["required"],
+            "checkpoints": pack_statuses,
+            "passed": bool(pack_statuses)
+                and all(value == "pass" for value in pack_statuses.values()),
+        }
+    required_names = [
+        checkpoint
+        for pack in manifest["packs"]
+        if pack["required"]
+        for checkpoint in pack["checkpoints"]
+    ]
+    required_statuses = [
+        payload.get(checkpoint, {"status": "pending"})["status"]
+        for checkpoint in required_names
+    ]
+    report["generatedAt"] = datetime.now(timezone.utc).isoformat()
+    report["uiCheckpoints"] = payload
+    report["scenarioCoverage"] = scenario_coverage
+    report["passed"] = (
+        report.get("preflight", {}).get("passed", False)
+        and report.get("fixture", {}).get("valid", False)
+        and set(required_names).issubset(payload)
+        and bool(required_statuses)
+        and all(value == "pass" for value in required_statuses)
+    )
+    with open(report_path, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2, sort_keys=True)
+        handle.write("\n")
 PY
 }
 
@@ -666,11 +1036,107 @@ send_shortcut() {
     key_sender_tool send "$shortcut_name"
 }
 
+send_pointer_click() {
+    local session_dir="$1"
+    local reference_width="$2"
+    local reference_height="$3"
+    local local_x="$4"
+    local local_y="$5"
+    local mode="${6:-}"
+    [[ -f "$session_dir/session.plist" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    for value in "$reference_width" "$reference_height" "$local_x" "$local_y"; do
+        [[ "$value" == <-> ]] || {
+            print -u2 -r -- "error: pointer coordinates and reference dimensions must be non-negative integers"
+            return 1
+        }
+    done
+    (( reference_width > 0 && reference_height > 0 )) || {
+        print -u2 -r -- "error: pointer reference dimensions must be positive"
+        return 1
+    }
+    (( local_x <= reference_width && local_y <= reference_height )) || {
+        print -u2 -r -- "error: pointer coordinate is outside the reference window"
+        return 1
+    }
+    if [[ "$mode" == --dry-run ]]; then
+        print -r -- "Pointer click at ($local_x,$local_y) in ${reference_width}x${reference_height} focused MacTools window"
+        return 0
+    fi
+    ensure_input_driver "$session_dir"
+    local process_output process_id
+    process_output="$(matching_pids)"
+    [[ "$(print -r -- "$process_output" | wc -l | tr -d ' ')" == 1 ]] || {
+        print -u2 -r -- "error: expected exactly one stable MacTools process before pointer input"
+        return 1
+    }
+    process_id="${process_output%%$'\n'*}"
+    input_driver_tool "$session_dir" click-relative \
+        "$process_id" "$reference_width" "$reference_height" "$local_x" "$local_y"
+}
+
+send_input_select_all() {
+    local session_dir="$1"
+    local mode="${2:-}"
+    [[ -f "$session_dir/session.plist" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    if [[ "$mode" == --dry-run ]]; then
+        print -r -- "Select all in the focused MacTools control"
+        return 0
+    fi
+    ensure_input_driver "$session_dir"
+    input_driver_tool "$session_dir" select-all
+}
+
+send_input_text() {
+    local session_dir="$1"
+    local input_text="$2"
+    local mode="${3:-}"
+    [[ -f "$session_dir/session.plist" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    if [[ "$mode" == --dry-run ]]; then
+        print -r -- "Type ${#input_text} characters into the focused MacTools control"
+        return 0
+    fi
+    ensure_input_driver "$session_dir"
+    input_driver_tool "$session_dir" type-text "$input_text"
+}
+
+launch_privacy_helper_session() {
+    local session_dir="$1"
+    local variant="$2"
+    local mode="${3:-}"
+    [[ -f "$session_dir/session.plist" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    session_dir="${session_dir:A}"
+    [[ "$variant" == primary || "$variant" == secondary ]] || {
+        print -u2 -r -- "error: privacy helper variant must be primary or secondary"
+        return 1
+    }
+    local app
+    app="$(privacy_helper_app_path "$session_dir" "$variant")"
+    if [[ "$mode" == --dry-run ]]; then
+        print -r -- "/usr/bin/open -a '$app'"
+        return
+    fi
+    ensure_privacy_helpers "$session_dir"
+    /usr/bin/open -a "$app"
+}
+
 record_session() {
     local session_dir="$1"
     local duration="${2:-90}"
     local mode="${3:-}"
     local label="${4:-}"
+    local start_route="${5:-settings/features/automation}"
     [[ "$duration" == <-> ]] && (( duration >= 1 && duration <= 600 )) || {
         print -u2 -r -- "error: recording duration must be between 1 and 600 seconds"
         return 1
@@ -679,6 +1145,7 @@ record_session() {
         print -u2 -r -- "error: invalid E2E session directory $session_dir"
         return 1
     }
+    session_dir="${session_dir:A}"
     if [[ -n "$label" && "$label" == *[^a-z0-9-]* ]]; then
         print -u2 -r -- "error: recording label must contain only lowercase letters, digits, and hyphens"
         return 1
@@ -690,29 +1157,87 @@ record_session() {
     local temporary_mov="$session_dir/.$base_name.$$.mov"
     local temporary_mp4="$session_dir/.$base_name.$$.mp4"
     if [[ "$mode" == --dry-run ]]; then
-        print -r -- "/usr/sbin/screencapture -v -V$duration -R<visible-MacTools-window> -C -k -x '$mov'"
+        print -r -- "Hide unrelated apps reversibly, start the privacy backdrop, reactivate MacTools, then record"
+        print -r -- "Story start route: mactools-dev://app/$start_route"
+        print -r -- "ScreenCaptureKit allowlist: MacTools + session privacy helper"
+        print -r -- "MacToolsE2ERecorder '$mov' '$duration' '<visible-MacTools-window>' '<ready-file>' '<first-action-file>' '<assertion-stop-file>' '<allowed-bundle-ids>'"
         return 0
     fi
+
+    stop_privacy_helpers "$session_dir"
+    build_privacy_helpers "$session_dir"
+    ensure_privacy_recorder "$session_dir"
+    ensure_input_driver "$session_dir"
+    stop_app
+    sleep 0.5
+    local visibility_state
+    visibility_state="$(recording_visibility_state_path "$session_dir")"
+    rm -f -- "$visibility_state"
+    /usr/bin/open -a "$APP_PATH"
+    sleep 1
+    key_sender_tool check >/dev/null || {
+        print -u2 -r -- "error: synthetic shortcut access is required to establish the private Settings recording surface"
+        return 1
+    }
+    key_sender_tool send open-settings >/dev/null
+    sleep 1
+    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/$start_route"
+    sleep 0.75
+    /usr/bin/open -a "$(privacy_helper_app_path "$session_dir" backdrop)" \
+        --args --recording-privacy --visibility-state "$visibility_state"
+    trap 'stop_privacy_helpers "$session_dir"' EXIT INT TERM
+    sleep 0.75
+    /usr/bin/open -gj -a "$(privacy_helper_app_path "$session_dir" primary)"
+    /usr/bin/open -gj -a "$(privacy_helper_app_path "$session_dir" secondary)"
+    sleep 0.5
+    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/$start_route"
+    sleep 0.75
 
     local process_output process_id capture_rect
     process_output="$(matching_pids)"
     [[ "$(print -r -- "$process_output" | wc -l | tr -d ' ')" == 1 ]] || {
+        stop_privacy_helpers "$session_dir"
         print -u2 -r -- "error: expected exactly one stable MacTools process before recording"
         return 1
     }
     process_id="${process_output%%$'\n'*}"
-    capture_rect="$(capture_rect_tool "$process_id")" || return 1
+    capture_rect=""
+    local capture_attempt
+    for capture_attempt in {1..50}; do
+        capture_rect="$(capture_rect_tool "$process_id" 2>/dev/null || true)"
+        [[ "$capture_rect" == <->,<->,<->,<-> ]] && break
+        sleep 0.2
+    done
     [[ "$capture_rect" == <->,<->,<->,<-> ]] || {
-        print -u2 -r -- "error: invalid private capture rectangle: $capture_rect"
+        stop_privacy_helpers "$session_dir"
+        print -u2 -r -- "error: no visible standard MacTools window is available for private recording"
         return 1
     }
 
-    print -r -- "/usr/sbin/screencapture -v -V$duration -R$capture_rect -C -k -x '$mov'"
-    rm -f -- "$temporary_mov" "$temporary_mp4"
-    if ! /usr/sbin/screencapture -v "-V$duration" "-R$capture_rect" -C -k -x "$temporary_mov"; then
-        rm -f -- "$temporary_mov" "$temporary_mp4"
+    local app_bundle_id primary_helper_bundle_id secondary_helper_bundle_id backdrop_bundle_id
+    app_bundle_id="$(app_bundle_identifier)"
+    primary_helper_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" primary)/Contents/Info.plist" CFBundleIdentifier)"
+    secondary_helper_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" secondary)/Contents/Info.plist" CFBundleIdentifier)"
+    backdrop_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" backdrop)/Contents/Info.plist" CFBundleIdentifier)"
+    local ready_marker start_marker stop_marker
+    ready_marker="$(recording_marker_path "$session_dir" "$label" ready)"
+    start_marker="$(recording_marker_path "$session_dir" "$label" start)"
+    stop_marker="$(recording_marker_path "$session_dir" "$label" stop)"
+    print -r -- "ScreenCaptureKit application allowlist: $app_bundle_id, $primary_helper_bundle_id, $secondary_helper_bundle_id, $backdrop_bundle_id"
+    print -r -- "Recording readiness marker: $ready_marker"
+    print -r -- "First action marker: $start_marker"
+    print -r -- "Assertion stop marker: $stop_marker"
+    rm -f -- "$temporary_mov" "$temporary_mp4" "$ready_marker" "$start_marker" "$stop_marker"
+    if ! privacy_recorder_tool "$session_dir" \
+        "$temporary_mov" "$duration" "$capture_rect" "$ready_marker" "$start_marker" "$stop_marker" \
+        "$app_bundle_id" "$primary_helper_bundle_id" "$secondary_helper_bundle_id" "$backdrop_bundle_id"; then
+        stop_privacy_helpers "$session_dir"
+        rm -f -- "$temporary_mov" "$temporary_mp4" "$ready_marker" "$start_marker" "$stop_marker"
         return 1
     fi
+    rm -f -- "$ready_marker" "$start_marker" "$stop_marker"
+    stop_privacy_helpers "$session_dir"
+    trap - EXIT INT TERM
     if ! /opt/homebrew/bin/ffmpeg -hide_banner -loglevel error -y -i "$temporary_mov" \
         -an -c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p \
         -movflags +faststart "$temporary_mp4"; then
@@ -730,7 +1255,9 @@ record_pack_session() {
     local duration="${3:-90}"
     local mode="${4:-}"
     print_scenarios "$pack_id" >/dev/null
-    record_session "$session_dir" "$duration" "$mode" "$pack_id"
+    local start_route
+    start_route="$(recording_start_route "$pack_id")"
+    record_session "$session_dir" "$duration" "$mode" "$pack_id" "$start_route"
     if [[ "$mode" != --dry-run ]]; then
         checkpoint "$session_dir" screencast-captured pass \
             "Recorded scenario pack $pack_id"
@@ -756,6 +1283,7 @@ verify_code_session() {
         -quiet
     )
     print -r -- "Run PluginCatalogManagerTests with xcodebuild"
+    print -r -- "Run action-registry core coverage and all 15 native action-provider suites with xcodebuild"
     print -r -- "Run the six injected Trackpad Gestures test classes with xcodebuild"
     if [[ "$mode" == --dry-run ]]; then
         return 0
@@ -774,6 +1302,38 @@ verify_code_session() {
     else
         checkpoint "$session_dir" plugin-migration-isolated-tests fail \
             "See code-verification.migration.log"
+        result=1
+    fi
+    stop_built_app
+    restore_stable_launch_services_registration
+
+    if env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcodebuild "${common_args[@]}" \
+        -only-testing:MacToolsTests/ActionRegistryTests \
+        -only-testing:MacToolsTests/ActionExecutorTests \
+        -only-testing:MacToolsTests/ActionRunLinkServiceTests \
+        -only-testing:MacToolsTests/AutomationControllerTests \
+        -only-testing:MacToolsTests/PluginHostActionRegistryTests \
+        -only-testing:MacToolsTests/ActionGridPluginTests \
+        -only-testing:MacToolsTests/AppearancePluginTests \
+        -only-testing:MacToolsTests/AppHotkeyPluginTests \
+        -only-testing:MacToolsTests/AutoHideDockPluginTests \
+        -only-testing:MacToolsTests/AutoHideMenuBarPluginTests \
+        -only-testing:MacToolsTests/DisplayBrightnessPluginTests \
+        -only-testing:MacToolsTests/DisplaySleepPluginTests \
+        -only-testing:MacToolsTests/KeepAwakePreferenceTests \
+        -only-testing:MacToolsTests/LaunchpadPluginActionTests \
+        -only-testing:MacToolsTests/LockScreenPluginTests \
+        -only-testing:MacToolsTests/MicrophoneMutePluginTests \
+        -only-testing:MacToolsTests/NightShiftPluginTests \
+        -only-testing:MacToolsTests/SavedScriptsPluginTests \
+        -only-testing:MacToolsTests/SystemMutePluginTests \
+        -only-testing:MacToolsTests/TranslatorPluginTests \
+        2>&1 | tee "$session_dir/code-verification.action-registry.log"; then
+        checkpoint "$session_dir" action-registry-health pass \
+            "Core registry coverage and all native action-provider suites passed"
+    else
+        checkpoint "$session_dir" action-registry-health fail \
+            "See code-verification.action-registry.log"
         result=1
     fi
     stop_built_app
@@ -857,10 +1417,13 @@ def hashed_artifacts(pattern):
 screenshots = hashed_artifacts("screenshot*.png")
 code_verification_logs = hashed_artifacts("code-verification.*.log")
 
-statuses = [item["status"] for item in checkpoints.values()]
 required_packs = [pack for pack in scenario_manifest["packs"] if pack["required"]]
 required_checkpoint_names = [
     name for pack in required_packs for name in pack["checkpoints"]
+]
+required_statuses = [
+    checkpoints.get(name, {"status": "pending"})["status"]
+    for name in required_checkpoint_names
 ]
 scenario_coverage = {}
 for pack in scenario_manifest["packs"]:
@@ -888,9 +1451,9 @@ payload = {
     "codeVerificationLogs": code_verification_logs,
     "passed": preflight.get("passed", False)
         and fixture.get("valid", False)
-        and set(checkpoints) == set(required_checkpoint_names)
-        and bool(statuses)
-        and all(status == "pass" for status in statuses),
+        and set(required_checkpoint_names).issubset(checkpoints)
+        and bool(required_statuses)
+        and all(status == "pass" for status in required_statuses),
 }
 with open(os.path.join(session, "report.json"), "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -906,6 +1469,7 @@ restore_session() {
         return 1
     }
     stop_app
+    stop_privacy_helpers "$session_dir"
 
     local bundle_id extension_id had_preferences had_extension_preferences
     bundle_id="$(session_value "$session_dir" bundleIdentifier)"
@@ -971,6 +1535,22 @@ case "$command" in
         [[ $# -ge 3 ]] || { usage; exit 1; }
         send_shortcut "$2" "$3" "${4:-}"
         ;;
+    pointer-click)
+        [[ $# -ge 6 ]] || { usage; exit 1; }
+        send_pointer_click "$2" "$3" "$4" "$5" "$6" "${7:-}"
+        ;;
+    input-select-all)
+        [[ $# -ge 2 ]] || { usage; exit 1; }
+        send_input_select_all "$2" "${3:-}"
+        ;;
+    input-text)
+        [[ $# -ge 3 ]] || { usage; exit 1; }
+        send_input_text "$2" "$3" "${4:-}"
+        ;;
+    privacy-helper)
+        [[ $# -ge 3 ]] || { usage; exit 1; }
+        launch_privacy_helper_session "$2" "$3" "${4:-}"
+        ;;
     record)
         [[ $# -ge 2 ]] || { usage; exit 1; }
         record_session "$2" "${3:-90}" "${4:-}"
@@ -978,6 +1558,18 @@ case "$command" in
     record-pack)
         [[ $# -ge 3 ]] || { usage; exit 1; }
         record_pack_session "$2" "$3" "${4:-90}" "${5:-}"
+        ;;
+    wait-recording-ready)
+        [[ $# -ge 2 ]] || { usage; exit 1; }
+        wait_recording_ready "$2" "${3:-}" "${4:-15}"
+        ;;
+    start-recording)
+        [[ $# -ge 2 ]] || { usage; exit 1; }
+        start_recording "$2" "${3:-}"
+        ;;
+    stop-recording)
+        [[ $# -ge 2 ]] || { usage; exit 1; }
+        stop_recording "$2" "${3:-}"
         ;;
     verify-code)
         [[ $# -ge 2 ]] || { usage; exit 1; }

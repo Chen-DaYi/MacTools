@@ -11,12 +11,16 @@ The harness is not part of the normal build, test, CI, release, or production la
 The fixture preserves unrelated action shortcut assignments and creates:
 
 - four shortcuts: Control-Command-3 for Open Settings, Control-Command-4 for Action Grid, Control-Command-5 for Dashboard, and Control-Command-6 for the safe workflow;
-- five workflows covering success, background execution, continue-on-error, stop-on-error, and cancellation during delay;
-- three application-activation rules covering a successful Calculator run, a skipped Calculator condition, and a successful TextEdit run;
-- nine Action Grid entries spanning host commands, plugin actions, workflows, and one deliberately unavailable action;
+- six workflows covering success, background execution, continue-on-error, stop-on-error, cancellation during delay, and a deliberately visible privacy-safe run;
+- three application-activation rules that target two session-local helper apps instead of opening apps that can restore private user content;
+- one Saved Script with a stable ID, local confirmation disabled, external Run Link confirmation required, portable backup enabled, captured output, and a long enough runtime to expose progress indicators;
+- nine top-level Action Grid entries plus nested System, Automation, Resilience, and Utilities folders spanning host commands, plugin actions, workflows, and one deliberately unavailable action;
+- two Trackpad Gestures examples that dispatch Action Grid and the safe workflow through the shared action catalog;
 - English and the light appearance for deterministic starting evidence.
 
-The background workflow reads the current system mute value and writes the same value back. Fixture workflows never contain Display Sleep, Lock Screen, Empty Trash, or another side-effecting confirmation action: workflow invocations are not external Run Links and therefore do not apply `confirmAlways`. Confirmation is tested separately at the Run Link boundary and must always be cancelled. The remaining fixture actions only navigate within MacTools or use a deliberately missing provider.
+The background workflow reads the current system mute value and writes the same value back. Fixture workflows never contain Display Sleep, Lock Screen, Empty Trash, or another side-effecting confirmation action: workflow invocations are not external Run Links and therefore do not apply `confirmAlways`. Confirmation is tested separately at the Run Link boundary and must always be cancelled. Display brightness remains a functional action test, not screencast evidence, because screen capture and display processing can make the real brightness change invisible in the encoded video.
+
+The harness compiles two tiny ad-hoc-signed helper apps and a private recorder inside the session directory. The helper windows contain only fixed test labels and never read files, account state, clipboard data, or another app. The backdrop helper provides a neutral surface on every connected display. The recorder uses a ScreenCaptureKit application allowlist containing only the stable MacTools bundle and the session helpers, so pixels from ChatGPT, Finder, notifications, and all other applications are excluded at capture time even if their windows remain open or overlap the capture rectangle.
 
 `make e2e-restore E2E_SESSION=...` restores both preference domains exactly from the original session backup. Backups and evidence remain in the session after restoration.
 
@@ -29,7 +33,7 @@ make e2e-self-test
 make e2e-preflight
 ```
 
-Preflight verifies the stable app path, deep signature, Apple Development authority, Team ID, installed Debug plugins, process count, recorder dependencies, and whether the process hosting the harness can post synthetic shortcuts. It also rejects a leftover Derived Data test host, because a second app with the development bundle identity can steal Run Links from the stable app. It reports permission state without opening System Settings, resetting TCC, requesting access, or accepting a prompt.
+Preflight verifies the stable app path, deep signature, Apple Development authority, Team ID, installed Debug plugins, process count, recorder dependencies, and whether the process hosting the harness can post synthetic shortcuts. It also rejects a leftover Derived Data test host, because a second app with the development bundle identity can steal Run Links from the stable app. When the stable app owns the Trackpad Gestures listener lease, preflight reports permission state as `granted`: that listener starts only after the app observes both Accessibility and Input Monitoring access. Otherwise it reports `unverified`, never a guessed denial or a hard-coded pending state.
 
 ## Prepare or upgrade a session
 
@@ -91,16 +95,16 @@ scripts/e2e/mactools-e2e.sh checkpoint "$E2E_SESSION" marketplace-visible pass
 
 ### Baseline cross-surface path
 
-1. Open `mactools-dev://app/settings/plugins/marketplace`; assert the current catalog contains 44 plugins and installed local plugins are verified.
+1. Open `mactools-dev://app/settings/plugins/marketplace`; assert the current catalog contains 45 plugins and installed local plugins are verified.
 2. Open Actions & Shortcuts; assert its search field and all four fixture assignments are visible.
-3. Open Automation; assert all five workflows, their expected step counts, and all three rules are visible.
+3. Open Automation; assert all six workflows, their expected step counts, and all three rules are visible.
 4. Run `E2E Safe Workflow`; assert its three steps and overall run succeed and the app remains responsive.
 5. Run the same workflow through its Run Link; assert another successful run with persisted source `publishedAction.runLink`.
 6. Open `mactools-dev://app/actions/action-grid/show`; assert nine accessible grid controls, then dismiss with Escape.
-7. Open `mactools-dev://app/actions/launchpad/toggleLaunchpad`; assert Launchpad appears, then dismiss it.
-8. Launch Calculator with `open -a Calculator`; assert `E2E Calculator Activation` succeeds, `E2E Calculator Condition Skip` records a condition skip, and fixture audit still reports `systemMuteStatePreserved: true`.
+7. In Actions & Shortcuts, assert the Launchpad action is available. Do not open Launchpad in a recorded session because its contents reflect the user's installed applications.
+8. Launch the primary session helper with `scripts/e2e/mactools-e2e.sh privacy-helper "$E2E_SESSION" primary`; assert `E2E Privacy Helper Activation` succeeds, `E2E Privacy Helper Condition Skip` records a condition skip, and fixture audit still reports `systemMuteStatePreserved: true`.
 9. Close Settings, send Control-Command-3, and assert General Settings appears. Send Control-Command-4 and assert one Action Grid overlay appears.
-10. Quit and relaunch the stable app; assert the four shortcuts, five workflows, three rules, nine grid entries, and recent history persist.
+10. Quit and relaunch the stable app; assert the four shortcuts, six workflows, one Saved Script, three rules, nine top-level grid entries with their nested folders, two Trackpad action mappings, and recent history persist.
 
 The shortcut driver refuses to request permission or post an event when access is absent. Its mappings can always be checked safely:
 
@@ -122,11 +126,35 @@ Reseed first, then run each fixture workflow separately:
 - `E2E Continue After Missing Action`: assert succeeded, unavailable, succeeded step states and a failed overall result.
 - `E2E Stop On Missing Action`: assert the missing step is unavailable and its following step is skipped.
 - `E2E Cancellable Delay`: stop it during its ten-second delay and assert cancelled status.
+While the delay workflow is running, close Settings and assert the MacTools menu-bar icon shows its running badge. Reopen Automation, assert the row still offers Stop, then inspect Recent Runs and copy its redacted diagnostics. The diagnostics may name action references and statuses but must not include action parameters.
 After every run, assert the deliberately unavailable step remains editable and visible rather than being silently removed. Reseed afterward.
 
 ### Automation conditions
 
-Reseed and verify all three enabled rules. Launch Calculator once and assert one successful run and one skipped condition result, with no duplicate success. Launch TextEdit with `open -a TextEdit` and assert its rule succeeds once. Audit the fixture again to prove the mute state was preserved. Reseed afterward.
+Reseed and verify all three enabled rules. Launch the primary privacy helper once and assert one successful run and one skipped condition result, with no duplicate success. Launch the secondary helper and assert its rule succeeds once. Audit the fixture again to prove the mute state was preserved. These helpers contain fixed test copy only; Calculator, TextEdit, Finder, and other state-restoring apps must not be used as recorded automation targets. Reseed afterward.
+
+```bash
+scripts/e2e/mactools-e2e.sh privacy-helper "$E2E_SESSION" primary
+scripts/e2e/mactools-e2e.sh privacy-helper "$E2E_SESSION" secondary
+```
+
+### Privacy-safe visual automation
+
+Reseed, select `E2E Visual Proof Workflow`, and begin recording the `visual-automation` pack. Run the workflow from Automation. Assert all of the following in one bounded clip:
+
+1. Automation shows a running state for `Show Privacy-Safe Helper`.
+2. The primary helper covers the recorded region with its fixed shield window for about three seconds.
+3. MacTools returns directly to Automation without showing another user's files or app state, and the fixture waits for that navigation to settle before advancing.
+4. The deterministic Action Grid appears for the second workflow step.
+5. After dismissing the grid, Recent Runs reports success and includes both steps.
+
+This is the visual proof workflow. Do not substitute display brightness: brightness can be verified through action tests and backend state, but it is not reliable visual evidence in a screencast.
+
+### Saved Scripts cross-surface coverage
+
+Reseed and open Saved Scripts. Assert the seeded `E2E Privacy-Safe Visual Proof` script has a stable action ID, a 15-second timeout, local confirmation disabled, Run Links enabled with mandatory external confirmation, and portable source backup enabled. Run it directly from the manager and from the menu-bar panel; assert the running indicator remains visible during its three-second delay and the captured output contains only the two deterministic status lines.
+
+In Actions & Shortcuts, search for the script and assert it is a canonical action. In the root Action Grid editor, search for the script and assert it appears even though the fixture also assigns it inside the nested Automation folder. Run that grid entry and assert no local confirmation appears. Open its Run Link and cancel the mandatory external confirmation. Finally audit, reseed, and audit again; the action ID must remain `run.00000000-0000-4000-8000-000000000290`. Portable backup/restore coverage must preserve the same ID so scripts that call the URL do not break.
 
 ### Run Link security and lifecycle
 
@@ -143,7 +171,7 @@ Assert visible rejection or matching diagnostics and no side effect. Finally qui
 
 ### Action Grid interactions
 
-Reseed and verify the 3-by-3 nine-entry layout. In settings, add or replace an entry, reorder it, clear it, and assert the overlay mirrors each change. Invoke the safe workflow entry and verify its history source. Invoke the unavailable entry and assert the grid stays open with an accessible error. Exercise arrow navigation, Return, numeric selection, Escape, outside-click dismissal, and rapid repeated invocation; assert focus is correct and at most one overlay exists. Reseed afterward.
+Reseed and verify the 3-by-3 nine-entry root layout. Open the System, Automation, and nested Resilience folders in the same overlay; assert the breadcrumb/back behavior and Escape return one level before dismissal. In settings, drag an entry to reorder it, add or replace an entry in place, rename a folder, clear an entry, and assert the overlay mirrors each change. Invoke the safe workflow entry and verify its history source. Invoke the unavailable entry and assert the grid stays open with an accessible error. Exercise arrow navigation, Return, numeric selection, Escape, outside-click dismissal, and rapid repeated invocation; assert focus is correct and at most one overlay exists. Reseed afterward.
 
 ### Localization and host commands
 
@@ -159,15 +187,15 @@ Run the isolated plugin-catalog and migration tests and only mark `plugin-migrat
 
 ### Trackpad automated coverage
 
-Open Trackpad Gestures settings and assert all gesture editors, enablement state, validation, and permission guidance are accessible. Run the Trackpad Gestures XCTest classes, which inject gesture events and cover recognition, persistence, assignment, validation, and action dispatch without physical input. Do not claim raw hardware verification from these tests.
+Open Trackpad Gestures settings and assert all gesture editors, enablement state, validation, and permission guidance are accessible. Verify the fixture exposes a four-finger long touch mapped directly to Action Grid and a five-finger long touch mapped directly to the safe workflow. Run the Trackpad Gestures XCTest classes, which inject gesture events and cover recognition, persistence, assignment, migration, portable backup, validation, and shared action dispatch without physical input. Do not claim raw hardware verification from these tests.
 
-Run both code-verification groups immediately after prepare or upgrade, before collecting UI evidence, and record their two checkpoints automatically with:
+Run all three code-verification groups immediately after prepare or upgrade, before collecting UI evidence, and record their checkpoints automatically with:
 
 ```bash
 make e2e-verify-code E2E_SESSION="$E2E_SESSION"
 ```
 
-The migration and trackpad logs are retained in the session. The command temporarily stops the stable app so its XCTest host cannot compete for preferences or URLs. XCTest can leave its Derived Data host running and register that bundle as a `mactools-dev://` handler, so cleanup stops and unregisters only that exact test host, force-registers the stable installed app, and reopens the stable Marketplace. A command-only preview is available with `scripts/e2e/mactools-e2e.sh verify-code "$E2E_SESSION" --dry-run`.
+The migration, action-registry, and trackpad logs are retained in the session. The registry group covers the registry/executor/Run Link core plus all 15 current native action providers, and passes `action-registry-health` only when every suite succeeds. Runtime synchronization also logs a redacted issue-category summary if a provider definition or catalog entry is rejected; it never logs action parameters. The command temporarily stops the stable app so its XCTest host cannot compete for preferences or URLs. XCTest can leave its Derived Data host running and register that bundle as a `mactools-dev://` handler, so cleanup stops and unregisters only that exact test host, force-registers the stable installed app, and reopens the stable Marketplace. A command-only preview is available with `scripts/e2e/mactools-e2e.sh verify-code "$E2E_SESSION" --dry-run`.
 
 ## Post-permission stable rebuild
 
@@ -198,14 +226,29 @@ Dry-run without requesting Screen Recording access:
 scripts/e2e/mactools-e2e.sh record-pack "$E2E_SESSION" workflow-resilience 90 --dry-run
 ```
 
-After Screen Recording is granted to the recorder's host process, record bounded, reviewable clips:
+After Screen Recording is granted to the recorder's host process, record bounded, reviewable clips. Each pack opens its story-specific start page before capture and publishes a readiness marker, so setup time is not part of the video. Once the visible story assertion passes, stop immediately instead of padding the clip to its maximum duration:
 
 ```bash
 make e2e-record-pack E2E_SESSION="$E2E_SESSION" E2E_PACK=baseline E2E_DURATION=90
 make e2e-record-pack E2E_SESSION="$E2E_SESSION" E2E_PACK=workflow-resilience E2E_DURATION=90
+make e2e-record-pack E2E_SESSION="$E2E_SESSION" E2E_PACK=visual-automation E2E_DURATION=45
+make e2e-record-pack E2E_SESSION="$E2E_SESSION" E2E_PACK=saved-scripts E2E_DURATION=60
 ```
 
-Each pack writes `screencast.<pack>.mov`, `screencast.<pack>.mp4`, and `screencast.<pack>.sha256`, then automatically marks `screencast-captured` as passed. The capture is cropped to the largest visible standard MacTools window and includes the pointer and click indicators, but no microphone or system audio. It fails closed when that window cannot be resolved; it never falls back to the full display, so unrelated background windows cannot enter the recording. Keep the MacTools window stationary while recording. Recorder permission is separate from MacTools permission and may be attributed to Codex or the terminal host.
+In a second terminal, synchronize the UI driver with the recorder and stop on the passed assertion:
+
+```bash
+scripts/e2e/mactools-e2e.sh wait-recording-ready "$E2E_SESSION" saved-scripts
+scripts/e2e/mactools-e2e.sh start-recording "$E2E_SESSION" saved-scripts
+# Perform and assert the visible user story here. Frames begin at its first action.
+scripts/e2e/mactools-e2e.sh stop-recording "$E2E_SESSION" saved-scripts
+```
+
+The privacy-safe visual workflow is the preferred dramatic proof. Treat brightness, audio, Night Shift, and similar system-state changes as functional assertions backed by state or history, not as visual evidence: display capture and video compression can hide or alter their apparent effect. Never open Launchpad, Finder, recent documents, or another user application during a recorded pack. The session-local helpers are the only approved external-app targets for screencasts. The recorder restarts MacTools to clear transient menu-bar panels, uses a dedicated backdrop helper process, prelaunches the separate primary and secondary workflow helpers hidden and without activation, and routes MacTools to the data-free Automation page before capture so proof actions can activate either helper without reusing the process that owns privacy isolation or firing automation rules before the story begins.
+
+Each pack writes `screencast.<pack>.mov`, `screencast.<pack>.mp4`, and `screencast.<pack>.sha256`, then automatically marks `screencast-captured` as passed. Before capture, the harness rebuilds and starts the session-local privacy backdrop, opens the pack's `recordingStartRoute`, reactivates MacTools, and resolves the largest visible standard MacTools window. The recorder publishes readiness but discards frames until `start-recording` marks the first story action; it stops on the assertion marker or the maximum duration, whichever comes first. ScreenCaptureKit captures that fixed rectangle using only the MacTools and helper application layers. It includes the pointer and, on macOS 15 or later, click indicators, but no microphone or system audio. Recorded UI automation uses `pointer-click` with the current Computer Use screenshot dimensions and coordinates so the existing accessibility-authorized E2E driver emits a real cursor move/down/up sequence; an Accessibility `AXPress` does not emit the pointer event needed for ScreenCaptureKit's click ring. Use `input-select-all` and `input-text` for deterministic text entry inside a rehearsed story, then perform one final accessibility assertion after the visible sequence; this keeps automation-inspection latency out of the clip without weakening acceptance checks. The recorder fails closed when an allowed app is absent, the story never starts, the window cannot be resolved, or the rectangle crosses display boundaries; it never falls back to a display-wide recording. If MacTools is hidden or moved, the captured area contains the deterministic helper backdrop rather than another application. Keep the MacTools window stationary so the desired UI remains inside the crop.
+
+Do not close unrelated apps as recording preparation: that can discard unsaved work. For visual quality, the helper temporarily hides unrelated regular apps and observes newly launched or activated apps during capture; it restores exactly those apps when the helper terminates, including after SIGINT or SIGTERM. This is reversible defense in depth, not the privacy boundary—the ScreenCaptureKit application allowlist remains responsible for excluding their pixels. Still disable sensitive notification previews when practical and inspect the generated clip before sharing; this protects against future recorder regressions and against private text intentionally shown inside MacTools itself. Recorder permission is separate from MacTools permission and may be attributed to Codex or the terminal host.
 
 ## Evidence and restoration
 

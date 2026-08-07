@@ -128,7 +128,7 @@ Then run MacTools:
 make run
 ```
 
-`make run` starts the app executable directly so the catalog environment variable reaches the app process. If `MACTOOLS_PLUGIN_CATALOG_URL` is not already set and `build/LocalPlugins/catalog.dev.json` exists, Make uses that file automatically.
+`make run` stages and verifies the latest Debug bundle at `~/Applications/MacTools Dev.app` with rollback on failure, then starts that installed executable directly so the catalog environment variable reaches the app process. If `MACTOOLS_PLUGIN_CATALOG_URL` is not already set and `build/LocalPlugins/catalog.dev.json` exists, Make uses that file automatically. Use `make install-debug-app` when the stable bundle should be updated without launching it.
 
 You can override the fixed directories:
 

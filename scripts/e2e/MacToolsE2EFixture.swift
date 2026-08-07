@@ -114,6 +114,25 @@ private struct WorkflowEnvelope: Codable {
     let workflows: [WorkflowDefinition]
 }
 
+private struct SavedScriptFixture: Codable {
+    let id: UUID
+    let name: String
+    let kind: String
+    let source: String
+    let workingDirectory: String
+    let timeoutSeconds: Int
+    let confirmOutsideManager: Bool
+    let allowExternalInvocation: Bool
+    let includeSourceInBackup: Bool
+    let createdAt: Date
+    let updatedAt: Date
+}
+
+private struct SavedScriptEnvelope: Codable {
+    let formatVersion: Int
+    let scripts: [SavedScriptFixture]
+}
+
 private enum ApplicationAutomationEvent: String, Codable {
     case activates
 }
@@ -153,15 +172,73 @@ private struct AutomationRuleEnvelope: Codable {
     let rules: [AutomationRule]
 }
 
+private struct ActionGridFolder: Codable {
+    let systemImage: String
+    let entries: [ActionGridEntry]
+}
+
 private struct ActionGridEntry: Codable {
     let id: UUID
     let reference: ActionReference
     let customTitle: String?
+    let folder: ActionGridFolder?
+
+    init(
+        id: UUID,
+        reference: ActionReference,
+        customTitle: String?,
+        folder: ActionGridFolder? = nil
+    ) {
+        self.id = id
+        self.reference = reference
+        self.customTitle = customTitle
+        self.folder = folder
+    }
 }
 
 private struct ActionGridEnvelope: Codable {
     let formatVersion: Int
     let entries: [ActionGridEntry]
+}
+
+private enum TrackpadGesture: String, Codable {
+    case fourFingerLongTouch
+    case fiveFingerLongTouch
+}
+
+private enum TrackpadGestureAction: Codable {
+    case action(ActionReference)
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case reference
+    }
+
+    private enum Kind: String, Codable {
+        case action
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        _ = try container.decode(Kind.self, forKey: .kind)
+        self = .action(try container.decode(ActionReference.self, forKey: .reference))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Kind.action, forKey: .kind)
+        switch self {
+        case let .action(reference):
+            try container.encode(reference, forKey: .reference)
+        }
+    }
+}
+
+private struct TrackpadGestureMapping: Codable {
+    let id: UUID
+    let gesture: TrackpadGesture
+    let action: TrackpadGestureAction
+    let isEnabled: Bool
 }
 
 private struct AuditReport: Codable {
@@ -179,6 +256,10 @@ private struct AuditReport: Codable {
     let hasDisplaySleepWorkflowStep: Bool
     let workflowName: String?
     let workflowStepCount: Int
+    let visualWorkflowName: String?
+    let visualWorkflowStepCount: Int
+    let visualWorkflowUsesSavedScript: Bool
+    let visualWorkflowShowsActionGrid: Bool
     let automationWorkflowName: String?
     let automationWorkflowStepCount: Int
     let automationWorkflowIsIdempotent: Bool
@@ -186,13 +267,28 @@ private struct AuditReport: Codable {
     let systemMuteStatePreserved: Bool
     let ruleCount: Int
     let ruleNames: [String]
-    let calculatorRuleEnabled: Bool
-    let calculatorSkipRuleEnabled: Bool
-    let textEditRuleEnabled: Bool
+    let primaryHelperRuleEnabled: Bool
+    let primaryHelperSkipRuleEnabled: Bool
+    let secondaryHelperRuleEnabled: Bool
+    let savedScriptCount: Int
+    let savedScriptName: String?
+    let savedScriptActionID: String?
+    let savedScriptRunsLocallyWithoutConfirmation: Bool
+    let savedScriptRequiresExternalConfirmation: Bool
+    let savedScriptIncludedInPortableBackup: Bool
+    let savedScriptIncludedInActionGrid: Bool
+    let savedScriptIncludedInVisualWorkflow: Bool
     let actionGridEntryCount: Int
+    let actionGridTotalEntryCount: Int
+    let actionGridFolderCount: Int
+    let actionGridMaximumFolderDepth: Int
     let actionGridActionIDs: [String]
     let actionGridReferences: [String]
     let hasUnavailableGridEntry: Bool
+    let trackpadMappingCount: Int
+    let trackpadActionReferences: [String]
+    let hasTrackpadActionGridMapping: Bool
+    let hasTrackpadWorkflowMapping: Bool
     let language: String?
     let appearance: String?
     let workflowHistoryCount: Int
@@ -201,13 +297,15 @@ private struct AuditReport: Codable {
 }
 
 private enum Fixture {
-    static let version = 4
+    static let version = 6
     static let markerKey = "mactools.e2e.fixture-version"
     static let shortcutKey = "action-shortcuts.assignments"
     static let workflowKey = "automation.workflows.v1"
     static let ruleKey = "automation.rules.v1"
     static let historyKey = "automation.history.v1"
+    static let savedScriptsKey = "plugin.saved-scripts.library.v1"
     static let actionGridKey = "plugin.action-grid.layout.v1"
+    static let trackpadGestureKey = "plugin.trackpad-gestures.mappings"
     static let languageKey = "app.languagePreference"
     static let appleLanguagesKey = "AppleLanguages"
     static let appearanceKey = "app.appearancePreference"
@@ -217,10 +315,14 @@ private enum Fixture {
     static let continueWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000260")!
     static let stopWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000261")!
     static let delayWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000262")!
+    static let visualWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000263")!
+    static let savedScriptID = UUID(uuidString: "00000000-0000-4000-8000-000000000290")!
     static let ruleID = UUID(uuidString: "00000000-0000-4000-8000-000000000249")!
     static let calculatorSkipRuleID = UUID(uuidString: "00000000-0000-4000-8000-000000000280")!
     static let textEditRuleID = UUID(uuidString: "00000000-0000-4000-8000-000000000281")!
     static let timestamp = Date(timeIntervalSinceReferenceDate: 800_000_000)
+    static let primaryPrivacyHelperBundleID = "com.jennymedia.mactools.e2e-helper.primary"
+    static let secondaryPrivacyHelperBundleID = "com.jennymedia.mactools.e2e-helper.secondary"
 
     static let openSettings = ActionReference(
         providerID: "mactools",
@@ -245,6 +347,11 @@ private enum Fixture {
     static let missingAction = ActionReference(
         providerID: "e2e-missing-provider",
         actionID: "not-installed"
+    )
+
+    static let savedScriptAction = ActionReference(
+        providerID: "saved-scripts",
+        actionID: "run.\(savedScriptID.uuidString.lowercased())"
     )
 
     static func workflowAction(_ id: UUID) -> ActionReference {
@@ -415,16 +522,63 @@ private enum Fixture {
         updatedAt: timestamp
     )
 
+    static let savedScript = SavedScriptFixture(
+        id: savedScriptID,
+        name: "E2E Privacy-Safe Visual Proof",
+        kind: "zsh",
+        source: """
+        printf 'Opening the privacy-safe MacTools E2E helper.\\n'
+        /usr/bin/open -b com.jennymedia.mactools.e2e-helper.primary
+        /bin/sleep 3
+        /usr/bin/open -a "$HOME/Applications/MacTools Dev.app" 'mactools-dev://app/settings/features/automation'
+        /bin/sleep 1
+        printf 'Returned to MacTools Automation.\\n'
+        """,
+        workingDirectory: "",
+        timeoutSeconds: 15,
+        confirmOutsideManager: false,
+        allowExternalInvocation: true,
+        includeSourceInBackup: true,
+        createdAt: timestamp,
+        updatedAt: timestamp
+    )
+
+    static let visualWorkflow = WorkflowDefinition(
+        formatVersion: 1,
+        id: visualWorkflowID,
+        name: "E2E Visual Proof Workflow",
+        systemImage: "sparkles.rectangle.stack",
+        isEnabled: true,
+        steps: [
+            WorkflowStep(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000276")!,
+                reference: savedScriptAction,
+                label: "Show Privacy-Safe Helper",
+                delaySeconds: 0,
+                errorPolicy: "stop"
+            ),
+            WorkflowStep(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000277")!,
+                reference: showActionGrid,
+                label: "Show Deterministic Action Grid",
+                delaySeconds: 0.75,
+                errorPolicy: "stop"
+            ),
+        ],
+        createdAt: timestamp,
+        updatedAt: timestamp
+    )
+
     static let rule = AutomationRule(
         formatVersion: 1,
         id: ruleID,
-        name: "E2E Calculator Activation",
+        name: "E2E Privacy Helper Activation",
         workflowID: automationWorkflowID,
         isEnabled: true,
         trigger: .application(
             ApplicationAutomationTrigger(
                 event: .activates,
-                bundleIdentifier: "com.apple.calculator"
+                bundleIdentifier: primaryPrivacyHelperBundleID
             )
         ),
         conditions: [],
@@ -435,13 +589,13 @@ private enum Fixture {
     static let calculatorSkipRule = AutomationRule(
         formatVersion: 1,
         id: calculatorSkipRuleID,
-        name: "E2E Calculator Condition Skip",
+        name: "E2E Privacy Helper Condition Skip",
         workflowID: automationWorkflowID,
         isEnabled: true,
         trigger: .application(
             ApplicationAutomationTrigger(
                 event: .activates,
-                bundleIdentifier: "com.apple.calculator"
+                bundleIdentifier: primaryPrivacyHelperBundleID
             )
         ),
         conditions: [
@@ -459,18 +613,118 @@ private enum Fixture {
     static let textEditRule = AutomationRule(
         formatVersion: 1,
         id: textEditRuleID,
-        name: "E2E TextEdit Activation",
+        name: "E2E Secondary Helper Activation",
         workflowID: automationWorkflowID,
         isEnabled: true,
         trigger: .application(
             ApplicationAutomationTrigger(
                 event: .activates,
-                bundleIdentifier: "com.apple.TextEdit"
+                bundleIdentifier: secondaryPrivacyHelperBundleID
             )
         ),
         conditions: [],
         createdAt: timestamp,
         updatedAt: timestamp
+    )
+
+    static func folderEntry(
+        id: UUID,
+        title: String,
+        children: [ActionGridEntry]
+    ) -> ActionGridEntry {
+        ActionGridEntry(
+            id: id,
+            reference: ActionReference(
+                providerID: "action-grid.folder",
+                actionID: id.uuidString.lowercased()
+            ),
+            customTitle: title,
+            folder: ActionGridFolder(systemImage: "folder.fill", entries: children)
+        )
+    }
+
+    static let systemFolder = folderEntry(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000310")!,
+        title: "System",
+        children: [
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000311")!,
+                reference: toggleDashboard,
+                customTitle: "Dashboard"
+            ),
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000312")!,
+                reference: toggleFeaturePanel,
+                customTitle: "Feature Panel"
+            ),
+        ]
+    )
+
+    static let resilienceFolder = folderEntry(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000320")!,
+        title: "Resilience",
+        children: [
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000321")!,
+                reference: workflowAction(continueWorkflowID),
+                customTitle: "Continue"
+            ),
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000322")!,
+                reference: workflowAction(stopWorkflowID),
+                customTitle: "Stop"
+            ),
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000323")!,
+                reference: workflowAction(delayWorkflowID),
+                customTitle: "Cancellable Delay"
+            ),
+        ]
+    )
+
+    static let automationFolder = folderEntry(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000330")!,
+        title: "Automation",
+        children: [
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000331")!,
+                reference: workflowAction(workflowID),
+                customTitle: "Safe Workflow"
+            ),
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000332")!,
+                reference: workflowAction(automationWorkflowID),
+                customTitle: "Background Workflow"
+            ),
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000333")!,
+                reference: workflowAction(visualWorkflowID),
+                customTitle: "Visual Proof Workflow"
+            ),
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000334")!,
+                reference: savedScriptAction,
+                customTitle: "Privacy-Safe Script"
+            ),
+            resilienceFolder,
+        ]
+    )
+
+    static let utilitiesFolder = folderEntry(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000340")!,
+        title: "Utilities",
+        children: [
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000341")!,
+                reference: openSettings,
+                customTitle: "Settings"
+            ),
+            ActionGridEntry(
+                id: UUID(uuidString: "00000000-0000-4000-8000-000000000342")!,
+                reference: toggleLaunchpad,
+                customTitle: "Launchpad"
+            ),
+        ]
     )
 
     static let actionGridEntries = [
@@ -500,24 +754,27 @@ private enum Fixture {
             customTitle: "Safe Workflow"
         ),
         ActionGridEntry(
-            id: UUID(uuidString: "00000000-0000-4000-8000-000000000303")!,
-            reference: workflowAction(automationWorkflowID),
-            customTitle: "Background Workflow"
-        ),
-        ActionGridEntry(
-            id: UUID(uuidString: "00000000-0000-4000-8000-000000000304")!,
-            reference: workflowAction(continueWorkflowID),
-            customTitle: "Continue Workflow"
-        ),
-        ActionGridEntry(
-            id: UUID(uuidString: "00000000-0000-4000-8000-000000000305")!,
-            reference: workflowAction(stopWorkflowID),
-            customTitle: "Stop Workflow"
-        ),
-        ActionGridEntry(
             id: UUID(uuidString: "00000000-0000-4000-8000-000000000306")!,
             reference: missingAction,
             customTitle: "Unavailable Action"
+        ),
+        systemFolder,
+        automationFolder,
+        utilitiesFolder,
+    ]
+
+    static let trackpadGestureMappings = [
+        TrackpadGestureMapping(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000350")!,
+            gesture: .fourFingerLongTouch,
+            action: .action(showActionGrid),
+            isEnabled: true
+        ),
+        TrackpadGestureMapping(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000351")!,
+            gesture: .fiveFingerLongTouch,
+            action: .action(workflowAction(workflowID)),
+            isEnabled: true
         ),
     ]
 
@@ -639,9 +896,14 @@ private func seed(bundleIdentifier: String, allowRealDomain: Bool) throws {
                 Fixture.continueWorkflow,
                 Fixture.stopWorkflow,
                 Fixture.delayWorkflow,
+                Fixture.visualWorkflow,
             ]
         )),
         forKey: Fixture.workflowKey
+    )
+    defaults.set(
+        try encode(SavedScriptEnvelope(formatVersion: 1, scripts: [Fixture.savedScript])),
+        forKey: Fixture.savedScriptsKey
     )
     defaults.set(
         try encode(AutomationRuleEnvelope(
@@ -651,8 +913,12 @@ private func seed(bundleIdentifier: String, allowRealDomain: Bool) throws {
         forKey: Fixture.ruleKey
     )
     defaults.set(
-        try encode(ActionGridEnvelope(formatVersion: 1, entries: Fixture.actionGridEntries)),
+        try encode(ActionGridEnvelope(formatVersion: 2, entries: Fixture.actionGridEntries)),
         forKey: Fixture.actionGridKey
+    )
+    defaults.set(
+        try encode(Fixture.trackpadGestureMappings),
+        forKey: Fixture.trackpadGestureKey
     )
     defaults.removeObject(forKey: Fixture.historyKey)
     defaults.set(Fixture.version, forKey: Fixture.markerKey)
@@ -671,11 +937,17 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
     let shortcuts = loadShortcutPayload(from: defaults).assignments
     let workflowEnvelope = defaults.data(forKey: Fixture.workflowKey)
         .flatMap { try? decoder.decode(WorkflowEnvelope.self, from: $0) }
+    let savedScriptEnvelope = defaults.data(forKey: Fixture.savedScriptsKey)
+        .flatMap { try? decoder.decode(SavedScriptEnvelope.self, from: $0) }
     let ruleEnvelope = defaults.data(forKey: Fixture.ruleKey)
         .flatMap { try? decoder.decode(AutomationRuleEnvelope.self, from: $0) }
     let actionGridEnvelope = defaults.data(forKey: Fixture.actionGridKey)
         .flatMap { try? decoder.decode(ActionGridEnvelope.self, from: $0) }
+    let trackpadMappings = defaults.data(forKey: Fixture.trackpadGestureKey)
+        .flatMap { try? decoder.decode([TrackpadGestureMapping].self, from: $0) }
+        ?? []
     let workflows = workflowEnvelope?.workflows ?? []
+    let savedScripts = savedScriptEnvelope?.scripts ?? []
     let rules = ruleEnvelope?.rules ?? []
     let actionGridEntries = actionGridEnvelope?.entries ?? []
     let historyRuns: [[String: Any]] = {
@@ -702,6 +974,11 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
             && $0.binding == Fixture.workflowShortcut.binding
     }
     let workflow = workflows.first { $0.id == Fixture.workflowID }
+    let visualWorkflow = workflows.first { $0.id == Fixture.visualWorkflowID }
+    let visualWorkflowUsesSavedScript = visualWorkflow?.steps.first?.reference
+        == Fixture.savedScriptAction
+    let visualWorkflowShowsActionGrid = visualWorkflow?.steps.last?.reference
+        == Fixture.showActionGrid
     let automationWorkflow = workflows.first { $0.id == Fixture.automationWorkflowID }
     let automationMuteSetting: Bool? = {
         guard let value = automationWorkflow?.steps.first?.reference.parameters.first?.value,
@@ -724,23 +1001,24 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         }()
     let systemMuteStatePreserved = automationMuteSetting != nil
         && automationMuteSetting == SystemAudioMuteState.currentSettableValue()
-    let calculatorRuleEnabled = rules.contains {
+    let primaryHelperRuleEnabled = rules.contains {
         guard $0.id == Fixture.ruleID,
               $0.workflowID == Fixture.automationWorkflowID,
               $0.isEnabled else {
             return false
         }
         guard case let .application(trigger) = $0.trigger else { return false }
-        return trigger.bundleIdentifier == "com.apple.calculator" && trigger.event == .activates
+        return trigger.bundleIdentifier == Fixture.primaryPrivacyHelperBundleID
+            && trigger.event == .activates
     }
-    let calculatorSkipRuleEnabled = rules.contains {
+    let primaryHelperSkipRuleEnabled = rules.contains {
         guard $0.id == Fixture.calculatorSkipRuleID,
               $0.workflowID == Fixture.automationWorkflowID,
               $0.isEnabled else {
             return false
         }
         guard case let .application(trigger) = $0.trigger,
-              trigger.bundleIdentifier == "com.apple.calculator",
+              trigger.bundleIdentifier == Fixture.primaryPrivacyHelperBundleID,
               trigger.event == .activates,
               $0.conditions.count == 1,
               case let .frontmostApplication(condition) = $0.conditions[0] else {
@@ -749,7 +1027,7 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         return condition.bundleIdentifier == "com.example.never-frontmost"
             && !condition.isExcluded
     }
-    let textEditRuleEnabled = rules.contains {
+    let secondaryHelperRuleEnabled = rules.contains {
         guard $0.id == Fixture.textEditRuleID,
               $0.workflowID == Fixture.automationWorkflowID,
               $0.isEnabled,
@@ -757,11 +1035,30 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
             return false
         }
         guard case let .application(trigger) = $0.trigger else { return false }
-        return trigger.bundleIdentifier == "com.apple.TextEdit" && trigger.event == .activates
+        return trigger.bundleIdentifier == Fixture.secondaryPrivacyHelperBundleID
+            && trigger.event == .activates
     }
-    let actionIDs = actionGridEntries.map { $0.reference.key.actionID }
-    let actionGridReferences = actionGridEntries.map {
+    let savedScript = savedScripts.first { $0.id == Fixture.savedScriptID }
+    let savedScriptRunsLocallyWithoutConfirmation = savedScript?.confirmOutsideManager == false
+    let savedScriptRequiresExternalConfirmation = savedScript?.allowExternalInvocation == true
+    let savedScriptIncludedInPortableBackup = savedScript?.includeSourceInBackup == true
+    func flattenedGridEntries(
+        _ entries: [ActionGridEntry],
+        depth: Int = 0
+    ) -> [(entry: ActionGridEntry, depth: Int)] {
+        entries.flatMap { entry in
+            [(entry, depth)] + flattenedGridEntries(entry.folder?.entries ?? [], depth: depth + 1)
+        }
+    }
+    let flattenedGrid = flattenedGridEntries(actionGridEntries)
+    let actionEntries = flattenedGrid.map(\.entry).filter { $0.folder == nil }
+    let actionIDs = actionEntries.map { $0.reference.key.actionID }
+    let actionGridReferences = actionEntries.map {
         "\($0.reference.key.providerID)/\($0.reference.key.actionID)"
+    }
+    let trackpadActionReferences = trackpadMappings.compactMap { mapping -> String? in
+        guard case let .action(reference) = mapping.action else { return nil }
+        return "\(reference.key.providerID)/\(reference.key.actionID)"
     }
     let expectedWorkflowIDs: Set<UUID> = [
         Fixture.workflowID,
@@ -769,6 +1066,7 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         Fixture.continueWorkflowID,
         Fixture.stopWorkflowID,
         Fixture.delayWorkflowID,
+        Fixture.visualWorkflowID,
     ]
     let hasDisplaySleepWorkflowStep = workflows.contains { workflow in
         workflow.steps.contains {
@@ -786,30 +1084,69 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
             .steps.first?.reference == Fixture.missingAction
         && workflows.first(where: { $0.id == Fixture.delayWorkflowID })?
             .steps.first?.delaySeconds == 10
+        && visualWorkflow?.steps.count == 2
+        && visualWorkflowUsesSavedScript
+        && visualWorkflowShowsActionGrid
     let language = defaults.string(forKey: Fixture.languageKey)
     let appearance = defaults.string(forKey: Fixture.appearanceKey)
     let expectedGridReferences = Fixture.actionGridEntries.map(\.reference)
-    let hasUnavailableGridEntry = actionGridEntries.contains {
+    let hasUnavailableGridEntry = actionEntries.contains {
         $0.reference == Fixture.missingAction
+    }
+    let savedScriptIncludedInActionGrid = actionEntries.contains {
+        $0.reference == Fixture.savedScriptAction
+    }
+    let savedScriptIncludedInVisualWorkflow = visualWorkflow?.steps.contains {
+        $0.reference == Fixture.savedScriptAction
+    } == true
+    let hasTrackpadActionGridMapping = trackpadMappings.contains { mapping in
+        guard mapping.gesture == .fourFingerLongTouch,
+              mapping.isEnabled,
+              case let .action(reference) = mapping.action else {
+            return false
+        }
+        return reference == Fixture.showActionGrid
+    }
+    let hasTrackpadWorkflowMapping = trackpadMappings.contains { mapping in
+        guard mapping.gesture == .fiveFingerLongTouch,
+              mapping.isEnabled,
+              case let .action(reference) = mapping.action else {
+            return false
+        }
+        return reference == Fixture.workflowAction(Fixture.workflowID)
     }
     let valid = defaults.integer(forKey: Fixture.markerKey) == Fixture.version
         && hasOpenSettingsShortcut
         && hasActionGridShortcut
         && hasDashboardShortcut
         && hasWorkflowShortcut
-        && workflows.count == 5
+        && workflows.count == 6
         && workflowsAreComplete
         && !hasDisplaySleepWorkflowStep
         && workflow?.steps.count == 3
         && automationWorkflowIsIdempotent
         && systemMuteStatePreserved
-        && calculatorRuleEnabled
-        && calculatorSkipRuleEnabled
-        && textEditRuleEnabled
+        && primaryHelperRuleEnabled
+        && primaryHelperSkipRuleEnabled
+        && secondaryHelperRuleEnabled
         && rules.count == 3
+        && savedScripts.count == 1
+        && savedScript?.name == Fixture.savedScript.name
+        && savedScript?.source == Fixture.savedScript.source
+        && savedScriptRunsLocallyWithoutConfirmation
+        && savedScriptRequiresExternalConfirmation
+        && savedScriptIncludedInPortableBackup
+        && savedScriptIncludedInActionGrid
+        && savedScriptIncludedInVisualWorkflow
         && actionGridEntries.map(\.reference) == expectedGridReferences
         && actionGridEntries.count == 9
+        && flattenedGrid.count == 21
+        && flattenedGrid.filter({ $0.entry.folder != nil }).count == 4
+        && flattenedGrid.map(\.depth).max() == 2
         && hasUnavailableGridEntry
+        && trackpadMappings.count == 2
+        && hasTrackpadActionGridMapping
+        && hasTrackpadWorkflowMapping
         && language == "en"
         && appearance == "light"
 
@@ -830,6 +1167,10 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         hasDisplaySleepWorkflowStep: hasDisplaySleepWorkflowStep,
         workflowName: workflow?.name,
         workflowStepCount: workflow?.steps.count ?? 0,
+        visualWorkflowName: visualWorkflow?.name,
+        visualWorkflowStepCount: visualWorkflow?.steps.count ?? 0,
+        visualWorkflowUsesSavedScript: visualWorkflowUsesSavedScript,
+        visualWorkflowShowsActionGrid: visualWorkflowShowsActionGrid,
         automationWorkflowName: automationWorkflow?.name,
         automationWorkflowStepCount: automationWorkflow?.steps.count ?? 0,
         automationWorkflowIsIdempotent: automationWorkflowIsIdempotent,
@@ -837,13 +1178,28 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         systemMuteStatePreserved: systemMuteStatePreserved,
         ruleCount: rules.count,
         ruleNames: rules.map(\.name),
-        calculatorRuleEnabled: calculatorRuleEnabled,
-        calculatorSkipRuleEnabled: calculatorSkipRuleEnabled,
-        textEditRuleEnabled: textEditRuleEnabled,
+        primaryHelperRuleEnabled: primaryHelperRuleEnabled,
+        primaryHelperSkipRuleEnabled: primaryHelperSkipRuleEnabled,
+        secondaryHelperRuleEnabled: secondaryHelperRuleEnabled,
+        savedScriptCount: savedScripts.count,
+        savedScriptName: savedScript?.name,
+        savedScriptActionID: savedScript.map { "run.\($0.id.uuidString.lowercased())" },
+        savedScriptRunsLocallyWithoutConfirmation: savedScriptRunsLocallyWithoutConfirmation,
+        savedScriptRequiresExternalConfirmation: savedScriptRequiresExternalConfirmation,
+        savedScriptIncludedInPortableBackup: savedScriptIncludedInPortableBackup,
+        savedScriptIncludedInActionGrid: savedScriptIncludedInActionGrid,
+        savedScriptIncludedInVisualWorkflow: savedScriptIncludedInVisualWorkflow,
         actionGridEntryCount: actionGridEntries.count,
+        actionGridTotalEntryCount: flattenedGrid.count,
+        actionGridFolderCount: flattenedGrid.filter { $0.entry.folder != nil }.count,
+        actionGridMaximumFolderDepth: flattenedGrid.map(\.depth).max() ?? 0,
         actionGridActionIDs: actionIDs,
         actionGridReferences: actionGridReferences,
         hasUnavailableGridEntry: hasUnavailableGridEntry,
+        trackpadMappingCount: trackpadMappings.count,
+        trackpadActionReferences: trackpadActionReferences,
+        hasTrackpadActionGridMapping: hasTrackpadActionGridMapping,
+        hasTrackpadWorkflowMapping: hasTrackpadWorkflowMapping,
         language: language,
         appearance: appearance,
         workflowHistoryCount: historyRuns.count,

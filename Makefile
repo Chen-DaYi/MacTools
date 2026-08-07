@@ -13,6 +13,9 @@ WORKSPACE_FILE := $(PROJECT_NAME).xcworkspace
 DERIVED_DATA := build/DerivedData
 APP_PATH := $(DERIVED_DATA)/Build/Products/Debug/$(APP_PRODUCT_NAME).app
 APP_EXECUTABLE := $(APP_PATH)/Contents/MacOS/$(APP_PRODUCT_NAME)
+LOCAL_APP_INSTALL_DIR ?= $(HOME)/Applications
+INSTALLED_APP_PATH := $(LOCAL_APP_INSTALL_DIR)/$(APP_PRODUCT_NAME).app
+INSTALLED_APP_EXECUTABLE := $(INSTALLED_APP_PATH)/Contents/MacOS/$(APP_PRODUCT_NAME)
 HOST_ARCH := $(shell uname -m)
 BUILD_DESTINATION := platform=macOS,arch=$(HOST_ARCH)
 XCODEBUILD ?= $(abspath scripts/xcodebuild-filtered.sh)
@@ -39,7 +42,7 @@ E2E_SESSION ?=
 E2E_DURATION ?= 90
 E2E_PACK ?=
 
-.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
+.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -108,7 +111,10 @@ package-plugins-release: generate
 		--xcodebuild "$(XCODEBUILD)" \
 		--release-notes-url "https://github.com/$(PLUGIN_RELEASE_REPO)/releases/tag/$(PLUGIN_RELEASE_TAG)"
 
-run: sync-debug-plugins generate-icon-gallery
+install-debug-app: sync-debug-plugins generate-icon-gallery
+	@./scripts/install-debug-app.sh "$(CURDIR)/$(APP_PATH)" "$(INSTALLED_APP_PATH)"
+
+run: install-debug-app
 	@CATALOG_URL="$(MACTOOLS_PLUGIN_CATALOG_URL)"; \
 	ICON_CATALOG_URL="$(MACTOOLS_ICON_CATALOG_URL)"; \
 	if [ -z "$$CATALOG_URL" ] && [ -f "$(LOCAL_PLUGIN_CATALOG)" ]; then \
@@ -141,12 +147,12 @@ run: sync-debug-plugins generate-icon-gallery
 	if [ -z "$$CATALOG_URL" ] && [ -z "$$ICON_CATALOG_URL" ]; then \
 		echo "No local plugin catalog found. Run 'make build-plugin' or set MACTOOLS_PLUGIN_CATALOG_URL."; \
 	fi; \
-	env "$${RUN_ENV[@]}" "$(APP_EXECUTABLE)" & \
+	env "$${RUN_ENV[@]}" "$(INSTALLED_APP_EXECUTABLE)" & \
 	APP_PID=$$!; \
 	wait "$$APP_PID"
 
-run-open: build
-	@open -n -W "$(APP_PATH)"
+run-open: install-debug-app
+	@open -n -W "$(INSTALLED_APP_PATH)"
 
 e2e-preflight:
 	@$(E2E_SCRIPT) preflight

@@ -12,6 +12,8 @@ MacTools exposes a guarded URL API for navigation and explicitly eligible Run Li
 | Settings | `mactools://app/settings` |
 | General settings | `mactools://app/settings/general` |
 | About | `mactools://app/settings/about` |
+| Actions & Shortcuts | `mactools://app/settings/features/actions-and-shortcuts` |
+| Automation | `mactools://app/settings/features/automation` |
 | Plugin Marketplace | `mactools://app/settings/plugins/marketplace` |
 | Installed plugin settings | `mactools://app/settings/plugins/<plugin-id>` |
 | Dashboard | `mactools://app/panels/dashboard` |

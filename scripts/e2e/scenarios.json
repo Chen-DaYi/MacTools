@@ -5,6 +5,7 @@
     {
       "id": "baseline",
       "title": "Cross-surface happy path",
+      "recordingStartRoute": "settings/plugins/marketplace",
       "phase": "pre-permission",
       "required": true,
       "issues": [247, 249, 250, 251],
@@ -15,16 +16,50 @@
         "workflow-run-succeeded",
         "run-link-executed",
         "action-grid-visible",
-        "launchpad-visible",
-        "calculator-automation-triggered",
+        "privacy-helper-automation-triggered",
         "shortcut-control-command-3",
         "shortcut-control-command-4",
         "relaunch-persistence"
       ]
     },
     {
+      "id": "visual-automation",
+      "title": "Privacy-safe visual workflow proof",
+      "recordingStartRoute": "settings/features/automation",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [247, 250],
+      "checkpoints": [
+        "visual-workflow-visible",
+        "visual-workflow-running",
+        "privacy-helper-window-visible",
+        "visual-workflow-returned-to-automation",
+        "visual-workflow-action-grid-visible",
+        "visual-workflow-succeeded"
+      ]
+    },
+    {
+      "id": "saved-scripts",
+      "title": "Saved Scripts across all action surfaces",
+      "recordingStartRoute": "settings/plugins/saved-scripts",
+      "phase": "pre-permission",
+      "required": true,
+      "issues": [],
+      "checkpoints": [
+        "saved-script-manager-visible",
+        "saved-script-catalog-visible",
+        "saved-script-grid-picker-visible",
+        "saved-script-local-run-without-confirmation",
+        "saved-script-running-indicator",
+        "saved-script-output-visible",
+        "saved-script-run-link-confirmation",
+        "saved-script-stable-id-roundtrip"
+      ]
+    },
+    {
       "id": "shortcut-lifecycle",
       "title": "Shortcut assignment and conflict lifecycle",
+      "recordingStartRoute": "settings/features/actions-and-shortcuts",
       "phase": "pre-permission",
       "required": true,
       "issues": [249],
@@ -38,6 +73,7 @@
     {
       "id": "workflow-resilience",
       "title": "Workflow failure, cancellation, and safety",
+      "recordingStartRoute": "settings/features/automation",
       "phase": "pre-permission",
       "required": true,
       "issues": [247],
@@ -45,24 +81,28 @@
         "workflow-continue-on-error",
         "workflow-stop-on-error",
         "workflow-cancelled-during-delay",
+        "workflow-background-indicator",
+        "workflow-run-diagnostics",
         "workflow-unavailable-preserved"
       ]
     },
     {
       "id": "automation-conditions",
       "title": "Multiple automatic rules and condition outcomes",
+      "recordingStartRoute": "settings/features/automation",
       "phase": "pre-permission",
       "required": true,
       "issues": [247],
       "checkpoints": [
         "multiple-rules-visible",
-        "calculator-condition-skipped",
-        "textedit-automation-triggered"
+        "privacy-helper-condition-skipped",
+        "secondary-helper-automation-triggered"
       ]
     },
     {
       "id": "run-link-security",
       "title": "Run Link copy, confirmation, presets, and rejection",
+      "recordingStartRoute": "settings/features/actions-and-shortcuts",
       "phase": "pre-permission",
       "required": true,
       "issues": [251],
@@ -78,11 +118,14 @@
     {
       "id": "action-grid-interactions",
       "title": "Nine-entry Action Grid configuration and input",
+      "recordingStartRoute": "settings/plugins/action-grid",
       "phase": "pre-permission",
       "required": true,
       "issues": [250],
       "checkpoints": [
         "grid-nine-entry-layout",
+        "grid-nested-folder-navigation",
+        "grid-drag-drop-reorder",
         "grid-configuration-lifecycle",
         "grid-workflow-executed",
         "grid-unavailable-kept-open",
@@ -95,6 +138,7 @@
     {
       "id": "localization-host-commands",
       "title": "Localization and merged Command-K host commands",
+      "recordingStartRoute": "settings/features/actions-and-shortcuts",
       "phase": "pre-permission",
       "required": true,
       "issues": [249, 250],
@@ -109,33 +153,41 @@
     {
       "id": "stability-and-migration",
       "title": "Dashboard responsiveness and plugin migration",
+      "recordingStartRoute": "settings/features/dashboard",
       "phase": "pre-permission",
       "required": true,
       "issues": [],
       "checkpoints": [
         "dashboard-bluetooth-responsive",
         "dashboard-stress-responsive",
-        "plugin-migration-isolated-tests"
+        "plugin-migration-isolated-tests",
+        "action-registry-health"
       ]
     },
     {
       "id": "trackpad-automated",
       "title": "Trackpad settings and injected logic coverage",
+      "recordingStartRoute": "settings/plugins/trackpad-gestures",
       "phase": "pre-permission",
       "required": true,
       "issues": [],
       "checkpoints": [
         "trackpad-settings-visible",
+        "trackpad-canonical-action-visible",
+        "trackpad-action-grid-dispatch",
+        "trackpad-workflow-dispatch",
         "trackpad-automated-tests"
       ]
     },
     {
       "id": "permission-and-recording",
       "title": "Stable identity permission persistence and evidence",
+      "recordingStartRoute": "settings/plugins/trackpad-gestures",
       "phase": "post-permission",
       "required": true,
       "issues": [249, 250],
       "checkpoints": [
+        "trackpad-permission-evidence",
         "rebuild-permission-persistence",
         "screencast-captured"
       ]
@@ -143,6 +195,7 @@
     {
       "id": "trackpad-hardware",
       "title": "Physical trackpad verification",
+      "recordingStartRoute": "settings/plugins/trackpad-gestures",
       "phase": "post-permission",
       "required": false,
       "issues": [],
