@@ -1,0 +1,67 @@
+{
+  "id": "saved-scripts",
+  "displayName": "已存脚本",
+  "summary": "保存并运行 AppleScript 和 Shell 脚本。",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "البرامج النصية المحفوظة",
+      "summary": "احفظ برامج AppleScript وبرامج shell النصية وشغّلها."
+    },
+    "de": {
+      "displayName": "Gespeicherte Skripte",
+      "summary": "AppleScript- und Shell-Skripte sichern und ausführen."
+    },
+    "en": {
+      "displayName": "Saved Scripts",
+      "summary": "Save and run AppleScript and shell scripts."
+    },
+    "es": {
+      "displayName": "Scripts guardados",
+      "summary": "Guarda y ejecuta scripts de AppleScript y shell."
+    },
+    "fr": {
+      "displayName": "Scripts enregistrés",
+      "summary": "Enregistrez et exécutez des scripts AppleScript et shell."
+    },
+    "ja": {
+      "displayName": "保存済みスクリプト",
+      "summary": "AppleScript とシェルスクリプトを保存して実行します。"
+    },
+    "ko": {
+      "displayName": "저장된 스크립트",
+      "summary": "AppleScript 및 셸 스크립트를 저장하고 실행합니다."
+    },
+    "pt": {
+      "displayName": "Scripts salvos",
+      "summary": "Salve e execute scripts AppleScript e shell."
+    },
+    "ru": {
+      "displayName": "Сохранённые скрипты",
+      "summary": "Сохраняйте и запускайте скрипты AppleScript и shell."
+    },
+    "zh-Hans": {
+      "displayName": "已存脚本",
+      "summary": "保存并运行 AppleScript 和 Shell 脚本。"
+    },
+    "zh-Hant": {
+      "displayName": "已儲存腳本",
+      "summary": "儲存並執行 AppleScript 和 Shell 腳本。"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.2.0",
+  "pluginKitVersion": 3,
+  "bundleRelativePath": "SavedScripts.bundle",
+  "factoryClass": "SavedScriptsPlugin.SavedScriptsPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "SavedScriptsPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [],
+  "category": "productivity"
+}

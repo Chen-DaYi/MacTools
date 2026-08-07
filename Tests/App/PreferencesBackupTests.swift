@@ -74,6 +74,145 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(restoredPlugin.restoredPortablePreferences, portableData)
     }
 
+    func testSelectiveExportContainsOnlyChosenCategoriesAndPluginSettings() throws {
+        let defaults = makeDefaults()
+        let first = BackupTestPlugin(
+            id: "first",
+            order: 1,
+            shortcutID: "toggle",
+            portablePreferences: Data("first".utf8)
+        )
+        let second = BackupTestPlugin(
+            id: "second",
+            order: 2,
+            shortcutID: "open",
+            portablePreferences: Data("second".utf8)
+        )
+        let host = makeHost(plugins: [first, second], defaults: defaults)
+        let selection = PreferencesBackupSelection(
+            includesApplicationPreferences: false,
+            includesPluginLayout: false,
+            includesShortcuts: false,
+            includesAutomation: false,
+            includesRunLinks: false,
+            pluginPreferenceIDs: ["first"]
+        )
+
+        let backup = host.makePreferencesBackup(selection: selection)
+        let decoded = try PreferencesBackup.decodeJSON(backup.encodedJSON())
+
+        XCTAssertEqual(decoded.effectiveSelection, selection)
+        XCTAssertEqual(decoded.pluginPreferences, ["first": Data("first".utf8)])
+        XCTAssertTrue(decoded.shortcutCustomizations.isEmpty)
+        XCTAssertTrue(decoded.actionShortcutAssignments.isEmpty)
+        XCTAssertEqual(decoded.actionInvocationPresets, [])
+        XCTAssertEqual(decoded.workflows, [])
+        XCTAssertEqual(decoded.automationRules, [])
+    }
+
+    func testSelectiveImportRestoresOnlyChosenPluginSettings() throws {
+        let first = BackupTestPlugin(id: "first", order: 1, shortcutID: "toggle")
+        let second = BackupTestPlugin(id: "second", order: 2, shortcutID: "open")
+        let host = makeHost(plugins: [first, second], defaults: makeDefaults())
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: ["second", "first"],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [:],
+            pluginPreferences: [
+                "first": Data("restore-first".utf8),
+                "second": Data("restore-second".utf8),
+            ]
+        )
+        let selection = PreferencesBackupSelection(
+            includesApplicationPreferences: false,
+            includesPluginLayout: false,
+            includesShortcuts: false,
+            includesAutomation: false,
+            includesRunLinks: false,
+            pluginPreferenceIDs: ["first"]
+        )
+
+        _ = try host.importPreferences(backup, selection: selection)
+
+        XCTAssertEqual(first.restoredPortablePreferences, Data("restore-first".utf8))
+        XCTAssertNil(second.restoredPortablePreferences)
+        XCTAssertEqual(host.featureManagementItems.map(\.id), ["first", "second"])
+    }
+
+    func testWorkflowRunLinkIdentityPersistsThroughBackupEncoding() throws {
+        let workflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000262")!
+        let workflow = WorkflowDefinition(
+            id: workflowID,
+            name: "Readable Name",
+            systemImage: "bolt",
+            isEnabled: true,
+            steps: []
+        )
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: [],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [:],
+            workflows: [workflow]
+        )
+
+        let decoded = try PreferencesBackup.decodeJSON(backup.encodedJSON())
+
+        XCTAssertEqual(decoded.workflows?.first?.id, workflowID)
+        XCTAssertEqual(decoded.workflows?.first?.actionReference, workflow.actionReference)
+    }
+
+    func testRunLinkPresetsWorkflowsAndRulesRoundTripThroughBackup() throws {
+        let workflow = WorkflowDefinition(
+            id: UUID(),
+            name: "Morning Setup",
+            systemImage: "sunrise",
+            isEnabled: true,
+            steps: []
+        )
+        let rule = AutomationRule(
+            id: UUID(),
+            name: "Weekday Morning",
+            workflowID: workflow.id,
+            isEnabled: true,
+            trigger: .schedule(.init(hour: 9, minute: 0, weekdays: [2, 3, 4, 5, 6])),
+            conditions: []
+        )
+        let preset = ActionInvocationPreset(
+            id: UUID(),
+            reference: ActionReference(
+                key: ActionKey(providerID: "example", actionID: "parameterized"),
+                parameters: try ActionParameterSet(["value": .string("portable")])
+            ),
+            createdAt: Date(timeIntervalSince1970: 123)
+        )
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: [],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [:],
+            actionInvocationPresets: [preset],
+            workflows: [workflow],
+            automationRules: [rule]
+        )
+
+        let host = makeHost(plugins: [], defaults: makeDefaults())
+        let result = try host.importPreferences(backup)
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+
+        let restored = host.makePreferencesBackup()
+        XCTAssertEqual(restored.actionInvocationPresets, [preset])
+        XCTAssertEqual(restored.workflows, [workflow])
+        XCTAssertEqual(restored.automationRules, [rule])
+    }
+
     func testImportRestoresPortablePreferencesBeforeDynamicShortcutCustomizations() throws {
         let binding = ShortcutBinding(keyCode: 12, modifiers: [.command, .shift])
         let plugin = DynamicBackupShortcutPlugin()
@@ -382,11 +521,62 @@ final class PreferencesBackupTests: XCTestCase {
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
         json["formatVersion"] = 1
         json.removeValue(forKey: "pluginPreferences")
+        json.removeValue(forKey: "actionInvocationPresets")
+        json.removeValue(forKey: "workflows")
+        json.removeValue(forKey: "automationRules")
+        json.removeValue(forKey: "selection")
 
         let decoded = try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))
 
         XCTAssertEqual(decoded.formatVersion, 1)
         XCTAssertTrue(decoded.pluginPreferences.isEmpty)
+        XCTAssertNil(decoded.actionInvocationPresets)
+        XCTAssertNil(decoded.workflows)
+        XCTAssertNil(decoded.automationRules)
+    }
+
+    func testDecodeTreatsVersionFourBackupWithoutSelectionAsAFullBackup() throws {
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: ["sidecar"],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [:],
+            pluginPreferences: ["sidecar": Data("portable".utf8)]
+        )
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any]
+        )
+        json["formatVersion"] = 4
+        json.removeValue(forKey: "selection")
+
+        let decoded = try PreferencesBackup.decodeJSON(
+            JSONSerialization.data(withJSONObject: json)
+        )
+
+        XCTAssertTrue(decoded.effectiveSelection.includesApplicationPreferences)
+        XCTAssertTrue(decoded.effectiveSelection.includesPluginLayout)
+        XCTAssertTrue(decoded.effectiveSelection.includesShortcuts)
+        XCTAssertTrue(decoded.effectiveSelection.includesAutomation)
+        XCTAssertTrue(decoded.effectiveSelection.includesRunLinks)
+        XCTAssertEqual(decoded.effectiveSelection.pluginPreferenceIDs, ["sidecar"])
+    }
+
+    func testDecodeRejectsVersionFourBackupMissingAutomationFields() throws {
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:]
+        )
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: backup.encodedJSON()) as? [String: Any])
+        json.removeValue(forKey: "workflows")
+
+        XCTAssertThrowsError(try PreferencesBackup.decodeJSON(JSONSerialization.data(withJSONObject: json))) { error in
+            guard case DecodingError.dataCorrupted = error else {
+                return XCTFail("Expected missing current-format fields to be rejected, got \(error)")
+            }
+        }
     }
 
     func testDecodeRejectsUnsupportedShortcutModifierBits() throws {

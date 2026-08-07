@@ -599,6 +599,46 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertEqual(store.workflows().count, 2)
     }
 
+    func testPortableWorkflowImportPreservesIdentityWhenThereIsNoCollision() throws {
+        let sourceStore = try makeStore()
+        let registry = ActionRegistry()
+        let provider = WorkflowStoreTestProvider()
+        let key = ActionKey(providerID: "test-provider", actionID: "portable")
+        let definition = ActionDefinition(
+            key: key,
+            title: "Export",
+            description: "",
+            systemImage: "square.and.arrow.up"
+        )
+        let reference = ActionReference(key: key)
+        registry.synchronize([
+            ActionProviderRegistration(
+                providerID: key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [definition],
+                catalogEntries: [ActionCatalogEntry(reference: reference, title: "Export")],
+                availability: { _ in .available },
+                begin: { _ in
+                    .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            ),
+        ])
+        let original = try sourceStore.upsert(
+            WorkflowDefinition(name: "Portable", steps: [WorkflowStep(reference: reference)])
+        ).get()
+        let data = try sourceStore.exportWorkflow(id: original.id, registry: registry).get()
+
+        let destinationDefaults = try XCTUnwrap(UserDefaults(suiteName: "\(suiteName).destination"))
+        destinationDefaults.removePersistentDomain(forName: "\(suiteName).destination")
+        defer { destinationDefaults.removePersistentDomain(forName: "\(suiteName).destination") }
+        let destinationStore = WorkflowStore(userDefaults: destinationDefaults)
+        let imported = try destinationStore.importWorkflow(data).get()
+
+        XCTAssertEqual(imported.id, original.id)
+        XCTAssertEqual(imported.actionReference, original.actionReference)
+        XCTAssertEqual(imported.steps.map(\.id), original.steps.map(\.id))
+    }
+
     func testDuplicateTruncatesMultibyteNameByUTF8Bytes() throws {
         let store = try makeStore()
         let original = try store.create(name: String(repeating: "工", count: 26)).get()

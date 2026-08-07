@@ -1445,7 +1445,15 @@ struct FeatureRowView: View {
     }
 
     private func primaryPanelIndicator(_ indicator: PluginPrimaryPanelIndicator) -> some View {
-        Label(indicator.text, systemImage: indicator.systemImage)
+        HStack(spacing: 3) {
+            if indicator.systemImage == "progress.indicator" {
+                ProgressView()
+                    .controlSize(.mini)
+            } else {
+                Image(systemName: indicator.systemImage)
+            }
+            Text(indicator.text)
+        }
             .font(.system(size: 8.5, weight: .semibold))
             .foregroundStyle(.secondary)
             .lineLimit(1)

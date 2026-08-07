@@ -135,13 +135,12 @@ final class ActionInvocationPresetStoreTests: XCTestCase {
         let (defaults, suite) = try makeUserDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = ActionInvocationPresetStore(userDefaults: defaults)
-        let reference = ActionReference(
-            key: ActionKey(providerID: "test-provider", actionID: "toggle")
-        )
         let presets = (0..<ActionInvocationPresetStore.maximumPresetCount).map { index in
             ActionInvocationPreset(
                 id: deterministicUUID(index),
-                reference: reference,
+                reference: ActionReference(
+                    key: ActionKey(providerID: "test-provider", actionID: "toggle-\(index)")
+                ),
                 createdAt: Date(timeIntervalSince1970: TimeInterval(index))
             )
         }
@@ -150,9 +149,28 @@ final class ActionInvocationPresetStoreTests: XCTestCase {
         XCTAssertEqual(store.presets().count, ActionInvocationPresetStore.maximumPresetCount)
         XCTAssertFalse(
             store.replaceAll(
-                presets + [ActionInvocationPreset(reference: reference)]
+                presets + [ActionInvocationPreset(
+                    reference: ActionReference(
+                        key: ActionKey(providerID: "test-provider", actionID: "overflow")
+                    )
+                )]
             )
         )
+    }
+
+    func testStoreRejectsDuplicateReferencesEvenWithUniqueIDs() throws {
+        let (defaults, suite) = try makeUserDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ActionInvocationPresetStore(userDefaults: defaults)
+        let reference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "toggle")
+        )
+
+        XCTAssertFalse(store.replaceAll([
+            ActionInvocationPreset(id: deterministicUUID(1), reference: reference),
+            ActionInvocationPreset(id: deterministicUUID(2), reference: reference),
+        ]))
+        XCTAssertTrue(store.presets().isEmpty)
     }
 
     private func parameterizedDefinition(

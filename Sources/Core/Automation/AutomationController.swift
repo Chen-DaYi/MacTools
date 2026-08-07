@@ -290,6 +290,35 @@ final class AutomationController: ObservableObject {
         Array(history.lazy.filter { $0.workflowID == workflowID }.prefix(max(0, limit)))
     }
 
+    func preferencesBackupSnapshot() -> (workflows: [WorkflowDefinition], rules: [AutomationRule]) {
+        (store.workflows(), ruleStore.rules())
+    }
+
+    @discardableResult
+    func restorePreferences(
+        workflows importedWorkflows: [WorkflowDefinition],
+        rules importedRules: [AutomationRule]
+    ) -> Bool {
+        let workflowIDs = Set(importedWorkflows.map(\.id))
+        guard importedRules.allSatisfy({ workflowIDs.contains($0.workflowID) }) else {
+            return false
+        }
+
+        let previousWorkflows = store.workflows()
+        guard store.replaceWorkflows(importedWorkflows) else { return false }
+        guard ruleStore.replace(importedRules) else {
+            _ = store.replaceWorkflows(previousWorkflows)
+            return false
+        }
+
+        activeRunIDs.forEach(cancel(runID:))
+        lastError = nil
+        reloadAll()
+        runtime?.refreshProviders()
+        onCatalogChange?()
+        return true
+    }
+
     func definition(for reference: ActionReference) -> ActionDefinition? {
         registry.definition(for: reference.key)
     }

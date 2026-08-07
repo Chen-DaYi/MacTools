@@ -295,6 +295,13 @@ final class WorkflowStore {
               validate(envelope.workflow) == nil else {
             return .failure(.invalidImport)
         }
+        if workflow(id: envelope.workflow.id) == nil {
+            return upsert(envelope.workflow)
+        }
+
+        // Importing the same workflow into a library that already contains it
+        // creates a copy. On a different Mac, preserve the exported identity so
+        // existing Run Links and scripts continue to address the workflow.
         let imported = WorkflowDefinition(
             name: envelope.workflow.name,
             systemImage: envelope.workflow.systemImage,

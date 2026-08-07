@@ -67,6 +67,7 @@ final class ActionInvocationPresetStore {
             guard envelope.formatVersion == ActionInvocationPreset.currentFormatVersion,
                   envelope.presets.count <= Self.maximumPresetCount,
                   Set(envelope.presets.map(\.id)).count == envelope.presets.count,
+                  Set(envelope.presets.map(\.reference)).count == envelope.presets.count,
                   envelope.presets.allSatisfy({
                       $0.formatVersion == ActionInvocationPreset.currentFormatVersion
                   }) else {
@@ -169,6 +170,7 @@ final class ActionInvocationPresetStore {
     func replaceAll(_ presets: [ActionInvocationPreset]) -> Bool {
         guard presets.count <= Self.maximumPresetCount,
               Set(presets.map(\.id)).count == presets.count,
+              Set(presets.map(\.reference)).count == presets.count,
               presets.allSatisfy({
                   $0.formatVersion == ActionInvocationPreset.currentFormatVersion
               }) else {

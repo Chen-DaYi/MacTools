@@ -47,6 +47,8 @@ final class PreferencesBackupLocalizationTests: XCTestCase {
             "preferencesBackup.error.invalidApplicationPreferences",
             "preferencesBackup.error.unsupportedFormat",
             "preferencesBackup.export",
+            "preferencesBackup.exportSelection.confirm",
+            "preferencesBackup.exportSelection.title",
             "preferencesBackup.export.prompt",
             "preferencesBackup.exported",
             "preferencesBackup.import",
@@ -66,6 +68,16 @@ final class PreferencesBackupLocalizationTests: XCTestCase {
             "preferencesBackup.preview.shortcutsCount",
             "preferencesBackup.preview.skipped",
             "preferencesBackup.preview.title",
+            "preferencesBackup.selection.automation",
+            "preferencesBackup.selection.automation.description",
+            "preferencesBackup.selection.application.description",
+            "preferencesBackup.selection.description",
+            "preferencesBackup.selection.pluginLayout",
+            "preferencesBackup.selection.pluginLayout.description",
+            "preferencesBackup.selection.plugins.description",
+            "preferencesBackup.selection.runLinks",
+            "preferencesBackup.selection.runLinks.description",
+            "preferencesBackup.selection.shortcuts.description",
             "preferencesBackup.title"
         ]
     }
