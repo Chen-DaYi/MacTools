@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import IOKit
 
 private typealias SMCBytes = (
@@ -58,6 +59,11 @@ private let kernelIndexSMC: UInt32 = 2
 private let smcCmdReadBytes: UInt8 = 5
 private let smcCmdWriteBytes: UInt8 = 6
 private let smcCmdReadKeyInfo: UInt8 = 9
+private let writeMaxAttempts = 2
+private let writeVerifyReads = 3
+private let writeVerifyInterval: TimeInterval = 0.1
+private let supportedFanIndices = 0..<16
+private let supportedRPMRange = 500...8_000
 
 private let typeFLT = fourCC("flt ")
 private let typeFPE2 = fourCC("fpe2")
@@ -73,7 +79,9 @@ private enum SMCHelperError: LocalizedError {
     case invalidKeyInfo(String)
     case readFailed(String, kern_return_t)
     case writeFailed(String, kern_return_t)
+    case writeVerificationFailed(String, expected: [UInt8], actual: [UInt8])
     case unsupportedWriteType(String, UInt32, UInt32)
+    case insufficientPrivileges(uid_t)
     case invalidArguments
 
     var errorDescription: String? {
@@ -90,8 +98,12 @@ private enum SMCHelperError: LocalizedError {
             return "Failed to read \(key): \(String(format: "%08x", code))"
         case .writeFailed(let key, let code):
             return "Failed to write \(key): \(String(format: "%08x", code))"
+        case .writeVerificationFailed(let key, let expected, let actual):
+            return "Failed to verify \(key): expected \(hexString(expected)), read \(hexString(actual))"
         case .unsupportedWriteType(let key, let type, let size):
             return "Unsupported SMC type for \(key): \(fourCCString(type))/\(size)"
+        case .insufficientPrivileges(let effectiveUserID):
+            return "Fan control requires root privileges (effective uid: \(effectiveUserID))"
         case .invalidArguments:
             return "Invalid arguments"
         }
@@ -210,8 +222,45 @@ private final class SMCConnection {
     }
 }
 
+/// Write an SMC value and verify that the firmware exposes the requested bytes.
+/// Some Macs briefly return the old value after accepting a write, so retry the
+/// read before treating a successful IOKit call as a successful fan change.
+private func writeAndVerify(key: String, value: SMCValue, connection: SMCConnection) throws {
+    let byteCount = Int(value.dataSize)
+    let expected = Array(value.bytes.prefix(byteCount))
+    var actual: [UInt8] = []
+    var lastError: Error?
+
+    for writeAttempt in 1...writeMaxAttempts {
+        do {
+            try connection.writeValue(key: key, value: value)
+
+            for verifyAttempt in 1...writeVerifyReads {
+                let readBack = try connection.readValue(key: key)
+                actual = Array(readBack.bytes.prefix(byteCount))
+                if actual == expected {
+                    return
+                }
+                if verifyAttempt < writeVerifyReads {
+                    Thread.sleep(forTimeInterval: writeVerifyInterval)
+                }
+            }
+
+            lastError = SMCHelperError.writeVerificationFailed(key, expected: expected, actual: actual)
+        } catch {
+            lastError = error
+        }
+
+        if writeAttempt < writeMaxAttempts {
+            Thread.sleep(forTimeInterval: writeVerifyInterval)
+        }
+    }
+
+    throw lastError ?? SMCHelperError.writeVerificationFailed(key, expected: expected, actual: actual)
+}
+
 private func setFanSpeed(_ rpm: Int, fanIndex: Int, connection: SMCConnection) throws {
-    try setFanMode(1, fanIndex: fanIndex, connection: connection)
+    try setFanMode(1, fanIndex: fanIndex, connection: connection, allowMissing: true)
 
     let key = "F\(fanIndex)Tg"
     var value = try connection.readValue(key: key)
@@ -228,25 +277,44 @@ private func setFanSpeed(_ rpm: Int, fanIndex: Int, connection: SMCConnection) t
         throw SMCHelperError.unsupportedWriteType(key, value.dataType, value.dataSize)
     }
 
-    try connection.writeValue(key: key, value: value)
+    try writeAndVerify(key: key, value: value, connection: connection)
 }
 
-private func setFanMode(_ mode: UInt8, fanIndex: Int, connection: SMCConnection) throws {
+private func setFanMode(
+    _ mode: UInt8,
+    fanIndex: Int,
+    connection: SMCConnection,
+    allowMissing: Bool = false
+) throws {
     let key = "F\(fanIndex)Md"
+    var value: SMCValue
 
     do {
-        var value = try connection.readValue(key: key)
-        guard value.dataSize == 1 else {
+        value = try connection.readValue(key: key)
+    } catch {
+        // Some Macs do not expose F{n}Md. Setting F{n}Tg can still control the
+        // target, but restoring automatic mode has no safe fallback.
+        switch error {
+        case SMCHelperError.keyInfoFailed,
+             SMCHelperError.invalidKeyInfo,
+             SMCHelperError.readFailed:
+            guard allowMissing else {
+                throw error
+            }
+            return
+        default:
+            throw error
+        }
+    }
+
+    guard value.dataSize == 1 else {
+        if allowMissing {
             return
         }
-        value.bytes[0] = mode
-        try connection.writeValue(key: key, value: value)
-    } catch SMCHelperError.keyInfoFailed,
-            SMCHelperError.invalidKeyInfo,
-            SMCHelperError.readFailed {
-        // Some Macs do not expose F{n}Md. F{n}Tg still controls the target.
-        return
+        throw SMCHelperError.unsupportedWriteType(key, value.dataType, value.dataSize)
     }
+    value.bytes[0] = mode
+    try writeAndVerify(key: key, value: value, connection: connection)
 }
 
 private func fanCount(connection: SMCConnection) throws -> Int {
@@ -325,6 +393,10 @@ private func fourCC(_ value: String) -> UInt32 {
     return result
 }
 
+private func hexString(_ bytes: [UInt8]) -> String {
+    bytes.map { String(format: "%02x", $0) }.joined()
+}
+
 private func fourCCString(_ value: UInt32) -> String {
     let bytes = [
         UInt8((value >> 24) & 0xff),
@@ -372,6 +444,7 @@ private func usage() {
     print("MacTools Fan SMC Helper")
     print("Usage:")
     print("  \(program) info")
+    print("  \(program) identity")
     print("  \(program) read <KEY>")
     print("  \(program) set <FAN#> <RPM>")
     print("  \(program) auto <FAN#>")
@@ -384,30 +457,43 @@ private func run() throws {
         throw SMCHelperError.invalidArguments
     }
 
-    let connection = try SMCConnection()
-
     switch arguments[1] {
     case "info":
+        let connection = try SMCConnection()
         try printFanInfo(connection: connection)
+    case "identity":
+        print("uid=\(getuid()) euid=\(geteuid()) gid=\(getgid()) egid=\(getegid())")
     case "read":
         guard arguments.count >= 3 else {
             throw SMCHelperError.invalidArguments
         }
+        let connection = try SMCConnection()
         try printKey(arguments[2], connection: connection)
     case "set":
+        guard geteuid() == 0 else {
+            throw SMCHelperError.insufficientPrivileges(geteuid())
+        }
         guard arguments.count >= 4,
               let fanIndex = Int(arguments[2]),
-              let rpm = Int(arguments[3])
+              supportedFanIndices.contains(fanIndex),
+              let rpm = Int(arguments[3]),
+              supportedRPMRange.contains(rpm)
         else {
             throw SMCHelperError.invalidArguments
         }
+        let connection = try SMCConnection()
         try setFanSpeed(rpm, fanIndex: fanIndex, connection: connection)
     case "auto":
+        guard geteuid() == 0 else {
+            throw SMCHelperError.insufficientPrivileges(geteuid())
+        }
         guard arguments.count >= 3,
-              let fanIndex = Int(arguments[2])
+              let fanIndex = Int(arguments[2]),
+              supportedFanIndices.contains(fanIndex)
         else {
             throw SMCHelperError.invalidArguments
         }
+        let connection = try SMCConnection()
         try setFanMode(0, fanIndex: fanIndex, connection: connection)
     default:
         usage()
@@ -417,6 +503,16 @@ private func run() throws {
 
 do {
     try run()
+} catch let error as SMCHelperError {
+    FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+    switch error {
+    case .insufficientPrivileges:
+        exit(77) // EX_NOPERM
+    case .writeVerificationFailed:
+        exit(74) // EX_IOERR
+    default:
+        exit(1)
+    }
 } catch {
     FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
     exit(1)
