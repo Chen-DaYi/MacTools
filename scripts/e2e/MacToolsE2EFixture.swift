@@ -263,6 +263,9 @@ private struct AuditReport: Codable {
     let automationWorkflowName: String?
     let automationWorkflowStepCount: Int
     let automationWorkflowIsIdempotent: Bool
+    let runLinkWorkflowName: String?
+    let runLinkWorkflowStepCount: Int
+    let runLinkWorkflowIsIdempotent: Bool
     let systemMuteValue: Bool?
     let systemMuteStatePreserved: Bool
     let ruleCount: Int
@@ -292,12 +295,18 @@ private struct AuditReport: Codable {
     let language: String?
     let appearance: String?
     let workflowHistoryCount: Int
+    let workflowHistoryIDs: [String]
+    let workflowHistoryNames: [String]
+    let workflowHistoryStatuses: [String]
+    let latestWorkflowID: String?
+    let latestWorkflowName: String?
     let latestWorkflowStatus: String?
+    let latestWorkflowStepStatuses: [String]
     let latestWorkflowSource: String?
 }
 
 private enum Fixture {
-    static let version = 6
+    static let version = 7
     static let markerKey = "mactools.e2e.fixture-version"
     static let shortcutKey = "action-shortcuts.assignments"
     static let workflowKey = "automation.workflows.v1"
@@ -316,6 +325,7 @@ private enum Fixture {
     static let stopWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000261")!
     static let delayWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000262")!
     static let visualWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000263")!
+    static let runLinkWorkflowID = UUID(uuidString: "00000000-0000-4000-8000-000000000266")!
     static let savedScriptID = UUID(uuidString: "00000000-0000-4000-8000-000000000290")!
     static let ruleID = UUID(uuidString: "00000000-0000-4000-8000-000000000249")!
     static let calculatorSkipRuleID = UUID(uuidString: "00000000-0000-4000-8000-000000000280")!
@@ -435,6 +445,27 @@ private enum Fixture {
                     id: UUID(uuidString: "00000000-0000-4000-8000-000000000257")!,
                     reference: preserveSystemMute(systemMuted),
                     label: "Preserve System Mute",
+                    delaySeconds: 0,
+                    errorPolicy: "stop"
+                ),
+            ],
+            createdAt: timestamp,
+            updatedAt: timestamp
+        )
+    }
+
+    static func runLinkWorkflow(systemMuted: Bool) -> WorkflowDefinition {
+        WorkflowDefinition(
+            formatVersion: 1,
+            id: runLinkWorkflowID,
+            name: "E2E Run Link Workflow",
+            systemImage: "link",
+            isEnabled: true,
+            steps: [
+                WorkflowStep(
+                    id: UUID(uuidString: "00000000-0000-4000-8000-000000000267")!,
+                    reference: preserveSystemMute(systemMuted),
+                    label: "Preserve System Mute From Run Link",
                     delaySeconds: 0,
                     errorPolicy: "stop"
                 ),
@@ -897,6 +928,7 @@ private func seed(bundleIdentifier: String, allowRealDomain: Bool) throws {
                 Fixture.stopWorkflow,
                 Fixture.delayWorkflow,
                 Fixture.visualWorkflow,
+                Fixture.runLinkWorkflow(systemMuted: systemMuted),
             ]
         )),
         forKey: Fixture.workflowKey
@@ -959,6 +991,7 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         return runs
     }()
     let latestHistory = historyRuns.first
+    let latestWorkflowSteps = latestHistory?["stepResults"] as? [[String: Any]] ?? []
 
     let hasOpenSettingsShortcut = shortcuts.contains {
         $0.reference == Fixture.openSettings && $0.binding == Fixture.openSettingsShortcut.binding
@@ -999,8 +1032,23 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
             }
             return true
         }()
+    let runLinkWorkflow = workflows.first { $0.id == Fixture.runLinkWorkflowID }
+    let runLinkMuteSetting: Bool? = {
+        guard let value = runLinkWorkflow?.steps.first?.reference.parameters.first?.value,
+              case let .boolean(isMuted) = value else {
+            return nil
+        }
+        return isMuted
+    }()
+    let runLinkWorkflowIsIdempotent = runLinkWorkflow?.steps.count == 1
+        && runLinkWorkflow?.steps.first?.reference.key
+            == ActionKey(providerID: "system-mute", actionID: "set-enabled")
+        && runLinkWorkflow?.steps.first?.reference.parameters.count == 1
+        && runLinkWorkflow?.steps.first?.reference.parameters.first?.name == "enabled"
+        && runLinkMuteSetting == automationMuteSetting
     let systemMuteStatePreserved = automationMuteSetting != nil
         && automationMuteSetting == SystemAudioMuteState.currentSettableValue()
+        && runLinkMuteSetting == automationMuteSetting
     let primaryHelperRuleEnabled = rules.contains {
         guard $0.id == Fixture.ruleID,
               $0.workflowID == Fixture.automationWorkflowID,
@@ -1067,6 +1115,7 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         Fixture.stopWorkflowID,
         Fixture.delayWorkflowID,
         Fixture.visualWorkflowID,
+        Fixture.runLinkWorkflowID,
     ]
     let hasDisplaySleepWorkflowStep = workflows.contains { workflow in
         workflow.steps.contains {
@@ -1084,6 +1133,7 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
             .steps.first?.reference == Fixture.missingAction
         && workflows.first(where: { $0.id == Fixture.delayWorkflowID })?
             .steps.first?.delaySeconds == 10
+        && runLinkWorkflowIsIdempotent
         && visualWorkflow?.steps.count == 2
         && visualWorkflowUsesSavedScript
         && visualWorkflowShowsActionGrid
@@ -1120,7 +1170,7 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         && hasActionGridShortcut
         && hasDashboardShortcut
         && hasWorkflowShortcut
-        && workflows.count == 6
+        && workflows.count == 7
         && workflowsAreComplete
         && !hasDisplaySleepWorkflowStep
         && workflow?.steps.count == 3
@@ -1174,6 +1224,9 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         automationWorkflowName: automationWorkflow?.name,
         automationWorkflowStepCount: automationWorkflow?.steps.count ?? 0,
         automationWorkflowIsIdempotent: automationWorkflowIsIdempotent,
+        runLinkWorkflowName: runLinkWorkflow?.name,
+        runLinkWorkflowStepCount: runLinkWorkflow?.steps.count ?? 0,
+        runLinkWorkflowIsIdempotent: runLinkWorkflowIsIdempotent,
         systemMuteValue: automationMuteSetting,
         systemMuteStatePreserved: systemMuteStatePreserved,
         ruleCount: rules.count,
@@ -1203,7 +1256,13 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         language: language,
         appearance: appearance,
         workflowHistoryCount: historyRuns.count,
+        workflowHistoryIDs: historyRuns.compactMap { $0["workflowID"] as? String },
+        workflowHistoryNames: historyRuns.compactMap { $0["workflowName"] as? String },
+        workflowHistoryStatuses: historyRuns.compactMap { $0["status"] as? String },
+        latestWorkflowID: latestHistory?["workflowID"] as? String,
+        latestWorkflowName: latestHistory?["workflowName"] as? String,
         latestWorkflowStatus: latestHistory?["status"] as? String,
+        latestWorkflowStepStatuses: latestWorkflowSteps.compactMap { $0["status"] as? String },
         latestWorkflowSource: latestHistory?["source"].map { String(describing: $0) }
     )
 }

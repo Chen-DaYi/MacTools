@@ -97,6 +97,27 @@ private enum ShortcutName: String {
     }
 }
 
+private enum InputKey: String {
+    case commandK = "command-k"
+    case returnKey = "return"
+    case escape
+
+    var keyCode: CGKeyCode {
+        switch self {
+        case .commandK: 40
+        case .returnKey: 36
+        case .escape: 53
+        }
+    }
+
+    var flags: CGEventFlags {
+        switch self {
+        case .commandK: .maskCommand
+        case .returnKey, .escape: []
+        }
+    }
+}
+
 private func writeJSON(_ payload: [String: Any]) throws {
     let data = try JSONSerialization.data(
         withJSONObject: payload,
@@ -162,6 +183,31 @@ private func requireEventPostingAccess() {
         ))
         Foundation.exit(2)
     }
+}
+
+private func pressInputKey(_ inputKey: InputKey) throws {
+    requireEventPostingAccess()
+    guard let keyDown = CGEvent(
+        keyboardEventSource: nil,
+        virtualKey: inputKey.keyCode,
+        keyDown: true
+    ), let keyUp = CGEvent(
+        keyboardEventSource: nil,
+        virtualKey: inputKey.keyCode,
+        keyDown: false
+    ) else {
+        throw NSError(
+            domain: "MacToolsE2EKeySender",
+            code: 8,
+            userInfo: [NSLocalizedDescriptionKey: "Could not create input key events."]
+        )
+    }
+    keyDown.flags = inputKey.flags
+    keyUp.flags = inputKey.flags
+    keyDown.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.04)
+    keyUp.post(tap: .cghidEventTap)
+    try writeJSON(["key": inputKey.rawValue, "pressed": true])
 }
 
 private func selectAll() throws {
@@ -313,11 +359,21 @@ do {
             )
         }
         try typeText(arguments[1])
+    case "press-key":
+        guard arguments.count == 2,
+              let inputKey = InputKey(rawValue: arguments[1]) else {
+            throw NSError(
+                domain: "MacToolsE2EKeySender",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Expected command-k, return, or escape."]
+            )
+        }
+        try pressInputKey(inputKey)
     default:
         throw NSError(
             domain: "MacToolsE2EKeySender",
             code: 2,
-            userInfo: [NSLocalizedDescriptionKey: "Usage: MacToolsE2EKeySender.swift <check|describe|send|click-relative|select-all|type-text> [...]"]
+            userInfo: [NSLocalizedDescriptionKey: "Usage: MacToolsE2EKeySender.swift <check|describe|send|click-relative|select-all|type-text|press-key> [...]"]
         )
     }
 } catch {

@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h:h}"
 FIXTURE_TOOL="$SCRIPT_DIR/MacToolsE2EFixture.swift"
+APP_CONTROLLER_TOOL="$SCRIPT_DIR/MacToolsE2EAppController.swift"
 KEY_SENDER_TOOL="$SCRIPT_DIR/MacToolsE2EKeySender.swift"
 CAPTURE_RECT_TOOL="$SCRIPT_DIR/MacToolsE2ECaptureRect.swift"
 PRIVACY_HELPER_SOURCE="$SCRIPT_DIR/MacToolsE2EPrivacyHelper.swift"
@@ -44,6 +45,7 @@ usage() {
     print -r -- "  pointer-click <session-dir> <reference-width> <reference-height> <x> <y> [--dry-run]"
     print -r -- "  input-select-all <session-dir> [--dry-run]"
     print -r -- "  input-text <session-dir> <text> [--dry-run]"
+    print -r -- "  input-key <session-dir> <command-k|return|escape> [--dry-run]"
     print -r -- "  privacy-helper <session-dir> <primary|secondary> [--dry-run]"
     print -r -- "  record <session-dir> [seconds] [--dry-run]"
     print -r -- "  record-pack <session-dir> <pack-id> [seconds] [--dry-run]"
@@ -86,6 +88,10 @@ extension_bundle_identifier() {
 
 fixture_tool() {
     env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swift "$FIXTURE_TOOL" "$@"
+}
+
+app_controller_tool() {
+    env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swift "$APP_CONTROLLER_TOOL" "$@"
 }
 
 key_sender_tool() {
@@ -169,6 +175,37 @@ privacy_helper_app_path() {
     print -r -- "$session_dir/privacy-helpers/MacTools E2E ${variant:u} Helper.app"
 }
 
+privacy_helper_executable_name() {
+    case "$1" in
+        primary) print -r -- "MacToolsE2EPrimaryHelper" ;;
+        secondary) print -r -- "MacToolsE2ESecondaryHelper" ;;
+        backdrop) print -r -- "MacToolsE2EBackdropHelper" ;;
+        *)
+            print -u2 -r -- "error: unknown privacy helper variant $1"
+            return 1
+            ;;
+    esac
+}
+
+privacy_helper_executable_path() {
+    local session_dir="$1"
+    local variant="$2"
+    print -r -- "$(privacy_helper_app_path "$session_dir" "$variant")/Contents/MacOS/$(privacy_helper_executable_name "$variant")"
+}
+
+launch_privacy_helper_process() {
+    local session_dir="$1"
+    local variant="$2"
+    shift 2
+    local executable
+    executable="$(privacy_helper_executable_path "$session_dir" "$variant")"
+    [[ -x "$executable" ]] || {
+        print -u2 -r -- "error: privacy helper executable is unavailable at $executable"
+        return 1
+    }
+    "$executable" "$@" >/dev/null 2>&1 &!
+}
+
 build_privacy_helpers() {
     local session_dir="$1"
     [[ -f "$PRIVACY_HELPER_SOURCE" ]] || {
@@ -181,7 +218,7 @@ build_privacy_helpers() {
     env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swiftc \
         -parse-as-library -framework AppKit "$PRIVACY_HELPER_SOURCE" -o "$executable"
 
-    local variant app bundle_id title accent
+    local variant app bundle_id title accent executable_name
     for variant in primary secondary backdrop; do
         app="$(privacy_helper_app_path "$session_dir" "$variant")"
         if [[ "$variant" == primary ]]; then
@@ -197,17 +234,19 @@ build_privacy_helpers() {
             title="MacTools E2E Privacy Backdrop"
             accent="blue"
         fi
+        executable_name="$(privacy_helper_executable_name "$variant")"
         mkdir -p "$app/Contents/MacOS"
-        /usr/bin/ditto "$executable" "$app/Contents/MacOS/MacToolsE2EPrivacyHelper"
-        "$PYTHON3" - "$app/Contents/Info.plist" "$bundle_id" "$title" "$accent" <<'PY'
+        /usr/bin/ditto "$executable" "$app/Contents/MacOS/$executable_name"
+        "$PYTHON3" - \
+            "$app/Contents/Info.plist" "$bundle_id" "$title" "$accent" "$executable_name" <<'PY'
 import plistlib
 import sys
 
-path, bundle_id, title, accent = sys.argv[1:]
+path, bundle_id, title, accent, executable_name = sys.argv[1:]
 payload = {
     "CFBundleDevelopmentRegion": "en",
     "CFBundleDisplayName": title,
-    "CFBundleExecutable": "MacToolsE2EPrivacyHelper",
+    "CFBundleExecutable": executable_name,
     "CFBundleIdentifier": bundle_id,
     "CFBundleInfoDictionaryVersion": "6.0",
     "CFBundleName": title,
@@ -230,16 +269,16 @@ PY
 ensure_privacy_helpers() {
     local session_dir="$1"
     local primary secondary backdrop
-    primary="$(privacy_helper_app_path "$session_dir" primary)"
-    secondary="$(privacy_helper_app_path "$session_dir" secondary)"
-    backdrop="$(privacy_helper_app_path "$session_dir" backdrop)"
-    if [[ ! -d "$primary" || ! -d "$secondary" || ! -d "$backdrop" ]]; then
+    primary="$(privacy_helper_executable_path "$session_dir" primary)"
+    secondary="$(privacy_helper_executable_path "$session_dir" secondary)"
+    backdrop="$(privacy_helper_executable_path "$session_dir" backdrop)"
+    if [[ ! -x "$primary" || ! -x "$secondary" || ! -x "$backdrop" ]]; then
         build_privacy_helpers "$session_dir"
         return
     fi
-    "$LSREGISTER" -f "$primary"
-    "$LSREGISTER" -f "$secondary"
-    "$LSREGISTER" -f "$backdrop"
+    "$LSREGISTER" -f "$(privacy_helper_app_path "$session_dir" primary)"
+    "$LSREGISTER" -f "$(privacy_helper_app_path "$session_dir" secondary)"
+    "$LSREGISTER" -f "$(privacy_helper_app_path "$session_dir" backdrop)"
 }
 
 recording_visibility_state_path() {
@@ -251,7 +290,7 @@ restore_recording_visibility() {
     local session_dir="$1"
     local state_path executable
     state_path="$(recording_visibility_state_path "$session_dir")"
-    executable="$(privacy_helper_app_path "$session_dir" backdrop)/Contents/MacOS/MacToolsE2EPrivacyHelper"
+    executable="$(privacy_helper_executable_path "$session_dir" backdrop)"
     if [[ -s "$state_path" && -x "$executable" ]]; then
         "$executable" --restore-visibility "$state_path"
     fi
@@ -260,11 +299,10 @@ restore_recording_visibility() {
 
 stop_privacy_helpers() {
     local session_dir="$1"
-    local variant app executable output
+    local variant executable output
     local cleanup_failed=false
     for variant in primary secondary backdrop; do
-        app="$(privacy_helper_app_path "$session_dir" "$variant")"
-        executable="$app/Contents/MacOS/MacToolsE2EPrivacyHelper"
+        executable="$(privacy_helper_executable_path "$session_dir" "$variant")"
         output="$(/bin/ps -axo pid=,command= | awk -v executable="$executable" '
             {
                 pid = $1
@@ -314,7 +352,13 @@ single_executable_pid() {
     local executable="$1"
     local label="$2"
     local output
-    output="$(pgrep -f -x "$executable" || true)"
+    output="$(/bin/ps -axo pid=,command= | awk -v executable="$executable" '
+        {
+            pid = $1
+            sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", $0)
+            if ($0 == executable || index($0, executable " ") == 1) print pid
+        }
+    ')"
     if [[ -z "$output" ]] || [[ "$(print -r -- "$output" | wc -l | tr -d ' ')" != 1 ]]; then
         print -u2 -r -- "error: expected exactly one $label process before recording"
         return 1
@@ -337,14 +381,25 @@ stop_app() {
 
     local -a pids
     pids=("${(@f)output}")
-    /bin/kill -TERM -- "${pids[@]}"
+    local pid
+    for pid in "${pids[@]}"; do
+        app_controller_tool terminate "$pid" || true
+    done
 
     local attempt
     for attempt in {1..50}; do
         [[ -z "$(matching_pids)" ]] && return 0
         sleep 0.1
     done
-    print -u2 -r -- "error: MacTools Dev did not terminate gracefully"
+
+    print -u2 -r -- "warning: MacTools Dev ignored the graceful quit request; falling back to SIGTERM"
+    output="$(matching_pids)"
+    [[ -z "$output" ]] || /bin/kill -TERM -- "${(@f)output}"
+    for attempt in {1..50}; do
+        [[ -z "$(matching_pids)" ]] && return 0
+        sleep 0.1
+    done
+    print -u2 -r -- "error: MacTools Dev did not terminate after SIGTERM fallback"
     return 1
 }
 
@@ -355,14 +410,25 @@ stop_built_app() {
 
     local -a pids
     pids=("${(@f)output}")
-    /bin/kill -TERM -- "${pids[@]}"
+    local pid
+    for pid in "${pids[@]}"; do
+        app_controller_tool terminate "$pid" || true
+    done
 
     local attempt
     for attempt in {1..50}; do
         [[ -z "$(matching_built_pids)" ]] && return 0
         sleep 0.1
     done
-    print -u2 -r -- "error: Derived Data MacTools test host did not terminate gracefully"
+
+    print -u2 -r -- "warning: Derived Data MacTools test host ignored the graceful quit request; falling back to SIGTERM"
+    output="$(matching_built_pids)"
+    [[ -z "$output" ]] || /bin/kill -TERM -- "${(@f)output}"
+    for attempt in {1..50}; do
+        [[ -z "$(matching_built_pids)" ]] && return 0
+        sleep 0.1
+    done
+    print -u2 -r -- "error: Derived Data MacTools test host did not terminate after SIGTERM fallback"
     return 1
 }
 
@@ -381,7 +447,7 @@ restore_stable_app_after_code_verification() {
     stop_built_app || true
     restore_stable_launch_services_registration || true
     if [[ -z "$(matching_pids)" ]]; then
-        /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+        /usr/bin/open -n -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
     fi
 }
 
@@ -847,7 +913,7 @@ rebuild_session() {
         return 1
     }
     preflight "$session_dir/preflight.json"
-    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+    /usr/bin/open -n -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
     print -r -- "Rebuilt stable app with an unchanged designated requirement."
     print -r -- "Recoverable previous app: $backup_app"
 }
@@ -890,7 +956,7 @@ prepare() {
         return 1
     fi
 
-    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+    /usr/bin/open -n -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
     local attempt
     for attempt in {1..100}; do
         [[ -n "$(matching_pids)" ]] && break
@@ -934,7 +1000,7 @@ reseed_session() {
     stamp="$(date -u +%Y%m%d-%H%M%S)"
     evidence_path="$session_dir/fixture.reseed-$stamp.json"
     fixture_tool seed --bundle-id "$bundle_id" --allow-real-domain >"$evidence_path"
-    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+    /usr/bin/open -n -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
 
     local attempt
     for attempt in {1..100}; do
@@ -1199,6 +1265,26 @@ send_input_text() {
     input_driver_tool "$session_dir" type-text "$input_text"
 }
 
+send_input_key() {
+    local session_dir="$1"
+    local input_key="$2"
+    local mode="${3:-}"
+    [[ -f "$session_dir/session.plist" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    [[ "$input_key" == command-k || "$input_key" == return || "$input_key" == escape ]] || {
+        print -u2 -r -- "error: input key must be command-k, return, or escape"
+        return 1
+    }
+    if [[ "$mode" == --dry-run ]]; then
+        print -r -- "Press $input_key in MacTools"
+        return 0
+    fi
+    ensure_input_driver "$session_dir"
+    input_driver_tool "$session_dir" press-key "$input_key"
+}
+
 launch_privacy_helper_session() {
     local session_dir="$1"
     local variant="$2"
@@ -1212,14 +1298,12 @@ launch_privacy_helper_session() {
         print -u2 -r -- "error: privacy helper variant must be primary or secondary"
         return 1
     }
-    local app
-    app="$(privacy_helper_app_path "$session_dir" "$variant")"
     if [[ "$mode" == --dry-run ]]; then
-        print -r -- "/usr/bin/open -a '$app'"
+        print -r -- "$(privacy_helper_executable_path "$session_dir" "$variant")"
         return
     fi
     ensure_privacy_helpers "$session_dir"
-    /usr/bin/open -a "$app"
+    launch_privacy_helper_process "$session_dir" "$variant"
 }
 
 record_session() {
@@ -1264,7 +1348,7 @@ record_session() {
     local visibility_state
     visibility_state="$(recording_visibility_state_path "$session_dir")"
     rm -f -- "$visibility_state"
-    /usr/bin/open -a "$APP_PATH"
+    /usr/bin/open -n -a "$APP_PATH"
     sleep 1
     key_sender_tool check >/dev/null || {
         print -u2 -r -- "error: synthetic shortcut access is required to establish the private Settings recording surface"
@@ -1274,12 +1358,12 @@ record_session() {
     sleep 1
     /usr/bin/open -a "$APP_PATH" "mactools-dev://app/$start_route"
     sleep 0.75
-    /usr/bin/open -a "$(privacy_helper_app_path "$session_dir" backdrop)" \
-        --args --recording-privacy --visibility-state "$visibility_state"
+    launch_privacy_helper_process "$session_dir" backdrop \
+        --recording-privacy --visibility-state "$visibility_state"
     trap 'stop_privacy_helpers "$session_dir"' EXIT INT TERM
     sleep 0.75
-    /usr/bin/open -gj -a "$(privacy_helper_app_path "$session_dir" primary)"
-    /usr/bin/open -gj -a "$(privacy_helper_app_path "$session_dir" secondary)"
+    launch_privacy_helper_process "$session_dir" primary
+    launch_privacy_helper_process "$session_dir" secondary
     sleep 0.5
     /usr/bin/open -a "$APP_PATH" "mactools-dev://app/$start_route"
     sleep 0.75
@@ -1311,9 +1395,9 @@ record_session() {
     primary_helper_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" primary)/Contents/Info.plist" CFBundleIdentifier)"
     secondary_helper_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" secondary)/Contents/Info.plist" CFBundleIdentifier)"
     backdrop_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" backdrop)/Contents/Info.plist" CFBundleIdentifier)"
-    primary_helper_pid="$(single_executable_pid "$(privacy_helper_app_path "$session_dir" primary)/Contents/MacOS/MacToolsE2EPrivacyHelper" "primary privacy helper")" || return 1
-    secondary_helper_pid="$(single_executable_pid "$(privacy_helper_app_path "$session_dir" secondary)/Contents/MacOS/MacToolsE2EPrivacyHelper" "secondary privacy helper")" || return 1
-    backdrop_pid="$(single_executable_pid "$(privacy_helper_app_path "$session_dir" backdrop)/Contents/MacOS/MacToolsE2EPrivacyHelper" "privacy backdrop")" || return 1
+    primary_helper_pid="$(single_executable_pid "$(privacy_helper_executable_path "$session_dir" primary)" "primary privacy helper")" || return 1
+    secondary_helper_pid="$(single_executable_pid "$(privacy_helper_executable_path "$session_dir" secondary)" "secondary privacy helper")" || return 1
+    backdrop_pid="$(single_executable_pid "$(privacy_helper_executable_path "$session_dir" backdrop)" "privacy backdrop")" || return 1
     local ready_marker start_marker stop_marker
     ready_marker="$(recording_marker_path "$session_dir" "$label" ready)"
     start_marker="$(recording_marker_path "$session_dir" "$label" start)"
@@ -1410,6 +1494,7 @@ verify_code_session() {
         -only-testing:MacToolsTests/ActionExecutorTests \
         -only-testing:MacToolsTests/ActionRunLinkServiceTests \
         -only-testing:MacToolsTests/AutomationControllerTests \
+        -only-testing:MacToolsTests/WorkflowRunnerTests \
         -only-testing:MacToolsTests/PluginHostActionRegistryTests \
         -only-testing:MacToolsTests/ActionGridPluginTests \
         -only-testing:MacToolsTests/ActivityBarPluginTests \
@@ -1477,7 +1562,7 @@ verify_code_session() {
     fi
     stop_built_app
     restore_stable_launch_services_registration
-    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+    /usr/bin/open -n -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
     trap - EXIT
     return "$result"
 }
@@ -1645,13 +1730,20 @@ restore_session() {
             "$session_dir/extension-preferences.before.plist"
     fi
     touch "$session_dir/restored.ok"
-    /usr/bin/open -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
+    /usr/bin/open -n -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
     print -r -- "Restored preferences from $session_dir"
 }
 
 self_test() {
     local domain="com.jennymedia.mactools.e2e-test.$$.${RANDOM}"
     trap 'fixture_tool clear-test-domain --bundle-id "$domain" >/dev/null 2>&1 || true' EXIT
+    env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swiftc \
+        -typecheck -framework AppKit "$APP_CONTROLLER_TOOL"
+    env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swiftc \
+        -typecheck -framework ApplicationServices -framework CoreGraphics \
+        "$KEY_SENDER_TOOL"
+    env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swiftc \
+        -typecheck -parse-as-library -framework AppKit "$PRIVACY_HELPER_SOURCE"
     fixture_tool seed --bundle-id "$domain" >/dev/null
     fixture_tool audit --bundle-id "$domain"
     fixture_tool clear-test-domain --bundle-id "$domain"
@@ -1705,6 +1797,10 @@ case "$command" in
     input-text)
         [[ $# -ge 3 ]] || { usage; exit 1; }
         send_input_text "$2" "$3" "${4:-}"
+        ;;
+    input-key)
+        [[ $# -ge 3 ]] || { usage; exit 1; }
+        send_input_key "$2" "$3" "${4:-}"
         ;;
     privacy-helper)
         [[ $# -ge 3 ]] || { usage; exit 1; }

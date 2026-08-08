@@ -11,7 +11,7 @@ The harness is not part of the normal build, test, CI, release, or production la
 The fixture preserves unrelated action shortcut assignments and creates:
 
 - four shortcuts: Control-Command-3 for Open Settings, Control-Command-4 for Action Grid, Control-Command-5 for Dashboard, and Control-Command-6 for the safe workflow;
-- six workflows covering success, background execution, continue-on-error, stop-on-error, cancellation during delay, and a deliberately visible privacy-safe run;
+- seven workflows covering local success, externally safe Run Link execution, background execution, continue-on-error, stop-on-error, cancellation during delay, and a deliberately visible privacy-safe run;
 - three application-activation rules that target two session-local helper apps instead of opening apps that can restore private user content;
 - one Saved Script with a stable ID, local confirmation disabled, external Run Link confirmation required, portable backup enabled, captured output, and a long enough runtime to expose progress indicators;
 - nine top-level Action Grid entries plus nested System, Automation, Resilience, and Utilities folders spanning host commands, plugin actions, workflows, and one deliberately unavailable action;
@@ -97,14 +97,14 @@ scripts/e2e/mactools-e2e.sh checkpoint "$E2E_SESSION" marketplace-visible pass
 
 1. Open `mactools-dev://app/settings/plugins/marketplace`; assert the current catalog contains 45 plugins and installed local plugins are verified.
 2. Open Actions & Shortcuts; assert its search field and all four fixture assignments are visible.
-3. Open Automation; assert all six workflows, their expected step counts, and all three rules are visible.
+3. Open Automation; assert all seven workflows, their expected step counts, and all three rules are visible.
 4. Run `E2E Safe Workflow`; assert its three steps and overall run succeed and the app remains responsive.
-5. Run the same workflow through its Run Link; assert another successful run with persisted source `publishedAction.runLink`.
+5. Run `E2E Run Link Workflow` through its Run Link; assert its idempotent System Mute step and overall run succeed with persisted source `publishedAction.runLink`, without changing the current mute state.
 6. Open `mactools-dev://app/actions/action-grid/show`; assert nine accessible grid controls, then dismiss with Escape.
 7. In Actions & Shortcuts, assert the Launchpad action is available. Do not open Launchpad in a recorded session because its contents reflect the user's installed applications.
 8. Launch the primary session helper with `scripts/e2e/mactools-e2e.sh privacy-helper "$E2E_SESSION" primary`; assert `E2E Privacy Helper Activation` succeeds, `E2E Privacy Helper Condition Skip` records a condition skip, and fixture audit still reports `systemMuteStatePreserved: true`.
 9. Close Settings, send Control-Command-3, and assert General Settings appears. Send Control-Command-4 and assert one Action Grid overlay appears.
-10. Quit and relaunch the stable app; assert the four shortcuts, six workflows, one Saved Script, three rules, nine top-level grid entries with their nested folders, two Trackpad action mappings, and recent history persist.
+10. Quit and relaunch the stable app; assert the four shortcuts, seven workflows, one Saved Script, three rules, nine top-level grid entries with their nested folders, two Trackpad action mappings, and recent history persist.
 
 The shortcut driver refuses to request permission or post an event when access is absent. Its mappings can always be checked safely:
 
@@ -158,7 +158,7 @@ In Actions & Shortcuts, search for the script and assert it is a canonical actio
 
 ### Run Link security and lifecycle
 
-Use the safe workflow for direct-link and copy checks. Expand Run Link, copy both the URL and terminal command, and assert the temporary copied-state feedback appears. For the parameterized preset, read `systemMuteValue` from `fixture.audit.json`, find the System Mute catalog action that sets that same value, create and execute its preset, and assert the mute value remains unchanged. Delete the preset and verify its old link no longer runs. Never choose the opposite mute action for this test.
+Use `E2E Run Link Workflow` for successful direct-link and copy checks. Expand Run Link, copy both the URL and terminal command, and assert the temporary copied-state feedback appears. Then invoke the `E2E Safe Workflow` Run Link and assert the workflow records its host-only first step as unavailable, skips the remaining steps, and reports failure without navigating. This expected rejection proves that a Run Link cannot bypass an action's external-invocation policy. For the parameterized preset, read `systemMuteValue` from `fixture.audit.json`, find the System Mute catalog action that sets that same value, create and execute its preset, and assert the mute value remains unchanged. Delete the preset and verify its old link no longer runs. Never choose the opposite mute action for this test.
 
 Search Actions & Shortcuts for Display Sleep, invoke its direct Run Link, and cancel the external confirmation. Never press the Sleep button. Exercise rejection with an unknown action and a percent-encoded path separator, for example:
 
@@ -167,7 +167,7 @@ open -a "$HOME/Applications/MacTools Dev.app" 'mactools-dev://app/actions/e2e-mi
 open -a "$HOME/Applications/MacTools Dev.app" 'mactools-dev://app/actions/mactools%2Fbad/app.open-settings'
 ```
 
-Assert visible rejection or matching diagnostics and no side effect. Finally quit the app, submit a navigation link followed immediately by two distinct safe action links, and assert the cold-launch queue runs each action once and in submission order. Reseed afterward.
+Assert visible rejection or matching diagnostics and no side effect. Finally quit the app, submit a navigation link followed immediately by the distinct `E2E Run Link Workflow` and `E2E Background Workflow` links, and assert the cold-launch queue runs each idempotent action once and in submission order without changing the current mute state. Reseed afterward.
 
 ### Action Grid interactions
 

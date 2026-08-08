@@ -117,6 +117,7 @@
         "run-link-copy-url",
         "run-link-copy-terminal",
         "run-link-parameterized-preset",
+        "run-link-restricted-workflow-rejected",
         "run-link-confirmation-denied",
         "run-link-invalid-rejected",
         "run-link-cold-launch-ordered"

@@ -12,6 +12,9 @@ import uuid
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURE_TOOL = REPO_ROOT / "scripts" / "e2e" / "MacToolsE2EFixture.swift"
 E2E_SCRIPT = REPO_ROOT / "scripts" / "e2e" / "mactools-e2e.sh"
+APP_CONTROLLER_TOOL = (
+    REPO_ROOT / "scripts" / "e2e" / "MacToolsE2EAppController.swift"
+)
 KEY_SENDER_TOOL = REPO_ROOT / "scripts" / "e2e" / "MacToolsE2EKeySender.swift"
 CAPTURE_RECT_TOOL = REPO_ROOT / "scripts" / "e2e" / "MacToolsE2ECaptureRect.swift"
 PRIVACY_HELPER_TOOL = REPO_ROOT / "scripts" / "e2e" / "MacToolsE2EPrivacyHelper.swift"
@@ -59,7 +62,7 @@ class MacToolsE2ETests(unittest.TestCase):
             self.assertTrue(report["hasWorkflowShortcut"])
             self.assertEqual(report["workflowName"], "E2E Safe Workflow")
             self.assertEqual(report["workflowStepCount"], 3)
-            self.assertEqual(report["workflowCount"], 6)
+            self.assertEqual(report["workflowCount"], 7)
             self.assertEqual(
                 report["workflowNames"],
                 [
@@ -69,6 +72,7 @@ class MacToolsE2ETests(unittest.TestCase):
                     "E2E Stop On Missing Action",
                     "E2E Cancellable Delay",
                     "E2E Visual Proof Workflow",
+                    "E2E Run Link Workflow",
                 ],
             )
             self.assertFalse(report["hasDisplaySleepWorkflowStep"])
@@ -86,6 +90,12 @@ class MacToolsE2ETests(unittest.TestCase):
             )
             self.assertEqual(report["automationWorkflowStepCount"], 1)
             self.assertTrue(report["automationWorkflowIsIdempotent"])
+            self.assertEqual(
+                report["runLinkWorkflowName"],
+                "E2E Run Link Workflow",
+            )
+            self.assertEqual(report["runLinkWorkflowStepCount"], 1)
+            self.assertTrue(report["runLinkWorkflowIsIdempotent"])
             self.assertIsInstance(report["systemMuteValue"], bool)
             self.assertTrue(report["systemMuteStatePreserved"])
             self.assertTrue(report["primaryHelperRuleEnabled"])
@@ -531,12 +541,27 @@ print(json.dumps({
                 capture_output=True,
                 text=True,
             )
+            press_key = subprocess.run(
+                [
+                    str(E2E_SCRIPT),
+                    "input-key",
+                    temporary_directory,
+                    "command-k",
+                    "--dry-run",
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             self.assertIn("Select all", select_all.stdout)
             self.assertIn("Type 17 characters", type_text.stdout)
+            self.assertIn("Press command-k", press_key.stdout)
             key_sender = KEY_SENDER_TOOL.read_text(encoding="utf-8")
             self.assertIn("keyboardSetUnicodeString", key_sender)
             self.assertIn('case "select-all"', key_sender)
             self.assertIn('case "type-text"', key_sender)
+            self.assertIn('case "press-key"', key_sender)
 
     def test_scenario_manifest_has_unique_complete_required_checkpoints(self):
         manifest = json.loads(SCENARIO_MANIFEST.read_text(encoding="utf-8"))
@@ -641,6 +666,7 @@ print(json.dumps({
                 text=True,
             )
             self.assertIn("MacTools E2E PRIMARY Helper.app", helper.stdout)
+            self.assertIn("MacToolsE2EPrimaryHelper", helper.stdout)
             self.assertIn(str(pathlib.Path(temporary_directory).resolve()), helper.stdout)
 
     def test_recording_ready_and_assertion_stop_markers_are_addressable(self):
@@ -741,8 +767,10 @@ print(json.dumps({
         self.assertIn('"$app_bundle_id@$process_id"', harness)
         self.assertIn("com.jennymedia.mactools.e2e-helper.backdrop", harness)
         self.assertIn("com.jennymedia.mactools.e2e-helper.secondary", harness)
-        self.assertIn('/usr/bin/open -gj -a "$(privacy_helper_app_path "$session_dir" primary)"', harness)
-        self.assertIn('/usr/bin/open -gj -a "$(privacy_helper_app_path "$session_dir" secondary)"', harness)
+        self.assertIn('launch_privacy_helper_process "$session_dir" primary', harness)
+        self.assertIn('launch_privacy_helper_process "$session_dir" secondary', harness)
+        self.assertIn('privacy_helper_executable_path "$session_dir" primary', harness)
+        self.assertIn('privacy_helper_executable_path "$session_dir" secondary', harness)
         self.assertIn('mactools-dev://app/$start_route', harness)
         self.assertIn("recording_start_route", harness)
         self.assertIn("wait_recording_ready", harness)
@@ -850,10 +878,12 @@ print(json.dumps({
             self.assertNotEqual(rendered_date, "2026-08-07T12:34:56Z")
             self.assertEqual(raw_date, "2026-08-07T12:34:56Z")
 
-    def test_privacy_recorder_and_helper_typecheck(self):
+    def test_e2e_swift_helpers_typecheck(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             recorder = pathlib.Path(temporary_directory) / "MacToolsE2ERecorder"
             helper = pathlib.Path(temporary_directory) / "MacToolsE2EPrivacyHelper"
+            app_controller = pathlib.Path(temporary_directory) / "MacToolsE2EAppController"
+            input_driver = pathlib.Path(temporary_directory) / "MacToolsE2EInputDriver"
             subprocess.run(
                 [
                     "xcrun",
@@ -869,6 +899,34 @@ print(json.dumps({
                     str(PRIVACY_RECORDER_TOOL),
                     "-o",
                     str(recorder),
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "xcrun",
+                    "swiftc",
+                    "-framework",
+                    "AppKit",
+                    str(APP_CONTROLLER_TOOL),
+                    "-o",
+                    str(app_controller),
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "xcrun",
+                    "swiftc",
+                    "-framework",
+                    "ApplicationServices",
+                    "-framework",
+                    "CoreGraphics",
+                    str(KEY_SENDER_TOOL),
+                    "-o",
+                    str(input_driver),
                 ],
                 cwd=REPO_ROOT,
                 check=True,
@@ -932,7 +990,11 @@ print(json.dumps({
         harness = E2E_SCRIPT.read_text(encoding="utf-8")
         self.assertNotIn('"permissionState": "pending-user-grant"', harness)
         self.assertIn("trackpadListenerLeaseOwnedByStableApp", harness)
-        self.assertIn("--args --recording-privacy", harness)
+        self.assertIn(
+            'launch_privacy_helper_process "$session_dir" backdrop',
+            harness,
+        )
+        self.assertIn("--recording-privacy --visibility-state", harness)
 
 
 if __name__ == "__main__":
