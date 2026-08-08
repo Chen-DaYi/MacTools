@@ -42,7 +42,7 @@ E2E_SESSION ?=
 E2E_DURATION ?= 90
 E2E_PACK ?=
 
-.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
+.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release stop-debug-app install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -111,10 +111,37 @@ package-plugins-release: generate
 		--xcodebuild "$(XCODEBUILD)" \
 		--release-notes-url "https://github.com/$(PLUGIN_RELEASE_REPO)/releases/tag/$(PLUGIN_RELEASE_TAG)"
 
+# Stop only this worktree's build and its stable installed copy. Other
+# worktrees may intentionally run their own debug app at the same time.
+stop-debug-app:
+	@PIDS=(); \
+	while read -r PID COMMAND; do \
+		if [[ "$$COMMAND" == "$(CURDIR)/$(APP_EXECUTABLE)" || "$$COMMAND" == "$(INSTALLED_APP_EXECUTABLE)" ]]; then \
+			PIDS+=("$$PID"); \
+		fi; \
+	done < <(/bin/ps -axo pid=,command=); \
+	if (( $${#PIDS[@]} == 0 )); then \
+		exit 0; \
+	fi; \
+	echo "Stopping existing $(APP_PRODUCT_NAME) instance(s) for this worktree..."; \
+	/bin/kill -TERM $${PIDS[@]} >/dev/null 2>&1 || true; \
+	for attempt in {1..50}; do \
+		REMAINING=(); \
+		for PID in $${PIDS[@]}; do \
+			/bin/kill -0 "$$PID" >/dev/null 2>&1 && REMAINING+=("$$PID"); \
+		done; \
+		if (( $${#REMAINING[@]} == 0 )); then \
+			exit 0; \
+		fi; \
+		/bin/sleep 0.1; \
+	done; \
+	echo "$(APP_PRODUCT_NAME) is still running; not launching another instance." >&2; \
+	exit 1
+
 install-debug-app: sync-debug-plugins generate-icon-gallery
 	@./scripts/install-debug-app.sh "$(CURDIR)/$(APP_PATH)" "$(INSTALLED_APP_PATH)"
 
-run: install-debug-app
+run: stop-debug-app install-debug-app
 	@CATALOG_URL="$(MACTOOLS_PLUGIN_CATALOG_URL)"; \
 	ICON_CATALOG_URL="$(MACTOOLS_ICON_CATALOG_URL)"; \
 	if [ -z "$$CATALOG_URL" ] && [ -f "$(LOCAL_PLUGIN_CATALOG)" ]; then \
@@ -137,22 +164,24 @@ run: install-debug-app
 		RUN_ENV+=("MACTOOLS_ICON_CATALOG_URL=$$ICON_CATALOG_URL"); \
 	fi; \
 	stop_app() { \
-		if [ -n "$${APP_PID:-}" ]; then \
+		PIDS=($$(/usr/bin/pgrep -f -x "$(INSTALLED_APP_EXECUTABLE)" 2>/dev/null || true)); \
+		if (( $${#PIDS[@]} > 0 )); then \
 			echo "Stopping $(APP_PRODUCT_NAME)..."; \
-			/bin/kill -TERM "$$APP_PID" >/dev/null 2>&1 || true; \
-			wait "$$APP_PID" >/dev/null 2>&1 || true; \
+			/bin/kill -TERM $${PIDS[@]} >/dev/null 2>&1 || true; \
 		fi; \
 	}; \
 	trap 'stop_app; exit 130' INT TERM; \
 	if [ -z "$$CATALOG_URL" ] && [ -z "$$ICON_CATALOG_URL" ]; then \
 		echo "No local plugin catalog found. Run 'make build-plugin' or set MACTOOLS_PLUGIN_CATALOG_URL."; \
 	fi; \
-	env "$${RUN_ENV[@]}" "$(INSTALLED_APP_EXECUTABLE)" & \
-	APP_PID=$$!; \
-	wait "$$APP_PID"
+	OPEN_ENV=(); \
+	for ENVIRONMENT_VARIABLE in "$${RUN_ENV[@]}"; do \
+		OPEN_ENV+=(--env "$$ENVIRONMENT_VARIABLE"); \
+	done; \
+	open "$${OPEN_ENV[@]}" -W "$(INSTALLED_APP_PATH)"
 
-run-open: install-debug-app
-	@open -n -W "$(INSTALLED_APP_PATH)"
+run-open: stop-debug-app install-debug-app
+	@open -W "$(INSTALLED_APP_PATH)"
 
 e2e-preflight:
 	@$(E2E_SCRIPT) preflight
