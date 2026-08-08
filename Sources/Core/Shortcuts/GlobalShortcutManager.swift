@@ -2,7 +2,7 @@ import Carbon
 import MacToolsPluginKit
 
 enum MacToolsReservedShortcutBindings {
-    private static let commandBindings: Set<ShortcutBinding> = [
+    private static let commonApplicationBindings: Set<ShortcutBinding> = [
         kVK_ANSI_Comma,
         kVK_ANSI_F,
         kVK_ANSI_K,
@@ -38,12 +38,14 @@ enum MacToolsReservedShortcutBindings {
         )
     }
 
-    static let all = commandBindings.union(pluginNavigationBindings)
+    static func requiresConflictWarning(for binding: ShortcutBinding) -> Bool {
+        commonApplicationBindings.contains(binding)
+    }
 
     static func validationError(
         for binding: ShortcutBinding
     ) -> ShortcutValidationError? {
-        guard all.contains(binding) else {
+        guard pluginNavigationBindings.contains(binding) else {
             return nil
         }
 

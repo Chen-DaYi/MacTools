@@ -1,6 +1,42 @@
 import SwiftUI
 import MacToolsPluginKit
 
+struct CommonShortcutBindingWarning: Identifiable {
+    let id = UUID()
+    let shortcutID: String
+    let binding: ShortcutBinding
+}
+
+func commonShortcutBindingWarningAlert(
+    _ warning: CommonShortcutBindingWarning,
+    onConfirm: @escaping () -> Void
+) -> Alert {
+    Alert(
+        title: Text(AppL10n.settingsFormat(
+            "shortcuts.commonConflictWarning.title",
+            defaultValue: "仍要使用“%@”？",
+            ShortcutFormatter.displayString(for: warning.binding)
+        )),
+        message: Text(AppL10n.settings(
+            "shortcuts.commonConflictWarning.message",
+            defaultValue: "这是全局快捷键，可能覆盖其他应用的常用操作。"
+        )),
+        primaryButton: .default(
+            Text(AppL10n.settings(
+                "shortcuts.commonConflictWarning.confirm",
+                defaultValue: "仍要使用"
+            )),
+            action: onConfirm
+        ),
+        secondaryButton: .cancel(
+            Text(AppL10n.settings(
+                "shortcuts.commonConflictWarning.cancel",
+                defaultValue: "取消"
+            ))
+        )
+    )
+}
+
 private enum ShortcutSettingsLayout {
     static let standardRecorderWidth: CGFloat = 126
     static let groupedRecorderWidth: CGFloat = 126
@@ -45,6 +81,7 @@ struct ShortcutSettingsView: View {
 struct ShortcutSettingsRowsView: View {
     @ObservedObject var pluginHost: PluginHost
     let items: [ShortcutSettingsItem]
+    @State private var pendingWarning: CommonShortcutBindingWarning?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -74,9 +111,26 @@ struct ShortcutSettingsRowsView: View {
                 }
             }
         }
+        .alert(item: $pendingWarning) { warning in
+            commonShortcutBindingWarningAlert(warning) {
+                guard let item = items.first(where: { $0.id == warning.shortcutID }) else {
+                    return
+                }
+                save(item, binding: warning.binding)
+            }
+        }
     }
 
     private func configure(_ item: ShortcutSettingsItem, binding: ShortcutBinding) -> String? {
+        if MacToolsReservedShortcutBindings.requiresConflictWarning(for: binding) {
+            pendingWarning = CommonShortcutBindingWarning(shortcutID: item.id, binding: binding)
+            return nil
+        }
+
+        return save(item, binding: binding)
+    }
+
+    private func save(_ item: ShortcutSettingsItem, binding: ShortcutBinding) -> String? {
         pluginHost.clearShortcutError(for: item.id)
         return pluginHost.setShortcutBindingAndReturnError(binding, for: item.id)
     }
@@ -95,6 +149,7 @@ struct ShortcutSettingsRowsView: View {
 struct GroupedShortcutSettingsRowsView: View {
     @ObservedObject var pluginHost: PluginHost
     let groups: [ShortcutSettingsGroup]
+    @State private var pendingWarning: CommonShortcutBindingWarning?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -118,9 +173,29 @@ struct GroupedShortcutSettingsRowsView: View {
                 }
             }
         }
+        .alert(item: $pendingWarning) { warning in
+            commonShortcutBindingWarningAlert(warning) {
+                guard let item = groups
+                    .flatMap(\.items)
+                    .first(where: { $0.id == warning.shortcutID })
+                else {
+                    return
+                }
+                save(item, binding: warning.binding)
+            }
+        }
     }
 
     private func configure(_ item: ShortcutSettingsItem, binding: ShortcutBinding) -> String? {
+        if MacToolsReservedShortcutBindings.requiresConflictWarning(for: binding) {
+            pendingWarning = CommonShortcutBindingWarning(shortcutID: item.id, binding: binding)
+            return nil
+        }
+
+        return save(item, binding: binding)
+    }
+
+    private func save(_ item: ShortcutSettingsItem, binding: ShortcutBinding) -> String? {
         pluginHost.clearShortcutError(for: item.id)
         return pluginHost.setShortcutBindingAndReturnError(binding, for: item.id)
     }
