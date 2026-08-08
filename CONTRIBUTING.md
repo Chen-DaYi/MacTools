@@ -60,6 +60,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Build or tests have passed. If they could not be run, explain why in the PR.
 - User-visible behavior changes are reflected in `README.md` or the relevant design documentation.
 - User-visible app or plugin changes include a concise English changelog fragment in `changes/unreleased/*.md`.
+- Plugin manifest capabilities match the runtime interfaces and configuration views implemented by the plugin.
 - High-risk features cover safety checks, error states, and missing-permission cases.
 - The PR does not include unrelated formatting, generated files, local configuration, certificates, or release credentials.
 
@@ -69,7 +70,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - For quick releases, prefer `make release`. The command interactively chooses `app` or `plugin`, analyzes the next `patch`/`minor`/`major` version, previews the bump, then only after confirmation runs `git pull --rebase`, lightweight checks, version updates, commit, tag creation, and tag push.
 - App releases update `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `Configs/AppVersion.xcconfig`. The app and embedded extensions inherit this shared version config. After pushing a `v*.*.*` tag, the `Release` workflow builds, signs, notarizes, uploads the DMG, marks the stable App release as GitHub Latest, and updates the Appcast plus website download metadata.
 - Plugin releases push a `plugins-*` batch tag. The default `auto` mode uses the production catalog to find new plugins, already bumped plugins, and package-related plugin changes; it updates `plugin.json.version` when needed, then the `Plugin Release` workflow builds plugins and merges the signed catalog. Plugin batch releases are never marked as GitHub Latest.
-- On first launch, a new app version checks installed plugins and automatically updates them from the signed production catalog. It does not automatically install plugins the user has not installed.
+- On first launch, a new app version checks installed plugins and automatically updates them from the signed production catalog. It does not normally install plugins the user has not installed. The only exception is a host-declared feature-extraction migration: when an installed source plugin still owns a legacy preference, the host may runtime-validate the replacement package and update the source as one rollback-protected operation. Manually installing that replacement also coordinates retirement of an older source package, even before the legacy preference has been written.
 - Non-interactive examples: `make release ARGS="--type app --version 1.0.7 --yes"` or `make release ARGS="--type plugin --version 1.0.10 --plugin-mode selected --plugin calendar --yes"`.
 - Add `--dry-run` to preview the steps. The working tree must be clean before a real release.
 - Before local release builds, copy `scripts/release.local.env.sample` to `scripts/release.local.env` and fill in at least `DEVELOPER_ID_APPLICATION`.

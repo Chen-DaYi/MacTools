@@ -29,17 +29,29 @@ enum MenuBarStatusItemInvocation: Equatable {
 
 enum MenuBarStatusItemPresentationAction: Equatable {
     case presentSettings(SettingsPresentationRequest)
+    case toggleCommandPalette
     case toggleComponentPanel
     case toggleFeaturePanel
+    case showComponentPanel
+    case showFeaturePanel
+    case showUnifiedSearch
 
     init(request: AppPresentationRequest) {
         switch request {
         case let .settings(settingsRequest):
             self = .presentSettings(settingsRequest)
+        case .toggleCommandPalette:
+            self = .toggleCommandPalette
         case .toggleDashboard:
             self = .toggleComponentPanel
         case .toggleFeaturePanel:
             self = .toggleFeaturePanel
+        case .showDashboard:
+            self = .showComponentPanel
+        case .showFeaturePanel:
+            self = .showFeaturePanel
+        case .showUnifiedSearch:
+            self = .showUnifiedSearch
         }
     }
 }
@@ -140,10 +152,18 @@ final class MenuBarStatusItemController: NSObject {
             switch MenuBarStatusItemPresentationAction(request: request) {
             case let .presentSettings(settingsRequest):
                 windowRouter?.presentSettings(settingsRequest)
+            case .toggleCommandPalette:
+                windowRouter?.toggleCommandPalette()
             case .toggleComponentPanel:
                 self?.toggleDashboard()
             case .toggleFeaturePanel:
                 self?.toggleFeaturePanel()
+            case .showComponentPanel:
+                self?.showDashboard()
+            case .showFeaturePanel:
+                self?.showFeaturePanel()
+            case .showUnifiedSearch:
+                windowRouter?.showUnifiedSearch()
             }
         }
     }

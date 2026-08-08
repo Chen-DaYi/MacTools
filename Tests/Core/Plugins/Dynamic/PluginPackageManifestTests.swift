@@ -58,6 +58,24 @@ final class PluginPackageManifestTests: XCTestCase {
         }
     }
 
+    func testManifestValidationRejectsReservedOrTerminatedPluginIdentifiers() {
+        for id in ["marketplace", "fan-control\n", "fan-control\r"] {
+            let manifest = PluginPackageManifest(
+                id: id,
+                displayName: "Demo",
+                version: "1.0.0",
+                minHostVersion: "0.15.0",
+                bundleRelativePath: "Demo.bundle"
+            )
+
+            XCTAssertThrowsError(
+                try PluginPackageManifestLoader.validate(manifest, hostVersion: "0.16.0")
+            ) { error in
+                XCTAssertEqual(error as? PluginPackageManifestError, .invalidIdentifier(id))
+            }
+        }
+    }
+
     func testManifestValidationRejectsIncompatibleHostVersion() {
         let manifest = PluginPackageManifest(
             id: "com.example.demo",
@@ -72,6 +90,46 @@ final class PluginPackageManifestTests: XCTestCase {
                 error as? PluginPackageManifestError,
                 .incompatibleHostVersion(required: "1.0.0", current: "0.16.0")
             )
+        }
+    }
+
+    func testExtractionPackagesDeclareTheirRequiredHostCompatibility() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let expectations = [
+            (path: "Plugins/MouseEnhancer/plugin.json", minimum: "1.1.3", supports115: true),
+            (path: "Plugins/TrackpadGestures/plugin.json", minimum: "1.1.6", supports115: false),
+        ]
+        for expectation in expectations {
+            let relativePath = expectation.path
+            let manifestURL = repositoryRoot.appendingPathComponent(relativePath)
+            let manifest = try JSONDecoder().decode(
+                PluginPackageManifest.self,
+                from: Data(contentsOf: manifestURL)
+            )
+
+            XCTAssertEqual(manifest.minHostVersion, expectation.minimum)
+            XCTAssertNoThrow(
+                try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.6")
+            )
+            if expectation.supports115 {
+                XCTAssertNoThrow(
+                    try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.5")
+                )
+            } else {
+                XCTAssertThrowsError(
+                    try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.5")
+                ) { error in
+                    XCTAssertEqual(
+                        error as? PluginPackageManifestError,
+                        .incompatibleHostVersion(required: "1.1.6", current: "1.1.5")
+                    )
+                }
+            }
         }
     }
 

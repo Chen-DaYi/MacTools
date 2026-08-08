@@ -12,16 +12,17 @@ enum UnifiedSearchPaletteLayout {
     static let verticalChromeHeight: CGFloat = 202
 
     static func width(for availableWidth: CGFloat) -> CGFloat {
-        min(
-            maximumWidth,
-            max(minimumWidth, availableWidth - outerHorizontalPadding)
-        )
+        let screenSafeWidth = max(0, availableWidth - outerHorizontalPadding)
+        return min(maximumWidth, screenSafeWidth)
     }
 
     static func resultListHeight(for availableHeight: CGFloat) -> CGFloat {
         min(
-            maximumResultListHeight,
-            max(minimumResultListHeight, availableHeight - verticalChromeHeight)
+            max(0, availableHeight - verticalChromeHeight),
+            min(
+                maximumResultListHeight,
+                max(minimumResultListHeight, availableHeight - verticalChromeHeight)
+            )
         )
     }
 }
@@ -30,24 +31,21 @@ enum UnifiedSearchPaletteLayout {
 final class UnifiedSearchPaletteModel: ObservableObject {
     @Published private(set) var results: [MacToolsSearchResult]
 
-    private let pluginHost: PluginHost
+    private let commandContext: AppHostCommandContext
     private var index: MacToolsSearchIndex
     private var query = ""
-    private var pluginHostCancellable: AnyCancellable?
+    private var stateCancellables: Set<AnyCancellable> = []
     private var rebuildTask: Task<Void, Never>?
 
-    init(pluginHost: PluginHost) {
-        self.pluginHost = pluginHost
-        let index = MacToolsSearchIndexBuilder.build(pluginHost: pluginHost)
+    init(commandContext: AppHostCommandContext) {
+        self.commandContext = commandContext
+        commandContext.launchAtLoginController.refreshStatus()
+        let index = Self.buildIndex(commandContext: commandContext)
         self.index = index
         self.results = MacToolsSearchPresentation.orderedResults(
             index.results(matching: "")
         )
-        pluginHostCancellable = pluginHost.objectWillChange.sink { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.scheduleIndexRebuild()
-            }
-        }
+        observeStateChanges()
     }
 
     func updateQuery(_ query: String) {
@@ -61,8 +59,35 @@ final class UnifiedSearchPaletteModel: ObservableObject {
 
     func refresh() {
         rebuildTask?.cancel()
-        index = MacToolsSearchIndexBuilder.build(pluginHost: pluginHost)
+        commandContext.launchAtLoginController.refreshStatus()
+        index = Self.buildIndex(commandContext: commandContext)
         updateResults()
+    }
+
+    private func observeStateChanges() {
+        commandContext.pluginHost.objectWillChange
+            .sink { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.scheduleIndexRebuild()
+                }
+            }
+            .store(in: &stateCancellables)
+
+        commandContext.launchAtLoginController.objectWillChange
+            .sink { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.scheduleIndexRebuild()
+                }
+            }
+            .store(in: &stateCancellables)
+
+        NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.scheduleIndexRebuild()
+                }
+            }
+            .store(in: &stateCancellables)
     }
 
     private func scheduleIndexRebuild() {
@@ -73,9 +98,20 @@ final class UnifiedSearchPaletteModel: ObservableObject {
                 return
             }
 
-            index = MacToolsSearchIndexBuilder.build(pluginHost: pluginHost)
+            index = Self.buildIndex(commandContext: commandContext)
             updateResults()
         }
+    }
+
+    private static func buildIndex(
+        commandContext: AppHostCommandContext
+    ) -> MacToolsSearchIndex {
+        MacToolsSearchIndexBuilder.build(
+            pluginHost: commandContext.pluginHost,
+            appHostCommandDefinitions: AppHostCommandCatalog.applicableDefinitions(
+                in: commandContext
+            )
+        )
     }
 
     private func updateResults() {
@@ -198,6 +234,8 @@ struct UnifiedSearchTextField: NSViewRepresentable {
 struct UnifiedSearchPresentationView: View {
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     let pluginHost: PluginHost
+    let launchAtLoginController: LaunchAtLoginController
+    let appearanceUserDefaults: UserDefaults
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
 
     var body: some View {
@@ -213,11 +251,42 @@ struct UnifiedSearchPresentationView: View {
 
                 UnifiedSearchPaletteView(
                     pluginHost: pluginHost,
-                    navigationCoordinator: navigationCoordinator,
-                    availableSize: geometry.size
+                    launchAtLoginController: launchAtLoginController,
+                    appearanceUserDefaults: appearanceUserDefaults,
+                    availableSize: geometry.size,
+                    presentationOrigin: navigationCoordinator.unifiedSearchPresentationOrigin,
+                    shortcutHint: "⌘K",
+                    focusRequestID: navigationCoordinator.unifiedSearchFocusRequestID,
+                    resetRequestID: nil,
+                    quickSelectionRequest: navigationCoordinator.unifiedSearchQuickSelectionRequest,
+                    showsCustomShadow: true,
+                    actions: UnifiedSearchPaletteActions(
+                        dismiss: navigationCoordinator.dismissUnifiedSearch,
+                        navigate: navigationCoordinator.navigateFromSearch,
+                        consumeQuickSelection: navigationCoordinator.consumeUnifiedSearchQuickSelectionRequest
+                    )
                 )
                 .padding(24)
             }
+        }
+    }
+}
+
+struct UnifiedSearchPaletteActions {
+    let dismiss: () -> Void
+    let navigate: (SettingsNavigationDestination, SettingsSearchRevealTarget?) -> Bool
+    let consumeQuickSelection: (UnifiedSearchQuickSelectionRequest) -> Bool
+}
+
+private struct UnifiedSearchPaletteShadowModifier: ViewModifier {
+    let isEnabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.shadow(color: .black.opacity(0.22), radius: 28, y: 12)
+        } else {
+            content
         }
     }
 }
@@ -228,8 +297,15 @@ struct UnifiedSearchPaletteView: View {
     }
 
     let pluginHost: PluginHost
-    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
+    let commandContext: AppHostCommandContext
     let availableSize: CGSize
+    let presentationOrigin: UnifiedSearchPresentationOrigin?
+    let shortcutHint: String?
+    let focusRequestID: UInt
+    let resetRequestID: UInt?
+    let quickSelectionRequest: UnifiedSearchQuickSelectionRequest?
+    let showsCustomShadow: Bool
+    let actions: UnifiedSearchPaletteActions
     @StateObject private var model: UnifiedSearchPaletteModel
     @State private var query = ""
     @State private var selectedResultID: String?
@@ -237,14 +313,34 @@ struct UnifiedSearchPaletteView: View {
 
     init(
         pluginHost: PluginHost,
-        navigationCoordinator: SettingsNavigationCoordinator,
-        availableSize: CGSize
+        launchAtLoginController: LaunchAtLoginController,
+        appearanceUserDefaults: UserDefaults,
+        availableSize: CGSize,
+        presentationOrigin: UnifiedSearchPresentationOrigin?,
+        shortcutHint: String?,
+        focusRequestID: UInt,
+        resetRequestID: UInt?,
+        quickSelectionRequest: UnifiedSearchQuickSelectionRequest?,
+        showsCustomShadow: Bool,
+        actions: UnifiedSearchPaletteActions
     ) {
         self.pluginHost = pluginHost
-        self.navigationCoordinator = navigationCoordinator
+        let commandContext = AppHostCommandContext(
+            pluginHost: pluginHost,
+            launchAtLoginController: launchAtLoginController,
+            appearanceUserDefaults: appearanceUserDefaults
+        )
+        self.commandContext = commandContext
         self.availableSize = availableSize
+        self.presentationOrigin = presentationOrigin
+        self.shortcutHint = shortcutHint
+        self.focusRequestID = focusRequestID
+        self.resetRequestID = resetRequestID
+        self.quickSelectionRequest = quickSelectionRequest
+        self.showsCustomShadow = showsCustomShadow
+        self.actions = actions
         _model = StateObject(
-            wrappedValue: UnifiedSearchPaletteModel(pluginHost: pluginHost)
+            wrappedValue: UnifiedSearchPaletteModel(commandContext: commandContext)
         )
     }
 
@@ -266,12 +362,10 @@ struct UnifiedSearchPaletteView: View {
                 .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
                 .allowsHitTesting(false)
         }
-        .shadow(color: .black.opacity(0.22), radius: 28, y: 12)
+        .modifier(UnifiedSearchPaletteShadowModifier(isEnabled: showsCustomShadow))
         .onAppear {
             syncSelection()
-            handleQuickSelectionRequest(
-                navigationCoordinator.unifiedSearchQuickSelectionRequest
-            )
+            handleQuickSelectionRequest(quickSelectionRequest)
         }
         .onChange(of: query) {
             model.updateQuery(query)
@@ -280,11 +374,14 @@ struct UnifiedSearchPaletteView: View {
         .onChange(of: resultIDs) {
             syncSelection()
         }
-        .onChange(of: navigationCoordinator.unifiedSearchQuickSelectionRequest) { _, request in
+        .onChange(of: quickSelectionRequest) { _, request in
             handleQuickSelectionRequest(request)
         }
+        .onChange(of: resetRequestID) {
+            resetTransientState()
+        }
         .onExitCommand {
-            navigationCoordinator.dismissUnifiedSearch()
+            actions.dismiss()
         }
         .alert(item: $pendingConfirmation) { result in
             let confirmation = result.confirmation
@@ -324,7 +421,7 @@ struct UnifiedSearchPaletteView: View {
                     "search.title",
                     defaultValue: "搜索 MacTools"
                 ),
-                focusRequestID: navigationCoordinator.unifiedSearchFocusRequestID,
+                focusRequestID: focusRequestID,
                 onCommand: handleSearchFieldCommand
             )
             .frame(maxWidth: .infinity, minHeight: 22)
@@ -343,19 +440,21 @@ struct UnifiedSearchPaletteView: View {
                 )
             }
 
-            Text("⌘K")
-                .font(PluginSettingsTheme.Typography.statusBadge)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.12))
-                )
-                .accessibilityHidden(true)
+            if let shortcutHint, !shortcutHint.isEmpty {
+                Text(shortcutHint)
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.12))
+                    )
+                    .accessibilityHidden(true)
+            }
 
             Button {
-                navigationCoordinator.dismissUnifiedSearch()
+                actions.dismiss()
             } label: {
                 Text("Esc")
             }
@@ -571,7 +670,7 @@ struct UnifiedSearchPaletteView: View {
     }
 
     private var originText: String {
-        switch navigationCoordinator.unifiedSearchPresentationOrigin {
+        switch presentationOrigin {
         case .pluginSidebar:
             return AppL10n.search(
                 "search.origin.pluginSidebar",
@@ -580,7 +679,13 @@ struct UnifiedSearchPaletteView: View {
         case .keyboard:
             return AppL10n.search(
                 "search.origin.keyboard",
-                defaultValue: "全局快捷键 ⌘K"
+                defaultValue: "MacTools 快捷键 ⌘K"
+            )
+        case let .globalShortcut(label):
+            return AppL10n.searchFormat(
+                "search.origin.globalShortcutFormat",
+                defaultValue: "全局快捷键 %@",
+                label
             )
         case nil:
             return AppL10n.search(
@@ -663,7 +768,7 @@ struct UnifiedSearchPaletteView: View {
         case .submit:
             activateSelectedResult()
         case .cancel:
-            navigationCoordinator.dismissUnifiedSearch()
+            actions.dismiss()
         }
     }
 
@@ -672,7 +777,7 @@ struct UnifiedSearchPaletteView: View {
     ) {
         guard
             let request,
-            navigationCoordinator.consumeUnifiedSearchQuickSelectionRequest(request)
+            actions.consumeQuickSelection(request)
         else {
             return
         }
@@ -687,9 +792,10 @@ struct UnifiedSearchPaletteView: View {
     }
 
     private func activate(_ result: MacToolsSearchResult) {
-        if result.confirmation != nil {
+        switch MacToolsSearchActivationDecision.resolve(for: result) {
+        case .confirm:
             pendingConfirmation = result
-        } else {
+        case .execute:
             execute(result)
         }
     }
@@ -697,10 +803,7 @@ struct UnifiedSearchPaletteView: View {
     private func execute(_ result: MacToolsSearchResult) {
         switch result.action {
         case let .navigate(destination, target):
-            if !navigationCoordinator.navigateFromSearch(
-                to: destination,
-                target: target
-            ) {
+            if !actions.navigate(destination, target) {
                 model.refresh()
             }
         case let .pluginCommand(pluginID, expectedDefinition):
@@ -708,17 +811,30 @@ struct UnifiedSearchPaletteView: View {
                 pluginID: pluginID,
                 expectedDefinition: expectedDefinition
             ) {
-                navigationCoordinator.dismissUnifiedSearch()
+                actions.dismiss()
             } else {
                 model.refresh()
             }
-        case let .appCommand(action):
-            if pluginHost.performAppCommand(action) {
-                navigationCoordinator.dismissUnifiedSearch()
-            } else {
+        case let .appHostCommand(expectedDefinition):
+            switch AppHostCommandExecutor.perform(
+                expectedDefinition: expectedDefinition,
+                context: commandContext
+            ) {
+            case .performed(.dismissPalette):
+                actions.dismiss()
+            case .performed(.refreshIndex), .unavailable, .failed:
                 model.refresh()
             }
         }
+    }
+
+    private func resetTransientState() {
+        query = ""
+        pendingConfirmation = nil
+        model.updateQuery("")
+        model.refresh()
+        selectedResultID = nil
+        syncSelection()
     }
 
 }

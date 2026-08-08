@@ -32,12 +32,14 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private let menuBarIconSettings = MenuBarIconSettings()
     private let menuBarIconGallery = MenuBarIconGalleryLibrary()
     private let launchAtLoginController = LaunchAtLoginController()
+    private let appearanceUserDefaults = UserDefaults.standard
     private let pluginAutomaticUpdateVersionStore = PluginAutomaticUpdateVersionStore()
+    private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        AppAppearancePreference.applyStoredPreference()
+        AppAppearancePreference.applyStoredPreference(userDefaults: appearanceUserDefaults)
         launchAtLoginController.refreshStatus()
         UNUserNotificationCenter.current().delegate = self
 
@@ -46,7 +48,8 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             appUpdater: appUpdater,
             menuBarIconSettings: menuBarIconSettings,
             menuBarIconGallery: menuBarIconGallery,
-            launchAtLoginController: launchAtLoginController
+            launchAtLoginController: launchAtLoginController,
+            appearanceUserDefaults: appearanceUserDefaults
         )
         self.windowRouter = windowRouter
         statusItemController = MenuBarStatusItemController(
@@ -60,7 +63,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        RightClickURLRouter.shared.handle(urls)
+        appURLRouter.handle(urls)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -84,25 +87,40 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
                 currentAppVersion: currentAppVersion
             )
+            activateAppURLRouter()
             return
         }
 
-        guard pluginAutomaticUpdateVersionStore.needsAutomaticUpdateCheck(
+        let needsAutomaticUpdateCheck = pluginAutomaticUpdateVersionStore.needsAutomaticUpdateCheck(
             currentAppVersion: currentAppVersion
-        ) else {
+        )
+        guard needsAutomaticUpdateCheck
+            || pluginHost.hasPendingDynamicPluginExtractionMigration
+        else {
             pluginHost.loadDynamicPluginsIfNeeded()
+            activateAppURLRouter()
             return
         }
 
         Task { @MainActor in
             let updateSucceeded = await pluginHost.automaticUpdateInstalledPluginsBeforeLoading()
-            guard updateSucceeded else {
-                return
+            if updateSucceeded {
+                pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
+                    currentAppVersion: currentAppVersion
+                )
             }
-
-            pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
-                currentAppVersion: currentAppVersion
-            )
+            activateAppURLRouter()
         }
+    }
+
+    private func activateAppURLRouter() {
+        appURLRouter.activate(
+            presentationHandler: { [weak self] request in
+                self?.pluginHost.appPresentationHandler?(request)
+            },
+            isPluginConfigurationAvailable: { [weak self] pluginID in
+                self?.pluginHost.hasPluginConfiguration(pluginID: pluginID) == true
+            }
+        )
     }
 }

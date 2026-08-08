@@ -1,54 +1,54 @@
 {
   "id": "keep-awake",
   "displayName": "阻止休眠",
-  "summary": "阻止系统空闲休眠；可选保持屏幕常亮，或接通电源时合盖运行",
+  "summary": "保持 Mac 唤醒；可选保持屏幕常亮或让屏幕工具继续工作。MacBook 合盖运行要求连接电源",
   "localizedMetadata": {
     "ar": {
       "displayName": "منع السكون",
-      "summary": "يمنع سكون النظام؛ ويمكن إبقاء الشاشة قيد التشغيل أو تشغيل Mac والغطاء مغلق عند توصيل الطاقة."
+      "summary": "أبقِ Mac مستيقظًا، مع خيار إبقاء الشاشة مضاءة أو إبقاء أدوات الشاشة قيد التشغيل. يتطلب تشغيل MacBook بغطاء مغلق توصيله بالطاقة."
     },
     "de": {
       "displayName": "Wach halten",
-      "summary": "Verhindert den Leerlauf des Systems; optional bleibt das Display an oder der Mac läuft am Netzteil mit geschlossenem Deckel."
+      "summary": "Hält den Mac wach; optional bleibt das Display an oder Bildschirmtools funktionieren weiter. Der Betrieb eines MacBook mit geschlossenem Deckel erfordert Netzstrom."
     },
     "en": {
       "displayName": "Keep Awake",
-      "summary": "Prevent idle system sleep; optionally keep the display on or run with the lid closed while on power."
+      "summary": "Keep the Mac awake; optionally keep the display on or keep screen-based tools working. Closed-lid MacBook operation requires a power connection."
     },
     "es": {
       "displayName": "Mantener activo",
-      "summary": "Evita la suspensión del sistema; opcionalmente mantiene la pantalla encendida o funciona con la tapa cerrada al conectarse a la corriente."
+      "summary": "Mantén el Mac activo; opcionalmente, conserva la pantalla encendida o las herramientas de pantalla funcionando. El uso del MacBook con la tapa cerrada requiere alimentación."
     },
     "fr": {
       "displayName": "Empêcher la suspension",
-      "summary": "Empêche la mise en veille du système ; option pour garder l’écran allumé ou fonctionner couvercle fermé sur secteur."
+      "summary": "Garde le Mac actif ; permet aussi de garder l’écran allumé ou les outils liés à l’écran opérationnels. L’utilisation du MacBook couvercle fermé nécessite le secteur."
     },
     "ja": {
       "displayName": "スリープを防止",
-      "summary": "システムのアイドルスリープを防止。必要に応じてディスプレイをオンのままにするか、電源接続時に閉じた状態で動作できます。"
+      "summary": "Macをスリープさせず、必要に応じてディスプレイをオンのままにするか画面ツールを動作させます。MacBookを閉じた状態で使用するには電源接続が必要です。"
     },
     "ko": {
       "displayName": "잠자기 방지",
-      "summary": "시스템 유휴 절전을 방지하며, 선택적으로 디스플레이를 켜 두거나 전원 연결 시 덮개를 닫은 채 실행합니다."
+      "summary": "Mac을 깨운 상태로 두고, 선택적으로 디스플레이를 켜 두거나 화면 도구를 계속 작동시킵니다. MacBook을 덮개를 닫은 상태로 사용하려면 전원 연결이 필요합니다."
     },
     "pt": {
       "displayName": "Manter ativo",
-      "summary": "Impede a suspensão ociosa do sistema; opcionalmente mantém a tela ligada ou funciona com a tampa fechada quando conectado à energia."
+      "summary": "Mantenha o Mac ativo; opcionalmente, mantenha a tela ligada ou as ferramentas de tela funcionando. O uso do MacBook com a tampa fechada requer energia conectada."
     },
     "ru": {
       "displayName": "Не давать уснуть",
-      "summary": "Предотвращает спящий режим системы; по желанию не даёт экрану гаснуть или позволяет работать с закрытой крышкой при питании от сети."
+      "summary": "Не даёт Mac уснуть; при необходимости не гасит экран или сохраняет работу экранных инструментов. Для работы MacBook с закрытой крышкой требуется питание от сети."
     },
     "zh-Hans": {
       "displayName": "阻止休眠",
-      "summary": "阻止系统空闲休眠；可选保持屏幕常亮，或接通电源时合盖运行"
+      "summary": "保持 Mac 唤醒；可选保持屏幕常亮或让屏幕工具继续工作。MacBook 合盖运行要求连接电源"
     },
     "zh-Hant": {
       "displayName": "防止睡眠",
-      "summary": "阻止系統空閒休眠；可選保持螢幕常亮，或接通電源時闔蓋運作"
+      "summary": "保持 Mac 喚醒；可選保持螢幕常亮或讓螢幕工具繼續運作。MacBook 闔蓋運作要求連接電源"
     }
   },
-  "version": "1.1.0",
+  "version": "1.2.0",
   "minHostVersion": "1.1.5",
   "pluginKitVersion": 3,
   "bundleRelativePath": "KeepAwake.bundle",

@@ -158,7 +158,7 @@ final class CalendarEventService: CalendarEventServicing {
     }
 
     private static func appleScriptDateFormatter() -> DateFormatter {
-        let calendar = CalendarComponentCalendars.gregorianFollowingSystem()
+        let calendar = CalendarComponentCalendars.gregorian()
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = .autoupdatingCurrent

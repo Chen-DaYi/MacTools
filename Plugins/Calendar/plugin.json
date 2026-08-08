@@ -60,7 +60,7 @@
   "capabilities": {
     "primaryPanel": false,
     "componentPanel": true,
-    "configuration": false
+    "configuration": true
   },
   "permissions": [
     "calendarFullAccess",

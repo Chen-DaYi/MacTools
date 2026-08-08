@@ -11,17 +11,18 @@ final class CalendarComponentViewModel: ObservableObject {
 
     private let eventService: CalendarEventServicing
     private let holidayProvider: CalendarHolidayProvider
-    private let calendar: Calendar
+    private var calendar: Calendar
     private let localization: PluginLocalization
     private var displayedMonthStart: Date
     private var selectedDate: Date
     private var eventsByDay: [Date: [CalendarEventSummary]] = [:]
     private var loadTask: Task<Void, Never>?
+    private var isStarted = false
 
     init(
         eventService: CalendarEventServicing = CalendarEventService(),
         holidayProvider: CalendarHolidayProvider,
-        calendar: Calendar = CalendarComponentCalendars.gregorianFollowingSystem(),
+        calendar: Calendar = CalendarComponentCalendars.gregorian(),
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         today: Date = Date()
     ) {
@@ -41,17 +42,34 @@ final class CalendarComponentViewModel: ObservableObject {
     }
 
     func start() {
+        isStarted = true
         refresh()
     }
 
     func stop() {
+        isStarted = false
         loadTask?.cancel()
         loadTask = nil
+        isLoadingEvents = false
     }
 
     func refresh() {
         rebuildMonth()
         reloadEvents()
+    }
+
+    func setWeekStartDay(_ day: CalendarWeekStartDay) {
+        guard calendar.firstWeekday != day.calendarFirstWeekday else {
+            return
+        }
+
+        loadTask?.cancel()
+        calendar.firstWeekday = day.calendarFirstWeekday
+        eventsByDay = [:]
+        rebuildMonth()
+        if isStarted {
+            reloadEvents()
+        }
     }
 
     func moveMonth(by value: Int) {

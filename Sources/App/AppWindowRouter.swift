@@ -82,6 +82,176 @@ final class MacToolsCommandWindow: NSWindow {
     }
 }
 
+enum StandaloneCommandPaletteLayout {
+    static let contentSize = NSSize(width: 720, height: 660)
+
+    static func frame(
+        contentSize: NSSize = contentSize,
+        pointerLocation: NSPoint,
+        visibleFrames: [NSRect]
+    ) -> NSRect {
+        guard let visibleFrame = visibleFrames.first(where: { $0.contains(pointerLocation) })
+            ?? visibleFrames.first
+        else {
+            return NSRect(origin: .zero, size: contentSize)
+        }
+
+        let size = NSSize(
+            width: min(contentSize.width, visibleFrame.width),
+            height: min(contentSize.height, visibleFrame.height)
+        )
+        let proposedOrigin = NSPoint(
+            x: visibleFrame.midX - (size.width / 2),
+            y: visibleFrame.midY - (size.height / 2)
+        )
+        let origin = NSPoint(
+            x: min(max(proposedOrigin.x, visibleFrame.minX), visibleFrame.maxX - size.width),
+            y: min(max(proposedOrigin.y, visibleFrame.minY), visibleFrame.maxY - size.height)
+        )
+        return NSRect(origin: origin, size: size)
+    }
+}
+
+enum CommandPaletteTogglePolicy {
+    static func settingsPaletteIsVisible(
+        isPresented: Bool,
+        isWindowVisible: Bool,
+        isWindowMiniaturized: Bool,
+        isWindowOnActiveSpace: Bool
+    ) -> Bool {
+        isPresented
+            && isWindowVisible
+            && !isWindowMiniaturized
+            && isWindowOnActiveSpace
+    }
+}
+
+enum AppWindowPresentation {
+    static func perform(
+        isMiniaturized: Bool,
+        activate: () -> Void,
+        deminiaturize: () -> Void,
+        orderFront: () -> Void
+    ) {
+        activate()
+        if isMiniaturized {
+            deminiaturize()
+        }
+        orderFront()
+    }
+}
+
+@MainActor
+final class StandaloneCommandPaletteState: ObservableObject {
+    @Published private(set) var presentationOrigin: UnifiedSearchPresentationOrigin?
+    @Published private(set) var shortcutHint: String?
+    @Published private(set) var focusRequestID: UInt = 0
+    @Published private(set) var resetRequestID: UInt = 0
+    @Published private(set) var quickSelectionRequest: UnifiedSearchQuickSelectionRequest?
+    @Published private(set) var localizationRevision: UInt = 0
+
+    private var nextQuickSelectionRequestID: UInt = 0
+
+    func prepareForPresentation(shortcutLabel: String) {
+        presentationOrigin = .globalShortcut(shortcutLabel)
+        shortcutHint = shortcutLabel
+        quickSelectionRequest = nil
+        resetRequestID &+= 1
+        focusRequestID &+= 1
+    }
+
+    @discardableResult
+    func requestQuickSelection(number: Int) -> Bool {
+        guard (1...MacToolsSearchPresentation.quickSelectionLimit).contains(number) else {
+            return false
+        }
+
+        nextQuickSelectionRequestID &+= 1
+        quickSelectionRequest = UnifiedSearchQuickSelectionRequest(
+            id: nextQuickSelectionRequestID,
+            number: number
+        )
+        return true
+    }
+
+    @discardableResult
+    func consumeQuickSelectionRequest(_ request: UnifiedSearchQuickSelectionRequest) -> Bool {
+        guard quickSelectionRequest == request else {
+            return false
+        }
+
+        quickSelectionRequest = nil
+        return true
+    }
+
+    func refreshLocalization() {
+        localizationRevision &+= 1
+    }
+}
+
+@MainActor
+final class MacToolsCommandPalettePanel: NSPanel {
+    var onQuickSelection: ((Int) -> Bool)?
+    var onDismiss: (() -> Void)?
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if case let .selectUnifiedSearchResult(number) = MacToolsLocalKeyboardCommand.resolve(for: event),
+           onQuickSelection?(number) == true {
+            return true
+        }
+
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        onDismiss?()
+    }
+}
+
+struct StandaloneCommandPaletteRootView: View {
+    let pluginHost: PluginHost
+    let launchAtLoginController: LaunchAtLoginController
+    let appearanceUserDefaults: UserDefaults
+    @ObservedObject var state: StandaloneCommandPaletteState
+    let actions: UnifiedSearchPaletteActions
+
+    var body: some View {
+        GeometryReader { geometry in
+            UnifiedSearchPaletteView(
+                pluginHost: pluginHost,
+                launchAtLoginController: launchAtLoginController,
+                appearanceUserDefaults: appearanceUserDefaults,
+                availableSize: geometry.size,
+                presentationOrigin: state.presentationOrigin,
+                shortcutHint: state.shortcutHint,
+                focusRequestID: state.focusRequestID,
+                resetRequestID: state.resetRequestID,
+                quickSelectionRequest: state.quickSelectionRequest,
+                showsCustomShadow: false,
+                actions: actions
+            )
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .id(state.localizationRevision)
+        .background(Color.clear)
+        .environment(\.locale, PluginRuntimeLocalization.locale)
+        .environment(
+            \.layoutDirection,
+            Self.layoutDirection(for: PluginRuntimeLocalization.locale)
+        )
+    }
+
+    static func layoutDirection(for locale: Locale) -> LayoutDirection {
+        locale.language.characterDirection == .rightToLeft
+            ? .rightToLeft
+            : .leftToRight
+    }
+}
+
 enum SettingsPanelPresentationTarget {
     case dashboard
     case featurePanel
@@ -113,9 +283,13 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let menuBarIconSettings: MenuBarIconSettings
     private let menuBarIconGallery: MenuBarIconGalleryLibrary
     private let launchAtLoginController: LaunchAtLoginController
+    private let appearanceUserDefaults: UserDefaults
     private(set) var settingsWindow: NSWindow?
     private(set) var settingsNavigationCoordinator: SettingsNavigationCoordinator?
+    private(set) var commandPalettePanel: NSPanel?
+    private(set) var commandPaletteState: StandaloneCommandPaletteState?
     private var runtimeLocaleCancellable: AnyCancellable?
+    private var appDeactivationObserver: NSObjectProtocol?
     private var panelPresentationActions = SettingsPanelPresentationActions()
     private var onProgrammaticSettingsPresentation: () -> Void = {}
 
@@ -123,30 +297,50 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         AppL10n.settings("settings.window.title", defaultValue: "设置")
     }
 
+    static var commandPaletteWindowTitle: String {
+        AppL10n.search("search.title", defaultValue: "搜索 MacTools")
+    }
+
     init(
         pluginHost: PluginHost,
         appUpdater: AppUpdater,
         menuBarIconSettings: MenuBarIconSettings,
         menuBarIconGallery: MenuBarIconGalleryLibrary,
-        launchAtLoginController: LaunchAtLoginController
+        launchAtLoginController: LaunchAtLoginController,
+        appearanceUserDefaults: UserDefaults = .standard
     ) {
         self.pluginHost = pluginHost
         self.appUpdater = appUpdater
         self.menuBarIconSettings = menuBarIconSettings
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
+        self.appearanceUserDefaults = appearanceUserDefaults
         super.init()
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in
                     self?.settingsWindow?.title = Self.settingsWindowTitle
+                    self?.commandPalettePanel?.setAccessibilityTitle(Self.commandPaletteWindowTitle)
+                    self?.commandPaletteState?.refreshLocalization()
                 }
             }
+        appDeactivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.dismissCommandPalette()
+            }
+        }
     }
 
     isolated deinit {
         runtimeLocaleCancellable?.cancel()
+        if let appDeactivationObserver {
+            NotificationCenter.default.removeObserver(appDeactivationObserver)
+        }
     }
 
     func showSettings() {
@@ -154,8 +348,63 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     func showUnifiedSearch() {
+        launchAtLoginController.refreshStatus()
         presentSettings(.settings)
         settingsNavigationCoordinator?.presentUnifiedSearch(origin: .keyboard)
+    }
+
+    func toggleCommandPalette() {
+        if settingsNavigationCoordinator?.isUnifiedSearchPresented == true {
+            if CommandPaletteTogglePolicy.settingsPaletteIsVisible(
+                isPresented: true,
+                isWindowVisible: settingsWindow?.isVisible == true,
+                isWindowMiniaturized: settingsWindow?.isMiniaturized == true,
+                isWindowOnActiveSpace: settingsWindow?.isOnActiveSpace == true
+            ) {
+                settingsNavigationCoordinator?.dismissUnifiedSearch()
+                return
+            }
+
+            settingsNavigationCoordinator?.dismissUnifiedSearch()
+        }
+
+        if commandPalettePanel?.isVisible == true {
+            dismissCommandPalette()
+            return
+        }
+
+        launchAtLoginController.refreshStatus()
+        onProgrammaticSettingsPresentation()
+        let state = commandPaletteState ?? StandaloneCommandPaletteState()
+        let panel = commandPalettePanel ?? makeCommandPalettePanel(state: state)
+        commandPaletteState = state
+        commandPalettePanel = panel
+
+        let shortcutLabel = pluginHost.appShortcutItems.first {
+            $0.action == .openCommandPalette
+        }?.bindingText ?? ""
+        state.prepareForPresentation(shortcutLabel: shortcutLabel)
+
+        let screens = NSScreen.screens
+        let pointerLocation = NSEvent.mouseLocation
+        let orderedVisibleFrames = screens
+            .filter { $0.frame.contains(pointerLocation) }
+            .map(\.visibleFrame)
+            + [NSScreen.main?.visibleFrame].compactMap { $0 }
+            + screens.map(\.visibleFrame)
+        panel.setFrame(
+            StandaloneCommandPaletteLayout.frame(
+                pointerLocation: pointerLocation,
+                visibleFrames: orderedVisibleFrames
+            ),
+            display: true
+        )
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func dismissCommandPalette() {
+        commandPalettePanel?.orderOut(nil)
     }
 
     func setPanelPresentationActions(
@@ -173,8 +422,18 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     private func show(_ window: NSWindow) {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        AppWindowPresentation.perform(
+            isMiniaturized: window.isMiniaturized,
+            activate: {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            },
+            deminiaturize: {
+                window.deminiaturize(nil)
+            },
+            orderFront: {
+                window.makeKeyAndOrderFront(nil)
+            }
+        )
     }
 
     private func makeSettingsWindow() -> NSWindow {
@@ -194,6 +453,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 menuBarIconSettings: menuBarIconSettings,
                 menuBarIconGallery: menuBarIconGallery,
                 launchAtLoginController: launchAtLoginController,
+                appearanceUserDefaults: appearanceUserDefaults,
                 showDashboard: { [weak self] in
                     self?.panelPresentationActions.present(.dashboard)
                 },
@@ -215,14 +475,88 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         return window
     }
 
+    private func makeCommandPalettePanel(
+        state: StandaloneCommandPaletteState
+    ) -> MacToolsCommandPalettePanel {
+        let panel = MacToolsCommandPalettePanel(
+            contentRect: NSRect(origin: .zero, size: StandaloneCommandPaletteLayout.contentSize),
+            styleMask: [.borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        let actions = UnifiedSearchPaletteActions(
+            dismiss: { [weak self] in
+                self?.dismissCommandPalette()
+            },
+            navigate: { [weak self] destination, target in
+                self?.navigateFromStandaloneSearch(to: destination, target: target) ?? false
+            },
+            consumeQuickSelection: state.consumeQuickSelectionRequest
+        )
+        let hostingView = NSHostingView(
+            rootView: StandaloneCommandPaletteRootView(
+                pluginHost: pluginHost,
+                launchAtLoginController: launchAtLoginController,
+                appearanceUserDefaults: appearanceUserDefaults,
+                state: state,
+                actions: actions
+            )
+        )
+        hostingView.sizingOptions = []
+        panel.contentView = hostingView
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.animationBehavior = .utilityWindow
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.setAccessibilityTitle(Self.commandPaletteWindowTitle)
+        panel.onQuickSelection = state.requestQuickSelection
+        panel.onDismiss = { [weak self] in
+            self?.dismissCommandPalette()
+        }
+        return panel
+    }
+
+    @discardableResult
+    func navigateFromStandaloneSearch(
+        to destination: SettingsNavigationDestination,
+        target: SettingsSearchRevealTarget?
+    ) -> Bool {
+        let validator = settingsNavigationCoordinator
+            ?? SettingsNavigationCoordinator(pluginHost: pluginHost)
+        guard validator.canNavigateFromSearch(to: destination, target: target) else {
+            return false
+        }
+
+        dismissCommandPalette()
+        presentSettings(.settings)
+        return settingsNavigationCoordinator?.navigateFromSearch(
+            to: destination,
+            target: target
+        ) ?? false
+    }
+
     func presentSettings(_ request: SettingsPresentationRequest) {
+        dismissCommandPalette()
         let window = settingsWindow ?? makeSettingsWindow()
         let wasVisible = window.isVisible
         let pendingAppUpdateVersion: String?
 
+        settingsNavigationCoordinator?.dismissUnifiedSearch()
+
         switch request {
         case .settings:
             pendingAppUpdateVersion = nil
+        case .general:
+            pendingAppUpdateVersion = nil
+            settingsNavigationCoordinator?.navigate(to: .general)
+        case .about:
+            pendingAppUpdateVersion = nil
+            settingsNavigationCoordinator?.navigate(to: .about)
         case .appUpdate:
             pendingAppUpdateVersion = appUpdater.availableUpdateVersion
             settingsNavigationCoordinator?.navigate(to: .about)

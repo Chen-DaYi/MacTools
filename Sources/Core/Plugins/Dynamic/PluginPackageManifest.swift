@@ -152,14 +152,18 @@ enum PluginPackageManifestLoader {
         }
     }
 
-    private static func isValidPluginID(_ id: String) -> Bool {
-        let pattern = #"^[A-Za-z0-9][A-Za-z0-9._-]{1,126}[A-Za-z0-9]$"#
-        return id.range(of: pattern, options: .regularExpression) != nil
+    static func isValidPluginID(_ id: String) -> Bool {
+        guard id != "marketplace" else {
+            return false
+        }
+
+        let pattern = #"^[A-Za-z0-9][A-Za-z0-9._-]{1,126}[A-Za-z0-9]\z"#
+        return id.range(of: pattern, options: .regularExpression) == id.startIndex..<id.endIndex
     }
 
     private static func isValidVersion(_ version: String) -> Bool {
-        let pattern = #"^[0-9]+(?:\.[0-9]+){0,2}$"#
-        return version.range(of: pattern, options: .regularExpression) != nil
+        let pattern = #"^[0-9]+(?:\.[0-9]+){0,2}\z"#
+        return version.range(of: pattern, options: .regularExpression) == version.startIndex..<version.endIndex
     }
 
     private static func readManifest(from packageURL: URL) throws -> PluginPackageManifest {

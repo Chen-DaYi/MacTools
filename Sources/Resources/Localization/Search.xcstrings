@@ -16,6 +16,188 @@
     "search.close": { "extractionState": "manual", "localizations": {
       "ar": { "stringUnit": { "state": "translated", "value": "إغلاق البحث" } }, "de": { "stringUnit": { "state": "translated", "value": "Suche schließen" } }, "en": { "stringUnit": { "state": "translated", "value": "Close Search" } }, "es": { "stringUnit": { "state": "translated", "value": "Cerrar búsqueda" } }, "fr": { "stringUnit": { "state": "translated", "value": "Fermer la recherche" } }, "ja": { "stringUnit": { "state": "translated", "value": "検索を閉じる" } }, "ko": { "stringUnit": { "state": "translated", "value": "검색 닫기" } }, "pt": { "stringUnit": { "state": "translated", "value": "Fechar busca" } }, "ru": { "stringUnit": { "state": "translated", "value": "Закрыть поиск" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "关闭搜索" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "關閉搜尋" } }
     } },
+    "search.command.appearance.system.title": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "استخدام مظهر النظام" } },
+      "de": { "stringUnit": { "state": "translated", "value": "Systemdarstellung verwenden" } },
+      "en": { "stringUnit": { "state": "translated", "value": "Use System Appearance" } },
+      "es": { "stringUnit": { "state": "translated", "value": "Usar la apariencia del sistema" } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Utiliser l’apparence du système" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "システムの外観を使用" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "시스템 화면 모드 사용" } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Usar a aparência do sistema" } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Использовать системное оформление" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用系统外观" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "使用系統外觀" } }
+    } },
+    "search.command.appearance.system.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "اجعل مظهر MacTools يتبع النظام تلقائيًا." } },
+      "de": { "stringUnit": { "state": "translated", "value": "Die Darstellung von MacTools automatisch an das System anpassen." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Make MacTools follow the system appearance automatically." } },
+      "es": { "stringUnit": { "state": "translated", "value": "Hacer que la apariencia de MacTools siga automáticamente la del sistema." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Adapter automatiquement l’apparence de MacTools au système." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "MacToolsの外観をシステムに自動的に合わせます。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "MacTools 화면 모드를 시스템에 자동으로 맞춥니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Fazer o MacTools seguir automaticamente a aparência do sistema." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Автоматически подстраивать оформление MacTools под систему." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "让 MacTools 外观自动跟随系统。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "讓 MacTools 外觀自動跟隨系統。" } }
+    } },
+    "search.command.appearance.dark.title": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "استخدام المظهر الداكن" } },
+      "de": { "stringUnit": { "state": "translated", "value": "Dunkle Darstellung verwenden" } },
+      "en": { "stringUnit": { "state": "translated", "value": "Use Dark Appearance" } },
+      "es": { "stringUnit": { "state": "translated", "value": "Usar la apariencia oscura" } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Utiliser l’apparence sombre" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "ダークモードを使用" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "다크 모드 사용" } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Usar a aparência escura" } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Использовать тёмное оформление" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用深色外观" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "使用深色外觀" } }
+    } },
+    "search.command.appearance.dark.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "ثبّت مظهر MacTools على الوضع الداكن." } },
+      "de": { "stringUnit": { "state": "translated", "value": "Die Darstellung von MacTools dauerhaft auf Dunkel stellen." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Keep MacTools in Dark appearance." } },
+      "es": { "stringUnit": { "state": "translated", "value": "Mantener MacTools con la apariencia oscura." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Conserver l’apparence sombre de MacTools." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "MacToolsの外観をダークに固定します。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "MacTools 화면 모드를 다크로 고정합니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Manter o MacTools com a aparência escura." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Всегда использовать тёмное оформление MacTools." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "将 MacTools 外观固定为深色。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "將 MacTools 外觀固定為深色。" } }
+    } },
+    "search.command.appearance.light.title": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "استخدام المظهر الفاتح" } },
+      "de": { "stringUnit": { "state": "translated", "value": "Helle Darstellung verwenden" } },
+      "en": { "stringUnit": { "state": "translated", "value": "Use Light Appearance" } },
+      "es": { "stringUnit": { "state": "translated", "value": "Usar la apariencia clara" } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Utiliser l’apparence claire" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "ライトモードを使用" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "라이트 모드 사용" } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Usar a aparência clara" } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Использовать светлое оформление" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用浅色外观" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "使用淺色外觀" } }
+    } },
+    "search.command.appearance.light.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "ثبّت مظهر MacTools على الوضع الفاتح." } },
+      "de": { "stringUnit": { "state": "translated", "value": "Die Darstellung von MacTools dauerhaft auf Hell stellen." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Keep MacTools in Light appearance." } },
+      "es": { "stringUnit": { "state": "translated", "value": "Mantener MacTools con la apariencia clara." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Conserver l’apparence claire de MacTools." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "MacToolsの外観をライトに固定します。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "MacTools 화면 모드를 라이트로 고정합니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Manter o MacTools com a aparência clara." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Всегда использовать светлое оформление MacTools." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "将 MacTools 外观固定为浅色。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "將 MacTools 外觀固定為淺色。" } }
+    } },
+    "search.command.launchAtLogin.enable.title": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "تشغيل عند تسجيل الدخول" } },
+      "de": { "stringUnit": { "state": "translated", "value": "Beim Anmelden starten" } },
+      "en": { "stringUnit": { "state": "translated", "value": "Enable Launch at Login" } },
+      "es": { "stringUnit": { "state": "translated", "value": "Activar inicio al iniciar sesión" } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Activer l’ouverture à la connexion" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "ログイン時に起動" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "로그인 시 실행 켜기" } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Ativar abertura ao iniciar sessão" } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Включить запуск при входе" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "开启登录时启动" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "開啟登入時啟動" } }
+    } },
+    "search.command.launchAtLogin.enable.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "شغّل MacTools تلقائيًا عند تسجيل الدخول." } },
+      "de": { "stringUnit": { "state": "translated", "value": "MacTools bei der Anmeldung automatisch starten." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Start MacTools automatically when you log in." } },
+      "es": { "stringUnit": { "state": "translated", "value": "Iniciar MacTools automáticamente al iniciar sesión." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Ouvrir automatiquement MacTools à la connexion." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "ログイン時にMacToolsを自動的に起動します。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "로그인할 때 MacTools를 자동으로 실행합니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Iniciar o MacTools automaticamente ao iniciar sessão." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Автоматически запускать MacTools при входе." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "登录系统时自动启动 MacTools。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "登入系統時自動啟動 MacTools。" } }
+    } },
+    "search.command.launchAtLogin.disable.title": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "إيقاف التشغيل عند تسجيل الدخول" } },
+      "de": { "stringUnit": { "state": "translated", "value": "Start bei Anmeldung deaktivieren" } },
+      "en": { "stringUnit": { "state": "translated", "value": "Disable Launch at Login" } },
+      "es": { "stringUnit": { "state": "translated", "value": "Desactivar inicio al iniciar sesión" } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Désactiver l’ouverture à la connexion" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "ログイン時の起動をオフ" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "로그인 시 실행 끄기" } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Desativar abertura ao iniciar sessão" } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Отключить запуск при входе" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "关闭登录时启动" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "關閉登入時啟動" } }
+    } },
+    "search.command.launchAtLogin.disable.description": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "لا تشغّل MacTools تلقائيًا عند تسجيل الدخول." } },
+      "de": { "stringUnit": { "state": "translated", "value": "MacTools bei der Anmeldung nicht mehr automatisch starten." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Stop starting MacTools automatically when you log in." } },
+      "es": { "stringUnit": { "state": "translated", "value": "Dejar de iniciar MacTools automáticamente al iniciar sesión." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Ne plus ouvrir automatiquement MacTools à la connexion." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "ログイン時にMacToolsを自動起動しません。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "로그인할 때 MacTools를 자동으로 실행하지 않습니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Deixar de iniciar o MacTools automaticamente ao iniciar sessão." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Не запускать MacTools автоматически при входе." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "登录系统时不再自动启动 MacTools。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "登入系統時不再自動啟動 MacTools。" } }
+    } },
+    "search.command.pluginVisibility.show.titleFormat": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "إظهار «%2$@» في %1$@" } },
+      "de": { "stringUnit": { "state": "translated", "value": "„%2$@“ in %1$@ anzeigen" } },
+      "en": { "stringUnit": { "state": "translated", "value": "Show “%2$@” in %1$@" } },
+      "es": { "stringUnit": { "state": "translated", "value": "Mostrar «%2$@» en %1$@" } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Afficher « %2$@ » dans %1$@" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "%1$@に「%2$@」を表示" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "%1$@에 “%2$@” 표시" } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Mostrar “%2$@” em %1$@" } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Показать «%2$@» в разделе «%1$@»" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "在%1$@中显示“%2$@”" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "在%1$@中顯示「%2$@」" } }
+    } },
+    "search.command.pluginVisibility.show.descriptionFormat": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "اعرض «%1$@» في %2$@." } },
+      "de": { "stringUnit": { "state": "translated", "value": "„%1$@“ in %2$@ einblenden." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Show “%1$@” in %2$@." } },
+      "es": { "stringUnit": { "state": "translated", "value": "Mostrar «%1$@» en %2$@." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Afficher « %1$@ » dans %2$@." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "「%1$@」を%2$@に表示します。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "“%1$@”을(를) %2$@에 표시합니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Mostrar “%1$@” em %2$@." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Показывать «%1$@» в разделе «%2$@»." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "让“%1$@”出现在%2$@中。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "讓「%1$@」顯示在%2$@中。" } }
+    } },
+    "search.command.pluginVisibility.hide.titleFormat": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "إخفاء «%2$@» من %1$@" } },
+      "de": { "stringUnit": { "state": "translated", "value": "„%2$@“ in %1$@ ausblenden" } },
+      "en": { "stringUnit": { "state": "translated", "value": "Hide “%2$@” from %1$@" } },
+      "es": { "stringUnit": { "state": "translated", "value": "Ocultar «%2$@» de %1$@" } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Masquer « %2$@ » dans %1$@" } },
+      "ja": { "stringUnit": { "state": "translated", "value": "%1$@で「%2$@」を非表示" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "%1$@에서 “%2$@” 숨기기" } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Ocultar “%2$@” de %1$@" } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Скрыть «%2$@» из раздела «%1$@»" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "在%1$@中隐藏“%2$@”" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "在%1$@中隱藏「%2$@」" } }
+    } },
+    "search.command.pluginVisibility.hide.descriptionFormat": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "أخفِ «%2$@» من %1$@ مع إبقاء الإضافة مثبتة." } },
+      "de": { "stringUnit": { "state": "translated", "value": "„%2$@“ in %1$@ ausblenden, ohne das Plugin zu deinstallieren." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Hide “%2$@” from %1$@ without uninstalling the plugin." } },
+      "es": { "stringUnit": { "state": "translated", "value": "Ocultar «%2$@» de %1$@ sin desinstalar el plugin." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Masquer « %2$@ » dans %1$@ sans désinstaller le module." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "プラグインをアンインストールせずに、%1$@で「%2$@」を非表示にします。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "플러그인을 제거하지 않고 %1$@에서 “%2$@”을(를) 숨깁니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Ocultar “%2$@” de %1$@ sem desinstalar o plugin." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Скрыть «%2$@» из раздела «%1$@», не удаляя плагин." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "从%1$@中隐藏“%2$@”，但保留插件安装。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "從%1$@中隱藏「%2$@」，但保留外掛安裝。" } }
+    } },
     "search.detail.about": { "extractionState": "manual", "localizations": {
       "ar": { "stringUnit": { "state": "translated", "value": "الإصدار والتحديثات وروابط المشروع." } }, "de": { "stringUnit": { "state": "translated", "value": "Version, Updates und Projektlinks." } }, "en": { "stringUnit": { "state": "translated", "value": "Version, updates, and project links." } }, "es": { "stringUnit": { "state": "translated", "value": "Versión, actualizaciones y enlaces del proyecto." } }, "fr": { "stringUnit": { "state": "translated", "value": "Version, mises à jour et liens du projet." } }, "ja": { "stringUnit": { "state": "translated", "value": "バージョン、アップデート、プロジェクトリンク。" } }, "ko": { "stringUnit": { "state": "translated", "value": "버전, 업데이트 및 프로젝트 링크." } }, "pt": { "stringUnit": { "state": "translated", "value": "Versão, atualizações e links do projeto." } }, "ru": { "stringUnit": { "state": "translated", "value": "Версия, обновления и ссылки проекта." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "版本、更新和项目链接。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "版本、更新與專案連結。" } }
     } },
@@ -46,8 +228,11 @@
     "search.group.settings": { "extractionState": "manual", "localizations": {
       "ar": { "stringUnit": { "state": "translated", "value": "الإعدادات" } }, "de": { "stringUnit": { "state": "translated", "value": "Einstellungen" } }, "en": { "stringUnit": { "state": "translated", "value": "Settings" } }, "es": { "stringUnit": { "state": "translated", "value": "Ajustes" } }, "fr": { "stringUnit": { "state": "translated", "value": "Réglages" } }, "ja": { "stringUnit": { "state": "translated", "value": "設定" } }, "ko": { "stringUnit": { "state": "translated", "value": "설정" } }, "pt": { "stringUnit": { "state": "translated", "value": "Ajustes" } }, "ru": { "stringUnit": { "state": "translated", "value": "Настройки" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "设置" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "設定" } }
     } },
+    "search.origin.globalShortcutFormat": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "الاختصار العام %@" } }, "de": { "stringUnit": { "state": "translated", "value": "Globaler Kurzbefehl %@" } }, "en": { "stringUnit": { "state": "translated", "value": "Global Shortcut %@" } }, "es": { "stringUnit": { "state": "translated", "value": "Atajo global %@" } }, "fr": { "stringUnit": { "state": "translated", "value": "Raccourci global %@" } }, "ja": { "stringUnit": { "state": "translated", "value": "グローバルショートカット %@" } }, "ko": { "stringUnit": { "state": "translated", "value": "전역 단축키 %@" } }, "pt": { "stringUnit": { "state": "translated", "value": "Atalho global %@" } }, "ru": { "stringUnit": { "state": "translated", "value": "Глобальное сочетание %@" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "全局快捷键 %@" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "全域快速鍵 %@" } }
+    } },
     "search.origin.keyboard": { "extractionState": "manual", "localizations": {
-      "ar": { "stringUnit": { "state": "translated", "value": "الاختصار العام ⌘K" } }, "de": { "stringUnit": { "state": "translated", "value": "Globaler Kurzbefehl ⌘K" } }, "en": { "stringUnit": { "state": "translated", "value": "Global Shortcut ⌘K" } }, "es": { "stringUnit": { "state": "translated", "value": "Atajo global ⌘K" } }, "fr": { "stringUnit": { "state": "translated", "value": "Raccourci global ⌘K" } }, "ja": { "stringUnit": { "state": "translated", "value": "グローバルショートカット ⌘K" } }, "ko": { "stringUnit": { "state": "translated", "value": "전역 단축키 ⌘K" } }, "pt": { "stringUnit": { "state": "translated", "value": "Atalho global ⌘K" } }, "ru": { "stringUnit": { "state": "translated", "value": "Глобальное сочетание ⌘K" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "全局快捷键 ⌘K" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "全域快速鍵 ⌘K" } }
+      "ar": { "stringUnit": { "state": "translated", "value": "اختصار MacTools ⌘K" } }, "de": { "stringUnit": { "state": "translated", "value": "MacTools-Kurzbefehl ⌘K" } }, "en": { "stringUnit": { "state": "translated", "value": "MacTools Shortcut ⌘K" } }, "es": { "stringUnit": { "state": "translated", "value": "Atajo de MacTools ⌘K" } }, "fr": { "stringUnit": { "state": "translated", "value": "Raccourci MacTools ⌘K" } }, "ja": { "stringUnit": { "state": "translated", "value": "MacToolsショートカット ⌘K" } }, "ko": { "stringUnit": { "state": "translated", "value": "MacTools 단축키 ⌘K" } }, "pt": { "stringUnit": { "state": "translated", "value": "Atalho do MacTools ⌘K" } }, "ru": { "stringUnit": { "state": "translated", "value": "Сочетание MacTools ⌘K" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "MacTools 快捷键 ⌘K" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "MacTools 快速鍵 ⌘K" } }
     } },
     "search.origin.pluginSidebar": { "extractionState": "manual", "localizations": {
       "ar": { "stringUnit": { "state": "translated", "value": "من تنقل الإضافات" } }, "de": { "stringUnit": { "state": "translated", "value": "Aus der Plugin-Navigation" } }, "en": { "stringUnit": { "state": "translated", "value": "From Plugin Navigation" } }, "es": { "stringUnit": { "state": "translated", "value": "Desde la navegación de plugins" } }, "fr": { "stringUnit": { "state": "translated", "value": "Depuis la navigation des modules" } }, "ja": { "stringUnit": { "state": "translated", "value": "プラグインナビゲーションから" } }, "ko": { "stringUnit": { "state": "translated", "value": "플러그인 탐색에서" } }, "pt": { "stringUnit": { "state": "translated", "value": "Da navegação de plugins" } }, "ru": { "stringUnit": { "state": "translated", "value": "Из навигации по плагинам" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "来自插件导航" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "來自外掛導覽" } }

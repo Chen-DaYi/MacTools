@@ -50,6 +50,18 @@ final class DynamicPluginLoaderTests: XCTestCase {
         }
     }
 
+    func testFailedLoadTeardownRequiresCleanupOfPartialExternalSession() {
+        let plugin = MockLoadedPlugin(id: "com.example.demo", externalSessionIsActive: true)
+
+        DynamicPluginLoader.deactivateAfterFailedLoad(
+            [plugin],
+            recordID: "com.example.demo"
+        )
+
+        XCTAssertEqual(plugin.deactivationReasons, [.disabled])
+        XCTAssertFalse(plugin.externalSessionIsActive)
+    }
+
     private func makeRecord(id: String) -> PluginPackageRecord {
         let packageURL = URL(fileURLWithPath: "/tmp/\(id).mactoolsplugin", isDirectory: true)
         return PluginPackageRecord(
@@ -75,8 +87,11 @@ private final class MockLoadedPlugin: MacToolsPlugin {
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var deactivationReasons: [PluginDeactivationReason] = []
+    private(set) var externalSessionIsActive: Bool
 
-    init(id: String) {
+    init(id: String, externalSessionIsActive: Bool = false) {
+        self.externalSessionIsActive = externalSessionIsActive
         metadata = PluginMetadata(
             id: id,
             title: "Demo",
@@ -85,5 +100,12 @@ private final class MockLoadedPlugin: MacToolsPlugin {
             order: 1,
             defaultDescription: "Demo"
         )
+    }
+
+    func deactivate(reason: PluginDeactivationReason) {
+        deactivationReasons.append(reason)
+        if reason.requiresStateCleanup {
+            externalSessionIsActive = false
+        }
     }
 }

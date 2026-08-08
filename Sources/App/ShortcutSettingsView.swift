@@ -116,7 +116,7 @@ struct ShortcutSettingsRowsView: View {
                 guard let item = items.first(where: { $0.id == warning.shortcutID }) else {
                     return
                 }
-                save(item, binding: warning.binding)
+                _ = save(item, binding: warning.binding)
             }
         }
     }
@@ -181,7 +181,7 @@ struct GroupedShortcutSettingsRowsView: View {
                 else {
                     return
                 }
-                save(item, binding: warning.binding)
+                _ = save(item, binding: warning.binding)
             }
         }
     }

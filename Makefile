@@ -35,7 +35,7 @@ PLUGIN_KIT_VERSION ?= $(shell $(PYTHON3) -c 'import glob,json; versions={json.lo
 PLUGIN_RELEASE_SIGNED_CATALOG ?= $(if $(filter 2,$(PLUGIN_KIT_VERSION)),docs/plugins/catalog.json,docs/plugins/v$(PLUGIN_KIT_VERSION)/catalog.json)
 PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
 
-.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open clean release release-local
+.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release stop-debug-app run run-open clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -104,7 +104,27 @@ package-plugins-release: generate
 		--xcodebuild "$(XCODEBUILD)" \
 		--release-notes-url "https://github.com/$(PLUGIN_RELEASE_REPO)/releases/tag/$(PLUGIN_RELEASE_TAG)"
 
-run: sync-debug-plugins generate-icon-gallery
+# Relaunching a local build needs to replace, rather than duplicate, the
+# existing debug app. Stop all matching debug processes first; do not start a
+# new copy if the old process declines to quit.
+stop-debug-app:
+	@PIDS=($$(/usr/bin/pgrep -x "$(APP_PRODUCT_NAME)" 2>/dev/null || true)); \
+	if (( $${#PIDS[@]} == 0 )); then \
+		exit 0; \
+	fi; \
+	echo "Stopping existing $(APP_PRODUCT_NAME) instance(s)..."; \
+	/bin/kill -TERM $${PIDS[@]} >/dev/null 2>&1 || true; \
+	for attempt in {1..50}; do \
+		PIDS=($$(/usr/bin/pgrep -x "$(APP_PRODUCT_NAME)" 2>/dev/null || true)); \
+		if (( $${#PIDS[@]} == 0 )); then \
+			exit 0; \
+		fi; \
+		/bin/sleep 0.1; \
+	done; \
+	echo "$(APP_PRODUCT_NAME) is still running; not launching another instance." >&2; \
+	exit 1
+
+run: stop-debug-app sync-debug-plugins generate-icon-gallery
 	@CATALOG_URL="$(MACTOOLS_PLUGIN_CATALOG_URL)"; \
 	ICON_CATALOG_URL="$(MACTOOLS_ICON_CATALOG_URL)"; \
 	if [ -z "$$CATALOG_URL" ] && [ -f "$(LOCAL_PLUGIN_CATALOG)" ]; then \
@@ -127,22 +147,24 @@ run: sync-debug-plugins generate-icon-gallery
 		RUN_ENV+=("MACTOOLS_ICON_CATALOG_URL=$$ICON_CATALOG_URL"); \
 	fi; \
 	stop_app() { \
-		if [ -n "$${APP_PID:-}" ]; then \
+		PIDS=($$(/usr/bin/pgrep -x "$(APP_PRODUCT_NAME)" 2>/dev/null || true)); \
+		if (( $${#PIDS[@]} > 0 )); then \
 			echo "Stopping $(APP_PRODUCT_NAME)..."; \
-			/bin/kill -TERM "$$APP_PID" >/dev/null 2>&1 || true; \
-			wait "$$APP_PID" >/dev/null 2>&1 || true; \
+			/bin/kill -TERM $${PIDS[@]} >/dev/null 2>&1 || true; \
 		fi; \
 	}; \
 	trap 'stop_app; exit 130' INT TERM; \
 	if [ -z "$$CATALOG_URL" ] && [ -z "$$ICON_CATALOG_URL" ]; then \
 		echo "No local plugin catalog found. Run 'make build-plugin' or set MACTOOLS_PLUGIN_CATALOG_URL."; \
 	fi; \
-	env "$${RUN_ENV[@]}" "$(APP_EXECUTABLE)" & \
-	APP_PID=$$!; \
-	wait "$$APP_PID"
+	OPEN_ENV=(); \
+	for ENVIRONMENT_VARIABLE in "$${RUN_ENV[@]}"; do \
+		OPEN_ENV+=(--env "$$ENVIRONMENT_VARIABLE"); \
+	done; \
+	open "$${OPEN_ENV[@]}" -W "$(APP_PATH)"
 
-run-open: build
-	@open -n -W "$(APP_PATH)"
+run-open: stop-debug-app build
+	@open -W "$(APP_PATH)"
 
 clean:
 	@rm -rf build $(PROJECT_FILE) $(WORKSPACE_FILE) "$(GENERATED_PLUGIN_PROJECT_CONFIG)"
