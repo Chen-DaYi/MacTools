@@ -69,12 +69,12 @@ struct CalendarMonthModel: Equatable, Sendable {
 }
 
 enum CalendarComponentCalendars {
-    static func gregorianFollowingSystem() -> Calendar {
+    static func gregorian(firstWeekday: Int = CalendarWeekStartDay.sunday.calendarFirstWeekday) -> Calendar {
         let current = Calendar.autoupdatingCurrent
         var calendar = current.identifier == .gregorian ? current : Calendar(identifier: .gregorian)
         calendar.locale = current.locale
         calendar.timeZone = current.timeZone
-        calendar.firstWeekday = current.firstWeekday
+        calendar.firstWeekday = min(max(firstWeekday, 1), 7)
         return calendar
     }
 
@@ -102,7 +102,7 @@ struct CalendarMonthModelBuilder {
     private let showsHolidayBadges: Bool
 
     init(
-        calendar: Calendar = CalendarComponentCalendars.gregorianFollowingSystem(),
+        calendar: Calendar = CalendarComponentCalendars.gregorian(),
         holidayProvider: CalendarHolidayProvider = .empty,
         localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {

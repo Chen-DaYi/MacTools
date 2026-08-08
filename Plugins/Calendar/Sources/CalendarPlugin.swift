@@ -46,6 +46,7 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
     private let context: PluginRuntimeContext
     private let eventService: CalendarEventServicing
     private let localization: PluginLocalization
+    private let settingsStore: CalendarSettingsStore
     private let viewModel: CalendarComponentViewModel
 
     init(
@@ -59,9 +60,13 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
         self.context = context
         self.localization = localization
         self.eventService = eventService ?? CalendarEventService(localization: localization)
+        self.settingsStore = CalendarSettingsStore(storage: context.storage)
         self.viewModel = CalendarComponentViewModel(
             eventService: self.eventService,
             holidayProvider: .bundled(context: context),
+            calendar: CalendarComponentCalendars.gregorian(
+                firstWeekday: self.settingsStore.weekStartDay.calendarFirstWeekday
+            ),
             localization: localization
         )
         self.metadata = PluginMetadata(
@@ -115,6 +120,18 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
     }
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(description: metadata.defaultDescription) { [weak self, localization] _ in
+            if let self {
+                CalendarSettingsView(
+                    store: settingsStore,
+                    localization: localization,
+                    onWeekStartDayChange: setWeekStartDay
+                )
+            }
+        }
+    }
 
     func makeView(context: PluginComponentContext) -> AnyView {
         AnyView(
@@ -176,6 +193,12 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
     }
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+
+    private func setWeekStartDay(_ day: CalendarWeekStartDay) {
+        settingsStore.setWeekStartDay(day)
+        viewModel.setWeekStartDay(day)
+        onStateChange?()
+    }
 
     private var calendarEventsPermissionState: PluginPermissionState {
         switch eventService.authorization {

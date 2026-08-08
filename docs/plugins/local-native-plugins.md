@@ -130,6 +130,8 @@ Plugin settings are hosted by MacTools. Prefer the descriptive surfaces first:
 - Use `shortcutDefinitions` for global shortcut rows.
 - Use `PluginConfiguration` when the plugin needs an interactive preference, custom manager, list, editor, drag-and-drop surface, chart, or other interaction that cannot be expressed by the descriptive models.
 
+When a plugin exposes `PluginConfiguration`, its manifest must also declare `capabilities.configuration` as `true`; keep the manifest capability and runtime implementation in sync so packaged plugins expose the same settings as local builds.
+
 Custom configuration views must provide only the plugin-specific content. The settings window header, plugin icon, plugin description, permission cards, and shortcut cards are derived by the host; do not repeat a full page title inside the custom view.
 
 All custom settings views should use `MacToolsPluginKit.PluginSettingsTheme` for typography, spacing, radii, colors, and shared card backgrounds. This keeps the dependency direction clean: the host app and plugins both depend on `MacToolsPluginKit`, while plugins never depend on `Sources/App/SettingsStyle.swift`.

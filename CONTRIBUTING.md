@@ -60,6 +60,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Build or tests have passed. If they could not be run, explain why in the PR.
 - User-visible behavior changes are reflected in `README.md` or the relevant design documentation.
 - User-visible app or plugin changes include a concise English changelog fragment in `changes/unreleased/*.md`.
+- Plugin manifest capabilities match the runtime interfaces and configuration views implemented by the plugin.
 - High-risk features cover safety checks, error states, and missing-permission cases.
 - The PR does not include unrelated formatting, generated files, local configuration, certificates, or release credentials.
 
