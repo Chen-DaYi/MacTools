@@ -3,6 +3,30 @@ import XCTest
 @testable import CalendarPlugin
 
 final class CalendarMonthModelBuilderTests: XCTestCase {
+    func testMonthSupportsEveryConfiguredFirstWeekday() throws {
+        let expectedSymbols = ["日", "一", "二", "三", "四", "五", "六"]
+
+        for firstWeekday in 1...7 {
+            let calendar = Self.makeCalendar(firstWeekday: firstWeekday)
+            let builder = CalendarMonthModelBuilder(calendar: calendar)
+            let model = builder.makeMonth(
+                containing: try Self.date(year: 2026, month: 4, day: 15, calendar: calendar)
+            )
+
+            XCTAssertEqual(model.days.count, 42, "firstWeekday=\(firstWeekday)")
+            XCTAssertEqual(
+                model.weekdaySymbols.first,
+                expectedSymbols[firstWeekday - 1],
+                "firstWeekday=\(firstWeekday)"
+            )
+            XCTAssertEqual(
+                model.days.first.map { calendar.component(.weekday, from: $0.date) },
+                firstWeekday,
+                "firstWeekday=\(firstWeekday)"
+            )
+        }
+    }
+
     func testMonthAlwaysBuildsFortyTwoDaysFromConfiguredFirstWeekday() throws {
         var calendar = Self.makeCalendar(firstWeekday: 2)
         calendar.locale = Locale(identifier: "en_US_POSIX")

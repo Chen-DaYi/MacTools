@@ -29,6 +29,7 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         XCTAssertEqual(host.componentItems.first?.span.height, 37)
         XCTAssertEqual(host.permissionCards.map(\.permissionID), ["calendar-events", "calendar-automation"])
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["calendar"])
+        XCTAssertEqual(host.pluginConfigurationItems.first?.hasCustomConfiguration, true)
         XCTAssertEqual(host.pluginConfigurationItems.first?.permissionCards.map(\.permissionID), [
             "calendar-events",
             "calendar-automation"

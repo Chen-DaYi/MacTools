@@ -5,8 +5,8 @@ import MacToolsPluginKit
 
 /// Writes SMC fan control values through MacTools' bundled SMC helper.
 /// The helper is copied to `/Library/PrivilegedHelperTools` with root ownership
-/// and setuid permissions on first use, so users do not need to install SoloFan's
-/// external helper manually.
+/// and setuid permissions on first use. The helper itself rejects unprivileged
+/// writes and verifies that the SMC value changed before reporting success.
 @MainActor
 final class FanControlSMCWriter: FanControlSMCWriting {
     private enum Helper {
@@ -176,6 +176,7 @@ final class FanControlSMCWriter: FanControlSMCWriting {
 
     private func installedHelperMatchesBundled(installedPath: String, bundledURL: URL) -> Bool {
         guard let installedAttributes = try? fileManager.attributesOfItem(atPath: installedPath),
+              Self.helperHasExpectedPrivileges(attributes: installedAttributes),
               let installedSize = installedAttributes[.size] as? NSNumber,
               let installedModifiedAt = installedAttributes[.modificationDate] as? Date,
               let bundledAttributes = try? fileManager.attributesOfItem(atPath: bundledURL.path),
@@ -193,6 +194,19 @@ final class FanControlSMCWriter: FanControlSMCWriting {
 
         return installedModifiedAt.timeIntervalSince(bundledModifiedAt) >= -1
             && installedData == bundledData
+    }
+
+    static func helperHasExpectedPrivileges(attributes: [FileAttributeKey: Any]) -> Bool {
+        guard let ownerID = attributes[.ownerAccountID] as? NSNumber,
+              let groupID = attributes[.groupOwnerAccountID] as? NSNumber,
+              let permissions = attributes[.posixPermissions] as? NSNumber
+        else {
+            return false
+        }
+
+        return ownerID.intValue == 0
+            && groupID.intValue == 0
+            && permissions.intValue & 0o7777 == 0o4755
     }
 
     private func verifyBundleContainingBundledHelper(_ helperURL: URL) -> Bool {
