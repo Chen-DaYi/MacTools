@@ -40,7 +40,7 @@ final class FanControlPluginTests: XCTestCase {
     func testSliderEndedUpdatesCustomPresetRPM() {
         let writer = MockSMCWriter()
         let plugin = makePlugin(writer: writer)
-        let preset = plugin.presetStore.addCustomPreset()
+        let preset = plugin.presetStore.addCustomPreset()!
         plugin.presetStore.setActivePreset(id: preset.id)
 
         plugin.handleAction(.setSlider(controlID: "fan-custom-rpm", value: 4000, phase: .ended))
@@ -76,7 +76,7 @@ final class FanControlPluginTests: XCTestCase {
     func testDeletingActiveCustomPresetResetsToAuto() {
         let writer = MockSMCWriter()
         let plugin = makePlugin(writer: writer)
-        let preset = plugin.presetStore.addCustomPreset()
+        let preset = plugin.presetStore.addCustomPreset()!
         plugin.presetStore.setActivePreset(id: preset.id)
 
         plugin.handleAction(.invokeAction(controlID: "fan-delete-preset"))
@@ -139,7 +139,7 @@ final class FanControlPluginTests: XCTestCase {
     func testCanonicalActionsPublishAndApplyEveryFanPreset() async throws {
         let writer = MockSMCWriter()
         let plugin = makePlugin(writer: writer)
-        let custom = plugin.presetStore.addCustomPreset()
+        let custom = plugin.presetStore.addCustomPreset()!
         plugin.presetStore.updateCustomPresetRPM(id: custom.id, rpm: 3800)
 
         XCTAssertEqual(plugin.actionCatalogEntries.count, 3)
@@ -159,7 +159,7 @@ final class FanControlPluginTests: XCTestCase {
 
     func testDeletedCustomPresetActionBecomesUnavailable() throws {
         let plugin = makePlugin()
-        let custom = plugin.presetStore.addCustomPreset()
+        let custom = plugin.presetStore.addCustomPreset()!
         let reference = try XCTUnwrap(
             plugin.actionCatalogEntries.first(where: { $0.title.contains(custom.name) })?.reference
         )
@@ -167,6 +167,86 @@ final class FanControlPluginTests: XCTestCase {
         plugin.presetStore.deleteCustomPreset(id: custom.id)
 
         XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+    }
+
+    func testPresetCatalogChangesNotifyTheHost() {
+        let plugin = makePlugin()
+        var notifications = 0
+        plugin.onStateChange = { notifications += 1 }
+
+        let preset = plugin.presetStore.addCustomPreset()!
+        plugin.presetStore.renameCustomPreset(id: preset.id, newName: "Quiet")
+        plugin.presetStore.deleteCustomPreset(id: preset.id)
+
+        XCTAssertEqual(notifications, 3)
+    }
+
+    func testPortablePreferencesPreserveCustomPresetActionIdentifiers() throws {
+        let source = makePlugin()
+        let preset = source.presetStore.addCustomPreset()!
+        source.presetStore.renameCustomPreset(id: preset.id, newName: "Quiet")
+        source.presetStore.updateCustomPresetRPM(id: preset.id, rpm: 3_800)
+        source.presetStore.setActivePreset(id: preset.id)
+        let reference = try XCTUnwrap(
+            source.actionCatalogEntries.first(where: { $0.reference.parameters["preset"] == .string(preset.id) })?.reference
+        )
+        let backup = try XCTUnwrap(source.makePortablePreferencesBackup())
+
+        let restored = makePlugin()
+        restored.restorePortablePreferences(from: backup)
+
+        XCTAssertEqual(restored.presetStore.activePresetID, preset.id)
+        XCTAssertTrue(restored.actionCatalogEntries.contains(where: { $0.reference == reference }))
+        XCTAssertTrue(restored.actionAvailability(for: reference).isAvailable)
+    }
+
+    func testPortablePreferencesRoundTripAtUserInputLimits() throws {
+        let source = makePlugin()
+        for _ in 0..<100 {
+            XCTAssertNotNil(source.presetStore.addCustomPreset())
+        }
+        XCTAssertFalse(source.presetStore.canAddPreset)
+        XCTAssertNil(source.presetStore.addCustomPreset())
+        let first = try XCTUnwrap(source.presetStore.customPresets.first)
+        source.presetStore.renameCustomPreset(
+            id: first.id,
+            newName: String(repeating: "A", count: 150)
+        )
+        XCTAssertEqual(source.presetStore.customPresets.first?.name.count, 100)
+
+        let backup = try XCTUnwrap(source.makePortablePreferencesBackup())
+        let restored = makePlugin()
+        restored.restorePortablePreferences(from: backup)
+
+        XCTAssertEqual(restored.presetStore.customPresets.count, 100)
+        XCTAssertEqual(restored.presetStore.customPresets.first?.name.count, 100)
+    }
+
+    func testCustomPresetActionsDependOnPortablePreferencesButBuiltInsDoNot() throws {
+        let plugin = makePlugin()
+        let custom = plugin.presetStore.addCustomPreset()!
+        let builtInReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.parameters["preset"] == .string(FanPresetBuiltInID.auto)
+            })?.reference
+        )
+        let customReference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.parameters["preset"] == .string(custom.id)
+            })?.reference
+        )
+
+        XCTAssertEqual(plugin.backupDisposition(for: builtInReference), .selfContained)
+        XCTAssertEqual(
+            plugin.backupDisposition(for: customReference),
+            .requiresPluginPreferences
+        )
+        let backup = try XCTUnwrap(plugin.makePortablePreferencesBackup())
+        XCTAssertEqual(
+            plugin.actionReferences(inPortablePreferences: backup),
+            [customReference]
+        )
+        XCTAssertNil(plugin.actionReferences(inPortablePreferences: Data("invalid".utf8)))
     }
 
     func testMonitoringOnlyPublishesMeaningfulSnapshotChanges() async throws {
@@ -253,13 +333,17 @@ final class FanControlPluginTests: XCTestCase {
     }
 
     private func makePlugin(
+        storage: FanControlMemoryStorage? = nil,
         reader: MockSMCReader? = nil,
         writer: MockSMCWriter? = nil,
         monitoringActiveInterval: Duration = .seconds(2),
         monitoringIdleInterval: Duration = .seconds(10)
     ) -> FanControlPlugin {
         FanControlPlugin(
-            context: PluginRuntimeContext(pluginID: "fan-control", storage: FanControlMemoryStorage()),
+            context: PluginRuntimeContext(
+                pluginID: "fan-control",
+                storage: storage ?? FanControlMemoryStorage()
+            ),
             smcReader: reader ?? MockSMCReader(),
             smcWriter: writer ?? MockSMCWriter(),
             monitoringActiveInterval: monitoringActiveInterval,

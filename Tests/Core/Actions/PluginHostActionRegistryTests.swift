@@ -70,13 +70,28 @@ final class PluginHostActionRegistryTests: XCTestCase {
         XCTAssertEqual(nativeOutcome, .completed(.succeeded(message: "native")))
         XCTAssertEqual(native.beginCount, 1)
 
-        let legacyOutcome = await host.actionExecutor.execute(
+        let legacyReference = ActionReference(
+            key: ActionKey(providerID: legacy.metadata.id, actionID: "sleep")
+        )
+        XCTAssertFalse(
+            host.actionRegistry.definition(for: legacyReference.key)?
+                .capabilities.contains(.background) ?? true
+        )
+        let backgroundLegacyOutcome = await host.actionExecutor.execute(
             ActionInvocation(
-                reference: ActionReference(
-                    key: ActionKey(providerID: legacy.metadata.id, actionID: "sleep")
-                ),
+                reference: legacyReference,
                 source: .test,
                 mode: .background
+            )
+        )
+        XCTAssertEqual(backgroundLegacyOutcome, .rejected(.backgroundExecutionUnsupported))
+        XCTAssertTrue(legacy.performedCommandIDs.isEmpty)
+
+        let legacyOutcome = await host.actionExecutor.execute(
+            ActionInvocation(
+                reference: legacyReference,
+                source: .test,
+                mode: .foreground
             )
         )
         XCTAssertEqual(legacyOutcome, .completed(.succeeded()))
@@ -126,6 +141,64 @@ final class PluginHostActionRegistryTests: XCTestCase {
             })?.title,
             "Added Later"
         )
+    }
+
+    func testConvergedShortcutAssignmentsRemainIndividuallyVisibleAndEditable() async throws {
+        let plugin = NativeActionTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let reference = ActionReference(key: plugin.definition.key)
+        let firstID = UUID()
+        let secondID = UUID()
+        let firstBinding = ShortcutBinding(keyCode: 31, modifiers: [.command, .option])
+        let secondBinding = ShortcutBinding(keyCode: 32, modifiers: [.command, .shift])
+        XCTAssertEqual(
+            host.shortcutAssignmentService.replaceAllForImport([
+                ActionShortcutAssignmentRecord(
+                    id: firstID,
+                    reference: reference,
+                    binding: firstBinding
+                ),
+                ActionShortcutAssignmentRecord(
+                    id: secondID,
+                    reference: reference,
+                    binding: secondBinding
+                ),
+            ]),
+            .success
+        )
+
+        plugin.onStateChange?()
+        for _ in 0 ..< 100 where host.actionShortcutCatalogItems.filter({
+            $0.reference == reference
+        }).count != 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(
+            Set(host.actionShortcutCatalogItems.filter { $0.reference == reference }
+                .compactMap(\.assignmentID)),
+            [firstID, secondID]
+        )
+
+        let replacement = ShortcutBinding(keyCode: 33, modifiers: [.command, .control])
+        XCTAssertEqual(
+            host.setActionShortcutBinding(
+                replacement,
+                to: reference,
+                assignmentID: secondID
+            ),
+            .success
+        )
+        XCTAssertEqual(
+            host.shortcutAssignmentService.assignments.first(where: { $0.id == firstID })?.binding,
+            firstBinding
+        )
+        XCTAssertEqual(
+            host.shortcutAssignmentService.assignments.first(where: { $0.id == secondID })?.binding,
+            replacement
+        )
+
+        host.clearActionShortcut(for: reference, assignmentID: firstID)
+        XCTAssertEqual(host.shortcutAssignmentService.assignments.map(\.id), [secondID])
     }
 
     func testNativeProviderAvailabilityIsEvaluatedAtExecutionTime() async {
@@ -475,6 +548,87 @@ final class PluginHostActionRegistryTests: XCTestCase {
         )
         XCTAssertTrue(try shortcutItem(in: host).usesDefaultValue)
         XCTAssertEqual(registrations(for: reference, in: host, manager: shortcutManager).count, 1)
+    }
+
+    func testPluginShortcutEditorKeepsConvergedAssignmentsIndividuallyEditable() throws {
+        let plugin = ActionBackedShortcutTestPlugin()
+        let suiteName = "PluginHostActionRegistryTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let reference = ActionReference(key: plugin.definition.key)
+        let first = ActionShortcutAssignmentRecord(
+            reference: reference,
+            binding: ShortcutBinding(keyCode: UInt16(kVK_ANSI_A), modifiers: [.command, .option])
+        )
+        let second = ActionShortcutAssignmentRecord(
+            reference: reference,
+            binding: ShortcutBinding(keyCode: UInt16(kVK_ANSI_B), modifiers: [.command, .shift])
+        )
+        XCTAssertTrue(
+            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([first, second])
+        )
+        let host = makeIsolatedHost(
+            plugin: plugin,
+            defaults: defaults,
+            shortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        )
+
+        let rows = host.shortcutItems.filter {
+            $0.shortcutID == ActionBackedShortcutTestPlugin.shortcutItemID
+        }
+        XCTAssertEqual(rows.map(\.assignmentID), [first.id, second.id])
+        XCTAssertEqual(Set(rows.map(\.id)).count, 2)
+
+        let secondRow = try XCTUnwrap(rows.first(where: { $0.assignmentID == second.id }))
+        host.clearShortcut(for: secondRow.id)
+
+        XCTAssertEqual(host.shortcutAssignmentService.assignments, [first])
+        XCTAssertEqual(
+            host.shortcutItems.filter {
+                $0.shortcutID == ActionBackedShortcutTestPlugin.shortcutItemID
+            }.map(\.assignmentID),
+            [first.id]
+        )
+    }
+
+    func testAppShortcutEditorKeepsConvergedAssignmentsIndividuallyEditable() throws {
+        let suiteName = "PluginHostActionRegistryTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let reference = ActionReference(
+            key: ActionKey(providerID: "mactools", actionID: AppShortcutAction.openSettings.rawValue)
+        )
+        let first = ActionShortcutAssignmentRecord(
+            reference: reference,
+            binding: ShortcutBinding(keyCode: UInt16(kVK_ANSI_C), modifiers: [.command, .option])
+        )
+        let second = ActionShortcutAssignmentRecord(
+            reference: reference,
+            binding: ShortcutBinding(keyCode: UInt16(kVK_ANSI_D), modifiers: [.command, .shift])
+        )
+        XCTAssertTrue(
+            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([first, second])
+        )
+        let host = PluginHost(
+            plugins: [],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar()),
+            loadDynamicPluginsOnInit: false
+        )
+
+        let rows = host.appShortcutItems.filter { $0.action == .openSettings }
+        XCTAssertEqual(rows.map(\.assignmentID), [first.id, second.id])
+
+        host.clearAppShortcut(.openSettings, assignmentID: second.id)
+
+        XCTAssertEqual(
+            host.shortcutAssignmentService.assignments.filter { $0.reference == reference },
+            [first]
+        )
     }
 
     func testMissingProviderShortcutRemainsVisibleUnavailableAndAssigned() throws {

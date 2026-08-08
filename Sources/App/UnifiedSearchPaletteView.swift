@@ -181,10 +181,6 @@ struct UnifiedSearchTextField: NSViewRepresentable {
             return .moveSelection(1)
         case #selector(NSResponder.moveUp(_:)):
             return .moveSelection(-1)
-        case #selector(NSResponder.insertTab(_:)):
-            return .moveSelection(1)
-        case #selector(NSResponder.insertBacktab(_:)):
-            return .moveSelection(-1)
         case #selector(NSResponder.insertNewline(_:)):
             return modifierFlags.contains(.command) ? .openOwner : .submit
         case #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
@@ -336,6 +332,7 @@ struct UnifiedSearchPaletteView: View {
         case execute(MacToolsSearchResult)
         case replaceShortcut(
             reference: ActionReference,
+            assignmentID: UUID?,
             binding: ShortcutBinding,
             ownerDescription: String
         )
@@ -344,8 +341,8 @@ struct UnifiedSearchPaletteView: View {
             switch self {
             case let .execute(result):
                 "execute.\(result.id)"
-            case let .replaceShortcut(reference, _, _):
-                "shortcut.\(reference.key.id)"
+            case let .replaceShortcut(reference, assignmentID, _, _):
+                "shortcut.\(assignmentID?.uuidString ?? reference.key.id)"
             }
         }
     }
@@ -454,7 +451,7 @@ struct UnifiedSearchPaletteView: View {
                     },
                     secondaryButton: .cancel()
                 )
-            case let .replaceShortcut(reference, binding, ownerDescription):
+            case let .replaceShortcut(reference, assignmentID, binding, ownerDescription):
                 return Alert(
                     title: Text(FeatureL10n.string("替换快捷键？")),
                     message: Text(
@@ -467,6 +464,7 @@ struct UnifiedSearchPaletteView: View {
                         _ = pluginHost.setActionShortcutBinding(
                             binding,
                             to: reference,
+                            assignmentID: assignmentID,
                             replacingConflictingActionAssignments: true
                         )
                     },
@@ -695,12 +693,17 @@ struct UnifiedSearchPaletteView: View {
                 displayText: shortcut?.bindingText ?? "",
                 minWidth: 72,
                 onRecord: { binding in
-                    switch pluginHost.setActionShortcutBinding(binding, to: reference) {
+                    switch pluginHost.setActionShortcutBinding(
+                        binding,
+                        to: reference,
+                        assignmentID: shortcut?.assignment.id
+                    ) {
                     case .success:
                         return .accepted
                     case let .failure(.conflict(ownerDescription)):
                         pendingAlert = .replaceShortcut(
                             reference: reference,
+                            assignmentID: shortcut?.assignment.id,
                             binding: binding,
                             ownerDescription: ownerDescription
                         )
@@ -714,7 +717,10 @@ struct UnifiedSearchPaletteView: View {
 
             if shortcut != nil {
                 Button {
-                    pluginHost.clearActionShortcut(for: reference)
+                    pluginHost.clearActionShortcut(
+                        for: reference,
+                        assignmentID: shortcut?.assignment.id
+                    )
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                 }
@@ -768,7 +774,7 @@ struct UnifiedSearchPaletteView: View {
             Text(
                 AppL10n.search(
                     "search.footer.keyboard",
-                    defaultValue: "↑↓/Tab 选择　↩ 打开　⌘↩ 设置　⌘1–9 快速打开"
+                    defaultValue: "↑↓ 选择　↩ 打开　⌘↩ 设置　Tab 操作　⌘1–9 快速打开"
                 )
             )
         }
@@ -958,9 +964,19 @@ struct UnifiedSearchPaletteView: View {
         case let .executeAction(reference):
             Task { @MainActor in
                 let confirmationService: (any ActionConfirmationRequesting)? =
-                    result.confirmation == nil
-                        ? nil
-                        : ApprovedActionConfirmationService()
+                    result.confirmation.map { confirmation in
+                        MatchingApprovedActionConfirmationService(
+                            expectedRequest: ActionConfirmationRequest(
+                                reference: reference,
+                                confirmation: ActionConfirmation(
+                                    title: confirmation.title,
+                                    message: confirmation.message,
+                                    confirmButtonTitle: confirmation.confirmButtonTitle
+                                ),
+                                source: .unifiedSearch
+                            )
+                        )
+                    }
                 let outcome = await pluginHost.actionExecutor.execute(
                     ActionInvocation(
                         reference: reference,

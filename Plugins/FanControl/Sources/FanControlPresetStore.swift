@@ -6,6 +6,17 @@ import MacToolsPluginKit
 /// Manages fan presets (built-in + user-created) with persistence via PluginStorage.
 @MainActor
 final class FanControlPresetStore: ObservableObject {
+    private struct PortablePreferences: Codable {
+        let version: Int
+        let customPresets: [FanPreset]
+        let activePresetID: String
+    }
+
+    private static let portablePreferencesVersion = 1
+    private static let maximumPortablePreferencesSize = 256 * 1_024
+    private static let maximumCustomPresetCount = 100
+    private static let maximumPresetNameLength = 100
+
     // MARK: - Storage Keys
 
     private enum Key {
@@ -36,6 +47,7 @@ final class FanControlPresetStore: ObservableObject {
     private let localization: PluginLocalization
     @Published private(set) var customPresets: [FanPreset] = []
     @Published private(set) var activePresetID: String = FanPresetBuiltInID.auto
+    var onCatalogChange: (() -> Void)?
 
     var allPresets: [FanPreset] {
         Self.builtInPresets + customPresets
@@ -44,6 +56,10 @@ final class FanControlPresetStore: ObservableObject {
     var activePreset: FanPreset {
         allPresets.first(where: { $0.id == activePresetID })
             ?? Self.builtInPresets[0]
+    }
+
+    var canAddPreset: Bool {
+        customPresets.count < Self.maximumCustomPresetCount
     }
 
     // MARK: - Init
@@ -83,6 +99,78 @@ final class FanControlPresetStore: ObservableObject {
         storage.set(activePresetID, forKey: Key.activePresetID)
     }
 
+    func makePortablePreferencesBackup() -> Data? {
+        let payload = PortablePreferences(
+            version: Self.portablePreferencesVersion,
+            customPresets: customPresets,
+            activePresetID: activePresetID
+        )
+        guard Self.isValidPortablePayload(payload),
+              let data = try? JSONEncoder().encode(payload),
+              data.count <= Self.maximumPortablePreferencesSize else {
+            return nil
+        }
+        return data
+    }
+
+    @discardableResult
+    func restorePortablePreferences(from data: Data) -> Bool {
+        guard data.count <= Self.maximumPortablePreferencesSize,
+              let payload = try? JSONDecoder().decode(PortablePreferences.self, from: data),
+              payload.version == Self.portablePreferencesVersion,
+              Self.isValidPortablePayload(payload)
+        else {
+            return false
+        }
+
+        guard let presetData = try? JSONEncoder().encode(payload.customPresets) else {
+            return false
+        }
+        storage.set(presetData, forKey: Key.customPresets)
+        storage.set(payload.activePresetID, forKey: Key.activePresetID)
+        guard storage.data(forKey: Key.customPresets) == presetData,
+              storage.string(forKey: Key.activePresetID) == payload.activePresetID else {
+            return false
+        }
+        customPresets = payload.customPresets
+        activePresetID = payload.activePresetID
+        onCatalogChange?()
+        return true
+    }
+
+    func customPresetIDs(inPortablePreferences data: Data) -> [String]? {
+        guard data.count <= Self.maximumPortablePreferencesSize,
+              let payload = try? JSONDecoder().decode(PortablePreferences.self, from: data),
+              payload.version == Self.portablePreferencesVersion,
+              Self.isValidPortablePayload(payload) else {
+            return nil
+        }
+        return payload.customPresets.map(\.id)
+    }
+
+    private static func isValidPortablePayload(_ payload: PortablePreferences) -> Bool {
+        guard payload.customPresets.count <= maximumCustomPresetCount else { return false }
+        let identifiers = Set(payload.customPresets.map(\.id))
+        guard identifiers.count == payload.customPresets.count else { return false }
+        guard payload.customPresets.allSatisfy({ preset in
+            guard UUID(uuidString: preset.id) != nil,
+                  !preset.isBuiltIn,
+                  !preset.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  preset.name.count <= maximumPresetNameLength,
+                  case let .fixed(rpm) = preset.strategy
+            else {
+                return false
+            }
+            return (FanRPMLimits.absoluteMin...FanRPMLimits.absoluteMax).contains(rpm)
+        }) else {
+            return false
+        }
+
+        return payload.activePresetID == FanPresetBuiltInID.auto
+            || payload.activePresetID == FanPresetBuiltInID.fullSpeed
+            || identifiers.contains(payload.activePresetID)
+    }
+
     // MARK: - CRUD
 
     func setActivePreset(id: String) {
@@ -91,7 +179,8 @@ final class FanControlPresetStore: ObservableObject {
         saveActivePresetID()
     }
 
-    func addCustomPreset() -> FanPreset {
+    func addCustomPreset() -> FanPreset? {
+        guard customPresets.count < Self.maximumCustomPresetCount else { return nil }
         let index = customPresets.count + 1
         let preset = FanPreset(
             id: UUID().uuidString,
@@ -101,6 +190,7 @@ final class FanControlPresetStore: ObservableObject {
         )
         customPresets.append(preset)
         saveCustomPresets()
+        onCatalogChange?()
         return preset
     }
 
@@ -115,8 +205,9 @@ final class FanControlPresetStore: ObservableObject {
         guard let idx = customPresets.firstIndex(where: { $0.id == id }) else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        customPresets[idx].name = trimmed
+        customPresets[idx].name = String(trimmed.prefix(Self.maximumPresetNameLength))
         saveCustomPresets()
+        onCatalogChange?()
     }
 
     func deleteCustomPreset(id: String) {
@@ -126,5 +217,6 @@ final class FanControlPresetStore: ObservableObject {
             saveActivePresetID()
         }
         saveCustomPresets()
+        onCatalogChange?()
     }
 }

@@ -101,6 +101,8 @@ final class EjectDiskPluginTests: XCTestCase {
 
         XCTAssertEqual(definition.risk, .confirmationRequired)
         XCTAssertEqual(definition.externalInvocationPolicy, .confirmAlways)
+        XCTAssertFalse(definition.capabilities.contains(.cancellable))
+        XCTAssertNil(definition.executionTimeoutSeconds)
 
         let result = try await plugin.beginAction(
             ActionInvocation(reference: reference, source: .test, mode: .background)

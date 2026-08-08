@@ -335,6 +335,61 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
         XCTAssertTrue(writer.inhibitCalls.contains(70))
     }
 
+    func testCanonicalActionDefersMutationUntilHandleStarts() async throws {
+        let writer = MockBatteryWriter()
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        let enable = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.key.actionID == "set-enabled"
+            })?.reference
+        )
+
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: enable,
+            source: .test,
+            mode: .foreground
+        ))
+
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertTrue(writer.inhibitCalls.isEmpty)
+        let result = await handle.result()
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertFalse(writer.inhibitCalls.isEmpty)
+    }
+
+    func testCanonicalActionsRequireForegroundWhenHelperIsNotInstalled() async throws {
+        let writer = MockBatteryWriter(isInstalledHelperAvailable: false)
+        let plugin = makePlugin(
+            reader: MockBatteryReader(snapshot: makeSnapshot(level: 60)),
+            writer: writer
+        )
+        plugin.refresh()
+        let enable = try XCTUnwrap(
+            plugin.actionCatalogEntries.first(where: {
+                $0.reference.key.actionID == "set-enabled"
+            })?.reference
+        )
+
+        XCTAssertTrue(plugin.actionDefinitions.allSatisfy {
+            !$0.capabilities.contains(.background)
+                && $0.capabilities.contains(.foregroundInteractive)
+        })
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: enable,
+            source: .workflow,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .failed(message: PluginKitLocalization.actionUnavailable))
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertTrue(writer.inhibitCalls.isEmpty)
+    }
+
     func testCanonicalDischargeRequiresEnabledSupportedState() async throws {
         let writer = MockBatteryWriter()
         let plugin = makePlugin(reader: MockBatteryReader(snapshot: makeSnapshot(level: 90)), writer: writer)

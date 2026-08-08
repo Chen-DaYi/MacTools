@@ -43,6 +43,10 @@ final class ActionRunLinkService {
     }
 
     func presentation(for reference: ActionReference) -> ActionRunLinkPresentation {
+        guard canonicalizeStoredPresets() else {
+            return .unavailable(FeatureL10n.string("无法保存运行链接预设。"))
+        }
+        let reference = canonicalReference(for: reference)
         guard case let .success(action) = registry.registeredAction(for: reference) else {
             return .unavailable(FeatureL10n.string("操作提供方当前不可用。"))
         }
@@ -71,17 +75,42 @@ final class ActionRunLinkService {
     func createPreset(
         for reference: ActionReference
     ) -> Result<ActionRunLinkRepresentation, ActionInvocationPresetError> {
-        presetStore.create(reference: reference, registry: registry).map { preset in
+        guard canonicalizeStoredPresets() else {
+            return .failure(.persistenceFailed)
+        }
+        let reference = canonicalReference(for: reference)
+        return presetStore.create(reference: reference, registry: registry).map { preset in
             representation(for: .preset(preset.id))
         }
     }
 
     @discardableResult
     func deletePreset(for reference: ActionReference) -> Bool {
-        guard let preset = presetStore.preset(reference: reference) else {
-            return false
+        guard canonicalizeStoredPresets() else { return false }
+        return presetStore.delete(reference: canonicalReference(for: reference))
+    }
+
+    private func canonicalReference(for reference: ActionReference) -> ActionReference {
+        guard case let .success(migrated) = registry.migrate(reference) else {
+            return reference
         }
-        return presetStore.delete(id: preset.id)
+        return migrated
+    }
+
+    private func canonicalizeStoredPresets() -> Bool {
+        let stored = presetStore.presets()
+        guard presetStore.loadError == nil else { return false }
+        let canonical = stored.map { preset in
+            let reference = canonicalReference(for: preset.reference)
+            guard reference != preset.reference else { return preset }
+            return ActionInvocationPreset(
+                id: preset.id,
+                reference: reference,
+                createdAt: preset.createdAt,
+                formatVersion: preset.formatVersion
+            )
+        }
+        return canonical == stored || presetStore.replaceAll(canonical)
     }
 
     func resolve(

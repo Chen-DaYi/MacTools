@@ -61,7 +61,8 @@ final class SystemAutomationProvidersTests: XCTestCase {
             events,
             [
                 .power(source: .battery, batteryLevel: 39, event: .adapterDisconnected, date: date),
-                .power(source: .battery, batteryLevel: 39, event: .batteryAtOrBelow, date: date),
+                .power(source: .battery, batteryLevel: 50, event: .batteryAtOrBelow, date: date),
+                .power(source: .battery, batteryLevel: 40, event: .batteryAtOrBelow, date: date),
             ]
         )
         XCTAssertTrue(
@@ -71,6 +72,75 @@ final class SystemAutomationProvidersTests: XCTestCase {
                 thresholds: [40],
                 date: date
             ).isEmpty
+        )
+    }
+
+    func testPowerTransitionsEmitOnlyThresholdsCrossedSinceThePreviousLevel() {
+        let date = Date(timeIntervalSince1970: 100)
+
+        XCTAssertEqual(
+            SystemAutomationTransitions.powerEvents(
+                previous: AutomationPowerSnapshot(source: .battery, batteryLevel: 50),
+                current: AutomationPowerSnapshot(source: .battery, batteryLevel: 19),
+                thresholds: [20, 80],
+                date: date
+            ),
+            [.power(source: .battery, batteryLevel: 20, event: .batteryAtOrBelow, date: date)]
+        )
+        XCTAssertEqual(
+            SystemAutomationTransitions.powerEvents(
+                previous: AutomationPowerSnapshot(source: .battery, batteryLevel: 100),
+                current: AutomationPowerSnapshot(source: .battery, batteryLevel: 19),
+                thresholds: [20, 80],
+                date: date
+            ),
+            [
+                .power(source: .battery, batteryLevel: 80, event: .batteryAtOrBelow, date: date),
+                .power(source: .battery, batteryLevel: 20, event: .batteryAtOrBelow, date: date),
+            ]
+        )
+    }
+
+    func testNetworkTransitionsSeparateAvailabilityFromInterfaceChanges() {
+        let date = Date(timeIntervalSince1970: 100)
+
+        XCTAssertEqual(
+            SystemAutomationTransitions.networkEvents(
+                previousStatus: .available,
+                previousInterface: .wifi,
+                currentStatus: .available,
+                currentInterface: .wiredEthernet,
+                date: date
+            ),
+            [.network(status: .available, interface: .wiredEthernet, date: date)]
+        )
+        XCTAssertEqual(
+            SystemAutomationTransitions.networkEvents(
+                previousStatus: .unavailable,
+                previousInterface: .any,
+                currentStatus: .available,
+                currentInterface: .wifi,
+                date: date
+            ),
+            [
+                .network(status: .available, interface: .any, date: date),
+                .network(status: .available, interface: .wifi, date: date),
+            ]
+        )
+    }
+
+    func testCalendarQueryIncludesEndedEventsWithFuturePositiveOffsets() {
+        let now = Date(timeIntervalSince1970: 10_000)
+
+        XCTAssertEqual(
+            SystemCalendarAutomationTriggerProvider.queryStartDate(
+                currentDate: now,
+                configurations: [
+                    CalendarAutomationTrigger(phase: .ends, offsetMinutes: 30),
+                    CalendarAutomationTrigger(phase: .starts, offsetMinutes: -10),
+                ]
+            ),
+            now.addingTimeInterval(-30 * 60)
         )
     }
 
@@ -92,6 +162,103 @@ final class SystemAutomationProvidersTests: XCTestCase {
                 .display(newExternal, event: .connected, date: date),
                 .display(oldExternal, event: .disconnected, date: date),
             ]
+        )
+    }
+
+    @MainActor
+    func testCalendarPlanBatchesSimultaneousEventsAndExcludesLaterOnes() {
+        let now = Date(timeIntervalSince1970: 100)
+        let firstDate = now.addingTimeInterval(60)
+        let laterDate = now.addingTimeInterval(120)
+        let events = [
+            calendarEvent(id: "second", date: firstDate),
+            calendarEvent(id: "later", date: laterDate),
+            calendarEvent(id: "first", date: firstDate),
+        ]
+
+        let plan = SystemCalendarAutomationTriggerProvider.SchedulePlan.make(
+            candidates: events,
+            after: now
+        )
+
+        XCTAssertEqual(plan.nextBatch.map(\.identifier), ["first", "second"])
+        XCTAssertEqual(plan.dueEvents(at: firstDate), plan.nextBatch)
+        XCTAssertTrue(plan.dueEvents(at: firstDate.addingTimeInterval(91)).isEmpty)
+    }
+
+    @MainActor
+    func testCalendarPlanAlwaysSchedulesMaintenanceWhenNoEventsAreInHorizon() {
+        let now = Date(timeIntervalSince1970: 100)
+
+        let plan = SystemCalendarAutomationTriggerProvider.SchedulePlan.make(
+            candidates: [],
+            after: now
+        )
+
+        XCTAssertTrue(plan.nextBatch.isEmpty)
+        XCTAssertEqual(plan.maintenanceDate, now.addingTimeInterval(24 * 60 * 60))
+        XCTAssertEqual(plan.nextTimerDate, plan.maintenanceDate)
+    }
+
+    @MainActor
+    func testCalendarPlanUsesOneDeadlineWhenEventAndMaintenanceBecomeDueTogether() {
+        let now = Date(timeIntervalSince1970: 100)
+        let sharedDeadline = now.addingTimeInterval(60)
+        let plan = SystemCalendarAutomationTriggerProvider.SchedulePlan.make(
+            candidates: [calendarEvent(id: "wake-event", date: sharedDeadline)],
+            after: now,
+            maintenanceInterval: 60
+        )
+
+        XCTAssertEqual(plan.nextTimerDate, sharedDeadline)
+        XCTAssertEqual(
+            plan.dueEvents(at: sharedDeadline.addingTimeInterval(30)).map(\.identifier),
+            ["wake-event"]
+        )
+    }
+
+    @MainActor
+    func testCalendarPlanSchedulesMaintenanceBeforeADistantEvent() {
+        let now = Date(timeIntervalSince1970: 100)
+        let plan = SystemCalendarAutomationTriggerProvider.SchedulePlan.make(
+            candidates: [calendarEvent(id: "distant", date: now.addingTimeInterval(120))],
+            after: now,
+            maintenanceInterval: 60
+        )
+
+        XCTAssertEqual(plan.nextTimerDate, now.addingTimeInterval(60))
+        XCTAssertTrue(plan.dueEvents(at: plan.nextTimerDate).isEmpty)
+    }
+
+    @MainActor
+    func testCalendarPlanKeepsEverySimultaneousEventBeyondLegacyTimerLimit() {
+        let now = Date(timeIntervalSince1970: 100)
+        let fireDate = now.addingTimeInterval(60)
+        let events = (0..<513).map {
+            calendarEvent(id: "event-\($0)", date: fireDate)
+        } + [calendarEvent(id: "later", date: fireDate.addingTimeInterval(60))]
+
+        let plan = SystemCalendarAutomationTriggerProvider.SchedulePlan.make(
+            candidates: events,
+            after: now
+        )
+
+        XCTAssertEqual(plan.nextBatch.count, 513)
+        XCTAssertFalse(plan.nextBatch.contains(where: { $0.identifier == "later" }))
+    }
+
+    @MainActor
+    private func calendarEvent(
+        id: String,
+        date: Date
+    ) -> SystemCalendarAutomationTriggerProvider.ScheduledEvent {
+        SystemCalendarAutomationTriggerProvider.ScheduledEvent(
+            fireDate: date,
+            identifier: id,
+            title: id,
+            calendarIdentifier: nil,
+            phase: .starts,
+            offsetMinutes: 0
         )
     }
 }

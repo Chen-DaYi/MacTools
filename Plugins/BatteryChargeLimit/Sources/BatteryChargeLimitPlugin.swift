@@ -15,7 +15,7 @@ public final class BatteryChargeLimitPluginFactory: NSObject, MacToolsPluginBund
 private struct BatteryChargeLimitPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
     func makePlugins() -> [any MacToolsPlugin] {
-        [
+        return [
             BatteryChargeLimitPlugin(
                 context: context,
                 localization: PluginLocalization(bundle: context.resourceBundle)
@@ -155,7 +155,11 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var actionDefinitions: [ActionDefinition] {
-        [
+        let executionCapabilities: ActionExecutionCapabilities =
+            writer.isInstalledHelperAvailable
+                ? [.background, .foregroundInteractive]
+                : [.foregroundInteractive]
+        return [
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: metadata.title,
@@ -171,7 +175,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
                 ],
                 confirmation: actionConfirmation,
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: executionCapabilities
             ),
             ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setLimit),
@@ -191,17 +195,19 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
                 ],
                 confirmation: actionConfirmation,
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: executionCapabilities
             ),
             batteryModeActionDefinition(
                 actionID: ActionID.hold,
                 title: localization.string("panel.action.stopCharging", defaultValue: "停止充电"),
-                systemImage: "bolt.slash.fill"
+                systemImage: "bolt.slash.fill",
+                capabilities: executionCapabilities
             ),
             batteryModeActionDefinition(
                 actionID: ActionID.resume,
                 title: localization.string("panel.action.startCharging", defaultValue: "开始充电"),
-                systemImage: "bolt.fill"
+                systemImage: "bolt.fill",
+                capabilities: executionCapabilities
             ),
             batteryModeActionDefinition(
                 actionID: ActionID.discharge,
@@ -211,7 +217,8 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
                     store.limitPercent
                 ),
                 systemImage: "minus.circle",
-                risk: .confirmationRequired
+                risk: .confirmationRequired,
+                capabilities: executionCapabilities
             ),
         ]
     }
@@ -318,11 +325,24 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
             }
         }
 
+        return ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return self.performCanonicalAction(invocation)
+        }
+    }
+
+    private func performCanonicalAction(
+        _ invocation: ActionInvocation
+    ) -> ActionExecutionResult {
+        guard invocation.mode != .background || writer.isInstalledHelperAvailable else {
+            return .failed(message: PluginKitLocalization.actionUnavailable)
+        }
+
         let succeeded: Bool
         switch invocation.reference.key.actionID {
         case ActionID.setEnabled:
             guard case let .boolean(enabled)? = invocation.reference.parameters[ActionParameterID.enabled] else {
-                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+                return .failed(message: PluginKitLocalization.actionInvalidParameters)
             }
             if store.isEnabled != enabled {
                 handleEnableToggle(enabled)
@@ -332,7 +352,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
             guard case let .integer(limit)? = invocation.reference.parameters[ActionParameterID.limit],
                   limit >= BatteryChargeLimits.minimumPercent,
                   limit <= BatteryChargeLimits.maximumPercent else {
-                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+                return .failed(message: PluginKitLocalization.actionInvalidParameters)
             }
             handleLimitChange(Int(limit))
             succeeded = store.limitPercent == Int(limit) && lastErrorMessage == nil
@@ -343,13 +363,11 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
         case ActionID.discharge:
             succeeded = setModeFromAction(.discharging)
         default:
-            return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            return .failed(message: PluginKitLocalization.actionInvalidParameters)
         }
 
         let failureMessage = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
-        return ActionExecutionHandle {
-            succeeded ? .succeeded() : .failed(message: failureMessage)
-        }
+        return succeeded ? .succeeded() : .failed(message: failureMessage)
     }
 
     // MARK: - User Actions
@@ -460,7 +478,8 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
         actionID: String,
         title: String,
         systemImage: String,
-        risk: ActionRisk = .safe
+        risk: ActionRisk = .safe,
+        capabilities: ActionExecutionCapabilities
     ) -> ActionDefinition {
         ActionDefinition(
             key: ActionKey(providerID: metadata.id, actionID: actionID),
@@ -471,7 +490,7 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
             risk: risk,
             confirmation: actionConfirmation,
             externalInvocationPolicy: .confirmAlways,
-            capabilities: [.background, .foregroundInteractive]
+            capabilities: capabilities
         )
     }
 

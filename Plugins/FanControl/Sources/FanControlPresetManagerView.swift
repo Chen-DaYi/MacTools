@@ -57,6 +57,16 @@ struct FanControlPresetManagerView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(!presetStore.canAddPreset)
+            }
+
+            if !presetStore.canAddPreset {
+                Text(localization.string(
+                    "settings.custom.limit",
+                    defaultValue: "最多可创建 100 个自定义预设。"
+                ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
             }
 
             if presetStore.customPresets.isEmpty {

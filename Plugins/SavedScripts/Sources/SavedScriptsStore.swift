@@ -97,6 +97,16 @@ final class SavedScriptsStore: ObservableObject {
         return try? encode(portableScripts)
     }
 
+    func actionIDs(inPortableBackup data: Data) -> [String]? {
+        guard data.count <= Self.maximumPayloadByteCount,
+              let envelope = try? decoder.decode(Envelope.self, from: data),
+              envelope.formatVersion == Self.currentFormatVersion,
+              let decoded = try? validated(envelope.scripts) else {
+            return nil
+        }
+        return decoded.map(\.actionID)
+    }
+
     @discardableResult
     func restorePortableBackup(_ data: Data) -> Bool {
         guard data.count <= Self.maximumPayloadByteCount,

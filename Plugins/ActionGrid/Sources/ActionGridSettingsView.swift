@@ -577,10 +577,11 @@ private struct ActionGridActionEditorSheet: View {
         let saved: Bool
         if let entryID = request.entryID {
             guard let selectedReference else { return }
-            saved = store.replace(id: entryID, reference: selectedReference)
-            if saved {
-                _ = store.setCustomTitle(id: entryID, title: customTitle)
-            }
+            saved = store.replace(
+                id: entryID,
+                reference: selectedReference,
+                customTitle: customTitle
+            )
         } else if addKind == .folder {
             saved = store.addFolder(
                 title: customTitle,
@@ -591,14 +592,10 @@ private struct ActionGridActionEditorSheet: View {
             guard let selectedReference else { return }
             saved = store.add(
                 reference: selectedReference,
+                customTitle: customTitle,
                 in: folderID,
                 at: request.targetSlot
             )
-            if saved,
-               let slot = request.targetSlot,
-               let entryID = store.entry(at: slot, in: folderID)?.id {
-                _ = store.setCustomTitle(id: entryID, title: customTitle)
-            }
         }
         if saved {
             plugin.notifyMutation()

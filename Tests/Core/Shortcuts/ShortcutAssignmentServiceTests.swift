@@ -176,16 +176,20 @@ final class ShortcutAssignmentServiceTests: XCTestCase {
         XCTAssertEqual(store.assignments().map(\.binding), [binding])
     }
 
-    func testStoredActionReferenceMigratesBeforeRegistration() throws {
+    func testStoredActionReferenceAliasesConvergeWithoutDroppingBindings() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = ActionShortcutAssignmentStore(userDefaults: defaults)
         let key = ActionKey(providerID: "shortcut-tests", actionID: "migrated")
         let legacy = ActionReference(key: key, schemaVersion: 1)
         let current = ActionReference(key: key, schemaVersion: 2)
+        let firstID = UUID()
+        let secondID = UUID()
         let binding = ShortcutBinding(keyCode: 10, modifiers: [.command, .option])
+        let secondBinding = ShortcutBinding(keyCode: 11, modifiers: [.command, .option])
         XCTAssertTrue(
             store.replaceAll([
-                ActionShortcutAssignmentRecord(reference: legacy, binding: binding),
+                ActionShortcutAssignmentRecord(id: firstID, reference: legacy, binding: binding),
+                ActionShortcutAssignmentRecord(id: secondID, reference: current, binding: secondBinding),
             ])
         )
         let registry = ActionRegistry()
@@ -227,9 +231,28 @@ final class ShortcutAssignmentServiceTests: XCTestCase {
 
         service.synchronize(reservedRegistrations: [], reservedOwnerDescriptions: [:])
 
-        XCTAssertEqual(service.assignments.first?.reference, current)
-        XCTAssertEqual(service.settingsItems.first?.state, .registered)
-        XCTAssertEqual(registrar.registeredBindings, [binding])
+        XCTAssertEqual(service.assignments.map(\.id), [firstID, secondID])
+        XCTAssertEqual(service.assignments.map(\.reference), [current, current])
+        XCTAssertEqual(service.assignments.map(\.binding), [binding, secondBinding])
+        XCTAssertEqual(service.settingsItems.map(\.state), [.registered, .registered])
+        XCTAssertEqual(Set(registrar.registeredBindings), Set([binding, secondBinding]))
+
+        let replacement = ShortcutBinding(keyCode: 12, modifiers: [.command, .shift])
+        XCTAssertEqual(
+            service.assign(replacement, to: current, assignmentID: secondID),
+            .success
+        )
+        XCTAssertEqual(service.assignments.map(\.id), [firstID, secondID])
+        XCTAssertEqual(service.assignments.map(\.binding), [binding, replacement])
+        XCTAssertEqual(
+            service.assign(binding, to: current, assignmentID: secondID),
+            .failure(.conflict(ownerDescription: "迁移操作"))
+        )
+
+        XCTAssertTrue(service.clear(current, assignmentID: firstID))
+        XCTAssertEqual(service.assignments.map(\.id), [secondID])
+        XCTAssertEqual(service.assignments.map(\.binding), [replacement])
+        XCTAssertEqual(service.settingsItems.map(\.id), [secondID])
     }
 
     private func makeHarness() throws -> ShortcutServiceHarness {

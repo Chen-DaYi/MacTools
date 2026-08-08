@@ -40,6 +40,44 @@ final class ActionGridStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.entries.count, 8)
     }
 
+    func testAddAndReplaceValidateTitleBeforePersistingEitherField() throws {
+        let storage = ActionGridTestStorage()
+        let store = ActionGridStore(storage: storage)
+        let original = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "original")
+        )
+        let replacement = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "replacement")
+        )
+        XCTAssertTrue(store.add(
+            reference: original,
+            customTitle: "Original title",
+            in: nil,
+            at: 4
+        ))
+        let entryID = try XCTUnwrap(store.entry(at: 4, in: nil)?.id)
+        let oversizedTitle = String(
+            repeating: "x",
+            count: ActionGridEntry.maximumCustomTitleByteCount + 1
+        )
+
+        XCTAssertFalse(store.replace(
+            id: entryID,
+            reference: replacement,
+            customTitle: oversizedTitle
+        ))
+        XCTAssertEqual(store.entry(at: 4, in: nil)?.reference, original)
+        XCTAssertEqual(store.entry(at: 4, in: nil)?.customTitle, "Original title")
+        XCTAssertFalse(store.add(
+            reference: replacement,
+            customTitle: oversizedTitle,
+            in: nil,
+            at: 5
+        ))
+        XCTAssertNil(store.entry(at: 5, in: nil))
+        XCTAssertEqual(ActionGridStore(storage: storage).entries, store.entries)
+    }
+
     func testMissingActionsRemainStoredAndMigrateWhenProviderReturns() {
         let storage = ActionGridTestStorage()
         let store = ActionGridStore(storage: storage)
@@ -66,6 +104,39 @@ final class ActionGridStoreTests: XCTestCase {
         providerIsAvailable = true
         XCTAssertTrue(store.migrate(using: context))
         XCTAssertEqual(store.entries.first?.reference.schemaVersion, 2)
+    }
+
+    func testMigratedAliasesPreserveBothCellsAndTheirMetadata() throws {
+        let storage = ActionGridTestStorage()
+        let store = ActionGridStore(storage: storage)
+        let key = ActionKey(providerID: "provider", actionID: "versioned")
+        let legacy = ActionReference(key: key, schemaVersion: 1)
+        let current = ActionReference(key: key, schemaVersion: 2)
+        XCTAssertTrue(store.add(reference: legacy, in: nil, at: 1))
+        XCTAssertTrue(store.add(reference: current, in: nil, at: 7))
+        let legacyID = try XCTUnwrap(store.entry(at: 1, in: nil)?.id)
+        let currentID = try XCTUnwrap(store.entry(at: 7, in: nil)?.id)
+        XCTAssertTrue(store.setCustomTitle(id: legacyID, title: "Legacy alias"))
+        let context = ActionGridHostContext(
+            catalog: { [] },
+            item: { _ in nil },
+            migrate: { reference in
+                ActionReference(
+                    key: reference.key,
+                    schemaVersion: 2,
+                    parameters: reference.parameters
+                )
+            },
+            canPresent: { true },
+            present: { _, _ in true }
+        )
+
+        XCTAssertTrue(store.migrate(using: context))
+        XCTAssertEqual(store.entries.map(\.id), [legacyID, currentID])
+        XCTAssertEqual(store.entries.map(\.slot), [1, 7])
+        XCTAssertEqual(store.entries.map(\.reference), [current, current])
+        XCTAssertEqual(store.entries.first?.customTitle, "Legacy alias")
+        XCTAssertEqual(ActionGridStore(storage: storage).entries, store.entries)
     }
 
     func testCorruptPayloadFailsClosedWithoutDeletingBytesAndPortableBackupRoundTrips() throws {
@@ -115,9 +186,44 @@ final class ActionGridStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.entries(in: powerID).map(\.reference), [lock, sleep])
 
         let backup = try XCTUnwrap(reloaded.portableBackup())
+        XCTAssertEqual(
+            reloaded.actionReferences(inPortableBackup: backup),
+            [lock, sleep]
+        )
         let restored = ActionGridStore(storage: ActionGridTestStorage())
         XCTAssertTrue(restored.restorePortableBackup(backup))
         XCTAssertEqual(restored.entries, reloaded.entries)
+    }
+
+    func testPortableBackupRemovesNestedLocalActionsAndRestoreRejectsThem() throws {
+        let store = ActionGridStore(storage: ActionGridTestStorage())
+        XCTAssertTrue(store.addFolder(title: "Folder", in: nil))
+        let folderID = try XCTUnwrap(store.entries.first?.id)
+        let portable = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "portable")
+        )
+        let local = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "local")
+        )
+        XCTAssertTrue(store.add(reference: portable, in: folderID, at: 0))
+        XCTAssertTrue(store.add(reference: local, in: folderID, at: 1))
+        let context = ActionGridHostContext(
+            catalog: { [] },
+            item: { _ in nil },
+            migrate: { $0 },
+            canExport: { $0 != local },
+            canRestore: { $0 != local },
+            canPresent: { true },
+            present: { _, _ in true }
+        )
+
+        let filteredBackup = try XCTUnwrap(store.portableBackup(using: context))
+        let restored = ActionGridStore(storage: ActionGridTestStorage())
+        XCTAssertTrue(restored.restorePortableBackup(filteredBackup, using: context))
+        XCTAssertEqual(restored.entries(in: restored.entries.first?.id).map(\.reference), [portable])
+
+        let unfilteredBackup = try XCTUnwrap(store.portableBackup())
+        XCTAssertFalse(restored.restorePortableBackup(unfilteredBackup, using: context))
     }
 
     func testRequestedSlotsPreserveEmptyCellsAcrossReloadAndMove() throws {

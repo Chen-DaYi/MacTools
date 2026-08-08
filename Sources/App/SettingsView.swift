@@ -543,7 +543,8 @@ private struct AppShortcutSettingsRow: View {
                         PluginShortcutRecordingResult.from(
                             errorMessage: pluginHost.setAppShortcutBindingAndReturnError(
                                 binding,
-                                for: item.action
+                                for: item.action,
+                                assignmentID: item.assignmentID
                             )
                         )
                     },
@@ -555,7 +556,10 @@ private struct AppShortcutSettingsRow: View {
 
                 if item.canClear {
                     Button {
-                        pluginHost.clearAppShortcut(item.action)
+                        pluginHost.clearAppShortcut(
+                            item.action,
+                            assignmentID: item.assignmentID
+                        )
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(PluginSettingsTheme.Typography.rowIcon)
@@ -868,6 +872,7 @@ private struct PreferencesExportSelectionSheet: View {
 private struct PreferencesSelectionFields: View {
     @Binding var selection: PreferencesBackupSelection
     let pluginOptions: [PreferencesPluginOption]
+    var availableSelection: PreferencesBackupSelection? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -880,7 +885,8 @@ private struct PreferencesSelectionFields: View {
                     "preferencesBackup.selection.application.description",
                     defaultValue: "外观、语言和菜单栏点击方式；不包含权限、登录项或凭证。"
                 ),
-                isOn: $selection.includesApplicationPreferences
+                isOn: $selection.includesApplicationPreferences,
+                isAvailable: availableSelection?.includesApplicationPreferences ?? true
             )
             selectionRow(
                 title: AppL10n.preferencesBackup(
@@ -891,7 +897,8 @@ private struct PreferencesSelectionFields: View {
                     "preferencesBackup.selection.pluginLayout.description",
                     defaultValue: "恢复仪表盘和功能面板中的插件顺序与可见性；缺失插件需要另外安装。"
                 ),
-                isOn: $selection.includesPluginLayout
+                isOn: $selection.includesPluginLayout,
+                isAvailable: availableSelection?.includesPluginLayout ?? true
             )
             selectionRow(
                 title: AppL10n.preferencesBackup(
@@ -902,7 +909,8 @@ private struct PreferencesSelectionFields: View {
                     "preferencesBackup.selection.shortcuts.description",
                     defaultValue: "恢复应用和操作快捷键；插件操作还需要对应插件及其设置。"
                 ),
-                isOn: $selection.includesShortcuts
+                isOn: $selection.includesShortcuts,
+                isAvailable: availableSelection?.includesShortcuts ?? true
             )
             selectionRow(
                 title: AppL10n.preferencesBackup(
@@ -913,7 +921,8 @@ private struct PreferencesSelectionFields: View {
                     "preferencesBackup.selection.automation.description",
                     defaultValue: "保留工作流标识和直接 Run Link；工作流步骤仍需要对应插件及其设置。"
                 ),
-                isOn: $selection.includesAutomation
+                isOn: $selection.includesAutomation,
+                isAvailable: availableSelection?.includesAutomation ?? true
             )
             selectionRow(
                 title: AppL10n.preferencesBackup(
@@ -924,7 +933,8 @@ private struct PreferencesSelectionFields: View {
                     "preferencesBackup.selection.runLinks.description",
                     defaultValue: "参数化操作的已保存链接；工作流链接随“工作流与自动化规则”一起恢复。"
                 ),
-                isOn: $selection.includesRunLinks
+                isOn: $selection.includesRunLinks,
+                isAvailable: availableSelection?.includesRunLinks ?? true
             )
 
             if !pluginOptions.isEmpty {
@@ -947,6 +957,11 @@ private struct PreferencesSelectionFields: View {
                     Toggle(plugin.title, isOn: pluginSelectionBinding(plugin.id))
                         .toggleStyle(.checkbox)
                         .padding(.leading, 18)
+                        .disabled(
+                            availableSelection.map {
+                                !$0.pluginPreferenceIDs.contains(plugin.id)
+                            } ?? false
+                        )
                 }
             }
         }
@@ -959,7 +974,8 @@ private struct PreferencesSelectionFields: View {
     private func selectionRow(
         title: String,
         description: String,
-        isOn: Binding<Bool>
+        isOn: Binding<Bool>,
+        isAvailable: Bool
     ) -> some View {
         Toggle(isOn: isOn) {
             VStack(alignment: .leading, spacing: 2) {
@@ -971,6 +987,7 @@ private struct PreferencesSelectionFields: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .disabled(!isAvailable)
     }
 
     private func pluginSelectionBinding(_ pluginID: String) -> Binding<Bool> {
@@ -1035,7 +1052,8 @@ private struct PreferencesImportPreviewSheet: View {
 
             PreferencesSelectionFields(
                 selection: $selection,
-                pluginOptions: pluginOptions
+                pluginOptions: pluginOptions,
+                availableSelection: preview.selection
             )
 
             Text(AppL10n.preferencesBackup(
@@ -1078,12 +1096,15 @@ private struct PreferencesImportPreviewSheet: View {
                 }
             }
 
-            if !preview.unavailablePluginIDs.isEmpty || !preview.unavailableShortcutIDs.isEmpty {
+            if !preview.unavailablePluginIDs.isEmpty
+                || !preview.unavailableShortcutIDs.isEmpty
+                || !preview.unavailableActionReferences.isEmpty {
                 Text(AppL10n.preferencesBackupFormat(
                     "preferencesBackup.preview.skipped",
-                    defaultValue: "将跳过 %d 个本机不可用的插件设置和 %d 项快捷键；不会安装缺失插件。",
+                    defaultValue: "将跳过 %d 个本机不可用的插件设置、%d 项快捷键和 %d 个不可用或不可移植的操作；不会安装缺失插件。",
                     preview.unavailablePluginIDs.count,
-                    preview.unavailableShortcutIDs.count
+                    preview.unavailableShortcutIDs.count,
+                    preview.unavailableActionReferences.count
                 ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)

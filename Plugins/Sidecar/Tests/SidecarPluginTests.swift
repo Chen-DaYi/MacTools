@@ -22,6 +22,36 @@ final class SidecarPluginTests: XCTestCase {
             $0.title.contains("My iPad")
         })
         XCTAssertEqual(plugin.actionAvailability(for: ActionReference(key: deviceAction.key)), .available)
+
+        XCTAssertEqual(
+            plugin.backupDisposition(for: ActionReference(
+                key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+            )),
+            .requiresPluginPreferences
+        )
+        XCTAssertEqual(
+            plugin.backupDisposition(for: ActionReference(key: deviceAction.key)),
+            .requiresPluginPreferences
+        )
+        XCTAssertEqual(
+            plugin.backupDisposition(for: ActionReference(
+                key: ActionKey(providerID: "sidecar", actionID: "device.missing")
+            )),
+            .excluded
+        )
+        let backup = try XCTUnwrap(plugin.makePortablePreferencesBackup())
+        XCTAssertEqual(
+            plugin.actionReferences(inPortablePreferences: backup),
+            [
+                ActionReference(
+                    key: ActionKey(
+                        providerID: "sidecar",
+                        actionID: "connect-first-available"
+                    )
+                ),
+                ActionReference(key: deviceAction.key),
+            ]
+        )
     }
 
     func testCanonicalConnectActionWaitsForTheSidecarRequestResult() async throws {
@@ -333,6 +363,11 @@ final class SidecarPluginTests: XCTestCase {
             restored.disconnectAllShortcut,
             ShortcutBinding(keyCode: 1, modifiers: [.command, .shift])
         )
+        XCTAssertEqual(
+            restored.deviceIDs(inPortablePreferences: try! XCTUnwrap(source.portablePreferencesData())),
+            ["ipad-2", "ipad-1"]
+        )
+        XCTAssertNil(restored.deviceIDs(inPortablePreferences: Data("invalid".utf8)))
     }
 
     func testOnlyCustomizedOfflineDevicePreferencesNeedToRemainVisible() {

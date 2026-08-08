@@ -93,6 +93,8 @@ public struct ActionGridHostContext {
     private let itemHandler: (ActionReference) -> ActionSurfaceCatalogItem?
     private let migrationHandler: (ActionReference) -> ActionReference?
     private let openOwnerHandler: (ActionReference) -> Bool
+    private let exportHandler: (ActionReference) -> Bool
+    private let restoreHandler: (ActionReference) -> Bool
     private let presentationAvailabilityHandler: () -> Bool
     private let presentationHandler: ([ActionGridPresentationEntry], ActionExecutionSource) -> Bool
 
@@ -101,6 +103,8 @@ public struct ActionGridHostContext {
         item: @escaping (ActionReference) -> ActionSurfaceCatalogItem?,
         migrate: @escaping (ActionReference) -> ActionReference?,
         openOwner: @escaping (ActionReference) -> Bool = { _ in false },
+        canExport: @escaping (ActionReference) -> Bool = { _ in true },
+        canRestore: @escaping (ActionReference) -> Bool = { _ in true },
         canPresent: @escaping () -> Bool,
         present: @escaping ([ActionGridPresentationEntry], ActionExecutionSource) -> Bool
     ) {
@@ -108,6 +112,8 @@ public struct ActionGridHostContext {
         self.itemHandler = item
         self.migrationHandler = migrate
         self.openOwnerHandler = openOwner
+        self.exportHandler = canExport
+        self.restoreHandler = canRestore
         self.presentationAvailabilityHandler = canPresent
         self.presentationHandler = present
     }
@@ -126,6 +132,14 @@ public struct ActionGridHostContext {
     @discardableResult
     public func openOwner(for reference: ActionReference) -> Bool {
         openOwnerHandler(reference)
+    }
+
+    public func canExport(_ reference: ActionReference) -> Bool {
+        exportHandler(reference)
+    }
+
+    public func canRestore(_ reference: ActionReference) -> Bool {
+        restoreHandler(reference)
     }
 
     @discardableResult
@@ -156,17 +170,23 @@ public struct TrackpadActionHostContext {
     private let catalogHandler: () -> [ActionSurfaceCatalogItem]
     private let itemHandler: (ActionReference) -> ActionSurfaceCatalogItem?
     private let migrationHandler: (ActionReference) -> ActionReference?
+    private let exportHandler: (ActionReference) -> Bool
+    private let restoreHandler: (ActionReference) -> Bool
     private let executionHandler: (ActionReference) -> Void
 
     public init(
         catalog: @escaping () -> [ActionSurfaceCatalogItem],
         item: @escaping (ActionReference) -> ActionSurfaceCatalogItem?,
         migrate: @escaping (ActionReference) -> ActionReference?,
+        canExport: @escaping (ActionReference) -> Bool = { _ in true },
+        canRestore: @escaping (ActionReference) -> Bool = { _ in true },
         execute: @escaping (ActionReference) -> Void
     ) {
         self.catalogHandler = catalog
         self.itemHandler = item
         self.migrationHandler = migrate
+        self.exportHandler = canExport
+        self.restoreHandler = canRestore
         self.executionHandler = execute
     }
 
@@ -178,6 +198,14 @@ public struct TrackpadActionHostContext {
 
     public func migrate(_ reference: ActionReference) -> ActionReference? {
         migrationHandler(reference)
+    }
+
+    public func canExport(_ reference: ActionReference) -> Bool {
+        exportHandler(reference)
+    }
+
+    public func canRestore(_ reference: ActionReference) -> Bool {
+        restoreHandler(reference)
     }
 
     public func execute(_ reference: ActionReference) {

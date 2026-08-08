@@ -142,6 +142,111 @@ final class AutomationControllerTests: XCTestCase {
         )
     }
 
+    func testWorkflowCapabilitiesReflectNestedBackgroundSupport() throws {
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let provider = AutomationControllerTestProvider(
+            capabilities: [.foregroundInteractive]
+        )
+        registry.synchronize([provider.registration])
+        let store = WorkflowStore(userDefaults: defaults)
+        let controller = AutomationController(
+            store: store,
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let child = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: child.id, reference: provider.reference)
+        let parent = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: parent.id, reference: child.actionReference)
+
+        let definitions = controller.actionRegistration().definitions
+
+        XCTAssertFalse(
+            try XCTUnwrap(definitions.first { $0.key == child.actionKey })
+                .capabilities.contains(.background)
+        )
+        XCTAssertFalse(
+            try XCTUnwrap(definitions.first { $0.key == parent.actionKey })
+                .capabilities.contains(.background)
+        )
+        XCTAssertFalse(controller.supportsAutomaticRules(workflowID: parent.id))
+    }
+
+    func testAutomaticRuleAvailabilityExplainsEveryIneligibleWorkflow() throws {
+        let suite = "AutomationControllerTests.eligibility.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let background = AutomationControllerTestProvider(actionID: "background")
+        let foreground = AutomationControllerTestProvider(
+            providerID: "automation-controller-foreground-tests",
+            actionID: "foreground",
+            capabilities: [.foregroundInteractive]
+        )
+        registry.synchronize([background.registration, foreground.registration])
+        let controller = AutomationController(
+            store: WorkflowStore(userDefaults: defaults),
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: UUID()).reason,
+            FeatureL10n.string("找不到工作流。")
+        )
+        let empty = try XCTUnwrap(controller.createWorkflow())
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: empty.id).reason,
+            FeatureL10n.string("工作流尚未添加步骤。")
+        )
+        controller.setWorkflowEnabled(false, id: empty.id)
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: empty.id).reason,
+            FeatureL10n.string("工作流已停用。")
+        )
+
+        let interactive = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: interactive.id, reference: foreground.reference)
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: interactive.id).reason,
+            FeatureL10n.string("此工作流包含需要交互的操作，不能由自动规则在后台运行。")
+        )
+
+        let missing = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(
+            workflowID: missing.id,
+            reference: ActionReference(
+                key: ActionKey(providerID: "missing", actionID: "action")
+            )
+        )
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: missing.id).reason,
+            FeatureL10n.string("工作流包含不可用操作。")
+        )
+
+        let unavailable = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: unavailable.id, reference: background.reference)
+        background.availability = .unavailable("Device disconnected")
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: unavailable.id).reason,
+            "Device disconnected"
+        )
+        background.availability = .available
+        XCTAssertTrue(controller.automaticRuleAvailability(workflowID: unavailable.id).isAvailable)
+
+        let first = try XCTUnwrap(controller.createWorkflow())
+        let second = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: first.id, reference: second.actionReference)
+        controller.addStep(workflowID: second.id, reference: first.actionReference)
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: first.id).reason,
+            FeatureL10n.string("检测到递归工作流调用。")
+        )
+    }
+
     func testRuleManagementKeepsMultipleIndependentRulesForWorkflow() throws {
         let suite = "AutomationControllerTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -287,10 +392,21 @@ final class AutomationControllerTests: XCTestCase {
 
 @MainActor
 private final class AutomationControllerTestProvider {
-    let reference = ActionReference(
-        key: ActionKey(providerID: "automation-controller-tests", actionID: "run")
-    )
+    let reference: ActionReference
     private(set) var invocationCount = 0
+    let capabilities: ActionExecutionCapabilities
+    var availability: ActionAvailability = .available
+
+    init(
+        providerID: String = "automation-controller-tests",
+        actionID: String = "run",
+        capabilities: ActionExecutionCapabilities = [.background, .foregroundInteractive]
+    ) {
+        self.reference = ActionReference(
+            key: ActionKey(providerID: providerID, actionID: actionID)
+        )
+        self.capabilities = capabilities
+    }
 
     var registration: ActionProviderRegistration {
         let definition = ActionDefinition(
@@ -299,14 +415,14 @@ private final class AutomationControllerTestProvider {
             description: "",
             systemImage: "bolt",
             externalInvocationPolicy: .allowed,
-            capabilities: [.background, .foregroundInteractive]
+            capabilities: capabilities
         )
         return ActionProviderRegistration(
             providerID: reference.key.providerID,
             identity: ObjectIdentifier(self),
             definitions: [definition],
             catalogEntries: [ActionCatalogEntry(reference: reference, title: "运行")],
-            availability: { _ in .available },
+            availability: { [weak self] _ in self?.availability ?? .unavailable("Missing") },
             begin: { [weak self] _ in
                 self?.invocationCount += 1
                 return .success(ActionExecutionHandle(operation: { .succeeded() }))

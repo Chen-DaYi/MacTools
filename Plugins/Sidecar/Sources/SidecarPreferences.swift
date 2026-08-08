@@ -229,21 +229,63 @@ final class SidecarPreferencesStore: ObservableObject {
         ))
     }
 
-    func restorePortablePreferences(from data: Data) {
+    @discardableResult
+    func restorePortablePreferences(from data: Data) -> Bool {
         guard let portablePreferences = try? decoder.decode(PortablePreferences.self, from: data) else {
-            return
+            return false
         }
         let normalized = Self.normalizedShortcuts(
             devices: portablePreferences.devices,
             disconnectAllShortcut: portablePreferences.disconnectAllShortcut,
             connectFirstAvailableShortcut: portablePreferences.connectFirstAvailableShortcut
         )
+        guard let devicesData = try? encoder.encode(normalized.devices) else { return false }
+        let disconnectData: Data?
+        if let shortcut = normalized.disconnectAllShortcut {
+            guard let encoded = try? encoder.encode(shortcut) else { return false }
+            disconnectData = encoded
+        } else {
+            disconnectData = nil
+        }
+        let connectData: Data?
+        if let shortcut = normalized.connectFirstAvailableShortcut {
+            guard let encoded = try? encoder.encode(shortcut) else { return false }
+            connectData = encoded
+        } else {
+            connectData = nil
+        }
+        storage.set(devicesData, forKey: StorageKey.devices)
+        if let data = disconnectData {
+            storage.set(data, forKey: StorageKey.disconnectAllShortcut)
+        } else {
+            storage.removeObject(forKey: StorageKey.disconnectAllShortcut)
+        }
+        if let data = connectData {
+            storage.set(data, forKey: StorageKey.connectFirstAvailableShortcut)
+        } else {
+            storage.removeObject(forKey: StorageKey.connectFirstAvailableShortcut)
+        }
+        guard storage.data(forKey: StorageKey.devices) == devicesData,
+              storage.data(forKey: StorageKey.disconnectAllShortcut) == disconnectData,
+              storage.data(forKey: StorageKey.connectFirstAvailableShortcut) == connectData else {
+            return false
+        }
         devices = normalized.devices
         disconnectAllShortcut = normalized.disconnectAllShortcut
         connectFirstAvailableShortcut = normalized.connectFirstAvailableShortcut
-        persistDevices()
-        persistShortcut(disconnectAllShortcut, forKey: StorageKey.disconnectAllShortcut)
-        persistShortcut(connectFirstAvailableShortcut, forKey: StorageKey.connectFirstAvailableShortcut)
+        return true
+    }
+
+    func deviceIDs(inPortablePreferences data: Data) -> [String]? {
+        guard let portablePreferences = try? decoder.decode(PortablePreferences.self, from: data)
+        else {
+            return nil
+        }
+        return Self.normalizedShortcuts(
+            devices: portablePreferences.devices,
+            disconnectAllShortcut: portablePreferences.disconnectAllShortcut,
+            connectFirstAvailableShortcut: portablePreferences.connectFirstAvailableShortcut
+        ).devices.map(\.id)
     }
 
     private func update(deviceID: String, _ change: (inout SidecarDevicePreference) -> Void) {

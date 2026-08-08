@@ -39,7 +39,8 @@ private struct TrackpadGestureReadinessError: LocalizedError {
 final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     AccessibilityPermissionRefreshing, PluginConfigurationPresenting,
     PluginFeatureExtractionReadinessProviding, TrackpadActionHostContextConsuming,
-    PluginPortablePreferencesProviding {
+    PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
+    PluginPortablePreferencesActionReferencesProviding {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -488,12 +489,22 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     }
 
     func makePortablePreferencesBackup() -> Data? {
-        store.portableBackup()
+        store.portableBackup(using: trackpadActionHostContext)
     }
 
     func restorePortablePreferences(from data: Data) {
-        if store.restorePortableBackup(data) {
+        if store.restorePortableBackup(data, using: trackpadActionHostContext) {
             configurationDidChange()
         }
+    }
+
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        let restored = store.restorePortableBackup(data, using: trackpadActionHostContext)
+        if restored { configurationDidChange() }
+        return restored
+    }
+
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
+        store.actionReferences(inPortableBackup: data)
     }
 }

@@ -45,7 +45,13 @@ enum ActionShortcutCatalogStatus: Equatable {
 }
 
 struct ActionShortcutCatalogItem: Identifiable, Equatable {
+    struct ID: Hashable {
+        let reference: ActionReference
+        let assignmentID: UUID?
+    }
+
     let reference: ActionReference
+    let assignmentID: UUID?
     let title: String
     let ownerTitle: String
     let description: String
@@ -55,7 +61,7 @@ struct ActionShortcutCatalogItem: Identifiable, Equatable {
     let status: ActionShortcutCatalogStatus
     let canAssign: Bool
 
-    var id: ActionReference { reference }
+    var id: ID { ID(reference: reference, assignmentID: assignmentID) }
 }
 
 struct ActionShortcutSettingsItem: Identifiable, Equatable {
@@ -110,6 +116,10 @@ final class ShortcutAssignmentService {
         settingsItems.first { $0.assignment.reference == reference }
     }
 
+    func settingsItems(for reference: ActionReference) -> [ActionShortcutSettingsItem] {
+        settingsItems.filter { $0.assignment.reference == reference }
+    }
+
     func reference(forShortcutID shortcutID: String) -> ActionReference? {
         referencesByShortcutID[shortcutID]
     }
@@ -118,6 +128,7 @@ final class ShortcutAssignmentService {
     func assign(
         _ binding: ShortcutBinding,
         to reference: ActionReference,
+        assignmentID: UUID? = nil,
         replacingConflictingActionAssignments: Bool = false
     ) -> ActionShortcutMutationResult {
         guard binding.hasRequiredModifiers else {
@@ -146,8 +157,14 @@ final class ShortcutAssignmentService {
         }
 
         var records = store.assignments()
+        let targetID = assignmentID
+            ?? records.first(where: { $0.reference == reference })?.id
+        if let assignmentID,
+           !records.contains(where: { $0.id == assignmentID && $0.reference == reference }) {
+            return .failure(.unavailableAction)
+        }
         let conflictingRecords = records.filter {
-            $0.reference != reference && $0.binding == binding
+            $0.id != targetID && $0.binding == binding
         }
         if let conflict = conflictingRecords.first,
            !replacingConflictingActionAssignments {
@@ -160,7 +177,8 @@ final class ShortcutAssignmentService {
             records.removeAll { conflictingIDs.contains($0.id) }
         }
 
-        if let index = records.firstIndex(where: { $0.reference == reference }) {
+        if let targetID,
+           let index = records.firstIndex(where: { $0.id == targetID }) {
             records[index] = ActionShortcutAssignmentRecord(
                 id: records[index].id,
                 reference: reference,
@@ -183,10 +201,13 @@ final class ShortcutAssignmentService {
     }
 
     @discardableResult
-    func clear(_ reference: ActionReference) -> Bool {
+    func clear(_ reference: ActionReference, assignmentID: UUID? = nil) -> Bool {
         var records = store.assignments()
         let originalCount = records.count
-        records.removeAll { $0.reference == reference }
+        records.removeAll { record in
+            guard record.reference == reference else { return false }
+            return assignmentID == nil || record.id == assignmentID
+        }
         guard records.count != originalCount else {
             return false
         }
@@ -332,16 +353,10 @@ final class ShortcutAssignmentService {
         _ records: [ActionShortcutAssignmentRecord]
     ) -> [ActionShortcutAssignmentRecord] {
         var result = records
-        var claimedReferences = Set(records.map(\.reference))
         for index in result.indices {
             let original = result[index]
             guard case let .success(migrated) = registry.migrate(original.reference),
                   migrated != original.reference else {
-                continue
-            }
-            claimedReferences.remove(original.reference)
-            guard claimedReferences.insert(migrated).inserted else {
-                claimedReferences.insert(original.reference)
                 continue
             }
             result[index] = ActionShortcutAssignmentRecord(

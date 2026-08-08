@@ -40,6 +40,47 @@ final class ActionRegistryTests: XCTestCase {
         )
     }
 
+    func testReferencePortabilityDistinguishesPortableKnownLocalAndUnknownActions() throws {
+        let registry = ActionRegistry()
+        let provider = ActionRegistryTestProvider()
+        let portable = makeActionDefinition(parameters: [
+            ActionParameterDefinition(id: "value", title: "Value", kind: .string),
+        ])
+        let local = ActionDefinition(
+            key: ActionKey(providerID: portable.key.providerID, actionID: "local"),
+            title: "Local",
+            description: "",
+            systemImage: "externaldrive",
+            parameters: [
+                ActionParameterDefinition(
+                    id: "device",
+                    title: "Device",
+                    kind: .string,
+                    portability: .localOnly
+                ),
+            ]
+        )
+        registry.synchronize([provider.registration(
+            definitions: [portable, local],
+            catalogEntries: []
+        )])
+        let portableReference = ActionReference(
+            key: portable.key,
+            parameters: try ActionParameterSet(["value": .string("shared")])
+        )
+        let localReference = ActionReference(
+            key: local.key,
+            parameters: try ActionParameterSet(["device": .string("this-mac")])
+        )
+        let unknown = ActionReference(
+            key: ActionKey(providerID: "missing", actionID: "run")
+        )
+
+        XCTAssertEqual(registry.portability(of: portableReference), .portable)
+        XCTAssertEqual(registry.portability(of: localReference), .knownNonPortable)
+        XCTAssertEqual(registry.portability(of: unknown), .unknown)
+    }
+
     func testRegistryRejectsConfirmAlwaysDefinitionWithoutConfirmationMetadata() {
         let registry = ActionRegistry()
         let provider = ActionRegistryTestProvider()

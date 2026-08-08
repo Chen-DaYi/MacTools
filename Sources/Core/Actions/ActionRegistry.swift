@@ -27,6 +27,12 @@ struct RegisteredAction: Equatable {
     let providerGeneration: UInt64
 }
 
+enum ActionReferencePortability: Equatable {
+    case portable
+    case knownNonPortable
+    case unknown
+}
+
 @MainActor
 struct ActionProviderRegistration {
     let providerID: String
@@ -208,6 +214,20 @@ final class ActionRegistry: ObservableObject {
 
     func definition(for key: ActionKey) -> ActionDefinition? {
         definitions[key]
+    }
+
+    func portability(of reference: ActionReference) -> ActionReferencePortability {
+        guard let definition = definitions[reference.key] else { return .unknown }
+        guard case .success = registeredAction(for: reference) else {
+            return .knownNonPortable
+        }
+        let schemaByID = Dictionary(
+            uniqueKeysWithValues: definition.parameters.map { ($0.id, $0) }
+        )
+        return reference.parameters.entries.allSatisfy { entry in
+            schemaByID[entry.name]?.privacy == .publicValue
+                && schemaByID[entry.name]?.portability == .portable
+        } ? .portable : .knownNonPortable
     }
 
     func migrate(_ reference: ActionReference) -> Result<ActionReference, ActionRegistryError> {

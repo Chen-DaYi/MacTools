@@ -16,6 +16,8 @@ PLUGIN_INSTALL_DIR="${MACTOOLS_E2E_PLUGIN_DIR:-$HOME/Library/Application Support
 ARTIFACT_ROOT="${MACTOOLS_E2E_ARTIFACT_ROOT:-$REPO_ROOT/build/E2EArtifacts}"
 BUILT_APP_PATH="$REPO_ROOT/build/DerivedData/Build/Products/Debug/${APP_PATH:t}"
 PYTHON3="${PYTHON3:-/usr/bin/python3}"
+FFMPEG="${MACTOOLS_E2E_FFMPEG:-/opt/homebrew/bin/ffmpeg}"
+FFPROBE="${MACTOOLS_E2E_FFPROBE:-${FFMPEG:h}/ffprobe}"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 if [[ -n "${DEVELOPER_DIR:-}" ]]; then
@@ -308,6 +310,18 @@ matching_pids() {
     pgrep -f -x "$executable" || true
 }
 
+single_executable_pid() {
+    local executable="$1"
+    local label="$2"
+    local output
+    output="$(pgrep -f -x "$executable" || true)"
+    if [[ -z "$output" ]] || [[ "$(print -r -- "$output" | wc -l | tr -d ' ')" != 1 ]]; then
+        print -u2 -r -- "error: expected exactly one $label process before recording"
+        return 1
+    fi
+    print -r -- "${output%%$'\n'*}"
+}
+
 matching_built_pids() {
     [[ -d "$BUILT_APP_PATH" ]] || return 0
     local executable_name executable
@@ -392,12 +406,16 @@ write_preflight_json() {
     local event_posting_access="$8"
     local conflicting_process_count="$9"
     local trackpad_listener_lease_owned="${10}"
-    local passed="${11}"
+    local trackpad_listener_owner_pids="${11}"
+    local trackpad_listener_other_owner_pids="${12}"
+    local passed="${13}"
 
     mkdir -p "${output_path:h}"
     "$PYTHON3" - "$output_path" "$APP_PATH" "$bundle_id" "$team_id" "$expected_team_id" \
         "$authority" "$plugin_count" "$process_count" "$event_posting_access" \
-        "$conflicting_process_count" "$trackpad_listener_lease_owned" "$passed" <<'PY'
+        "$conflicting_process_count" "$trackpad_listener_lease_owned" \
+        "$trackpad_listener_owner_pids" "$trackpad_listener_other_owner_pids" \
+        "$FFMPEG" "$FFPROBE" "$passed" <<'PY'
 import json
 import sys
 from datetime import datetime, timezone
@@ -414,9 +432,24 @@ from datetime import datetime, timezone
     event_posting_access,
     conflicting_process_count,
     trackpad_listener_lease_owned,
+    trackpad_listener_owner_pids,
+    trackpad_listener_other_owner_pids,
+    transcoder,
+    media_probe,
     passed,
 ) = sys.argv[1:]
+listener_owner_pids = [
+    int(value) for value in trackpad_listener_owner_pids.splitlines() if value.isdigit()
+]
+listener_other_owner_pids = [
+    int(value) for value in trackpad_listener_other_owner_pids.splitlines() if value.isdigit()
+]
 listener_owned = trackpad_listener_lease_owned == "true"
+permission_state = (
+    "blocked-by-other-process"
+    if listener_other_owner_pids
+    else ("granted" if listener_owned else "unverified")
+)
 payload = {
     "timestamp": datetime.now(timezone.utc).isoformat(),
     "passed": passed == "true",
@@ -432,15 +465,23 @@ payload = {
     "recorder": "scripts/e2e/MacToolsE2ERecorder.swift",
     "recorderPrivacyFilter": "application-allowlist",
     "recorderEnvironmentPreparation": "hide-and-restore-unrelated-regular-apps",
-    "transcoder": "/opt/homebrew/bin/ffmpeg",
-    "permissionState": "granted" if listener_owned else "unverified",
+    "transcoder": transcoder,
+    "mediaProbe": media_probe,
+    "permissionState": permission_state,
     "permissionEvidence": {
         "trackpadListenerLeaseOwnedByStableApp": listener_owned,
+        "trackpadListenerLeaseOwnerPIDs": listener_owner_pids,
+        "trackpadListenerLeaseOwnedByOtherProcesses": bool(listener_other_owner_pids),
+        "trackpadListenerLeaseOtherOwnerPIDs": listener_other_owner_pids,
         "meaning": (
-            "The active Trackpad Gestures listener starts only after MacTools observes both "
-            "Accessibility and Input Monitoring permission."
-            if listener_owned
-            else "No active Trackpad Gestures listener was observed; this does not prove denial."
+            "Another process owns the one global Trackpad Gestures listener lease."
+            if listener_other_owner_pids
+            else (
+                "The active Trackpad Gestures listener starts only after MacTools observes both "
+                "Accessibility and Input Monitoring permission."
+                if listener_owned
+                else "No active Trackpad Gestures listener was observed; this does not prove denial."
+            )
         ),
     },
 }
@@ -485,15 +526,19 @@ preflight() {
     fi
     local trackpad_listener_lease_owned=false
     local listener_lock="${TMPDIR:-/tmp}"
-    listener_lock="${listener_lock%/}/$bundle_id.trackpad-gestures.listener.lock"
-    if [[ -f "$listener_lock" && -n "$process_output" ]]; then
-        local listener_owners
+    listener_lock="${listener_lock%/}/mactools.trackpad-gestures.listener.lock"
+    local listener_owners=""
+    local listener_other_owners=""
+    if [[ -f "$listener_lock" ]]; then
         listener_owners="$(/usr/sbin/lsof -t -- "$listener_lock" 2>/dev/null || true)"
-        local stable_pid
-        for stable_pid in "${(@f)process_output}"; do
-            if print -r -- "$listener_owners" | grep -q -x "$stable_pid"; then
+        local owner_pid
+        for owner_pid in "${(@f)listener_owners}"; do
+            [[ -n "$owner_pid" ]] || continue
+            if [[ -n "$process_output" ]] \
+                && print -r -- "$process_output" | grep -q -x "$owner_pid"; then
                 trackpad_listener_lease_owned=true
-                break
+            else
+                listener_other_owners+="${listener_other_owners:+$'\n'}$owner_pid"
             fi
         done
     fi
@@ -511,16 +556,20 @@ preflight() {
     (( process_count <= 1 )) || failures+=("more than one stable-path app instance is running")
     (( conflicting_process_count == 0 )) \
         || failures+=("a Derived Data MacTools test host is still running")
+    [[ -z "$listener_other_owners" ]] \
+        || failures+=("the global trackpad listener lease is owned by another process: ${listener_other_owners//$'\n'/,}")
     [[ -f "$CAPTURE_RECT_TOOL" ]] || failures+=("private capture rectangle helper is unavailable")
     [[ -f "$PRIVACY_RECORDER_SOURCE" ]] || failures+=("application-filtered recorder is unavailable")
-    [[ -x /opt/homebrew/bin/ffmpeg ]] || failures+=("ffmpeg is unavailable")
+    [[ -x "$FFMPEG" ]] || failures+=("ffmpeg is unavailable at $FFMPEG")
+    [[ -x "$FFPROBE" ]] || failures+=("ffprobe is unavailable at $FFPROBE")
 
     local passed=true
     (( ${#failures[@]} == 0 )) || passed=false
     write_preflight_json \
         "$output_path" "$bundle_id" "$team_id" "$expected_team" "$authority" \
         "$plugin_count" "$process_count" "$event_posting_access" \
-        "$conflicting_process_count" "$trackpad_listener_lease_owned" "$passed"
+        "$conflicting_process_count" "$trackpad_listener_lease_owned" \
+        "$listener_owners" "$listener_other_owners" "$passed"
 
     print -r -- "App: $APP_PATH"
     print -r -- "Bundle: $bundle_id"
@@ -585,6 +634,7 @@ write_session_metadata() {
     plutil -insert hadPreferences -bool "$had_preferences" "$metadata"
     plutil -insert hadExtensionPreferences -bool "$had_extension_preferences" "$metadata"
     plutil -insert preparedAt -date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$metadata"
+    plutil -insert preparedAtEpoch -integer "$(date '+%s')" "$metadata"
 }
 
 write_pending_checkpoints() {
@@ -906,9 +956,25 @@ upgrade_session() {
         print -u2 -r -- "error: invalid E2E session directory $session_dir"
         return 1
     }
+    invalidate_session_recordings "$session_dir"
+    plutil -replace preparedAtEpoch -integer "$(date '+%s')" "$session_dir/session.plist"
     write_pending_checkpoints "$session_dir/ui-checkpoints.json"
     reseed_session "$session_dir"
-    print -r -- "Reset required checkpoints from $SCENARIO_MANIFEST"
+    print -r -- "Reset required checkpoints and recording evidence from $SCENARIO_MANIFEST"
+}
+
+invalidate_session_recordings() {
+    local session_dir="$1"
+    local -a artifacts
+    artifacts=(
+        "$session_dir"/screencast*.mov(N)
+        "$session_dir"/screencast*.mp4(N)
+        "$session_dir"/screencast*.sha256(N)
+        "$session_dir"/screencast*.ready(N)
+        "$session_dir"/screencast*.start(N)
+        "$session_dir"/screencast*.stop(N)
+    )
+    (( ${#artifacts[@]} == 0 )) || rm -f -- "${artifacts[@]}"
 }
 
 session_value() {
@@ -935,17 +1001,28 @@ checkpoint() {
         print -u2 -r -- "error: checkpoint status must be pass, fail, or pending"
         return 1
     }
+    local recording_epoch=0
+    if [[ -f "$session_dir/session.plist" ]]; then
+        recording_epoch="$(session_value "$session_dir" preparedAtEpoch 2>/dev/null || true)"
+        [[ "$recording_epoch" == <-> ]] || recording_epoch=0
+    fi
     "$PYTHON3" - \
         "$session_dir/ui-checkpoints.json" \
         "$session_dir/report.json" \
         "$SCENARIO_MANIFEST" \
+        "$SCRIPT_DIR" \
+        "$FFPROBE" \
+        "$recording_epoch" \
         "$name" "$checkpoint_status" "$detail" <<'PY'
 import json
 import os
 import sys
 from datetime import datetime, timezone
 
-path, report_path, manifest_path, name, status, detail = sys.argv[1:]
+path, report_path, manifest_path, script_dir, ffprobe, recording_epoch, name, status, detail = sys.argv[1:]
+sys.path.insert(0, script_dir)
+from recording_validation import recording_artifact_status
+
 with open(path, encoding="utf-8") as handle:
     payload = json.load(handle)
 with open(manifest_path, encoding="utf-8") as handle:
@@ -971,18 +1048,31 @@ if os.path.isfile(report_path):
     with open(report_path, encoding="utf-8") as handle:
         report = json.load(handle)
     scenario_coverage = {}
+    session = os.path.dirname(path)
+    required_recordings_passed = True
     for pack in manifest["packs"]:
         pack_statuses = {
             checkpoint: payload.get(checkpoint, {"status": "not-required"})["status"]
             for checkpoint in pack["checkpoints"]
         }
+        missing_recordings, invalid_recordings = recording_artifact_status(
+            session, pack["id"], ffprobe, float(recording_epoch)
+        ) if pack.get("recordingRequired", False) else ([], [])
+        recording_passed = not missing_recordings and not invalid_recordings
+        if pack.get("recordingRequired", False):
+            required_recordings_passed = required_recordings_passed and recording_passed
         scenario_coverage[pack["id"]] = {
             "title": pack["title"],
             "phase": pack["phase"],
             "required": pack["required"],
+            "recordingRequired": pack.get("recordingRequired", False),
+            "missingRecordings": missing_recordings,
+            "invalidRecordings": invalid_recordings,
+            "recordingPassed": recording_passed,
             "checkpoints": pack_statuses,
             "passed": bool(pack_statuses)
-                and all(value == "pass" for value in pack_statuses.values()),
+                and all(value == "pass" for value in pack_statuses.values())
+                and recording_passed,
         }
     required_names = [
         checkpoint
@@ -1003,6 +1093,7 @@ if os.path.isfile(report_path):
         and set(required_names).issubset(payload)
         and bool(required_statuses)
         and all(value == "pass" for value in required_statuses)
+        and required_recordings_passed
     )
     with open(report_path, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, sort_keys=True)
@@ -1160,7 +1251,7 @@ record_session() {
         print -r -- "Hide unrelated apps reversibly, start the privacy backdrop, reactivate MacTools, then record"
         print -r -- "Story start route: mactools-dev://app/$start_route"
         print -r -- "ScreenCaptureKit allowlist: MacTools + session privacy helper"
-        print -r -- "MacToolsE2ERecorder '$mov' '$duration' '<visible-MacTools-window>' '<ready-file>' '<first-action-file>' '<assertion-stop-file>' '<allowed-bundle-ids>'"
+        print -r -- "MacToolsE2ERecorder '$mov' '$duration' '<visible-MacTools-window>' '<ready-file>' '<first-action-file>' '<assertion-stop-file>' '<allowed-bundle-id>@<pid>...>'"
         return 0
     fi
 
@@ -1215,22 +1306,29 @@ record_session() {
     }
 
     local app_bundle_id primary_helper_bundle_id secondary_helper_bundle_id backdrop_bundle_id
+    local primary_helper_pid secondary_helper_pid backdrop_pid
     app_bundle_id="$(app_bundle_identifier)"
     primary_helper_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" primary)/Contents/Info.plist" CFBundleIdentifier)"
     secondary_helper_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" secondary)/Contents/Info.plist" CFBundleIdentifier)"
     backdrop_bundle_id="$(plist_value "$(privacy_helper_app_path "$session_dir" backdrop)/Contents/Info.plist" CFBundleIdentifier)"
+    primary_helper_pid="$(single_executable_pid "$(privacy_helper_app_path "$session_dir" primary)/Contents/MacOS/MacToolsE2EPrivacyHelper" "primary privacy helper")" || return 1
+    secondary_helper_pid="$(single_executable_pid "$(privacy_helper_app_path "$session_dir" secondary)/Contents/MacOS/MacToolsE2EPrivacyHelper" "secondary privacy helper")" || return 1
+    backdrop_pid="$(single_executable_pid "$(privacy_helper_app_path "$session_dir" backdrop)/Contents/MacOS/MacToolsE2EPrivacyHelper" "privacy backdrop")" || return 1
     local ready_marker start_marker stop_marker
     ready_marker="$(recording_marker_path "$session_dir" "$label" ready)"
     start_marker="$(recording_marker_path "$session_dir" "$label" start)"
     stop_marker="$(recording_marker_path "$session_dir" "$label" stop)"
-    print -r -- "ScreenCaptureKit application allowlist: $app_bundle_id, $primary_helper_bundle_id, $secondary_helper_bundle_id, $backdrop_bundle_id"
+    print -r -- "ScreenCaptureKit application allowlist: $app_bundle_id@$process_id, $primary_helper_bundle_id@$primary_helper_pid, $secondary_helper_bundle_id@$secondary_helper_pid, $backdrop_bundle_id@$backdrop_pid"
     print -r -- "Recording readiness marker: $ready_marker"
     print -r -- "First action marker: $start_marker"
     print -r -- "Assertion stop marker: $stop_marker"
     rm -f -- "$temporary_mov" "$temporary_mp4" "$ready_marker" "$start_marker" "$stop_marker"
     if ! privacy_recorder_tool "$session_dir" \
         "$temporary_mov" "$duration" "$capture_rect" "$ready_marker" "$start_marker" "$stop_marker" \
-        "$app_bundle_id" "$primary_helper_bundle_id" "$secondary_helper_bundle_id" "$backdrop_bundle_id"; then
+        "$app_bundle_id@$process_id" \
+        "$primary_helper_bundle_id@$primary_helper_pid" \
+        "$secondary_helper_bundle_id@$secondary_helper_pid" \
+        "$backdrop_bundle_id@$backdrop_pid"; then
         stop_privacy_helpers "$session_dir"
         rm -f -- "$temporary_mov" "$temporary_mp4" "$ready_marker" "$start_marker" "$stop_marker"
         return 1
@@ -1238,7 +1336,7 @@ record_session() {
     rm -f -- "$ready_marker" "$start_marker" "$stop_marker"
     stop_privacy_helpers "$session_dir"
     trap - EXIT INT TERM
-    if ! /opt/homebrew/bin/ffmpeg -hide_banner -loglevel error -y -i "$temporary_mov" \
+    if ! "$FFMPEG" -hide_banner -loglevel error -y -i "$temporary_mov" \
         -an -c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p \
         -movflags +faststart "$temporary_mp4"; then
         rm -f -- "$temporary_mov" "$temporary_mp4"
@@ -1339,6 +1437,7 @@ verify_code_session() {
         -only-testing:MacToolsTests/LaunchControlCanonicalActionTests \
         -only-testing:MacToolsTests/LaunchpadPluginActionTests \
         -only-testing:MacToolsTests/LockScreenPluginTests \
+        -only-testing:MacToolsTests/MenuBarHiddenPluginTests \
         -only-testing:MacToolsTests/MicrophoneMutePluginTests \
         -only-testing:MacToolsTests/NightShiftPluginTests \
         -only-testing:MacToolsTests/PhysicalCleanModePluginTests \
@@ -1389,11 +1488,31 @@ collect_session() {
     audit_session "$session_dir" >/dev/null
     codesign -dv --verbose=4 "$APP_PATH" >"$session_dir/signature.txt" 2>&1
     codesign -d -r- "$APP_PATH" >"$session_dir/designated-requirement.txt" 2>&1
-    pgrep -fal 'MacTools Dev' >"$session_dir/processes.txt" || true
-    /usr/bin/log show --last 5m --style compact --predicate 'process == "MacTools Dev"' \
+    matching_pids >"$session_dir/processes.txt" || true
+    local bundle_id start_epoch end_epoch
+    bundle_id="$(session_value "$session_dir" bundleIdentifier)"
+    start_epoch="$(session_value "$session_dir" preparedAtEpoch 2>/dev/null || true)"
+    if [[ "$start_epoch" != <-> ]]; then
+        local prepared_at
+        prepared_at="$(plutil -extract preparedAt raw -o - "$session_dir/session.plist")"
+        start_epoch="$("$PYTHON3" - "$prepared_at" <<'PY'
+import datetime
+import sys
+
+print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).timestamp()))
+PY
+)"
+    fi
+    [[ "$start_epoch" == <-> ]] || {
+        print -u2 -r -- "error: invalid preparedAtEpoch in $session_dir/session.plist"
+        return 1
+    }
+    end_epoch="$(date '+%s')"
+    /usr/bin/log show --start "@$start_epoch" --end "@$end_epoch" --style compact \
+        --predicate "subsystem == '$bundle_id' AND ((category == 'PluginHost' AND eventMessage BEGINSWITH 'Action registry ') OR category == 'TrackpadGesturesPlugin' OR category == 'MultitouchDeviceSession' OR category == 'MultitouchDeviceDriver')" \
         2>/dev/null | tail -2000 >"$session_dir/app.log" || true
 
-    "$PYTHON3" - "$session_dir" "$SCENARIO_MANIFEST" <<'PY'
+    "$PYTHON3" - "$session_dir" "$SCENARIO_MANIFEST" "$SCRIPT_DIR" "$FFPROBE" "$start_epoch" <<'PY'
 import hashlib
 import json
 import glob
@@ -1404,6 +1523,11 @@ from datetime import datetime, timezone
 session = sys.argv[1]
 with open(sys.argv[2], encoding="utf-8") as handle:
     scenario_manifest = json.load(handle)
+sys.path.insert(0, sys.argv[3])
+from recording_validation import recording_artifact_status
+ffprobe = sys.argv[4]
+recording_epoch = float(sys.argv[5])
+
 def load(name):
     with open(os.path.join(session, name), encoding="utf-8") as handle:
         return json.load(handle)
@@ -1448,18 +1572,30 @@ required_statuses = [
     for name in required_checkpoint_names
 ]
 scenario_coverage = {}
+required_recordings_passed = True
 for pack in scenario_manifest["packs"]:
     pack_statuses = {
         name: checkpoints.get(name, {"status": "not-required"})["status"]
         for name in pack["checkpoints"]
     }
+    missing_recordings, invalid_recordings = recording_artifact_status(
+        session, pack["id"], ffprobe, recording_epoch
+    ) if pack.get("recordingRequired", False) else ([], [])
+    recording_passed = not missing_recordings and not invalid_recordings
+    if pack.get("recordingRequired", False):
+        required_recordings_passed = required_recordings_passed and recording_passed
     scenario_coverage[pack["id"]] = {
         "title": pack["title"],
         "phase": pack["phase"],
         "required": pack["required"],
+        "recordingRequired": pack.get("recordingRequired", False),
+        "missingRecordings": missing_recordings,
+        "invalidRecordings": invalid_recordings,
+        "recordingPassed": recording_passed,
         "checkpoints": pack_statuses,
         "passed": bool(pack_statuses)
-            and all(status == "pass" for status in pack_statuses.values()),
+            and all(status == "pass" for status in pack_statuses.values())
+            and recording_passed,
     }
 payload = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -1475,7 +1611,8 @@ payload = {
         and fixture.get("valid", False)
         and set(required_checkpoint_names).issubset(checkpoints)
         and bool(required_statuses)
-        and all(status == "pass" for status in required_statuses),
+        and all(status == "pass" for status in required_statuses)
+        and required_recordings_passed,
 }
 with open(os.path.join(session, "report.json"), "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)

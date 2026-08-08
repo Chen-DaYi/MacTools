@@ -1285,67 +1285,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "سيتم تخطي إعدادات %d من الإضافات غير المتاحة و%d من الاختصارات غير المتاحة."
+            "value": "سيتم تخطي إعدادات %d من الإضافات غير المتاحة و%d من الاختصارات غير المتاحة و%d من الإجراءات غير المتاحة أو غير القابلة للنقل."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Einstellungen für %d nicht verfügbare Plugins und %d nicht verfügbare Kurzbefehle werden übersprungen."
+            "value": "Einstellungen für %d nicht verfügbare Plugins, %d nicht verfügbare Kurzbefehle und %d nicht verfügbare oder nicht übertragbare Aktionen werden übersprungen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Settings for %d unavailable plugins and %d unavailable shortcuts will be skipped."
+            "value": "Settings for %d unavailable plugins, %d unavailable shortcuts, and %d unavailable or non-portable actions will be skipped."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Se omitirán los ajustes de %d plugins no disponibles y %d atajos no disponibles."
+            "value": "Se omitirán los ajustes de %d plugins no disponibles, %d atajos no disponibles y %d acciones no disponibles o no portátiles."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les réglages de %d extensions indisponibles et de %d raccourcis indisponibles seront ignorés."
+            "value": "Les réglages de %d extensions indisponibles, %d raccourcis indisponibles et %d actions indisponibles ou non transférables seront ignorés."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "利用できないプラグイン %d 件の設定と利用できないショートカット %d 件はスキップされます。"
+            "value": "利用できないプラグイン %d 件の設定、利用できないショートカット %d 件、利用できないか移行できないアクション %d 件はスキップされます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용할 수 없는 플러그인 %d개의 설정과 사용할 수 없는 단축키 %d개는 건너뜁니다."
+            "value": "사용할 수 없는 플러그인 설정 %d개, 단축키 %d개 및 사용할 수 없거나 이식할 수 없는 동작 %d개는 건너뜁니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "As configurações de %d plugins indisponíveis e %d atalhos indisponíveis serão ignoradas."
+            "value": "As configurações de %d plugins indisponíveis, %d atalhos indisponíveis e %d ações indisponíveis ou não portáteis serão ignoradas."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Настройки для %d недоступных плагинов и %d недоступных сочетаний клавиш будут пропущены."
+            "value": "Настройки для %d недоступных плагинов, %d недоступных сочетаний клавиш и %d недоступных или непереносимых действий будут пропущены."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将跳过 %d 个本机不可用的插件设置和 %d 项不可用快捷键。"
+            "value": "将跳过 %d 个本机不可用的插件设置、%d 项快捷键和 %d 个不可用或不可移植的操作。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "將略過 %d 個本機不可用的插件設定和 %d 項不可用快速鍵。"
+            "value": "將略過 %d 個本機不可用的插件設定、%d 項快速鍵和 %d 個不可用或不可移植的操作。"
           }
         }
       }
@@ -1953,7 +1953,20 @@
           }
         }
       }
-    }
+    },
+    "preferencesBackup.import.pluginRestoreFailed": { "extractionState": "manual", "localizations": {
+      "ar": { "stringUnit": { "state": "translated", "value": "تعذر استعادة إعدادات \"%@\"." } },
+      "de": { "stringUnit": { "state": "translated", "value": "Die Einstellungen für „%@“ konnten nicht wiederhergestellt werden." } },
+      "en": { "stringUnit": { "state": "translated", "value": "Couldn’t restore settings for “%@”." } },
+      "es": { "stringUnit": { "state": "translated", "value": "No se pudieron restaurar los ajustes de «%@»." } },
+      "fr": { "stringUnit": { "state": "translated", "value": "Impossible de restaurer les réglages de « %@ »." } },
+      "ja": { "stringUnit": { "state": "translated", "value": "「%@」の設定を復元できませんでした。" } },
+      "ko": { "stringUnit": { "state": "translated", "value": "‘%@’ 설정을 복원할 수 없습니다." } },
+      "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível restaurar os ajustes de “%@”." } },
+      "ru": { "stringUnit": { "state": "translated", "value": "Не удалось восстановить настройки «%@»." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法恢复“%@”的插件设置。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法回復「%@」的外掛設定。" } }
+    } }
   },
   "version": "1.0"
 }

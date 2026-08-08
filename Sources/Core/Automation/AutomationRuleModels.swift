@@ -227,7 +227,14 @@ struct AutomationEnvironmentSnapshot: Equatable, Sendable {
 
 enum AutomationTriggerEvent: Equatable, Sendable {
     case schedule(Date)
-    case calendar(identifier: String, title: String, calendarIdentifier: String?, phase: CalendarAutomationPhase, date: Date)
+    case calendar(
+        identifier: String,
+        title: String,
+        calendarIdentifier: String?,
+        phase: CalendarAutomationPhase,
+        offsetMinutes: Int = 0,
+        date: Date
+    )
     case application(bundleIdentifier: String, event: ApplicationAutomationEvent, date: Date)
     case power(source: AutomationPowerSource, batteryLevel: Int?, event: PowerAutomationEvent, date: Date)
     case display(AutomationDisplaySnapshot, event: DisplayAutomationEvent, date: Date)
@@ -246,7 +253,7 @@ enum AutomationTriggerEvent: Equatable, Sendable {
 
     var date: Date {
         switch self {
-        case let .schedule(date), let .calendar(_, _, _, _, date), let .application(_, _, date),
+        case let .schedule(date), let .calendar(_, _, _, _, _, date), let .application(_, _, date),
              let .power(_, _, _, date), let .display(_, _, date), let .network(_, _, date):
             date
         }
@@ -256,8 +263,8 @@ enum AutomationTriggerEvent: Equatable, Sendable {
         switch self {
         case .schedule:
             "schedule"
-        case let .calendar(identifier, _, _, phase, _):
-            "calendar:\(identifier):\(phase.rawValue)"
+        case let .calendar(identifier, _, _, phase, offsetMinutes, _):
+            "calendar:\(identifier):\(phase.rawValue):\(offsetMinutes)"
         case let .application(bundleIdentifier, event, _):
             "application:\(bundleIdentifier):\(event.rawValue)"
         case let .power(source, level, event, _):

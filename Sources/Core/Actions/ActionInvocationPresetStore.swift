@@ -67,7 +67,6 @@ final class ActionInvocationPresetStore {
             guard envelope.formatVersion == ActionInvocationPreset.currentFormatVersion,
                   envelope.presets.count <= Self.maximumPresetCount,
                   Set(envelope.presets.map(\.id)).count == envelope.presets.count,
-                  Set(envelope.presets.map(\.reference)).count == envelope.presets.count,
                   envelope.presets.allSatisfy({
                       $0.formatVersion == ActionInvocationPreset.currentFormatVersion
                   }) else {
@@ -87,7 +86,14 @@ final class ActionInvocationPresetStore {
     }
 
     func preset(reference: ActionReference) -> ActionInvocationPreset? {
-        presets().first { $0.reference == reference }
+        presets()
+            .filter { $0.reference == reference }
+            .min { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
     }
 
     func create(
@@ -120,7 +126,7 @@ final class ActionInvocationPresetStore {
         }
 
         var stored = presets()
-        if let existing = stored.first(where: { $0.reference == reference }) {
+        if let existing = preset(reference: reference) {
             return .success(existing)
         }
         guard stored.count < Self.maximumPresetCount else {
@@ -146,6 +152,17 @@ final class ActionInvocationPresetStore {
     }
 
     @discardableResult
+    func delete(reference: ActionReference) -> Bool {
+        var stored = presets()
+        let originalCount = stored.count
+        stored.removeAll { $0.reference == reference }
+        guard stored.count != originalCount else {
+            return false
+        }
+        return replaceAll(stored)
+    }
+
+    @discardableResult
     func updateReference(id: UUID, reference: ActionReference) -> Bool {
         var stored = presets()
         guard let index = stored.firstIndex(where: { $0.id == id }) else {
@@ -153,9 +170,6 @@ final class ActionInvocationPresetStore {
         }
         if stored[index].reference == reference {
             return true
-        }
-        guard !stored.contains(where: { $0.id != id && $0.reference == reference }) else {
-            return false
         }
         stored[index] = ActionInvocationPreset(
             id: stored[index].id,
@@ -170,7 +184,6 @@ final class ActionInvocationPresetStore {
     func replaceAll(_ presets: [ActionInvocationPreset]) -> Bool {
         guard presets.count <= Self.maximumPresetCount,
               Set(presets.map(\.id)).count == presets.count,
-              Set(presets.map(\.reference)).count == presets.count,
               presets.allSatisfy({
                   $0.formatVersion == ActionInvocationPreset.currentFormatVersion
               }) else {

@@ -1,8 +1,10 @@
+import hashlib
 import json
 import os
 import pathlib
 import subprocess
 import tempfile
+import time
 import unittest
 import uuid
 
@@ -224,6 +226,30 @@ class MacToolsE2ETests(unittest.TestCase):
 
     def test_checkpoint_records_optional_manifest_checkpoint_for_existing_session(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
+            fake_ffprobe = pathlib.Path(temporary_directory) / "ffprobe"
+            fake_ffprobe.write_text(
+                """#!/usr/bin/python3
+import json
+import pathlib
+import sys
+
+if pathlib.Path(sys.argv[-1]).read_bytes() != b"valid-video":
+    raise SystemExit(1)
+print(json.dumps({
+    "streams": [{
+        "codec_type": "video",
+        "width": 1280,
+        "height": 720,
+        "duration": "1.0",
+    }],
+    "format": {"format_name": "mov,mp4", "duration": "1.0"},
+}))
+""",
+                encoding="utf-8",
+            )
+            fake_ffprobe.chmod(0o755)
+            environment = os.environ.copy()
+            environment["MACTOOLS_E2E_FFPROBE"] = str(fake_ffprobe)
             checkpoint_path = pathlib.Path(temporary_directory) / "ui-checkpoints.json"
             manifest = json.loads(SCENARIO_MANIFEST.read_text(encoding="utf-8"))
             required_names = [
@@ -266,6 +292,123 @@ class MacToolsE2ETests(unittest.TestCase):
                     "physical gesture recognized",
                 ],
                 cwd=REPO_ROOT,
+                env=environment,
+                check=True,
+            )
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertFalse(report["passed"])
+            self.assertFalse(
+                report["scenarioCoverage"]["baseline"]["recordingPassed"]
+            )
+            for pack in manifest["packs"]:
+                if not pack["recordingRequired"]:
+                    continue
+                for extension in ("mov", "mp4", "sha256"):
+                    pathlib.Path(
+                        temporary_directory,
+                        f"screencast.{pack['id']}.{extension}",
+                    ).write_bytes(b"evidence")
+            subprocess.run(
+                [
+                    str(E2E_SCRIPT),
+                    "checkpoint",
+                    temporary_directory,
+                    "trackpad-physical-gesture-verification",
+                    "pass",
+                    "physical gesture recognized",
+                ],
+                cwd=REPO_ROOT,
+                env=environment,
+                check=True,
+            )
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertFalse(report["passed"])
+            self.assertFalse(
+                report["scenarioCoverage"]["baseline"]["recordingPassed"]
+            )
+            self.assertTrue(
+                report["scenarioCoverage"]["baseline"]["invalidRecordings"]
+            )
+
+            for pack in manifest["packs"]:
+                if not pack["recordingRequired"]:
+                    continue
+                video_paths = [
+                    pathlib.Path(
+                        temporary_directory,
+                        f"screencast.{pack['id']}.{extension}",
+                    )
+                    for extension in ("mov", "mp4")
+                ]
+                checksum_path = pathlib.Path(
+                    temporary_directory,
+                    f"screencast.{pack['id']}.sha256",
+                )
+                checksum_path.write_text(
+                    "".join(
+                        f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path}\n"
+                        for path in video_paths
+                    ),
+                    encoding="utf-8",
+                )
+            subprocess.run(
+                [
+                    str(E2E_SCRIPT),
+                    "checkpoint",
+                    temporary_directory,
+                    "trackpad-physical-gesture-verification",
+                    "pass",
+                    "physical gesture recognized",
+                ],
+                cwd=REPO_ROOT,
+                env=environment,
+                check=True,
+            )
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertFalse(report["passed"])
+            self.assertFalse(
+                report["scenarioCoverage"]["baseline"]["recordingPassed"]
+            )
+            self.assertTrue(
+                report["scenarioCoverage"]["baseline"]["invalidRecordings"]
+            )
+
+            for pack in manifest["packs"]:
+                if not pack["recordingRequired"]:
+                    continue
+                video_paths = [
+                    pathlib.Path(
+                        temporary_directory,
+                        f"screencast.{pack['id']}.{extension}",
+                    )
+                    for extension in ("mov", "mp4")
+                ]
+                for path in video_paths:
+                    path.write_bytes(b"valid-video")
+                pathlib.Path(
+                    temporary_directory,
+                    f"screencast.{pack['id']}.sha256",
+                ).write_text(
+                    "".join(
+                        f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path}\n"
+                        for path in video_paths
+                    ),
+                    encoding="utf-8",
+                )
+            subprocess.run(
+                [
+                    str(E2E_SCRIPT),
+                    "checkpoint",
+                    temporary_directory,
+                    "trackpad-physical-gesture-verification",
+                    "pass",
+                    "physical gesture recognized",
+                ],
+                cwd=REPO_ROOT,
+                env=environment,
                 check=True,
             )
 
@@ -278,6 +421,38 @@ class MacToolsE2ETests(unittest.TestCase):
             self.assertTrue(report["passed"])
             self.assertEqual(len(report["uiCheckpoints"]), len(required_names) + 1)
             self.assertTrue(report["scenarioCoverage"]["trackpad-hardware"]["passed"])
+
+            metadata_path = pathlib.Path(temporary_directory) / "session.plist"
+            subprocess.run(["plutil", "-create", "xml1", str(metadata_path)], check=True)
+            subprocess.run(
+                [
+                    "plutil",
+                    "-insert",
+                    "preparedAtEpoch",
+                    "-integer",
+                    str(int(time.time()) + 60),
+                    str(metadata_path),
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    str(E2E_SCRIPT),
+                    "checkpoint",
+                    temporary_directory,
+                    "trackpad-physical-gesture-verification",
+                    "pass",
+                    "physical gesture recognized",
+                ],
+                cwd=REPO_ROOT,
+                env=environment,
+                check=True,
+            )
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertFalse(report["passed"])
+            self.assertTrue(
+                report["scenarioCoverage"]["baseline"]["invalidRecordings"]
+            )
 
     def test_key_sender_dry_run_mapping(self):
         expected = {
@@ -365,7 +540,7 @@ class MacToolsE2ETests(unittest.TestCase):
 
     def test_scenario_manifest_has_unique_complete_required_checkpoints(self):
         manifest = json.loads(SCENARIO_MANIFEST.read_text(encoding="utf-8"))
-        self.assertEqual(manifest["formatVersion"], 1)
+        self.assertEqual(manifest["formatVersion"], 2)
         self.assertEqual(set(manifest["issueScope"]), {247, 249, 250, 251})
         required = [pack for pack in manifest["packs"] if pack["required"]]
         self.assertTrue(required)
@@ -384,6 +559,10 @@ class MacToolsE2ETests(unittest.TestCase):
         self.assertIn("saved-script-grid-picker-visible", checkpoints)
         self.assertIn("privacy-helper-window-visible", checkpoints)
         self.assertIn("screencast-captured", checkpoints)
+        self.assertEqual(
+            {pack["id"] for pack in manifest["packs"] if pack["recordingRequired"]},
+            {"baseline", "visual-automation", "saved-scripts", "workflow-resilience"},
+        )
         optional = [pack for pack in manifest["packs"] if not pack["required"]]
         self.assertEqual([pack["id"] for pack in optional], ["trackpad-hardware"])
         self.assertEqual(
@@ -543,6 +722,8 @@ class MacToolsE2ETests(unittest.TestCase):
         self.assertIn("SCContentFilter", recorder)
         self.assertIn("including: allowedApplications", recorder)
         self.assertIn("missingApplication", recorder)
+        self.assertIn("$0.processID == allowed.processID", recorder)
+        self.assertIn("<allowed-bundle-id>@<pid>", recorder)
         self.assertIn("rectangleSpansDisplays", recorder)
         self.assertIn("configuration.showMouseClicks = true", recorder)
         self.assertIn("request.stopURL", recorder)
@@ -556,6 +737,8 @@ class MacToolsE2ETests(unittest.TestCase):
         self.assertIn('temporary_mov="$session_dir/.$base_name.$$.mov"', harness)
         self.assertIn('mv -f -- "$temporary_mov" "$mov"', harness)
         self.assertIn("privacy_recorder_tool", harness)
+        self.assertIn("single_executable_pid", harness)
+        self.assertIn('"$app_bundle_id@$process_id"', harness)
         self.assertIn("com.jennymedia.mactools.e2e-helper.backdrop", harness)
         self.assertIn("com.jennymedia.mactools.e2e-helper.secondary", harness)
         self.assertIn('/usr/bin/open -gj -a "$(privacy_helper_app_path "$session_dir" primary)"', harness)
@@ -577,6 +760,95 @@ class MacToolsE2ETests(unittest.TestCase):
         self.assertIn('for capture_attempt in {1..50}; do', harness)
         self.assertIn('key_sender_tool send open-settings', harness)
         self.assertNotIn("/usr/sbin/screencapture -v", harness)
+
+    def test_preflight_and_collection_use_global_lease_and_private_session_evidence(self):
+        harness = E2E_SCRIPT.read_text(encoding="utf-8")
+        trackpad_runtime = (
+            REPO_ROOT
+            / "Plugins"
+            / "TrackpadGestures"
+            / "Sources"
+            / "MultitouchDeviceSession.swift"
+        ).read_text(encoding="utf-8")
+
+        lease_name = "mactools.trackpad-gestures.listener.lock"
+        self.assertIn(lease_name, trackpad_runtime)
+        self.assertIn(lease_name, harness)
+        self.assertNotIn('$bundle_id.trackpad-gestures.listener.lock', harness)
+        self.assertIn('"trackpadListenerLeaseOwnedByOtherProcesses"', harness)
+        self.assertIn('"trackpadListenerLeaseOtherOwnerPIDs"', harness)
+        self.assertIn('"blocked-by-other-process"', harness)
+
+        self.assertNotIn("--last 5m", harness)
+        self.assertIn('plutil -insert preparedAtEpoch -integer "$(date \'+%s\')"', harness)
+        self.assertIn('plutil -replace preparedAtEpoch -integer "$(date \'+%s\')"', harness)
+        self.assertIn('invalidate_session_recordings "$session_dir"', harness)
+        self.assertIn(
+            'start_epoch="$(session_value "$session_dir" preparedAtEpoch 2>/dev/null || true)"',
+            harness,
+        )
+        self.assertIn('plutil -extract preparedAt raw -o - "$session_dir/session.plist"', harness)
+        self.assertNotIn("date -j -u -f '%Y-%m-%dT%H:%M:%SZ'", harness)
+        self.assertIn('/usr/bin/log show --start "@$start_epoch" --end "@$end_epoch"', harness)
+        self.assertIn("category == 'PluginHost'", harness)
+        self.assertIn("category == 'TrackpadGesturesPlugin'", harness)
+        self.assertIn("category == 'MultitouchDeviceSession'", harness)
+        self.assertIn("category == 'MultitouchDeviceDriver'", harness)
+        self.assertNotIn("category == 'SavedScriptsPlugin'", harness)
+        self.assertNotIn("category == 'ZshConfigPlugin'", harness)
+        self.assertIn('matching_pids >"$session_dir/processes.txt"', harness)
+        self.assertNotIn("pgrep -fal 'MacTools Dev'", harness)
+
+    def test_session_epoch_survives_plist_date_round_trip(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            metadata = pathlib.Path(temporary_directory) / "session.plist"
+            epoch = int(time.time())
+            subprocess.run(["plutil", "-create", "xml1", str(metadata)], check=True)
+            subprocess.run(
+                [
+                    "plutil",
+                    "-insert",
+                    "preparedAt",
+                    "-date",
+                    "2026-08-07T12:34:56Z",
+                    str(metadata),
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "plutil",
+                    "-insert",
+                    "preparedAtEpoch",
+                    "-integer",
+                    str(epoch),
+                    str(metadata),
+                ],
+                check=True,
+            )
+
+            stored_epoch = subprocess.run(
+                ["/usr/libexec/PlistBuddy", "-c", "Print :preparedAtEpoch", str(metadata)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            rendered_date = subprocess.run(
+                ["/usr/libexec/PlistBuddy", "-c", "Print :preparedAt", str(metadata)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            raw_date = subprocess.run(
+                ["plutil", "-extract", "preparedAt", "raw", "-o", "-", str(metadata)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+
+            self.assertEqual(int(stored_epoch), epoch)
+            self.assertNotEqual(rendered_date, "2026-08-07T12:34:56Z")
+            self.assertEqual(raw_date, "2026-08-07T12:34:56Z")
 
     def test_privacy_recorder_and_helper_typecheck(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -637,7 +909,10 @@ class MacToolsE2ETests(unittest.TestCase):
                 text=True,
             )
         self.assertIn("PluginCatalogManagerTests", result.stdout)
-        self.assertIn("all 15 native action-provider suites", result.stdout)
+        self.assertIn(
+            "action-registry core coverage and native action-provider suites",
+            result.stdout,
+        )
         self.assertIn("six injected Trackpad Gestures test classes", result.stdout)
         self.assertNotIn("Test Suite", result.stdout)
 

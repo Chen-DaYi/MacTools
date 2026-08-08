@@ -48,7 +48,7 @@ struct SavedScriptsSettingsView: View {
                     "common.delete",
                     defaultValue: "删除"
                 ))) {
-                    plugin.cancelManual(scriptID: request.script.id)
+                    plugin.cancelExecution(scriptID: request.script.id)
                     if store.remove(id: request.script.id) {
                         executionStore.removeRecord(for: request.script.id)
                     }
@@ -180,7 +180,7 @@ struct SavedScriptsSettingsView: View {
                     .controlSize(.small)
                 if plugin.isManualRun(script.id) {
                     Button(plugin.localized("common.stop", defaultValue: "停止")) {
-                        plugin.cancelManual(scriptID: script.id)
+                        plugin.cancelExecution(scriptID: script.id)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)

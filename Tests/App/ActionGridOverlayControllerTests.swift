@@ -287,6 +287,49 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertFalse(controller.isShown)
     }
 
+    func testFolderNavigationResizesPanelForNestedGridAndBack() throws {
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let reference = ActionReference(
+            key: ActionKey(providerID: "missing", actionID: "run")
+        )
+        let folder = ActionGridPresentationEntry(
+            id: "folder",
+            folderTitle: "Folder",
+            children: [
+                ActionGridPresentationEntry(id: "top", reference: reference, slotIndex: 0),
+                ActionGridPresentationEntry(id: "middle", reference: reference, slotIndex: 4),
+                ActionGridPresentationEntry(id: "bottom", reference: reference, slotIndex: 8),
+            ]
+        )
+
+        XCTAssertTrue(controller.present(entries: [folder]))
+        let rootFrame = try XCTUnwrap(controller.presentedPanelFrame)
+        XCTAssertTrue(controller.processKeyEvent(try keyEvent(keyCode: 36, characters: "\r")))
+        let nestedFrame = try XCTUnwrap(controller.presentedPanelFrame)
+        XCTAssertGreaterThan(nestedFrame.height, rootFrame.height)
+        XCTAssertEqual(
+            nestedFrame.height,
+            ActionGridOverlayGeometry.contentSize(
+                for: 9,
+                includesNavigationHeader: true
+            ).height
+        )
+        XCTAssertGreaterThan(
+            nestedFrame.height,
+            ActionGridOverlayGeometry.contentSize(for: 9).height
+        )
+
+        XCTAssertTrue(controller.processKeyEvent(try keyEvent(keyCode: 53, characters: "\u{1B}")))
+        XCTAssertEqual(
+            try XCTUnwrap(controller.presentedPanelFrame?.height),
+            rootFrame.height,
+            accuracy: 1
+        )
+        XCTAssertTrue(controller.isShown)
+    }
+
     func testPointerDismissalKeepsInsideClickAndClosesForOutsideClick() throws {
         let host = makePluginHostForTests(plugins: [])
         let controller = ActionGridOverlayController(pluginHost: host)
@@ -495,5 +538,20 @@ final class ActionGridOverlayControllerTests: XCTestCase {
                 key: ActionKey(providerID: "missing", actionID: "run")
             )
         )
+    }
+
+    private func keyEvent(keyCode: UInt16, characters: String) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: keyCode
+        ))
     }
 }

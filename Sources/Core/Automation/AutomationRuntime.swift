@@ -236,6 +236,7 @@ final class AutomationRuntime {
         case .emptyWorkflow: .emptyWorkflow
         case .recursiveInvocation: .recursiveInvocation
         case .maximumDepthExceeded: .maximumDepthExceeded
+        case .backgroundExecutionUnsupported: .backgroundExecutionUnsupported
         }
     }
 }

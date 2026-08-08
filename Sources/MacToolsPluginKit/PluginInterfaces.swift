@@ -217,3 +217,37 @@ public protocol PluginPortablePreferencesProviding: AnyObject {
     func makePortablePreferencesBackup() -> Data?
     func restorePortablePreferences(from data: Data)
 }
+
+/// Optional companion for portable-preference providers that can verify validation and
+/// persistence. The host uses this result before restoring actions that depend on the payload.
+/// Keeping this separate preserves compatibility with existing dynamic plugins.
+@MainActor
+public protocol PluginPortablePreferencesRestorationReporting: AnyObject {
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool
+}
+
+/// Optional dependency index for portable plugin preferences that embed or define canonical
+/// actions. The host persists these references beside the opaque payload so a fresh Mac can
+/// offer missing action providers before the surface plugin restores its own settings. Providers
+/// whose actions require plugin preferences must enumerate every exact action reference defined
+/// by the payload; restore validation fails closed for references that are not enumerated.
+@MainActor
+public protocol PluginPortablePreferencesActionReferencesProviding: AnyObject {
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]?
+}
+
+/// Describes whether a dynamic action can be restored independently or depends on the
+/// plugin's portable preferences payload. Providers only need this hook when the action's
+/// portability cannot be expressed by its parameter schema alone.
+public enum PluginActionReferenceBackupDisposition: Equatable, Sendable {
+    case selfContained
+    case requiresPluginPreferences
+    case excluded
+}
+
+@MainActor
+public protocol PluginActionReferenceBackupProviding: AnyObject {
+    func backupDisposition(
+        for reference: ActionReference
+    ) -> PluginActionReferenceBackupDisposition
+}

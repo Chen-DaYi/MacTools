@@ -432,6 +432,7 @@ public final class ActionExecutionHandle {
     private let operation: @MainActor () async -> ActionExecutionResult
     private let cancellationHandler: @MainActor () -> Void
     private var task: Task<ActionExecutionResult, Never>?
+    private var isCancelled = false
 
     public init(
         operation: @escaping @MainActor () async -> ActionExecutionResult,
@@ -442,8 +443,12 @@ public final class ActionExecutionHandle {
     }
 
     public func result() async -> ActionExecutionResult {
+        guard !isCancelled else {
+            return .cancelled
+        }
         if let task {
-            return await task.value
+            let result = await task.value
+            return isCancelled ? .cancelled : result
         }
 
         let operation = self.operation
@@ -451,10 +456,13 @@ public final class ActionExecutionHandle {
             await operation()
         }
         self.task = task
-        return await task.value
+        let result = await task.value
+        return isCancelled ? .cancelled : result
     }
 
     public func cancel() {
+        guard !isCancelled else { return }
+        isCancelled = true
         task?.cancel()
         cancellationHandler()
     }

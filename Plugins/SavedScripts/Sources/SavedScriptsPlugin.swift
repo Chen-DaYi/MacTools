@@ -26,7 +26,10 @@ final class SavedScriptsPlugin:
     PluginActionProviding,
     PluginConfigurationPresenting,
     PluginPrimaryPanelIndicatorProviding,
-    PluginPortablePreferencesProviding
+    PluginPortablePreferencesProviding,
+    PluginPortablePreferencesRestorationReporting,
+    PluginPortablePreferencesActionReferencesProviding,
+    PluginActionReferenceBackupProviding
 {
     private enum ControlID {
         static let openManager = "open-manager"
@@ -49,8 +52,14 @@ final class SavedScriptsPlugin:
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "SavedScriptsPlugin"
     )
+    private struct ActiveRun {
+        let token: UUID
+        let task: Task<ActionExecutionResult, Never>
+        let isManual: Bool
+    }
+
     private var isExpanded = false
-    private var manualTasks: [UUID: Task<Void, Never>] = [:]
+    private var activeRuns: [UUID: ActiveRun] = [:]
     private var indicatorExpirationTask: Task<Void, Never>?
     private let indicatorNow: () -> Date
     private static let completionIndicatorVisibility: TimeInterval = 8
@@ -197,6 +206,7 @@ final class SavedScriptsPlugin:
                 externalInvocationPolicy: script.allowExternalInvocation ? .confirmAlways : .unavailable,
                 capabilities: [.background, .foregroundInteractive, .cancellable],
                 executionTimeoutSeconds: Double(script.timeoutSeconds)
+                    + ProcessSavedScriptRunner.actionExecutionTimeoutGraceSeconds
             )
         }
     }
@@ -245,8 +255,24 @@ final class SavedScriptsPlugin:
         }
         return ActionExecutionHandle { [weak self] in
             guard let self else { return .cancelled }
-            return await self.execute(script)
+            guard let run = self.startExecution(script, isManual: false) else {
+                return .failed(message: self.localization.string(
+                    "action.unavailable.running",
+                    defaultValue: "脚本正在运行。"
+                ))
+            }
+            return await self.waitForExecution(run, scriptID: script.id)
+        } cancel: { [weak self] in
+            self?.cancelExecution(scriptID: script.id)
         }
+    }
+
+    func deactivate(reason _: PluginDeactivationReason) {
+        indicatorExpirationTask?.cancel()
+        indicatorExpirationTask = nil
+        let runs = Array(activeRuns.values)
+        activeRuns.removeAll()
+        runs.forEach { $0.task.cancel() }
     }
 
     func handleAction(_ action: PluginPanelAction) {
@@ -267,24 +293,19 @@ final class SavedScriptsPlugin:
     }
 
     func runManual(scriptID: UUID) {
-        guard manualTasks[scriptID] == nil,
-              let script = store.script(id: scriptID),
-              !executionStore.isRunning(scriptID) else { return }
-        let task = Task { @MainActor [weak self] in
-            guard let self else { return }
-            _ = await self.execute(script)
-            self.manualTasks[scriptID] = nil
+        guard let script = store.script(id: scriptID),
+              let run = startExecution(script, isManual: true) else { return }
+        Task { @MainActor [weak self] in
+            _ = await self?.waitForExecution(run, scriptID: scriptID)
         }
-        manualTasks[scriptID] = task
     }
 
-    func cancelManual(scriptID: UUID) {
-        manualTasks[scriptID]?.cancel()
-        manualTasks[scriptID] = nil
+    func cancelExecution(scriptID: UUID) {
+        activeRuns[scriptID]?.task.cancel()
     }
 
     func isManualRun(_ scriptID: UUID) -> Bool {
-        manualTasks[scriptID] != nil
+        activeRuns[scriptID]?.isManual == true
     }
 
     func makePortablePreferencesBackup() -> Data? {
@@ -293,6 +314,23 @@ final class SavedScriptsPlugin:
 
     func restorePortablePreferences(from data: Data) {
         _ = store.restorePortableBackup(data)
+    }
+
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        store.restorePortableBackup(data)
+    }
+
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
+        store.actionIDs(inPortableBackup: data)?.map {
+            ActionReference(key: ActionKey(providerID: metadata.id, actionID: $0))
+        }
+    }
+
+    func backupDisposition(
+        for reference: ActionReference
+    ) -> PluginActionReferenceBackupDisposition {
+        guard let script = script(for: reference) else { return .excluded }
+        return script.includeSourceInBackup ? .requiresPluginPreferences : .excluded
     }
 
     func kindTitle(_ kind: SavedScriptKind) -> String {
@@ -431,9 +469,39 @@ final class SavedScriptsPlugin:
                 message: message
             )
             executionDidFinish()
-            logger.error("Saved script failed: \(message, privacy: .public)")
+            logger.error("Saved script failed: \(message, privacy: .private)")
             return .failed(message: message)
         }
+    }
+
+    private func startExecution(_ script: SavedScript, isManual: Bool) -> ActiveRun? {
+        guard activeRuns[script.id] == nil,
+              !executionStore.isRunning(script.id) else {
+            return nil
+        }
+        let token = UUID()
+        let task = Task<ActionExecutionResult, Never> { @MainActor [weak self] in
+            guard let self else { return ActionExecutionResult.cancelled }
+            return await self.execute(script)
+        }
+        let run = ActiveRun(token: token, task: task, isManual: isManual)
+        activeRuns[script.id] = run
+        return run
+    }
+
+    private func waitForExecution(
+        _ run: ActiveRun,
+        scriptID: UUID
+    ) async -> ActionExecutionResult {
+        let result = await withTaskCancellationHandler {
+            await run.task.value
+        } onCancel: {
+            run.task.cancel()
+        }
+        if activeRuns[scriptID]?.token == run.token {
+            activeRuns[scriptID] = nil
+        }
+        return result
     }
 
     private func showsCompletedIndicator(_ record: SavedScriptRunRecord) -> Bool {

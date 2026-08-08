@@ -93,8 +93,13 @@ final class DynamicPluginLoader: DynamicPluginLoading {
             throw DynamicPluginLoaderError.unreadableBundle(record.bundleURL)
         }
 
-        guard bundle.load() else {
-            throw DynamicPluginLoaderError.loadFailed(record.bundleURL)
+        do {
+            try bundle.loadAndReturnError()
+        } catch {
+            throw DynamicPluginLoaderError.loadFailed(
+                record.bundleURL,
+                reason: error.localizedDescription
+            )
         }
 
         let context = packageStore.runtimeContext(for: record)
@@ -137,7 +142,7 @@ final class DynamicPluginLoader: DynamicPluginLoading {
 
 enum DynamicPluginLoaderError: LocalizedError, Equatable {
     case unreadableBundle(URL)
-    case loadFailed(URL)
+    case loadFailed(URL, reason: String)
     case missingFactory(String)
     case invalidPluginCount(expected: String, actual: Int)
     case pluginIdentifierMismatch(expected: String, actual: String)
@@ -146,8 +151,13 @@ enum DynamicPluginLoaderError: LocalizedError, Equatable {
         switch self {
         case let .unreadableBundle(url):
             return AppL10n.pluginsFormat("plugin.error.loader.unreadableBundleFormat", defaultValue: "无法读取插件 bundle：%@", url.path)
-        case let .loadFailed(url):
-            return AppL10n.pluginsFormat("plugin.error.loader.loadFailedFormat", defaultValue: "插件代码加载失败：%@", url.path)
+        case let .loadFailed(url, reason):
+            let summary = AppL10n.pluginsFormat(
+                "plugin.error.loader.loadFailedFormat",
+                defaultValue: "插件代码加载失败：%@",
+                url.path
+            )
+            return "\(summary) (\(reason))"
         case let .missingFactory(name):
             return AppL10n.pluginsFormat("plugin.error.loader.missingFactoryFormat", defaultValue: "插件缺少入口工厂：%@", name)
         case let .invalidPluginCount(expected, actual):

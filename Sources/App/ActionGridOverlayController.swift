@@ -125,25 +125,38 @@ enum ActionGridKeyboardNavigation {
 }
 
 enum ActionGridOverlayGeometry {
+    private static let navigationHeaderHeight: CGFloat = 28
+    private static let navigationHeaderSpacing: CGFloat = 12
+
     static func columnCount(for itemCount: Int) -> Int {
         itemCount > 0 ? 3 : 0
     }
 
-    static func contentSize(for itemCount: Int) -> CGSize {
+    static func contentSize(
+        for itemCount: Int,
+        includesNavigationHeader: Bool = false
+    ) -> CGSize {
         let columns = max(1, columnCount(for: itemCount))
         let rows = max(1, Int(ceil(Double(max(1, itemCount)) / Double(columns))))
         return CGSize(
             width: CGFloat(columns) * 160 + CGFloat(columns - 1) * 12 + 32,
             height: CGFloat(rows) * 104 + CGFloat(rows - 1) * 12 + 32
+                + (includesNavigationHeader
+                    ? navigationHeaderHeight + navigationHeaderSpacing
+                    : 0)
         )
     }
 
     static func targetFrame(
         pointer: CGPoint,
         visibleFrame: CGRect,
-        itemCount: Int
+        itemCount: Int,
+        includesNavigationHeader: Bool = false
     ) -> CGRect {
-        let size = contentSize(for: itemCount)
+        let size = contentSize(
+            for: itemCount,
+            includesNavigationHeader: includesNavigationHeader
+        )
         let margin: CGFloat = 10
         let preferredOrigin = CGPoint(
             x: pointer.x - size.width / 2,
@@ -210,6 +223,7 @@ final class ActionGridOverlayModel: ObservableObject {
     private var sourceEntries: [ActionGridPresentationEntry] = []
     private var navigationStack: [NavigationLevel] = []
     var onSuccessfulExecution: (() -> Void)?
+    var onLayoutChange: ((Int, Bool) -> Void)?
 
     init(
         resolver: @escaping (ActionGridPresentationEntry) -> ResolvedActionGridEntry,
@@ -244,6 +258,7 @@ final class ActionGridOverlayModel: ObservableObject {
             ActionGridPresentationLimits.maximumEntriesPerGrid,
             max(1, (entries.map(\.slotIndex).max() ?? 0) + 1)
         )
+        onLayoutChange?(slotCount, !isAtRoot)
         if entry(at: selectedIndex) == nil {
             selectedIndex = preferredInitialSelection()
         }
@@ -389,6 +404,8 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     private var previousApplication: NSRunningApplication?
     private var presentationUptime: TimeInterval = 0
     private var presentationSource = ActionExecutionSource.manual
+    private var presentationPointer: CGPoint?
+    private var presentationVisibleFrame: CGRect?
 
     init(pluginHost: PluginHost) {
         self.pluginHost = pluginHost
@@ -439,6 +456,12 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         )
         super.init()
         model.onSuccessfulExecution = { [weak self] in self?.close() }
+        model.onLayoutChange = { [weak self] slotCount, includesNavigationHeader in
+            self?.resizePanel(
+                for: slotCount,
+                includesNavigationHeader: includesNavigationHeader
+            )
+        }
     }
 
     var isShown: Bool { panel != nil }
@@ -463,11 +486,12 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
             panel.makeKeyAndOrderFront(nil)
             return true
         }
-        model.update(entries)
-
         let pointer = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
         guard let screen else { return false }
+        presentationPointer = pointer
+        presentationVisibleFrame = screen.visibleFrame
+        model.update(entries)
         let frame = ActionGridOverlayGeometry.targetFrame(
             pointer: pointer,
             visibleFrame: screen.visibleFrame,
@@ -526,6 +550,19 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
             previousApplication?.activate()
         }
         previousApplication = nil
+        presentationPointer = nil
+        presentationVisibleFrame = nil
+    }
+
+    private func resizePanel(for slotCount: Int, includesNavigationHeader: Bool) {
+        guard let panel, let presentationPointer, let presentationVisibleFrame else { return }
+        let frame = ActionGridOverlayGeometry.targetFrame(
+            pointer: presentationPointer,
+            visibleFrame: presentationVisibleFrame,
+            itemCount: slotCount,
+            includesNavigationHeader: includesNavigationHeader
+        )
+        panel.setFrame(frame, display: true, animate: false)
     }
 
     func windowWillClose(_ notification: Notification) {

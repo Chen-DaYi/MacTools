@@ -201,6 +201,8 @@ public struct PluginShortcutDefinition: Identifiable {
 
 public struct ShortcutSettingsItem: Identifiable {
     public let id: String
+    public let shortcutID: String
+    public let assignmentID: UUID?
     public let pluginID: String
     public let pluginTitle: String
     public let title: String
@@ -218,6 +220,8 @@ public struct ShortcutSettingsItem: Identifiable {
 
     public init(
         id: String,
+        shortcutID: String? = nil,
+        assignmentID: UUID? = nil,
         pluginID: String,
         pluginTitle: String,
         title: String,
@@ -234,6 +238,8 @@ public struct ShortcutSettingsItem: Identifiable {
         settingsControlSystemImage: String? = nil
     ) {
         self.id = id
+        self.shortcutID = shortcutID ?? id
+        self.assignmentID = assignmentID
         self.pluginID = pluginID
         self.pluginTitle = pluginTitle
         self.title = title

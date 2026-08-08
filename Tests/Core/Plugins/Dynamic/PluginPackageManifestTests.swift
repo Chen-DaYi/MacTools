@@ -101,8 +101,18 @@ final class PluginPackageManifestTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let expectations = [
-            (path: "Plugins/MouseEnhancer/plugin.json", minimum: "1.1.3", supports115: true),
-            (path: "Plugins/TrackpadGestures/plugin.json", minimum: "1.1.6", supports115: false),
+            (
+                path: "Plugins/MouseEnhancer/plugin.json",
+                minimum: "1.1.3",
+                compatibleHost: "1.1.5",
+                incompatibleHost: nil as String?
+            ),
+            (
+                path: "Plugins/TrackpadGestures/plugin.json",
+                minimum: "1.2.0",
+                compatibleHost: "1.2.0",
+                incompatibleHost: "1.1.6"
+            ),
         ]
         for expectation in expectations {
             let relativePath = expectation.path
@@ -114,19 +124,24 @@ final class PluginPackageManifestTests: XCTestCase {
 
             XCTAssertEqual(manifest.minHostVersion, expectation.minimum)
             XCTAssertNoThrow(
-                try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.6")
-            )
-            if expectation.supports115 {
-                XCTAssertNoThrow(
-                    try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.5")
+                try PluginPackageManifestLoader.validate(
+                    manifest,
+                    hostVersion: expectation.compatibleHost
                 )
-            } else {
+            )
+            if let incompatibleHost = expectation.incompatibleHost {
                 XCTAssertThrowsError(
-                    try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.5")
+                    try PluginPackageManifestLoader.validate(
+                        manifest,
+                        hostVersion: incompatibleHost
+                    )
                 ) { error in
                     XCTAssertEqual(
                         error as? PluginPackageManifestError,
-                        .incompatibleHostVersion(required: "1.1.6", current: "1.1.5")
+                        .incompatibleHostVersion(
+                            required: expectation.minimum,
+                            current: incompatibleHost
+                        )
                     )
                 }
             }

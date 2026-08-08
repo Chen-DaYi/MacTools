@@ -251,13 +251,48 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
     }
 
-    func testUnifiedSearchPluginProvidersRequireFirstCompatibleHostVersion() throws {
-        let expectedMinimumHostVersion = "1.1.5"
+    func testActionSurfaceConsumersRequireFirstCompatibleHostVersion() throws {
+        let expectedMinimumHostVersion = "1.2.0"
         let pluginNames = [
+            "ActionGrid",
+            "ActivityBar",
+            "Appearance",
+            "AppHotkey",
+            "AppVolume",
+            "AutoHideDock",
+            "AutoHideMenuBar",
+            "AutoInput",
+            "BatteryChargeLimit",
+            "ClipboardClear",
+            "DiskClean",
             "DisplayBrightness",
+            "DisplayResolution",
             "DisplaySleep",
+            "DisplayTrueColor",
+            "EjectDisk",
+            "EmptyTrash",
+            "FanControl",
+            "FixDamagedApp",
+            "HideNotch",
+            "Homebrew",
+            "IPOverview",
             "KeepAwake",
+            "LaunchControl",
+            "Launchpad",
             "LockScreen",
+            "MenuBarHidden",
+            "MicrophoneMute",
+            "NightShift",
+            "PhysicalCleanMode",
+            "QuitApps",
+            "SavedScripts",
+            "Sidecar",
+            "StageManager",
+            "SystemMute",
+            "TrackpadGestures",
+            "Translator",
+            "WindowSwitcher",
+            "XcodeClean",
         ]
 
         for pluginName in pluginNames {
@@ -273,7 +308,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
                     minimumHostVersion,
                     atLeast: expectedMinimumHostVersion
                 ),
-                "\(pluginName) must not be published to hosts that predate unified-search PluginKit symbols"
+                "\(pluginName) must not be published to hosts that predate action-surface PluginKit symbols"
             )
         }
     }

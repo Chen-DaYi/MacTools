@@ -98,8 +98,8 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurf
                     confirmButtonTitle: localization.string("panel.button.eject", defaultValue: "推出")
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive, .cancellable],
-                executionTimeoutSeconds: 60
+                capabilities: [.background, .foregroundInteractive],
+                executionTimeoutSeconds: nil
             ),
         ]
     }

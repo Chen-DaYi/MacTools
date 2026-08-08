@@ -115,12 +115,28 @@ final class ActionGridStore: ObservableObject {
 
     @discardableResult
     func add(reference: ActionReference, in folderID: UUID?, at requestedSlot: Int?) -> Bool {
-        updateEntries(in: folderID) { entries in
+        add(reference: reference, customTitle: nil, in: folderID, at: requestedSlot)
+    }
+
+    @discardableResult
+    func add(
+        reference: ActionReference,
+        customTitle: String?,
+        in folderID: UUID?,
+        at requestedSlot: Int?
+    ) -> Bool {
+        guard Self.isValidCustomTitle(customTitle) else {
+            return false
+        }
+        let customTitle = Self.normalizedCustomTitle(customTitle)
+        return updateEntries(in: folderID) { entries in
             guard let slot = Self.availableSlot(requestedSlot, in: entries),
                   !entries.contains(where: { $0.folder == nil && $0.reference == reference }) else {
                 return false
             }
-            entries.append(ActionGridEntry(reference: reference, slot: slot))
+            var entry = ActionGridEntry(reference: reference, slot: slot)
+            entry.customTitle = customTitle
+            entries.append(entry)
             Self.sortBySlot(&entries)
             return true
         }
@@ -148,7 +164,7 @@ final class ActionGridStore: ObservableObject {
 
     @discardableResult
     func replace(id: UUID, reference: ActionReference) -> Bool {
-        updateContainingEntries(entryID: id) { entries, index in
+        return updateContainingEntries(entryID: id) { entries, index in
             guard entries[index].folder == nil,
                   !entries.enumerated().contains(where: {
                       $0.offset != index && $0.element.folder == nil && $0.element.reference == reference
@@ -156,6 +172,25 @@ final class ActionGridStore: ObservableObject {
                 return false
             }
             entries[index].reference = reference
+            return true
+        }
+    }
+
+    @discardableResult
+    func replace(id: UUID, reference: ActionReference, customTitle: String?) -> Bool {
+        guard Self.isValidCustomTitle(customTitle) else {
+            return false
+        }
+        let customTitle = Self.normalizedCustomTitle(customTitle)
+        return updateContainingEntries(entryID: id) { entries, index in
+            guard entries[index].folder == nil,
+                  !entries.enumerated().contains(where: {
+                      $0.offset != index && $0.element.folder == nil && $0.element.reference == reference
+                  }) else {
+                return false
+            }
+            entries[index].reference = reference
+            entries[index].customTitle = customTitle
             return true
         }
     }
@@ -173,6 +208,16 @@ final class ActionGridStore: ObservableObject {
             entries[index].customTitle = trimmed?.isEmpty == false ? trimmed : nil
             return true
         }
+    }
+
+    private static func isValidCustomTitle(_ title: String?) -> Bool {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.utf8.count ?? 0) <= ActionGridEntry.maximumCustomTitleByteCount
+    }
+
+    private static func normalizedCustomTitle(_ title: String?) -> String? {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 
     @discardableResult
@@ -258,25 +303,63 @@ final class ActionGridStore: ObservableObject {
         return changed && replace(updated)
     }
 
-    func portableBackup() -> Data? {
-        guard validate(entries) else { return nil }
+    func portableBackup(using context: ActionGridHostContext? = nil) -> Data? {
+        let portableEntries = portableEntries(entries, using: context)
+        guard validate(portableEntries) else { return nil }
         return try? encoder.encode(
-            Envelope(formatVersion: Self.currentFormatVersion, entries: entries)
+            Envelope(formatVersion: Self.currentFormatVersion, entries: portableEntries)
         )
     }
 
+    func actionReferences(inPortableBackup data: Data) -> [ActionReference]? {
+        guard data.count <= Self.maximumPayloadByteCount,
+              let envelope = try? decoder.decode(Envelope.self, from: data),
+              (1 ... Self.currentFormatVersion).contains(envelope.formatVersion),
+              let entries = normalizedEntries(
+                  envelope.entries,
+                  permitsLegacySlots: envelope.formatVersion < 3
+              ) else {
+            return nil
+        }
+        return actionReferences(in: entries)
+    }
+
     @discardableResult
-    func restorePortableBackup(_ data: Data) -> Bool {
+    func restorePortableBackup(_ data: Data, using context: ActionGridHostContext? = nil) -> Bool {
         guard data.count <= Self.maximumPayloadByteCount,
               let envelope = try? decoder.decode(Envelope.self, from: data),
               (1 ... Self.currentFormatVersion).contains(envelope.formatVersion),
               let restoredEntries = normalizedEntries(
                   envelope.entries,
                   permitsLegacySlots: envelope.formatVersion < 3
-              ) else {
+              ),
+              actionReferences(in: restoredEntries).allSatisfy({
+                  context?.canRestore($0) ?? true
+              }) else {
             return false
         }
         return replace(restoredEntries)
+    }
+
+    private func portableEntries(
+        _ source: [ActionGridEntry],
+        using context: ActionGridHostContext?
+    ) -> [ActionGridEntry] {
+        source.compactMap { entry in
+            guard var folder = entry.folder else {
+                return context?.canExport(entry.reference) == false ? nil : entry
+            }
+            folder.entries = portableEntries(folder.entries, using: context)
+            var result = entry
+            result.folder = folder
+            return result
+        }
+    }
+
+    private func actionReferences(in source: [ActionGridEntry]) -> [ActionReference] {
+        source.flatMap { entry in
+            entry.folder.map { actionReferences(in: $0.entries) } ?? [entry.reference]
+        }
     }
 
     @discardableResult
@@ -341,7 +424,6 @@ final class ActionGridStore: ObservableObject {
               entries.count <= Self.maximumEntryCount else {
             return false
         }
-        var actionReferences = Set<ActionReference>()
         var occupiedSlots = Set<Int>()
         for entry in entries {
             totalCount += 1
@@ -366,8 +448,6 @@ final class ActionGridStore: ObservableObject {
                       ) else {
                     return false
                 }
-            } else if !actionReferences.insert(entry.reference).inserted {
-                return false
             }
         }
         return true

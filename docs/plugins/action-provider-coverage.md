@@ -2,6 +2,8 @@
 
 `PluginActionProviding` is the default integration point for a reusable plugin operation. A canonical action can appear in Actions & Shortcuts, Unified Search, Trackpad Gestures, Action Grid, and Automation. It may also support Run Links when its parameters and safety model are suitable for external invocation.
 
+Plugins that publish or consume this action surface require MacTools 1.2.0 or later because the shared action contracts are part of that host ABI. Keep `plugin.json.minHostVersion` at or above the first host version that exports every PluginKit type used by the plugin.
+
 This inventory records the current migration boundary. It prevents a plugin from accidentally growing a second, surface-specific execution path and makes intentional exclusions visible during review.
 
 ## Migrated providers

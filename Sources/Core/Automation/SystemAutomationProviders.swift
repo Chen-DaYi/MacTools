@@ -28,9 +28,38 @@ enum SystemAutomationTransitions {
             }
         }
         if let oldLevel = previous.batteryLevel,
-           let newLevel = current.batteryLevel,
-           thresholds.contains(where: { oldLevel > $0 && newLevel <= $0 }) {
-            events.append(.power(source: current.source, batteryLevel: newLevel, event: .batteryAtOrBelow, date: date))
+           let newLevel = current.batteryLevel {
+            let crossedThresholds = thresholds
+                .filter { oldLevel > $0 && newLevel <= $0 }
+                .sorted(by: >)
+            events += crossedThresholds.map { threshold in
+                .power(
+                    source: current.source,
+                    batteryLevel: threshold,
+                    event: .batteryAtOrBelow,
+                    date: date
+                )
+            }
+        }
+        return events
+    }
+
+    static func networkEvents(
+        previousStatus: AutomationNetworkStatus,
+        previousInterface: AutomationNetworkInterface,
+        currentStatus: AutomationNetworkStatus,
+        currentInterface: AutomationNetworkInterface,
+        date: Date
+    ) -> [AutomationTriggerEvent] {
+        guard previousStatus != currentStatus || previousInterface != currentInterface else {
+            return []
+        }
+        var events: [AutomationTriggerEvent] = []
+        if previousStatus != currentStatus {
+            events.append(.network(status: currentStatus, interface: .any, date: date))
+        }
+        if currentInterface != .any {
+            events.append(.network(status: currentStatus, interface: currentInterface, date: date))
         }
         return events
     }
@@ -167,6 +196,56 @@ final class SystemScheduleAutomationTriggerProvider: AutomationTriggerProviding 
 
 @MainActor
 final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding {
+    struct ScheduledEvent: Equatable {
+        let fireDate: Date
+        let identifier: String
+        let title: String
+        let calendarIdentifier: String?
+        let phase: CalendarAutomationPhase
+        let offsetMinutes: Int
+    }
+
+    struct SchedulePlan: Equatable {
+        let nextBatch: [ScheduledEvent]
+        let maintenanceDate: Date
+
+        var nextTimerDate: Date {
+            guard let eventDate = nextBatch.first?.fireDate else {
+                return maintenanceDate
+            }
+            return min(eventDate, maintenanceDate)
+        }
+
+        static func make(
+            candidates: [ScheduledEvent],
+            after currentDate: Date,
+            maintenanceInterval: TimeInterval = 24 * 60 * 60
+        ) -> Self {
+            let future = candidates
+                .filter { $0.fireDate > currentDate }
+                .sorted { lhs, rhs in
+                    if lhs.fireDate != rhs.fireDate { return lhs.fireDate < rhs.fireDate }
+                    return lhs.identifier < rhs.identifier
+                }
+            let firstDate = future.first?.fireDate
+            return Self(
+                nextBatch: firstDate.map { date in
+                    future.filter { $0.fireDate == date }
+                } ?? [],
+                maintenanceDate: currentDate.addingTimeInterval(maintenanceInterval)
+            )
+        }
+
+        func dueEvents(at currentDate: Date, tolerance: TimeInterval = 90) -> [ScheduledEvent] {
+            guard let fireDate = nextBatch.first?.fireDate,
+                  currentDate >= fireDate,
+                  currentDate.timeIntervalSince(fireDate) <= tolerance else {
+                return []
+            }
+            return nextBatch
+        }
+    }
+
     let kind: AutomationTriggerKind = .calendar
 
     var availability: AutomationTriggerAvailability {
@@ -181,10 +260,9 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
     private let eventStore: EKEventStore
     private let notificationCenter: NotificationCenter
     private let now: () -> Date
-    private let maximumTimerCount = 512
     private var handler: (@MainActor (AutomationTriggerEvent) -> Void)?
     private var configurations: [CalendarAutomationTrigger] = []
-    private var timers: [Timer] = []
+    private var timer: Timer?
     private var storeObserver: NSObjectProtocol?
 
     init(
@@ -212,8 +290,8 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
     }
 
     func stop() {
-        timers.forEach { $0.invalidate() }
-        timers.removeAll()
+        timer?.invalidate()
+        timer = nil
         if let storeObserver {
             notificationCenter.removeObserver(storeObserver)
         }
@@ -240,16 +318,24 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
     }
 
     private func reschedule() {
-        timers.forEach { $0.invalidate() }
-        timers.removeAll()
+        timer?.invalidate()
+        timer = nil
         guard handler != nil, availability.isAvailable, !configurations.isEmpty else { return }
         let currentDate = now()
         guard let endDate = Calendar.current.date(byAdding: .day, value: 31, to: currentDate) else {
             return
         }
-        let predicate = eventStore.predicateForEvents(withStart: currentDate, end: endDate, calendars: nil)
+        let queryStartDate = Self.queryStartDate(
+            currentDate: currentDate,
+            configurations: configurations
+        )
+        let predicate = eventStore.predicateForEvents(
+            withStart: queryStartDate,
+            end: endDate,
+            calendars: nil
+        )
         let events = eventStore.events(matching: predicate)
-        var scheduled: [(Date, String, String, String?, CalendarAutomationPhase)] = []
+        var scheduled: [ScheduledEvent] = []
         for configuration in configurations {
             for event in events where matches(event, configuration: configuration) {
                 guard let eventDate = configuration.phase == .starts ? event.startDate : event.endDate else {
@@ -260,34 +346,50 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
                 let identifier = event.eventIdentifier ?? event.calendarItemIdentifier
                 let title = event.title ?? ""
                 let calendarIdentifier = event.calendar.calendarIdentifier
-                scheduled.append((fireDate, identifier, title, calendarIdentifier, configuration.phase))
+                scheduled.append(ScheduledEvent(
+                    fireDate: fireDate,
+                    identifier: identifier,
+                    title: title,
+                    calendarIdentifier: calendarIdentifier,
+                    phase: configuration.phase,
+                    offsetMinutes: configuration.offsetMinutes
+                ))
             }
         }
-        for (fireDate, identifier, title, calendarIdentifier, phase) in scheduled
-            .sorted(by: { $0.0 < $1.0 })
-            .prefix(maximumTimerCount) {
-            let timer = Timer(fire: fireDate, interval: 0, repeats: false) { [weak self] _ in
-                Task { @MainActor in
-                    guard let self else { return }
-                    guard self.now().timeIntervalSince(fireDate) <= 90 else {
-                        self.reschedule()
-                        return
-                    }
-                    self.handler?(
-                        .calendar(
-                            identifier: identifier,
-                            title: title,
-                            calendarIdentifier: calendarIdentifier,
-                            phase: phase,
-                            date: fireDate
-                        )
-                    )
-                    self.reschedule()
+        let plan = SchedulePlan.make(candidates: scheduled, after: currentDate)
+        let timer = Timer(
+            fire: plan.nextTimerDate,
+            interval: 0,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                for event in plan.dueEvents(at: self.now()) {
+                    self.handler?(.calendar(
+                        identifier: event.identifier,
+                        title: event.title,
+                        calendarIdentifier: event.calendarIdentifier,
+                        phase: event.phase,
+                        offsetMinutes: event.offsetMinutes,
+                        date: event.fireDate
+                    ))
                 }
+                self.reschedule()
             }
-            timers.append(timer)
-            RunLoop.main.add(timer, forMode: .common)
         }
+        self.timer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    nonisolated static func queryStartDate(
+        currentDate: Date,
+        configurations: [CalendarAutomationTrigger]
+    ) -> Date {
+        let maximumPositiveOffset = configurations
+            .map(\.offsetMinutes)
+            .filter { $0 > 0 }
+            .max() ?? 0
+        return currentDate.addingTimeInterval(TimeInterval(-maximumPositiveOffset * 60))
     }
 
     private func matches(_ event: EKEvent, configuration: CalendarAutomationTrigger) -> Bool {
@@ -587,15 +689,20 @@ final class SystemNetworkAutomationTriggerProvider: AutomationTriggerProviding {
     }
 
     private func pathChanged(status: AutomationNetworkStatus, interface: AutomationNetworkInterface) {
-        let changed = status != currentStatus || interface != currentInterface
+        let events = SystemAutomationTransitions.networkEvents(
+            previousStatus: currentStatus,
+            previousInterface: currentInterface,
+            currentStatus: status,
+            currentInterface: interface,
+            date: now()
+        )
         currentStatus = status
         currentInterface = interface
         guard hasReceivedInitialPath else {
             hasReceivedInitialPath = true
             return
         }
-        guard changed else { return }
-        handler?(.network(status: status, interface: interface, date: now()))
+        events.forEach { handler?($0) }
     }
 }
 

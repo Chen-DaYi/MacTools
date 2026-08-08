@@ -28,7 +28,9 @@ final class ActionGridPlugin:
     PluginActionProviding,
     ActionGridHostContextConsuming,
     ActionSurfaceAssignmentSummarizing,
-    PluginPortablePreferencesProviding
+    PluginPortablePreferencesProviding,
+    PluginPortablePreferencesRestorationReporting,
+    PluginPortablePreferencesActionReferencesProviding
 {
     static let showActionKey = ActionKey(providerID: "action-grid", actionID: "show")
 
@@ -149,13 +151,23 @@ final class ActionGridPlugin:
     }
 
     func makePortablePreferencesBackup() -> Data? {
-        store.portableBackup()
+        store.portableBackup(using: actionGridHostContext)
     }
 
     func restorePortablePreferences(from data: Data) {
-        if store.restorePortableBackup(data) {
+        if store.restorePortableBackup(data, using: actionGridHostContext) {
             onStateChange?()
         }
+    }
+
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        let restored = store.restorePortableBackup(data, using: actionGridHostContext)
+        if restored { onStateChange?() }
+        return restored
+    }
+
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
+        store.actionReferences(inPortableBackup: data)
     }
 
     func catalogItems(

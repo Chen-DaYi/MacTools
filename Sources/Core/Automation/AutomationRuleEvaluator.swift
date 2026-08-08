@@ -19,6 +19,7 @@ enum AutomationRunSkipReason: String, Codable, Equatable, Sendable {
     case emptyWorkflow = "工作流尚未添加步骤。"
     case recursiveInvocation = "检测到递归工作流调用。"
     case maximumDepthExceeded = "工作流嵌套层级已达上限。"
+    case backgroundExecutionUnsupported = "工作流包含只能交互运行的操作。"
 
     var localizedText: String {
         switch self {
@@ -58,6 +59,8 @@ enum AutomationRunSkipReason: String, Codable, Equatable, Sendable {
             FeatureL10n.string("检测到递归工作流调用。")
         case .maximumDepthExceeded:
             FeatureL10n.string("工作流嵌套层级已达上限。")
+        case .backgroundExecutionUnsupported:
+            FeatureL10n.string("工作流包含只能交互运行的操作。")
         }
     }
 }
@@ -89,9 +92,10 @@ struct AutomationRuleEvaluator {
                 && components.weekday.map(configuration.weekdays.contains) == true
         case let (
             .calendar(configuration),
-            .calendar(_, title, calendarIdentifier, phase, _)
+            .calendar(_, title, calendarIdentifier, phase, offsetMinutes, _)
         ):
             guard phase == configuration.phase,
+                  offsetMinutes == configuration.offsetMinutes,
                   normalized(configuration.calendarIdentifier).map({ $0 == calendarIdentifier }) ?? true,
                   normalized(configuration.titleContains).map({
                       title.localizedCaseInsensitiveContains($0)
@@ -105,7 +109,7 @@ struct AutomationRuleEvaluator {
         case let (.power(configuration), .power(_, batteryLevel, event, _)):
             guard configuration.event == event else { return false }
             return event != .batteryAtOrBelow
-                || batteryLevel.map { $0 <= configuration.batteryLevel } == true
+                || batteryLevel == configuration.batteryLevel
         case let (.display(configuration), .display(display, event, _)):
             return configuration.event == event
                 && (normalized(configuration.displayIdentifier).map({ $0 == display.identifier }) ?? true)
@@ -114,7 +118,7 @@ struct AutomationRuleEvaluator {
                 }) ?? true)
         case let (.network(configuration), .network(status, interface, _)):
             return configuration.status == status
-                && (configuration.interface == .any || configuration.interface == interface)
+                && configuration.interface == interface
         default:
             return false
         }

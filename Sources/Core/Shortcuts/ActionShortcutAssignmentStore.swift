@@ -52,8 +52,7 @@ final class ActionShortcutAssignmentStore {
             let payload = try decoder.decode(Payload.self, from: data)
             guard payload.version == Self.currentVersion,
                   payload.assignments.count <= Self.maximumAssignmentCount,
-                  Set(payload.assignments.map(\.id)).count == payload.assignments.count,
-                  Set(payload.assignments.map(\.reference)).count == payload.assignments.count else {
+                  Set(payload.assignments.map(\.id)).count == payload.assignments.count else {
                 loadError = FeatureL10n.string("快捷键数据格式无效。")
                 return []
             }
@@ -69,7 +68,6 @@ final class ActionShortcutAssignmentStore {
     func replaceAll(_ assignments: [ActionShortcutAssignmentRecord]) -> Bool {
         guard assignments.count <= Self.maximumAssignmentCount,
               Set(assignments.map(\.id)).count == assignments.count,
-              Set(assignments.map(\.reference)).count == assignments.count,
               let data = try? encoder.encode(
                   Payload(version: Self.currentVersion, assignments: assignments)
               ) else {

@@ -27,6 +27,19 @@ final class ApprovedActionConfirmationService: ActionConfirmationRequesting {
 }
 
 @MainActor
+final class MatchingApprovedActionConfirmationService: ActionConfirmationRequesting {
+    private let expectedRequest: ActionConfirmationRequest
+
+    init(expectedRequest: ActionConfirmationRequest) {
+        self.expectedRequest = expectedRequest
+    }
+
+    func confirm(_ request: ActionConfirmationRequest) async -> Bool {
+        request == expectedRequest
+    }
+}
+
+@MainActor
 final class ActionConfirmationRouter: ActionConfirmationRequesting {
     typealias Handler = @MainActor @Sendable (ActionConfirmationRequest) async -> Bool
 
@@ -211,10 +224,15 @@ final class ActionExecutor {
             return .rejected(Self.rejection(for: error))
         }
 
-        let timeout = revalidated.definition.executionTimeoutSeconds.map {
-            Duration.seconds($0)
-        }
-        switch await executionResult(handle: handle, timeout: timeout) {
+        let isCancellable = revalidated.definition.capabilities.contains(.cancellable)
+        let timeout = isCancellable
+            ? revalidated.definition.executionTimeoutSeconds.map(Duration.seconds)
+            : nil
+        switch await executionResult(
+            handle: handle,
+            timeout: timeout,
+            isCancellable: isCancellable
+        ) {
         case let .result(result):
             return .completed(result)
         case .timedOut:
@@ -270,7 +288,8 @@ final class ActionExecutor {
 
     private func executionResult(
         handle: ActionExecutionHandle,
-        timeout: Duration?
+        timeout: Duration?,
+        isCancellable: Bool
     ) async -> ExecutionRace {
         let race = Race<ExecutionRace>()
         race.add(Task { @MainActor in
@@ -287,6 +306,7 @@ final class ActionExecutor {
         return await withTaskCancellationHandler {
             await race.wait()
         } onCancel: {
+            guard isCancellable else { return }
             Task { @MainActor in race.resolve(.cancelled) }
         }
     }

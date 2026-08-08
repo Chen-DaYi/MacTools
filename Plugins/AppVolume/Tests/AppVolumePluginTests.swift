@@ -159,6 +159,17 @@ final class AppVolumePluginTests: XCTestCase {
             ["Music · 0%", "Music · 50%", "Music · 100%"]
         )
         XCTAssertEqual(plugin.actionDefinitions.first?.externalInvocationPolicy, .unavailable)
+        XCTAssertEqual(
+            plugin.permissionRequirementIDs(
+                for: ActionKey(providerID: "app-volume", actionID: "set-volume")
+            ),
+            ["system-audio-recording"]
+        )
+        XCTAssertTrue(
+            plugin.permissionRequirementIDs(
+                for: ActionKey(providerID: "app-volume", actionID: "unknown")
+            ).isEmpty
+        )
     }
 
     func testCanonicalMuteRequestsAccessAndRoutesTheTarget() async throws {

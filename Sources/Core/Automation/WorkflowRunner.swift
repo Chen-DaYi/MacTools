@@ -56,6 +56,16 @@ final class WorkflowRunner {
         guard !workflow.steps.isEmpty else {
             return .failure(.emptyWorkflow)
         }
+        if mode == .background {
+            let analysis = WorkflowExecutionAnalysis.analyze(
+                workflowID: workflowID,
+                store: store,
+                definition: registry.definition(for:)
+            )
+            guard analysis.supportsBackground else {
+                return .failure(.backgroundExecutionUnsupported)
+            }
+        }
 
         let runID = UUID()
         let actionHandle = ActionExecutionHandle(
@@ -199,9 +209,11 @@ final class WorkflowRunner {
             }
 
             let stepMode = executionMode(for: reference, requestedMode: mode)
-            let outcome = await executor.execute(
-                ActionInvocation(reference: reference, source: .workflow, mode: stepMode)
-            )
+            let outcome = await executor.execute(ActionInvocation(
+                reference: reference,
+                source: actionExecutionSource(for: source),
+                mode: stepMode
+            ))
             let result = stepResult(
                 for: originalStep,
                 startedAt: stepStart,
@@ -246,6 +258,13 @@ final class WorkflowRunner {
             return .background
         }
         return .foreground
+    }
+
+    private func actionExecutionSource(for source: WorkflowRunSource) -> ActionExecutionSource {
+        if case .publishedAction(.runLink) = source {
+            return .runLink
+        }
+        return .workflow
     }
 
     private func stepResult(

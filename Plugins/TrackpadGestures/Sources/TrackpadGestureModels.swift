@@ -331,10 +331,13 @@ final class TrackpadGestureStore: ObservableObject {
         return true
     }
 
-    func portableBackup() -> Data? {
+    func portableBackup(using context: TrackpadActionHostContext? = nil) -> Data? {
         let backup = PortableBackup(
             formatVersion: Self.portableBackupFormatVersion,
-            mappings: mappings,
+            mappings: mappings.filter { mapping in
+                guard case let .action(reference) = mapping.action else { return true }
+                return context?.canExport(reference) ?? true
+            },
             ignoresGesturesWhileTyping: ignoresGesturesWhileTyping,
             typingGracePeriod: typingGracePeriod
         )
@@ -345,20 +348,48 @@ final class TrackpadGestureStore: ObservableObject {
         return data
     }
 
-    @discardableResult
-    func restorePortableBackup(_ data: Data) -> Bool {
+    func actionReferences(inPortableBackup data: Data) -> [ActionReference]? {
         guard data.count <= Self.maximumPortableBackupByteCount,
               let backup = try? JSONDecoder().decode(PortableBackup.self, from: data),
               backup.formatVersion == Self.portableBackupFormatVersion,
               backup.mappings == Self.normalized(backup.mappings) else {
+            return nil
+        }
+        return backup.mappings.compactMap { mapping in
+            guard case let .action(reference) = mapping.action else { return nil }
+            return reference
+        }
+    }
+
+    @discardableResult
+    func restorePortableBackup(
+        _ data: Data,
+        using context: TrackpadActionHostContext? = nil
+    ) -> Bool {
+        guard data.count <= Self.maximumPortableBackupByteCount,
+              let backup = try? JSONDecoder().decode(PortableBackup.self, from: data),
+              backup.formatVersion == Self.portableBackupFormatVersion,
+              backup.mappings == Self.normalized(backup.mappings),
+              backup.mappings.allSatisfy({ mapping in
+                  guard case let .action(reference) = mapping.action else { return true }
+                  return context?.canRestore(reference) ?? true
+              }) else {
+            return false
+        }
+        guard let mappingData = try? encoder.encode(backup.mappings) else { return false }
+        let gracePeriod = TrackpadTypingSuppressionGate.clamped(backup.typingGracePeriod)
+        storage.set(mappingData, forKey: Key.mappings)
+        storage.set(backup.ignoresGesturesWhileTyping, forKey: Key.ignoreWhileTyping)
+        storage.set(gracePeriod, forKey: Key.typingGracePeriod)
+        guard storage.data(forKey: Key.mappings) == mappingData,
+              storage.bool(forKey: Key.ignoreWhileTyping) == backup.ignoresGesturesWhileTyping,
+              (storage.object(forKey: Key.typingGracePeriod) as? NSNumber)?.doubleValue
+                == gracePeriod else {
             return false
         }
         mappings = backup.mappings
         ignoresGesturesWhileTyping = backup.ignoresGesturesWhileTyping
-        typingGracePeriod = TrackpadTypingSuppressionGate.clamped(backup.typingGracePeriod)
-        persist()
-        storage.set(ignoresGesturesWhileTyping, forKey: Key.ignoreWhileTyping)
-        storage.set(typingGracePeriod, forKey: Key.typingGracePeriod)
+        typingGracePeriod = gracePeriod
         return true
     }
 

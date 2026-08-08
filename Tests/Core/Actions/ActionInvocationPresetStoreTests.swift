@@ -158,18 +158,20 @@ final class ActionInvocationPresetStoreTests: XCTestCase {
         )
     }
 
-    func testStoreRejectsDuplicateReferencesEvenWithUniqueIDs() throws {
+    func testStorePreservesStableIDAliasesForTheSameMigratedReference() throws {
         let (defaults, suite) = try makeUserDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = ActionInvocationPresetStore(userDefaults: defaults)
         let reference = ActionReference(
             key: ActionKey(providerID: "test-provider", actionID: "toggle")
         )
+        let first = ActionInvocationPreset(id: deterministicUUID(1), reference: reference)
+        let second = ActionInvocationPreset(id: deterministicUUID(2), reference: reference)
 
-        XCTAssertFalse(store.replaceAll([
-            ActionInvocationPreset(id: deterministicUUID(1), reference: reference),
-            ActionInvocationPreset(id: deterministicUUID(2), reference: reference),
-        ]))
+        XCTAssertTrue(store.replaceAll([first, second]))
+        XCTAssertEqual(store.presets(), [first, second])
+        XCTAssertEqual(store.preset(reference: reference), first)
+        XCTAssertTrue(store.delete(reference: reference))
         XCTAssertTrue(store.presets().isEmpty)
     }
 

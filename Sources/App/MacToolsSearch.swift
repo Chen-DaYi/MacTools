@@ -343,7 +343,7 @@ enum MacToolsSearchIndexBuilder {
         items += pluginHost.pluginConfigurationItems.map { item in
             let managementItem = managementItemsByID[item.pluginID]
             return MacToolsSearchResult(
-                id: "plugin.\(item.pluginID)",
+                id: "plugin.configuration.\(item.pluginID)",
                 kind: .navigation,
                 title: item.title,
                 subtitle: AppL10n.settings(
@@ -392,9 +392,13 @@ enum MacToolsSearchIndexBuilder {
             } else {
                 return nil
             }
+            let surfaceID = switch surface {
+            case .dashboard: "dashboard"
+            case .featurePanel: "feature-panel"
+            }
 
             return MacToolsSearchResult(
-                id: "plugin.\(item.id)",
+                id: "plugin.surface.\(surfaceID).\(item.id)",
                 kind: .navigation,
                 title: item.title,
                 subtitle: subtitle,
@@ -425,7 +429,7 @@ enum MacToolsSearchIndexBuilder {
             }
 
             return MacToolsSearchResult(
-                id: "plugin.\(item.id)",
+                id: "plugin.marketplace.\(item.id)",
                 kind: .navigation,
                 title: item.title,
                 subtitle: AppL10n.settings(

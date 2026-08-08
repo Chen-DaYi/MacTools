@@ -35,6 +35,7 @@ final class AutomationController: ObservableObject {
     private var startedHandles: [UUID: ActionExecutionHandle] = [:]
 
     var onCatalogChange: (() -> Void)?
+    var actionReferencePortability: ((ActionReference) -> ActionReferencePortability)?
 
     init(
         store: WorkflowStore,
@@ -334,10 +335,24 @@ final class AutomationController: ObservableObject {
         registry.availability(for: reference)
     }
 
-    func actionRegistration() -> ActionProviderRegistration {
+    func actionRegistration(
+        definitionLookup: ((ActionKey) -> ActionDefinition?)? = nil
+    ) -> ActionProviderRegistration {
+        let definitionLookup = definitionLookup ?? { [registry] key in
+            registry.definition(for: key)
+        }
         let enabled = workflows.filter(\.isEnabled)
         let definitions = enabled.map { workflow in
-            ActionDefinition(
+            let analysis = WorkflowExecutionAnalysis.analyze(
+                workflowID: workflow.id,
+                store: store,
+                definition: definitionLookup
+            )
+            var capabilities: ActionExecutionCapabilities = [.foregroundInteractive, .cancellable]
+            if analysis.supportsBackground {
+                capabilities.insert(.background)
+            }
+            return ActionDefinition(
                 key: workflow.actionKey,
                 title: FeatureL10n.format("运行“%@”", workflow.name),
                 description: FeatureL10n.format(
@@ -347,7 +362,7 @@ final class AutomationController: ObservableObject {
                 keywords: [FeatureL10n.string("工作流"), FeatureL10n.string("自动化"), workflow.name],
                 systemImage: workflow.systemImage,
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive, .cancellable],
+                capabilities: capabilities,
                 executionTimeoutSeconds: nil
             )
         }
@@ -401,7 +416,11 @@ final class AutomationController: ObservableObject {
     }
 
     func exportWorkflow(id: UUID) -> Result<Data, WorkflowStoreError> {
-        store.exportWorkflow(id: id, registry: registry)
+        store.exportWorkflow(
+            id: id,
+            registry: registry,
+            referencePortability: actionReferencePortability
+        )
     }
 
     @discardableResult
@@ -470,35 +489,33 @@ final class AutomationController: ObservableObject {
     }
 
     private func workflowActionAvailability(_ reference: ActionReference) -> ActionAvailability {
-        guard let currentWorkflowID = workflowID(for: reference.key),
-              let workflow = store.workflow(id: currentWorkflowID),
-              workflow.isEnabled else {
+        guard let currentWorkflowID = workflowID(for: reference.key) else {
             return .unavailable(FeatureL10n.string("工作流已停用或不存在。"))
         }
-        guard !workflow.steps.isEmpty else {
-            return .unavailable(FeatureL10n.string("工作流尚未添加步骤。"))
-        }
-        for step in workflow.steps {
-            if step.reference.key == workflow.actionKey {
-                return .unavailable(FeatureL10n.string("工作流不能调用自身。"))
-            }
-            if step.reference.key.providerID == Self.providerID {
-                guard let nestedID = workflowID(for: step.reference.key),
-                      let nested = store.workflow(id: nestedID),
-                      nested.isEnabled,
-                      !nested.steps.isEmpty else {
-                    return .unavailable(FeatureL10n.string("嵌套工作流不可用。"))
-                }
-                continue
-            }
-            guard case let .success(reference) = registry.migrate(step.reference),
-                  case .success = registry.registeredAction(for: reference) else {
-                return .unavailable(FeatureL10n.string("工作流包含不可用操作。"))
-            }
-            let availability = registry.availability(for: reference)
-            if !availability.isAvailable {
-                return .unavailable(availability.reason ?? FeatureL10n.string("工作流包含不可用操作。"))
-            }
+        return WorkflowExecutionAnalysis.analyze(
+            workflowID: currentWorkflowID,
+            store: store,
+            definition: registry.definition(for:),
+            availability: registry.availability(for:)
+        ).availability
+    }
+
+    func supportsAutomaticRules(workflowID: UUID) -> Bool {
+        automaticRuleAvailability(workflowID: workflowID).isAvailable
+    }
+
+    func automaticRuleAvailability(workflowID: UUID) -> ActionAvailability {
+        let analysis = WorkflowExecutionAnalysis.analyze(
+            workflowID: workflowID,
+            store: store,
+            definition: registry.definition(for:),
+            availability: registry.availability(for:)
+        )
+        guard analysis.availability.isAvailable else { return analysis.availability }
+        guard analysis.supportsBackground else {
+            return .unavailable(FeatureL10n.string(
+                "此工作流包含需要交互的操作，不能由自动规则在后台运行。"
+            ))
         }
         return .available
     }
@@ -557,6 +574,8 @@ final class AutomationController: ObservableObject {
         case .emptyWorkflow: FeatureL10n.string("工作流尚未添加步骤。")
         case .recursiveInvocation: FeatureL10n.string("检测到递归工作流调用。")
         case .maximumDepthExceeded: FeatureL10n.string("工作流嵌套层级已达上限。")
+        case .backgroundExecutionUnsupported:
+            FeatureL10n.string("工作流包含只能交互运行的操作。")
         }
     }
 }

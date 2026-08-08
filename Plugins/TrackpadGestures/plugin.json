@@ -49,7 +49,7 @@
     }
   },
   "version": "1.0.0",
-  "minHostVersion": "1.1.6",
+  "minHostVersion": "1.2.0",
   "pluginKitVersion": 3,
   "bundleRelativePath": "TrackpadGestures.bundle",
   "factoryClass": "TrackpadGesturesPlugin.TrackpadGesturesPluginFactory",

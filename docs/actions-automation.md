@@ -5,13 +5,15 @@ MacTools exposes one host-owned action platform to every invocation surface. Plu
 ## Ownership
 
 - `ActionRegistry` owns revisioned in-memory definition/catalog indexes and live availability invalidation.
-- `ActionExecutor` is the only execution gate. It validates parameters and execution mode, applies confirmation policy, revalidates the provider and availability, and enforces cancellation and timeouts.
+- `ActionExecutor` is the only execution gate. It validates parameters and execution mode, applies confirmation policy, revalidates the exact approved request, provider, and availability, and enforces cancellation and timeouts only when the provider advertises cancellable execution. Non-cancellable destructive work is allowed to finish so MacTools never reports a cancellation while the operation is still running.
 - `ShortcutAssignmentService` owns ordinary global-action bindings, conflicts, migration, persistence, and Carbon registration state. Plugin-specific and central editors are projections of the same records.
 - Automation owns workflow definitions, rules, conditions, and bounded privacy-conscious history. Steps store versioned `ActionReference` values and execute serially through `ActionExecutor`.
 - `AppURLRouter` owns one strict, ordered, bounded route queue. Run Links resolve to `ActionReference` values before execution.
-- Action Grid owns only its ordered, versioned list of up to nine references. Catalog discovery, owner navigation, migration, availability, execution, shortcut assignment, and Run Link generation remain host-owned.
+- Action Grid owns only its versioned tree of folders, each containing up to nine positioned references. Catalog discovery, owner navigation, migration, availability, execution, shortcut assignment, and Run Link generation remain host-owned.
 
 Unavailable references are retained by shortcut assignments, workflows, presets, and Action Grid. A provider returning with a compatible migration can restore them without recreating user configuration.
+
+Portable imports distinguish unavailable providers from configuration-defined actions. A plugin payload that defines action identities must validate and report successful restoration before the host admits dependent workflows, shortcuts, Run Links, Trackpad mappings, or Action Grid entries. Workflows restore before those consumers; if provider or workflow persistence fails, the import reports a warning and drops the affected imported dependency chain instead of creating dangling state. Current backups treat an explicitly empty action-shortcut section as authoritative, while older backups bridge only the legacy assignments they actually contain and preserve unrelated destination assignments.
 
 ## Automation boundaries
 
@@ -25,7 +27,7 @@ If:   frontmost app, power/battery, connected display, time range, or network st
 Run:  reusable workflow
 ```
 
-Trigger delivery is debounced, serialized per rule, and bounded. Skipped rules record a concise reason. Workflow recursion and execution depth are bounded; history recovers unfinished runs as interrupted after a restart. Advanced branches, loops, variables, folders, and application-specific Action Grid profiles are intentionally outside this release.
+Trigger delivery is debounced, serialized per rule, and bounded. Calendar offsets, crossed battery thresholds, and network-interface transitions are carried as exact event identities so adjacent rules cannot cross-fire; positive calendar offsets retain ended events across provider refreshes. Skipped rules record a concise reason. Workflow recursion and execution depth are bounded; history recovers unfinished runs as interrupted after a restart. Advanced branches, loops, variables, folders, and application-specific Action Grid profiles are intentionally outside this release.
 
 ## Automated verification
 

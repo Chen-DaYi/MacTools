@@ -15,7 +15,16 @@ final class WorkflowStore {
 
     private struct PortableWorkflowEnvelope: Codable {
         let formatVersion: Int
-        let workflow: WorkflowDefinition
+        let rootWorkflowID: UUID?
+        let workflows: [WorkflowDefinition]?
+        let workflow: WorkflowDefinition?
+
+        init(rootWorkflowID: UUID, workflows: [WorkflowDefinition]) {
+            self.formatVersion = WorkflowDefinition.currentFormatVersion
+            self.rootWorkflowID = rootWorkflowID
+            self.workflows = workflows
+            self.workflow = nil
+        }
     }
 
     private enum DefaultsKey {
@@ -253,30 +262,27 @@ final class WorkflowStore {
 
     func exportWorkflow(
         id: UUID,
-        registry: ActionRegistry
+        registry: ActionRegistry,
+        referencePortability: ((ActionReference) -> ActionReferencePortability)? = nil
     ) -> Result<Data, WorkflowStoreError> {
         guard let workflow = workflow(id: id) else {
             return .failure(.workflowNotFound)
         }
-        for step in workflow.steps {
-            guard case let .success(action) = registry.registeredAction(for: step.reference) else {
-                return .failure(.unsafeForExport)
-            }
-            let schemas = Dictionary(
-                uniqueKeysWithValues: action.definition.parameters.map { ($0.id, $0) }
-            )
-            guard step.reference.parameters.entries.allSatisfy({ entry in
-                schemas[entry.name]?.privacy == .publicValue
-                    && schemas[entry.name]?.portability == .portable
-            }) else {
-                return .failure(.unsafeForExport)
-            }
+        guard WorkflowPortabilityAnalysis.portableWorkflowIDs(
+            in: workflows(),
+            referencePortability: referencePortability ?? { registry.portability(of: $0) }
+        ).contains(workflow.id) else {
+            return .failure(.unsafeForExport)
+        }
+        let exportedWorkflows = workflowDependencies(rootID: workflow.id, in: workflows())
+        guard !exportedWorkflows.isEmpty else {
+            return .failure(.unsafeForExport)
         }
         do {
             let data = try encoder.encode(
                 PortableWorkflowEnvelope(
-                    formatVersion: WorkflowDefinition.currentFormatVersion,
-                    workflow: workflow
+                    rootWorkflowID: workflow.id,
+                    workflows: exportedWorkflows
                 )
             )
             guard data.count <= Self.maximumPayloadByteCount else {
@@ -291,31 +297,119 @@ final class WorkflowStore {
     func importWorkflow(_ data: Data) -> Result<WorkflowDefinition, WorkflowStoreError> {
         guard data.count <= Self.maximumPayloadByteCount,
               let envelope = try? decoder.decode(PortableWorkflowEnvelope.self, from: data),
-              envelope.formatVersion == WorkflowDefinition.currentFormatVersion,
-              validate(envelope.workflow) == nil else {
+              envelope.formatVersion == WorkflowDefinition.currentFormatVersion else {
             return .failure(.invalidImport)
         }
-        if workflow(id: envelope.workflow.id) == nil {
-            return upsert(envelope.workflow)
+        let importedWorkflows = envelope.workflows ?? envelope.workflow.map { [$0] } ?? []
+        let rootID = envelope.rootWorkflowID ?? envelope.workflow?.id
+        guard let rootID,
+              importedWorkflows.count <= Self.maximumWorkflowCount,
+              Set(importedWorkflows.map(\.id)).count == importedWorkflows.count,
+              importedWorkflows.contains(where: { $0.id == rootID }),
+              portableWorkflowGraphIsClosed(
+                  rootID: rootID,
+                  workflows: importedWorkflows
+              ),
+              validate(importedWorkflows) == nil else {
+            return .failure(.invalidImport)
         }
 
-        // Importing the same workflow into a library that already contains it
-        // creates a copy. On a different Mac, preserve the exported identity so
-        // existing Run Links and scripts continue to address the workflow.
-        let imported = WorkflowDefinition(
-            name: envelope.workflow.name,
-            systemImage: envelope.workflow.systemImage,
-            isEnabled: envelope.workflow.isEnabled,
-            steps: envelope.workflow.steps.map {
-                WorkflowStep(
-                    reference: $0.reference,
-                    label: $0.label,
-                    delaySeconds: $0.delaySeconds,
-                    errorPolicy: $0.errorPolicy
-                )
+        let existing = workflows()
+        guard existing.count + importedWorkflows.count <= Self.maximumWorkflowCount else {
+            return .failure(.maximumWorkflowCountReached)
+        }
+        let existingIDs = Set(existing.map(\.id))
+        let remappedIDs = Dictionary(uniqueKeysWithValues: importedWorkflows.map { workflow in
+            (workflow.id, existingIDs.contains(workflow.id) ? UUID() : workflow.id)
+        })
+        let remapped = importedWorkflows.map { workflow in
+            remapPortableWorkflow(workflow, ids: remappedIDs)
+        }
+        guard replaceWorkflows(existing + remapped),
+              let importedRootID = remappedIDs[rootID],
+              let importedRoot = remapped.first(where: { $0.id == importedRootID }) else {
+            return .failure(.persistenceFailed)
+        }
+        return .success(importedRoot)
+    }
+
+    private func workflowDependencies(
+        rootID: UUID,
+        in workflows: [WorkflowDefinition]
+    ) -> [WorkflowDefinition] {
+        let byID = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var visited = Set<UUID>()
+        var result: [WorkflowDefinition] = []
+
+        func visit(_ id: UUID) {
+            guard visited.insert(id).inserted, let workflow = byID[id] else { return }
+            for step in workflow.steps {
+                if let nestedID = WorkflowExecutionAnalysis.nestedWorkflowID(for: step.reference.key) {
+                    visit(nestedID)
+                }
             }
+            result.append(workflow)
+        }
+
+        visit(rootID)
+        return result
+    }
+
+    private func portableWorkflowGraphIsClosed(
+        rootID: UUID,
+        workflows: [WorkflowDefinition]
+    ) -> Bool {
+        let byID = Dictionary(workflows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var visited = Set<UUID>()
+        var visiting = Set<UUID>()
+
+        func visit(_ id: UUID) -> Bool {
+            guard let workflow = byID[id], !visiting.contains(id) else { return false }
+            if visited.contains(id) { return true }
+            visiting.insert(id)
+            for step in workflow.steps {
+                guard let nestedID = WorkflowExecutionAnalysis.nestedWorkflowID(for: step.reference.key) else {
+                    continue
+                }
+                guard visit(nestedID) else { return false }
+            }
+            visiting.remove(id)
+            visited.insert(id)
+            return true
+        }
+
+        return visit(rootID) && visited.count == workflows.count
+    }
+
+    private func remapPortableWorkflow(
+        _ workflow: WorkflowDefinition,
+        ids: [UUID: UUID]
+    ) -> WorkflowDefinition {
+        let isCopy = ids[workflow.id] != workflow.id
+        let steps = workflow.steps.map { step in
+            var reference = step.reference
+            if let nestedID = WorkflowExecutionAnalysis.nestedWorkflowID(for: reference.key),
+               let remappedNestedID = ids[nestedID] {
+                reference = WorkflowDefinition(id: remappedNestedID, name: "").actionReference
+            }
+            return WorkflowStep(
+                id: isCopy ? UUID() : step.id,
+                reference: reference,
+                label: step.label,
+                delaySeconds: step.delaySeconds,
+                errorPolicy: step.errorPolicy
+            )
+        }
+        return WorkflowDefinition(
+            id: ids[workflow.id] ?? workflow.id,
+            name: workflow.name,
+            systemImage: workflow.systemImage,
+            isEnabled: workflow.isEnabled,
+            steps: steps,
+            createdAt: isCopy ? .now : workflow.createdAt,
+            updatedAt: isCopy ? .now : workflow.updatedAt,
+            formatVersion: workflow.formatVersion
         )
-        return upsert(imported)
     }
 
     private func replaceHistory(_ runs: [WorkflowRun]) -> Bool {

@@ -466,7 +466,11 @@ private struct WorkflowDetailView: View {
     }
 
     private var automaticRulesSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+        let automaticRuleAvailability = automation.automaticRuleAvailability(
+            workflowID: workflow.id
+        )
+        let supportsAutomaticRules = automaticRuleAvailability.isAvailable
+        return VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
                 Label(FeatureL10n.string("自动规则"), systemImage: "clock.arrow.circlepath")
                     .font(PluginSettingsTheme.Typography.sectionTitle)
@@ -479,6 +483,17 @@ private struct WorkflowDetailView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(!supportsAutomaticRules)
+            }
+
+            if !supportsAutomaticRules {
+                Label(
+                    automaticRuleAvailability.reason
+                        ?? FeatureL10n.string("工作流包含不可用操作。"),
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.orange)
             }
 
             let rules = automation.rules(workflowID: workflow.id)
@@ -495,7 +510,8 @@ private struct WorkflowDetailView: View {
                         AutomationRuleEditor(
                             automation: automation,
                             rule: rule,
-                            workflowName: workflow.name
+                            workflowName: workflow.name,
+                            supportsBackground: supportsAutomaticRules
                         )
                         if index + 1 < rules.count {
                             PluginSettingsListDivider()
@@ -737,6 +753,7 @@ private struct AutomationRuleEditor: View {
     @ObservedObject var automation: AutomationController
     let rule: AutomationRule
     let workflowName: String
+    let supportsBackground: Bool
     @State private var isExpanded = false
 
     var body: some View {
@@ -821,13 +838,25 @@ private struct AutomationRuleEditor: View {
                         .lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Toggle(FeatureL10n.string("启用"), isOn: binding(\.isEnabled))
+                Toggle(FeatureL10n.string("启用"), isOn: enabledBinding)
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
         }
         .pluginSettingsListRowPadding(interactive: true)
         .accessibilityIdentifier("mactools.automation.rule.\(rule.id.uuidString)")
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { rule.isEnabled },
+            set: { enabled in
+                guard !enabled || supportsBackground else { return }
+                var updated = rule
+                updated.isEnabled = enabled
+                automation.saveRule(updated)
+            }
+        )
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<AutomationRule, Value>) -> Binding<Value> {

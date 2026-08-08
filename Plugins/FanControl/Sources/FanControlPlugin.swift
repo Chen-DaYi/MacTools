@@ -33,7 +33,9 @@ private enum ControlID {
 
 @MainActor
 final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
-    PluginActionProviding
+    PluginActionProviding, PluginPortablePreferencesProviding,
+    PluginPortablePreferencesRestorationReporting,
+    PluginPortablePreferencesActionReferencesProviding, PluginActionReferenceBackupProviding
 {
     private enum ActionID {
         static let applyPreset = "apply-preset"
@@ -103,6 +105,9 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
             order: 45,
             defaultDescription: localization.string("metadata.description", defaultValue: "管理风扇转速预设")
         )
+        presetStore.onCatalogChange = { [weak self] in
+            self?.onStateChange?()
+        }
     }
 
     // MARK: - MacToolsPlugin
@@ -183,6 +188,31 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
                 title: "\(metadata.title) · \(preset.displayName(localization: localization))"
             )
         }
+    }
+
+    func makePortablePreferencesBackup() -> Data? {
+        presetStore.makePortablePreferencesBackup()
+    }
+
+    func restorePortablePreferences(from data: Data) {
+        _ = presetStore.restorePortablePreferences(from: data)
+    }
+
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        presetStore.restorePortablePreferences(from: data)
+    }
+
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
+        presetStore.customPresetIDs(inPortablePreferences: data)?.map {
+            presetActionReference(presetID: $0)
+        }
+    }
+
+    func backupDisposition(
+        for reference: ActionReference
+    ) -> PluginActionReferenceBackupDisposition {
+        guard let preset = preset(for: reference) else { return .excluded }
+        return preset.isBuiltIn ? .selfContained : .requiresPluginPreferences
     }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {

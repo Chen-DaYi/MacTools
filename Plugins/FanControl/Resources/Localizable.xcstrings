@@ -1208,6 +1208,77 @@
         }
       }
     },
+    "settings.custom.limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يمكنك إنشاء ما يصل إلى 100 إعداد مسبق مخصص."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst bis zu 100 eigene Voreinstellungen erstellen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can create up to 100 custom presets."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puedes crear hasta 100 preajustes personalizados."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous pouvez créer jusqu’à 100 préréglages personnalisés."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタムプリセットは最大100個まで作成できます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용자 설정 프리셋은 최대 100개까지 만들 수 있습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Você pode criar até 100 predefinições personalizadas."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Можно создать до 100 пользовательских профилей."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多可创建 100 个自定义预设。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多可建立 100 個自訂預設。"
+          }
+        }
+      }
+    },
     "settings.custom.deleteHelp": {
       "extractionState": "manual",
       "localizations": {

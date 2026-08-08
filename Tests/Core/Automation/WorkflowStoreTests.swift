@@ -556,6 +556,57 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertEqual(store.exportWorkflow(id: workflow.id, registry: registry), .failure(.unsafeForExport))
     }
 
+    func testPortableExportRejectsParentOfNonPortableNestedWorkflow() throws {
+        let store = try makeStore()
+        let registry = ActionRegistry()
+        let provider = WorkflowStoreTestProvider()
+        let key = ActionKey(providerID: "test-provider", actionID: "local")
+        let definition = ActionDefinition(
+            key: key,
+            title: "Local",
+            description: "",
+            systemImage: "internaldrive",
+            parameters: [
+                ActionParameterDefinition(
+                    id: "path",
+                    title: "Path",
+                    kind: .string,
+                    portability: .localOnly
+                ),
+            ]
+        )
+        let reference = ActionReference(
+            key: key,
+            parameters: try ActionParameterSet(["path": .string("/tmp/local")])
+        )
+        registry.synchronize([
+            ActionProviderRegistration(
+                providerID: key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [definition],
+                catalogEntries: [ActionCatalogEntry(reference: reference, title: "Local")],
+                availability: { _ in .available },
+                begin: { _ in
+                    .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            ),
+        ])
+        let child = try store.upsert(
+            WorkflowDefinition(name: "Child", steps: [WorkflowStep(reference: reference)])
+        ).get()
+        let parent = try store.upsert(
+            WorkflowDefinition(
+                name: "Parent",
+                steps: [WorkflowStep(reference: child.actionReference)]
+            )
+        ).get()
+
+        XCTAssertEqual(
+            store.exportWorkflow(id: parent.id, registry: registry),
+            .failure(.unsafeForExport)
+        )
+    }
+
     func testPortableWorkflowRoundTripCreatesFreshStableIdentity() throws {
         let store = try makeStore()
         let registry = ActionRegistry()
@@ -637,6 +688,149 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertEqual(imported.id, original.id)
         XCTAssertEqual(imported.actionReference, original.actionReference)
         XCTAssertEqual(imported.steps.map(\.id), original.steps.map(\.id))
+    }
+
+    func testPortableWorkflowExportIncludesNestedWorkflowDependencies() throws {
+        let sourceStore = try makeStore()
+        let registry = ActionRegistry()
+        let provider = WorkflowStoreTestProvider()
+        let key = ActionKey(providerID: "test-provider", actionID: "portable-nested")
+        let definition = ActionDefinition(
+            key: key,
+            title: "Portable",
+            description: "",
+            systemImage: "checkmark"
+        )
+        let reference = ActionReference(key: key)
+        registry.synchronize([
+            ActionProviderRegistration(
+                providerID: key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [definition],
+                catalogEntries: [ActionCatalogEntry(reference: reference, title: "Portable")],
+                availability: { _ in .available },
+                begin: { _ in .success(ActionExecutionHandle { .succeeded() }) }
+            ),
+        ])
+        let child = try sourceStore.upsert(
+            WorkflowDefinition(name: "Child", steps: [WorkflowStep(reference: reference)])
+        ).get()
+        let parent = try sourceStore.upsert(
+            WorkflowDefinition(name: "Parent", steps: [WorkflowStep(reference: child.actionReference)])
+        ).get()
+
+        let data = try sourceStore.exportWorkflow(id: parent.id, registry: registry).get()
+        let destinationDefaults = try XCTUnwrap(UserDefaults(suiteName: "\(suiteName).nested-destination"))
+        destinationDefaults.removePersistentDomain(forName: "\(suiteName).nested-destination")
+        defer { destinationDefaults.removePersistentDomain(forName: "\(suiteName).nested-destination") }
+        let destinationStore = WorkflowStore(userDefaults: destinationDefaults)
+
+        let importedParent = try destinationStore.importWorkflow(data).get()
+
+        XCTAssertEqual(destinationStore.workflows().count, 2)
+        let importedChildID = try XCTUnwrap(
+            WorkflowExecutionAnalysis.nestedWorkflowID(
+                for: try XCTUnwrap(importedParent.steps.first).reference.key
+            )
+        )
+        XCTAssertEqual(destinationStore.workflow(id: importedChildID)?.name, "Child")
+    }
+
+    func testPortableWorkflowImportRejectsIncompleteNestedGraph() throws {
+        let store = try makeStore()
+        let registry = ActionRegistry()
+        let child = try store.upsert(WorkflowDefinition(name: "Child")).get()
+        let parent = try store.upsert(WorkflowDefinition(
+            name: "Parent",
+            steps: [WorkflowStep(reference: child.actionReference)]
+        )).get()
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: try store.exportWorkflow(id: parent.id, registry: registry).get()
+            ) as? [String: Any]
+        )
+        let workflows = try XCTUnwrap(json["workflows"] as? [[String: Any]])
+        json["workflows"] = workflows.filter {
+            ($0["id"] as? String)?.lowercased() != child.id.uuidString.lowercased()
+        }
+
+        let damaged = try JSONSerialization.data(withJSONObject: json)
+
+        XCTAssertEqual(store.importWorkflow(damaged), .failure(.invalidImport))
+    }
+
+    func testPortableWorkflowImportRejectsCyclicNestedGraph() throws {
+        let store = try makeStore()
+        let registry = ActionRegistry()
+        let child = try store.upsert(WorkflowDefinition(name: "Child")).get()
+        let parent = try store.upsert(WorkflowDefinition(
+            name: "Parent",
+            steps: [WorkflowStep(reference: child.actionReference)]
+        )).get()
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: try store.exportWorkflow(id: parent.id, registry: registry).get()
+            ) as? [String: Any]
+        )
+        var workflows = try XCTUnwrap(json["workflows"] as? [[String: Any]])
+        let childIndex = try XCTUnwrap(workflows.firstIndex {
+            ($0["id"] as? String)?.lowercased() == child.id.uuidString.lowercased()
+        })
+        var childJSON = workflows[childIndex]
+        var steps = (childJSON["steps"] as? [[String: Any]]) ?? []
+        let parentReferenceData = try JSONEncoder().encode(parent.actionReference)
+        let parentReferenceJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: parentReferenceData) as? [String: Any]
+        )
+        steps.append([
+            "id": UUID().uuidString,
+            "reference": parentReferenceJSON,
+            "delaySeconds": 0,
+            "errorPolicy": "stop",
+        ])
+        childJSON["steps"] = steps
+        workflows[childIndex] = childJSON
+        json["workflows"] = workflows
+
+        let damaged = try JSONSerialization.data(withJSONObject: json)
+
+        XCTAssertEqual(store.importWorkflow(damaged), .failure(.invalidImport))
+    }
+
+    func testPortableWorkflowExportRejectsPreferenceDependentAction() throws {
+        let store = try makeStore()
+        let registry = ActionRegistry()
+        let provider = WorkflowStoreTestProvider()
+        let key = ActionKey(providerID: "settings-provider", actionID: "custom-item")
+        let definition = ActionDefinition(
+            key: key,
+            title: "Custom Item",
+            description: "",
+            systemImage: "gear"
+        )
+        let reference = ActionReference(key: key)
+        registry.synchronize([
+            ActionProviderRegistration(
+                providerID: key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [definition],
+                catalogEntries: [ActionCatalogEntry(reference: reference, title: "Custom Item")],
+                availability: { _ in .available },
+                begin: { _ in .success(ActionExecutionHandle { .succeeded() }) }
+            ),
+        ])
+        let workflow = try store.upsert(
+            WorkflowDefinition(name: "Needs Settings", steps: [WorkflowStep(reference: reference)])
+        ).get()
+
+        XCTAssertEqual(
+            store.exportWorkflow(
+                id: workflow.id,
+                registry: registry,
+                referencePortability: { _ in .knownNonPortable }
+            ),
+            .failure(.unsafeForExport)
+        )
     }
 
     func testDuplicateTruncatesMultibyteNameByUTF8Bytes() throws {

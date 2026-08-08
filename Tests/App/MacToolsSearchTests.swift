@@ -472,20 +472,26 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
-    func testUnifiedSearchFieldKeepsKeyboardNavigationInsideThePalette() {
-        XCTAssertEqual(
+    func testSearchIndexUsesUniqueStableIdentifiers() {
+        let index = MacToolsSearchIndexBuilder.build(
+            pluginHost: makePluginHostForTests(plugins: [SearchableTestPlugin()])
+        )
+
+        XCTAssertEqual(Set(index.items.map(\.id)).count, index.items.count)
+    }
+
+    func testUnifiedSearchFieldLeavesTabForInlineControlNavigation() {
+        XCTAssertNil(
             UnifiedSearchTextField.command(
                 for: #selector(NSResponder.insertTab(_:)),
                 hasMarkedText: false
-            ),
-            .moveSelection(1)
+            )
         )
-        XCTAssertEqual(
+        XCTAssertNil(
             UnifiedSearchTextField.command(
                 for: #selector(NSResponder.insertBacktab(_:)),
                 hasMarkedText: false
-            ),
-            .moveSelection(-1)
+            )
         )
         XCTAssertEqual(
             UnifiedSearchTextField.command(
@@ -613,7 +619,7 @@ final class MacToolsSearchTests: XCTestCase {
         )
         let result = try XCTUnwrap(
             MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
-                $0.id == "plugin.com.example.future"
+                $0.id == "plugin.marketplace.com.example.future"
             }
         )
 

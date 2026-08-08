@@ -72,8 +72,10 @@ private struct SidecarSwitchRequest {
 
 @MainActor
 final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
-    PluginPortablePreferencesProviding, PluginShortcutBindingChangeHandling, PluginActionProviding,
-    PluginLegacyActionShortcutProviding {
+    PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
+    PluginShortcutBindingChangeHandling, PluginActionProviding,
+    PluginLegacyActionShortcutProviding, PluginPortablePreferencesActionReferencesProviding,
+    PluginActionReferenceBackupProviding {
     let metadata: PluginMetadata
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -502,9 +504,48 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     func restorePortablePreferences(from data: Data) {
-        preferences.restorePortablePreferences(from: data)
+        _ = restorePortablePreferencesReportingResult(from: data)
+    }
+
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        guard preferences.restorePortablePreferences(from: data) else { return false }
         refreshDevices(notify: false)
         onStateChange?()
+        return true
+    }
+
+    func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
+        guard let deviceIDs = preferences.deviceIDs(inPortablePreferences: data) else {
+            return nil
+        }
+        return [
+            ActionReference(
+                key: ActionKey(
+                    providerID: metadata.id,
+                    actionID: SidecarActionID.connectFirstAvailable
+                )
+            ),
+        ] + deviceIDs.map {
+            ActionReference(
+                key: ActionKey(providerID: metadata.id, actionID: SidecarActionID.device($0))
+            )
+        }
+    }
+
+    func backupDisposition(
+        for reference: ActionReference
+    ) -> PluginActionReferenceBackupDisposition {
+        guard reference.key.providerID == metadata.id else { return .excluded }
+        switch reference.key.actionID {
+        case SidecarActionID.disconnectAll:
+            return .selfContained
+        case SidecarActionID.connectFirstAvailable:
+            return .requiresPluginPreferences
+        default:
+            return preference(forActionID: reference.key.actionID) == nil
+                ? .excluded
+                : .requiresPluginPreferences
+        }
     }
 
     private var subtitle: String {

@@ -379,6 +379,51 @@ final class TrackpadGestureStoreTests: XCTestCase {
         XCTAssertEqual(restored.mappings, reloaded.mappings)
     }
 
+    func testPortableBackupFiltersOnlyNonportableCanonicalActions() throws {
+        let store = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        let portable = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "portable")
+        )
+        let local = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "local")
+        )
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .action(portable)
+        )))
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .fourFingerTap,
+            action: .action(local)
+        )))
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .fiveFingerTap,
+            action: .middleClick
+        )))
+        let context = TrackpadActionHostContext(
+            catalog: { [] },
+            item: { _ in nil },
+            migrate: { $0 },
+            canExport: { $0 != local },
+            canRestore: { $0 != local },
+            execute: { _ in }
+        )
+
+        let backup = try XCTUnwrap(store.portableBackup(using: context))
+        XCTAssertEqual(store.actionReferences(inPortableBackup: backup), [portable])
+        let restored = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        XCTAssertTrue(restored.restorePortableBackup(backup, using: context))
+        XCTAssertEqual(Set(restored.mappings.map(\.gesture)), [.threeFingerTap, .fiveFingerTap])
+
+        let unfiltered = try XCTUnwrap(store.portableBackup())
+        XCTAssertFalse(restored.restorePortableBackup(unfiltered, using: context))
+    }
+
     func testDuplicateGestureIsRejectedEvenWhenExistingMappingIsDisabled() {
         let store = TrackpadGestureStore(
             storage: TrackpadGestureMemoryStorage(),
@@ -1001,7 +1046,7 @@ final class TrackpadGesturesPluginTests: XCTestCase {
             isAcquisitionAllowed: true
         )
         let second = TrackpadInterprocessListenerLease(
-            bundleIdentifier: "test.mactools",
+            bundleIdentifier: "media.jenny.mactools.dev",
             temporaryDirectory: directory,
             isAcquisitionAllowed: true
         )

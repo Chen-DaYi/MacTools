@@ -51,10 +51,7 @@ final class DropZoneViewModel: ObservableObject {
         phase = .running
         Task {
             do {
-                let localization = localization
-                try await Task.detached(priority: .userInitiated) {
-                    try runQuarantineRemoval(appPath: appPath, localization: localization)
-                }.value
+                try await runQuarantineRemoval(appPath: appPath, localization: localization)
                 phase = .success(appName: appName)
                 onComplete(appName, true, nil)
                 try? await Task.sleep(for: .seconds(1.5))

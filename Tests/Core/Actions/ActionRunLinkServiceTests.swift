@@ -181,6 +181,86 @@ final class ActionRunLinkServiceTests: XCTestCase {
         XCTAssertEqual(setup.store.preset(id: preset.id)?.reference, current)
     }
 
+    func testDistinctStablePresetIDsRemainResolvableAfterReferencesConverge() throws {
+        let key = ActionKey(providerID: "test-provider", actionID: "migrated-aliases")
+        let current = ActionReference(key: key, schemaVersion: 2)
+        let setup = try makeService(
+            reference: current,
+            schemaVersion: 2,
+            migrate: { reference, version in
+                ActionReference(
+                    key: reference.key,
+                    schemaVersion: version,
+                    parameters: reference.parameters
+                )
+            }
+        )
+        let legacy = ActionInvocationPreset(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000481")!,
+            reference: ActionReference(key: key, schemaVersion: 1)
+        )
+        let canonical = ActionInvocationPreset(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000482")!,
+            reference: current
+        )
+        XCTAssertTrue(setup.store.replaceAll([legacy, canonical]))
+
+        XCTAssertEqual(setup.service.resolve(.preset(legacy.id)), .success(current))
+        XCTAssertEqual(setup.service.resolve(.preset(canonical.id)), .success(current))
+        XCTAssertEqual(setup.store.preset(id: legacy.id)?.reference, current)
+        XCTAssertEqual(setup.store.preset(id: canonical.id)?.reference, current)
+        XCTAssertTrue(setup.service.deletePreset(for: current))
+        XCTAssertTrue(setup.store.presets().isEmpty)
+    }
+
+    func testManagementCanonicalizesAliasesWithoutRequiringResolution() throws {
+        let key = ActionKey(providerID: "test-provider", actionID: "managed-aliases")
+        let parameters = try ActionParameterSet(["target": .string("one")])
+        let current = ActionReference(key: key, schemaVersion: 2, parameters: parameters)
+        let setup = try makeService(
+            reference: current,
+            schemaVersion: 2,
+            parameterDefinitions: [
+                ActionParameterDefinition(id: "target", title: "Target", kind: .string),
+            ],
+            migrate: { reference, version in
+                ActionReference(
+                    key: reference.key,
+                    schemaVersion: version,
+                    parameters: reference.parameters
+                )
+            }
+        )
+        let legacyReference = ActionReference(key: key, schemaVersion: 1, parameters: parameters)
+        let currentReference = ActionReference(key: key, schemaVersion: 2, parameters: parameters)
+        let oldest = ActionInvocationPreset(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000491")!,
+            reference: legacyReference,
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+        let newer = ActionInvocationPreset(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000492")!,
+            reference: currentReference,
+            createdAt: Date(timeIntervalSince1970: 2)
+        )
+        XCTAssertTrue(setup.store.replaceAll([newer, oldest]))
+
+        guard case let .available(_, presetID) = setup.service.presentation(for: currentReference)
+        else {
+            return XCTFail("Expected an existing canonical preset")
+        }
+        XCTAssertEqual(presetID, oldest.id)
+        XCTAssertEqual(
+            try setup.service.createPreset(for: legacyReference).get().url,
+            setup.service.representation(for: .preset(oldest.id)).url
+        )
+        XCTAssertEqual(setup.store.presets().map(\.id), [newer.id, oldest.id])
+        XCTAssertTrue(setup.store.presets().allSatisfy { $0.reference == currentReference })
+
+        XCTAssertTrue(setup.service.deletePreset(for: legacyReference))
+        XCTAssertTrue(setup.store.presets().isEmpty)
+    }
+
     private struct Setup {
         let registry: ActionRegistry
         let registration: ActionProviderRegistration

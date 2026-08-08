@@ -3,6 +3,51 @@ import Foundation
 import SwiftUI
 import MacToolsPluginKit
 
+@MainActor
+protocol AppHotkeyApplicationLaunching: AnyObject {
+    func launch(_ bundleURL: URL) async throws
+}
+
+@MainActor
+final class SystemAppHotkeyApplicationLauncher: AppHotkeyApplicationLaunching {
+    private let bundleIdentifier: (URL) -> String?
+    private let frontmostBundleIdentifier: () -> String?
+    private let hideFrontmost: () -> Bool
+    private let openApplication: (URL) async throws -> Void
+
+    init(
+        bundleIdentifier: @escaping (URL) -> String? = { Bundle(url: $0)?.bundleIdentifier },
+        frontmostBundleIdentifier: @escaping () -> String? = {
+            NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        },
+        hideFrontmost: @escaping () -> Bool = {
+            NSWorkspace.shared.frontmostApplication?.hide() ?? false
+        },
+        openApplication: ((URL) async throws -> Void)? = nil
+    ) {
+        self.bundleIdentifier = bundleIdentifier
+        self.frontmostBundleIdentifier = frontmostBundleIdentifier
+        self.hideFrontmost = hideFrontmost
+        self.openApplication = openApplication ?? { url in
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        }
+    }
+
+    func launch(_ bundleURL: URL) async throws {
+        if let target = bundleIdentifier(bundleURL),
+           target == frontmostBundleIdentifier() {
+            guard hideFrontmost() else {
+                throw NSError(domain: "AppHotkeyPlugin", code: 2)
+            }
+            return
+        }
+
+        try await openApplication(bundleURL)
+    }
+}
+
 // MARK: - Bundle Factory
 
 public final class AppHotkeyPluginFactory: NSObject, MacToolsPluginBundleFactory {
@@ -49,14 +94,19 @@ final class AppHotkeyPlugin:
     private let store: AppHotkeyStore
     private let storage: PluginStorage
     private let localization: PluginLocalization
+    private let applicationLauncher: any AppHotkeyApplicationLaunching
     private var isEnabled: Bool
 
     // MARK: Init
 
-    init(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "app-hotkey")) {
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "app-hotkey"),
+        applicationLauncher: (any AppHotkeyApplicationLaunching)? = nil
+    ) {
         self.localization = PluginLocalization(bundle: context.resourceBundle)
         self.storage = context.storage
         self.store = AppHotkeyStore(storage: context.storage)
+        self.applicationLauncher = applicationLauncher ?? SystemAppHotkeyApplicationLauncher()
         self.metadata = PluginMetadata(
             id: "app-hotkey",
             title: localization.string("metadata.title", defaultValue: "应用快捷键"),
@@ -200,7 +250,8 @@ final class AppHotkeyPlugin:
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         guard actionAvailability(for: invocation.reference).isAvailable,
-              let entry = entry(for: invocation.reference) else {
+              let entry = entry(for: invocation.reference),
+              let bundleURL = entry.bundleURL else {
             let failureMessage = localization.string(
                 "action.unavailable.missing",
                 defaultValue: "应用不可用。"
@@ -209,8 +260,16 @@ final class AppHotkeyPlugin:
                 .failed(message: failureMessage)
             })
         }
-        launch(entryID: entry.id)
-        return ActionExecutionHandle(operation: { .succeeded() })
+        return ActionExecutionHandle { [applicationLauncher] in
+            do {
+                try await applicationLauncher.launch(bundleURL)
+                return .succeeded()
+            } catch is CancellationError {
+                return .cancelled
+            } catch {
+                return .failed(message: error.localizedDescription)
+            }
+        }
     }
 
     var legacyActionShortcutAssignments: [LegacyActionShortcutAssignment] {
@@ -240,22 +299,4 @@ final class AppHotkeyPlugin:
         return store.entries.first { $0.id == id }
     }
 
-    /// Hides the target app when it is frontmost; otherwise opens or activates it.
-    private func launch(entryID: UUID) {
-        guard let entry = store.entries.first(where: { $0.id == entryID }),
-              let bundleURL = entry.bundleURL
-        else { return }
-
-        let bundleIdentifier = Bundle(url: bundleURL)?.bundleIdentifier
-
-        if let bundleIdentifier,
-           let frontmost = NSWorkspace.shared.frontmostApplication,
-           frontmost.bundleIdentifier == bundleIdentifier {
-            frontmost.hide()
-        } else {
-            let config = NSWorkspace.OpenConfiguration()
-            config.activates = true
-            NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, _ in }
-        }
-    }
 }

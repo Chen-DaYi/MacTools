@@ -839,7 +839,7 @@
           }
         }
       }
-    }, 
+    },
     "%@ 快捷键": {
       "extractionState": "manual",
       "localizations": {
@@ -5668,73 +5668,73 @@
         }
       }
     },
-    "嵌套工作流不可用。": {
+    "工作流包含只能交互运行的操作。": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "سير العمل المتداخل غير متوفر."
+            "value": "يحتوي سير العمل على إجراءات لا يمكن تشغيلها إلا بشكل تفاعلي."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Geschachtelter Workflow ist nicht verfügbar."
+            "value": "Der Workflow enthält Aktionen, die nur interaktiv ausgeführt werden können."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nested workflow is not available."
+            "value": "The workflow contains actions that can only run interactively."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "El flujo de trabajo anidado no está disponible."
+            "value": "El flujo de trabajo contiene acciones que solo se pueden ejecutar de forma interactiva."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le workflow imbriqué n'est pas disponible."
+            "value": "Le workflow contient des actions qui ne peuvent s'exécuter qu'en mode interactif."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ネストされたワークフローは使用できません。"
+            "value": "ワークフローには対話的にのみ実行できる操作が含まれています。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "중첩된 워크플로를 사용할 수 없습니다."
+            "value": "워크플로에 대화식으로만 실행할 수 있는 동작이 포함되어 있습니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "O fluxo de trabalho aninhado não está disponível."
+            "value": "O fluxo de trabalho contém ações que só podem ser executadas interativamente."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Вложенный рабочий процесс недоступен."
+            "value": "Рабочий процесс содержит действия, которые можно выполнять только интерактивно."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "嵌套工作流不可用。"
+            "value": "工作流包含只能交互运行的操作。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "嵌套工作流程不可用。"
+            "value": "工作流程包含只能以互動方式執行的操作。"
           }
         }
       }
@@ -5881,73 +5881,73 @@
         }
       }
     },
-    "工作流不能调用自身。": {
+    "此工作流包含需要交互的操作，不能由自动规则在后台运行。": {
       "extractionState": "manual",
       "localizations": {
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "لا يمكن لسير العمل استدعاء نفسه."
+            "value": "يحتوي سير العمل هذا على إجراءات تفاعلية ولا يمكن تشغيله في الخلفية بواسطة قواعد الأتمتة."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Der Workflow kann sich nicht selbst aufrufen."
+            "value": "Dieser Workflow enthält interaktive Aktionen und kann nicht durch Automatisierungsregeln im Hintergrund ausgeführt werden."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The workflow cannot call itself."
+            "value": "This workflow contains interactive actions and cannot run in the background from automation rules."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "El flujo de trabajo no puede llamarse a sí mismo."
+            "value": "Este flujo de trabajo contiene acciones interactivas y no se puede ejecutar en segundo plano mediante reglas de automatización."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le workflow ne peut pas s'appeler tout seul."
+            "value": "Ce workflow contient des actions interactives et ne peut pas s'exécuter en arrière-plan via des règles d'automatisation."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ワークフローはそれ自体を呼び出すことができません。"
+            "value": "このワークフローには対話操作が含まれるため、自動化ルールからバックグラウンドで実行できません。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "워크플로 자체를 호출할 수 없습니다."
+            "value": "이 워크플로에는 대화식 동작이 포함되어 있어 자동화 규칙으로 백그라운드에서 실행할 수 없습니다."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "O fluxo de trabalho não pode chamar a si mesmo."
+            "value": "Este fluxo de trabalho contém ações interativas e não pode ser executado em segundo plano por regras de automação."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Рабочий процесс не может вызвать сам себя."
+            "value": "Этот рабочий процесс содержит интерактивные действия и не может выполняться в фоне по правилам автоматизации."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "工作流不能调用自身。"
+            "value": "此工作流包含需要交互的操作，不能由自动规则在后台运行。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "工作流程不能呼叫自身。"
+            "value": "此工作流程包含需要互動的操作，無法由自動規則在背景執行。"
           }
         }
       }

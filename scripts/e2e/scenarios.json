@@ -1,5 +1,5 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "issueScope": [247, 249, 250, 251],
   "packs": [
     {
@@ -8,6 +8,7 @@
       "recordingStartRoute": "settings/plugins/marketplace",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": true,
       "issues": [247, 249, 250, 251],
       "checkpoints": [
         "marketplace-visible",
@@ -28,6 +29,7 @@
       "recordingStartRoute": "settings/features/automation",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": true,
       "issues": [247, 250],
       "checkpoints": [
         "visual-workflow-visible",
@@ -44,6 +46,7 @@
       "recordingStartRoute": "settings/plugins/saved-scripts",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": true,
       "issues": [],
       "checkpoints": [
         "saved-script-manager-visible",
@@ -62,6 +65,7 @@
       "recordingStartRoute": "settings/features/actions-and-shortcuts",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": false,
       "issues": [249],
       "checkpoints": [
         "shortcut-conflict-visible",
@@ -76,6 +80,7 @@
       "recordingStartRoute": "settings/features/automation",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": true,
       "issues": [247],
       "checkpoints": [
         "workflow-continue-on-error",
@@ -92,6 +97,7 @@
       "recordingStartRoute": "settings/features/automation",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": false,
       "issues": [247],
       "checkpoints": [
         "multiple-rules-visible",
@@ -105,6 +111,7 @@
       "recordingStartRoute": "settings/features/actions-and-shortcuts",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": false,
       "issues": [251],
       "checkpoints": [
         "run-link-copy-url",
@@ -121,6 +128,7 @@
       "recordingStartRoute": "settings/plugins/action-grid",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": false,
       "issues": [250],
       "checkpoints": [
         "grid-nine-entry-layout",
@@ -141,6 +149,7 @@
       "recordingStartRoute": "settings/features/actions-and-shortcuts",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": false,
       "issues": [249, 250],
       "checkpoints": [
         "localization-english",
@@ -156,6 +165,7 @@
       "recordingStartRoute": "settings/features/dashboard",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": false,
       "issues": [],
       "checkpoints": [
         "dashboard-bluetooth-responsive",
@@ -170,6 +180,7 @@
       "recordingStartRoute": "settings/plugins/trackpad-gestures",
       "phase": "pre-permission",
       "required": true,
+      "recordingRequired": false,
       "issues": [],
       "checkpoints": [
         "trackpad-settings-visible",
@@ -185,6 +196,7 @@
       "recordingStartRoute": "settings/plugins/trackpad-gestures",
       "phase": "post-permission",
       "required": true,
+      "recordingRequired": false,
       "issues": [249, 250],
       "checkpoints": [
         "trackpad-permission-evidence",
@@ -198,6 +210,7 @@
       "recordingStartRoute": "settings/plugins/trackpad-gestures",
       "phase": "post-permission",
       "required": false,
+      "recordingRequired": false,
       "issues": [],
       "checkpoints": [
         "trackpad-physical-gesture-verification"

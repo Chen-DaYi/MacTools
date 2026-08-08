@@ -38,7 +38,7 @@ final class RightClickURLRouter {
         case "/open-with":
             handleOpenWith(url)
         default:
-            logger.error("Unsupported right-click URL path: \(url.path, privacy: .public)")
+            logger.error("Unsupported right-click URL path: \(url.path, privacy: .private)")
         }
     }
 
@@ -52,7 +52,7 @@ final class RightClickURLRouter {
             let folderURL = try fileActionService.createFolder(in: URL(fileURLWithPath: directoryPath))
             logger.info("Created folder at \(folderURL.path, privacy: .public)")
         } catch {
-            logger.error("Create folder failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Create folder failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -70,7 +70,7 @@ final class RightClickURLRouter {
             )
             logger.info("Created file at \(fileURL.path, privacy: .public)")
         } catch {
-            logger.error("Create file failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Create file failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -81,7 +81,7 @@ final class RightClickURLRouter {
         }
         let directory = URL(fileURLWithPath: directoryPath)
         guard RightClickTargetResolver.isDirectory(directory) else {
-            logger.error("open-terminal directory unavailable: \(directoryPath, privacy: .public)")
+            logger.error("open-terminal directory unavailable: \(directoryPath, privacy: .private)")
             return
         }
         guard let terminalURL = NSWorkspace.shared.urlForApplication(
@@ -96,7 +96,7 @@ final class RightClickURLRouter {
             configuration: NSWorkspace.OpenConfiguration()
         ) { [logger] _, error in
             if let error {
-                logger.error("open in terminal failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("open in terminal failed: \(error.localizedDescription, privacy: .private)")
             }
         }
     }
@@ -110,7 +110,7 @@ final class RightClickURLRouter {
         // with an app the user actually configured — not any .app on disk.
         let configuredApps = Set(RightClickConfigurationStore.load().openWithApps.map(\.appPath))
         guard configuredApps.contains(request.appURL.path) else {
-            logger.error("open-with rejected: app not in configured list: \(request.appURL.path, privacy: .public)")
+            logger.error("open-with rejected: app not in configured list: \(request.appURL.path, privacy: .private)")
             return
         }
         NSWorkspace.shared.open(
@@ -119,7 +119,7 @@ final class RightClickURLRouter {
             configuration: NSWorkspace.OpenConfiguration()
         ) { [logger] _, error in
             if let error {
-                logger.error("open-with failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("open-with failed: \(error.localizedDescription, privacy: .private)")
             }
         }
     }

@@ -65,7 +65,7 @@ final class TrackpadInterprocessListenerLease: TrackpadListenerLeaseManaging {
         isAcquisitionAllowed: Bool? = nil
     ) {
         lockPath = temporaryDirectory
-            .appendingPathComponent("\(bundleIdentifier).trackpad-gestures.listener.lock")
+            .appendingPathComponent("mactools.trackpad-gestures.listener.lock")
             .path
         self.isAcquisitionAllowed = isAcquisitionAllowed ?? Self.defaultAcquisitionPolicy(
             bundleIdentifier: bundleIdentifier

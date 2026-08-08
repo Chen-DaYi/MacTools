@@ -74,10 +74,11 @@ private enum ActionShortcutFilter: String, CaseIterable, Identifiable {
 
 private struct PendingActionShortcutReplacement: Identifiable {
     let reference: ActionReference
+    let assignmentID: UUID?
     let binding: ShortcutBinding
     let ownerDescription: String
 
-    var id: ActionReference { reference }
+    var id: String { assignmentID?.uuidString ?? reference.key.id }
 }
 
 struct ActionShortcutSettingsView: View {
@@ -119,6 +120,7 @@ struct ActionShortcutSettingsView: View {
                     _ = pluginHost.setActionShortcutBinding(
                         replacement.binding,
                         to: replacement.reference,
+                        assignmentID: replacement.assignmentID,
                         replacingConflictingActionAssignments: true
                     )
                 },
@@ -237,7 +239,12 @@ struct ActionShortcutSettingsView: View {
                         item: item,
                         displaysOwnerSettings: group.providerID == "mactools",
                         onRecord: { binding in record(binding, for: item) },
-                        onClear: { pluginHost.clearActionShortcut(for: item.reference) }
+                        onClear: {
+                            pluginHost.clearActionShortcut(
+                                for: item.reference,
+                                assignmentID: item.assignmentID
+                            )
+                        }
                     )
                     if index < group.items.count - 1 {
                         PluginSettingsListDivider()
@@ -252,12 +259,17 @@ struct ActionShortcutSettingsView: View {
         _ binding: ShortcutBinding,
         for item: ActionShortcutCatalogItem
     ) -> PluginShortcutRecordingResult {
-        switch pluginHost.setActionShortcutBinding(binding, to: item.reference) {
+        switch pluginHost.setActionShortcutBinding(
+            binding,
+            to: item.reference,
+            assignmentID: item.assignmentID
+        ) {
         case .success:
             return .accepted
         case let .failure(.conflict(ownerDescription)):
             pendingReplacement = PendingActionShortcutReplacement(
                 reference: item.reference,
+                assignmentID: item.assignmentID,
                 binding: binding,
                 ownerDescription: ownerDescription
             )

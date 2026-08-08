@@ -16,7 +16,7 @@
     "zh-Hant": { "displayName": "自動切換輸入法", "summary": "按應用程式記住並自動切換輸入法" }
   },
   "version": "1.0.0",
-  "minHostVersion": "1.1.3",
+  "minHostVersion": "1.2.0",
   "pluginKitVersion": 3,
   "bundleRelativePath": "AutoInput.bundle",
   "factoryClass": "AutoInputPlugin.AutoInputPluginFactory",

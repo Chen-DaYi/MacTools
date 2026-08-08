@@ -9,7 +9,7 @@ private enum RecorderError: LocalizedError {
     case invalidArguments
     case invalidRectangle(String)
     case rectangleSpansDisplays
-    case missingApplication(String)
+    case missingApplication(String, pid_t)
     case startTimedOut
     case cannotAddWriterInput
     case writerDidNotStart
@@ -19,13 +19,13 @@ private enum RecorderError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidArguments:
-            return "usage: MacToolsE2ERecorder.swift <output.mov> <seconds> <x,y,width,height> <ready-file> <start-file> <stop-file> <allowed-bundle-id>..."
+            return "usage: MacToolsE2ERecorder.swift <output.mov> <seconds> <x,y,width,height> <ready-file> <start-file> <stop-file> <allowed-bundle-id>@<pid>..."
         case let .invalidRectangle(value):
             return "invalid capture rectangle: \(value)"
         case .rectangleSpansDisplays:
             return "the private capture rectangle must be fully contained by one display"
-        case let .missingApplication(bundleIdentifier):
-            return "allowed capture application is not running: \(bundleIdentifier)"
+        case let .missingApplication(bundleIdentifier, processID):
+            return "allowed capture application is not running at the expected PID: \(bundleIdentifier)@\(processID)"
         case .startTimedOut:
             return "the story did not start within 60 seconds of recorder readiness"
         case .cannotAddWriterInput:
@@ -40,6 +40,22 @@ private enum RecorderError: LocalizedError {
     }
 }
 
+private struct AllowedApplication: Hashable {
+    let bundleIdentifier: String
+    let processID: pid_t
+
+    init?(_ value: String) {
+        guard let separator = value.lastIndex(of: "@"),
+              separator != value.startIndex,
+              let processID = pid_t(value[value.index(after: separator)...]),
+              processID > 0 else {
+            return nil
+        }
+        bundleIdentifier = String(value[..<separator])
+        self.processID = processID
+    }
+}
+
 private struct CaptureRequest {
     let outputURL: URL
     let duration: TimeInterval
@@ -47,7 +63,7 @@ private struct CaptureRequest {
     let readyURL: URL
     let startURL: URL
     let stopURL: URL
-    let allowedBundleIdentifiers: Set<String>
+    let allowedApplications: Set<AllowedApplication>
 
     init(arguments: [String]) throws {
         guard arguments.count >= 9,
@@ -70,8 +86,11 @@ private struct CaptureRequest {
             throw RecorderError.invalidRectangle(arguments[3])
         }
 
-        let identifiers = Set(arguments.dropFirst(7).filter { !$0.isEmpty })
-        guard !identifiers.isEmpty else {
+        let applicationValues = arguments.dropFirst(7).filter { !$0.isEmpty }
+        let applications = applicationValues.compactMap(AllowedApplication.init)
+        guard !applications.isEmpty,
+              applications.count == applicationValues.count,
+              Set(applications.map(\.processID)).count == applications.count else {
             throw RecorderError.invalidArguments
         }
 
@@ -86,7 +105,7 @@ private struct CaptureRequest {
         readyURL = URL(fileURLWithPath: arguments[4])
         startURL = URL(fileURLWithPath: arguments[5])
         stopURL = URL(fileURLWithPath: arguments[6])
-        allowedBundleIdentifiers = identifiers
+        allowedApplications = Set(applications)
     }
 }
 
@@ -274,19 +293,23 @@ private func record(_ request: CaptureRequest) async throws -> Int {
         throw RecorderError.rectangleSpansDisplays
     }
 
-    let applicationsByIdentifier = Dictionary(
-        grouping: content.applications.map { application in
-            (application.bundleIdentifier, application)
-        },
-        by: { $0.0 }
-    )
     var allowedApplications: [SCRunningApplication] = []
-    for identifier in request.allowedBundleIdentifiers.sorted() {
-        guard let applications = applicationsByIdentifier[identifier]?.map(\.1),
-              !applications.isEmpty else {
-            throw RecorderError.missingApplication(identifier)
+    for allowed in request.allowedApplications.sorted(by: {
+        if $0.bundleIdentifier != $1.bundleIdentifier {
+            return $0.bundleIdentifier < $1.bundleIdentifier
         }
-        allowedApplications.append(contentsOf: applications)
+        return $0.processID < $1.processID
+    }) {
+        guard let application = content.applications.first(where: {
+            $0.bundleIdentifier == allowed.bundleIdentifier
+                && $0.processID == allowed.processID
+        }) else {
+            throw RecorderError.missingApplication(
+                allowed.bundleIdentifier,
+                allowed.processID
+            )
+        }
+        allowedApplications.append(application)
     }
 
     let scale = CGFloat(display.width) / display.frame.width
@@ -363,7 +386,11 @@ private struct MacToolsE2ERecorder {
             print("frames=\(frameCount)")
             print("privacyFilter=application-allowlist")
             print("mouseClickIndicators=enabled")
-            print("allowedBundleIdentifiers=\(request.allowedBundleIdentifiers.sorted().joined(separator: ","))")
+            let allowedApplicationSpecs = request.allowedApplications
+                .map { "\($0.bundleIdentifier)@\($0.processID)" }
+                .sorted()
+                .joined(separator: ",")
+            print("allowedApplications=\(allowedApplicationSpecs)")
         } catch {
             fputs("error: \(error.localizedDescription)\n", stderr)
             exit(1)

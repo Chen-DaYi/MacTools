@@ -24,7 +24,9 @@ private struct AppVolumePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding,
+    PluginActionPermissionProviding
+{
     private enum ActionID {
         static let setVolume = "set-volume"
     }
@@ -179,6 +181,12 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
                 )
             }
         }
+    }
+
+    func permissionRequirementIDs(for actionKey: ActionKey) -> [String] {
+        actionKey == ActionKey(providerID: metadata.id, actionID: ActionID.setVolume)
+            ? [PermissionID.systemAudio]
+            : []
     }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {

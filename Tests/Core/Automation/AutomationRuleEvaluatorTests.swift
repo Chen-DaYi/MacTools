@@ -10,7 +10,7 @@ final class AutomationRuleEvaluatorTests: XCTestCase {
             (.schedule(ScheduleAutomationTrigger(hour: 9, minute: 30, weekdays: [2])), .schedule(date)),
             (.calendar(CalendarAutomationTrigger(phase: .starts, calendarIdentifier: "work", titleContains: "standup")), .calendar(identifier: "event", title: "Daily Standup", calendarIdentifier: "work", phase: .starts, date: date)),
             (.application(ApplicationAutomationTrigger(event: .activates, bundleIdentifier: "com.example.editor")), .application(bundleIdentifier: "com.example.editor", event: .activates, date: date)),
-            (.power(PowerAutomationTrigger(event: .batteryAtOrBelow, batteryLevel: 30)), .power(source: .battery, batteryLevel: 20, event: .batteryAtOrBelow, date: date)),
+            (.power(PowerAutomationTrigger(event: .batteryAtOrBelow, batteryLevel: 30)), .power(source: .battery, batteryLevel: 30, event: .batteryAtOrBelow, date: date)),
             (.display(DisplayAutomationTrigger(event: .connected, displayNameContains: "studio")), .display(display, event: .connected, date: date)),
             (.network(NetworkAutomationTrigger(status: .available, interface: .wifi)), .network(status: .available, interface: .wifi, date: date)),
         ]
@@ -54,6 +54,71 @@ final class AutomationRuleEvaluatorTests: XCTestCase {
         let result = evaluator.evaluate(conditions: failing, snapshot: snapshot)
         XCTAssertFalse(result.isSatisfied)
         XCTAssertEqual(result.reason, FeatureL10n.string("指定显示器未连接。"))
+    }
+
+    func testCalendarAndPowerTriggersMatchOnlyTheFiredConfigurationIdentity() throws {
+        let (date, calendar) = try makeDate(hour: 9, minute: 30, weekday: 2)
+        let evaluator = AutomationRuleEvaluator(calendar: calendar)
+        let calendarEvent = AutomationTriggerEvent.calendar(
+            identifier: "event",
+            title: "Planning",
+            calendarIdentifier: "work",
+            phase: .starts,
+            offsetMinutes: -10,
+            date: date
+        )
+
+        XCTAssertTrue(evaluator.triggerMatches(
+            .calendar(CalendarAutomationTrigger(
+                phase: .starts,
+                calendarIdentifier: "work",
+                titleContains: "plan",
+                offsetMinutes: -10
+            )),
+            event: calendarEvent
+        ))
+        XCTAssertFalse(evaluator.triggerMatches(
+            .calendar(CalendarAutomationTrigger(
+                phase: .starts,
+                calendarIdentifier: "work",
+                titleContains: "plan",
+                offsetMinutes: 10
+            )),
+            event: calendarEvent
+        ))
+        let thresholdEvent = AutomationTriggerEvent.power(
+            source: .battery,
+            batteryLevel: 20,
+            event: .batteryAtOrBelow,
+            date: date
+        )
+        XCTAssertTrue(evaluator.triggerMatches(
+            .power(PowerAutomationTrigger(event: .batteryAtOrBelow, batteryLevel: 20)),
+            event: thresholdEvent
+        ))
+        XCTAssertFalse(evaluator.triggerMatches(
+            .power(PowerAutomationTrigger(event: .batteryAtOrBelow, batteryLevel: 80)),
+            event: thresholdEvent
+        ))
+    }
+
+    func testAnyNetworkRuleDoesNotMatchAnInterfaceOnlyEvent() throws {
+        let (date, calendar) = try makeDate(hour: 9, minute: 30, weekday: 2)
+        let evaluator = AutomationRuleEvaluator(calendar: calendar)
+        let interfaceEvent = AutomationTriggerEvent.network(
+            status: .available,
+            interface: .wiredEthernet,
+            date: date
+        )
+
+        XCTAssertFalse(evaluator.triggerMatches(
+            .network(NetworkAutomationTrigger(status: .available, interface: .any)),
+            event: interfaceEvent
+        ))
+        XCTAssertTrue(evaluator.triggerMatches(
+            .network(NetworkAutomationTrigger(status: .available, interface: .wiredEthernet)),
+            event: interfaceEvent
+        ))
     }
 
     func testOvernightTimeRangeIncludesBothSidesOfMidnight() throws {
