@@ -109,6 +109,66 @@ final class ShortcutAssignmentServiceTests: XCTestCase {
         )
     }
 
+    func testAssignmentUnregistersWhenForegroundCapabilityDisappearsAndRecovers() throws {
+        let harness = try makeHarness()
+        let reference = harness.references[0]
+        XCTAssertEqual(harness.service.assign(harness.bindings[0], to: reference), .success)
+        let provider = ShortcutActionTestProvider()
+
+        func registration(
+            capabilities: ActionExecutionCapabilities
+        ) -> ActionProviderRegistration {
+            let definitions = harness.references.map { reference in
+                ActionDefinition(
+                    key: reference.key,
+                    title: reference.key.actionID,
+                    description: "",
+                    systemImage: "bolt",
+                    externalInvocationPolicy: .allowed,
+                    capabilities: capabilities
+                )
+            }
+            return ActionProviderRegistration(
+                providerID: reference.key.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: definitions,
+                catalogEntries: definitions.map {
+                    ActionCatalogEntry(reference: ActionReference(key: $0.key), title: $0.title)
+                },
+                availability: { _ in .available },
+                begin: { _ in
+                    .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            )
+        }
+
+        harness.registry.synchronize([registration(capabilities: [.background])])
+        harness.service.synchronize(reservedRegistrations: [], reservedOwnerDescriptions: [:])
+
+        XCTAssertEqual(harness.service.assignments.first?.reference, reference)
+        XCTAssertEqual(
+            harness.service.settingsItems.first?.state,
+            .unavailable(reason: FeatureL10n.string("操作不可用。"))
+        )
+        XCTAssertFalse(
+            harness.manager.debugRegistrationsForTests.contains {
+                $0.binding == harness.bindings[0]
+            }
+        )
+
+        harness.registry.synchronize([
+            registration(capabilities: [.background, .foregroundInteractive]),
+        ])
+        harness.service.synchronize(reservedRegistrations: [], reservedOwnerDescriptions: [:])
+
+        XCTAssertEqual(harness.service.settingsItems.first?.state, .registered)
+        XCTAssertTrue(
+            harness.manager.debugRegistrationsForTests.contains {
+                $0.binding == harness.bindings[0]
+            }
+        )
+    }
+
     func testCarbonRegistrationFailureIsVisibleAndRecoverable() throws {
         let harness = try makeHarness()
         harness.registrar.failures[harness.bindings[0]] = -9876

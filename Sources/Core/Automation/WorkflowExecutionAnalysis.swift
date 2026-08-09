@@ -4,6 +4,11 @@ import MacToolsPluginKit
 struct WorkflowExecutionAnalysisResult: Equatable {
     let availability: ActionAvailability
     let supportsBackground: Bool
+    let allowsExternalInvocation: Bool
+}
+
+enum WorkflowExecutionLimits {
+    static let maximumDepth = 8
 }
 
 @MainActor
@@ -19,7 +24,20 @@ enum WorkflowExecutionAnalysis {
             store: store,
             definition: definition,
             availability: availability,
-            visiting: []
+            visiting: [],
+            depth: 0
+        )
+    }
+
+    static func structuralStartError(
+        workflowID: UUID,
+        store: WorkflowStore
+    ) -> WorkflowStartError? {
+        structuralStartError(
+            workflowID: workflowID,
+            store: store,
+            visiting: [],
+            depth: 0
         )
     }
 
@@ -36,8 +54,12 @@ enum WorkflowExecutionAnalysis {
         store: WorkflowStore,
         definition: (ActionKey) -> ActionDefinition?,
         availability: ((ActionReference) -> ActionAvailability)?,
-        visiting: Set<UUID>
+        visiting: Set<UUID>,
+        depth: Int
     ) -> WorkflowExecutionAnalysisResult {
+        guard depth < WorkflowExecutionLimits.maximumDepth else {
+            return unavailable(FeatureL10n.string("工作流嵌套层级已达上限。"))
+        }
         guard !visiting.contains(workflowID) else {
             return unavailable(FeatureL10n.string("检测到递归工作流调用。"))
         }
@@ -54,6 +76,7 @@ enum WorkflowExecutionAnalysis {
         var nextVisiting = visiting
         nextVisiting.insert(workflowID)
         var supportsBackground = true
+        var allowsExternalInvocation = true
 
         for step in workflow.steps {
             if let nestedID = nestedWorkflowID(for: step.reference.key) {
@@ -62,10 +85,13 @@ enum WorkflowExecutionAnalysis {
                     store: store,
                     definition: definition,
                     availability: availability,
-                    visiting: nextVisiting
+                    visiting: nextVisiting,
+                    depth: depth + 1
                 )
                 guard nested.availability.isAvailable else { return nested }
                 supportsBackground = supportsBackground && nested.supportsBackground
+                allowsExternalInvocation = allowsExternalInvocation
+                    && nested.allowsExternalInvocation
                 continue
             }
 
@@ -82,18 +108,56 @@ enum WorkflowExecutionAnalysis {
             }
             supportsBackground = supportsBackground
                 && actionDefinition.capabilities.contains(.background)
+            allowsExternalInvocation = allowsExternalInvocation
+                && actionDefinition.externalInvocationPolicy != .unavailable
         }
 
         return WorkflowExecutionAnalysisResult(
             availability: .available,
-            supportsBackground: supportsBackground
+            supportsBackground: supportsBackground,
+            allowsExternalInvocation: allowsExternalInvocation
         )
+    }
+
+    private static func structuralStartError(
+        workflowID: UUID,
+        store: WorkflowStore,
+        visiting: Set<UUID>,
+        depth: Int
+    ) -> WorkflowStartError? {
+        guard depth < WorkflowExecutionLimits.maximumDepth else {
+            return .maximumDepthExceeded
+        }
+        guard !visiting.contains(workflowID) else {
+            return .recursiveInvocation
+        }
+        guard let workflow = store.workflow(id: workflowID) else {
+            return nil
+        }
+
+        var nextVisiting = visiting
+        nextVisiting.insert(workflowID)
+        for step in workflow.steps {
+            guard let nestedID = nestedWorkflowID(for: step.reference.key) else {
+                continue
+            }
+            if let error = structuralStartError(
+                workflowID: nestedID,
+                store: store,
+                visiting: nextVisiting,
+                depth: depth + 1
+            ) {
+                return error
+            }
+        }
+        return nil
     }
 
     private static func unavailable(_ reason: String) -> WorkflowExecutionAnalysisResult {
         WorkflowExecutionAnalysisResult(
             availability: .unavailable(reason),
-            supportsBackground: false
+            supportsBackground: false,
+            allowsExternalInvocation: false
         )
     }
 }

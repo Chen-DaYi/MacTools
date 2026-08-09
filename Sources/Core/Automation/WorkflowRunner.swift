@@ -15,8 +15,6 @@ final class SystemWorkflowSleeper: WorkflowSleeping {
 
 @MainActor
 final class WorkflowRunner {
-    static let maximumExecutionDepth = 8
-
     private let store: WorkflowStore
     private let registry: ActionRegistry
     private let executor: ActionExecutor
@@ -55,6 +53,12 @@ final class WorkflowRunner {
         }
         guard !workflow.steps.isEmpty else {
             return .failure(.emptyWorkflow)
+        }
+        if let error = WorkflowExecutionAnalysis.structuralStartError(
+            workflowID: workflowID,
+            store: store
+        ) {
+            return .failure(error)
         }
         if mode == .background {
             let analysis = WorkflowExecutionAnalysis.analyze(
@@ -106,6 +110,16 @@ final class WorkflowRunner {
         guard let workflow = store.workflow(id: workflowID) else {
             return .failed(message: FeatureL10n.string("找不到工作流。"))
         }
+        if case .publishedAction(.runLink) = source {
+            let analysis = WorkflowExecutionAnalysis.analyze(
+                workflowID: workflowID,
+                store: store,
+                definition: registry.definition(for:)
+            )
+            guard analysis.allowsExternalInvocation else {
+                return .failed(message: FeatureL10n.string("此操作不能通过运行链接调用。"))
+            }
+        }
         let stack = WorkflowExecutionContext.workflowStack
         if stack.contains(workflowID) {
             recordRejectedRun(
@@ -116,7 +130,7 @@ final class WorkflowRunner {
             )
             return .failed(message: FeatureL10n.string("检测到递归工作流调用。"))
         }
-        if stack.count >= Self.maximumExecutionDepth {
+        if stack.count >= WorkflowExecutionLimits.maximumDepth {
             recordRejectedRun(
                 runID: runID,
                 workflow: workflow,

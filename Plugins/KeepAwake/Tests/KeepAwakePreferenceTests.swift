@@ -127,7 +127,7 @@ final class KeepAwakePreferenceTests: XCTestCase {
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
         let reference = try XCTUnwrap(
-            plugin.actionCatalogEntries.first { $0.title == "阻止休眠 · 永不" }?.reference
+            plugin.actionCatalogEntries.first { $0.title == "无限期阻止休眠" }?.reference
         )
 
         let result = try await plugin.beginAction(
@@ -135,8 +135,8 @@ final class KeepAwakePreferenceTests: XCTestCase {
         ).result()
 
         XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), [
-            "停用阻止休眠",
-            "阻止休眠 · 永不",
+            "切换阻止休眠",
+            "无限期阻止休眠",
             "停用阻止休眠",
             "阻止休眠 · 30min",
             "阻止休眠 · 1h",
@@ -155,14 +155,14 @@ final class KeepAwakePreferenceTests: XCTestCase {
             plugin.actionCatalogEntries.first { $0.presentationState != nil }?.reference
         )
 
-        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "启用阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "切换阻止休眠")
         XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
 
         let startResult = try await plugin.beginAction(
             ActionInvocation(reference: toggle, source: .actionGrid, mode: .foreground)
         ).result()
         XCTAssertEqual(startResult, .succeeded())
-        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "停用阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "切换阻止休眠")
         XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
         XCTAssertEqual(plugin.actionCatalogEntries.first?.subtitle, "不会自动停止")
 
@@ -170,9 +170,13 @@ final class KeepAwakePreferenceTests: XCTestCase {
             ActionInvocation(reference: toggle, source: .actionGrid, mode: .foreground)
         ).result()
         XCTAssertEqual(stopResult, .succeeded())
-        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "启用阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "切换阻止休眠")
         XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
         XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(
+            Set(plugin.actionCatalogEntries.map(\.title)).count,
+            plugin.actionCatalogEntries.count
+        )
     }
 
     func testDurationActionsStartBoundedKeepAwakeSessions() async throws {

@@ -316,67 +316,67 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "تم تمكين مفاتيح التشغيل السريع %d"
+            "value": "تم إعداد %d من التطبيقات"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d Hotkeys aktiviert"
+            "value": "%d Apps konfiguriert"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d hotkeys enabled"
+            "value": "%d apps configured"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d teclas de acceso rápido habilitadas"
+            "value": "%d aplicaciones configuradas"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Touches de raccourci %d activées"
+            "value": "%d apps configurées"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d ホットキーが有効になりました"
+            "value": "%d個のアプリを設定済み"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d 단축키 활성화됨"
+            "value": "앱 %d개 구성됨"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d teclas de atalho ativadas"
+            "value": "%d aplicativos configurados"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Горячие клавиши %d включены"
+            "value": "Настроено приложений: %d"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d 个快捷键已启用"
+            "value": "已配置 %d 个应用"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d 個快速鍵已啟用"
+            "value": "已設定 %d 個 App"
           }
         }
       }

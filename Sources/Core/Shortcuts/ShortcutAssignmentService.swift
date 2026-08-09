@@ -284,6 +284,10 @@ final class ShortcutAssignmentService {
                 states[record.id] = .unavailable(reason: FeatureL10n.string("操作不可用。"))
                 continue
             }
+            guard action.definition.capabilities.contains(.foregroundInteractive) else {
+                states[record.id] = .unavailable(reason: FeatureL10n.string("操作不可用。"))
+                continue
+            }
             let availability = registry.availability(for: record.reference)
             guard availability.isAvailable else {
                 states[record.id] = .unavailable(reason: availability.reason)

@@ -94,69 +94,85 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "تشغيل منع الإسبات"
+            "value": "منع الإسبات إلى أجل غير مسمى"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wachhalten aktivieren"
+            "value": "Unbegrenzt wach halten"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Turn On Keep Awake"
+            "value": "Keep Awake Indefinitely"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activar No suspender"
+            "value": "Impedir reposo indefinidamente"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activer Maintien éveillé"
+            "value": "Maintenir éveillé indéfiniment"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "スリープ防止をオンにする"
+            "value": "無期限にスリープを防止"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "잠자기 방지 켜기"
+            "value": "무기한 잠자기 방지"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ativar Impedir repouso"
+            "value": "Impedir repouso indefinidamente"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Включить запрет сна"
+            "value": "Запретить сон бессрочно"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "启用阻止休眠"
+            "value": "无限期阻止休眠"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "啟用防止睡眠"
+            "value": "無限期防止睡眠"
           }
         }
+      }
+    },
+    "action.toggle.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تبديل منع الإسبات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Wachhalten umschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Toggle Keep Awake" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Alternar No suspender" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Basculer Maintien éveillé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "スリープ防止を切り替える" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "잠자기 방지 전환" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Alternar Impedir repouso" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Переключить запрет сна" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "切换阻止休眠" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "切換防止睡眠" } }
       }
     },
     "panel.subtitle.closedLidWaitingForPower": {

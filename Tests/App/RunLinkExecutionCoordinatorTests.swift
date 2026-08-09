@@ -100,6 +100,27 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
         XCTAssertEqual(panels.first?.accessibilityLabel(), "Failed and Action unavailable.")
     }
 
+    func testCancellingSystemConfirmationDismissesPresentationAndResumesOnce() async {
+        var response: ((Bool) -> Void)?
+        var dismissCount = 0
+        let session = AppActionConfirmationSheetSession(
+            start: { response = $0 },
+            dismiss: { dismissCount += 1 }
+        )
+        let task = Task { @MainActor in await session.response() }
+
+        while response == nil {
+            await Task.yield()
+        }
+        task.cancel()
+
+        let result = await task.value
+        XCTAssertFalse(result)
+        XCTAssertEqual(dismissCount, 1)
+        response?(true)
+        XCTAssertEqual(dismissCount, 1)
+    }
+
     private struct Setup {
         let provider: ActionExecutorTestProvider
         let reference: ActionReference

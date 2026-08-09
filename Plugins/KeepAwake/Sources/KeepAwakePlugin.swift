@@ -350,15 +350,19 @@ final class KeepAwakePlugin:
         var entries = [
             ActionCatalogEntry(
                 reference: toggleActionReference,
-                title: session == nil
-                    ? localization.string("action.enable.title", defaultValue: "启用阻止休眠")
-                    : localization.string("action.disable.title", defaultValue: "停用阻止休眠"),
+                title: localization.string(
+                    "action.toggle.title",
+                    defaultValue: "切换阻止休眠"
+                ),
                 subtitle: session == nil ? nil : panelSubtitle,
                 presentationState: session == nil ? .inactive : .active
             ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
-                title: "\(metadata.title) · \(localization.string("panel.duration.forever", defaultValue: "永不"))"
+                title: localization.string(
+                    "action.enable.title",
+                    defaultValue: "无限期阻止休眠"
+                )
             ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: false),

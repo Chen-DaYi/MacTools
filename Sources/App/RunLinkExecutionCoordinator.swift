@@ -135,6 +135,52 @@ private struct RunLinkFeedbackView: View {
 }
 
 @MainActor
+final class AppActionConfirmationSheetSession {
+    typealias Start = (@escaping (Bool) -> Void) -> Void
+
+    private let start: Start
+    private let dismiss: () -> Void
+    private var continuation: CheckedContinuation<Bool, Never>?
+    private var resolvedResult: Bool?
+
+    init(start: @escaping Start, dismiss: @escaping () -> Void) {
+        self.start = start
+        self.dismiss = dismiss
+    }
+
+    func response() async -> Bool {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if let resolvedResult {
+                    continuation.resume(returning: resolvedResult)
+                    return
+                }
+                self.continuation = continuation
+                start { [weak self] result in
+                    self?.finish(result)
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancel()
+            }
+        }
+    }
+
+    func cancel() {
+        finish(false)
+    }
+
+    private func finish(_ result: Bool) {
+        guard resolvedResult == nil else { return }
+        resolvedResult = result
+        dismiss()
+        continuation?.resume(returning: result)
+        continuation = nil
+    }
+}
+
+@MainActor
 final class AppActionConfirmationService: ActionConfirmationRequesting {
     private let windowProvider: @MainActor () -> NSWindow?
 
@@ -147,19 +193,26 @@ final class AppActionConfirmationService: ActionConfirmationRequesting {
             return false
         }
         NSApplication.shared.activate(ignoringOtherApps: true)
-
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = request.confirmation.title
         alert.informativeText = request.confirmation.message
         alert.addButton(withTitle: request.confirmation.confirmButtonTitle)
         alert.addButton(withTitle: FeatureL10n.string("取消"))
-        return await withCheckedContinuation { continuation in
-            PluginPresentationSafety.prepareForWindowOrdering()
-            alert.beginSheetModal(for: window) { response in
-                continuation.resume(returning: response == .alertFirstButtonReturn)
+        let session = AppActionConfirmationSheetSession(
+            start: { completion in
+                PluginPresentationSafety.prepareForWindowOrdering()
+                alert.beginSheetModal(for: window) { response in
+                    completion(response == .alertFirstButtonReturn)
+                }
+            },
+            dismiss: {
+                if window.attachedSheet === alert.window {
+                    window.endSheet(alert.window, returnCode: .abort)
+                }
             }
-        }
+        )
+        return await session.response()
     }
 }
 

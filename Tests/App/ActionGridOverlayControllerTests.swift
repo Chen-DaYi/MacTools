@@ -147,6 +147,50 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertEqual(ActionGridKeyCommand.resolve(keyCode: 123, characters: nil), .move(.left))
         XCTAssertEqual(ActionGridKeyCommand.resolve(keyCode: 0, characters: "7"), .select(7))
         XCTAssertNil(ActionGridKeyCommand.resolve(keyCode: 0, characters: "0"))
+        XCTAssertNil(ActionGridKeyCommand.resolve(
+            keyCode: 124,
+            characters: nil,
+            modifierFlags: [.control, .option]
+        ))
+        XCTAssertNil(ActionGridKeyCommand.resolve(
+            keyCode: 36,
+            characters: "\r",
+            modifierFlags: .command
+        ))
+        XCTAssertNil(ActionGridKeyCommand.resolve(
+            keyCode: 0,
+            characters: "1",
+            modifierFlags: .command
+        ))
+        XCTAssertEqual(ActionGridKeyCommand.resolve(
+            keyCode: 76,
+            characters: "\r",
+            modifierFlags: [.numericPad]
+        ), .activateSelected)
+    }
+
+    func testModifiedNavigationEventsPassThroughWithoutChangingSelection() throws {
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let reference = ActionReference(
+            key: ActionKey(providerID: "missing", actionID: "run")
+        )
+        XCTAssertTrue(controller.present(entries: [
+            ActionGridPresentationEntry(id: "one", reference: reference, slotIndex: 0),
+            ActionGridPresentationEntry(id: "two", reference: reference, slotIndex: 1),
+        ]))
+
+        let initialSelection = controller.presentedSelectedIndex
+        let voiceOverRight = try keyEvent(
+            keyCode: 124,
+            characters: "\u{F703}",
+            modifierFlags: [.control, .option]
+        )
+
+        XCTAssertFalse(controller.processKeyEvent(voiceOverRight))
+        XCTAssertEqual(controller.presentedSelectedIndex, initialSelection)
+        XCTAssertTrue(controller.isShown)
     }
 
     func testKeyboardNavigationPreservesSparseGridSlots() {
@@ -504,10 +548,43 @@ final class ActionGridOverlayControllerTests: XCTestCase {
                 ]
             )
         )
-        XCTAssertEqual(controller.presentedEntryIDs, ["one"])
+        XCTAssertEqual(controller.presentedEntryIDs, ["replacement"])
+        XCTAssertEqual(controller.presentedSelectedIndex, 0)
         XCTAssertEqual(
             NSApp.windows.filter { $0.identifier == ActionGridOverlayController.panelIdentifier }.count,
             1
+        )
+    }
+
+    func testRepeatedPresentationReturnsNestedGridToFreshRoot() throws {
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let reference = ActionReference(
+            key: ActionKey(providerID: "missing", actionID: "run")
+        )
+        let folder = ActionGridPresentationEntry(
+            id: "folder",
+            folderTitle: "Folder",
+            children: [ActionGridPresentationEntry(id: "child", reference: reference)]
+        )
+
+        XCTAssertTrue(controller.present(entries: [folder]))
+        XCTAssertTrue(controller.processKeyEvent(try keyEvent(keyCode: 36, characters: "\r")))
+        XCTAssertEqual(controller.presentedEntryIDs, ["child"])
+
+        let replacement = ActionGridPresentationEntry(
+            id: "replacement",
+            reference: reference,
+            slotIndex: 8
+        )
+        XCTAssertTrue(controller.present(entries: [replacement]))
+
+        XCTAssertEqual(controller.presentedEntryIDs, ["replacement"])
+        XCTAssertEqual(controller.presentedSelectedIndex, 8)
+        XCTAssertEqual(
+            try XCTUnwrap(controller.presentedPanelFrame?.size),
+            ActionGridOverlayGeometry.contentSize(for: 9)
         )
     }
 
@@ -959,11 +1036,15 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
     }
 
-    private func keyEvent(keyCode: UInt16, characters: String) throws -> NSEvent {
+    private func keyEvent(
+        keyCode: UInt16,
+        characters: String,
+        modifierFlags: NSEvent.ModifierFlags = []
+    ) throws -> NSEvent {
         try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
-            modifierFlags: [],
+            modifierFlags: modifierFlags,
             timestamp: 0,
             windowNumber: 0,
             context: nil,

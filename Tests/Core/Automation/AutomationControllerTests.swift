@@ -175,6 +175,40 @@ final class AutomationControllerTests: XCTestCase {
         XCTAssertFalse(controller.supportsAutomaticRules(workflowID: parent.id))
     }
 
+    func testNestedRestrictedActionDisablesWorkflowRunLinksWithoutDisablingLocalRuns() throws {
+        let suite = "AutomationControllerTests.external.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let provider = AutomationControllerTestProvider(
+            externalInvocationPolicy: .unavailable
+        )
+        registry.synchronize([provider.registration])
+        let store = WorkflowStore(userDefaults: defaults)
+        let controller = AutomationController(
+            store: store,
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let child = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: child.id, reference: provider.reference)
+        let parent = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: parent.id, reference: child.actionReference)
+
+        let registration = controller.actionRegistration()
+        XCTAssertEqual(
+            registration.definitions.first { $0.key == child.actionKey }?
+                .externalInvocationPolicy,
+            .unavailable
+        )
+        XCTAssertEqual(
+            registration.definitions.first { $0.key == parent.actionKey }?
+                .externalInvocationPolicy,
+            .unavailable
+        )
+        XCTAssertTrue(registration.availability(parent.actionReference).isAvailable)
+    }
+
     func testAutomaticRuleAvailabilityExplainsEveryIneligibleWorkflow() throws {
         let suite = "AutomationControllerTests.eligibility.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -395,17 +429,20 @@ private final class AutomationControllerTestProvider {
     let reference: ActionReference
     private(set) var invocationCount = 0
     let capabilities: ActionExecutionCapabilities
+    let externalInvocationPolicy: ActionExternalInvocationPolicy
     var availability: ActionAvailability = .available
 
     init(
         providerID: String = "automation-controller-tests",
         actionID: String = "run",
-        capabilities: ActionExecutionCapabilities = [.background, .foregroundInteractive]
+        capabilities: ActionExecutionCapabilities = [.background, .foregroundInteractive],
+        externalInvocationPolicy: ActionExternalInvocationPolicy = .allowed
     ) {
         self.reference = ActionReference(
             key: ActionKey(providerID: providerID, actionID: actionID)
         )
         self.capabilities = capabilities
+        self.externalInvocationPolicy = externalInvocationPolicy
     }
 
     var registration: ActionProviderRegistration {
@@ -414,7 +451,7 @@ private final class AutomationControllerTestProvider {
             title: "运行",
             description: "",
             systemImage: "bolt",
-            externalInvocationPolicy: .allowed,
+            externalInvocationPolicy: externalInvocationPolicy,
             capabilities: capabilities
         )
         return ActionProviderRegistration(

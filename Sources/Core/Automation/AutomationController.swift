@@ -361,7 +361,9 @@ final class AutomationController: ObservableObject {
                 ),
                 keywords: [FeatureL10n.string("工作流"), FeatureL10n.string("自动化"), workflow.name],
                 systemImage: workflow.systemImage,
-                externalInvocationPolicy: .allowed,
+                externalInvocationPolicy: analysis.allowsExternalInvocation
+                    ? .allowed
+                    : .unavailable,
                 capabilities: capabilities,
                 executionTimeoutSeconds: nil
             )

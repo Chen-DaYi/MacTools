@@ -253,6 +253,16 @@ final class WorkflowRunnerTests: XCTestCase {
         }
         XCTAssertEqual(reason, FeatureL10n.string("检测到递归工作流调用。"))
         XCTAssertTrue(harness.store.history().isEmpty)
+
+        guard case let .failure(startError) = harness.runner.makeExecutionHandle(
+            workflowID: first.id,
+            source: .manual,
+            mode: .foreground
+        ) else {
+            return XCTFail("Expected recursive workflow preflight rejection")
+        }
+        XCTAssertEqual(startError, .recursiveInvocation)
+        XCTAssertTrue(harness.store.history().isEmpty)
     }
 
     func testTestRunCanExecuteDisabledWorkflowButManualRunCannot() throws {
@@ -330,7 +340,7 @@ final class WorkflowRunnerTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)
         let registry = ActionRegistry()
-        let provider = WorkflowRunnerTestProvider(actionIDs: [], timeout: 30)
+        let provider = WorkflowRunnerTestProvider(actionIDs: ["allowed"], timeout: 30)
         let key = ActionKey(providerID: "restricted-leaf", actionID: "run")
         var invocationCount = 0
         let restricted = ActionProviderRegistration(
@@ -351,14 +361,17 @@ final class WorkflowRunnerTests: XCTestCase {
                 return .success(ActionExecutionHandle(operation: { .succeeded() }))
             }
         )
-        registry.synchronize([restricted])
+        registry.synchronize([provider.registration(), restricted])
         let child = try saveWorkflow(
             in: store,
             steps: [WorkflowStep(reference: ActionReference(key: key))]
         )
         let parent = try store.upsert(WorkflowDefinition(
             name: "Parent",
-            steps: [WorkflowStep(reference: child.actionReference)]
+            steps: [
+                WorkflowStep(reference: ActionReference(key: provider.definitions[0].key)),
+                WorkflowStep(reference: child.actionReference),
+            ]
         )).get()
         let executor = ActionExecutor(registry: registry)
         let runner = WorkflowRunner(store: store, registry: registry, executor: executor)
@@ -368,7 +381,11 @@ final class WorkflowRunnerTests: XCTestCase {
             executor: executor,
             runner: runner
         )
-        registry.synchronize([restricted, controller.actionRegistration()])
+        registry.synchronize([
+            provider.registration(),
+            restricted,
+            controller.actionRegistration(),
+        ])
 
         let outcome = await executor.execute(ActionInvocation(
             reference: parent.actionReference,
@@ -376,13 +393,116 @@ final class WorkflowRunnerTests: XCTestCase {
             mode: .foreground
         ))
 
-        guard case .completed(.failed) = outcome else {
-            return XCTFail("Expected the restricted nested action to fail")
-        }
+        XCTAssertEqual(outcome, .rejected(.externalInvocationUnavailable))
+        XCTAssertTrue(provider.invocations.isEmpty)
         XCTAssertEqual(invocationCount, 0)
-        XCTAssertTrue(store.history().contains { run in
-            run.workflowID == child.id && run.stepResults.first?.status == .unavailable
-        })
+        XCTAssertTrue(store.history().isEmpty)
+    }
+
+    func testRunLinkRechecksNestedExternalPolicyWhenExecutionStarts() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let registry = ActionRegistry()
+        let provider = WorkflowRunnerTestProvider(actionIDs: ["first"], timeout: 30)
+        let restrictedKey = ActionKey(providerID: "changing-leaf", actionID: "run")
+
+        func restrictedRegistration(
+            policy: ActionExternalInvocationPolicy
+        ) -> ActionProviderRegistration {
+            ActionProviderRegistration(
+                providerID: restrictedKey.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [ActionDefinition(
+                    key: restrictedKey,
+                    title: "Changing Leaf",
+                    description: "",
+                    systemImage: "lock",
+                    externalInvocationPolicy: policy,
+                    capabilities: [.background, .foregroundInteractive]
+                )],
+                catalogEntries: [],
+                availability: { _ in .available },
+                begin: { _ in
+                    XCTFail("Restricted leaf must not begin")
+                    return .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            )
+        }
+
+        registry.synchronize([
+            provider.registration(),
+            restrictedRegistration(policy: .allowed),
+        ])
+        let child = try saveWorkflow(
+            in: store,
+            steps: [WorkflowStep(reference: ActionReference(key: restrictedKey))]
+        )
+        let parent = try saveWorkflow(
+            in: store,
+            steps: [
+                WorkflowStep(reference: ActionReference(key: provider.definitions[0].key)),
+                WorkflowStep(reference: child.actionReference),
+            ]
+        )
+        let runner = WorkflowRunner(
+            store: store,
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let execution = try runner.makeExecutionHandle(
+            workflowID: parent.id,
+            source: .publishedAction(.runLink),
+            mode: .foreground
+        ).get()
+
+        registry.synchronize([
+            provider.registration(),
+            restrictedRegistration(policy: .unavailable),
+        ])
+        let result = await execution.actionHandle.result()
+
+        XCTAssertEqual(
+            result,
+            .failed(message: FeatureL10n.string("此操作不能通过运行链接调用。"))
+        )
+        XCTAssertTrue(provider.invocations.isEmpty)
+        XCTAssertTrue(store.history().isEmpty)
+    }
+
+    func testWorkflowDepthLimitIsPreflightedBeforeHistoryOrActions() throws {
+        let harness = try makeHarness(actionIDs: ["run"])
+        let supported = try nestedWorkflow(
+            in: harness.store,
+            depth: WorkflowExecutionLimits.maximumDepth,
+            leafReference: harness.reference("run")
+        )
+        let tooDeep = try nestedWorkflow(
+            in: harness.store,
+            depth: WorkflowExecutionLimits.maximumDepth + 1,
+            leafReference: harness.reference("run")
+        )
+
+        XCTAssertTrue(WorkflowExecutionAnalysis.analyze(
+            workflowID: supported.id,
+            store: harness.store,
+            definition: harness.registry.definition(for:)
+        ).availability.isAvailable)
+        XCTAssertFalse(WorkflowExecutionAnalysis.analyze(
+            workflowID: tooDeep.id,
+            store: harness.store,
+            definition: harness.registry.definition(for:)
+        ).availability.isAvailable)
+
+        guard case let .failure(error) = harness.runner.makeExecutionHandle(
+            workflowID: tooDeep.id,
+            source: .manual,
+            mode: .foreground
+        ) else {
+            return XCTFail("Expected depth preflight rejection")
+        }
+        XCTAssertEqual(error, .maximumDepthExceeded)
+        XCTAssertTrue(harness.provider.invocations.isEmpty)
+        XCTAssertTrue(harness.store.history().isEmpty)
     }
 
     private struct Harness {
@@ -439,6 +559,24 @@ final class WorkflowRunnerTests: XCTestCase {
         try store.upsert(
             WorkflowDefinition(name: "测试工作流", isEnabled: enabled, steps: steps)
         ).get()
+    }
+
+    private func nestedWorkflow(
+        in store: WorkflowStore,
+        depth: Int,
+        leafReference: ActionReference
+    ) throws -> WorkflowDefinition {
+        var current = try saveWorkflow(
+            in: store,
+            steps: [WorkflowStep(reference: leafReference)]
+        )
+        for index in 1 ..< depth {
+            current = try store.upsert(WorkflowDefinition(
+                name: "Nested \(index)",
+                steps: [WorkflowStep(reference: current.actionReference)]
+            )).get()
+        }
+        return current
     }
 }
 

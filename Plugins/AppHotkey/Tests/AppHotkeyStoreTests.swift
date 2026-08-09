@@ -68,7 +68,7 @@ final class AppHotkeyPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "暂无绑定，前往设置配置")
     }
 
-    func testSubtitleCountsOnlyBoundEntriesAndReflectsDisabledState() {
+    func testSubtitleCountsConfiguredApplicationsAndReflectsDisabledState() {
         let storage = InMemoryPluginStorage()
         let store = AppHotkeyStore(storage: storage)
         store.addEntry(AppShortcutEntry(
@@ -82,7 +82,7 @@ final class AppHotkeyPluginTests: XCTestCase {
         ))
         let plugin = makePlugin(storage: storage)
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "2 个应用可用")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "已配置 2 个应用")
 
         plugin.handleAction(.setSwitch(false))
 

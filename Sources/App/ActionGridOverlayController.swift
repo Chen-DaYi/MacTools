@@ -164,8 +164,22 @@ enum ActionGridKeyCommand: Equatable {
     case activateSelected
     case select(Int)
 
-    static func resolve(keyCode: UInt16, characters: String?) -> ActionGridKeyCommand? {
-        switch keyCode {
+    private static let disallowedModifiers: NSEvent.ModifierFlags = [
+        .command,
+        .control,
+        .option,
+        .shift,
+    ]
+
+    static func resolve(
+        keyCode: UInt16,
+        characters: String?,
+        modifierFlags: NSEvent.ModifierFlags = []
+    ) -> ActionGridKeyCommand? {
+        guard modifierFlags.intersection(disallowedModifiers).isEmpty else {
+            return nil
+        }
+        return switch keyCode {
         case 53: .dismiss
         case 123: .move(.left)
         case 124: .move(.right)
@@ -693,6 +707,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     var isShown: Bool { panel != nil }
     var presentedEntryIDs: [String] { model.entries.map(\.id) }
     var presentedEntries: [ResolvedActionGridEntry] { model.entries }
+    var presentedSelectedIndex: Int { model.selectedIndex }
     var presentedPanelFrame: CGRect? { panel?.frame }
     var presentedPanelCollectionBehavior: NSWindow.CollectionBehavior? {
         panel?.collectionBehavior
@@ -725,6 +740,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         let generation = presentationGeneration
         presentationPointer = pointer
         presentationVisibleFrame = screen.visibleFrame
+        model.update(entries)
         AppLog.actionGrid.debug(
             "Present requested at pointer (\(pointer.x, privacy: .public), \(pointer.y, privacy: .public)) on \(screen.localizedName, privacy: .public) with visible frame \(String(describing: screen.visibleFrame), privacy: .public)"
         )
@@ -739,7 +755,6 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
             orderPanel(panel, at: frame, intendedScreen: screen, generation: generation)
             return true
         }
-        model.update(entries)
         let frame = ActionGridOverlayGeometry.targetFrame(
             pointer: pointer,
             visibleFrame: screen.visibleFrame,
@@ -882,7 +897,8 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     func processKeyEvent(_ event: NSEvent) -> Bool {
         guard let command = ActionGridKeyCommand.resolve(
             keyCode: event.keyCode,
-            characters: event.charactersIgnoringModifiers
+            characters: event.charactersIgnoringModifiers,
+            modifierFlags: event.modifierFlags
         ) else {
             return false
         }
