@@ -432,6 +432,10 @@ final class PluginHost: ObservableObject {
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
     @Published private(set) var actionShortcutItems: [ActionShortcutSettingsItem] = []
     @Published private(set) var actionShortcutCatalogItems: [ActionShortcutCatalogItem] = []
+
+    var actionShortcutLoadError: String? {
+        actionShortcutStore.loadError
+    }
     @Published private(set) var pluginSettingsSearchItems: [PluginProvidedSettingsSearchItem] = []
     @Published private(set) var pluginCommandItems: [PluginCommandItem] = []
     @Published private(set) var actionCatalogEntries: [ActionCatalogEntry] = []
@@ -763,10 +767,19 @@ final class PluginHost: ObservableObject {
                 : [],
             workflows: selection.includesAutomation ? portableWorkflows : [],
             automationRules: selection.includesAutomation
-                ? automationSnapshot.rules.filter { portableWorkflowIDs.contains($0.workflowID) }
+                ? automationSnapshot.rules.filter {
+                    portableWorkflowIDs.contains($0.workflowID)
+                        && AutomationRulePortabilityAnalysis.isPortable($0)
+                }
                 : [],
             selection: selection
         )
+    }
+
+    var deviceLocalAutomationRuleCount: Int {
+        automationController.rules.filter {
+            AutomationRulePortabilityAnalysis.containsDeviceLocalDisplayReference($0)
+        }.count
     }
 
     func preferencesImportPreview(

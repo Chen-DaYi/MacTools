@@ -56,6 +56,9 @@ final class AutomationRuleStore {
 
     func create(workflowID: UUID) -> Result<AutomationRule, AutomationRuleStoreError> {
         var stored = rules()
+        guard loadError == nil else {
+            return .failure(.recoveryRequired)
+        }
         guard stored.count < Self.maximumRuleCount else {
             return .failure(.maximumRuleCountReached)
         }
@@ -72,6 +75,9 @@ final class AutomationRuleStore {
             return .failure(.invalidRule(failure))
         }
         var stored = rules()
+        guard loadError == nil else {
+            return .failure(.recoveryRequired)
+        }
         var updated = rule
         updated.updatedAt = .now
         if let index = stored.firstIndex(where: { $0.id == rule.id }) {
@@ -89,7 +95,11 @@ final class AutomationRuleStore {
     }
 
     func duplicate(id: UUID) -> Result<AutomationRule, AutomationRuleStoreError> {
-        guard let source = rule(id: id) else {
+        let stored = rules()
+        guard loadError == nil else {
+            return .failure(.recoveryRequired)
+        }
+        guard let source = stored.first(where: { $0.id == id }) else {
             return .failure(.ruleNotFound)
         }
         let copy = AutomationRule(
@@ -105,6 +115,7 @@ final class AutomationRuleStore {
     @discardableResult
     func delete(id: UUID) -> Bool {
         var stored = rules()
+        guard loadError == nil else { return false }
         let oldCount = stored.count
         stored.removeAll { $0.id == id }
         return stored.count != oldCount && replace(stored)

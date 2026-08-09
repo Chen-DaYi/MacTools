@@ -145,6 +145,8 @@ enum SavedScriptValidationError: LocalizedError, Equatable {
     case tooManyScripts
     case payloadTooLarge
     case duplicateID
+    case persistenceFailed
+    case recoveryRequired
 
     var errorDescription: String? {
         switch self {
@@ -157,6 +159,8 @@ enum SavedScriptValidationError: LocalizedError, Equatable {
         case .tooManyScripts: "Saved Scripts supports up to 32 scripts."
         case .payloadTooLarge: "The saved script library is too large."
         case .duplicateID: "The script identifier is already in use."
+        case .persistenceFailed: "The saved script library could not be saved."
+        case .recoveryRequired: "Recover or reset the unreadable script library before editing it."
         }
     }
 }

@@ -82,6 +82,8 @@ final class WorkflowStoreTests: XCTestCase {
         defaults.set(corrupt, forKey: key)
         XCTAssertTrue(store.workflows().isEmpty)
         XCTAssertEqual(store.workflowLoadError, "invalid-workflow-payload")
+        XCTAssertEqual(store.create(name: "不得覆盖"), .failure(.recoveryRequired))
+        XCTAssertFalse(store.delete(id: UUID()))
         XCTAssertEqual(defaults.data(forKey: key), corrupt)
     }
 
@@ -133,7 +135,7 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertEqual(store.workflow(id: workflow.id)?.steps.first?.reference, current)
     }
 
-    func testHistoryIsBoundedPrivacySafeAndRunningRecordsRecoverAsInterrupted() throws {
+    func testHistoryIsBoundedPrivacySafeAndRunningRecordsRecoverAsInterrupted() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)
         let workflowID = UUID()
@@ -143,7 +145,8 @@ final class WorkflowStoreTests: XCTestCase {
             source: .manual,
             startedAt: Date(timeIntervalSince1970: 10)
         )
-        XCTAssertTrue(store.record(running))
+        let recordedRunningRun = await store.record(running)
+        XCTAssertTrue(recordedRunningRun)
 
         let recovered = WorkflowStore(userDefaults: defaults)
         let run = try XCTUnwrap(recovered.history().first)
@@ -155,7 +158,7 @@ final class WorkflowStoreTests: XCTestCase {
         )
 
         for index in 0..<(WorkflowStore.maximumHistoryCount + 5) {
-            _ = recovered.record(
+            _ = await recovered.record(
                 WorkflowRun(
                     workflowID: workflowID,
                     workflowName: "记录 \(index)",
@@ -166,7 +169,33 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertEqual(recovered.history().count, WorkflowStore.maximumHistoryCount)
     }
 
-    func testLegacyChineseHistoryRelocalizesAfterSwitchAndRelaunch() throws {
+    func testCoalescedHistoryDefersIntermediateWriteAndImmediateRecordFlushesLatest() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        var run = WorkflowRun(
+            workflowID: UUID(),
+            workflowName: "Coalesced",
+            source: .manual,
+            startedAt: Date(timeIntervalSince1970: 10),
+            finishedAt: Date(timeIntervalSince1970: 11),
+            status: .failed,
+            summary: "initial"
+        )
+        let recordedInitial = await store.record(run)
+        XCTAssertTrue(recordedInitial)
+
+        run.summary = "intermediate"
+        let recordedIntermediate = await store.record(run, persistenceMode: .coalesced)
+        XCTAssertTrue(recordedIntermediate)
+        XCTAssertEqual(WorkflowStore(userDefaults: defaults).history().first?.summary, "initial")
+
+        run.summary = "final"
+        let recordedFinal = await store.record(run)
+        XCTAssertTrue(recordedFinal)
+        XCTAssertEqual(WorkflowStore(userDefaults: defaults).history().first?.summary, "final")
+    }
+
+    func testLegacyChineseHistoryRelocalizesAfterSwitchAndRelaunch() async throws {
         let originalPreference = UserDefaults.standard.string(
             forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
         )
@@ -180,29 +209,28 @@ final class WorkflowStoreTests: XCTestCase {
         let workflow = try store.upsert(
             WorkflowDefinition(name: "Legacy", steps: [step])
         ).get()
-        XCTAssertTrue(
-            store.record(
-                WorkflowRun(
-                    workflowID: workflow.id,
-                    workflowName: workflow.name,
-                    source: .manual,
-                    finishedAt: .now,
-                    status: .failed,
-                    stepResults: [
-                        WorkflowStepRunResult(
-                            stepID: step.id,
-                            actionKey: reference.key,
-                            title: "操作网格",
-                            startedAt: .now,
-                            finishedAt: .now,
-                            status: .failed,
-                            message: "操作未能完成。"
-                        ),
-                    ],
-                    summary: "工作流已完成，但部分步骤失败。"
-                )
+        let recordedLegacyRun = await store.record(
+            WorkflowRun(
+                workflowID: workflow.id,
+                workflowName: workflow.name,
+                source: .manual,
+                finishedAt: .now,
+                status: .failed,
+                stepResults: [
+                    WorkflowStepRunResult(
+                        stepID: step.id,
+                        actionKey: reference.key,
+                        title: "操作网格",
+                        startedAt: .now,
+                        finishedAt: .now,
+                        status: .failed,
+                        message: "操作未能完成。"
+                    ),
+                ],
+                summary: "工作流已完成，但部分步骤失败。"
             )
         )
+        XCTAssertTrue(recordedLegacyRun)
 
         PluginRuntimeLocalization.source.setPreference("en")
         let reloaded = WorkflowStore(

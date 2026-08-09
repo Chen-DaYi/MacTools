@@ -93,6 +93,15 @@ struct ActionShortcutSettingsView: View {
                 header
                 controls
 
+                if let error = pluginHost.actionShortcutLoadError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.red)
+                        .padding(PluginSettingsTheme.Spacing.cardContent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .pluginSettingsCardBackground(.host)
+                }
+
                 if groupedItems.isEmpty {
                     ContentUnavailableView(
                         FeatureL10n.string("没有匹配的操作"),
@@ -331,7 +340,7 @@ private struct ActionShortcutCatalogRow: View {
                     onRecord: onRecord
                 )
                 .frame(width: Layout.recorderWidth)
-                .disabled(!item.canAssign)
+                .disabled(!item.canAssign || pluginHost.actionShortcutLoadError != nil)
 
                 Button(action: onClear) {
                     Image(systemName: "xmark.circle.fill")
@@ -341,7 +350,10 @@ private struct ActionShortcutCatalogRow: View {
                 .foregroundStyle(.secondary)
                 .help(FeatureL10n.string("清除快捷键"))
                 .opacity(item.bindingText.isEmpty ? 0 : 1)
-                .disabled(item.bindingText.isEmpty)
+                .disabled(
+                    item.bindingText.isEmpty
+                        || pluginHost.actionShortcutLoadError != nil
+                )
             }
 
             ActionRunLinkControl(

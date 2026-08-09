@@ -26,6 +26,20 @@ final class AutomationController: ObservableObject {
         lastError.map(localizedMessage(for:))
     }
 
+    var definitionLoadErrorMessage: String? {
+        if store.workflowLoadError != nil {
+            return FeatureL10n.string("无法读取工作流数据；请先导入备份恢复。")
+        }
+        if ruleStore.loadError != nil {
+            return FeatureL10n.string("无法读取自动规则数据；请先导入备份恢复。")
+        }
+        return nil
+    }
+
+    var canEditDefinitions: Bool {
+        definitionLoadErrorMessage == nil
+    }
+
     private let store: WorkflowStore
     private let ruleStore: AutomationRuleStore
     private let registry: ActionRegistry
@@ -554,6 +568,7 @@ final class AutomationController: ObservableObject {
         case .workflowNotFound: FeatureL10n.string("找不到工作流。")
         case .maximumWorkflowCountReached: FeatureL10n.string("工作流数量已达上限。")
         case .persistenceFailed: FeatureL10n.string("无法保存工作流。")
+        case .recoveryRequired: FeatureL10n.string("无法读取工作流数据；请先导入备份恢复。")
         case .unsafeForExport: FeatureL10n.string("工作流包含不可安全导出的参数。")
         case .invalidImport: FeatureL10n.string("工作流文件无效。")
             }
@@ -563,6 +578,7 @@ final class AutomationController: ObservableObject {
         case .ruleNotFound: FeatureL10n.string("找不到自动规则。")
         case .maximumRuleCountReached: FeatureL10n.string("自动规则数量已达上限。")
         case .persistenceFailed: FeatureL10n.string("无法保存自动规则。")
+        case .recoveryRequired: FeatureL10n.string("无法读取自动规则数据；请先导入备份恢复。")
             }
         case let .workflowStart(error):
             message(for: error)

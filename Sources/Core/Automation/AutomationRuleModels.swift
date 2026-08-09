@@ -210,6 +210,27 @@ struct AutomationRule: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+enum AutomationRulePortabilityAnalysis {
+    static func isPortable(_ rule: AutomationRule) -> Bool {
+        !containsDeviceLocalDisplayReference(rule)
+    }
+
+    static func containsDeviceLocalDisplayReference(_ rule: AutomationRule) -> Bool {
+        if case let .display(trigger) = rule.trigger,
+           hasValue(trigger.displayIdentifier) {
+            return true
+        }
+        return rule.conditions.contains { condition in
+            guard case let .connectedDisplay(value) = condition else { return false }
+            return hasValue(value.displayIdentifier)
+        }
+    }
+
+    private static func hasValue(_ value: String?) -> Bool {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+}
+
 struct AutomationDisplaySnapshot: Codable, Equatable, Hashable, Sendable {
     let identifier: String
     let name: String
@@ -293,4 +314,5 @@ enum AutomationRuleStoreError: Error, Equatable {
     case ruleNotFound
     case maximumRuleCountReached
     case persistenceFailed
+    case recoveryRequired
 }

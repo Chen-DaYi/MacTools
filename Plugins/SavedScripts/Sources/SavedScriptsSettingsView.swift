@@ -91,7 +91,10 @@ struct SavedScriptsSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(store.scripts.count >= SavedScriptsStore.maximumScriptCount)
+                .disabled(
+                    store.loadError != nil
+                        || store.scripts.count >= SavedScriptsStore.maximumScriptCount
+                )
                 .accessibilityIdentifier("mactools.saved-scripts.add")
             }
 
@@ -146,6 +149,7 @@ struct SavedScriptsSettingsView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
+            .disabled(store.loadError != nil)
         }
         .frame(maxWidth: .infinity, minHeight: 220)
         .pluginSettingsCardBackground(.host)
@@ -658,6 +662,13 @@ private struct SavedScriptEditorSheet: View {
             plugin.localized("validation.payloadTooLarge", defaultValue: "脚本库数据过大。")
         case .duplicateID:
             plugin.localized("validation.duplicateID", defaultValue: "脚本标识符已被使用。")
+        case .persistenceFailed:
+            plugin.localized("validation.persistenceFailed", defaultValue: "无法保存脚本库。")
+        case .recoveryRequired:
+            plugin.localized(
+                "validation.recoveryRequired",
+                defaultValue: "无法读取脚本库；请先导入备份恢复。"
+            )
         }
     }
 }

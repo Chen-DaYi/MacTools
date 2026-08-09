@@ -45,6 +45,19 @@ final class ShortcutAssignmentServiceTests: XCTestCase {
         XCTAssertEqual(reloadedStore.assignments(), harness.service.assignments)
     }
 
+    func testCorruptAssignmentPayloadRejectsOrdinaryMutationWithoutOverwritingBytes() throws {
+        let harness = try makeHarness()
+        let corrupt = Data("not-json".utf8)
+        harness.defaults.set(corrupt, forKey: "action-shortcuts.assignments")
+
+        XCTAssertEqual(
+            harness.service.assign(harness.bindings[0], to: harness.references[0]),
+            .failure(.recoveryRequired)
+        )
+        XCTAssertFalse(harness.service.clear(harness.references[0]))
+        XCTAssertEqual(harness.defaults.data(forKey: "action-shortcuts.assignments"), corrupt)
+    }
+
     func testConflictReplacementIsAtomicAndReservedBindingsCannotBeReplaced() throws {
         let harness = try makeHarness()
         let first = harness.references[0]

@@ -258,6 +258,7 @@ enum WorkflowStoreError: Error, Equatable {
     case workflowNotFound
     case maximumWorkflowCountReached
     case persistenceFailed
+    case recoveryRequired
     case unsafeForExport
     case invalidImport
 }

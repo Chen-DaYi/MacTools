@@ -194,16 +194,97 @@ final class SystemScheduleAutomationTriggerProvider: AutomationTriggerProviding 
     }
 }
 
+struct CalendarAutomationScheduledEvent: Equatable, Sendable {
+    let fireDate: Date
+    let identifier: String
+    let title: String
+    let calendarIdentifier: String?
+    let phase: CalendarAutomationPhase
+    let offsetMinutes: Int
+}
+
+protocol CalendarAutomationEventQuerying: Sendable {
+    func requestAccess() async -> Bool
+    func scheduledEvents(
+        currentDate: Date,
+        configurations: [CalendarAutomationTrigger]
+    ) async -> [CalendarAutomationScheduledEvent]
+}
+
+private actor SystemCalendarAutomationEventQuery: CalendarAutomationEventQuerying {
+    private let eventStore: EKEventStore
+
+    init(eventStore: EKEventStore = EKEventStore()) {
+        self.eventStore = eventStore
+    }
+
+    func requestAccess() async -> Bool {
+        do {
+            return try await eventStore.requestFullAccessToEvents()
+        } catch {
+            return false
+        }
+    }
+
+    func scheduledEvents(
+        currentDate: Date,
+        configurations: [CalendarAutomationTrigger]
+    ) async -> [CalendarAutomationScheduledEvent] {
+        guard let endDate = Calendar.current.date(byAdding: .day, value: 31, to: currentDate) else {
+            return []
+        }
+        let queryStartDate = SystemCalendarAutomationTriggerProvider.queryStartDate(
+            currentDate: currentDate,
+            configurations: configurations
+        )
+        let predicate = eventStore.predicateForEvents(
+            withStart: queryStartDate,
+            end: endDate,
+            calendars: nil
+        )
+        let events = eventStore.events(matching: predicate)
+        var scheduled: [CalendarAutomationScheduledEvent] = []
+        for configuration in configurations {
+            for event in events where matches(event, configuration: configuration) {
+                guard let eventDate = configuration.phase == .starts ? event.startDate : event.endDate else {
+                    continue
+                }
+                let fireDate = eventDate.addingTimeInterval(
+                    TimeInterval(configuration.offsetMinutes * 60)
+                )
+                guard fireDate > currentDate else { continue }
+                scheduled.append(CalendarAutomationScheduledEvent(
+                    fireDate: fireDate,
+                    identifier: event.eventIdentifier ?? event.calendarItemIdentifier,
+                    title: event.title ?? "",
+                    calendarIdentifier: event.calendar.calendarIdentifier,
+                    phase: configuration.phase,
+                    offsetMinutes: configuration.offsetMinutes
+                ))
+            }
+        }
+        return scheduled
+    }
+
+    private func matches(_ event: EKEvent, configuration: CalendarAutomationTrigger) -> Bool {
+        let calendarMatches = normalized(configuration.calendarIdentifier).map {
+            $0 == event.calendar.calendarIdentifier
+        } ?? true
+        let titleMatches = normalized(configuration.titleContains).map {
+            (event.title ?? "").localizedCaseInsensitiveContains($0)
+        } ?? true
+        return calendarMatches && titleMatches
+    }
+
+    private func normalized(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+}
+
 @MainActor
 final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding {
-    struct ScheduledEvent: Equatable {
-        let fireDate: Date
-        let identifier: String
-        let title: String
-        let calendarIdentifier: String?
-        let phase: CalendarAutomationPhase
-        let offsetMinutes: Int
-    }
+    typealias ScheduledEvent = CalendarAutomationScheduledEvent
 
     struct SchedulePlan: Equatable {
         let nextBatch: [ScheduledEvent]
@@ -249,7 +330,7 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
     let kind: AutomationTriggerKind = .calendar
 
     var availability: AutomationTriggerAvailability {
-        switch EKEventStore.authorizationStatus(for: .event) {
+        switch authorizationStatus() {
         case .fullAccess: .available
         case .notDetermined: .unavailable(FeatureL10n.string("需要日历访问权限。"))
         case .denied, .restricted, .writeOnly: .unavailable(FeatureL10n.string("日历访问权限不可用。"))
@@ -257,22 +338,29 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
         }
     }
 
-    private let eventStore: EKEventStore
+    private let eventQuery: any CalendarAutomationEventQuerying
     private let notificationCenter: NotificationCenter
     private let now: () -> Date
+    private let authorizationStatus: () -> EKAuthorizationStatus
     private var handler: (@MainActor (AutomationTriggerEvent) -> Void)?
     private var configurations: [CalendarAutomationTrigger] = []
     private var timer: Timer?
     private var storeObserver: NSObjectProtocol?
+    private var rescheduleTask: Task<Void, Never>?
+    private var rescheduleGeneration = 0
 
     init(
-        eventStore: EKEventStore = EKEventStore(),
+        eventQuery: any CalendarAutomationEventQuerying = SystemCalendarAutomationEventQuery(),
         notificationCenter: NotificationCenter = .default,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        authorizationStatus: @escaping () -> EKAuthorizationStatus = {
+            EKEventStore.authorizationStatus(for: .event)
+        }
     ) {
-        self.eventStore = eventStore
+        self.eventQuery = eventQuery
         self.notificationCenter = notificationCenter
         self.now = now
+        self.authorizationStatus = authorizationStatus
     }
 
     func start(handler: @escaping @MainActor (AutomationTriggerEvent) -> Void) {
@@ -280,7 +368,7 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
         if storeObserver == nil {
             storeObserver = notificationCenter.addObserver(
                 forName: .EKEventStoreChanged,
-                object: eventStore,
+                object: nil,
                 queue: .main
             ) { [weak self] _ in
                 Task { @MainActor in self?.reschedule() }
@@ -290,6 +378,9 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
     }
 
     func stop() {
+        rescheduleGeneration += 1
+        rescheduleTask?.cancel()
+        rescheduleTask = nil
         timer?.invalidate()
         timer = nil
         if let storeObserver {
@@ -308,54 +399,37 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
     }
 
     func requestAccess() async -> Bool {
-        do {
-            let granted = try await eventStore.requestFullAccessToEvents()
-            reschedule()
-            return granted
-        } catch {
-            return false
-        }
+        let granted = await eventQuery.requestAccess()
+        reschedule()
+        return granted
     }
 
     private func reschedule() {
+        rescheduleGeneration += 1
+        let generation = rescheduleGeneration
+        rescheduleTask?.cancel()
+        rescheduleTask = nil
         timer?.invalidate()
         timer = nil
         guard handler != nil, availability.isAvailable, !configurations.isEmpty else { return }
         let currentDate = now()
-        guard let endDate = Calendar.current.date(byAdding: .day, value: 31, to: currentDate) else {
-            return
-        }
-        let queryStartDate = Self.queryStartDate(
-            currentDate: currentDate,
-            configurations: configurations
-        )
-        let predicate = eventStore.predicateForEvents(
-            withStart: queryStartDate,
-            end: endDate,
-            calendars: nil
-        )
-        let events = eventStore.events(matching: predicate)
-        var scheduled: [ScheduledEvent] = []
-        for configuration in configurations {
-            for event in events where matches(event, configuration: configuration) {
-                guard let eventDate = configuration.phase == .starts ? event.startDate : event.endDate else {
-                    continue
-                }
-                let fireDate = eventDate.addingTimeInterval(TimeInterval(configuration.offsetMinutes * 60))
-                guard fireDate > currentDate else { continue }
-                let identifier = event.eventIdentifier ?? event.calendarItemIdentifier
-                let title = event.title ?? ""
-                let calendarIdentifier = event.calendar.calendarIdentifier
-                scheduled.append(ScheduledEvent(
-                    fireDate: fireDate,
-                    identifier: identifier,
-                    title: title,
-                    calendarIdentifier: calendarIdentifier,
-                    phase: configuration.phase,
-                    offsetMinutes: configuration.offsetMinutes
-                ))
+        let configurations = configurations
+        rescheduleTask = Task { @MainActor [weak self, eventQuery] in
+            let scheduled = await eventQuery.scheduledEvents(
+                currentDate: currentDate,
+                configurations: configurations
+            )
+            guard !Task.isCancelled,
+                  let self,
+                  self.handler != nil,
+                  generation == self.rescheduleGeneration else {
+                return
             }
+            self.installSchedule(scheduled, currentDate: currentDate)
         }
+    }
+
+    private func installSchedule(_ scheduled: [ScheduledEvent], currentDate: Date) {
         let plan = SchedulePlan.make(candidates: scheduled, after: currentDate)
         let timer = Timer(
             fire: plan.nextTimerDate,
@@ -392,20 +466,6 @@ final class SystemCalendarAutomationTriggerProvider: AutomationTriggerProviding 
         return currentDate.addingTimeInterval(TimeInterval(-maximumPositiveOffset * 60))
     }
 
-    private func matches(_ event: EKEvent, configuration: CalendarAutomationTrigger) -> Bool {
-        let calendarMatches = normalized(configuration.calendarIdentifier).map {
-            $0 == event.calendar.calendarIdentifier
-        } ?? true
-        let titleMatches = normalized(configuration.titleContains).map {
-            (event.title ?? "").localizedCaseInsensitiveContains($0)
-        } ?? true
-        return calendarMatches && titleMatches
-    }
-
-    private func normalized(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed?.isEmpty == false ? trimmed : nil
-    }
 }
 
 @MainActor

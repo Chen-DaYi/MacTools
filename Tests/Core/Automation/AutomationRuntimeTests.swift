@@ -16,7 +16,7 @@ final class AutomationRuntimeTests: XCTestCase {
         super.tearDown()
     }
 
-    func testSkippedRunSummaryRelocalizesAfterLanguageSwitchAndRelaunch() throws {
+    func testSkippedRunSummaryRelocalizesAfterLanguageSwitchAndRelaunch() async throws {
         let originalPreference = UserDefaults.standard.string(
             forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
         )
@@ -43,6 +43,7 @@ final class AutomationRuntimeTests: XCTestCase {
             initialRun.localizedSummary,
             "规则“仅接电时”未运行：当前电源来源不匹配。"
         )
+        await fixture.workflowStore.flushPendingHistoryPersistence()
 
         PluginRuntimeLocalization.source.setPreference("en")
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

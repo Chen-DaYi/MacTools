@@ -39,6 +39,16 @@ struct AutomationSettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .overlay(alignment: .top) {
+            if let error = automation.definitionLoadErrorMessage {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.red)
+                    .padding(PluginSettingsTheme.Spacing.cardContent)
+                    .pluginSettingsCardBackground(.host)
+                    .padding(PluginSettingsTheme.Spacing.pagePadding)
+            }
+        }
         .background(SettingsStyle.contentBackground)
         .onAppear {
             selectInitialWorkflowIfNeeded()
@@ -69,6 +79,7 @@ struct AutomationSettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help(FeatureL10n.string("新建工作流"))
+                .disabled(!automation.canEditDefinitions)
             }
             .padding(12)
 
@@ -247,6 +258,7 @@ private struct WorkflowDetailView: View {
             }
             .padding(PluginSettingsTheme.Spacing.pagePadding)
         }
+        .disabled(!automation.canEditDefinitions)
         .alert(FeatureL10n.string("删除工作流？"), isPresented: $pendingDelete) {
             Button(FeatureL10n.string("删除"), role: .destructive) {
                 if automation.deleteWorkflow(id: workflow.id) {

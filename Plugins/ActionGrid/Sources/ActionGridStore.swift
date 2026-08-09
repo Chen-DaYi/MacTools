@@ -298,6 +298,7 @@ final class ActionGridStore: ObservableObject {
 
     @discardableResult
     func migrate(using context: ActionGridHostContext) -> Bool {
+        guard loadError == nil else { return false }
         var updated = entries
         let changed = migrate(entries: &updated, using: context)
         return changed && replace(updated)
@@ -524,6 +525,7 @@ final class ActionGridStore: ObservableObject {
         in folderID: UUID?,
         _ update: (inout [ActionGridEntry]) -> Bool
     ) -> Bool {
+        guard loadError == nil else { return false }
         var updated = entries
         let changed: Bool
         if let folderID {
@@ -539,6 +541,7 @@ final class ActionGridStore: ObservableObject {
         entryID: UUID,
         _ update: (inout [ActionGridEntry], Int) -> Bool
     ) -> Bool {
+        guard loadError == nil else { return false }
         var updated = entries
         guard updateContainingEntries(entryID: entryID, entries: &updated, update: update) else {
             return false

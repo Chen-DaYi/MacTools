@@ -601,6 +601,7 @@ private struct PreferencesBackupSettingsRow: View {
     @State private var isChoosingExport = false
     @State private var exportSelection = PreferencesBackupSelection.all(pluginPreferenceIDs: [])
     @State private var exportPluginOptions: [PreferencesPluginOption] = []
+    @State private var deviceLocalAutomationRuleCount = 0
     @State private var alertMessage: String?
     @State private var isPreparingImport = false
     @State private var isImporting = false
@@ -663,6 +664,7 @@ private struct PreferencesBackupSettingsRow: View {
             PreferencesExportSelectionSheet(
                 selection: $exportSelection,
                 pluginOptions: exportPluginOptions,
+                deviceLocalAutomationRuleCount: deviceLocalAutomationRuleCount,
                 onCancel: { isChoosingExport = false },
                 onExport: {
                     isChoosingExport = false
@@ -691,6 +693,7 @@ private struct PreferencesBackupSettingsRow: View {
         let backup = pluginHost.makePreferencesBackup()
         exportSelection = .all(pluginPreferenceIDs: Set(backup.pluginPreferences.keys))
         exportPluginOptions = pluginOptions(for: Set(backup.pluginPreferences.keys))
+        deviceLocalAutomationRuleCount = pluginHost.deviceLocalAutomationRuleCount
         isChoosingExport = true
     }
 
@@ -831,6 +834,7 @@ private struct PreferencesPluginOption: Identifiable, Equatable {
 private struct PreferencesExportSelectionSheet: View {
     @Binding var selection: PreferencesBackupSelection
     let pluginOptions: [PreferencesPluginOption]
+    let deviceLocalAutomationRuleCount: Int
     let onCancel: () -> Void
     let onExport: () -> Void
 
@@ -853,6 +857,20 @@ private struct PreferencesExportSelectionSheet: View {
                 selection: $selection,
                 pluginOptions: pluginOptions
             )
+
+            if selection.includesAutomation, deviceLocalAutomationRuleCount > 0 {
+                Label {
+                    Text(AppL10n.preferencesBackupFormat(
+                        "preferencesBackup.exportSelection.deviceLocalRulesOmitted",
+                        defaultValue: "%d 条绑定到此 Mac 显示器的自动化规则不会导出。",
+                        deviceLocalAutomationRuleCount
+                    ))
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+            }
 
             HStack {
                 Spacer()

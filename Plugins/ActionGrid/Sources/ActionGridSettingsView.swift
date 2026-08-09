@@ -104,7 +104,10 @@ struct ActionGridSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(currentEntries.count >= ActionGridStore.maximumEntryCount)
+                .disabled(
+                    store.loadError != nil
+                        || currentEntries.count >= ActionGridStore.maximumEntryCount
+                )
 
                 Button(plugin.localized("重置")) { confirmingReset = true }
                     .buttonStyle(.bordered)
@@ -123,6 +126,7 @@ struct ActionGridSettingsView: View {
             }
             .padding(12)
             .pluginSettingsCardBackground(.host)
+            .disabled(store.loadError != nil)
 
             if let dropTargetSlot {
                 Label(

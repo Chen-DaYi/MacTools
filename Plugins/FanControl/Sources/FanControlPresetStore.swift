@@ -12,6 +12,11 @@ final class FanControlPresetStore: ObservableObject {
         let activePresetID: String
     }
 
+    private struct PortableRestoreTransaction: Codable {
+        let customPresets: Data?
+        let activePresetID: String?
+    }
+
     private static let portablePreferencesVersion = 1
     private static let maximumPortablePreferencesSize = 256 * 1_024
     private static let maximumCustomPresetCount = 100
@@ -22,6 +27,7 @@ final class FanControlPresetStore: ObservableObject {
     private enum Key {
         static let customPresets = "custom-presets"
         static let activePresetID = "active-preset-id"
+        static let portableRestoreTransaction = "portable-restore-transaction.v1"
     }
 
     // MARK: - Built-in Presets
@@ -70,6 +76,7 @@ final class FanControlPresetStore: ObservableObject {
     ) {
         self.storage = storage
         self.localization = localization
+        _ = recoverInterruptedPortableRestore()
         load()
     }
 
@@ -126,10 +133,14 @@ final class FanControlPresetStore: ObservableObject {
         guard let presetData = try? JSONEncoder().encode(payload.customPresets) else {
             return false
         }
-        storage.set(presetData, forKey: Key.customPresets)
-        storage.set(payload.activePresetID, forKey: Key.activePresetID)
-        guard storage.data(forKey: Key.customPresets) == presetData,
-              storage.string(forKey: Key.activePresetID) == payload.activePresetID else {
+        guard recoverInterruptedPortableRestore(),
+              beginPortableRestoreTransaction(),
+              writePortableValues(
+                  customPresets: presetData,
+                  activePresetID: payload.activePresetID
+              ),
+              finishPortableRestoreTransaction() else {
+            rollbackPortableRestoreTransaction()
             return false
         }
         customPresets = payload.customPresets
@@ -146,6 +157,61 @@ final class FanControlPresetStore: ObservableObject {
             return nil
         }
         return payload.customPresets.map(\.id)
+    }
+
+    private func beginPortableRestoreTransaction() -> Bool {
+        let transaction = PortableRestoreTransaction(
+            customPresets: storage.data(forKey: Key.customPresets),
+            activePresetID: storage.string(forKey: Key.activePresetID)
+        )
+        guard let data = try? JSONEncoder().encode(transaction) else { return false }
+        storage.set(data, forKey: Key.portableRestoreTransaction)
+        return storage.data(forKey: Key.portableRestoreTransaction) == data
+    }
+
+    private func recoverInterruptedPortableRestore() -> Bool {
+        guard let transactionData = storage.data(forKey: Key.portableRestoreTransaction) else {
+            return true
+        }
+        guard let transaction = try? JSONDecoder().decode(
+            PortableRestoreTransaction.self,
+            from: transactionData
+        ) else {
+            return false
+        }
+        guard writePortableValues(
+            customPresets: transaction.customPresets,
+            activePresetID: transaction.activePresetID
+        ) else {
+            return false
+        }
+        storage.removeObject(forKey: Key.portableRestoreTransaction)
+        return storage.data(forKey: Key.portableRestoreTransaction) == nil
+    }
+
+    @discardableResult
+    private func rollbackPortableRestoreTransaction() -> Bool {
+        recoverInterruptedPortableRestore()
+    }
+
+    private func finishPortableRestoreTransaction() -> Bool {
+        storage.removeObject(forKey: Key.portableRestoreTransaction)
+        return storage.data(forKey: Key.portableRestoreTransaction) == nil
+    }
+
+    private func writePortableValues(customPresets: Data?, activePresetID: String?) -> Bool {
+        setOptional(customPresets, forKey: Key.customPresets)
+        setOptional(activePresetID, forKey: Key.activePresetID)
+        return storage.data(forKey: Key.customPresets) == customPresets
+            && storage.string(forKey: Key.activePresetID) == activePresetID
+    }
+
+    private func setOptional(_ value: Any?, forKey key: String) {
+        if let value {
+            storage.set(value, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
     }
 
     private static func isValidPortablePayload(_ payload: PortablePreferences) -> Bool {

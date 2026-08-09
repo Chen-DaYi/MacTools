@@ -323,6 +323,48 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertTrue(references.isEmpty)
     }
 
+    func testExportOmitsRulesBoundToLocalDisplayIdentifiersAndReportsTheirCount() throws {
+        let provider = BackupActionProviderPlugin()
+        let host = makeHost(plugins: [provider], defaults: makeDefaults())
+        let workflow = try XCTUnwrap(host.automationController.createWorkflow())
+        host.automationController.addStep(
+            workflowID: workflow.id,
+            reference: try provider.references()[0]
+        )
+
+        var portable = try XCTUnwrap(
+            host.automationController.createRule(workflowID: workflow.id)
+        )
+        portable.trigger = .display(DisplayAutomationTrigger(
+            event: .connected,
+            displayNameContains: "Studio"
+        ))
+        host.automationController.saveRule(portable)
+
+        var localTrigger = try XCTUnwrap(
+            host.automationController.createRule(workflowID: workflow.id)
+        )
+        localTrigger.trigger = .display(DisplayAutomationTrigger(
+            event: .connected,
+            displayIdentifier: "742311",
+            displayNameContains: "Studio"
+        ))
+        host.automationController.saveRule(localTrigger)
+
+        var localCondition = try XCTUnwrap(
+            host.automationController.createRule(workflowID: workflow.id)
+        )
+        localCondition.conditions = [
+            .connectedDisplay(ConnectedDisplayCondition(displayIdentifier: "991200")),
+        ]
+        host.automationController.saveRule(localCondition)
+
+        let backup = host.makePreferencesBackup()
+
+        XCTAssertEqual(backup.automationRules?.map(\.id), [portable.id])
+        XCTAssertEqual(host.deviceLocalAutomationRuleCount, 2)
+    }
+
     func testActionSurfaceBackupPersistsProviderDependencyIndex() throws {
         let provider = BackupActionProviderPlugin()
         let surface = BackupActionSurfacePlugin()

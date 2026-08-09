@@ -222,6 +222,60 @@ final class FanControlPluginTests: XCTestCase {
         XCTAssertEqual(restored.presetStore.customPresets.first?.name.count, 100)
     }
 
+    func testActiveRestoreAppliesManualAndAutomaticStrategiesToHardware() throws {
+        let manualSource = makePlugin()
+        manualSource.presetStore.setActivePreset(id: FanPresetBuiltInID.fullSpeed)
+        let manualBackup = try XCTUnwrap(manualSource.makePortablePreferencesBackup())
+        let autoBackup = try XCTUnwrap(makePlugin().makePortablePreferencesBackup())
+
+        let writer = MockSMCWriter()
+        let restored = makePlugin(writer: writer)
+        restored.activate(context: PluginRuntimeContext(pluginID: "fan-control"))
+
+        XCTAssertTrue(restored.restorePortablePreferencesReportingResult(from: manualBackup))
+        XCTAssertEqual(writer.appliedStrategies.last, .fullSpeed)
+        XCTAssertTrue(restored.restorePortablePreferencesReportingResult(from: autoBackup))
+        XCTAssertEqual(writer.appliedStrategies.last, .auto)
+
+        restored.deactivate(reason: .hostShutdown)
+    }
+
+    func testFailedActiveRestoreRollsBackPreferencesAndHardwareStrategy() throws {
+        let autoBackup = try XCTUnwrap(makePlugin().makePortablePreferencesBackup())
+        let writer = MockSMCWriter()
+        let plugin = makePlugin(writer: writer)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "fan-control"))
+        plugin.handleAction(.setSelection(
+            controlID: "fan-preset-list",
+            optionID: FanPresetBuiltInID.fullSpeed
+        ))
+        writer.queuedWriteErrors = [.writeFailed("restore failed"), nil]
+
+        XCTAssertFalse(plugin.restorePortablePreferencesReportingResult(from: autoBackup))
+        XCTAssertEqual(plugin.presetStore.activePresetID, FanPresetBuiltInID.fullSpeed)
+        XCTAssertEqual(writer.appliedStrategies.suffix(2), [.auto, .fullSpeed])
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+
+        plugin.deactivate(reason: .hostShutdown)
+    }
+
+    func testPortableRestoreWriteFailureRollsBackEveryStoredValue() throws {
+        let source = makePlugin()
+        let preset = try XCTUnwrap(source.presetStore.addCustomPreset())
+        source.presetStore.setActivePreset(id: preset.id)
+        let backup = try XCTUnwrap(source.makePortablePreferencesBackup())
+        let storage = FanControlMemoryStorage()
+        let destination = makePlugin(storage: storage)
+        destination.presetStore.setActivePreset(id: FanPresetBuiltInID.fullSpeed)
+        storage.blockedSetKeys = ["active-preset-id"]
+
+        XCTAssertFalse(destination.restorePortablePreferencesReportingResult(from: backup))
+        storage.blockedSetKeys = []
+        let reloaded = makePlugin(storage: storage)
+        XCTAssertTrue(reloaded.presetStore.customPresets.isEmpty)
+        XCTAssertEqual(reloaded.presetStore.activePresetID, FanPresetBuiltInID.fullSpeed)
+    }
+
     func testCustomPresetActionsDependOnPortablePreferencesButBuiltInsDoNot() throws {
         let plugin = makePlugin()
         let custom = plugin.presetStore.addCustomPreset()!
@@ -379,10 +433,14 @@ private final class MockSMCWriter: FanControlSMCWriting {
     var appliedStrategy: FanControlStrategy?
     var appliedStrategies: [FanControlStrategy] = []
     var writeError: FanWriteError?
+    var queuedWriteErrors: [FanWriteError?] = []
 
     func apply(strategy: FanControlStrategy, snapshot _: FanSnapshot) -> FanWriteError? {
         appliedStrategy = strategy
         appliedStrategies.append(strategy)
+        if !queuedWriteErrors.isEmpty {
+            return queuedWriteErrors.removeFirst()
+        }
         return writeError
     }
 }
@@ -390,6 +448,7 @@ private final class MockSMCWriter: FanControlSMCWriting {
 @MainActor
 private final class FanControlMemoryStorage: PluginStorage {
     private var values: [String: Any] = [:]
+    var blockedSetKeys: Set<String> = []
 
     func object(forKey key: String) -> Any? { values[key] }
     func data(forKey key: String) -> Data? { values[key] as? Data }
@@ -397,7 +456,10 @@ private final class FanControlMemoryStorage: PluginStorage {
     func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
     func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
-    func set(_ value: Any?, forKey key: String) { values[key] = value }
+    func set(_ value: Any?, forKey key: String) {
+        guard !blockedSetKeys.contains(key) else { return }
+        values[key] = value
+    }
     func removeObject(forKey key: String) { values.removeValue(forKey: key) }
     func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
         guard values[key] == nil, let value = values[legacyKey] else { return }

@@ -227,6 +227,12 @@ final class TrackpadGestureStore: ObservableObject {
         let typingGracePeriod: TimeInterval
     }
 
+    private struct PortableRestoreTransaction: Codable {
+        let mappings: Data?
+        let ignoresGesturesWhileTyping: Bool?
+        let typingGracePeriod: TimeInterval?
+    }
+
     private static let portableBackupFormatVersion = 1
     private static let maximumPortableBackupByteCount = 256 * 1_024
     private struct LegacyMiddleClickMigrationRecord: Codable {
@@ -242,6 +248,7 @@ final class TrackpadGestureStore: ObservableObject {
         static let mappingSort = "settings.mapping-sort"
         static let mappingStatusFilter = "settings.mapping-status-filter"
         static let mappingActionFilter = "settings.mapping-action-filter"
+        static let portableRestoreTransaction = "portable-restore-transaction.v1"
     }
 
     @Published private(set) var mappings: [TrackpadGestureMapping]
@@ -261,6 +268,7 @@ final class TrackpadGestureStore: ObservableObject {
         legacyMiddleClick: LegacyMiddleClickPreferences? = LegacyMiddleClickPreferences.load()
     ) {
         self.storage = storage
+        _ = Self.recoverInterruptedPortableRestore(storage: storage)
         let decoded = storage.data(forKey: Key.mappings)
             .flatMap { try? JSONDecoder().decode([TrackpadGestureMapping].self, from: $0) }
             ?? []
@@ -468,19 +476,125 @@ final class TrackpadGestureStore: ObservableObject {
         }
         guard let mappingData = try? encoder.encode(backup.mappings) else { return false }
         let gracePeriod = TrackpadTypingSuppressionGate.clamped(backup.typingGracePeriod)
-        storage.set(mappingData, forKey: Key.mappings)
-        storage.set(backup.ignoresGesturesWhileTyping, forKey: Key.ignoreWhileTyping)
-        storage.set(gracePeriod, forKey: Key.typingGracePeriod)
-        guard storage.data(forKey: Key.mappings) == mappingData,
-              storage.bool(forKey: Key.ignoreWhileTyping) == backup.ignoresGesturesWhileTyping,
-              (storage.object(forKey: Key.typingGracePeriod) as? NSNumber)?.doubleValue
-                == gracePeriod else {
+        guard recoverInterruptedPortableRestore(),
+              beginPortableRestoreTransaction(),
+              writePortableValues(
+                  mappings: mappingData,
+                  ignoresGesturesWhileTyping: backup.ignoresGesturesWhileTyping,
+                  typingGracePeriod: gracePeriod
+              ),
+              finishPortableRestoreTransaction() else {
+            rollbackPortableRestoreTransaction()
             return false
         }
         mappings = backup.mappings
         ignoresGesturesWhileTyping = backup.ignoresGesturesWhileTyping
         typingGracePeriod = gracePeriod
         return true
+    }
+
+    private func beginPortableRestoreTransaction() -> Bool {
+        let transaction = PortableRestoreTransaction(
+            mappings: storage.data(forKey: Key.mappings),
+            ignoresGesturesWhileTyping: Self.storedBool(
+                forKey: Key.ignoreWhileTyping,
+                storage: storage
+            ),
+            typingGracePeriod: Self.storedDouble(
+                forKey: Key.typingGracePeriod,
+                storage: storage
+            )
+        )
+        guard let data = try? encoder.encode(transaction) else { return false }
+        storage.set(data, forKey: Key.portableRestoreTransaction)
+        return storage.data(forKey: Key.portableRestoreTransaction) == data
+    }
+
+    private func recoverInterruptedPortableRestore() -> Bool {
+        Self.recoverInterruptedPortableRestore(storage: storage)
+    }
+
+    private static func recoverInterruptedPortableRestore(storage: any PluginStorage) -> Bool {
+        guard let transactionData = storage.data(forKey: Key.portableRestoreTransaction) else {
+            return true
+        }
+        guard let transaction = try? JSONDecoder().decode(
+            PortableRestoreTransaction.self,
+            from: transactionData
+        ), writePortableValues(transaction, storage: storage) else {
+            return false
+        }
+        storage.removeObject(forKey: Key.portableRestoreTransaction)
+        return storage.data(forKey: Key.portableRestoreTransaction) == nil
+    }
+
+    @discardableResult
+    private func rollbackPortableRestoreTransaction() -> Bool {
+        recoverInterruptedPortableRestore()
+    }
+
+    private func finishPortableRestoreTransaction() -> Bool {
+        storage.removeObject(forKey: Key.portableRestoreTransaction)
+        return storage.data(forKey: Key.portableRestoreTransaction) == nil
+    }
+
+    private func writePortableValues(
+        mappings: Data?,
+        ignoresGesturesWhileTyping: Bool?,
+        typingGracePeriod: TimeInterval?
+    ) -> Bool {
+        Self.writePortableValues(
+            PortableRestoreTransaction(
+                mappings: mappings,
+                ignoresGesturesWhileTyping: ignoresGesturesWhileTyping,
+                typingGracePeriod: typingGracePeriod
+            ),
+            storage: storage
+        )
+    }
+
+    private static func writePortableValues(
+        _ values: PortableRestoreTransaction,
+        storage: any PluginStorage
+    ) -> Bool {
+        setOptional(values.mappings, forKey: Key.mappings, storage: storage)
+        setOptional(
+            values.ignoresGesturesWhileTyping,
+            forKey: Key.ignoreWhileTyping,
+            storage: storage
+        )
+        setOptional(
+            values.typingGracePeriod,
+            forKey: Key.typingGracePeriod,
+            storage: storage
+        )
+        return storage.data(forKey: Key.mappings) == values.mappings
+            && storedBool(forKey: Key.ignoreWhileTyping, storage: storage)
+                == values.ignoresGesturesWhileTyping
+            && storedDouble(forKey: Key.typingGracePeriod, storage: storage)
+                == values.typingGracePeriod
+    }
+
+    private static func setOptional(_ value: Any?, forKey key: String, storage: any PluginStorage) {
+        if let value {
+            storage.set(value, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
+    }
+
+    private static func storedBool(forKey key: String, storage: any PluginStorage) -> Bool? {
+        if let value = storage.object(forKey: key) as? Bool {
+            return value
+        }
+        return (storage.object(forKey: key) as? NSNumber)?.boolValue
+    }
+
+    private static func storedDouble(forKey key: String, storage: any PluginStorage) -> Double? {
+        if let value = storage.object(forKey: key) as? Double {
+            return value
+        }
+        return (storage.object(forKey: key) as? NSNumber)?.doubleValue
     }
 
     private func migrateLegacyMiddleClickIfNeeded(_ legacy: LegacyMiddleClickPreferences?) {

@@ -66,6 +66,21 @@ final class ActionShortcutAssignmentStore {
 
     @discardableResult
     func replaceAll(_ assignments: [ActionShortcutAssignmentRecord]) -> Bool {
+        _ = self.assignments()
+        guard loadError == nil else { return false }
+        return replaceAll(assignments, allowsRecovery: false)
+    }
+
+    @discardableResult
+    func replaceAllForRecovery(_ assignments: [ActionShortcutAssignmentRecord]) -> Bool {
+        replaceAll(assignments, allowsRecovery: true)
+    }
+
+    private func replaceAll(
+        _ assignments: [ActionShortcutAssignmentRecord],
+        allowsRecovery: Bool
+    ) -> Bool {
+        guard allowsRecovery || loadError == nil else { return false }
         guard assignments.count <= Self.maximumAssignmentCount,
               Set(assignments.map(\.id)).count == assignments.count,
               let data = try? encoder.encode(
@@ -92,6 +107,7 @@ final class ActionShortcutAssignmentStore {
         }
 
         var records = assignments()
+        guard loadError == nil else { return false }
         for candidate in candidates where !records.contains(where: {
             $0.reference == candidate.reference
         }) {
@@ -122,6 +138,7 @@ final class ActionShortcutAssignmentStore {
         }
 
         var records = self.assignments()
+        guard loadError == nil else { return false }
         for assignment in assignments where !records.contains(where: {
             $0.reference == assignment.reference
         }) {

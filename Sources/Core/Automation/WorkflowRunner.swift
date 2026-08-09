@@ -122,7 +122,7 @@ final class WorkflowRunner {
         }
         let stack = WorkflowExecutionContext.workflowStack
         if stack.contains(workflowID) {
-            recordRejectedRun(
+            await recordRejectedRun(
                 runID: runID,
                 workflow: workflow,
                 source: source,
@@ -131,7 +131,7 @@ final class WorkflowRunner {
             return .failed(message: FeatureL10n.string("检测到递归工作流调用。"))
         }
         if stack.count >= WorkflowExecutionLimits.maximumDepth {
-            recordRejectedRun(
+            await recordRejectedRun(
                 runID: runID,
                 workflow: workflow,
                 source: source,
@@ -164,7 +164,7 @@ final class WorkflowRunner {
             source: source,
             startedAt: now()
         )
-        _ = store.record(run)
+        _ = await store.record(run)
         onRunChange?()
 
         defer {
@@ -180,7 +180,7 @@ final class WorkflowRunner {
                     remainingSteps: workflow.steps.dropFirst(index + 1),
                     to: &run
                 )
-                finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
+                await finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
                 return .cancelled
             }
 
@@ -193,7 +193,7 @@ final class WorkflowRunner {
                         remainingSteps: workflow.steps.dropFirst(index + 1),
                         to: &run
                     )
-                    finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
+                    await finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
                     return .cancelled
                 }
             }
@@ -211,12 +211,16 @@ final class WorkflowRunner {
                     messageLocalizationKey: .actionVersionUnavailable
                 )
                 run.stepResults.append(result)
-                _ = store.record(run)
+                _ = await store.record(run, persistenceMode: .coalesced)
                 onRunChange?()
                 hadFailure = true
                 if originalStep.errorPolicy == .stop {
                     appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
-                    finish(&run, status: .failed, summaryLocalizationKey: .requiredActionUnavailable)
+                    await finish(
+                        &run,
+                        status: .failed,
+                        summaryLocalizationKey: .requiredActionUnavailable
+                    )
                     return .failed(message: FeatureL10n.string("必需操作不可用。"))
                 }
                 continue
@@ -234,7 +238,7 @@ final class WorkflowRunner {
                 outcome: outcome
             )
             run.stepResults.append(result)
-            _ = store.record(run)
+            _ = await store.record(run, persistenceMode: .coalesced)
             onRunChange?()
 
             switch result.status {
@@ -242,23 +246,27 @@ final class WorkflowRunner {
                 continue
             case .cancelled:
                 appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
-                finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
+                await finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
                 return .cancelled
             case .failed, .timedOut, .unavailable, .skipped:
                 hadFailure = true
                 if originalStep.errorPolicy == .stop {
                     appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
-                    finish(&run, status: .failed, summaryLocalizationKey: .stoppedAtFailedStep)
+                    await finish(
+                        &run,
+                        status: .failed,
+                        summaryLocalizationKey: .stoppedAtFailedStep
+                    )
                     return .failed(message: FeatureL10n.string("工作流在失败步骤处停止。"))
                 }
             }
         }
 
         if hadFailure {
-            finish(&run, status: .failed, summaryLocalizationKey: .completedWithFailures)
+            await finish(&run, status: .failed, summaryLocalizationKey: .completedWithFailures)
             return .failed(message: FeatureL10n.string("部分步骤失败。"))
         }
-        finish(&run, status: .succeeded, summaryLocalizationKey: .completed)
+        await finish(&run, status: .succeeded, summaryLocalizationKey: .completed)
         return .succeeded()
     }
 
@@ -406,12 +414,12 @@ final class WorkflowRunner {
         _ run: inout WorkflowRun,
         status: WorkflowRunStatus,
         summaryLocalizationKey: WorkflowHistoryLocalizationKey
-    ) {
+    ) async {
         run.status = status
         run.finishedAt = now()
         run.summary = summaryLocalizationKey.localizedText
         run.summaryLocalizationKey = summaryLocalizationKey
-        _ = store.record(run)
+        _ = await store.record(run)
         onRunChange?()
     }
 
@@ -420,9 +428,9 @@ final class WorkflowRunner {
         workflow: WorkflowDefinition,
         source: WorkflowRunSource,
         summaryLocalizationKey: WorkflowHistoryLocalizationKey
-    ) {
+    ) async {
         let timestamp = now()
-        _ = store.record(
+        _ = await store.record(
             WorkflowRun(
                 id: runID,
                 workflowID: workflow.id,

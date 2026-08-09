@@ -1,16 +1,78 @@
 import Foundation
 import MacToolsPluginKit
 
+private struct WorkflowHistoryEnvelope: Codable {
+    let formatVersion: Int
+    let runs: [WorkflowRun]
+}
+
+/// Foundation documents UserDefaults access as thread-safe. The wrapper makes that guarantee
+/// explicit while the main actor reads definitions and the history actor persists run snapshots.
+private final class WorkflowHistoryDefaults: @unchecked Sendable {
+    let value: UserDefaults
+
+    init(_ value: UserDefaults) {
+        self.value = value
+    }
+}
+
+private actor WorkflowHistoryPersistence {
+    private let defaults: WorkflowHistoryDefaults
+    private let key: String
+    private let maximumPayloadByteCount: Int
+    private let encoder = JSONEncoder()
+    private var latestRevision = 0
+
+    init(defaults: WorkflowHistoryDefaults, key: String, maximumPayloadByteCount: Int) {
+        self.defaults = defaults
+        self.key = key
+        self.maximumPayloadByteCount = maximumPayloadByteCount
+    }
+
+    func persist(_ runs: [WorkflowRun], coalesced: Bool, revision: Int) -> Bool {
+        guard revision >= latestRevision else { return true }
+        latestRevision = revision
+        guard coalesced else {
+            return write(runs)
+        }
+        Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return
+            }
+            await self?.persistIfCurrent(runs, revision: revision)
+        }
+        return true
+    }
+
+    private func persistIfCurrent(_ runs: [WorkflowRun], revision: Int) {
+        guard revision == latestRevision else { return }
+        _ = write(runs)
+    }
+
+    private func write(_ runs: [WorkflowRun]) -> Bool {
+        do {
+            let data = try encoder.encode(
+                WorkflowHistoryEnvelope(
+                    formatVersion: WorkflowRun.currentFormatVersion,
+                    runs: runs
+                )
+            )
+            guard data.count <= maximumPayloadByteCount else { return false }
+            defaults.value.set(data, forKey: key)
+            return defaults.value.data(forKey: key) == data
+        } catch {
+            return false
+        }
+    }
+}
+
 @MainActor
 final class WorkflowStore {
     private struct WorkflowEnvelope: Codable {
         let formatVersion: Int
         let workflows: [WorkflowDefinition]
-    }
-
-    private struct HistoryEnvelope: Codable {
-        let formatVersion: Int
-        let runs: [WorkflowRun]
     }
 
     private struct PortableWorkflowEnvelope: Codable {
@@ -36,14 +98,25 @@ final class WorkflowStore {
     static let maximumHistoryCount = 256
     static let maximumPayloadByteCount = 2 * 1_024 * 1_024
 
-    private let userDefaults: UserDefaults
+    private let defaults: WorkflowHistoryDefaults
+    private var userDefaults: UserDefaults { defaults.value }
+    private let historyPersistence: WorkflowHistoryPersistence
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var historyCache: [WorkflowRun]?
+    private var historyPersistenceRevision = 0
+    private var pendingHistoryPersistenceTask: Task<Bool, Never>?
     private(set) var workflowLoadError: String?
     private(set) var historyLoadError: String?
 
     init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+        let defaults = WorkflowHistoryDefaults(userDefaults)
+        self.defaults = defaults
+        self.historyPersistence = WorkflowHistoryPersistence(
+            defaults: defaults,
+            key: DefaultsKey.history,
+            maximumPayloadByteCount: Self.maximumPayloadByteCount
+        )
         recoverInterruptedRuns()
     }
 
@@ -78,6 +151,9 @@ final class WorkflowStore {
     @discardableResult
     func create(name: String = FeatureL10n.string("新建工作流")) -> Result<WorkflowDefinition, WorkflowStoreError> {
         var stored = workflows()
+        guard workflowLoadError == nil else {
+            return .failure(.recoveryRequired)
+        }
         guard stored.count < Self.maximumWorkflowCount else {
             return .failure(.maximumWorkflowCountReached)
         }
@@ -95,6 +171,9 @@ final class WorkflowStore {
             return .failure(.invalidWorkflow(failure))
         }
         var stored = workflows()
+        guard workflowLoadError == nil else {
+            return .failure(.recoveryRequired)
+        }
         var updated = workflow
         updated.updatedAt = .now
         if let index = stored.firstIndex(where: { $0.id == workflow.id }) {
@@ -114,13 +193,18 @@ final class WorkflowStore {
     @discardableResult
     func delete(id: UUID) -> Bool {
         var stored = workflows()
+        guard workflowLoadError == nil else { return false }
         let oldCount = stored.count
         stored.removeAll { $0.id == id }
         return stored.count != oldCount && replaceWorkflows(stored)
     }
 
     func duplicate(id: UUID) -> Result<WorkflowDefinition, WorkflowStoreError> {
-        guard let source = workflow(id: id) else {
+        let stored = workflows()
+        guard workflowLoadError == nil else {
+            return .failure(.recoveryRequired)
+        }
+        guard let source = stored.first(where: { $0.id == id }) else {
             return .failure(.workflowNotFound)
         }
         var copy = WorkflowDefinition(
@@ -146,6 +230,7 @@ final class WorkflowStore {
     @discardableResult
     func move(id: UUID, offset: Int) -> Bool {
         var stored = workflows()
+        guard workflowLoadError == nil else { return false }
         guard let source = stored.firstIndex(where: { $0.id == id }) else {
             return false
         }
@@ -195,6 +280,7 @@ final class WorkflowStore {
     @discardableResult
     func migrateReferences(using registry: ActionRegistry) -> Bool {
         var stored = workflows()
+        guard workflowLoadError == nil else { return false }
         var changed = false
         for workflowIndex in stored.indices {
             for stepIndex in stored[workflowIndex].steps.indices {
@@ -215,8 +301,14 @@ final class WorkflowStore {
     }
 
     func history(workflowID: UUID? = nil) -> [WorkflowRun] {
+        if let historyCache {
+            return workflowID.map { id in
+                historyCache.filter { $0.workflowID == id }
+            } ?? historyCache
+        }
         guard let data = userDefaults.data(forKey: DefaultsKey.history) else {
             historyLoadError = nil
+            historyCache = []
             return []
         }
         guard data.count <= Self.maximumPayloadByteCount else {
@@ -224,7 +316,7 @@ final class WorkflowStore {
             return []
         }
         do {
-            let envelope = try decoder.decode(HistoryEnvelope.self, from: data)
+            let envelope = try decoder.decode(WorkflowHistoryEnvelope.self, from: data)
             guard envelope.formatVersion == WorkflowRun.currentFormatVersion,
                   envelope.runs.count <= Self.maximumHistoryCount,
                   Set(envelope.runs.map(\.id)).count == envelope.runs.count,
@@ -235,6 +327,7 @@ final class WorkflowStore {
             }
             historyLoadError = nil
             let runs = migrateLegacyHistory(envelope.runs)
+            historyCache = runs
             if runs != envelope.runs {
                 _ = replaceHistory(runs)
             }
@@ -248,16 +341,75 @@ final class WorkflowStore {
         }
     }
 
+    enum HistoryPersistenceMode {
+        case immediate
+        case coalesced
+    }
+
     @discardableResult
-    func record(_ run: WorkflowRun) -> Bool {
+    func record(
+        _ run: WorkflowRun,
+        persistenceMode: HistoryPersistenceMode = .immediate
+    ) async -> Bool {
+        guard let update = historyUpdate(for: run) else { return false }
+        let runs = update.runs
+        historyCache = runs
+        let revision = nextHistoryPersistenceRevision()
+        let persisted = await historyPersistence.persist(
+            runs,
+            coalesced: persistenceMode == .coalesced,
+            revision: revision
+        )
+        if !persisted,
+           persistenceMode == .immediate,
+           revision == historyPersistenceRevision {
+            historyCache = update.previousRuns
+            historyLoadError = "history-persistence-failed"
+        }
+        return persisted
+    }
+
+    @discardableResult
+    func recordWithoutWaitingForPersistence(_ run: WorkflowRun) -> Bool {
+        guard let update = historyUpdate(for: run) else { return false }
+        historyCache = update.runs
+        let runs = update.runs
+        let revision = nextHistoryPersistenceRevision()
+        pendingHistoryPersistenceTask = Task { [historyPersistence] in
+            await historyPersistence.persist(
+                runs,
+                coalesced: false,
+                revision: revision
+            )
+        }
+        return true
+    }
+
+    func flushPendingHistoryPersistence() async {
+        while let task = pendingHistoryPersistenceTask {
+            pendingHistoryPersistenceTask = nil
+            _ = await task.value
+        }
+    }
+
+    private func nextHistoryPersistenceRevision() -> Int {
+        historyPersistenceRevision += 1
+        return historyPersistenceRevision
+    }
+
+    private func historyUpdate(
+        for run: WorkflowRun
+    ) -> (runs: [WorkflowRun], previousRuns: [WorkflowRun])? {
         let sanitizedRun = migrateLegacyHistory([run])[0]
         var runs = history()
+        guard historyLoadError == nil else { return nil }
+        let previousRuns = runs
         runs.removeAll { $0.id == sanitizedRun.id }
         runs.insert(sanitizedRun, at: 0)
         if runs.count > Self.maximumHistoryCount {
             runs.removeLast(runs.count - Self.maximumHistoryCount)
         }
-        return replaceHistory(runs)
+        return (runs, previousRuns)
     }
 
     func exportWorkflow(
@@ -265,16 +417,20 @@ final class WorkflowStore {
         registry: ActionRegistry,
         referencePortability: ((ActionReference) -> ActionReferencePortability)? = nil
     ) -> Result<Data, WorkflowStoreError> {
-        guard let workflow = workflow(id: id) else {
+        let stored = workflows()
+        guard workflowLoadError == nil else {
+            return .failure(.recoveryRequired)
+        }
+        guard let workflow = stored.first(where: { $0.id == id }) else {
             return .failure(.workflowNotFound)
         }
         guard WorkflowPortabilityAnalysis.portableWorkflowIDs(
-            in: workflows(),
+            in: stored,
             referencePortability: referencePortability ?? { registry.portability(of: $0) }
         ).contains(workflow.id) else {
             return .failure(.unsafeForExport)
         }
-        let exportedWorkflows = workflowDependencies(rootID: workflow.id, in: workflows())
+        let exportedWorkflows = workflowDependencies(rootID: workflow.id, in: stored)
         guard !exportedWorkflows.isEmpty else {
             return .failure(.unsafeForExport)
         }
@@ -315,6 +471,9 @@ final class WorkflowStore {
         }
 
         let existing = workflows()
+        guard workflowLoadError == nil else {
+            return .failure(.recoveryRequired)
+        }
         guard existing.count + importedWorkflows.count <= Self.maximumWorkflowCount else {
             return .failure(.maximumWorkflowCountReached)
         }
@@ -415,7 +574,7 @@ final class WorkflowStore {
     private func replaceHistory(_ runs: [WorkflowRun]) -> Bool {
         do {
             let data = try encoder.encode(
-                HistoryEnvelope(
+                WorkflowHistoryEnvelope(
                     formatVersion: WorkflowRun.currentFormatVersion,
                     runs: runs
                 )
@@ -424,7 +583,11 @@ final class WorkflowStore {
                 return false
             }
             userDefaults.set(data, forKey: DefaultsKey.history)
-            return userDefaults.data(forKey: DefaultsKey.history) == data
+            let persisted = userDefaults.data(forKey: DefaultsKey.history) == data
+            if persisted {
+                historyCache = runs
+            }
+            return persisted
         } catch {
             return false
         }

@@ -315,6 +315,150 @@ final class SavedScriptsPluginTests: XCTestCase {
         XCTAssertEqual(plugin.executionStore.record(for: script.id)?.status, .cancelled)
     }
 
+    func testRestoringChangedDefinitionCancelsItsActiveExecution() async throws {
+        let started = expectation(description: "redefined script started")
+        let checkpoint = expectation(description: "redefined script reached cancellation checkpoint")
+        let runner = CheckpointSavedScriptRunnerStub(
+            onStart: { started.fulfill() },
+            onCheckpoint: { checkpoint.fulfill() }
+        )
+        let plugin = SavedScriptsPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "saved-scripts",
+                storage: SavedScriptsTestStorage()
+            ),
+            runner: runner
+        )
+        var script = try plugin.store.save(SavedScript(
+            name: "Versioned",
+            kind: .zsh,
+            source: "echo original",
+            includeSourceInBackup: true
+        )).get()
+        let originalBackup = try XCTUnwrap(plugin.makePortablePreferencesBackup())
+        script.source = "sleep 60"
+        script = try plugin.store.save(script).get()
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: ActionReference(
+                key: ActionKey(providerID: plugin.metadata.id, actionID: script.actionID)
+            ),
+            source: .workflow,
+            mode: .background
+        ))
+        let resultTask = Task { @MainActor in await handle.result() }
+        await fulfillment(of: [started], timeout: 1)
+
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: originalBackup))
+        await runner.releaseCheckpoint()
+        await fulfillment(of: [checkpoint], timeout: 1)
+        let wasCancelledAtCheckpoint = await runner.wasCancelledAtCheckpoint()
+        if wasCancelledAtCheckpoint != true {
+            plugin.cancelExecution(scriptID: script.id)
+        }
+        let result = await resultTask.value
+
+        XCTAssertEqual(result, .cancelled)
+        XCTAssertEqual(wasCancelledAtCheckpoint, true)
+        XCTAssertEqual(plugin.store.script(id: script.id)?.source, "echo original")
+    }
+
+    func testRestoringLibraryWithoutActiveScriptCancelsItsExecution() async throws {
+        let started = expectation(description: "removed script started")
+        let checkpoint = expectation(description: "removed script reached cancellation checkpoint")
+        let runner = CheckpointSavedScriptRunnerStub(
+            onStart: { started.fulfill() },
+            onCheckpoint: { checkpoint.fulfill() }
+        )
+        let plugin = SavedScriptsPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "saved-scripts",
+                storage: SavedScriptsTestStorage()
+            ),
+            runner: runner
+        )
+        let script = try plugin.store.save(SavedScript(
+            name: "Removed During Restore",
+            kind: .zsh,
+            source: "sleep 60",
+            includeSourceInBackup: true
+        )).get()
+        let emptyLibrary = SavedScriptsPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "saved-scripts",
+                storage: SavedScriptsTestStorage()
+            ),
+            runner: SavedScriptRunnerStub()
+        )
+        let emptyBackup = try XCTUnwrap(emptyLibrary.makePortablePreferencesBackup())
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: ActionReference(
+                key: ActionKey(providerID: plugin.metadata.id, actionID: script.actionID)
+            ),
+            source: .workflow,
+            mode: .background
+        ))
+        let resultTask = Task { @MainActor in await handle.result() }
+        await fulfillment(of: [started], timeout: 1)
+
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: emptyBackup))
+        await runner.releaseCheckpoint()
+        await fulfillment(of: [checkpoint], timeout: 1)
+        let wasCancelledAtCheckpoint = await runner.wasCancelledAtCheckpoint()
+        if wasCancelledAtCheckpoint != true {
+            plugin.cancelExecution(scriptID: script.id)
+        }
+        let result = await resultTask.value
+
+        XCTAssertEqual(result, .cancelled)
+        XCTAssertEqual(wasCancelledAtCheckpoint, true)
+        XCTAssertNil(plugin.store.script(id: script.id))
+    }
+
+    func testFailedRestoreDoesNotCancelActiveExecution() async throws {
+        let storage = SavedScriptsTestStorage()
+        let started = expectation(description: "script started before failed restore")
+        let checkpoint = expectation(description: "failed restore cancellation checkpoint")
+        let runner = CheckpointSavedScriptRunnerStub(
+            onStart: { started.fulfill() },
+            onCheckpoint: { checkpoint.fulfill() }
+        )
+        let plugin = SavedScriptsPlugin(
+            context: PluginRuntimeContext(pluginID: "saved-scripts", storage: storage),
+            runner: runner
+        )
+        var script = try plugin.store.save(SavedScript(
+            name: "Keep Running",
+            kind: .zsh,
+            source: "echo original",
+            includeSourceInBackup: true
+        )).get()
+        let originalBackup = try XCTUnwrap(plugin.makePortablePreferencesBackup())
+        script.source = "sleep 60"
+        script = try plugin.store.save(script).get()
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: ActionReference(
+                key: ActionKey(providerID: plugin.metadata.id, actionID: script.actionID)
+            ),
+            source: .workflow,
+            mode: .background
+        ))
+        let resultTask = Task { @MainActor in await handle.result() }
+        await fulfillment(of: [started], timeout: 1)
+
+        storage.blocksWrites = true
+        XCTAssertFalse(plugin.restorePortablePreferencesReportingResult(from: originalBackup))
+        XCTAssertEqual(plugin.store.script(id: script.id)?.source, "sleep 60")
+
+        await runner.releaseCheckpoint()
+        await fulfillment(of: [checkpoint], timeout: 1)
+        let wasCancelledByRestore = await runner.wasCancelledAtCheckpoint()
+        plugin.cancelExecution(scriptID: script.id)
+        let result = await resultTask.value
+
+        XCTAssertEqual(wasCancelledByRestore, false)
+        XCTAssertEqual(result, .cancelled)
+    }
+
     func testDeletingScriptCanCancelCanonicalExecutionBeforeRemovingItsRecord() async throws {
         let runner = SuspendingSavedScriptRunnerStub()
         let plugin = SavedScriptsPlugin(
@@ -351,6 +495,55 @@ final class SavedScriptsPluginTests: XCTestCase {
         XCTAssertEqual(result, .cancelled)
         XCTAssertTrue(wasCancelled)
         XCTAssertNil(plugin.executionStore.record(for: script.id))
+    }
+}
+
+private actor CheckpointSavedScriptRunnerStub: SavedScriptRunning {
+    private let onStart: @Sendable () -> Void
+    private let onCheckpoint: @Sendable () -> Void
+    private var releaseWasRequested = false
+    private var checkpointContinuation: CheckedContinuation<Void, Never>?
+    private var cancellationAtCheckpoint: Bool?
+
+    init(
+        onStart: @escaping @Sendable () -> Void,
+        onCheckpoint: @escaping @Sendable () -> Void
+    ) {
+        self.onStart = onStart
+        self.onCheckpoint = onCheckpoint
+    }
+
+    func run(_ script: SavedScript) async throws -> SavedScriptProcessResult {
+        onStart()
+        if !releaseWasRequested {
+            await withCheckedContinuation { continuation in
+                if releaseWasRequested {
+                    continuation.resume()
+                } else {
+                    checkpointContinuation = continuation
+                }
+            }
+        }
+
+        cancellationAtCheckpoint = Task.isCancelled
+        onCheckpoint()
+        try await Task.sleep(for: .seconds(60))
+        return SavedScriptProcessResult(
+            exitCode: 0,
+            standardOutput: "",
+            standardError: "",
+            outputWasTruncated: false
+        )
+    }
+
+    func releaseCheckpoint() {
+        releaseWasRequested = true
+        checkpointContinuation?.resume()
+        checkpointContinuation = nil
+    }
+
+    func wasCancelledAtCheckpoint() -> Bool? {
+        cancellationAtCheckpoint
     }
 }
 

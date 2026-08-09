@@ -7,6 +7,7 @@ enum ActionShortcutAssignmentError: Error, Equatable {
     case invalidBinding(ShortcutValidationError)
     case conflict(ownerDescription: String)
     case persistenceFailed
+    case recoveryRequired
 
     var localizedDescription: String {
         switch self {
@@ -20,6 +21,8 @@ enum ActionShortcutAssignmentError: Error, Equatable {
             ).localizedDescription
         case .persistenceFailed:
             return FeatureL10n.string("无法保存快捷键。")
+        case .recoveryRequired:
+            return FeatureL10n.string("快捷键数据无法读取；请先导入备份恢复。")
         }
     }
 }
@@ -157,6 +160,9 @@ final class ShortcutAssignmentService {
         }
 
         var records = store.assignments()
+        guard store.loadError == nil else {
+            return .failure(.recoveryRequired)
+        }
         let targetID = assignmentID
             ?? records.first(where: { $0.reference == reference })?.id
         if let assignmentID,
@@ -203,6 +209,7 @@ final class ShortcutAssignmentService {
     @discardableResult
     func clear(_ reference: ActionReference, assignmentID: UUID? = nil) -> Bool {
         var records = store.assignments()
+        guard store.loadError == nil else { return false }
         let originalCount = records.count
         records.removeAll { record in
             guard record.reference == reference else { return false }
@@ -247,7 +254,7 @@ final class ShortcutAssignmentService {
             }
             seenBindings[record.binding] = record
         }
-        guard store.replaceAll(records) else {
+        guard store.replaceAllForRecovery(records) else {
             return .failure(.persistenceFailed)
         }
         synchronize(

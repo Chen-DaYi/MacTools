@@ -207,7 +207,7 @@ final class AutomationRuntime {
         reason: AutomationRunSkipReason
     ) {
         let timestamp = now()
-        _ = workflowStore.record(
+        _ = workflowStore.recordWithoutWaitingForPersistence(
             WorkflowRun(
                 workflowID: rule.workflowID,
                 workflowName: workflowName,

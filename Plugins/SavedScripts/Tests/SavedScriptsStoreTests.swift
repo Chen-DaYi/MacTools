@@ -86,7 +86,35 @@ final class SavedScriptsStoreTests: XCTestCase {
 
         XCTAssertTrue(store.scripts.isEmpty)
         XCTAssertEqual(store.loadError, "invalid-saved-scripts-library")
+        XCTAssertThrowsError(try store.save(SavedScript(
+            name: "Must Not Overwrite",
+            kind: .zsh,
+            source: "echo protected"
+        )).get()) { error in
+            XCTAssertEqual(error as? SavedScriptValidationError, .recoveryRequired)
+        }
+        XCTAssertFalse(store.remove(id: UUID()))
         XCTAssertEqual(storage.data(forKey: "library.v1"), corrupt)
+    }
+
+    func testWriteReadbackFailureKeepsPublishedAndStoredLibraryUnchanged() throws {
+        let storage = SavedScriptsTestStorage()
+        let store = SavedScriptsStore(storage: storage)
+        let original = try store.save(SavedScript(
+            name: "Original",
+            kind: .zsh,
+            source: "echo original"
+        )).get()
+        let storedData = try XCTUnwrap(storage.data(forKey: "library.v1"))
+        var changed = original
+        changed.source = "echo changed"
+        storage.blocksWrites = true
+
+        XCTAssertThrowsError(try store.save(changed).get()) { error in
+            XCTAssertEqual(error as? SavedScriptValidationError, .persistenceFailed)
+        }
+        XCTAssertEqual(store.scripts, [original])
+        XCTAssertEqual(storage.data(forKey: "library.v1"), storedData)
     }
 
     func testValidationRejectsEmptyOversizedAndOutOfRangeScripts() {

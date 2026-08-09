@@ -139,9 +139,16 @@ private final class TrackpadRecognitionFrameBarrier: @unchecked Sendable {
     }
 }
 
+private struct TrackpadRestoreTransactionFixture: Codable {
+    let mappings: Data?
+    let ignoresGesturesWhileTyping: Bool?
+    let typingGracePeriod: TimeInterval?
+}
+
 @MainActor
 private final class TrackpadGestureMemoryStorage: PluginStorage {
     var values: [String: Any] = [:]
+    var blockedSetKeys: Set<String> = []
 
     func object(forKey key: String) -> Any? { values[key] }
     func data(forKey key: String) -> Data? { values[key] as? Data }
@@ -149,7 +156,10 @@ private final class TrackpadGestureMemoryStorage: PluginStorage {
     func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
     func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
-    func set(_ value: Any?, forKey key: String) { values[key] = value }
+    func set(_ value: Any?, forKey key: String) {
+        guard !blockedSetKeys.contains(key) else { return }
+        values[key] = value
+    }
     func removeObject(forKey key: String) { values.removeValue(forKey: key) }
     func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
         guard values[key] == nil, let value = values[legacyKey] else { return }
@@ -477,6 +487,67 @@ final class TrackpadGestureStoreTests: XCTestCase {
 
         let unfiltered = try XCTUnwrap(store.portableBackup())
         XCTAssertFalse(restored.restorePortableBackup(unfiltered, using: context))
+    }
+
+    func testPortableBackupWriteFailureRollsBackAllSettings() throws {
+        let source = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        XCTAssertTrue(source.save(TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )))
+        source.setTypingGracePeriod(1.2)
+        let backup = try XCTUnwrap(source.portableBackup())
+
+        let storage = TrackpadGestureMemoryStorage()
+        let destination = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let original = TrackpadGestureMapping(
+            gesture: .fourFingerTap,
+            action: .middleClick
+        )
+        XCTAssertTrue(destination.save(original))
+        destination.setIgnoresGesturesWhileTyping(false)
+        destination.setTypingGracePeriod(0.8)
+        storage.blockedSetKeys = ["ignore-while-typing"]
+
+        XCTAssertFalse(destination.restorePortableBackup(backup))
+        storage.blockedSetKeys = []
+        let reloaded = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reloaded.mappings, [original])
+        XCTAssertFalse(reloaded.ignoresGesturesWhileTyping)
+        XCTAssertEqual(reloaded.typingGracePeriod, 0.8)
+    }
+
+    func testInitializationRecoversInterruptedPortableRestoreJournal() throws {
+        let storage = TrackpadGestureMemoryStorage()
+        let originalStore = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let original = TrackpadGestureMapping(
+            gesture: .fourFingerTap,
+            action: .middleClick
+        )
+        XCTAssertTrue(originalStore.save(original))
+        originalStore.setIgnoresGesturesWhileTyping(false)
+        originalStore.setTypingGracePeriod(0.8)
+        let transaction = TrackpadRestoreTransactionFixture(
+            mappings: storage.data(forKey: "mappings"),
+            ignoresGesturesWhileTyping: false,
+            typingGracePeriod: 0.8
+        )
+        storage.values["portable-restore-transaction.v1"] = try JSONEncoder().encode(transaction)
+        storage.values["mappings"] = try JSONEncoder().encode([
+            TrackpadGestureMapping(gesture: .threeFingerTap, action: .middleClick),
+        ])
+        storage.values["ignore-while-typing"] = true
+        storage.values["typing-grace-period"] = 1.2
+
+        let recovered = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+
+        XCTAssertEqual(recovered.mappings, [original])
+        XCTAssertFalse(recovered.ignoresGesturesWhileTyping)
+        XCTAssertEqual(recovered.typingGracePeriod, 0.8)
+        XCTAssertNil(storage.data(forKey: "portable-restore-transaction.v1"))
     }
 
     func testDuplicateGestureIsRejectedEvenWhenExistingMappingIsDisabled() {

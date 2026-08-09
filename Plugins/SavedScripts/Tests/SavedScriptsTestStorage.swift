@@ -4,6 +4,7 @@ import MacToolsPluginKit
 @MainActor
 final class SavedScriptsTestStorage: PluginStorage {
     var values: [String: Any] = [:]
+    var blocksWrites = false
 
     func object(forKey key: String) -> Any? { values[key] }
     func data(forKey key: String) -> Data? { values[key] as? Data }
@@ -11,7 +12,10 @@ final class SavedScriptsTestStorage: PluginStorage {
     func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
     func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
-    func set(_ value: Any?, forKey key: String) { values[key] = value }
+    func set(_ value: Any?, forKey key: String) {
+        guard !blocksWrites else { return }
+        values[key] = value
+    }
     func removeObject(forKey key: String) { values[key] = nil }
 
     func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {

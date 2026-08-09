@@ -147,6 +147,9 @@ final class ActionGridStoreTests: XCTestCase {
 
         XCTAssertTrue(failed.entries.isEmpty)
         XCTAssertEqual(failed.loadError, "invalid-grid-layout")
+        XCTAssertFalse(failed.add(reference: ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "must-not-overwrite")
+        )))
         XCTAssertEqual(storage.data(forKey: "layout.v1"), corrupt)
 
         let sourceStorage = ActionGridTestStorage()

@@ -1,3 +1,5 @@
+import EventKit
+import Foundation
 import MacToolsPluginKit
 import XCTest
 @testable import MacTools
@@ -144,6 +146,29 @@ final class SystemAutomationProvidersTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testCalendarProviderDoesNotBlockMainActorWhileQueryIsRunning() async {
+        let query = SlowCalendarEventQuery()
+        let provider = SystemCalendarAutomationTriggerProvider(
+            eventQuery: query,
+            authorizationStatus: { .fullAccess }
+        )
+        let rule = AutomationRule(
+            workflowID: UUID(),
+            trigger: .calendar(CalendarAutomationTrigger(titleContains: "Review"))
+        )
+        provider.start { _ in }
+
+        provider.refresh(rules: [rule])
+        await query.waitUntilStarted()
+        let configurationCount = await query.configurationCount()
+        let queryIsSleeping = await query.isSleeping()
+        XCTAssertEqual(configurationCount, 1)
+        XCTAssertTrue(queryIsSleeping)
+
+        provider.stop()
+    }
+
     func testDisplayTransitionsPreserveDisconnectedDisplayMetadata() {
         let date = Date(timeIntervalSince1970: 100)
         let builtIn = AutomationDisplaySnapshot(identifier: "1", name: "Built-in")
@@ -261,4 +286,33 @@ final class SystemAutomationProvidersTests: XCTestCase {
             offsetMinutes: 0
         )
     }
+}
+
+private actor SlowCalendarEventQuery: CalendarAutomationEventQuerying {
+    private var started = false
+    private var sleeping = false
+    private var receivedConfigurationCount = 0
+
+    func requestAccess() async -> Bool { true }
+
+    func scheduledEvents(
+        currentDate _: Date,
+        configurations: [CalendarAutomationTrigger]
+    ) async -> [CalendarAutomationScheduledEvent] {
+        started = true
+        sleeping = true
+        receivedConfigurationCount = configurations.count
+        try? await Task.sleep(for: .milliseconds(200))
+        sleeping = false
+        return []
+    }
+
+    func waitUntilStarted() async {
+        while !started {
+            await Task.yield()
+        }
+    }
+
+    func configurationCount() -> Int { receivedConfigurationCount }
+    func isSleeping() -> Bool { sleeping }
 }

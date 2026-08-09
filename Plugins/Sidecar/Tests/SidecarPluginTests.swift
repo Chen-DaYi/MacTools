@@ -421,6 +421,32 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertNil(restored.deviceIDs(inPortablePreferences: Data("invalid".utf8)))
     }
 
+    func testPortablePreferencesWriteFailureRollsBackAllKeys() throws {
+        let source = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        source.reconcile(with: [SidecarDevice(id: "new-ipad", name: "New iPad")])
+        source.updateDisconnectAllShortcut(
+            ShortcutBinding(keyCode: 2, modifiers: [.command, .option])
+        )
+        source.updateConnectFirstAvailableShortcut(
+            ShortcutBinding(keyCode: 3, modifiers: [.command, .shift])
+        )
+        let backup = try XCTUnwrap(source.portablePreferencesData())
+
+        let storage = InMemoryPluginStorage()
+        let destination = SidecarPreferencesStore(storage: storage)
+        destination.reconcile(with: [SidecarDevice(id: "old-ipad", name: "Old iPad")])
+        let oldDisconnect = ShortcutBinding(keyCode: 4, modifiers: [.command, .option])
+        destination.updateDisconnectAllShortcut(oldDisconnect)
+        storage.blockedSetKeys = ["disconnectAllShortcut"]
+
+        XCTAssertFalse(destination.restorePortablePreferences(from: backup))
+        storage.blockedSetKeys = []
+        let reloaded = SidecarPreferencesStore(storage: storage)
+        XCTAssertEqual(reloaded.devices.map(\.id), ["old-ipad"])
+        XCTAssertEqual(reloaded.disconnectAllShortcut, oldDisconnect)
+        XCTAssertNil(reloaded.connectFirstAvailableShortcut)
+    }
+
     func testOnlyCustomizedOfflineDevicePreferencesNeedToRemainVisible() {
         let defaultPreference = SidecarDevicePreference(id: "ipad-1", name: "My iPad")
         let wiredPreference = SidecarDevicePreference(
@@ -650,6 +676,7 @@ private final class FakeSidecarService: SidecarServicing {
 @MainActor
 private final class InMemoryPluginStorage: PluginStorage {
     private var store: [String: Any] = [:]
+    var blockedSetKeys: Set<String> = []
 
     func object(forKey key: String) -> Any? { store[key] }
     func data(forKey key: String) -> Data? { store[key] as? Data }
@@ -657,7 +684,10 @@ private final class InMemoryPluginStorage: PluginStorage {
     func stringArray(forKey key: String) -> [String]? { store[key] as? [String] }
     func integer(forKey key: String) -> Int { store[key] as? Int ?? 0 }
     func bool(forKey key: String) -> Bool { store[key] as? Bool ?? false }
-    func set(_ value: Any?, forKey key: String) { store[key] = value }
+    func set(_ value: Any?, forKey key: String) {
+        guard !blockedSetKeys.contains(key) else { return }
+        store[key] = value
+    }
     func removeObject(forKey key: String) { store.removeValue(forKey: key) }
     func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
         guard store[key] == nil, let value = store[legacyKey] else { return }

@@ -74,6 +74,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
     private var requiresAutoRestore = false
+    private var isActivated = false
     private var monitoringTask: Task<Void, Never>?
     private var sleepObserver: (any NSObjectProtocol)?
     private var wakeObserver: (any NSObjectProtocol)?
@@ -113,6 +114,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     // MARK: - MacToolsPlugin
 
     func activate(context: PluginRuntimeContext) {
+        isActivated = true
         startMonitoring()
         registerSleepWakeObservers()
         // Re-apply the persisted active preset so fan state is consistent
@@ -130,6 +132,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         if reason.requiresStateCleanup {
             restoreAutomaticControlIfNeeded(reason: String(describing: reason))
         }
+        isActivated = false
     }
 
     func refresh() {
@@ -195,11 +198,11 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     }
 
     func restorePortablePreferences(from data: Data) {
-        _ = presetStore.restorePortablePreferences(from: data)
+        _ = restorePortablePreferencesAndReconcileHardware(from: data)
     }
 
     func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
-        presetStore.restorePortablePreferences(from: data)
+        restorePortablePreferencesAndReconcileHardware(from: data)
     }
 
     func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
@@ -344,6 +347,29 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         }
         onStateChange?()
         return result == nil
+    }
+
+    private func restorePortablePreferencesAndReconcileHardware(from data: Data) -> Bool {
+        guard let previousPreferences = presetStore.makePortablePreferencesBackup(),
+              presetStore.restorePortablePreferences(from: data) else {
+            return false
+        }
+        guard isActivated else { return true }
+        guard !applyActivePreset() else { return true }
+
+        let importedPresetError = lastErrorMessage
+        guard presetStore.restorePortablePreferences(from: previousPreferences) else {
+            FanControlLog.plugin.error("Failed to roll back fan preferences after restore failure")
+            return false
+        }
+        let didRestoreHardware = applyActivePreset()
+        if didRestoreHardware {
+            lastErrorMessage = importedPresetError
+            onStateChange?()
+        } else {
+            FanControlLog.plugin.error("Failed to restore prior fan strategy after restore failure")
+        }
+        return false
     }
 
     private func presetActionReference(presetID: String) -> ActionReference {

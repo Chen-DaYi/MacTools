@@ -325,11 +325,11 @@ final class SavedScriptsPlugin:
     }
 
     func restorePortablePreferences(from data: Data) {
-        _ = store.restorePortableBackup(data)
+        _ = restorePortablePreferencesAndCancelChangedRuns(from: data)
     }
 
     func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
-        store.restorePortableBackup(data)
+        restorePortablePreferencesAndCancelChangedRuns(from: data)
     }
 
     func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
@@ -499,6 +499,16 @@ final class SavedScriptsPlugin:
         let run = ActiveRun(token: token, task: task, isManual: isManual)
         activeRuns[script.id] = run
         return run
+    }
+
+    private func restorePortablePreferencesAndCancelChangedRuns(from data: Data) -> Bool {
+        let previousScripts = Dictionary(uniqueKeysWithValues: store.scripts.map { ($0.id, $0) })
+        guard store.restorePortableBackup(data) else { return false }
+        for (scriptID, run) in activeRuns
+        where store.script(id: scriptID) != previousScripts[scriptID] {
+            run.task.cancel()
+        }
+        return true
     }
 
     private func waitForExecution(

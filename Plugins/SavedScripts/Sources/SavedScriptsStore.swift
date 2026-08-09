@@ -35,6 +35,9 @@ final class SavedScriptsStore: ObservableObject {
     @discardableResult
     func save(_ candidate: SavedScript) -> Result<SavedScript, Error> {
         do {
+            guard loadError == nil else {
+                throw SavedScriptValidationError.recoveryRequired
+            }
             let normalized = try candidate.normalized()
             var updated = scripts
             if let index = updated.firstIndex(where: { $0.id == normalized.id }) {
@@ -58,6 +61,7 @@ final class SavedScriptsStore: ObservableObject {
 
     @discardableResult
     func remove(id: UUID) -> Bool {
+        guard loadError == nil else { return false }
         var updated = scripts
         guard let index = updated.firstIndex(where: { $0.id == id }) else { return false }
         updated.remove(at: index)
@@ -68,12 +72,14 @@ final class SavedScriptsStore: ObservableObject {
             onMutation?()
             return true
         } catch {
-            loadError = error.localizedDescription
             return false
         }
     }
 
     func duplicate(id: UUID, copySuffix: String) -> Result<SavedScript, Error> {
+        guard loadError == nil else {
+            return .failure(SavedScriptValidationError.recoveryRequired)
+        }
         guard var copy = script(id: id) else {
             return .failure(SavedScriptValidationError.emptySource)
         }
@@ -148,7 +154,11 @@ final class SavedScriptsStore: ObservableObject {
     }
 
     private func persist(_ scripts: [SavedScript]) throws {
-        storage.set(try encode(try validated(scripts)), forKey: Self.storageKey)
+        let data = try encode(try validated(scripts))
+        storage.set(data, forKey: Self.storageKey)
+        guard storage.data(forKey: Self.storageKey) == data else {
+            throw SavedScriptValidationError.persistenceFailed
+        }
     }
 
     private func encode(_ scripts: [SavedScript]) throws -> Data {

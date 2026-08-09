@@ -51,6 +51,8 @@ final class AutomationRuleStoreTests: XCTestCase {
 
         XCTAssertTrue(store.rules().isEmpty)
         XCTAssertEqual(store.loadError, "invalid-rule-payload")
+        XCTAssertEqual(store.create(workflowID: UUID()), .failure(.recoveryRequired))
+        XCTAssertFalse(store.delete(id: UUID()))
         XCTAssertEqual(defaults.data(forKey: "automation.rules.v1"), corrupt)
 
         var invalid = AutomationRule(workflowID: UUID())
