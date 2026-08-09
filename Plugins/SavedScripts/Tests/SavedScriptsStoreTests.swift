@@ -55,6 +55,28 @@ final class SavedScriptsStoreTests: XCTestCase {
         XCTAssertEqual(restored.scripts.first?.workingDirectory, "")
     }
 
+    func testPortableRestoreReplacesScriptsAbsentFromBackup() throws {
+        let source = SavedScriptsStore(storage: SavedScriptsTestStorage())
+        let included = try source.save(SavedScript(
+            name: "Portable",
+            kind: .bash,
+            source: "printf portable",
+            includeSourceInBackup: true
+        )).get()
+        let backup = try XCTUnwrap(source.portableBackup())
+
+        let destination = SavedScriptsStore(storage: SavedScriptsTestStorage())
+        let localOnly = try destination.save(SavedScript(
+            name: "Local Only",
+            kind: .zsh,
+            source: "printf local"
+        )).get()
+
+        XCTAssertTrue(destination.restorePortableBackup(backup))
+        XCTAssertEqual(destination.scripts.map(\.id), [included.id])
+        XCTAssertNil(destination.script(id: localOnly.id))
+    }
+
     func testCorruptPayloadFailsClosedWithoutDeletingOriginalBytes() {
         let storage = SavedScriptsTestStorage()
         let corrupt = Data("not-json".utf8)

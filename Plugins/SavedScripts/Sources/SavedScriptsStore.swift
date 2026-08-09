@@ -116,11 +116,7 @@ final class SavedScriptsStore: ObservableObject {
             return false
         }
 
-        var merged = Dictionary(uniqueKeysWithValues: scripts.map { ($0.id, $0) })
-        for script in restored {
-            merged[script.id] = script
-        }
-        let updated = merged.values.sorted(by: Self.scriptOrder)
+        let updated = restored.sorted(by: Self.scriptOrder)
         guard updated.count <= Self.maximumScriptCount else { return false }
         do {
             try persist(updated)
