@@ -116,7 +116,6 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         ]
     }
 
-    var settingsSections: [PluginSettingsSection] { [] }
 
     var shortcutDefinitions: [PluginShortcutDefinition] {
         [
@@ -139,9 +138,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
                 settingsGroupDescription: localization.string(
                     "shortcut.exit.settingsGroupDescription",
                     defaultValue: "清洁模式启用时恢复输入并关闭黑屏覆盖。"
-                ),
-                settingsControlTitle: localization.string("shortcut.exit.settingsControlTitle", defaultValue: "退出"),
-                settingsControlSystemImage: "keyboard"
+                )
             )
         ]
     }
@@ -206,7 +203,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         }
     }
 
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
 
     func handleShortcutAction(id: String) {
         guard id == ActionID.exitPhysicalCleanMode else {

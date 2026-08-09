@@ -140,7 +140,6 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {
@@ -168,7 +167,7 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     // MARK: - Private

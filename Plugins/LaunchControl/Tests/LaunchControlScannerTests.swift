@@ -4,6 +4,26 @@ import MacToolsPluginKit
 @testable import LaunchControlPlugin
 
 final class LaunchControlScannerTests: XCTestCase {
+    func testManagerLayoutSwitchesAtCompactThreshold() {
+        XCTAssertTrue(LaunchControlManagerLayout.usesCompactPresentation(for: 539))
+        XCTAssertTrue(LaunchControlManagerLayout.usesCompactPresentation(for: 719))
+        XCTAssertFalse(LaunchControlManagerLayout.usesCompactPresentation(for: 720))
+        XCTAssertFalse(LaunchControlManagerLayout.usesCompactPresentation(for: 779))
+    }
+
+    func testManagerLayoutCompactsScanActivityInShortWindows() {
+        XCTAssertTrue(LaunchControlManagerLayout.usesCompactHeight(for: 350))
+        XCTAssertTrue(LaunchControlManagerLayout.usesCompactHeight(for: 519))
+        XCTAssertFalse(LaunchControlManagerLayout.usesCompactHeight(for: 520))
+        XCTAssertFalse(LaunchControlManagerLayout.usesCompactHeight(for: 608))
+    }
+
+    func testManagerSidebarWidthStaysWithinReadableBounds() {
+        XCTAssertEqual(LaunchControlManagerLayout.sidebarWidth(for: 720), 260)
+        XCTAssertEqual(LaunchControlManagerLayout.sidebarWidth(for: 800), 288)
+        XCTAssertEqual(LaunchControlManagerLayout.sidebarWidth(for: 960), 340)
+    }
+
     func testParsePlistExtractsCommonLaunchdFields() throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -106,6 +126,6 @@ final class LaunchControlPluginTests: XCTestCase {
         )
 
         XCTAssertTrue(host.panelItems.contains { $0.id == "launch-control" })
-        XCTAssertTrue(host.pluginConfigurationItems.contains { $0.pluginID == "launch-control" })
+        XCTAssertTrue(host.pluginSettingsItems.contains { $0.pluginID == "launch-control" })
     }
 }

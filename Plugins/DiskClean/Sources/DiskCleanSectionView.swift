@@ -78,7 +78,7 @@ struct DiskCleanBanner<Trailing: View>: View {
             trailing()
         }
         .pluginSettingsListRowPadding()
-        .pluginSettingsCardBackground(.plugin)
+        .pluginSettingsCardBackground(.standard)
     }
 }
 
@@ -112,7 +112,7 @@ struct DiskCleanEmptyState<Action: View>: View {
             .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             Spacer()
         }
-        .pluginSettingsCardBackground(.plugin)
+        .pluginSettingsCardBackground(.standard)
     }
 }
 
@@ -228,7 +228,7 @@ struct DiskCleanCleanupSectionView<Configuration: View>: View {
                 )
             }
             .pluginSettingsListRowPadding(interactive: true)
-            .pluginSettingsCardBackground(.plugin)
+            .pluginSettingsCardBackground(.standard)
 
             if let errorMessage = snapshot.errorMessage {
                 DiskCleanBanner(

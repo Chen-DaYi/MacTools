@@ -184,7 +184,7 @@ for raw in packages:
         "capabilities": manifest.get("capabilities", {
             "primaryPanel": False,
             "componentPanel": False,
-            "configuration": False,
+            "settings": "none",
         }),
         "permissions": manifest.get("permissions", []),
         "package": {
@@ -208,7 +208,7 @@ else:
     catalog_plugin_kit_version = requested_plugin_kit_version
 
 catalog = {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "catalogID": catalog_id,
     "generatedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "minimumHostVersion": minimum_host_version,

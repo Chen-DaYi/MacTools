@@ -190,13 +190,12 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var configuration: PluginConfiguration? {
+    var settingsPage: PluginSettingsPage? {
         guard let controller = controller as? XcodeCleanController else { return nil }
         let localization = localization
-        return PluginConfiguration(description: metadata.defaultDescription) { _ in
+        return .workspace(description: metadata.defaultDescription, scrolling: .host) { _ in
             XcodeCleanDetailView(
                 controller: controller,
                 localization: localization,
@@ -229,7 +228,7 @@ final class XcodeCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchor
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     // MARK: - Private

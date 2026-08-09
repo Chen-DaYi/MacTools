@@ -5,10 +5,20 @@ import MacToolsPluginKit
 /// group (per the settings spec). Bindings write straight through to the persisted
 /// `LaunchpadPreferences`.
 struct LaunchpadSettingsView: View {
+    enum SectionKind {
+        case window
+        case appearance
+        case background
+        case grid
+        case sorting
+        case hiddenApps
+    }
+
     @ObservedObject var preferences: LaunchpadPreferences
     /// Observed so the sorting group appears / disappears as the custom layout is created or reset.
     @ObservedObject var layoutStore: LaunchpadLayoutStore
     let localization: PluginLocalization
+    let sectionKind: SectionKind
 
     private var isAutoColumns: Binding<Bool> {
         Binding(
@@ -17,13 +27,20 @@ struct LaunchpadSettingsView: View {
         )
     }
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+        switch sectionKind {
+        case .window:
             windowSection
+        case .appearance:
             appearanceSection
+        case .background:
             backgroundSection
+        case .grid:
             gridSection
+        case .sorting:
             sortSection
+        case .hiddenApps:
             hiddenSection
         }
     }
@@ -152,7 +169,7 @@ struct LaunchpadSettingsView: View {
                         )
                     ) {
                         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                            Slider(
+                            PluginSettingsSlider(
                                 value: compactScaleBinding,
                                 in: Double(LaunchpadPreferences.minCompactScale)
                                     ... Double(LaunchpadPreferences.maxCompactScale),
@@ -235,7 +252,7 @@ struct LaunchpadSettingsView: View {
                     )
                 ) {
                     HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                        Slider(
+                        PluginSettingsSlider(
                             value: iconSizeBinding,
                             in: Double(LaunchpadPreferences.minIconSize)
                                 ... Double(LaunchpadPreferences.maxIconSize),
@@ -406,7 +423,7 @@ struct LaunchpadSettingsView: View {
                         )
                     ) {
                         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                            Slider(
+                            PluginSettingsSlider(
                                 value: dimPercentBinding,
                                 in: Double(LaunchpadBackgroundDim.percentRange.lowerBound)
                                     ... Double(LaunchpadBackgroundDim.percentRange.upperBound),
@@ -508,18 +525,12 @@ struct LaunchpadSettingsView: View {
     // MARK: - Building blocks
 
     private func section<Content: View>(
-        title: String,
-        icon: String,
+        title _: String,
+        icon _: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(title, systemImage: icon)
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .foregroundStyle(.secondary)
-            content()
-                .pluginSettingsListRowPadding()
-                .pluginSettingsCardBackground(.host)
-        }
+        content()
+            .pluginSettingsListRowPadding()
     }
 
     private func row<Control: View>(

@@ -64,7 +64,6 @@ struct TranslatorSettingsView: View {
                     languagePicker(selection: messageClearing($secondLanguage))
                 }
             }
-            .pluginSettingsCardBackground(.host)
         }
     }
 
@@ -92,7 +91,6 @@ struct TranslatorSettingsView: View {
                     }
                 }
             }
-            .pluginSettingsCardBackground(.host)
         }
     }
 
@@ -148,13 +146,11 @@ struct TranslatorSettingsView: View {
 
                     promptEditor(index: index)
                 }
-                .pluginSettingsCardBackground(.host)
             } else {
                 Text(localization.string("settings.providerDetail.empty", defaultValue: "请选择一个翻译服务。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .pluginSettingsListRowPadding()
-                    .pluginSettingsCardBackground(.host)
             }
         }
     }
@@ -270,7 +266,7 @@ struct TranslatorSettingsView: View {
                 .scrollContentBackground(.hidden)
                 .padding(8)
                 .frame(minHeight: 130, idealHeight: 160, maxHeight: 220)
-                .background(PluginSettingsTheme.Palette.nativeFieldBackground)
+                .background(PluginSettingsTheme.Palette.fieldBackground)
                 .clipShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous))
         }
         .pluginSettingsListRowPadding(interactive: true)

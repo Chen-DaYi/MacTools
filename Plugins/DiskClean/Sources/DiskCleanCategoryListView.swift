@@ -96,7 +96,7 @@ private struct DiskCleanCategoryCard: View {
                 candidateRows
             }
         }
-        .pluginSettingsCardBackground(.plugin)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private var header: some View {

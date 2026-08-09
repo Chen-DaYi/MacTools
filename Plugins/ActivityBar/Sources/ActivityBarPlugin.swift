@@ -24,6 +24,11 @@ private struct ActivityBarPluginProvider: PluginProvider {
 
 @MainActor
 final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel {
+    private struct SettingsStatus {
+        let text: String
+        let systemImage: String
+        let tone: PluginStatusTone
+    }
     private enum ControlID {
         static let trackingEnabled = "tracking-enabled"
         static let installHooks = "install-hooks"
@@ -100,33 +105,54 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         )
     }
 
-    var settingsSections: [PluginSettingsSection] {
-        [
-            PluginSettingsSection(
-                id: "input-monitoring",
-                title: localization.string("settings.inputMonitoring.title", defaultValue: "输入监控"),
-                description: localization.string(
-                    "settings.inputMonitoring.description",
-                    defaultValue: "用于统计键盘、鼠标点击和滚动事件。"
-                ),
-                status: inputMonitoringSettingsStatus,
-                footnote: controller.inputMonitoringFootnote,
-                buttonTitle: localization.string("settings.inputMonitoring.button", defaultValue: "打开系统设置"),
-                actionID: ControlID.openInputMonitoring
-            ),
-            PluginSettingsSection(
-                id: "ai-hooks",
-                title: localization.string("settings.aiHooks.title", defaultValue: "AI 工具 Hook"),
-                description: localization.string(
-                    "settings.aiHooks.description",
-                    defaultValue: "记录 Claude Code、Cursor 和 Codex 的提示、工具调用与执行时长。"
-                ),
-                status: hookSettingsStatus,
-                footnote: controller.hookActionFootnote,
-                buttonTitle: hookActionButtonTitle,
-                actionID: hookActionControlID
-            )
-        ]
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "monitoring",
+                    title: localization.string("settings.section.status", defaultValue: "状态"),
+                    systemImage: "waveform.path.ecg",
+                    rows: [
+                        PluginSettingsRow(
+                            id: ControlID.openInputMonitoring,
+                            title: localization.string("settings.inputMonitoring.title", defaultValue: "输入监控"),
+                            description: localization.string(
+                                "settings.inputMonitoring.description",
+                                defaultValue: "用于统计键盘、鼠标点击和滚动事件。"
+                            ),
+                            systemImage: "keyboard",
+                            help: controller.inputMonitoringFootnote,
+                            control: .status(
+                                text: inputMonitoringSettingsStatus.text,
+                                systemImage: inputMonitoringSettingsStatus.systemImage,
+                                tone: inputMonitoringSettingsStatus.tone,
+                                actionTitle: localization.string(
+                                    "settings.inputMonitoring.button",
+                                    defaultValue: "打开系统设置"
+                                )
+                            )
+                        ),
+                        PluginSettingsRow(
+                            id: hookActionControlID,
+                            title: localization.string("settings.aiHooks.title", defaultValue: "AI 工具 Hook"),
+                            description: localization.string(
+                                "settings.aiHooks.description",
+                                defaultValue: "记录 Claude Code、Cursor 和 Codex 的提示、工具调用与执行时长。"
+                            ),
+                            systemImage: "terminal",
+                            help: controller.hookActionFootnote,
+                            control: .status(
+                                text: hookSettingsStatus.text,
+                                systemImage: hookSettingsStatus.systemImage,
+                                tone: hookSettingsStatus.tone,
+                                actionTitle: hookActionButtonTitle
+                            )
+                        )
+                    ]
+                )
+            ]
+        )
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -172,8 +198,9 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
 
     func handlePermissionAction(id: String) {}
 
-    func handleSettingsAction(id: String) {
-        handleAction(controlID: id)
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        guard case let .invoke(controlID) = action else { return }
+        handleAction(controlID: controlID)
     }
 
     func handleShortcutAction(id: String) {}
@@ -266,22 +293,22 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         return localization.string("panel.action.installHooks", defaultValue: "安装或更新 AI Hook")
     }
 
-    private var inputMonitoringSettingsStatus: PluginSettingsSection.Status {
+    private var inputMonitoringSettingsStatus: SettingsStatus {
         switch controller.monitorStatus {
         case .running:
-            return PluginSettingsSection.Status(
+            return SettingsStatus(
                 text: localization.string("status.running", defaultValue: "运行中"),
                 systemImage: "checkmark.circle.fill",
                 tone: .positive
             )
         case .inputMonitoringDenied:
-            return PluginSettingsSection.Status(
+            return SettingsStatus(
                 text: localization.string("status.permissionRequired", defaultValue: "需要授权"),
                 systemImage: "exclamationmark.triangle.fill",
                 tone: .caution
             )
         case .idle:
-            return PluginSettingsSection.Status(
+            return SettingsStatus(
                 text: localization.string("status.disabled", defaultValue: "未开启"),
                 systemImage: "pause.circle",
                 tone: .neutral
@@ -289,30 +316,30 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         }
     }
 
-    private var hookSettingsStatus: PluginSettingsSection.Status {
+    private var hookSettingsStatus: SettingsStatus {
         switch controller.hookInstallState {
         case .installed:
             if controller.isHookListenerRunning {
-                return PluginSettingsSection.Status(
+                return SettingsStatus(
                     text: localization.string("hook.status.listening", defaultValue: "监听中"),
                     systemImage: "checkmark.circle.fill",
                     tone: .positive
                 )
             }
 
-            return PluginSettingsSection.Status(
+            return SettingsStatus(
                 text: localization.string("hook.status.installed", defaultValue: "已安装"),
                 systemImage: "checkmark.circle.fill",
                 tone: .positive
             )
         case .failed:
-            return PluginSettingsSection.Status(
+            return SettingsStatus(
                 text: localization.string("hook.status.installFailed", defaultValue: "安装失败"),
                 systemImage: "exclamationmark.triangle.fill",
                 tone: .caution
             )
         case .notInstalled:
-            return PluginSettingsSection.Status(
+            return SettingsStatus(
                 text: localization.string("hook.status.notInstalled", defaultValue: "未安装"),
                 systemImage: "terminal",
                 tone: .neutral

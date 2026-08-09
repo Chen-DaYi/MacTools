@@ -130,7 +130,6 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel {
         ]
     }
 
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func activate(context: PluginRuntimeContext) {
@@ -228,7 +227,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
     }
 
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     // MARK: - Snapshot and routing

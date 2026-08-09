@@ -5,7 +5,7 @@ import MacToolsPluginKit
 
 private enum SidecarSettingsColumnWidth {
     static let picker: CGFloat = 144
-    static let shortcutRecorder: CGFloat = 126
+    static let shortcutRecorder = PluginSettingsTheme.Size.shortcutRecorderWidth
     static let shortcutActionButton: CGFloat = 22
     static let shortcutActions: CGFloat = 50
 }
@@ -20,7 +20,7 @@ struct SidecarSettingsView: View {
     @ObservedObject var store: SidecarPreferencesStore
     let liveDevices: [SidecarDevice]
     let localization: PluginLocalization
-    let configurationContext: PluginConfigurationContext
+    let settingsContext: PluginSettingsContext
     let onRefresh: () -> Void
     let onUpdate: () -> Void
 
@@ -45,56 +45,38 @@ struct SidecarSettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            savedDevicesSection
-        }
+        savedDevicesSection
     }
 
     private var savedDevicesSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack {
-                Label(
-                    localization.string("settings.devices.title", defaultValue: "Sidecar 设备"),
-                    systemImage: "display.2"
-                )
-                .font(PluginSettingsTheme.Typography.sectionTitle)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                Text(localization.string(
+                    "settings.devices.description",
+                    defaultValue: "设备离线时仍会保留它的设置和快捷键。"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
 
-                Spacer()
+                Label(
+                    localization.string(
+                        "panel.wired.warning",
+                        defaultValue: "请求仅通过有线连接，不请求 Wi-Fi 回退"
+                    ),
+                    systemImage: "cable.connector"
+                )
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
 
-                Button(action: onRefresh) {
-                    Label(
-                        localization.string("settings.refresh", defaultValue: "刷新"),
-                        systemImage: "arrow.clockwise"
-                    )
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                Text(localization.string(
+                    "settings.priority.description",
+                    defaultValue: "拖动可用显示器，设置“连接第一个可用显示器”使用的优先级。"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
             }
-
-            Text(localization.string(
-                "settings.devices.description",
-                defaultValue: "设备离线时仍会保留它的设置和快捷键。"
-            ))
-            .font(PluginSettingsTheme.Typography.rowDescription)
-            .foregroundStyle(.secondary)
-
-            Label(
-                localization.string(
-                    "panel.wired.warning",
-                    defaultValue: "请求仅通过有线连接，不请求 Wi-Fi 回退"
-                ),
-                systemImage: "cable.connector"
-            )
-            .font(PluginSettingsTheme.Typography.rowDescription)
-            .foregroundStyle(.secondary)
-
-            Text(localization.string(
-                "settings.priority.description",
-                defaultValue: "拖动可用显示器，设置“连接第一个可用显示器”使用的优先级。"
-            ))
-            .font(PluginSettingsTheme.Typography.rowDescription)
-            .foregroundStyle(.secondary)
+            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+            .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
 
             if displayedDevices.isEmpty {
                 ContentUnavailableView(
@@ -107,7 +89,6 @@ struct SidecarSettingsView: View {
                 )
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
-                .pluginSettingsCardBackground(.host)
             } else {
                 deviceSettingsCard
             }
@@ -129,7 +110,6 @@ struct SidecarSettingsView: View {
             .frame(height: SidecarDeviceSettingsTable.preferredHeight(for: displayedDeviceRows.count))
         }
         .frame(maxWidth: .infinity)
-        .pluginSettingsCardBackground(.host)
     }
 
     private func state(for preference: SidecarDevicePreference) -> SidecarDeviceSettingsState {
@@ -158,7 +138,7 @@ struct SidecarSettingsView: View {
                 preference: item.preference,
                 state: item.state,
                 localization: localization,
-                configurationContext: configurationContext,
+                settingsContext: settingsContext,
                 onTransportChange: { transport in
                     store.updateTransport(transport, for: item.preference.id)
                     onUpdate()
@@ -449,7 +429,7 @@ private struct SidecarDeviceSettingsRow: View {
     let preference: SidecarDevicePreference
     let state: SidecarDeviceSettingsState
     let localization: PluginLocalization
-    let configurationContext: PluginConfigurationContext
+    let settingsContext: PluginSettingsContext
     let onTransportChange: (SidecarConnectionTransport) -> Void
     let onShortcutActionChange: (SidecarShortcutAction) -> Void
     let isReorderable: Bool
@@ -479,7 +459,7 @@ private struct SidecarDeviceSettingsRow: View {
                         defaultValue: "仍要使用"
                     )),
                     action: {
-                        _ = configurationContext.recordShortcut(warning.binding, for: warning.itemID)
+                        _ = settingsContext.recordShortcut(warning.binding, for: warning.itemID)
                     }
                 ),
                 secondaryButton: .cancel(
@@ -615,7 +595,7 @@ private struct SidecarDeviceSettingsRow: View {
                         recordShortcut(binding, for: shortcutItem.id)
                     },
                     onBeginRecording: {
-                        configurationContext.beginShortcutRecording(for: shortcutItem.id)
+                        settingsContext.beginShortcutRecording(for: shortcutItem.id)
                     }
                 )
                 .frame(width: SidecarSettingsColumnWidth.shortcutRecorder)
@@ -630,7 +610,7 @@ private struct SidecarDeviceSettingsRow: View {
 
                     if shortcutItem.canClear {
                         Button {
-                            configurationContext.clearShortcut(for: shortcutItem.id)
+                            settingsContext.clearShortcut(for: shortcutItem.id)
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(PluginSettingsTheme.Typography.rowIcon)
@@ -669,11 +649,11 @@ private struct SidecarDeviceSettingsRow: View {
             return .accepted
         }
 
-        return configurationContext.recordShortcut(binding, for: itemID)
+        return settingsContext.recordShortcut(binding, for: itemID)
     }
 
     private var shortcutItem: ShortcutSettingsItem? {
-        configurationContext.shortcutItem(definitionID: "device.\(preference.id)")
+        settingsContext.shortcutItem(definitionID: "device.\(preference.id)")
     }
 
     private var shortcutContentInset: CGFloat {

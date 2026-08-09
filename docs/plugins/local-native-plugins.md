@@ -38,14 +38,14 @@ Example.mactoolsplugin/
     }
   },
   "version": "1.0.0",
-  "minHostVersion": "0.15.2",
-  "pluginKitVersion": 2,
+  "minHostVersion": "1.2.0",
+  "pluginKitVersion": 4,
   "bundleRelativePath": "Example.bundle",
   "factoryClass": "Example.ExamplePluginFactory",
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": true
+    "settings": "form"
   },
   "permissions": [],
   "category": "productivity"
@@ -123,16 +123,20 @@ To update an existing plugin, change its code/resources/tests beside the plugin.
 
 ## Settings UI
 
-Plugin settings are hosted by MacTools. Prefer the descriptive surfaces first:
+Plugin settings are hosted by MacTools. PluginKit 4 exposes one `settingsPage` entry point with two explicit layouts:
 
-- Use `settingsSections` for simple status/action cards.
-- Use `permissionRequirements` for system permission rows.
-- Use `shortcutDefinitions` for global shortcut rows.
-- Use `PluginConfiguration` when the plugin needs an interactive preference, custom manager, list, editor, drag-and-drop surface, chart, or other interaction that cannot be expressed by the descriptive models.
+- `PluginSettingsPage.form` is the default. Describe standard controls with `PluginSettingsSection`, `PluginSettingsRow`, and `PluginSettingsControl`; the host renders the native grouped form, search entries, validation, permissions, and shortcuts.
+- Reserve segmented pickers for a few short labels; use `.menu` when options are longer or localization can make the row overflow. Declarative sliders should provide `valueFormat` for a live host-rendered readout. Custom settings use `PluginSettingsSlider` to keep stepped values without drawing dense tick marks.
+- A form may contain a custom section for a complex list, chart, drag and drop editor, or manager while retaining the host-owned page shell and surrounding native sections.
+- `PluginSettingsPage.workspace` is reserved for a task-oriented full settings surface such as a cleanup browser or configuration editor. Declare `scrolling: .host` for a simple long page and `.selfManaged` for split views, lists, or editors. The host still owns navigation, header, permissions, shortcuts, background, and lifetime.
+- Use `.onVisibilityChange` for work that belongs to the whole settings page, such as starting observation or stopping a test session. Do not attach page lifetime work to custom section `onAppear`/`onDisappear`; grouped Form sections are lazy and may be recycled while the page is still visible.
+- Use `permissionRequirements` for system permission rows and `shortcutDefinitions` for shortcut rows. A form places a shortcut group with `PluginSettingsSection.shortcutGroup`; a custom section that renders a group itself declares `embeddedShortcutGroupIDs`.
 
-When a plugin exposes `PluginConfiguration`, its manifest must also declare `capabilities.configuration` as `true`; keep the manifest capability and runtime implementation in sync so packaged plugins expose the same settings as local builds.
+The manifest must declare the matching `capabilities.settings` value: `none`, `form`, or `workspace`. The host does not read an undeclared page and rejects a runtime layout that differs from the manifest. This capability is an ABI contract, not a styling preference.
 
-Custom configuration views must provide only the plugin-specific content. The settings window header, plugin icon, plugin description, permission cards, and shortcut cards are derived by the host; do not repeat a full page title inside the custom view.
+Settings changes use typed `PluginSettingsAction` values (`setBoolean`, `setSelection`, `setNumber`, `setText`, and `invoke`) instead of string-only callbacks. Text and numeric controls distinguish `.changed` from `.committed`, allowing live updates without rebuilding the entire settings hierarchy for every keystroke or slider tick.
+
+Custom sections and workspaces provide only plugin-specific content. The settings window title, plugin icon, description, permission cards, shortcut cards, scrolling shell, and system background are derived by the host; do not repeat a page title inside custom content. Form sections must not draw their own outer card or section header: use `presentation: .standard` for normal custom content, or `.edgeToEdge` for an AppKit table or an internally padded row collection. Add/Refresh-style actions belong in `.headerAccessory`.
 
 All custom settings views should use `MacToolsPluginKit.PluginSettingsTheme` for typography, spacing, radii, colors, and shared card backgrounds. This keeps the dependency direction clean: the host app and plugins both depend on `MacToolsPluginKit`, while plugins never depend on `Sources/App/SettingsStyle.swift`.
 
@@ -143,14 +147,14 @@ Recommended mapping:
 - Row text: `rowTitle` or `emphasizedRowTitle`; supporting text uses `rowDescription`; status pills use `statusBadge`.
 - Fixed-width numeric or path-like values may use `monospacedValue` or a local monospaced font when the content requires it.
 - Layout: use `Spacing.section`, `sectionHeaderContent`, `cardContent`, `rowHorizontal`, `rowVertical`, `interactiveRowVertical`, and `rowContentControl`.
-- Containers: use `.pluginSettingsCardBackground(.host)` for host-style cards, `.pluginSettingsCardBackground(.plugin)` for native plugin lists, and `.pluginSettingsCardBackground(.recessed)` for inset fields/log panes.
+- Containers: grouped Form supplies ordinary settings cards. Use `.pluginSettingsCardBackground(.standard)` only inside workspaces, and `.recessed` for inset fields or log panes.
 - Ordinary settings cards should be separated by background color, spacing, and rounded corners rather than borders. Reserve strokes for focused inputs, keycaps, badges, or other control-specific states.
 
 Avoid copying a plugin-local settings style enum. If a token is missing, add it to `PluginSettingsTheme` instead of hard-coding the same value in multiple plugins.
 
 ### Unified Search
 
-MacTools automatically indexes a plugin's configuration page, declarative settings cards, permission rows, and shortcut definitions. A custom `PluginConfiguration` can expose individual destinations by conforming to `PluginSettingsSearchProviding`; apply `pluginSettingsSearchAnchor(pluginID:entryID:)` to the matching row so selecting a result scrolls to, highlights, and exposes accessibility focus on that control.
+MacTools automatically indexes visible declarative row titles, descriptions, keywords and picker options, plus permission and shortcut rows. Current text-field and secure-field values are never indexed. Custom sections and workspaces can expose individual destinations by conforming to `PluginSettingsSearchProviding`; apply `pluginSettingsSearchAnchor(pluginID:entryID:)` to the matching control so selecting a result scrolls to, highlights, and exposes accessibility focus.
 
 Commands are never inferred from panel buttons. A plugin must explicitly conform to `PluginCommandProviding` and publish only actions that are safe and useful in the global palette. Commands that need an extra user decision should provide confirmation metadata. Destructive actions should remain in their contextual plugin UI unless their complete safety flow can be represented by that confirmation.
 

@@ -4,6 +4,10 @@ import OSLog
 import SwiftUI
 import MacToolsPluginKit
 
+enum KeepAwakeSettingsSearchEntryID {
+    static let behavior = "behavior"
+}
+
 public final class KeepAwakePluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
         KeepAwakePluginProvider(context: context)
@@ -41,7 +45,6 @@ final class KeepAwakePlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
     PluginPrimaryPanelCompactIndicatorProviding,
-    PluginSettingsSearchProviding,
     DisplayTopologyRefreshing
 {
     typealias SessionFactory = (
@@ -272,60 +275,38 @@ final class KeepAwakePlugin:
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
 
-    var settingsSections: [PluginSettingsSection] { [] }
-
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var settingsSearchEntries: [PluginSettingsSearchEntry] {
-        [
-            PluginSettingsSearchEntry(
-                id: KeepAwakeSettingsSearchEntryID.behavior,
-                title: localization.string(
-                    "settings.mode.section",
-                    defaultValue: "行为"
-                ),
-                description: localization.string(
-                    "settings.mode.search.description",
-                    defaultValue: "选择阻止休眠运行时保持可用的内容。"
-                ),
-                keywords: [
-                    localization.string(
-                        "settings.mode.keepMacAwake.title",
-                        defaultValue: "允许屏幕关闭"
-                    ),
-                    localization.string(
-                        "settings.display.keepOn",
-                        defaultValue: "保持常亮"
-                    ),
-                    localization.string(
-                        "settings.virtualDisplay.keepDesktopAvailable",
-                        defaultValue: "让屏幕相关工具继续工作"
-                    ),
-                    localization.string(
-                        "settings.lidClose.keepAwake",
-                        defaultValue: "合盖保持唤醒"
-                    ),
-                ],
-                systemImage: "slider.horizontal.3"
-            )
-        ]
-    }
-
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [weak self, localization] _ in
-            KeepAwakeSettingsView(
-                behavior: Binding(
-                    get: { self?.preferences.behavior ?? .allowDisplayToTurnOff },
-                    set: { [weak self] in self?.setBehavior($0) }
-                ),
-                isVirtualDisplayAvailable: self?.virtualDisplayManager.isAvailable ?? false,
-                powerSourceState: self?.powerSourceState ?? KeepAwakePowerSourceState(
-                    isPortableMac: false,
-                    isOnExternalPower: false
-                ),
-                localization: localization
-            )
-        }
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "behavior",
+                    title: localization.string("settings.mode.section", defaultValue: "行为"),
+                    systemImage: "slider.horizontal.3",
+                    rows: [
+                        PluginSettingsRow(
+                            id: KeepAwakeSettingsSearchEntryID.behavior,
+                            title: localization.string("settings.mode.section", defaultValue: "行为"),
+                            description: settingsBehaviorDescription(preferences.behavior),
+                            systemImage: "moon.zzz",
+                            help: settingsBehaviorHelp,
+                            control: .picker(
+                                selectionID: preferences.behavior.rawValue,
+                                options: KeepAwakeBehavior.allCases.map {
+                                    PluginSettingsOption(
+                                        id: $0.rawValue,
+                                        title: settingsBehaviorTitle($0)
+                                    )
+                                },
+                                style: .menu
+                            )
+                        )
+                    ]
+                )
+            ]
+        )
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -409,7 +390,13 @@ final class KeepAwakePlugin:
 
     func handlePermissionAction(id: String) {}
 
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        guard case let .setSelection(controlID, optionID) = action,
+              controlID == KeepAwakeSettingsSearchEntryID.behavior,
+              let behavior = KeepAwakeBehavior(rawValue: optionID)
+        else { return }
+        setBehavior(behavior)
+    }
 
     func handleShortcutAction(id: String) {}
 
@@ -540,6 +527,66 @@ final class KeepAwakePlugin:
             lastErrorMessage = error.localizedDescription
             notifyChange()
         }
+    }
+
+    private func settingsBehaviorTitle(_ behavior: KeepAwakeBehavior) -> String {
+        switch behavior {
+        case .allowDisplayToTurnOff:
+            localization.string("settings.mode.keepMacAwake.title", defaultValue: "允许屏幕关闭")
+        case .keepDisplayOn:
+            localization.string("settings.display.keepOn", defaultValue: "保持常亮")
+        case .keepScreenBasedToolsWorking:
+            localization.string("settings.mode.screenTools.shortTitle", defaultValue: "屏幕工具")
+        }
+    }
+
+    private func settingsBehaviorDescription(_ behavior: KeepAwakeBehavior) -> String {
+        switch behavior {
+        case .allowDisplayToTurnOff:
+            localization.string(
+                "settings.mode.keepMacAwake.description",
+                defaultValue: "保持 Mac 唤醒；屏幕关闭与锁定仍遵循 macOS 设置。"
+            )
+        case .keepDisplayOn:
+            localization.string(
+                "settings.display.keepOn.description",
+                defaultValue: "保持屏幕常亮。自动锁定仍遵循 macOS 设置。"
+            )
+        case .keepScreenBasedToolsWorking:
+            localization.string(
+                "settings.mode.screenTools.description",
+                defaultValue: "保持屏幕可用并防止自动锁定，适用于 Codex Computer Use、桌面自动化、屏幕共享和远程控制。"
+            )
+        }
+    }
+
+    private var settingsBehaviorHelp: String? {
+        guard preferences.behavior == .keepScreenBasedToolsWorking else { return nil }
+
+        var messages: [String] = []
+        if powerSourceState.isPortableMac {
+            messages.append(localization.string(
+                "settings.automaticLock.warning.closedLidPower",
+                defaultValue: "合盖运行要求 MacBook 连接电源。"
+            ))
+            messages.append(localization.string(
+                "settings.mode.screenTools.warning.ventilation",
+                defaultValue: "保持 Mac 通风，切勿将其放入包中。"
+            ))
+            messages.append(localization.string(
+                virtualDisplayManager.isAvailable
+                    ? "settings.mode.screenTools.warning.experimental"
+                    : "settings.mode.screenTools.warning.unavailable",
+                defaultValue: virtualDisplayManager.isAvailable
+                    ? "合盖软件显示器为实验性功能，macOS 更新后可能失效。"
+                    : "当前插件包不包含合盖软件显示器组件。"
+            ))
+        }
+        messages.append(localization.string(
+            "settings.mode.screenTools.warning.manualLock",
+            defaultValue: "手动锁定仍然有效；不会解锁已锁定的会话。"
+        ))
+        return messages.joined(separator: "\n")
     }
 
     private func applyKeepAwakeConfiguration() {

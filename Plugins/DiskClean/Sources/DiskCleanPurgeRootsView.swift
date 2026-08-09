@@ -26,7 +26,7 @@ struct DiskCleanPurgeRootsView: View {
                 rejectionRow
             }
         }
-        .pluginSettingsCardBackground(.plugin)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private var header: some View {

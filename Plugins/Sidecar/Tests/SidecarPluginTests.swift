@@ -320,6 +320,20 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertTrue(service.receivedWiredOnly)
     }
 
+    func testGlobalShortcutDefinitionsDescribeTheirRecorderControls() {
+        let plugin = makePlugin(service: FakeSidecarService())
+        let definitions = plugin.shortcutDefinitions
+
+        XCTAssertEqual(
+            definitions.first(where: { $0.id == "connect-first-available" })?.settingsControlTitle,
+            "连接第一个可用显示器"
+        )
+        XCTAssertEqual(
+            definitions.first(where: { $0.id == "disconnect-all" })?.settingsControlTitle,
+            "断开所有已连接设备"
+        )
+    }
+
     func testConnectFirstAvailableShortcutUsesSavedPriorityAndConnectionMode() {
         let service = FakeSidecarService(devices: [
             SidecarDevice(id: "ipad-1", name: "First", connectionState: .disconnected),

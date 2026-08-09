@@ -4,6 +4,10 @@ import Foundation
 import SwiftUI
 import MacToolsPluginKit
 
+private enum DisplayBrightnessSettingsSearchEntryID {
+    static let shortcutTarget = "shortcut-target"
+}
+
 public final class DisplayBrightnessPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
         DisplayBrightnessPluginProvider(context: context)
@@ -123,8 +127,7 @@ final class DisplayBrightnessPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
     PluginShortcutEventHandling,
-    DisplayTopologyRefreshing,
-    PluginSettingsSearchProviding
+    DisplayTopologyRefreshing
 {
     private enum Constants {
         static let displayControlPrefix = "display."
@@ -224,47 +227,41 @@ final class DisplayBrightnessPlugin:
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [shortcutPreferences, localization] _ in
-            DisplayBrightnessSettingsView(
-                preferences: shortcutPreferences,
-                localization: localization
-            )
-        }
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "shortcut-target",
+                    title: localization.string("settings.shortcutTarget.sectionTitle", defaultValue: "作用范围"),
+                    systemImage: "display.2",
+                    rows: [
+                        PluginSettingsRow(
+                            id: DisplayBrightnessSettingsSearchEntryID.shortcutTarget,
+                            title: localization.string("settings.shortcutTarget.title", defaultValue: "快捷键目标"),
+                            description: shortcutPreferences.targetMode.description(localization: localization),
+                            systemImage: "cursorarrow.motionlines",
+                            control: .picker(
+                                selectionID: shortcutPreferences.targetMode.rawValue,
+                                options: DisplayBrightnessShortcutPreferences.TargetMode.allCases.map {
+                                    PluginSettingsOption(
+                                        id: $0.rawValue,
+                                        title: $0.title(localization: localization)
+                                    )
+                                },
+                                style: .segmented
+                            )
+                        )
+                    ]
+                )
+            ]
+        )
     }
 
     var shortcutDefinitions: [PluginShortcutDefinition] {
         [
             shortcutDefinition(direction: .decrease),
             shortcutDefinition(direction: .increase)
-        ]
-    }
-
-    var settingsSearchEntries: [PluginSettingsSearchEntry] {
-        [
-            PluginSettingsSearchEntry(
-                id: DisplayBrightnessSettingsSearchEntryID.shortcutTarget,
-                title: localization.string(
-                    "settings.shortcutTarget.title",
-                    defaultValue: "快捷键目标"
-                ),
-                description: localization.string(
-                    "settings.shortcutTarget.searchDescription",
-                    defaultValue: "选择亮度快捷键控制的显示器范围。"
-                ),
-                keywords: [
-                    localization.string(
-                        "settings.shortcutTarget.sectionTitle",
-                        defaultValue: "作用范围"
-                    ),
-                    localization.string(
-                        "settings.shortcutTarget.searchKeyword",
-                        defaultValue: "屏幕"
-                    )
-                ],
-                systemImage: "display.2"
-            )
         ]
     }
 
@@ -314,7 +311,14 @@ final class DisplayBrightnessPlugin:
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        guard case let .setSelection(controlID, optionID) = action,
+              controlID == DisplayBrightnessSettingsSearchEntryID.shortcutTarget,
+              let mode = DisplayBrightnessShortcutPreferences.TargetMode(rawValue: optionID)
+        else { return }
+        shortcutPreferences.targetMode = mode
+        onStateChange?()
+    }
     func handleShortcutAction(id: String) {
         handleShortcutEvent(id: id, phase: .pressed)
     }
@@ -534,7 +538,6 @@ final class DisplayBrightnessPlugin:
                 "shortcut.settingsGroupDescription",
                 defaultValue: "按所选作用范围调整显示器亮度。"
             ),
-            settingsControlTitle: directionTitle,
             settingsControlSystemImage: direction.systemImage
         )
     }

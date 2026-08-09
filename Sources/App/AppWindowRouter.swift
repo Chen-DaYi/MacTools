@@ -290,6 +290,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private(set) var commandPaletteState: StandaloneCommandPaletteState?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var appDeactivationObserver: NSObjectProtocol?
+    private var appearanceObserver: NSObjectProtocol?
     private var panelPresentationActions = SettingsPanelPresentationActions()
     private var onProgrammaticSettingsPresentation: () -> Void = {}
 
@@ -334,12 +335,27 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 self?.dismissCommandPalette()
             }
         }
+        appearanceObserver = NotificationCenter.default.addObserver(
+            forName: AppAppearancePreference.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let preference = notification.object as? AppAppearancePreference else {
+                return
+            }
+            Task { @MainActor [weak self] in
+                preference.apply(to: self?.settingsWindow)
+            }
+        }
     }
 
     isolated deinit {
         runtimeLocaleCancellable?.cancel()
         if let appDeactivationObserver {
             NotificationCenter.default.removeObserver(appDeactivationObserver)
+        }
+        if let appearanceObserver {
+            NotificationCenter.default.removeObserver(appearanceObserver)
         }
     }
 
@@ -445,6 +461,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             defer: false
         )
         window.title = Self.settingsWindowTitle
+        AppAppearancePreference.stored(in: appearanceUserDefaults).apply(to: window)
         let hostingView = NSHostingView(
             rootView: SettingsView(
                 pluginHost: pluginHost,

@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import MacTools
 
 final class PluginPackageManifestTests: XCTestCase {
@@ -100,35 +101,29 @@ final class PluginPackageManifestTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let expectations = [
-            (path: "Plugins/MouseEnhancer/plugin.json", minimum: "1.1.3", supports115: true),
-            (path: "Plugins/TrackpadGestures/plugin.json", minimum: "1.1.6", supports115: false),
+        let paths = [
+            "Plugins/MouseEnhancer/plugin.json",
+            "Plugins/TrackpadGestures/plugin.json",
         ]
-        for expectation in expectations {
-            let relativePath = expectation.path
+        for relativePath in paths {
             let manifestURL = repositoryRoot.appendingPathComponent(relativePath)
             let manifest = try JSONDecoder().decode(
                 PluginPackageManifest.self,
                 from: Data(contentsOf: manifestURL)
             )
 
-            XCTAssertEqual(manifest.minHostVersion, expectation.minimum)
+            XCTAssertEqual(manifest.minHostVersion, "1.2.0")
+            XCTAssertEqual(manifest.pluginKitVersion, PluginKitCompatibility.currentVersion)
             XCTAssertNoThrow(
-                try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.6")
+                try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.2.0")
             )
-            if expectation.supports115 {
-                XCTAssertNoThrow(
-                    try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.5")
+            XCTAssertThrowsError(
+                try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.6")
+            ) { error in
+                XCTAssertEqual(
+                    error as? PluginPackageManifestError,
+                    .incompatibleHostVersion(required: "1.2.0", current: "1.1.6")
                 )
-            } else {
-                XCTAssertThrowsError(
-                    try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.5")
-                ) { error in
-                    XCTAssertEqual(
-                        error as? PluginPackageManifestError,
-                        .incompatibleHostVersion(required: "1.1.6", current: "1.1.5")
-                    )
-                }
             }
         }
     }
@@ -140,9 +135,9 @@ final class PluginPackageManifestTests: XCTestCase {
           "displayName": "Demo",
           "version": "1.0.0",
           "minHostVersion": "0.15.0",
-          "pluginKitVersion": 1,
+          "pluginKitVersion": 3,
           "bundleRelativePath": "Demo.bundle",
-          "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": false },
+          "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": true },
           "permissions": [],
           "category": "display",
           "releaseChannel": "beta",
@@ -162,6 +157,7 @@ final class PluginPackageManifestTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginPackageManifest.self, from: json)
         XCTAssertEqual(manifest.category, "display")
         XCTAssertEqual(manifest.releaseChannel, "beta")
+        XCTAssertEqual(manifest.capabilities.settings, .form)
         XCTAssertEqual(manifest.localizedMetadata?["en"]?.summary, "Demo plugin")
     }
 
@@ -173,7 +169,7 @@ final class PluginPackageManifestTests: XCTestCase {
           "displayName": "Demo",
           "version": "1.0.0",
           "minHostVersion": "0.15.0",
-          "pluginKitVersion": 1,
+          "pluginKitVersion": 3,
           "bundleRelativePath": "Demo.bundle",
           "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": false },
           "permissions": []

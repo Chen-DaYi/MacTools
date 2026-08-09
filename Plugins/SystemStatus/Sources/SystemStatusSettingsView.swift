@@ -3,15 +3,23 @@ import SwiftUI
 import MacToolsPluginKit
 
 struct SystemStatusSettingsView: View {
+    enum SectionKind {
+        case panel
+        case menuBar
+    }
+
     @ObservedObject var controller: SystemStatusSettingsController
     let localization: PluginLocalization
+    let section: SectionKind
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+        switch section {
+        case .panel:
             panelSection
+        case .menuBar:
             menuBarSection
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var panelSection: some View {
@@ -45,35 +53,21 @@ struct SystemStatusSettingsView: View {
     }
 
     private func metricSection(
-        systemName: String,
-        title: String,
-        description: String,
+        systemName _: String,
+        title _: String,
+        description _: String,
         items: [SystemStatusMetricPreferenceTableItem],
         listID: String,
         onVisibilityChange: @escaping (SystemStatusMetricKind, Bool) -> Void,
         onMove: @escaping (SystemStatusMetricKind, Int) -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            VStack(alignment: .leading, spacing: 4) {
-                Label(title, systemImage: systemName)
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(.secondary)
-
-                Text(description)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            SystemStatusMetricPreferenceTableView(
-                items: items,
-                listID: listID,
-                onVisibilityChange: onVisibilityChange,
-                onMove: onMove
-            )
-            .frame(height: SystemStatusMetricPreferenceTableView.preferredHeight(for: items.count))
-            .pluginSettingsCardBackground(.plugin)
-        }
+        SystemStatusMetricPreferenceTableView(
+            items: items,
+            listID: listID,
+            onVisibilityChange: onVisibilityChange,
+            onMove: onMove
+        )
+        .frame(height: SystemStatusMetricPreferenceTableView.preferredHeight(for: items.count))
     }
 
     private var panelItems: [SystemStatusMetricPreferenceTableItem] {

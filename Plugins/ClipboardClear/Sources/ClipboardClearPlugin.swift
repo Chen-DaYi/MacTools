@@ -54,7 +54,6 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -86,7 +85,7 @@ final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func permissionState(for permissionID: String) -> PluginPermissionState { PluginPermissionState(isGranted: false, footnote: nil) }
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     private func syncPasteboardState(forceNotify: Bool) {

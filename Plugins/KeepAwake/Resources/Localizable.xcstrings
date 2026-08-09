@@ -145,22 +145,6 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "讓螢幕工具繼續運作" } }
       }
     },
-    "settings.mode.search.description": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "اختر ما يبقى نشطًا أثناء تشغيل منع السكون." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Wähle, was während „Wach halten“ aktiv bleibt." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Choose what remains active while Keep Awake is running." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Elige qué permanece activo mientras Mantener activo está funcionando." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Choisissez ce qui reste actif pendant l’exécution d’Empêcher la suspension." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "スリープ防止の実行中に何を有効に保つかを選択します。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "잠자기 방지가 실행되는 동안 활성 상태로 유지할 항목을 선택합니다." } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Escolha o que permanece ativo enquanto Manter ativo está em execução." } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Выберите, что остаётся активным во время работы функции предотвращения сна." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择阻止休眠运行时保持可用的内容。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇防止睡眠執行時保持可用的內容。" } }
-      }
-    },
     "settings.mode.section": {
       "extractionState": "manual",
       "localizations": {
@@ -177,22 +161,6 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "行為" } }
       }
     },
-    "settings.mode.screenTools.warning.experimental": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "الشاشة البرمجية مع الغطاء المغلق تجريبية وقد تتوقف بعد تحديثات macOS." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Der Softwarebildschirm bei geschlossenem Deckel ist experimentell und kann nach macOS-Updates ausfallen." } },
-        "en": { "stringUnit": { "state": "translated", "value": "The closed-lid software display is experimental and may stop working after macOS updates." } },
-        "es": { "stringUnit": { "state": "translated", "value": "La pantalla por software con tapa cerrada es experimental y puede dejar de funcionar tras actualizar macOS." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "L’écran logiciel couvercle fermé est expérimental et peut cesser de fonctionner après une mise à jour de macOS." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ディスプレイを閉じた状態のソフトウェアディスプレイは試験的機能で、macOSのアップデート後に動作しない場合があります。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "덮개를 닫은 상태의 소프트웨어 디스플레이는 실험적 기능이며 macOS 업데이트 후 작동하지 않을 수 있습니다." } },
-        "pt": { "stringUnit": { "state": "translated", "value": "A tela de software com a tampa fechada é experimental e pode parar após atualizações do macOS." } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Программный дисплей при закрытой крышке — экспериментальная функция и может перестать работать после обновления macOS." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "合盖软件显示器为实验性功能，macOS 更新后可能失效。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "闔蓋軟體顯示器為實驗性功能，macOS 更新後可能失效。" } }
-      }
-    },
     "settings.mode.screenTools.warning.manualLock": {
       "extractionState": "manual",
       "localizations": {
@@ -207,22 +175,6 @@
         "ru": { "stringUnit": { "state": "translated", "value": "Ручная блокировка продолжает работать; заблокированный сеанс не будет разблокирован." } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "手动锁定仍然有效；不会解锁已锁定的会话。" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "手動鎖定仍然有效；不會解鎖已鎖定的工作階段。" } }
-      }
-    },
-    "settings.mode.screenTools.warning.unavailable": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "لا تتضمن حزمة المكوّن الحالية مكوّن الشاشة البرمجية للغطاء المغلق." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Dieses Plug-in-Paket enthält keine Softwarebildschirm-Komponente für den geschlossenen Deckel." } },
-        "en": { "stringUnit": { "state": "translated", "value": "This plugin package does not include the closed-lid software display component." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Este paquete del plugin no incluye el componente de pantalla por software para tapa cerrada." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Ce paquet d’extension ne contient pas le composant d’écran logiciel pour couvercle fermé." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "現在のプラグインパッケージには、ディスプレイを閉じた状態のソフトウェアディスプレイ機能が含まれていません。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "현재 플러그인 패키지에 덮개를 닫은 상태의 소프트웨어 디스플레이 구성요소가 없습니다." } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Este pacote do plugin não inclui o componente de tela de software para tampa fechada." } },
-        "ru": { "stringUnit": { "state": "translated", "value": "В этом пакете плагина нет компонента программного дисплея для закрытой крышки." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "当前插件包不包含合盖软件显示器组件。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "目前外掛套件不包含闔蓋軟體顯示器元件。" } }
       }
     },
     "settings.mode.screenTools.warning.ventilation": {
@@ -255,22 +207,6 @@
         "ru": { "stringUnit": { "state": "translated", "value": "Для работы с закрытой крышкой MacBook должен быть подключён к питанию." } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "合盖运行要求 MacBook 连接电源。" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "闔蓋運作要求 MacBook 連接電源。" } }
-      }
-    },
-    "settings.virtualDisplay.keepDesktopAvailable": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "إبقاء الأدوات المعتمدة على الشاشة قيد التشغيل" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Bildschirmbasierte Tools weiter ausführen" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Keep screen-based tools working" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Mantener activas las herramientas de pantalla" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Maintenir les outils liés à l’écran opérationnels" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "画面を使うツールを動作させる" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "화면 기반 도구 계속 작동" } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Manter ferramentas de tela funcionando" } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Сохранять работу экранных инструментов" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "让屏幕相关工具继续工作" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "讓螢幕相關工具繼續運作" } }
       }
     },
     "error.virtualDisplay.unavailable": {
@@ -351,77 +287,6 @@
         "ru": { "stringUnit": { "state": "translated", "value": "Программный дисплей остановлен; включён режим «Не гасить экран»." } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "软件显示器已停止；已切换为保持屏幕常亮。" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "軟體顯示器已停止；已切換為保持螢幕常亮。" } }
-      }
-    },
-    "settings.lidClose.keepAwake": {
-      "extractionState": "manual",
-      "localizations": {
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "إبقاء Mac مستيقظًا عند إغلاق الغطاء"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bei geschlossenem Deckel wach halten"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keep awake with lid closed"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mantener activo con la tapa cerrada"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Garder le Mac actif avec le couvercle fermé"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ディスプレイを閉じてもスリープさせない"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "덮개를 닫아도 깨우기"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manter ativo com a tampa fechada"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Не переходить в режим сна с закрытой крышкой"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "合盖保持唤醒"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "闔蓋保持喚醒"
-          }
-        }
       }
     },
     "error.lidCloseAssertionCreationFailedFormat": {

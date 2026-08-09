@@ -119,7 +119,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
                 self?.pluginHost.appPresentationHandler?(request)
             },
             isPluginConfigurationAvailable: { [weak self] pluginID in
-                self?.pluginHost.hasPluginConfiguration(pluginID: pluginID) == true
+                self?.pluginHost.hasPluginSettings(pluginID: pluginID) == true
             }
         )
     }

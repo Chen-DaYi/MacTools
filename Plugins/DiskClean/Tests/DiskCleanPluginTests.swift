@@ -160,7 +160,7 @@ final class DiskCleanPluginTests: XCTestCase {
     func testOpenDetailsRequestsConfigurationPresentation() {
         let plugin = DiskCleanPlugin(controller: FakeDiskCleanPluginController())
         var presentationRequests = 0
-        plugin.requestConfigurationPresentation = { presentationRequests += 1 }
+        plugin.requestSettingsPresentation = { presentationRequests += 1 }
 
         plugin.handleAction(.invokeAction(controlID: DiskCleanPlugin.ControlID.openDetails))
 

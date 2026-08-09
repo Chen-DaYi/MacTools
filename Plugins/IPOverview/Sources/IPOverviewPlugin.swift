@@ -22,7 +22,7 @@ private struct IPOverviewPluginProvider: PluginProvider {
 final class IPOverviewPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
-    PluginConfigurationPresenting,
+    PluginSettingsPresenting,
     PluginPanelSurfaceLifecycleHandling
 {
     enum ControlID {
@@ -42,7 +42,7 @@ final class IPOverviewPlugin:
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var requestConfigurationPresentation: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "ip-overview"),
@@ -134,16 +134,15 @@ final class IPOverviewPlugin:
         )
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(
-            description: metadata.defaultDescription,
-            prefersFullHeight: true
-        ) { _ in
+    var settingsPage: PluginSettingsPage? {
+        .workspace(description: metadata.defaultDescription, scrolling: .host) { _ in
             IPOverviewComponentView(
                 viewModel: self.viewModel,
                 localization: self.localization,
                 startsInDetails: true,
-                showsBackButton: false
+                showsBackButton: false,
+                showsDetailHeader: false,
+                managesScrolling: false
             )
         }
     }
@@ -183,7 +182,7 @@ final class IPOverviewPlugin:
     private func handleInvoke(controlID: String) {
         switch controlID {
         case ControlID.openSettings:
-            requestConfigurationPresentation?()
+            requestSettingsPresentation?()
         case ControlID.copyIP:
             viewModel.copy(viewModel.snapshot.preferredPublicIPv4?.ip)
         case ControlID.copyLocalIPv4:

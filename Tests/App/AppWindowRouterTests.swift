@@ -74,7 +74,11 @@ final class AppWindowRouterTests: XCTestCase {
             coordinator.navigate(to: destination)
             await settleWindowLayout(window)
             XCTAssertEqual(window.frame.width, resizedWidth, accuracy: 0.5)
-            XCTAssertEqual(window.toolbar?.items.count, initialToolbarItemCount)
+            XCTAssertEqual(
+                window.toolbar?.items.count,
+                initialToolbarItemCount,
+                "Unexpected toolbar items: \(window.toolbar?.items.map(\.itemIdentifier.rawValue) ?? [])"
+            )
         }
 
         window.close()
@@ -101,6 +105,44 @@ final class AppWindowRouterTests: XCTestCase {
             window.firstResponder === window,
             "Expected the window to own initial focus, got \(String(describing: window.firstResponder))"
         )
+
+        window.close()
+    }
+
+    func testSettingsWindowUsesStoredAppearanceAndUpdatesLive() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let originalApplicationAppearance = NSApp.appearance
+        defer {
+            NSApp.appearance = originalApplicationAppearance
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.set(
+            AppAppearancePreference.dark.rawValue,
+            forKey: AppAppearancePreference.userDefaultsKey
+        )
+        let router = makeRouter(defaults: defaults)
+
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow)
+        XCTAssertEqual(window.appearance?.name, .darkAqua)
+        XCTAssertEqual(
+            window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]),
+            .darkAqua
+        )
+
+        AppAppearancePreference.light.storeAndApply(in: defaults)
+        await settleWindowLayout(window)
+        XCTAssertEqual(window.appearance?.name, .aqua)
+        XCTAssertEqual(
+            window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]),
+            .aqua
+        )
+
+        AppAppearancePreference.system.storeAndApply(in: defaults)
+        await settleWindowLayout(window)
+        XCTAssertNil(window.appearance)
 
         window.close()
     }

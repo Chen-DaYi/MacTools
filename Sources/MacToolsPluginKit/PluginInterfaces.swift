@@ -7,9 +7,8 @@ public protocol MacToolsPlugin: AnyObject {
     var primaryPanel: (any PluginPrimaryPanel)? { get }
     var componentPanel: (any PluginComponentPanel)? { get }
     var permissionRequirements: [PluginPermissionRequirement] { get }
-    var settingsSections: [PluginSettingsSection] { get }
     var shortcutDefinitions: [PluginShortcutDefinition] { get }
-    var configuration: PluginConfiguration? { get }
+    var settingsPage: PluginSettingsPage? { get }
     var onStateChange: (() -> Void)? { get set }
     var requestPermissionGuidance: ((String) -> Void)? { get set }
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)? { get set }
@@ -19,7 +18,7 @@ public protocol MacToolsPlugin: AnyObject {
     func deactivate(reason: PluginDeactivationReason)
     func permissionState(for permissionID: String) -> PluginPermissionState
     func handlePermissionAction(id: String)
-    func handleSettingsAction(id: String)
+    func handleSettingsAction(_ action: PluginSettingsAction)
     func handleShortcutAction(id: String)
 }
 
@@ -54,15 +53,11 @@ public extension MacToolsPlugin {
         []
     }
 
-    var settingsSections: [PluginSettingsSection] {
-        []
-    }
-
     var shortcutDefinitions: [PluginShortcutDefinition] {
         []
     }
 
-    var configuration: PluginConfiguration? {
+    var settingsPage: PluginSettingsPage? {
         nil
     }
 
@@ -77,7 +72,7 @@ public extension MacToolsPlugin {
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 }
 
@@ -173,22 +168,9 @@ public protocol MenuBarHostStatusItemRecovering: AnyObject {
 }
 
 /// Optional protocol for plugins that need to open their settings page from custom UI, such as a floating panel.
-/// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
 @MainActor
-public protocol PluginConfigurationPresenting: AnyObject {
-    /// Host-injected callback requesting presentation of this plugin's settings page.
-    var requestConfigurationPresentation: (() -> Void)? { get set }
-}
-
-/// Legacy PluginKit v3 compatibility surface.
-///
-/// The host no longer ties plugin lifecycle to Dashboard or Feature Panel
-/// visibility, but previously released plugin binaries still reference this
-/// protocol descriptor. Keep the declaration until the next PluginKit ABI
-/// version so those installed packages continue to load.
-@MainActor
-public protocol PluginFeatureVisibilityLifecycleHandling: AnyObject {
-    func featureVisibilityDidChange(_ isVisible: Bool)
+public protocol PluginSettingsPresenting: AnyObject {
+    var requestSettingsPresentation: (() -> Void)? { get set }
 }
 
 /// Optional hook for built-in plugins that cache localized descriptors or

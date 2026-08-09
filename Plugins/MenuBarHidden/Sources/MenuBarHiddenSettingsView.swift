@@ -3,30 +3,30 @@ import SwiftUI
 import MacToolsPluginKit
 
 struct MenuBarHiddenSettingsView: View {
+    enum SectionKind {
+        case behavior
+        case layout
+    }
+
     @ObservedObject var controller: MenuBarHiddenController
+    let section: SectionKind
     private var localization: PluginLocalization { controller.localization }
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+        switch section {
+        case .behavior:
             behaviorSection
+        case .layout:
             layoutSection
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear { controller.setSettingsVisible(true) }
-        .onDisappear { controller.setSettingsVisible(false) }
     }
 
     // MARK: - Behavior
 
     private var behaviorSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(
-                title: localization.string("settings.behavior.title", defaultValue: "行为"),
-                icon: "switch.2"
-            )
-
-            VStack(spacing: 0) {
-                toggleRow(
+        VStack(spacing: 0) {
+            toggleRow(
                     title: localization.string("settings.hideIcons.title", defaultValue: "隐藏菜单栏图标"),
                     description: localization.string(
                         "settings.hideIcons.description",
@@ -36,10 +36,10 @@ struct MenuBarHiddenSettingsView: View {
                         get: { controller.isEnabled },
                         set: { controller.isEnabled = $0 }
                     )
-                )
-                Divider()
+            )
+            Divider()
                     .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
-                toggleRow(
+            toggleRow(
                     title: localization.string("settings.showInPanel.title", defaultValue: "面板中显示隐藏图标"),
                     description: localization.string(
                         "settings.showInPanel.description",
@@ -50,10 +50,10 @@ struct MenuBarHiddenSettingsView: View {
                         set: { controller.showsHiddenIconsInPanel = $0 }
                     ),
                     isEnabled: controller.permissions.canManageItems
-                )
-                Divider()
+            )
+            Divider()
                     .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
-                toggleRow(
+            toggleRow(
                     title: localization.string("settings.alwaysHidden.title", defaultValue: "永久隐藏"),
                     description: localization.string(
                         "settings.alwaysHidden.description",
@@ -64,9 +64,7 @@ struct MenuBarHiddenSettingsView: View {
                         set: { controller.isAlwaysHiddenEnabled = $0 }
                     ),
                     isEnabled: controller.permissions.canManageItems
-                )
-            }
-            .pluginSettingsCardBackground(.host)
+            )
         }
     }
 
@@ -74,13 +72,9 @@ struct MenuBarHiddenSettingsView: View {
 
     private var layoutSection: some View {
         let authorized = controller.permissions.canManageItems
-        return VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack(spacing: 8) {
-                sectionHeader(
-                    title: localization.string("settings.layout.title", defaultValue: "菜单栏布局"),
-                    icon: "rectangle.split.2x1"
-                )
-                if !authorized {
+        return VStack(alignment: .leading, spacing: 12) {
+            if !authorized {
+                HStack {
                     Label(
                         localization.string("settings.layout.authorizationRequired", defaultValue: "需要授权"),
                         systemImage: "lock.fill"
@@ -90,33 +84,31 @@ struct MenuBarHiddenSettingsView: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Capsule().fill(Color.primary.opacity(0.07)))
+                    Spacer()
                 }
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                stripRow(
+            stripRow(
                     title: MenuBarHiddenSection.visible.title(localization: localization),
                     section: .visible,
                     items: authorized ? controller.snapshot.visibleItems : []
                 )
-                stripRow(
+            stripRow(
                     title: MenuBarHiddenSection.hidden.title(localization: localization),
                     section: .hidden,
                     items: authorized ? controller.snapshot.hiddenItems : []
                 )
-                if controller.isAlwaysHiddenEnabled {
-                    stripRow(
+            if controller.isAlwaysHiddenEnabled {
+                stripRow(
                         title: MenuBarHiddenSection.alwaysHidden.title(localization: localization),
                         section: .alwaysHidden,
                         items: authorized ? controller.snapshot.alwaysHiddenItems : []
-                    )
-                }
+                )
             }
-            .padding(PluginSettingsTheme.Spacing.cardContent)
-            .pluginSettingsCardBackground(.host)
-            .opacity(authorized ? 1 : 0.4)
-            .allowsHitTesting(authorized)
         }
+        .padding(PluginSettingsTheme.Spacing.cardContent)
+        .opacity(authorized ? 1 : 0.4)
+        .allowsHitTesting(authorized)
     }
 
     // MARK: - Rows
@@ -189,11 +181,6 @@ struct MenuBarHiddenSettingsView: View {
         .opacity(isEnabled ? 1 : 0.45)
     }
 
-    private func sectionHeader(title: String, icon: String) -> some View {
-        Label(title, systemImage: icon)
-            .font(PluginSettingsTheme.Typography.sectionTitle)
-            .foregroundStyle(.secondary)
-    }
 }
 
 private struct MenuBarHiddenLayoutStripRow: View {

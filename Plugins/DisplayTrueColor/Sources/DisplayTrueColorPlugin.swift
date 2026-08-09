@@ -73,7 +73,6 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
@@ -81,7 +80,7 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     func refresh() {

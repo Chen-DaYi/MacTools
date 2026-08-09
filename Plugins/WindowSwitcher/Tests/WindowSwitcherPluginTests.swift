@@ -52,6 +52,14 @@ private final class WindowSwitcherMemoryStorage: PluginStorage {
 
 @MainActor
 final class WindowSwitcherPluginTests: XCTestCase {
+    func testShortcutRecorderUsesGroupSummaryWithoutDuplicateControlLabel() {
+        let plugin = WindowSwitcherPlugin(accessibilityTrusted: { true })
+        let definition = plugin.shortcutDefinitions.first
+
+        XCTAssertNil(definition?.settingsControlTitle)
+        XCTAssertNil(definition?.settingsControlSystemImage)
+    }
+
     func testModePersists() {
         let storage = WindowSwitcherMemoryStorage()
         let store = WindowSwitcherStore(storage: storage)

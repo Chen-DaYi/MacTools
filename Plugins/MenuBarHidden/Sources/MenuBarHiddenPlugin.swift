@@ -255,12 +255,29 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
 
     // MARK: - Configuration
 
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription, prefersFullHeight: false) { [controller] _ in
-            MenuBarHiddenSettingsView(controller: controller)
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [
+            PluginSettingsSection(
+                id: "behavior",
+                title: controller.localization.string("settings.behavior.title", defaultValue: "行为"),
+                systemImage: "switch.2",
+                presentation: .edgeToEdge
+            ) { [controller] _ in
+                MenuBarHiddenSettingsView(controller: controller, section: .behavior)
+            },
+            PluginSettingsSection(
+                id: "layout",
+                title: controller.localization.string("settings.layout.title", defaultValue: "菜单栏布局"),
+                systemImage: "rectangle.split.2x1",
+                presentation: .edgeToEdge
+            ) { [controller] _ in
+                MenuBarHiddenSettingsView(controller: controller, section: .layout)
+            }
+        ])
+        .onVisibilityChange { [controller] isVisible in
+            controller.setSettingsVisible(isVisible)
         }
     }
 

@@ -119,7 +119,6 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {
@@ -143,7 +142,7 @@ final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     private func setDockHidden(_ isEnabled: Bool) {

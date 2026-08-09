@@ -85,7 +85,7 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         var requests: [AppPresentationRequest] = []
         host.appPresentationHandler = { requests.append($0) }
 
-        host.presentPluginConfiguration(pluginID: plugin.metadata.id)
+        host.presentPluginSettings(pluginID: plugin.metadata.id)
 
         XCTAssertEqual(requests, [.settings(.pluginConfiguration(plugin.metadata.id))])
     }
@@ -195,12 +195,9 @@ private final class MockNavigationPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
-    var configuration: PluginConfiguration? {
-        PluginConfiguration { _ in
-            EmptyView()
-        }
+    var settingsPage: PluginSettingsPage? {
+        .workspace { _ in EmptyView() }
     }
 
     func refresh() {}
@@ -214,7 +211,7 @@ private final class MockNavigationPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 }
 

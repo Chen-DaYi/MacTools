@@ -20,8 +20,12 @@ struct AppHotkeyManagerView: View {
     @State private var pendingShortcutConflictWarning: AppHotkeyShortcutConflictWarning?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            bindingSection
+        Group {
+            if store.entries.isEmpty {
+                emptyView
+            } else {
+                entryList
+            }
         }
         .alert(item: $pendingShortcutConflictWarning) { warning in
             Alert(
@@ -53,31 +57,6 @@ struct AppHotkeyManagerView: View {
         }
     }
 
-    // MARK: Binding Section
-
-    private var bindingSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack {
-                Label(localization.string("settings.section.bindings", defaultValue: "应用绑定"), systemImage: "keyboard")
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(action: addApp) {
-                    Label(localization.string("settings.add", defaultValue: "添加"), systemImage: "plus")
-                        .font(PluginSettingsTheme.Typography.controlLabel)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
-            if store.entries.isEmpty {
-                emptyView
-            } else {
-                entryList
-            }
-        }
-    }
-
     private var emptyView: some View {
         HStack {
             Spacer()
@@ -92,7 +71,6 @@ struct AppHotkeyManagerView: View {
             .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             Spacer()
         }
-        .pluginSettingsCardBackground(.host)
     }
 
     private var entryList: some View {
@@ -137,7 +115,6 @@ struct AppHotkeyManagerView: View {
                 }
             }
         }
-        .pluginSettingsCardBackground(.host)
     }
 
     private func applyShortcut(_ binding: ShortcutBinding, to entryID: UUID) {
@@ -147,7 +124,11 @@ struct AppHotkeyManagerView: View {
 
     // MARK: Actions
 
-    private func addApp() {
+    static func addApp(
+        store: AppHotkeyStore,
+        localization: PluginLocalization,
+        onUpdate: () -> Void
+    ) {
         let panel = NSOpenPanel()
         panel.title = localization.string("openPanel.title", defaultValue: "选择应用")
         panel.message = localization.string("openPanel.message", defaultValue: "选择要绑定快捷键的应用")
@@ -169,6 +150,11 @@ struct AppHotkeyManagerView: View {
 // MARK: - Entry Row
 
 private struct AppShortcutEntryRow: View {
+    private enum Layout {
+        static let recorderWidth = PluginSettingsTheme.Size.shortcutRecorderWidth
+        static let summaryMinWidth: CGFloat = 220
+    }
+
     let entry: AppShortcutEntry
     let localization: PluginLocalization
     let onClearShortcut: () -> Void
@@ -201,7 +187,24 @@ private struct AppShortcutEntryRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                appSummary
+                    .frame(minWidth: Layout.summaryMinWidth)
+                shortcutControl
+            }
+
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                appSummary
+                shortcutControl
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .pluginSettingsListRowPadding()
+    }
+
+    private var appSummary: some View {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
             Image(nsImage: appIcon)
                 .resizable()
                 .frame(width: PluginSettingsTheme.Size.rowIcon, height: PluginSettingsTheme.Size.rowIcon)
@@ -210,6 +213,7 @@ private struct AppShortcutEntryRow: View {
                 Text(entry.displayName)
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     .lineLimit(1)
+                    .truncationMode(.tail)
 
                 Text(subtitle)
                     .font(PluginSettingsTheme.Typography.rowDescription)
@@ -217,8 +221,13 @@ private struct AppShortcutEntryRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
+    private var shortcutControl: some View {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
             PluginShortcutRecorder(
                 title: localization.format(
                     "settings.shortcutRecorderTitleFormat",
@@ -226,10 +235,12 @@ private struct AppShortcutEntryRow: View {
                     entry.displayName
                 ),
                 displayText: shortcutText,
+                minWidth: Layout.recorderWidth,
                 onRecord: onRecord,
                 onBeginRecording: onBeginRecording,
                 onEndRecording: onEndRecording
             )
+            .frame(width: Layout.recorderWidth)
 
             if entry.shortcut != nil {
                 Button(action: onClearShortcut) {
@@ -247,6 +258,5 @@ private struct AppShortcutEntryRow: View {
             .buttonStyle(.plain)
             .help(localization.string("settings.deleteBinding", defaultValue: "删除此绑定"))
         }
-        .pluginSettingsListRowPadding()
     }
 }

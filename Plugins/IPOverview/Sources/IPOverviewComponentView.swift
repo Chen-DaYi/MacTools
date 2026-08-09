@@ -11,6 +11,8 @@ struct IPOverviewComponentView: View {
     let localization: PluginLocalization
     let startsInDetails: Bool
     let showsBackButton: Bool
+    let showsDetailHeader: Bool
+    let managesScrolling: Bool
     @State private var customName = ""
     @State private var customURL = ""
     @State private var addError = ""
@@ -20,12 +22,16 @@ struct IPOverviewComponentView: View {
         viewModel: IPOverviewViewModel,
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         startsInDetails: Bool = false,
-        showsBackButton: Bool = true
+        showsBackButton: Bool = true,
+        showsDetailHeader: Bool = true,
+        managesScrolling: Bool = true
     ) {
         self.viewModel = viewModel
         self.localization = localization
         self.startsInDetails = startsInDetails
         self.showsBackButton = showsBackButton
+        self.showsDetailHeader = showsDetailHeader
+        self.managesScrolling = managesScrolling
     }
 
     var body: some View {
@@ -111,22 +117,32 @@ struct IPOverviewComponentView: View {
 
     private var detailPage: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            detailHeader
+            if showsDetailHeader {
+                detailHeader
+            }
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-                    networkQualitySection
-                    publicIPSection
-                    localAddressSection
-                    connectivitySection
-                    webRTCLeakSection
-                    dnsLeakSection
-                    privacyFooter
+            if managesScrolling {
+                ScrollView(.vertical, showsIndicators: false) {
+                    detailSections
                 }
-                .padding(.bottom, 2)
+            } else {
+                detailSections
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var detailSections: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            networkQualitySection
+            publicIPSection
+            localAddressSection
+            connectivitySection
+            webRTCLeakSection
+            dnsLeakSection
+            privacyFooter
+        }
+        .padding(.bottom, 2)
     }
 
     private var detailHeader: some View {
@@ -240,7 +256,7 @@ struct IPOverviewComponentView: View {
                     result: viewModel.snapshot.internationalIPv6
                 )
             }
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -286,7 +302,7 @@ struct IPOverviewComponentView: View {
                     }
                 }
             }
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -368,7 +384,7 @@ struct IPOverviewComponentView: View {
                 customTargetForm
             }
             .padding(PluginSettingsTheme.Spacing.cardContent)
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -500,10 +516,7 @@ struct IPOverviewComponentView: View {
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
         .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            PluginSettingsTheme.Palette.nativeCardBackground,
-            in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card, style: .continuous)
-        )
+        .pluginSettingsCardBackground(.standard)
     }
 
     private func leakDetailsPopover(
@@ -1031,7 +1044,7 @@ private struct NetworkQualityCardView: View {
             }
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private func chartContent(
@@ -1213,7 +1226,8 @@ private struct NetworkQualityGaugeView: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(PluginSettingsTheme.Palette.cardBackground.opacity(0.66))
+                .fill(PluginSettingsTheme.Surface.raisedControl)
+                .opacity(0.66)
                 .frame(width: 116, height: 116)
             GaugeArc(progress: 1)
                 .stroke(.secondary.opacity(0.15), style: StrokeStyle(lineWidth: 10, lineCap: .round))
@@ -1281,7 +1295,8 @@ private struct NetworkQualitySparklineView: View {
             GeometryReader { proxy in
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(PluginSettingsTheme.Palette.cardBackground.opacity(0.42))
+                        .fill(PluginSettingsTheme.Surface.raisedControl)
+                        .opacity(0.42)
                     NetworkQualityGrid()
                         .stroke(.secondary.opacity(0.11), lineWidth: 0.7)
                     if normalizedSamples.isEmpty {

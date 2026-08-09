@@ -25,6 +25,9 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertTrue(index.items.contains {
             $0.kind == .setting && $0.title == "自动切换"
         })
+        XCTAssertFalse(index.items.contains {
+            $0.kind == .setting && $0.title == "暂不可用设置"
+        })
         XCTAssertTrue(index.items.contains {
             $0.kind == .setting && $0.title == "辅助功能授权"
         })
@@ -453,6 +456,14 @@ final class MacToolsSearchTests: XCTestCase {
                 )
             )
         )
+        XCTAssertFalse(
+            host.hasPluginSettingsSearchTarget(
+                PluginSettingsSearchTarget(
+                    pluginID: plugin.metadata.id,
+                    entryID: "hidden-row"
+                )
+            )
+        )
     }
 
     func testInstalledIncompatiblePluginIsDiscoverableInMarketplace() throws {
@@ -620,22 +631,41 @@ private final class SearchableTestPlugin:
         )
     }
 
-    var settingsSections: [PluginSettingsSection] {
-        [
-            PluginSettingsSection(
-                id: "automatic",
-                title: "自动切换",
-                description: "根据屏幕状态自动切换亮度。",
-                status: .init(
-                    text: "已开启",
-                    systemImage: "checkmark.circle",
-                    tone: .positive
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "automatic",
+                    title: "自动切换",
+                    rows: [
+                        PluginSettingsRow(
+                            id: "automatic-status",
+                            title: "自动切换",
+                            description: "根据屏幕状态自动切换亮度。",
+                            control: .status(
+                                text: "已开启",
+                                systemImage: "checkmark.circle",
+                                tone: .positive,
+                                actionTitle: nil
+                            )
+                        )
+                    ]
                 ),
-                footnote: nil,
-                buttonTitle: nil,
-                actionID: nil
-            )
-        ]
+                PluginSettingsSection(
+                    id: "temporarily-unavailable",
+                    title: "暂不可用设置",
+                    isVisible: false,
+                    rows: [
+                        PluginSettingsRow(
+                            id: "hidden-row",
+                            title: "暂不可用设置",
+                            control: .toggle(isOn: false)
+                        )
+                    ]
+                )
+            ]
+        )
     }
 
     var permissionRequirements: [PluginPermissionRequirement] {
@@ -661,12 +691,6 @@ private final class SearchableTestPlugin:
                 isRequired: false
             )
         ]
-    }
-
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { _ in
-            EmptyView()
-        }
     }
 
     var settingsSearchEntries: [PluginSettingsSearchEntry] {

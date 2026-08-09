@@ -48,9 +48,9 @@
       "summary": "分別調整正在播放音訊的應用程式音量"
     }
   },
-  "version": "1.0.0",
-  "minHostVersion": "1.1.4",
-  "pluginKitVersion": 3,
+  "version": "1.0.1",
+  "minHostVersion": "1.2.0",
+  "pluginKitVersion": 4,
   "bundleRelativePath": "AppVolume.bundle",
   "factoryClass": "AppVolumePlugin.AppVolumePluginFactory",
   "build": {
@@ -60,7 +60,7 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": false
+    "settings": "form"
   },
   "permissions": [
     "screen-recording"

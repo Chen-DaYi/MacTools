@@ -37,7 +37,7 @@ private struct TrackpadGestureReadinessError: LocalizedError {
 
 @MainActor
 final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
-    AccessibilityPermissionRefreshing, PluginConfigurationPresenting,
+    AccessibilityPermissionRefreshing, PluginSettingsPresenting,
     PluginFeatureExtractionReadinessProviding {
     private enum PermissionID {
         static let accessibility = "accessibility"
@@ -50,7 +50,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var requestConfigurationPresentation: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
 
     let store: TrackpadGestureStore
 
@@ -199,24 +199,70 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         ]
     }
 
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [weak self] _ in
-            guard let self else { return AnyView(EmptyView()) }
-            return AnyView(TrackpadGesturesSettingsView(
-                store: self.store,
-                localization: self.localization,
-                onChange: { [weak self] in self?.configurationDidChange() },
-                onSetTesting: { [weak self] enabled in self?.setTesting(enabled) }
-            ))
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [
+            PluginSettingsSection(
+                id: "mappings",
+                title: localization.string("settings.mappings.title", defaultValue: "手势映射"),
+                systemImage: "hand.tap",
+                presentation: .edgeToEdge
+            ) { [weak self] _ in
+                if let self {
+                    TrackpadGesturesSettingsView(
+                        store: self.store,
+                        localization: self.localization,
+                        onChange: { [weak self] in self?.configurationDidChange() },
+                        onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
+                        section: .mappings
+                    )
+                }
+            },
+            PluginSettingsSection(
+                id: "typing-protection",
+                title: localization.string("settings.typing.title", defaultValue: "输入保护"),
+                systemImage: "keyboard",
+                presentation: .edgeToEdge
+            ) { [weak self] _ in
+                if let self {
+                    TrackpadGesturesSettingsView(
+                        store: self.store,
+                        localization: self.localization,
+                        onChange: { [weak self] in self?.configurationDidChange() },
+                        onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
+                        section: .typingProtection
+                    )
+                }
+            },
+            PluginSettingsSection(
+                id: "testing",
+                title: localization.string("settings.testing.title", defaultValue: "测试"),
+                systemImage: "waveform.path",
+                presentation: .edgeToEdge
+            ) { [weak self] _ in
+                if let self {
+                    TrackpadGesturesSettingsView(
+                        store: self.store,
+                        localization: self.localization,
+                        onChange: { [weak self] in self?.configurationDidChange() },
+                        onSetTesting: { [weak self] enabled in self?.setTesting(enabled) },
+                        section: .testing
+                    )
+                }
+            }
+        ])
+        .onVisibilityChange { [weak self] isVisible in
+            guard !isVisible, self?.store.isTesting == true else {
+                return
+            }
+            self?.setTesting(false)
         }
     }
 
     func handleAction(_ action: PluginPanelAction) {
         if case .invokeAction = action {
-            requestConfigurationPresentation?()
+            requestSettingsPresentation?()
         }
     }
 
@@ -258,7 +304,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         onStateChange?()
     }
 
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     func refreshAccessibilityPermission() {

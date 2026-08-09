@@ -2,164 +2,151 @@ import SwiftUI
 import MacToolsPluginKit
 
 struct DeviceBatterySettingsView: View {
+    enum SectionKind {
+        case layout
+        case sources
+        case notifications
+    }
+
     @ObservedObject var store: DeviceBatteryStore
     let localization: PluginLocalization
     let onChange: () -> Void
     let onNotificationSettingsChange: () -> Void
+    let section: SectionKind
     @State private var thresholdText: String
 
     init(
         store: DeviceBatteryStore,
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         onChange: @escaping () -> Void,
-        onNotificationSettingsChange: @escaping () -> Void = {}
+        onNotificationSettingsChange: @escaping () -> Void = {},
+        section: SectionKind
     ) {
         self.store = store
         self.localization = localization
         self.onChange = onChange
         self.onNotificationSettingsChange = onNotificationSettingsChange
+        self.section = section
         _thresholdText = State(initialValue: "\(store.lowBatteryNotificationThreshold)")
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            layoutSection
-            sourceSection
-            notificationSection
+        Group {
+            switch section {
+            case .layout:
+                layoutSection
+            case .sources:
+                sourceSection
+            case .notifications:
+                notificationSection
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: store.lowBatteryNotificationThreshold) { _, newValue in
             thresholdText = "\(newValue)"
         }
     }
 
     private var layoutSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(
-                systemName: "rectangle.grid.2x2",
-                title: localization.string("settings.layout.title", defaultValue: "组件布局")
-            )
-
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
-                    ForEach(DeviceBatteryLayoutMode.allCases, id: \.self) { mode in
-                        DeviceBatteryLayoutModeButton(
-                            mode: mode,
-                            isSelected: store.layoutMode == mode,
-                            iconSystemName: iconName(for: mode),
-                            localization: localization,
-                            action: {
-                                store.setLayoutMode(mode)
-                                onChange()
-                            }
-                        )
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            ForEach(DeviceBatteryLayoutMode.allCases, id: \.self) { mode in
+                DeviceBatteryLayoutModeButton(
+                    mode: mode,
+                    isSelected: store.layoutMode == mode,
+                    iconSystemName: iconName(for: mode),
+                    localization: localization,
+                    action: {
+                        store.setLayoutMode(mode)
+                        onChange()
                     }
-                }
+                )
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(PluginSettingsTheme.Spacing.cardContent)
-            .pluginSettingsCardBackground(.host)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(PluginSettingsTheme.Spacing.cardContent)
     }
 
     private var sourceSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(
-                systemName: "bolt.horizontal.circle",
-                title: localization.string("settings.sources.title", defaultValue: "显示内容")
+        VStack(spacing: 0) {
+            sourceToggle(
+                title: localization.string("settings.source.internal.title", defaultValue: "Mac 内置电池"),
+                description: localization.string(
+                    "settings.source.internal.description",
+                    defaultValue: "显示本机电量、充电状态和剩余时间。"
+                ),
+                isOn: store.showInternalBattery,
+                isFirst: true,
+                action: store.setShowInternalBattery
             )
-
-            VStack(spacing: 0) {
-                sourceToggle(
-                    title: localization.string("settings.source.internal.title", defaultValue: "Mac 内置电池"),
-                    description: localization.string(
-                        "settings.source.internal.description",
-                        defaultValue: "显示本机电量、充电状态和剩余时间。"
-                    ),
-                    isOn: store.showInternalBattery,
-                    isFirst: true,
-                    action: store.setShowInternalBattery
-                )
-                sourceToggle(
-                    title: localization.string(
-                        "settings.source.appleMobile.title",
-                        defaultValue: "iPhone、iPad 与 Apple Watch"
-                    ),
-                    description: localization.string(
-                        "settings.source.appleMobile.description",
-                        defaultValue: "读取已信任并通过 USB 或 Wi-Fi 连接的 Apple 移动设备。"
-                    ),
-                    isOn: store.showAppleMobileDevices,
-                    action: store.setShowAppleMobileDevices
-                )
-                sourceToggle(
-                    title: localization.string("settings.source.bluetooth.title", defaultValue: "蓝牙与 Apple 外设"),
-                    description: localization.string(
-                        "settings.source.bluetooth.description",
-                        defaultValue: "读取系统可见的蓝牙设备、AirPods 分体电量和 Magic 外设。"
-                    ),
-                    isOn: store.showBluetoothDevices,
-                    action: store.setShowBluetoothDevices
-                )
-                sourceToggle(
-                    title: localization.string("settings.source.rapoo.title", defaultValue: "厂商 HID 鼠标"),
-                    description: localization.string(
-                        "settings.source.rapoo.description",
-                        defaultValue: "读取已适配鼠标的电量、充电状态、设备型号和名称。"
-                    ),
-                    isOn: store.showRapooDevices,
-                    isLast: true,
-                    action: store.setShowRapooDevices
-                )
-            }
-            .pluginSettingsCardBackground(.plugin)
+            sourceToggle(
+                title: localization.string(
+                    "settings.source.appleMobile.title",
+                    defaultValue: "iPhone、iPad 与 Apple Watch"
+                ),
+                description: localization.string(
+                    "settings.source.appleMobile.description",
+                    defaultValue: "读取已信任并通过 USB 或 Wi-Fi 连接的 Apple 移动设备。"
+                ),
+                isOn: store.showAppleMobileDevices,
+                action: store.setShowAppleMobileDevices
+            )
+            sourceToggle(
+                title: localization.string("settings.source.bluetooth.title", defaultValue: "蓝牙与 Apple 外设"),
+                description: localization.string(
+                    "settings.source.bluetooth.description",
+                    defaultValue: "读取系统可见的蓝牙设备、AirPods 分体电量和 Magic 外设。"
+                ),
+                isOn: store.showBluetoothDevices,
+                action: store.setShowBluetoothDevices
+            )
+            sourceToggle(
+                title: localization.string("settings.source.rapoo.title", defaultValue: "厂商 HID 鼠标"),
+                description: localization.string(
+                    "settings.source.rapoo.description",
+                    defaultValue: "读取已适配鼠标的电量、充电状态、设备型号和名称。"
+                ),
+                isOn: store.showRapooDevices,
+                isLast: true,
+                action: store.setShowRapooDevices
+            )
         }
     }
 
     private var notificationSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(
-                systemName: "bell.badge",
-                title: localization.string("settings.notification.title", defaultValue: "低电量通知")
-            )
-
-            VStack(spacing: 0) {
-                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                        Text(localization.string("settings.notification.lowBattery.title", defaultValue: "发送低电量通知"))
-                            .font(PluginSettingsTheme.Typography.rowTitle)
-                        Text(localization.string(
-                            "settings.notification.lowBattery.description",
-                            defaultValue: "设备电量低于阈值时发送系统通知。"
-                        ))
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                    }
-
-                    Spacer(minLength: 12)
-
-                    Toggle("", isOn: Binding(
-                        get: { store.lowBatteryNotificationEnabled },
-                        set: { newValue in
-                            store.setLowBatteryNotificationEnabled(newValue)
-                            onNotificationSettingsChange()
-                        }
+        VStack(spacing: 0) {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                    Text(localization.string("settings.notification.lowBattery.title", defaultValue: "发送低电量通知"))
+                        .font(PluginSettingsTheme.Typography.rowTitle)
+                    Text(localization.string(
+                        "settings.notification.lowBattery.description",
+                        defaultValue: "设备电量低于阈值时发送系统通知。"
                     ))
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
                 }
-                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
 
-                if store.lowBatteryNotificationEnabled {
-                    Divider()
-                        .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
+                Spacer(minLength: 12)
 
-                    thresholdRow
-                }
+                Toggle("", isOn: Binding(
+                    get: { store.lowBatteryNotificationEnabled },
+                    set: { newValue in
+                        store.setLowBatteryNotificationEnabled(newValue)
+                        onNotificationSettingsChange()
+                    }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
             }
-            .pluginSettingsCardBackground(.plugin)
+            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+            .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+
+            if store.lowBatteryNotificationEnabled {
+                Divider()
+                    .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
+
+                thresholdRow
+            }
         }
     }
 
@@ -259,16 +246,6 @@ struct DeviceBatterySettingsView: View {
             .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
             .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
         }
-    }
-
-    private func sectionHeader(systemName: String, title: String) -> some View {
-        Label {
-            Text(title)
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-        } icon: {
-            Image(systemName: systemName)
-        }
-        .foregroundStyle(.secondary)
     }
 
     private func commitThresholdText() {

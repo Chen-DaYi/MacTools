@@ -8,7 +8,7 @@ final class IPOverviewPluginTests: XCTestCase {
         let viewModel = IPOverviewViewModel(storage: IPOverviewPluginTestStorage())
         let plugin = IPOverviewPlugin(viewModel: viewModel)
         var didRequestConfigurationPresentation = false
-        plugin.requestConfigurationPresentation = {
+        plugin.requestSettingsPresentation = {
             didRequestConfigurationPresentation = true
         }
 

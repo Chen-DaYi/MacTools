@@ -270,78 +270,6 @@ public enum MenuBarControlItemDefaults {
     }
 }
 
-public struct PluginConfigurationContext {
-    public let pluginID: String
-    public let shortcutItems: [ShortcutSettingsItem]
-
-    private let recordShortcutHandler: (String, ShortcutBinding) -> String?
-    private let beginShortcutRecordingHandler: (String) -> Void
-    private let clearShortcutHandler: (String) -> Void
-    private let resetShortcutHandler: (String) -> Void
-
-    public init(
-        pluginID: String,
-        shortcutItems: [ShortcutSettingsItem] = [],
-        recordShortcut: @escaping (String, ShortcutBinding) -> String? = { _, _ in nil },
-        beginShortcutRecording: @escaping (String) -> Void = { _ in },
-        clearShortcut: @escaping (String) -> Void = { _ in },
-        resetShortcut: @escaping (String) -> Void = { _ in }
-    ) {
-        self.pluginID = pluginID
-        self.shortcutItems = shortcutItems
-        self.recordShortcutHandler = recordShortcut
-        self.beginShortcutRecordingHandler = beginShortcutRecording
-        self.clearShortcutHandler = clearShortcut
-        self.resetShortcutHandler = resetShortcut
-    }
-
-    public func shortcutItem(definitionID: String) -> ShortcutSettingsItem? {
-        shortcutItems.first { $0.id == "\(pluginID).shortcut.\(definitionID)" }
-    }
-
-    public func recordShortcut(
-        _ binding: ShortcutBinding,
-        for itemID: String
-    ) -> PluginShortcutRecordingResult {
-        PluginShortcutRecordingResult.from(
-            errorMessage: recordShortcutHandler(itemID, binding)
-        )
-    }
-
-    public func beginShortcutRecording(for itemID: String) {
-        beginShortcutRecordingHandler(itemID)
-    }
-
-    public func clearShortcut(for itemID: String) {
-        clearShortcutHandler(itemID)
-    }
-
-    public func resetShortcut(for itemID: String) {
-        resetShortcutHandler(itemID)
-    }
-}
-
-public struct PluginConfiguration {
-    public let description: String?
-    public let prefersFullHeight: Bool
-    public let integratedShortcutGroupIDs: Set<String>
-    public let makeView: (PluginConfigurationContext) -> AnyView
-
-    public init<Content: View>(
-        description: String? = nil,
-        prefersFullHeight: Bool = false,
-        integratedShortcutGroupIDs: Set<String> = [],
-        @ViewBuilder content: @escaping (PluginConfigurationContext) -> Content
-    ) {
-        self.description = description
-        self.prefersFullHeight = prefersFullHeight
-        self.integratedShortcutGroupIDs = integratedShortcutGroupIDs
-        self.makeView = { context in
-            AnyView(content(context))
-        }
-    }
-}
-
 public struct PluginPrimaryPanelDescriptor {
     public let controlStyle: PluginControlStyle
     public let menuActionBehavior: PluginMenuActionBehavior
@@ -824,46 +752,6 @@ public struct PluginPermissionState {
     }
 }
 
-public struct PluginSettingsSection: Identifiable {
-    public struct Status {
-        public let text: String
-        public let systemImage: String
-        public let tone: PluginStatusTone
-
-        public init(text: String, systemImage: String, tone: PluginStatusTone) {
-            self.text = text
-            self.systemImage = systemImage
-            self.tone = tone
-        }
-    }
-
-    public let id: String
-    public let title: String
-    public let description: String
-    public let status: Status
-    public let footnote: String?
-    public let buttonTitle: String?
-    public let actionID: String?
-
-    public init(
-        id: String,
-        title: String,
-        description: String,
-        status: Status,
-        footnote: String?,
-        buttonTitle: String?,
-        actionID: String?
-    ) {
-        self.id = id
-        self.title = title
-        self.description = description
-        self.status = status
-        self.footnote = footnote
-        self.buttonTitle = buttonTitle
-        self.actionID = actionID
-    }
-}
-
 public struct PluginPanelItem: Identifiable {
     public let id: String
     public let title: String
@@ -959,56 +847,6 @@ public struct PluginFeatureManagementItem: Identifiable {
     }
 }
 
-public struct PluginConfigurationItem: Identifiable {
-    public let id: String
-    public let pluginID: String
-    public let title: String
-    public let description: String
-    public let iconName: String
-    public let iconTint: Color
-    public let settingsCards: [PluginSettingsCard]
-    public let permissionCards: [PluginPermissionCard]
-    public let shortcutItems: [ShortcutSettingsItem]
-    public let hasCustomConfiguration: Bool
-    public let prefersFullHeight: Bool
-
-    public init(
-        id: String,
-        pluginID: String,
-        title: String,
-        description: String,
-        iconName: String,
-        iconTint: Color,
-        settingsCards: [PluginSettingsCard],
-        permissionCards: [PluginPermissionCard],
-        shortcutItems: [ShortcutSettingsItem],
-        hasCustomConfiguration: Bool,
-        prefersFullHeight: Bool = false
-    ) {
-        self.id = id
-        self.pluginID = pluginID
-        self.title = title
-        self.description = description
-        self.iconName = iconName
-        self.iconTint = iconTint
-        self.settingsCards = settingsCards
-        self.permissionCards = permissionCards
-        self.shortcutItems = shortcutItems
-        self.hasCustomConfiguration = hasCustomConfiguration
-        self.prefersFullHeight = prefersFullHeight
-    }
-}
-
-public struct PluginConfigurationViewItem: Identifiable {
-    public let id: String
-    public let content: AnyView
-
-    public init(id: String, content: AnyView) {
-        self.id = id
-        self.content = content
-    }
-}
-
 public struct PluginPermissionCard: Identifiable {
     public let id: String
     public let pluginID: String
@@ -1049,42 +887,5 @@ public struct PluginPermissionCard: Identifiable {
         self.statusTone = statusTone
         self.footnote = footnote
         self.buttonTitle = buttonTitle
-    }
-}
-
-public struct PluginSettingsCard: Identifiable {
-    public let id: String
-    public let pluginID: String
-    public let title: String
-    public let description: String
-    public let statusText: String
-    public let statusSystemImage: String
-    public let statusTone: PluginStatusTone
-    public let footnote: String?
-    public let buttonTitle: String?
-    public let actionID: String?
-
-    public init(
-        id: String,
-        pluginID: String,
-        title: String,
-        description: String,
-        statusText: String,
-        statusSystemImage: String,
-        statusTone: PluginStatusTone,
-        footnote: String?,
-        buttonTitle: String?,
-        actionID: String?
-    ) {
-        self.id = id
-        self.pluginID = pluginID
-        self.title = title
-        self.description = description
-        self.statusText = statusText
-        self.statusSystemImage = statusSystemImage
-        self.statusTone = statusTone
-        self.footnote = footnote
-        self.buttonTitle = buttonTitle
-        self.actionID = actionID
     }
 }

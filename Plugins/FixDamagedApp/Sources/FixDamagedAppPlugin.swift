@@ -82,7 +82,6 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
     )
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     // MARK: Init
@@ -124,19 +123,36 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
 
     // MARK: Configuration
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [weak self] _ in
-            guard let self else { return AnyView(EmptyView()) }
-            return AnyView(
-                FixDamagedAppSettingsView(
-                    isDragDetectionEnabled: self.isDragDetectionEnabled,
-                    localization: self.localization,
-                    onToggle: { [weak self] isOn in
-                        self?.setDragDetectionEnabled(isOn)
-                    }
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "behavior",
+                    title: localization.string("settings.section.behavior", defaultValue: "行为"),
+                    systemImage: "hand.rays",
+                    rows: [
+                        PluginSettingsRow(
+                            id: "drag-detection",
+                            title: localization.string("settings.dragDetection.title", defaultValue: "拖动检测"),
+                            description: localization.string(
+                                "settings.dragDetection.description",
+                                defaultValue: "拖入 .app 文件后松手，自动弹出修复窗口并开始修复。"
+                            ),
+                            systemImage: "hand.draw",
+                            control: .toggle(isOn: isDragDetectionEnabled)
+                        )
+                    ]
                 )
-            )
-        }
+            ]
+        )
+    }
+
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        guard case let .setBoolean(controlID, isOn) = action,
+              controlID == "drag-detection"
+        else { return }
+        setDragDetectionEnabled(isOn)
     }
 
     func setDragDetectionEnabled(_ enabled: Bool) {

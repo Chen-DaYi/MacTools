@@ -120,10 +120,10 @@ final class MenuBarStatusItemController: NSObject {
                 self?.windowRouter.showUnifiedSearch()
             },
             onPresentDiskCleanConfiguration: { [weak self] in
-                self?.pluginHost.presentPluginConfiguration(pluginID: "disk-clean")
+                self?.pluginHost.presentPluginSettings(pluginID: "disk-clean")
             },
             onPresentLaunchControlConfiguration: { [weak self] in
-                self?.pluginHost.presentPluginConfiguration(pluginID: "launch-control")
+                self?.pluginHost.presentPluginSettings(pluginID: "launch-control")
             },
             onAllPanelsClosed: { [weak self] in
                 self?.removeDismissMonitorsIfNeeded()

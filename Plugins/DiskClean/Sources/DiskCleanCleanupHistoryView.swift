@@ -221,7 +221,7 @@ struct DiskCleanCleanupHistorySection: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .pluginSettingsListRowPadding()
-                .pluginSettingsCardBackground(.plugin)
+                .pluginSettingsCardBackground(.standard)
         } else {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
                 if let attentionCount {
@@ -244,7 +244,7 @@ struct DiskCleanCleanupHistorySection: View {
                     }
                 }
                 .frame(maxHeight: 260)
-                .pluginSettingsCardBackground(.plugin)
+                .pluginSettingsCardBackground(.standard)
             }
         }
     }
@@ -284,7 +284,7 @@ struct DiskCleanCleanupHistorySection: View {
             Spacer(minLength: 0)
         }
         .pluginSettingsListRowPadding()
-        .pluginSettingsCardBackground(.plugin)
+        .pluginSettingsCardBackground(.standard)
     }
 }
 

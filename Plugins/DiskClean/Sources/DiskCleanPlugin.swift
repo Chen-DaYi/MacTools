@@ -65,7 +65,7 @@ private struct DiskCleanPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
+final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginSettingsPresenting {
     enum ControlID {
         static let scan = "disk-clean-scan"
         static let clean = "disk-clean-clean"
@@ -85,7 +85,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     /// Host injection: switch Settings to this plugin's configuration page (destination of "Open Details").
-    var requestConfigurationPresentation: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
 
     private let controller: DiskCleanControlling
     /// Controllers for the two P2 sections on the detail page (design §10).
@@ -163,9 +163,8 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
-    var configuration: PluginConfiguration? {
+    var settingsPage: PluginSettingsPage? {
         guard let controller = controller as? DiskCleanController else {
             return nil
         }
@@ -175,7 +174,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
         let developerArtifactsController = developerArtifactsController
         let installersController = installersController
         let purgeRoots = purgeRoots
-        return PluginConfiguration(description: metadata.defaultDescription) { _ in
+        return .workspace(description: metadata.defaultDescription, scrolling: .host) { _ in
             DiskCleanDetailView(
                 controller: controller,
                 developerArtifactsController: developerArtifactsController,
@@ -251,7 +250,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     private func handleInvoke(controlID: String) {
@@ -265,7 +264,7 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
         case ControlID.cancelClean:
             controller.cancelPendingClean()
         case ControlID.openDetails:
-            requestConfigurationPresentation?()
+            requestSettingsPresentation?()
         default:
             break
         }

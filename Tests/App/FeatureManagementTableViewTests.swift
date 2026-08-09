@@ -5,6 +5,84 @@ import MacToolsPluginKit
 @testable import MacTools
 
 final class FeatureManagementTableViewTests: XCTestCase {
+    func testSettingsPageReadableWidthExpandsBeforeCapping() {
+        XCTAssertEqual(SettingsPageLayout.readableContentWidth(for: 560), 520)
+        XCTAssertEqual(SettingsPageLayout.readableContentWidth(for: 800), 760)
+        XCTAssertEqual(SettingsPageLayout.readableContentWidth(for: 1_200), 960)
+    }
+
+    func testGeneralSettingsUsesACompactReadableColumn() {
+        XCTAssertEqual(
+            SettingsPageLayout.readableContentWidth(for: 560, policy: .general),
+            520
+        )
+        XCTAssertEqual(
+            SettingsPageLayout.readableContentWidth(for: 800, policy: .general),
+            720
+        )
+        XCTAssertEqual(
+            SettingsPageLayout.readableContentWidth(for: 1_200, policy: .general),
+            720
+        )
+        XCTAssertEqual(
+            SettingsPageLayout.groupedSectionLayoutWidth(
+                for: 1_200,
+                policy: .general
+            ),
+            700
+        )
+    }
+
+    func testGroupedSectionWidthPreservesNativeCardChrome() {
+        XCTAssertEqual(SettingsPageLayout.groupedSectionLayoutWidth(for: 560), 500)
+        XCTAssertEqual(SettingsPageLayout.groupedSectionLayoutWidth(for: 800), 740)
+        XCTAssertEqual(SettingsPageLayout.groupedSectionLayoutWidth(for: 1_200), 940)
+    }
+
+    @MainActor
+    func testTwoGroupedShortcutControlsStayBesideSummaryAtStandardSettingsWidth() throws {
+        let width = SettingsPageLayout.groupedSectionLayoutWidth(for: 800)
+        let group = ShortcutSettingsGroup(
+            id: "display-brightness.shortcuts",
+            title: "亮度快捷键",
+            description: "按所选作用范围调整显示器亮度。",
+            items: [
+                shortcutItem(id: "decrease", systemImage: "sun.min.fill"),
+                shortcutItem(id: "increase", systemImage: "sun.max.fill")
+            ]
+        )
+        let view = GroupedShortcutSettingsRow(
+            group: group,
+            recordShortcut: { _, _ in nil },
+            onBeginRecording: { _ in },
+            onClear: { _ in },
+            onReset: { _ in }
+        )
+        .frame(width: width)
+        .fixedSize(horizontal: false, vertical: true)
+        let host = NSHostingView(rootView: view)
+        host.appearance = try XCTUnwrap(NSAppearance(named: .aqua))
+        host.layoutSubtreeIfNeeded()
+
+        XCTAssertLessThan(host.fittingSize.height, 100)
+    }
+
+    func testGroupedSectionCardAndHeaderShareTheReadableOuterGuide() {
+        for viewportWidth in [560.0, 800.0, 1_200.0] {
+            let readableWidth = SettingsPageLayout.readableContentWidth(
+                for: viewportWidth
+            )
+            let sectionLayoutWidth = SettingsPageLayout.groupedSectionLayoutWidth(
+                for: viewportWidth
+            )
+
+            XCTAssertEqual(
+                sectionLayoutWidth + SettingsPageLayout.groupedSectionHorizontalChrome,
+                readableWidth
+            )
+        }
+    }
+
     func testUpdatePolicySkipsUnchangedItems() {
         let items = [
             makeItem(id: "activity-bar", isActive: false)
@@ -320,6 +398,24 @@ final class FeatureManagementTableViewTests: XCTestCase {
         ), hasSettings: hasSettings)
     }
 
+    private func shortcutItem(id: String, systemImage: String) -> ShortcutSettingsItem {
+        ShortcutSettingsItem(
+            id: "display-brightness.shortcut.\(id)",
+            pluginID: "display-brightness",
+            pluginTitle: "显示器亮度",
+            title: id,
+            description: "",
+            bindingText: "⌃⌥⌘B",
+            isRequired: false,
+            canClear: true,
+            usesDefaultValue: false,
+            errorMessage: nil,
+            settingsGroupID: "display-brightness.shortcuts",
+            settingsGroupTitle: "亮度快捷键",
+            settingsControlSystemImage: systemImage
+        )
+    }
+
     private func makeSurfaceItem(
         id: String,
         isActive: Bool = false,
@@ -350,7 +446,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
         PluginHostCapabilities(
             supportsDashboard: dashboard,
             supportsFeaturePanel: featurePanel,
-            hasCustomConfiguration: false
+            settingsLayout: nil
         )
     }
 

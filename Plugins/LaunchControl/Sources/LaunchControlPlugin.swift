@@ -79,11 +79,10 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
-    var configuration: PluginConfiguration? {
+    var settingsPage: PluginSettingsPage? {
         let localization = localization
-        return PluginConfiguration(description: metadata.defaultDescription) { _ in
+        return .workspace(description: metadata.defaultDescription, scrolling: .selfManaged) { _ in
             LaunchControlManagerView(controller: self.controller, localization: localization)
         }
     }
@@ -122,7 +121,7 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     private func buildDetail(for snapshot: LaunchControlSnapshot) -> PluginPanelDetail {

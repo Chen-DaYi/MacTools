@@ -4,14 +4,23 @@ import MacToolsPluginKit
 // MARK: - FanControlPresetManagerView
 
 struct FanControlPresetManagerView: View {
+    enum SectionKind {
+        case builtIn
+        case custom
+    }
+
     @ObservedObject var presetStore: FanControlPresetStore
     /// Live snapshot for showing actual hardware max RPM in sliders.
     var fanSnapshot: FanSnapshot
     var localization: PluginLocalization = PluginLocalization(bundle: .main)
+    let section: SectionKind
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+        switch section {
+        case .builtIn:
             builtInSection
+        case .custom:
             customSection
         }
     }
@@ -19,65 +28,41 @@ struct FanControlPresetManagerView: View {
     // MARK: - Built-in Section
 
     private var builtInSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(
-                title: localization.string("settings.builtIn.title", defaultValue: "内置预设"),
-                icon: "lock"
-            )
-
-            VStack(spacing: 0) {
-                ForEach(FanControlPresetStore.builtInPresets) { preset in
-                    BuiltInPresetRow(
-                        preset: preset,
-                        fanSnapshot: fanSnapshot,
-                        localization: localization
-                    )
-                    if preset.id != FanControlPresetStore.builtInPresets.last?.id {
-                        PluginSettingsListDivider()
-                    }
+        VStack(spacing: 0) {
+            ForEach(FanControlPresetStore.builtInPresets) { preset in
+                BuiltInPresetRow(
+                    preset: preset,
+                    fanSnapshot: fanSnapshot,
+                    localization: localization
+                )
+                if preset.id != FanControlPresetStore.builtInPresets.last?.id {
+                    PluginSettingsListDivider()
                 }
             }
-            .pluginSettingsCardBackground(.host)
         }
     }
 
     // MARK: - Custom Section
 
+    @ViewBuilder
     private var customSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack {
-                sectionHeader(
-                    title: localization.string("settings.custom.title", defaultValue: "自定义预设"),
-                    icon: "slider.horizontal.3"
-                )
-                Spacer()
-                Button(action: addPreset) {
-                    Label(localization.string("settings.custom.add", defaultValue: "添加"), systemImage: "plus")
-                        .font(PluginSettingsTheme.Typography.controlLabel)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
-            if presetStore.customPresets.isEmpty {
-                emptyCustomPresetsView
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(presetStore.customPresets) { preset in
-                        CustomPresetRow(
-                            preset: preset,
-                            fanSnapshot: fanSnapshot,
-                            localization: localization,
-                            onRename: { presetStore.renameCustomPreset(id: preset.id, newName: $0) },
-                            onRPMChange: { presetStore.updateCustomPresetRPM(id: preset.id, rpm: $0) },
-                            onDelete: { presetStore.deleteCustomPreset(id: preset.id) }
-                        )
-                        if preset.id != presetStore.customPresets.last?.id {
-                            PluginSettingsListDivider()
-                        }
+        if presetStore.customPresets.isEmpty {
+            emptyCustomPresetsView
+        } else {
+            VStack(spacing: 0) {
+                ForEach(presetStore.customPresets) { preset in
+                    CustomPresetRow(
+                        preset: preset,
+                        fanSnapshot: fanSnapshot,
+                        localization: localization,
+                        onRename: { presetStore.renameCustomPreset(id: preset.id, newName: $0) },
+                        onRPMChange: { presetStore.updateCustomPresetRPM(id: preset.id, rpm: $0) },
+                        onDelete: { presetStore.deleteCustomPreset(id: preset.id) }
+                    )
+                    if preset.id != presetStore.customPresets.last?.id {
+                        PluginSettingsListDivider()
                     }
                 }
-                .pluginSettingsCardBackground(.host)
             }
         }
     }
@@ -96,19 +81,12 @@ struct FanControlPresetManagerView: View {
             .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             Spacer()
         }
-        .pluginSettingsCardBackground(.host)
     }
 
     // MARK: - Helpers
 
-    private func sectionHeader(title: String, icon: String) -> some View {
-        Label(title, systemImage: icon)
-            .font(PluginSettingsTheme.Typography.sectionTitle)
-            .foregroundStyle(.secondary)
-    }
-
-    private func addPreset() {
-        _ = presetStore.addCustomPreset()
+    static func addPreset(to store: FanControlPresetStore) {
+        _ = store.addCustomPreset()
     }
 }
 
@@ -216,7 +194,7 @@ private struct CustomPresetRow: View {
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .fill(isNameFocused
-                                  ? PluginSettingsTheme.Palette.nativeFieldBackground
+                                  ? PluginSettingsTheme.Palette.fieldBackground
                                   : Color.clear)
                     )
                     .overlay(
@@ -225,7 +203,7 @@ private struct CustomPresetRow: View {
                                 isNameFocused
                                     ? Color(nsColor: .controlAccentColor)
                                     : isNameHovered
-                                        ? PluginSettingsTheme.Palette.nativeSeparator
+                                        ? PluginSettingsTheme.Palette.separator
                                         : Color.clear,
                                 lineWidth: 1
                             )
@@ -249,16 +227,15 @@ private struct CustomPresetRow: View {
             }
 
             HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Slider(
+                PluginSettingsSlider(
                     value: $sliderValue,
                     in: Double(FanRPMLimits.absoluteMin)...sliderMax,
-                    step: 100
-                ) {
-                    EmptyView()
-                } onEditingChanged: { editing in
-                    if editing { resignFocus() }
-                    if !editing { onRPMChange(Int(sliderValue)) }
-                }
+                    step: 100,
+                    onEditingChanged: { editing in
+                        if editing { resignFocus() }
+                        if !editing { onRPMChange(Int(sliderValue)) }
+                    }
+                )
 
                 Text("\(Int(sliderValue)) RPM")
                     .font(PluginSettingsTheme.Typography.monospacedValue)

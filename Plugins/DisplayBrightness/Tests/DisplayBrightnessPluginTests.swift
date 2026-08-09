@@ -116,7 +116,7 @@ final class DisplayBrightnessPluginTests: XCTestCase {
                 "按所选作用范围调整显示器亮度。"
             ]
         )
-        XCTAssertEqual(definitions.map(\.settingsControlTitle), ["降低", "增加"])
+        XCTAssertTrue(definitions.allSatisfy { $0.settingsControlTitle == nil })
         XCTAssertEqual(definitions.map(\.settingsControlSystemImage), ["sun.min.fill", "sun.max.fill"])
         XCTAssertEqual(definitions.map(\.settingsGroupID), ["display-brightness.shortcuts", "display-brightness.shortcuts"])
         XCTAssertEqual(definitions.map(\.sharedBindingGroupID), [nil, nil])

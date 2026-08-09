@@ -3,15 +3,11 @@ import MacToolsPluginKit
 
 enum SettingsStyle {
     static var windowBackground: Color {
-        PluginSettingsTheme.Palette.windowBackground
+        Color(nsColor: .windowBackgroundColor)
     }
 
     static var contentBackground: Color {
-        PluginSettingsTheme.Palette.contentBackground
-    }
-
-    static var cardBackground: Color {
-        PluginSettingsTheme.Palette.cardBackground
+        Color(nsColor: .windowBackgroundColor)
     }
 
     static var recessedControlBackground: Color {

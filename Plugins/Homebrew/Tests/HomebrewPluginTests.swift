@@ -90,7 +90,7 @@ final class HomebrewPluginTests: XCTestCase {
         let localization = PluginLocalization(bundle: .main)
         let plugin = HomebrewPlugin(controller: controller, localization: localization)
         var requestCount = 0
-        plugin.requestConfigurationPresentation = {
+        plugin.requestSettingsPresentation = {
             requestCount += 1
         }
 

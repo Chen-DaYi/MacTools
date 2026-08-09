@@ -118,19 +118,37 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
             )
         ]
     }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [weak self, localization] _ in
-            if let self {
-                CalendarSettingsView(
-                    store: settingsStore,
-                    localization: localization,
-                    onWeekStartDayChange: setWeekStartDay
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "calendar-display",
+                    title: localization.string("settings.display.title", defaultValue: "日历显示"),
+                    systemImage: "calendar",
+                    rows: [
+                        PluginSettingsRow(
+                            id: "week-start-day",
+                            title: localization.string("settings.weekStart.title", defaultValue: "每周起始日"),
+                            description: localization.string(
+                                "settings.weekStart.description",
+                                defaultValue: "选择月历每周显示的第一天。"
+                            ),
+                            systemImage: "calendar.day.timeline.leading",
+                            control: .picker(
+                                selectionID: settingsStore.weekStartDay.rawValue,
+                                options: CalendarWeekStartDay.allCases.map {
+                                    PluginSettingsOption(id: $0.rawValue, title: $0.displayName())
+                                },
+                                style: .menu
+                            )
+                        )
+                    ]
                 )
-            }
-        }
+            ]
+        )
     }
 
     func makeView(context: PluginComponentContext) -> AnyView {
@@ -191,7 +209,13 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
             break
         }
     }
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        guard case let .setSelection(controlID, optionID) = action,
+              controlID == "week-start-day",
+              let day = CalendarWeekStartDay(rawValue: optionID)
+        else { return }
+        setWeekStartDay(day)
+    }
     func handleShortcutAction(id: String) {}
 
     private func setWeekStartDay(_ day: CalendarWeekStartDay) {

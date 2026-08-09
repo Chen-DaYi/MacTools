@@ -125,7 +125,7 @@ struct XcodeCleanDetailView: View {
             }
             .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
             .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -311,12 +311,10 @@ struct XcodeCleanDetailView: View {
     @ViewBuilder
     private var candidateList: some View {
         if let scanResult = snapshot.scanResult, !scanResult.candidates.isEmpty {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(scanResult.candidates) { candidate in
-                        candidateRow(candidate)
-                        Divider()
-                    }
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(scanResult.candidates) { candidate in
+                    candidateRow(candidate)
+                    Divider()
                 }
             }
         }

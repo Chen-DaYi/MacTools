@@ -161,7 +161,7 @@ final class MouseEnhancerPluginTests: XCTestCase {
     func testPanelButtonRequestsConfigurationPresentation() {
         let plugin = makePlugin()
         var didRequestConfigurationPresentation = false
-        plugin.requestConfigurationPresentation = {
+        plugin.requestSettingsPresentation = {
             didRequestConfigurationPresentation = true
         }
 

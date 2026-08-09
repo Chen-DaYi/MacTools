@@ -138,17 +138,49 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
-            FanControlPresetManagerView(
-                presetStore: self.presetStore,
-                fanSnapshot: self.fanSnapshot,
-                localization: self.localization
-            )
-        }
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [
+            PluginSettingsSection(
+                id: "built-in-presets",
+                title: localization.string("settings.builtIn.title", defaultValue: "内置预设"),
+                systemImage: "lock",
+                presentation: .edgeToEdge
+            ) { [self] _ in
+                FanControlPresetManagerView(
+                    presetStore: self.presetStore,
+                    fanSnapshot: self.fanSnapshot,
+                    localization: self.localization,
+                    section: .builtIn
+                )
+            },
+            PluginSettingsSection(
+                id: "custom-presets",
+                title: localization.string("settings.custom.title", defaultValue: "自定义预设"),
+                systemImage: "slider.horizontal.3",
+                presentation: .edgeToEdge
+            ) { [self] _ in
+                FanControlPresetManagerView(
+                    presetStore: self.presetStore,
+                    fanSnapshot: self.fanSnapshot,
+                    localization: self.localization,
+                    section: .custom
+                )
+            }
+            .headerAccessory { [presetStore, localization] _ in
+                Button {
+                    FanControlPresetManagerView.addPreset(to: presetStore)
+                } label: {
+                    Label(
+                        localization.string("settings.custom.add", defaultValue: "添加"),
+                        systemImage: "plus"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        ])
     }
 
     func handleAction(_ action: PluginPanelAction) {
@@ -190,7 +222,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     // MARK: - PluginPanelSurfaceLifecycleHandling
@@ -220,7 +252,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         case ControlID.addPreset:
             // Navigation to settings page is handled by MenuBarContent;
             // the host intercepts this action ID and calls
-            // pluginHost.presentPluginConfiguration(pluginID: "fan-control").
+            // pluginHost.presentPluginSettings(pluginID: "fan-control").
             break
 
         case ControlID.deletePreset:

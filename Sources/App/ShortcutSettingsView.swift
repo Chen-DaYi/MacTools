@@ -38,11 +38,11 @@ func commonShortcutBindingWarningAlert(
 }
 
 private enum ShortcutSettingsLayout {
-    static let standardRecorderWidth: CGFloat = 126
-    static let groupedRecorderWidth: CGFloat = 126
-    static let groupedControlMinWidth: CGFloat = 192
-    static let groupedControlMaxWidth: CGFloat = 240
-    static let groupedIconWidth: CGFloat = 22
+    static let recorderWidth = PluginSettingsTheme.Size.shortcutRecorderWidth
+    static let controlLabelMaxWidth: CGFloat = 160
+    static let groupedControlMinWidth: CGFloat = 260
+    static let groupedControlMaxWidth: CGFloat = 380
+    static let summaryMinWidth: CGFloat = 220
     static let actionButtonSize: CGFloat = 22
     static let actionButtonsWidth: CGFloat = 50
 }
@@ -67,10 +67,10 @@ struct ShortcutSettingsView: View {
                 }
                 .padding(PluginSettingsTheme.Spacing.cardContent)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
 
                 ShortcutSettingsRowsView(pluginHost: pluginHost, items: pluginHost.shortcutItems)
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
             }
             .padding(PluginSettingsTheme.Spacing.pagePadding)
         }
@@ -91,7 +91,7 @@ struct ShortcutSettingsRowsView: View {
                     recordShortcut: { binding in
                         configure(item, binding: binding)
                     },
-                    onConfigure: {
+                    onBeginRecording: {
                         pluginHost.clearShortcutError(for: item.id)
                     },
                     onClear: {
@@ -221,7 +221,7 @@ struct ShortcutSettingsGroup: Identifiable {
 private struct ShortcutSettingsStandardRow: View {
     let item: ShortcutSettingsItem
     let recordShortcut: (ShortcutBinding) -> String?
-    let onConfigure: () -> Void
+    let onBeginRecording: () -> Void
     let onClear: () -> Void
     let onReset: () -> Void
 
@@ -240,56 +240,71 @@ private struct ShortcutSettingsStandardRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(item.title)
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .help(item.title)
-
-                    if item.isRequired {
-                        ShortcutStatusBadge(text: AppL10n.settings("shortcuts.required", defaultValue: "必填"))
-                    }
-                }
-
-                if !supportingText.isEmpty {
-                    Text(supportingText)
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(supportingColor)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .help(supportingText)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                summary
+                    .frame(minWidth: ShortcutSettingsLayout.summaryMinWidth)
+                shortcutControl
             }
-            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-            .help(rowHelpText)
 
-            HStack(alignment: .center, spacing: 10) {
-                ShortcutBindingControl(
-                    item: item,
-                    onRecord: { binding in
-                        PluginShortcutRecordingResult.from(
-                            errorMessage: recordShortcut(binding)
-                        )
-                    },
-                    onBeginRecording: onConfigure,
-                    onConfigure: onConfigure,
-                    onReset: onReset,
-                    onClear: onClear
-                )
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                summary
+                shortcutControl
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .pluginSettingsListRowPadding(interactive: true)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            HStack(spacing: 8) {
+                Text(item.title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(item.title)
+
+                if item.isRequired {
+                    ShortcutStatusBadge(text: AppL10n.settings("shortcuts.required", defaultValue: "必填"))
+                }
+            }
+
+            if !supportingText.isEmpty {
+                Text(supportingText)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(supportingColor)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(supportingText)
+            }
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .help(rowHelpText)
+    }
+
+    private var shortcutControl: some View {
+        ShortcutBindingControl(
+            item: item,
+            onRecord: { binding in
+                PluginShortcutRecordingResult.from(
+                    errorMessage: recordShortcut(binding)
+                )
+            },
+            onBeginRecording: onBeginRecording,
+            onReset: onReset,
+            onClear: onClear,
+            title: item.settingsControlTitle,
+            systemImage: item.settingsControlSystemImage
+        )
+    }
 }
 
-private struct GroupedShortcutSettingsRow: View {
+struct GroupedShortcutSettingsRow: View {
     private enum Layout {
         static let spacing = PluginSettingsTheme.Spacing.rowContentControl
-        static let summaryMinWidth: CGFloat = 220
+        static let summaryIdealWidth: CGFloat = 120
         static let controlMinWidth = ShortcutSettingsLayout.groupedControlMinWidth
         static let controlMaxWidth = ShortcutSettingsLayout.groupedControlMaxWidth
     }
@@ -302,7 +317,7 @@ private struct GroupedShortcutSettingsRow: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 16) {
+            HStack(alignment: .center, spacing: Layout.spacing) {
                 groupSummary
                 fixedWidthControls
             }
@@ -328,13 +343,14 @@ private struct GroupedShortcutSettingsRow: View {
                 Text(supportingText)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(supportingColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .help(supportingText)
             }
         }
         .frame(
-            minWidth: Layout.summaryMinWidth,
+            minWidth: 0,
+            idealWidth: Layout.summaryIdealWidth,
             maxWidth: .infinity,
             alignment: .leading
         )
@@ -344,9 +360,9 @@ private struct GroupedShortcutSettingsRow: View {
         HStack(alignment: .center, spacing: Layout.spacing) {
             ForEach(group.items) { item in
                 shortcutControl(for: item)
-                    .frame(width: Layout.controlMaxWidth, alignment: .leading)
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var adaptiveControls: some View {
@@ -366,10 +382,10 @@ private struct GroupedShortcutSettingsRow: View {
         ) {
             ForEach(group.items) { item in
                 shortcutControl(for: item)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private func shortcutControl(for item: ShortcutSettingsItem) -> some View {
@@ -381,12 +397,10 @@ private struct GroupedShortcutSettingsRow: View {
                 )
             },
             onBeginRecording: { onBeginRecording(item) },
-            onConfigure: { onBeginRecording(item) },
             onReset: { onReset(item) },
             onClear: { onClear(item) },
-            title: item.settingsControlTitle ?? item.title,
-            systemImage: item.settingsControlSystemImage,
-            layout: .stacked
+            title: item.settingsControlTitle,
+            systemImage: item.settingsControlSystemImage
         )
     }
 
@@ -405,79 +419,64 @@ private struct GroupedShortcutSettingsRow: View {
 }
 
 private struct ShortcutBindingControl: View {
-    enum LayoutStyle: Equatable {
-        case horizontal
-        case stacked
-    }
-
     let item: ShortcutSettingsItem
     let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
     let onBeginRecording: () -> Void
-    let onConfigure: () -> Void
     let onReset: () -> Void
     let onClear: () -> Void
     var title: String? = nil
     var systemImage: String? = nil
-    var layout: LayoutStyle = .horizontal
 
+    @ViewBuilder
     var body: some View {
-        switch layout {
-        case .horizontal:
-            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+        if hasControlLabel {
+            PluginSettingsShortcutControlLayout(
+                maximumLabelWidth: ShortcutSettingsLayout.controlLabelMaxWidth
+            ) {
+                controlLabel
                 recorderButton
                 actionButtons
             }
-        case .stacked:
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                controlLabel
-
-                HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
-                    recorderButton
-                    actionButtons
-                }
+        } else {
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                recorderButton
+                actionButtons
             }
         }
     }
 
     @ViewBuilder
     private var controlLabel: some View {
-        if let systemImage {
-            Image(systemName: systemImage)
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.secondary)
-                .frame(width: ShortcutSettingsLayout.groupedIconWidth, alignment: .center)
-                .accessibilityLabel(Text(title ?? item.title))
-                .help(title ?? item.title)
-        } else if let title {
-            Text(title)
-                .font(PluginSettingsTheme.Typography.secondaryLabel)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .help(title)
-        }
-    }
+        HStack(spacing: 6) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .pluginSettingsRowIconStyle(.secondary)
+            }
 
-    private var recorderWidth: CGFloat {
-        switch layout {
-        case .horizontal:
-            return ShortcutSettingsLayout.standardRecorderWidth
-        case .stacked:
-            return ShortcutSettingsLayout.groupedRecorderWidth
+            if let title {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
         }
+        .help(title ?? item.title)
     }
 
     private var recorderButton: some View {
         PluginShortcutRecorder(
             title: title ?? item.title,
             displayText: item.bindingText,
-            minWidth: recorderWidth,
+            minWidth: ShortcutSettingsLayout.recorderWidth,
             onRecord: onRecord,
             onBeginRecording: onBeginRecording
         )
-        .frame(width: recorderWidth)
+        .frame(width: ShortcutSettingsLayout.recorderWidth)
+    }
+
+    private var hasControlLabel: Bool {
+        title != nil || systemImage != nil
     }
 
     @ViewBuilder
@@ -505,11 +504,7 @@ private struct ShortcutBindingControl: View {
     }
 
     private var shouldShowReset: Bool {
-        guard layout == .horizontal || item.isRequired else {
-            return false
-        }
-
-        return !item.usesDefaultValue
+        !item.usesDefaultValue
     }
 
     private var actionButtonsWidth: CGFloat {

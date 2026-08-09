@@ -22,7 +22,7 @@ private struct SystemStatusPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling, PluginConfigurationPresenting {
+final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling, PluginSettingsPresenting {
     let metadata: PluginMetadata
 
     var descriptor: PluginComponentDescriptor {
@@ -87,9 +87,9 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var requestConfigurationPresentation: (() -> Void)? {
+    var requestSettingsPresentation: (() -> Void)? {
         didSet {
-            menuBarMetricsController.requestConfigurationPresentation = requestConfigurationPresentation
+            menuBarMetricsController.requestConfigurationPresentation = requestSettingsPresentation
         }
     }
 
@@ -104,16 +104,43 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [settingsController, localization] _ in
-            SystemStatusSettingsView(
-                controller: settingsController,
-                localization: localization
-            )
-        }
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [
+            PluginSettingsSection(
+                id: "panel-metrics",
+                title: localization.string("settings.panel.title", defaultValue: "组件面板"),
+                systemImage: "square.grid.2x2",
+                footer: localization.string(
+                    "settings.panel.description",
+                    defaultValue: "选择组件面板显示的内容，并拖拽调整顺序。"
+                ),
+                presentation: .edgeToEdge
+            ) { [settingsController, localization] _ in
+                SystemStatusSettingsView(
+                    controller: settingsController,
+                    localization: localization,
+                    section: .panel
+                )
+            },
+            PluginSettingsSection(
+                id: "menu-bar-metrics",
+                title: localization.string("settings.menuBar.title", defaultValue: "菜单栏指标"),
+                systemImage: "menubar.rectangle",
+                footer: localization.string(
+                    "settings.menuBar.description",
+                    defaultValue: "选择要显示在菜单栏里的指标。"
+                ),
+                presentation: .edgeToEdge
+            ) { [settingsController, localization] _ in
+                SystemStatusSettingsView(
+                    controller: settingsController,
+                    localization: localization,
+                    section: .menuBar
+                )
+            }
+        ])
     }
 
     func makeView(context: PluginComponentContext) -> AnyView {
@@ -167,7 +194,7 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPane
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 }
 

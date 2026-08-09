@@ -104,13 +104,13 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: - Configuration
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(
+    var settingsPage: PluginSettingsPage? {
+        .workspace(
             description: localization.string(
                 "configuration.description",
                 defaultValue: "在应用内直接查看和编辑 zsh 配置文件，支持常用片段快速插入。"
             ),
-            prefersFullHeight: true
+            scrolling: .selfManaged
         ) { [self] _ in
             ZshConfigEditorView(store: self.store, localization: self.localization)
         }

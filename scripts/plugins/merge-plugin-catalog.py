@@ -92,7 +92,7 @@ def main():
             merged_entries[plugin_id] = update_entries[plugin_id]
         base_catalog = previous or updates
 
-    schema_version = update_field(base_catalog, updates, "schemaVersion", 1)
+    schema_version = update_field(base_catalog, updates, "schemaVersion", 2)
     plugin_kit_version = update_field(base_catalog, updates, "pluginKitVersion", args.plugin_kit_version)
     if plugin_kit_version != args.plugin_kit_version:
         raise SystemExit(
