@@ -523,6 +523,7 @@ private struct AppShortcutSettingsRow: View {
 
     @ObservedObject var pluginHost: PluginHost
     let item: AppShortcutSettingsItem
+    @State private var pendingWarning: CommonShortcutBindingWarning?
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -554,12 +555,7 @@ private struct AppShortcutSettingsRow: View {
                     displayText: item.bindingText,
                     minWidth: Layout.recorderWidth,
                     onRecord: { binding in
-                        PluginShortcutRecordingResult.from(
-                            errorMessage: pluginHost.setAppShortcutBindingAndReturnError(
-                                binding,
-                                for: item.action
-                            )
-                        )
+                        record(binding)
                     },
                     onBeginRecording: {
                         pluginHost.clearAppShortcutError(item.action)
@@ -596,6 +592,24 @@ private struct AppShortcutSettingsRow: View {
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+        .alert(item: $pendingWarning) { warning in
+            commonShortcutBindingWarningAlert(warning) {
+                _ = save(warning.binding)
+            }
+        }
+    }
+
+    private func record(_ binding: ShortcutBinding) -> PluginShortcutRecordingResult {
+        if MacToolsReservedShortcutBindings.requiresConflictWarning(for: binding) {
+            pendingWarning = CommonShortcutBindingWarning(shortcutID: item.id, binding: binding)
+            return .accepted
+        }
+
+        return PluginShortcutRecordingResult.from(errorMessage: save(binding))
+    }
+
+    private func save(_ binding: ShortcutBinding) -> String? {
+        pluginHost.setAppShortcutBindingAndReturnError(binding, for: item.action)
     }
 }
 

@@ -10,6 +10,12 @@ private enum SidecarSettingsColumnWidth {
     static let shortcutActions: CGFloat = 50
 }
 
+private struct SidecarShortcutConflictWarning: Identifiable {
+    let id = UUID()
+    let itemID: String
+    let binding: ShortcutBinding
+}
+
 struct SidecarSettingsView: View {
     @ObservedObject var store: SidecarPreferencesStore
     let liveDevices: [SidecarDevice]
@@ -447,6 +453,7 @@ private struct SidecarDeviceSettingsRow: View {
     let onTransportChange: (SidecarConnectionTransport) -> Void
     let onShortcutActionChange: (SidecarShortcutAction) -> Void
     let isReorderable: Bool
+    @State private var pendingShortcutConflictWarning: SidecarShortcutConflictWarning?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -455,6 +462,34 @@ private struct SidecarDeviceSettingsRow: View {
             shortcutLine
         }
         .pluginSettingsListRowPadding(interactive: true)
+        .alert(item: $pendingShortcutConflictWarning) { warning in
+            Alert(
+                title: Text(localization.format(
+                    "settings.shortcut.commonConflictWarning.title",
+                    defaultValue: "仍要使用“%@”？",
+                    ShortcutFormatter.displayString(for: warning.binding)
+                )),
+                message: Text(localization.string(
+                    "settings.shortcut.commonConflictWarning.message",
+                    defaultValue: "这是全局快捷键，可能覆盖其他应用的常用操作。"
+                )),
+                primaryButton: .default(
+                    Text(localization.string(
+                        "settings.shortcut.commonConflictWarning.confirm",
+                        defaultValue: "仍要使用"
+                    )),
+                    action: {
+                        _ = configurationContext.recordShortcut(warning.binding, for: warning.itemID)
+                    }
+                ),
+                secondaryButton: .cancel(
+                    Text(localization.string(
+                        "settings.shortcut.commonConflictWarning.cancel",
+                        defaultValue: "取消"
+                    ))
+                )
+            )
+        }
     }
 
     private var connectionLine: some View {
@@ -577,7 +612,7 @@ private struct SidecarDeviceSettingsRow: View {
                     displayText: shortcutItem.bindingText,
                     minWidth: SidecarSettingsColumnWidth.shortcutRecorder,
                     onRecord: { binding in
-                        configurationContext.recordShortcut(binding, for: shortcutItem.id)
+                        recordShortcut(binding, for: shortcutItem.id)
                     },
                     onBeginRecording: {
                         configurationContext.beginShortcutRecording(for: shortcutItem.id)
@@ -620,6 +655,21 @@ private struct SidecarDeviceSettingsRow: View {
             .frame(width: SidecarSettingsColumnWidth.shortcutRecorder)
             .disabled(true)
         }
+    }
+
+    private func recordShortcut(
+        _ binding: ShortcutBinding,
+        for itemID: String
+    ) -> PluginShortcutRecordingResult {
+        if CommonApplicationShortcutBindings.requiresConflictWarning(for: binding) {
+            pendingShortcutConflictWarning = SidecarShortcutConflictWarning(
+                itemID: itemID,
+                binding: binding
+            )
+            return .accepted
+        }
+
+        return configurationContext.recordShortcut(binding, for: itemID)
     }
 
     private var shortcutItem: ShortcutSettingsItem? {

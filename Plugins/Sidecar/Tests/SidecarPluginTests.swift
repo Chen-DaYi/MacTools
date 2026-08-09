@@ -1,9 +1,37 @@
 import XCTest
+import Carbon
 import MacToolsPluginKit
 @testable import SidecarPlugin
 
 @MainActor
 final class SidecarPluginTests: XCTestCase {
+    func testCommonApplicationShortcutBindingsRequireConflictWarning() {
+        XCTAssertTrue(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(
+                    keyCode: UInt16(kVK_ANSI_1),
+                    modifiers: .command
+                )
+            )
+        )
+        XCTAssertTrue(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(
+                    keyCode: UInt16(kVK_ANSI_F),
+                    modifiers: .command
+                )
+            )
+        )
+        XCTAssertFalse(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(
+                    keyCode: UInt16(kVK_ANSI_1),
+                    modifiers: [.command, .option]
+                )
+            )
+        )
+    }
+
     func testSidecarDeviceIdentifierAcceptsUUIDAndStringValues() {
         let uuid = UUID(uuidString: "9DFBEA6D-4DCF-431D-B7A0-A74F26231DAF")!
 

@@ -83,6 +83,10 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
     ]
 
     private let appShortcutLocalizationKeys = [
+        "shortcuts.commonConflictWarning.cancel",
+        "shortcuts.commonConflictWarning.confirm",
+        "shortcuts.commonConflictWarning.message",
+        "shortcuts.commonConflictWarning.title",
         "shortcuts.openCommandPalette.description",
         "shortcuts.openCommandPalette.title",
     ]

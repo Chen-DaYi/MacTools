@@ -5,16 +5,51 @@ import MacToolsPluginKit
 
 // MARK: - Manager View
 
+private struct AppHotkeyShortcutConflictWarning: Identifiable {
+    let id = UUID()
+    let entryID: UUID
+    let binding: ShortcutBinding
+}
+
 struct AppHotkeyManagerView: View {
     @ObservedObject var store: AppHotkeyStore
     let localization: PluginLocalization
     let onUpdate: () -> Void
     var onBeginRecording: ((UUID) -> Void)? = nil
     var onEndRecording: ((UUID) -> Void)? = nil
+    @State private var pendingShortcutConflictWarning: AppHotkeyShortcutConflictWarning?
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             bindingSection
+        }
+        .alert(item: $pendingShortcutConflictWarning) { warning in
+            Alert(
+                title: Text(localization.format(
+                    "settings.shortcut.commonConflictWarning.title",
+                    defaultValue: "仍要使用“%@”？",
+                    ShortcutFormatter.displayString(for: warning.binding)
+                )),
+                message: Text(localization.string(
+                    "settings.shortcut.commonConflictWarning.message",
+                    defaultValue: "这是全局快捷键，可能覆盖其他应用的常用操作。"
+                )),
+                primaryButton: .default(
+                    Text(localization.string(
+                        "settings.shortcut.commonConflictWarning.confirm",
+                        defaultValue: "仍要使用"
+                    )),
+                    action: {
+                        applyShortcut(warning.binding, to: warning.entryID)
+                    }
+                ),
+                secondaryButton: .cancel(
+                    Text(localization.string(
+                        "settings.shortcut.commonConflictWarning.cancel",
+                        defaultValue: "取消"
+                    ))
+                )
+            )
         }
     }
 
@@ -84,8 +119,16 @@ struct AppHotkeyManagerView: View {
                                 conflict.displayName
                             ))
                         }
-                        store.updateShortcut(id: entry.id, shortcut: binding)
-                        onUpdate()
+
+                        if CommonApplicationShortcutBindings.requiresConflictWarning(for: binding) {
+                            pendingShortcutConflictWarning = AppHotkeyShortcutConflictWarning(
+                                entryID: entry.id,
+                                binding: binding
+                            )
+                            return .accepted
+                        }
+
+                        applyShortcut(binding, to: entry.id)
                         return .accepted
                     }
                 )
@@ -95,6 +138,11 @@ struct AppHotkeyManagerView: View {
             }
         }
         .pluginSettingsCardBackground(.host)
+    }
+
+    private func applyShortcut(_ binding: ShortcutBinding, to entryID: UUID) {
+        store.updateShortcut(id: entryID, shortcut: binding)
+        onUpdate()
     }
 
     // MARK: Actions
