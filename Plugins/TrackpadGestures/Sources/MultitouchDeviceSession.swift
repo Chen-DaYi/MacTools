@@ -4,6 +4,7 @@ import CoreGraphics
 import Darwin
 import Foundation
 import IOKit
+import MacToolsPluginKit
 import MultitouchSupport
 import OSLog
 
@@ -528,6 +529,8 @@ extension MultitouchDeviceSessionManaging {
 
 @MainActor
 final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked Sendable {
+    private typealias CallbackContext = PluginCallbackContext<MultitouchDeviceSession>
+
     var onRecognized: ((TrackpadGesture, UInt64) -> Void)?
     var onAvailabilityChange: ((Bool) -> Void)?
 
@@ -556,11 +559,14 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
     private var isActivationRequested = false
     private var eventTap: CFMachPort?
     private var eventTapSource: CFRunLoopSource?
+    private var eventTapCallbackPointer: UnsafeMutableRawPointer?
     private var wakeObserver: NSObjectProtocol?
     private var ioNotificationPort: IONotificationPortRef?
     private var ioArrivalIterator: io_iterator_t = 0
     private var ioTerminationIterator: io_iterator_t = 0
+    private var ioCallbackPointer: UnsafeMutableRawPointer?
     private var displayCallbackRegistered = false
+    private var displayCallbackPointer: UnsafeMutableRawPointer?
     private var restartWorkItem: DispatchWorkItem?
     private let testEventTapStart: (@MainActor () -> Bool)?
     private let testEventTapStop: (@MainActor () -> Void)?
@@ -626,6 +632,9 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
             releaseMiddleButton: releaseMiddleButton,
             postEvent: postMiddleClickEvent,
             candidateTimeline: candidateTimeline,
+            recognizePhysicalClick: { gesture, deviceID in
+                recognitionWorker.recognizeNativeClick(gesture, deviceID: deviceID)
+            },
             eventOrigin: middleClickEventOrigin
         )
         self.testEventTapStart = testEventTapStart
@@ -758,30 +767,44 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
             guard let userInfo else {
                 return Unmanaged.passUnretained(event)
             }
-            let session = Unmanaged<MultitouchDeviceSession>
+            let context = Unmanaged<CallbackContext>
                 .fromOpaque(userInfo)
                 .takeUnretainedValue()
 
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                DispatchQueue.main.async {
-                    session.middleClickCoordinator.reset()
-                    session.typingSuppressionGate.reset()
-                    session.reenableEventTap()
+                context.withOwner { session in
+                    DispatchQueue.main.async { [weak session] in
+                        session?.middleClickCoordinator.reset()
+                        session?.typingSuppressionGate.reset()
+                        session?.reenableEventTap()
+                    }
                 }
                 return Unmanaged.passUnretained(event)
             }
 
-            return session.handleEventTapEvent(type: type, event: event)
+            return context.withOwner {
+                $0.handleEventTapEvent(type: type, event: event)
+            } ?? Unmanaged.passUnretained(event)
         }
 
+        let context = CallbackContext(owner: self)
+        let callbackPointer = Unmanaged.passRetained(context).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cghidEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: mask,
             callback: callback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ), let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            userInfo: callbackPointer
+        ) else {
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
+            return false
+        }
+        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            CFMachPortInvalidate(tap)
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             return false
         }
 
@@ -789,6 +812,7 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         CGEvent.tapEnable(tap: tap, enable: true)
         eventTap = tap
         eventTapSource = source
+        eventTapCallbackPointer = callbackPointer
         return true
     }
 
@@ -808,8 +832,10 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         }
         guard let eventTap else {
             eventTapSource = nil
+            releaseEventTapCallbackContext()
             return
         }
+        callbackContext(from: eventTapCallbackPointer)?.invalidate()
         CGEvent.tapEnable(tap: eventTap, enable: false)
         if let eventTapSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), eventTapSource, .commonModes)
@@ -817,6 +843,14 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         CFMachPortInvalidate(eventTap)
         self.eventTap = nil
         eventTapSource = nil
+        releaseEventTapCallbackContext()
+    }
+
+    private func releaseEventTapCallbackContext() {
+        guard let eventTapCallbackPointer else { return }
+        callbackContext(from: eventTapCallbackPointer)?.invalidate()
+        Unmanaged<CallbackContext>.fromOpaque(eventTapCallbackPointer).release()
+        self.eventTapCallbackPointer = nil
     }
 
     private func restartListeners(reason: String) {
@@ -972,6 +1006,8 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
             CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
         }
 
+        let context = CallbackContext(owner: self)
+        let callbackPointer = Unmanaged.passRetained(context).toOpaque()
         var arrivalIterator: io_iterator_t = 0
         let arrivalResult = IOServiceAddMatchingNotification(
             port,
@@ -980,18 +1016,22 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
             { userData, iterator in
                 MultitouchDeviceSession.drain(iterator)
                 guard let userData else { return }
-                let session = Unmanaged<MultitouchDeviceSession>
+                let context = Unmanaged<CallbackContext>
                     .fromOpaque(userData)
                     .takeUnretainedValue()
-                DispatchQueue.main.async {
-                    session.handleMultitouchDeviceChange(reason: "deviceArrived")
+                context.withOwner { session in
+                    DispatchQueue.main.async { [weak session] in
+                        session?.handleMultitouchDeviceChange(reason: "deviceArrived")
+                    }
                 }
             },
-            Unmanaged.passUnretained(self).toOpaque(),
+            callbackPointer,
             &arrivalIterator
         )
 
         guard arrivalResult == KERN_SUCCESS else {
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             IONotificationPortDestroy(port)
             return
         }
@@ -1004,20 +1044,24 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
             { userData, iterator in
                 MultitouchDeviceSession.drain(iterator)
                 guard let userData else { return }
-                let session = Unmanaged<MultitouchDeviceSession>
+                let context = Unmanaged<CallbackContext>
                     .fromOpaque(userData)
                     .takeUnretainedValue()
-                DispatchQueue.main.async {
-                    session.handleMultitouchDeviceChange(reason: "deviceRemoved")
+                context.withOwner { session in
+                    DispatchQueue.main.async { [weak session] in
+                        session?.handleMultitouchDeviceChange(reason: "deviceRemoved")
+                    }
                 }
             },
-            Unmanaged.passUnretained(self).toOpaque(),
+            callbackPointer,
             &terminationIterator
         )
 
         guard terminationResult == KERN_SUCCESS else {
+            context.invalidate()
             IOObjectRelease(arrivalIterator)
             IONotificationPortDestroy(port)
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             return
         }
 
@@ -1026,9 +1070,11 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         ioNotificationPort = port
         ioArrivalIterator = arrivalIterator
         ioTerminationIterator = terminationIterator
+        ioCallbackPointer = callbackPointer
     }
 
     private func removeMultitouchDeviceObserver() {
+        callbackContext(from: ioCallbackPointer)?.invalidate()
         if ioArrivalIterator != 0 {
             IOObjectRelease(ioArrivalIterator)
             ioArrivalIterator = 0
@@ -1040,6 +1086,10 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         if let ioNotificationPort {
             IONotificationPortDestroy(ioNotificationPort)
             self.ioNotificationPort = nil
+        }
+        if let ioCallbackPointer {
+            Unmanaged<CallbackContext>.fromOpaque(ioCallbackPointer).release()
+            self.ioCallbackPointer = nil
         }
     }
 
@@ -1061,31 +1111,51 @@ final class MultitouchDeviceSession: MultitouchDeviceSessionManaging, @unchecked
         guard !flags.intersection(relevant).isEmpty, let userInfo else {
             return
         }
-        let session = Unmanaged<MultitouchDeviceSession>
+        let context = Unmanaged<CallbackContext>
             .fromOpaque(userInfo)
             .takeUnretainedValue()
-        DispatchQueue.main.async {
-            session.scheduleRestart(after: 2, reason: "displayReconfigured")
+        context.withOwner { session in
+            DispatchQueue.main.async { [weak session] in
+                session?.scheduleRestart(after: 2, reason: "displayReconfigured")
+            }
         }
     }
 
     private func observeDisplayReconfiguration() {
         guard !displayCallbackRegistered else { return }
+        let context = CallbackContext(owner: self)
+        let callbackPointer = Unmanaged.passRetained(context).toOpaque()
         if CGDisplayRegisterReconfigurationCallback(
             Self.displayCallback,
-            Unmanaged.passUnretained(self).toOpaque()
+            callbackPointer
         ) == .success {
             displayCallbackRegistered = true
+            displayCallbackPointer = callbackPointer
+        } else {
+            context.invalidate()
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
         }
     }
 
     private func removeDisplayReconfigurationObserver() {
         guard displayCallbackRegistered else { return }
+        callbackContext(from: displayCallbackPointer)?.invalidate()
         CGDisplayRemoveReconfigurationCallback(
             Self.displayCallback,
-            Unmanaged.passUnretained(self).toOpaque()
+            displayCallbackPointer
         )
         displayCallbackRegistered = false
+        if let displayCallbackPointer {
+            Unmanaged<CallbackContext>.fromOpaque(displayCallbackPointer).release()
+            self.displayCallbackPointer = nil
+        }
+    }
+
+    private nonisolated func callbackContext(
+        from pointer: UnsafeMutableRawPointer?
+    ) -> CallbackContext? {
+        guard let pointer else { return nil }
+        return Unmanaged<CallbackContext>.fromOpaque(pointer).takeUnretainedValue()
     }
 
     #if DEBUG

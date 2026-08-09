@@ -24,6 +24,10 @@ struct MacToolsApp: App {
 
 @MainActor
 final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    #if DEBUG
+    private let developmentInstanceGuard = DevelopmentInstanceGuard()
+    private var shouldCompleteLaunch = true
+    #endif
     private let pluginHost = PluginHost(
         loadDynamicPluginsOnInit: false,
         preferencesBackupStore: PreferencesBackupStore()
@@ -49,7 +53,22 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         feedbackPresenter: SystemRunLinkFeedbackPresenter()
     )
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        guard developmentInstanceGuard.claim(bundleIdentifier: Bundle.main.bundleIdentifier) else {
+            shouldCompleteLaunch = false
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
+            return
+        }
+        #endif
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        guard shouldCompleteLaunch else { return }
+        #endif
         AppAppearancePreference.applyStoredPreference(userDefaults: appearanceUserDefaults)
         launchAtLoginController.refreshStatus()
         UNUserNotificationCenter.current().delegate = self
@@ -93,6 +112,9 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         actionGridOverlayController?.close(restoringFocus: false)
         statusItemController?.dismissPanels()
         pluginHost.deactivateAllPlugins()
+        #if DEBUG
+        developmentInstanceGuard.release()
+        #endif
     }
 
     nonisolated func userNotificationCenter(

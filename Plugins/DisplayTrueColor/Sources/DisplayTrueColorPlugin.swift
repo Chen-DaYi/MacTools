@@ -24,6 +24,7 @@ private struct DisplayTrueColorPluginProvider: PluginProvider {
 final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
     private enum ActionID {
         static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
     }
 
     let metadata: PluginMetadata
@@ -83,6 +84,15 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
     var actionDefinitions: [ActionDefinition] {
         [
             ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "True Tone"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: metadata.title,
                 description: metadata.defaultDescription,
@@ -99,6 +109,14 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isTrueColorEnabled
+                    ? localization.string("action.disable.title", defaultValue: "关闭原彩显示")
+                    : localization.string("action.enable.title", defaultValue: "开启原彩显示"),
+                subtitle: subtitle,
+                presentationState: isTrueColorEnabled ? .active : .inactive
+            ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
                 title: "\(metadata.title) · \(localization.string("panel.subtitle.enabled", defaultValue: "已开启"))"
@@ -139,8 +157,16 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        guard invocation.reference.key.actionID == ActionID.setEnabled,
-              case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !(client.isEnabled ?? isTrueColorEnabled)
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = setEnabled(enabled)
@@ -166,6 +192,10 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
             parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
         )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
     }
 
     @discardableResult

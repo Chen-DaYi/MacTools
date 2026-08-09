@@ -159,7 +159,7 @@ final class PluginLocalizationCatalogAuditTests: XCTestCase {
         let patterns = [
             #"ActionDefinition\s*\([\s\S]{0,500}?\btitle\s*:\s*\"[^\"]*[\p{Han}]"#,
             #"ActionDefinition\s*\([\s\S]{0,700}?\bdescription\s*:\s*\"[^\"]*[\p{Han}]"#,
-            #"ActionParameterDefinition\s*\([\s\S]{0,250}?\btitle\s*:\s*\"[^\"]*[\p{Han}]"#,
+            #"ActionParameterDefinition\s*\([\s\S]{0,250}?\btitle\s*:\s*\"[^\"]+\""#,
             #"ActionConfirmation\s*\([\s\S]{0,500}?(?:title|message|confirmButtonTitle)\s*:\s*\"[^\"]*[\p{Han}]"#,
             #"\.unavailable\s*\(\s*\"[^\"]*[\p{Han}]"#,
             #"\.failed\s*\(\s*message\s*:\s*\"[^\"]*[\p{Han}]"#,

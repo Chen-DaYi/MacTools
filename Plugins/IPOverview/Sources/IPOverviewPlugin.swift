@@ -102,7 +102,7 @@ final class IPOverviewPlugin:
 
     private var addressControls: [PluginPanelControl] {
         let snapshot = viewModel.snapshot
-        let localKind = localization.string("landing.local", defaultValue: "内网")
+        let localKind = localization.string("landing.local", defaultValue: "本地")
         let localLabel = "\(localKind) IPv4"
         let publicLabel = localization.string("publicIP.title", defaultValue: "公网 IP")
         return [
@@ -141,7 +141,7 @@ final class IPOverviewPlugin:
     }
 
     var actionDefinitions: [ActionDefinition] {
-        let localKind = localization.string("landing.local", defaultValue: "内网")
+        let localKind = localization.string("landing.local", defaultValue: "本地")
         return [
             copyActionDefinition(
                 id: ActionID.copyLocalIPv4,
@@ -180,7 +180,7 @@ final class IPOverviewPlugin:
             guard let value, !value.isEmpty else {
                 let fallbackMessage = actionID == ActionID.copyLocalIPv4
                     ? PluginKitLocalization.actionUnavailable
-                    : self.localization.string("service.error.noPublicIP", defaultValue: "未获取到公网 IP")
+                    : self.localization.string("service.error.noPublicIP", defaultValue: "未能从外部检测源获取公网 IP")
                 return .failed(
                     message: self.viewModel.snapshot.errorMessage
                         ?? fallbackMessage

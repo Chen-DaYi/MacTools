@@ -88,6 +88,7 @@ struct AppHotkeyManagerView: View {
         panel.canChooseDirectories = false
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard Bundle(url: url) != nil else { return }
 

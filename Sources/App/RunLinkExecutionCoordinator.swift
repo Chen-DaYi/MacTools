@@ -72,6 +72,7 @@ final class SystemRunLinkFeedbackPresenter: RunLinkFeedbackPresenting {
         panel.contentView = NSHostingView(
             rootView: RunLinkFeedbackView(feedback: feedback)
         )
+        PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.orderFrontRegardless()
 
         dismissTask?.cancel()
@@ -154,6 +155,7 @@ final class AppActionConfirmationService: ActionConfirmationRequesting {
         alert.addButton(withTitle: request.confirmation.confirmButtonTitle)
         alert.addButton(withTitle: FeatureL10n.string("取消"))
         return await withCheckedContinuation { continuation in
+            PluginPresentationSafety.prepareForWindowOrdering()
             alert.beginSheetModal(for: window) { response in
                 continuation.resume(returning: response == .alertFirstButtonReturn)
             }

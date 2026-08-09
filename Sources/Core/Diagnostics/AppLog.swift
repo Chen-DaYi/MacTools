@@ -5,8 +5,10 @@ enum AppLog {
     private static let subsystem = Bundle.main.bundleIdentifier ?? "com.example.mactools"
 
     static let accessibilityPermissionObserver = Logger(subsystem: subsystem, category: "AccessibilityPermissionObserver")
+    static let actionGrid = Logger(subsystem: subsystem, category: "ActionGrid")
     static let applicationActivity = Logger(subsystem: subsystem, category: "ApplicationActivity")
     static let appURLRouter = Logger(subsystem: subsystem, category: "AppURLRouter")
+    static let developmentInstance = Logger(subsystem: subsystem, category: "DevelopmentInstance")
     static let displayConfigurationObserver = Logger(subsystem: subsystem, category: "DisplayConfigurationObserver")
     static let autoHideDockPlugin = Logger(subsystem: subsystem, category: "AutoHideDockPlugin")
     static let pluginHost = Logger(subsystem: subsystem, category: "PluginHost")

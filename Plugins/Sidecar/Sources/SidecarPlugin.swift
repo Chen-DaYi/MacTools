@@ -114,6 +114,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     private let terminalFeedbackExpiration: TimeInterval
     private let initialDeviceRefreshDelayNanoseconds: UInt64
     private let deviceRefreshIntervalNanoseconds: UInt64
+    private let presentationPreparation: @MainActor @Sendable () -> Void
 
     init(
         service: any SidecarServicing = SidecarCoreService(),
@@ -123,7 +124,10 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
         terminalFeedbackExpiration: TimeInterval = 30,
         initialDeviceRefreshDelayNanoseconds: UInt64 = 750_000_000,
-        deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000
+        deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000,
+        presentationPreparation: @escaping @MainActor @Sendable () -> Void = {
+            PluginPresentationSafety.prepareForWindowOrdering()
+        }
     ) {
         self.service = service
         self.localization = localization
@@ -135,6 +139,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         self.terminalFeedbackExpiration = max(0, terminalFeedbackExpiration)
         self.initialDeviceRefreshDelayNanoseconds = initialDeviceRefreshDelayNanoseconds
         self.deviceRefreshIntervalNanoseconds = deviceRefreshIntervalNanoseconds
+        self.presentationPreparation = presentationPreparation
         metadata = PluginMetadata(
             id: "sidecar",
             title: localization.string("metadata.title", defaultValue: "Sidecar"),
@@ -254,9 +259,9 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                     defaultValue: "按上方的可用显示器优先级连接第一个设备。"
                 ),
                 keywords: [metadata.title, "Sidecar"],
-                systemImage: "display.badge.plus",
+                systemImage: "rectangle.badge.plus",
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive],
+                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             ),
             ActionDefinition(
@@ -270,9 +275,9 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                     defaultValue: "只会断开 Sidecar 明确报告为已连接的显示器。"
                 ),
                 keywords: [metadata.title, "Sidecar"],
-                systemImage: "display.badge.minus",
+                systemImage: "rectangle.badge.minus",
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive],
+                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             ),
         ]
@@ -291,7 +296,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 keywords: [metadata.title, preference.name, "Sidecar"],
                 systemImage: deviceActionIcon(for: preference.shortcutAction),
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive],
+                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             )
         }
@@ -1034,11 +1039,12 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             self?.onStateChange?()
             self?.completeCanonicalAction(.failed(message: self?.localization.string(
                 "panel.error.timeout",
-                defaultValue: "Sidecar 操作超时"
+                defaultValue: "操作超时，请检查目标显示器、线缆和网络后重试"
             ) ?? PluginKitLocalization.actionUnavailable))
         }
         onStateChange?()
 
+        presentationPreparation()
         for device in connectedDevices {
             service.disconnect(from: device) { [weak self] result in
                 Task { @MainActor [weak self] in
@@ -1111,6 +1117,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
 
     private func startSwitchDisconnect(from source: SidecarDevice) {
         let token = beginOperation(action: .disconnect, for: source)
+        presentationPreparation()
         service.disconnect(from: source) { [weak self] result in
             self?.finishSwitchDisconnect(result: result, for: token)
         }
@@ -1154,6 +1161,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         let completion: (Result<Void, SidecarServiceError>) -> Void = { [weak self] result in
             self?.finish(result: result, for: token, action: request.targetAction, device: request.target)
         }
+        presentationPreparation()
         switch request.targetAction {
         case .connect:
             service.connect(to: request.target, wiredOnly: false, completion: completion)
@@ -1200,6 +1208,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         let completion: (Result<Void, SidecarServiceError>) -> Void = { [weak self] result in
             self?.finish(result: result, for: token, action: action, device: device)
         }
+        presentationPreparation()
         switch action {
         case .connect:
             service.connect(to: device, wiredOnly: false, completion: completion)
@@ -1281,7 +1290,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operation = .timedOut(action, deviceName: device.name)
         completeCanonicalAction(.failed(message: localization.string(
             "panel.error.timeout",
-            defaultValue: "Sidecar 操作超时"
+            defaultValue: "操作超时，请检查目标显示器、线缆和网络后重试"
         )))
         markTerminalFeedback()
         logger.error("Sidecar operation timed out action=\(String(describing: action), privacy: .public) device=\(device.name, privacy: .public)")
@@ -1566,8 +1575,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     private func deviceActionIcon(for action: SidecarShortcutAction) -> String {
         switch action {
         case .toggle: "rectangle.2.swap"
-        case .connect: "display.badge.plus"
-        case .disconnect: "display.badge.minus"
+        case .connect: "rectangle.badge.plus"
+        case .disconnect: "rectangle.badge.minus"
         }
     }
 

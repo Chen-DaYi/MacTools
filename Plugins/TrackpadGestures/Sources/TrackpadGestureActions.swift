@@ -184,6 +184,19 @@ final class TrackpadGestureRecognitionWorker: @unchecked Sendable {
         }
     }
 
+    func recognizeNativeClick(_ gesture: TrackpadGesture, deviceID: UInt64) {
+        generation.advanceWithValue { recognitionGeneration in
+            queue.async { [self] in
+                guard isCurrent(recognitionGeneration) else { return }
+                // A physical click can otherwise resemble a tap when the contacts lift. Keep
+                // the rest of this contact episode suppressed, then deliver only the click.
+                engine.beginSuppression(activeDeviceIDs: [deviceID])
+                guard isCurrent(recognitionGeneration) else { return }
+                onRecognized(gesture, deviceID, recognitionGeneration)
+            }
+        }
+    }
+
     func isCurrent(_ candidate: UInt64) -> Bool {
         generation.isCurrent(candidate)
     }

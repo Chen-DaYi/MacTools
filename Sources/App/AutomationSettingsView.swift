@@ -141,7 +141,7 @@ private struct WorkflowCollectionRow: View {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    Image(systemName: workflow.systemImage)
+                    Image(systemName: PluginSystemImage.resolvedName(workflow.systemImage))
                         .foregroundStyle(workflow.isEnabled ? Color.accentColor : .secondary)
                 }
             }
@@ -159,7 +159,7 @@ private struct WorkflowCollectionRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(workflow.name)，\(summary)")
+            .accessibilityLabel(FeatureL10n.joined([workflow.name, summary]))
 
             Button {
                 if isRunning {
@@ -288,7 +288,7 @@ private struct WorkflowDetailView: View {
 
     private var workflowIdentity: some View {
         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Image(systemName: workflow.systemImage)
+            Image(systemName: PluginSystemImage.resolvedName(workflow.systemImage))
                 .font(.title2)
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 34)
@@ -645,7 +645,7 @@ private struct WorkflowActionPicker: View {
                                         isPresented = false
                                     } label: {
                                         HStack(spacing: 10) {
-                                            Image(systemName: item.systemImage)
+                                            Image(systemName: PluginSystemImage.resolvedName(item.systemImage))
                                                 .frame(width: 22)
                                                 .foregroundStyle(item.availability.isAvailable ? Color.accentColor : .secondary)
 
@@ -1137,7 +1137,12 @@ private struct AutomationConditionEditor: View {
             }
             .labelsHidden()
             .frame(width: 70)
-            TextField("Bundle ID", text: binding(value.bundleIdentifier) { .frontmostApplication(replacing(value, bundleIdentifier: $0)) })
+            TextField(
+                FeatureL10n.string("应用 Bundle ID"),
+                text: binding(value.bundleIdentifier) {
+                    .frontmostApplication(replacing(value, bundleIdentifier: $0))
+                }
+            )
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 180, maxWidth: 280)
         case let .power(value):

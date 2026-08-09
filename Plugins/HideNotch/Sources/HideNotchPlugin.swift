@@ -21,6 +21,7 @@ private struct HideNotchPluginProvider: PluginProvider {
 final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
     private enum ActionID {
         static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
     }
 
     let metadata: PluginMetadata
@@ -107,6 +108,15 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     var actionDefinitions: [ActionDefinition] {
         [
             ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription, "notch"],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: metadata.title,
                 description: metadata.defaultDescription,
@@ -122,7 +132,18 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     }
 
     var actionCatalogEntries: [ActionCatalogEntry] {
-        [
+        let isEnabled = controller.snapshot().isEnabled
+        return [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isEnabled
+                    ? localization.string("action.disable.title", defaultValue: "显示刘海")
+                    : localization.string("action.enable.title", defaultValue: "隐藏刘海"),
+                subtitle: isEnabled
+                    ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                    : metadata.defaultDescription,
+                presentationState: isEnabled ? .active : .inactive
+            ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
                 title: "\(metadata.title) · \(localization.string("panel.subtitle.enabled", defaultValue: "已开启"))"
@@ -162,8 +183,16 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        guard invocation.reference.key.actionID == ActionID.setEnabled,
-              case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !controller.snapshot().isEnabled
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let availability = actionAvailability(for: invocation.reference)
@@ -190,5 +219,9 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
             parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
         )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
     }
 }

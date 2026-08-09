@@ -395,6 +395,7 @@ private struct PluginShortcutRecorderPopoverAnchor: NSViewRepresentable {
             }
 
             let anchorBounds = sourceView.bounds
+            PluginPresentationSafety.prepareForWindowOrdering()
             popover.show(relativeTo: anchorBounds, of: sourceView, preferredEdge: .maxY)
         }
 

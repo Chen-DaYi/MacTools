@@ -182,7 +182,7 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         guard store.configuration.isEnabled else {
             return .unavailable(localization.string(
                 "settings.status.disabled.description",
-                defaultValue: "窗口切换已停用。"
+                defaultValue: "暂停快捷键监听，系统默认切换保持不变。"
             ))
         }
         guard isAccessibilityGranted else {

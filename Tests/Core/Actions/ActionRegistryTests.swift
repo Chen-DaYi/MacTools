@@ -4,6 +4,31 @@ import XCTest
 
 @MainActor
 final class ActionRegistryTests: XCTestCase {
+    func testCatalogPresentationStateRoundTripsAndLegacyPayloadDefaultsToNil() throws {
+        let reference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "toggle")
+        )
+        let entry = ActionCatalogEntry(
+            reference: reference,
+            title: "Turn Off",
+            subtitle: "Active",
+            presentationState: .active
+        )
+        let encoded = try JSONEncoder().encode(entry)
+
+        XCTAssertEqual(try JSONDecoder().decode(ActionCatalogEntry.self, from: encoded), entry)
+
+        var legacyObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        legacyObject.removeValue(forKey: "presentationState")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+        let legacyEntry = try JSONDecoder().decode(ActionCatalogEntry.self, from: legacyData)
+
+        XCTAssertNil(legacyEntry.presentationState)
+        XCTAssertEqual(legacyEntry.reference, reference)
+    }
+
     func testRegistryRejectsUnknownParametersAndInvalidProviderDefinitions() throws {
         let registry = ActionRegistry()
         let provider = ActionRegistryTestProvider()

@@ -1251,7 +1251,7 @@ struct FeatureRowView: View {
                         RoundedRectangle(cornerRadius: FeatureRowLayout.iconCornerRadius, style: .continuous)
                             .fill(Color.primary.opacity(0.08))
 
-                        Image(systemName: item.iconName)
+                        Image(systemName: PluginSystemImage.resolvedName(item.iconName))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
@@ -1351,7 +1351,7 @@ struct FeatureRowView: View {
                 RoundedRectangle(cornerRadius: FeatureRowLayout.iconCornerRadius, style: .continuous)
                     .fill(Color.primary.opacity(0.08))
 
-                Image(systemName: item.iconName)
+                Image(systemName: PluginSystemImage.resolvedName(item.iconName))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
@@ -1450,7 +1450,7 @@ struct FeatureRowView: View {
                 ProgressView()
                     .controlSize(.mini)
             } else {
-                Image(systemName: indicator.systemImage)
+                Image(systemName: PluginSystemImage.resolvedName(indicator.systemImage))
             }
             Text(indicator.text)
         }
@@ -1470,7 +1470,7 @@ struct FeatureRowView: View {
             ForEach(indicator.icons.indices, id: \.self) { index in
                 let icon = indicator.icons[index]
                 HStack(spacing: 3) {
-                    Image(systemName: icon.systemImage)
+                    Image(systemName: PluginSystemImage.resolvedName(icon.systemImage))
                     Text(icon.label)
                 }
                 .lineLimit(1)
@@ -1989,7 +1989,7 @@ private struct SwitchRowControl: View {
     var body: some View {
         HStack(spacing: 8) {
             if let iconName = control.actionIconSystemName {
-                Image(systemName: iconName)
+                Image(systemName: PluginSystemImage.resolvedName(iconName))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 14, height: 14)
@@ -2640,6 +2640,7 @@ private final class SecondaryPanelController: ObservableObject {
             // Align the panel level to `hostWindow.level + 1` at runtime so it stays above the popover.
             // The MenuBarExtra popover level is a private SwiftUI implementation detail.
             panelWindow.level = NSWindow.Level(rawValue: hostWindow.level.rawValue + 1)
+            PluginPresentationSafety.prepareForWindowOrdering(panelWindow)
             panelWindow.orderFrontRegardless()
         case .inline:
             isPresentingInline = true

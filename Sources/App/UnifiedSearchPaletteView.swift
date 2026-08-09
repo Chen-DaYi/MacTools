@@ -7,7 +7,7 @@ enum UnifiedSearchPaletteLayout {
     static let maximumWidth: CGFloat = 672
     static let minimumWidth: CGFloat = 560
     static let outerHorizontalPadding: CGFloat = 48
-    static let maximumResultListHeight: CGFloat = 420
+    static let maximumResultListHeight: CGFloat = 468
     static let minimumResultListHeight: CGFloat = 260
     static let verticalChromeHeight: CGFloat = 202
 
@@ -24,6 +24,21 @@ enum UnifiedSearchPaletteLayout {
                 max(minimumResultListHeight, availableHeight - verticalChromeHeight)
             )
         )
+    }
+}
+
+enum UnifiedSearchResultRowLayout {
+    static let quickSelectionColumnWidth: CGFloat = 32
+    static let primaryActionColumnWidth: CGFloat = 56
+    static let rowVerticalPadding: CGFloat = 9
+
+    static func showsInlineActions(
+        for action: MacToolsSearchAction,
+        isSelected: Bool
+    ) -> Bool {
+        guard isSelected else { return false }
+        if case .executeAction = action { return true }
+        return false
     }
 }
 
@@ -357,6 +372,7 @@ struct UnifiedSearchPaletteView: View {
     let quickSelectionRequest: UnifiedSearchQuickSelectionRequest?
     let showsCustomShadow: Bool
     let actions: UnifiedSearchPaletteActions
+    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @StateObject private var model: UnifiedSearchPaletteModel
     @State private var query = ""
     @State private var selectedResultID: String?
@@ -407,10 +423,14 @@ struct UnifiedSearchPaletteView: View {
         }
         .padding(16)
         .frame(width: UnifiedSearchPaletteLayout.width(for: availableSize.width))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background {
+            UnifiedSearchPaletteSurface(
+                reducesTransparency: accessibilityReduceTransparency
+            )
+        }
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
+                .strokeBorder(PluginSettingsTheme.Palette.cardBorder, lineWidth: 1)
                 .allowsHitTesting(false)
         }
         .modifier(UnifiedSearchPaletteShadowModifier(isEnabled: showsCustomShadow))
@@ -542,11 +562,11 @@ struct UnifiedSearchPaletteView: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(PluginSettingsTheme.Palette.fieldBackground)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+                .strokeBorder(PluginSettingsTheme.Palette.cardBorder, lineWidth: 1)
         }
     }
 
@@ -577,7 +597,7 @@ struct UnifiedSearchPaletteView: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
-                    LazyVStack(alignment: .leading, spacing: 6) {
+                    LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(MacToolsSearchResultKind.allCases, id: \.self) { kind in
                             let group = results.filter { $0.kind == kind }
                             if !group.isEmpty {
@@ -585,7 +605,7 @@ struct UnifiedSearchPaletteView: View {
                                     .font(PluginSettingsTheme.Typography.secondaryLabel)
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 8)
-                                    .padding(.top, 4)
+                                    .padding(.top, 6)
 
                                 ForEach(group) { result in
                                     resultRow(
@@ -597,6 +617,8 @@ struct UnifiedSearchPaletteView: View {
                             }
                         }
                     }
+                    .padding(.trailing, 6)
+                    .padding(.bottom, 8)
                 }
             }
             .frame(
@@ -621,59 +643,74 @@ struct UnifiedSearchPaletteView: View {
         quickSelectionNumber: Int?
     ) -> some View {
         let isSelected = result.id == selectedResultID
+        let showsInlineActions = UnifiedSearchResultRowLayout.showsInlineActions(
+            for: result.action,
+            isSelected: isSelected
+        )
 
-        return HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: showsInlineActions ? 7 : 0) {
             Button {
                 selectedResultID = result.id
                 activate(result)
             } label: {
                 HStack(spacing: 12) {
-                Image(systemName: result.systemImage)
-                    .frame(width: 18)
-                    .foregroundStyle(isSelected ? Color.white : Color.accentColor)
+                    Image(systemName: PluginSystemImage.resolvedName(result.systemImage))
+                        .frame(width: 18)
+                        .foregroundStyle(isSelected ? Color.white : Color.accentColor)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(result.title)
-                        .font(PluginSettingsTheme.Typography.rowTitle)
-                        .foregroundStyle(isSelected ? Color.white : Color.primary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(result.title)
+                            .font(PluginSettingsTheme.Typography.rowTitle)
+                            .foregroundStyle(isSelected ? Color.white : Color.primary)
+                            .lineLimit(1)
 
-                    Text(result.subtitle)
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(isSelected ? Color.white.opacity(0.78) : Color.secondary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(result.subtitle)
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(
+                                isSelected ? Color.white.opacity(0.78) : Color.secondary
+                            )
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let quickSelectionNumber {
-                    Text("⌘\(quickSelectionNumber)")
+                    Text(quickSelectionNumber.map { "⌘\($0)" } ?? "")
                         .font(PluginSettingsTheme.Typography.statusBadge)
                         .foregroundStyle(isSelected ? Color.white.opacity(0.78) : Color.secondary)
+                        .frame(
+                            width: UnifiedSearchResultRowLayout.quickSelectionColumnWidth,
+                            alignment: .trailing
+                        )
                         .accessibilityHidden(true)
-                }
 
-                Text(result.kind.actionTitle)
-                    .font(PluginSettingsTheme.Typography.statusBadge)
-                    .foregroundStyle(isSelected ? Color.white : Color.accentColor)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(
-                                isSelected
-                                    ? Color.white.opacity(0.16)
-                                    : Color.accentColor.opacity(0.1)
-                            )
-                    )
+                    Text(result.kind.actionTitle)
+                        .font(PluginSettingsTheme.Typography.statusBadge)
+                        .foregroundStyle(isSelected ? Color.white : Color.accentColor)
+                        .frame(width: UnifiedSearchResultRowLayout.primaryActionColumnWidth)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(
+                                    isSelected
+                                        ? Color.white.opacity(0.16)
+                                        : Color.accentColor.opacity(0.1)
+                                )
+                        )
                 }
                 .contentShape(Rectangle())
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
 
-            shortcutControls(for: result)
+            if showsInlineActions {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 42)
+                    shortcutControls(for: result, isSelected: isSelected)
+                }
+                .tint(Color.white)
+            }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, UnifiedSearchResultRowLayout.rowVerticalPadding)
         .background(
             RoundedRectangle(cornerRadius: Layout.rowCornerRadius, style: .continuous)
                 .fill(isSelected ? Color.accentColor : Color.clear)
@@ -685,7 +722,10 @@ struct UnifiedSearchPaletteView: View {
     }
 
     @ViewBuilder
-    private func shortcutControls(for result: MacToolsSearchResult) -> some View {
+    private func shortcutControls(
+        for result: MacToolsSearchResult,
+        isSelected: Bool
+    ) -> some View {
         if case let .executeAction(reference) = result.action {
             let shortcut = pluginHost.actionShortcutSettingsItem(for: reference)
             PluginShortcutRecorder(
@@ -725,7 +765,7 @@ struct UnifiedSearchPaletteView: View {
                     Image(systemName: "xmark.circle.fill")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelected ? Color.white.opacity(0.9) : Color.secondary)
                 .help(FeatureL10n.string("清除快捷键"))
             }
 
@@ -741,7 +781,7 @@ struct UnifiedSearchPaletteView: View {
                     Image(systemName: "gearshape")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelected ? Color.white.opacity(0.9) : Color.secondary)
                 .help(FeatureL10n.string("打开所属功能的设置"))
                 .accessibilityLabel(FeatureL10n.string("打开所属功能的设置"))
             }
@@ -1022,4 +1062,23 @@ struct UnifiedSearchPaletteView: View {
         syncSelection()
     }
 
+}
+
+private struct UnifiedSearchPaletteSurface: View {
+    let reducesTransparency: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        shape
+            .fill(
+                reducesTransparency
+                    ? AnyShapeStyle(PluginSettingsTheme.Palette.cardBackground)
+                    : AnyShapeStyle(.regularMaterial)
+            )
+            .overlay {
+                if !reducesTransparency {
+                    shape.fill(PluginSettingsTheme.Palette.cardBackground.opacity(0.88))
+                }
+            }
+    }
 }

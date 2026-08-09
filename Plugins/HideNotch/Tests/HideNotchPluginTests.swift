@@ -131,6 +131,7 @@ final class HideNotchPluginTests: XCTestCase {
 
         XCTAssertEqual(result, .succeeded())
         XCTAssertEqual(controller.setEnabledCalls, [true])
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
     }
 
     func testCanonicalActionIsUnavailableWithoutANotchDisplay() throws {

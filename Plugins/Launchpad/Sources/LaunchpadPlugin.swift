@@ -154,7 +154,7 @@ final class LaunchpadPlugin:
                 title: localization.string("shortcut.toggle.title", defaultValue: "打开启动台"),
                 description: localization.string(
                     "shortcut.toggle.description",
-                    defaultValue: "唤出或收起应用网格。"
+                    defaultValue: "全局快捷键唤出或收起应用网格。默认未设置，可在此自定义。"
                 ),
                 keywords: [
                     localization.string("metadata.title", defaultValue: "启动台"),

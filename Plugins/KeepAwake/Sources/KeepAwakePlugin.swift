@@ -93,6 +93,7 @@ final class KeepAwakePlugin:
     }
 
     private enum ActionID {
+        static let toggle = "toggle"
         static let setEnabled = "set-enabled"
         static let startForDuration = "start-for-duration"
     }
@@ -290,6 +291,15 @@ final class KeepAwakePlugin:
     var actionDefinitions: [ActionDefinition] {
         [
             ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: localization.string("metadata.title", defaultValue: "阻止休眠"),
                 description: localization.string(
@@ -339,8 +349,16 @@ final class KeepAwakePlugin:
     var actionCatalogEntries: [ActionCatalogEntry] {
         var entries = [
             ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: session == nil
+                    ? localization.string("action.enable.title", defaultValue: "启用阻止休眠")
+                    : localization.string("action.disable.title", defaultValue: "停用阻止休眠"),
+                subtitle: session == nil ? nil : panelSubtitle,
+                presentationState: session == nil ? .inactive : .active
+            ),
+            ActionCatalogEntry(
                 reference: actionReference(enabled: true),
-                title: "\(localization.string("action.enable.title", defaultValue: "启用阻止休眠")) · \(localization.string("panel.duration.forever", defaultValue: "永不"))"
+                title: "\(metadata.title) · \(localization.string("panel.duration.forever", defaultValue: "永不"))"
             ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: false),
@@ -496,6 +514,9 @@ final class KeepAwakePlugin:
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         let shouldBeEnabled: Bool
         switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            shouldBeEnabled = session == nil
+            setKeepAwakeEnabled(shouldBeEnabled)
         case ActionID.setEnabled:
             guard case let .boolean(enabled)? = invocation.reference.parameters[ActionParameterID.enabled] else {
                 return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
@@ -529,6 +550,10 @@ final class KeepAwakePlugin:
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
             parameters: try! ActionParameterSet([ActionParameterID.enabled: .boolean(enabled)])
         )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
     }
 
     private func durationActionReference(_ preset: DurationPreset) -> ActionReference {

@@ -517,7 +517,7 @@ struct LaunchControlManagerView: View {
 
     private func statusBanner(message: String, systemImage: String, color: Color) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: systemImage)
+            Image(systemName: PluginSystemImage.resolvedName(systemImage))
                 .foregroundStyle(color)
             Text(message)
                 .font(PluginSettingsTheme.Typography.secondaryLabel)

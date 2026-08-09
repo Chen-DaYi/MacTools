@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import MacToolsPluginKit
 import OSLog
 
 // MARK: - Floating icon presentation (injectable — tests swap in a spy, design §10-①)
@@ -42,6 +43,7 @@ final class LaunchpadFloatingIconWindowPresenter: LaunchpadFloatingIconPresentin
         win.contentView = iconView
         window = win
         move(toScreenPoint: p)
+        PluginPresentationSafety.prepareForWindowOrdering(win)
         win.orderFront(nil)
     }
 

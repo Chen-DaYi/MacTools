@@ -59,6 +59,8 @@ final class DisplayTrueColorPluginTests: XCTestCase {
 
         XCTAssertEqual(result, .succeeded())
         XCTAssertEqual(client.lastSetEnabled, true)
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
     }
 
     func testCanonicalActionIsUnavailableOnUnsupportedHardware() throws {

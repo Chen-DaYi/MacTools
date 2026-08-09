@@ -180,7 +180,7 @@ final class AppHotkeyPlugin:
             return localization.string("panel.subtitle.empty", defaultValue: "暂无绑定，前往设置配置")
         }
         return isEnabled
-            ? localization.format("panel.subtitle.enabledCountFormat", defaultValue: "%d 个应用可用", count)
+            ? localization.format("panel.subtitle.enabledCountFormat", defaultValue: "%d 个快捷键已启用", count)
             : localization.string("panel.subtitle.paused", defaultValue: "快捷键已暂停")
     }
 

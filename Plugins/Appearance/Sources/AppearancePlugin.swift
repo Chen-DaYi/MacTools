@@ -23,6 +23,7 @@ private struct AppearancePluginProvider: PluginProvider {
 final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
     private enum ActionID {
         static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
     }
     let metadata: PluginMetadata
 
@@ -84,6 +85,21 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     var actionDefinitions: [ActionDefinition] {
         [
             ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("metadata.title", defaultValue: "深色模式"),
+                description: localization.string(
+                    "metadata.description",
+                    defaultValue: "切换系统亮色与深色外观"
+                ),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "深色模式"),
+                    localization.string("metadata.description", defaultValue: "切换系统亮色与深色外观"),
+                ],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: localization.string("metadata.title", defaultValue: "深色模式"),
                 description: localization.string(
@@ -111,6 +127,16 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
             ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isDarkMode
+                    ? localization.string("action.enableLight.title", defaultValue: "启用浅色模式")
+                    : localization.string("action.enableDark.title", defaultValue: "启用深色模式"),
+                subtitle: isDarkMode
+                    ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                    : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
+                presentationState: isDarkMode ? .active : .inactive
+            ),
+            ActionCatalogEntry(
                 reference: actionReference(enabled: true),
                 title: localization.string("action.enableDark.title", defaultValue: "启用深色模式")
             ),
@@ -130,7 +156,16 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !Self.readSystemDarkMode()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = setDarkMode(enabled)
@@ -170,6 +205,10 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
             parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
         )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
     }
 
     @discardableResult

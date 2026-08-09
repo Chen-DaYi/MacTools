@@ -24,6 +24,7 @@ final class TranslatorPanelController: TranslatorPanelControlling {
         panelWindow = panel
         panel.setFrame(clampedFrame(for: panel.frame, panel: panel), display: true)
 
+        PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.orderFrontRegardless()
 
         // Keep the panel non-key while capturing so the frontmost app keeps keyboard focus

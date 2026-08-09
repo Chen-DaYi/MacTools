@@ -97,8 +97,12 @@ final class MicrophoneMutePluginTests: XCTestCase {
             ActionInvocation(reference: reference, source: .test, mode: .background)
         ).result()
 
-        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["set-enabled"])
-        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["麦克风静音", "恢复麦克风"])
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(
+            plugin.actionCatalogEntries.map(\.title),
+            ["恢复麦克风", "麦克风静音", "恢复麦克风"]
+        )
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
         XCTAssertEqual(plugin.actionDefinitions.first?.externalInvocationPolicy, .confirmAlways)
         XCTAssertNotNil(plugin.actionDefinitions.first?.confirmation)
         XCTAssertEqual(result, .succeeded())

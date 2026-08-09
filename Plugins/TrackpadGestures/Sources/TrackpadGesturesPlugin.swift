@@ -322,8 +322,15 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         guard let mapping = store.mapping(for: gesture), mapping.isEnabled else {
             return
         }
-        if let clickResolution = session.resolveNativeClick(for: gesture, deviceID: deviceID),
-           clickResolution == .middleClick {
+        if gesture.physicalClickFingerCount != nil {
+            // The native event was already consumed or rewritten synchronously by the event tap.
+            if case .middleClick = mapping.action {
+                return
+            }
+        } else if let clickResolution = session.resolveNativeClick(
+            for: gesture,
+            deviceID: deviceID
+        ), clickResolution == .middleClick {
             return
         }
         if case let .action(reference) = mapping.action {
@@ -405,16 +412,21 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         let gestures = store.isTesting ? Set(TrackpadGesture.allCases) : store.enabledGestures
         let clickResolutions: [TrackpadGesture: TrackpadNativeClickResolution]
         if store.isTesting {
-            clickResolutions = [:]
+            clickResolutions = Dictionary(uniqueKeysWithValues: TrackpadGesture.allCases.compactMap {
+                gesture in
+                gesture.physicalClickFingerCount.map { _ in (gesture, .consume) }
+            })
         } else {
             clickResolutions = Dictionary(uniqueKeysWithValues: store.mappings.compactMap { mapping in
                 guard mapping.isEnabled else { return nil }
                 switch mapping.action {
                 case .middleClick:
                     return (mapping.gesture, .middleClick)
-                case .action where mapping.gesture.tipTapConfiguration != nil:
+                case .action where mapping.gesture.tipTapConfiguration != nil
+                    || mapping.gesture.physicalClickFingerCount != nil:
                     return (mapping.gesture, .consume)
-                case .keyboardShortcut where mapping.gesture.tipTapConfiguration != nil:
+                case .keyboardShortcut where mapping.gesture.tipTapConfiguration != nil
+                    || mapping.gesture.physicalClickFingerCount != nil:
                     return (mapping.gesture, .consume)
                 case .action, .keyboardShortcut:
                     return nil

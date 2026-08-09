@@ -9,11 +9,13 @@ enum TrackpadNativeClickResolution: Equatable, Sendable {
 final class TrackpadMiddleClickCandidateTimeline: @unchecked Sendable {
     struct Candidate: Equatable, Sendable {
         let deviceID: UInt64
+        let contactCount: Int
         let observedAt: TimeInterval
         let isAmbiguous: Bool
     }
 
     private struct CandidateEpisode {
+        var contactCount: Int
         var observedAt: TimeInterval
         var isAmbiguous: Bool
         // Tap recognition is delivered after the release frame, so a just-ended episode remains
@@ -54,11 +56,13 @@ final class TrackpadMiddleClickCandidateTimeline: @unchecked Sendable {
             let startsAmbiguous = untrustedNativeEventDeadline.map { $0 > time } == true
                 || uncorrelatedDeadlinesByDevice[frame.deviceID].map { $0 > time } == true
             if var episode = episodesByDevice[frame.deviceID], episode.isActive {
+                episode.contactCount = frame.contacts.count
                 episode.observedAt = time
                 episode.isAmbiguous = episode.isAmbiguous || startsAmbiguous
                 episodesByDevice[frame.deviceID] = episode
             } else {
                 episodesByDevice[frame.deviceID] = CandidateEpisode(
+                    contactCount: frame.contacts.count,
                     observedAt: time,
                     isAmbiguous: startsAmbiguous,
                     isActive: true
@@ -72,6 +76,7 @@ final class TrackpadMiddleClickCandidateTimeline: @unchecked Sendable {
             episodesByDevice.map { deviceID, episode in
                 Candidate(
                     deviceID: deviceID,
+                    contactCount: episode.contactCount,
                     observedAt: episode.observedAt,
                     isAmbiguous: episode.isAmbiguous
                 )
@@ -80,12 +85,46 @@ final class TrackpadMiddleClickCandidateTimeline: @unchecked Sendable {
     }
 
     func inferredTrackpadOrigin(at time: TimeInterval) -> TrackpadMiddleClickArbiter.NativeEventOrigin? {
+        inferredTrackpadCandidate(at: time).map { .trackpad(deviceID: $0.deviceID) }
+    }
+
+    func inferredTrackpadCandidate(at time: TimeInterval) -> Candidate? {
         lock.withLock {
             pruneEventDeadlines(at: time)
             pruneEpisodes(at: time)
             let candidates = episodesByDevice.filter { !$0.value.isAmbiguous }
-            guard candidates.count == 1, let deviceID = candidates.keys.first else { return nil }
-            return .trackpad(deviceID: deviceID)
+            guard candidates.count == 1,
+                  let (deviceID, episode) = candidates.first
+            else {
+                return nil
+            }
+            return Candidate(
+                deviceID: deviceID,
+                contactCount: episode.contactCount,
+                observedAt: episode.observedAt,
+                isAmbiguous: false
+            )
+        }
+    }
+
+    func activeTrackpadCandidate(at time: TimeInterval) -> Candidate? {
+        lock.withLock {
+            pruneEventDeadlines(at: time)
+            pruneEpisodes(at: time)
+            let candidates = episodesByDevice.filter {
+                $0.value.isActive && !$0.value.isAmbiguous
+            }
+            guard candidates.count == 1,
+                  let (deviceID, episode) = candidates.first
+            else {
+                return nil
+            }
+            return Candidate(
+                deviceID: deviceID,
+                contactCount: episode.contactCount,
+                observedAt: episode.observedAt,
+                isAmbiguous: false
+            )
         }
     }
 
@@ -552,6 +591,7 @@ final class TrackpadMiddleClickCoordinator: @unchecked Sendable {
 
     private var arbiter = TrackpadMiddleClickArbiter()
     private var clickResolutions: [TrackpadGesture: TrackpadNativeClickResolution] = [:]
+    private var physicalClicksByFingerCount: [Int: TrackpadGesture] = [:]
     private var bufferedEvents: [CGEvent] = []
     private var expirationWorkItem: DispatchWorkItem?
     private let clock: @Sendable () -> TimeInterval
@@ -560,6 +600,7 @@ final class TrackpadMiddleClickCoordinator: @unchecked Sendable {
     private let postEvent: (CGEvent) -> Void
     private let candidateTimeline: TrackpadMiddleClickCandidateTimeline
     private let eventOrigin: (CGEvent) -> TrackpadMiddleClickArbiter.NativeEventOrigin
+    private let recognizePhysicalClick: @Sendable (TrackpadGesture, UInt64) -> Void
 
     init(
         clock: @escaping @Sendable () -> TimeInterval = {
@@ -577,6 +618,7 @@ final class TrackpadMiddleClickCoordinator: @unchecked Sendable {
             $0.post(tap: .cghidEventTap)
         },
         candidateTimeline: TrackpadMiddleClickCandidateTimeline = .init(),
+        recognizePhysicalClick: @escaping @Sendable (TrackpadGesture, UInt64) -> Void = { _, _ in },
         eventOrigin: @escaping (CGEvent) -> TrackpadMiddleClickArbiter.NativeEventOrigin = { _ in
             // Public CGEvent metadata does not expose a trustworthy hardware device identifier.
             // The coordinator infers trackpad origin only during one unambiguous contact episode;
@@ -589,6 +631,7 @@ final class TrackpadMiddleClickCoordinator: @unchecked Sendable {
         self.releaseMiddleButton = releaseMiddleButton
         self.postEvent = postEvent
         self.candidateTimeline = candidateTimeline
+        self.recognizePhysicalClick = recognizePhysicalClick
         self.eventOrigin = eventOrigin
     }
 
@@ -596,6 +639,10 @@ final class TrackpadMiddleClickCoordinator: @unchecked Sendable {
         guard resolutions != clickResolutions else { return }
         process(arbiter.reset())
         clickResolutions = resolutions
+        physicalClicksByFingerCount = Dictionary(uniqueKeysWithValues: resolutions.keys.compactMap {
+            gesture in
+            gesture.physicalClickFingerCount.map { ($0, gesture) }
+        })
         candidateTimeline.update(gestures: Set(resolutions.keys))
         scheduleExpiration()
     }
@@ -641,6 +688,16 @@ final class TrackpadMiddleClickCoordinator: @unchecked Sendable {
             at: now
         )
         synchronizeCandidates(at: now)
+        var recognizedPhysicalClick: (gesture: TrackpadGesture, deviceID: UInt64)?
+        if nativeEvent.isDown,
+           case let .trackpad(deviceID) = origin,
+           let candidate = candidateTimeline.activeTrackpadCandidate(at: now),
+           candidate.deviceID == deviceID,
+           let gesture = physicalClicksByFingerCount[candidate.contactCount],
+           let resolution = clickResolutions[gesture] {
+            process(arbiter.recognize(deviceID: deviceID, resolution: resolution, at: now))
+            recognizedPhysicalClick = (gesture, deviceID)
+        }
         let outcome = arbiter.handleNativeEvent(
             nativeEvent,
             origin: origin,
@@ -653,9 +710,21 @@ final class TrackpadMiddleClickCoordinator: @unchecked Sendable {
         case .passThrough:
             return Unmanaged.passUnretained(event)
         case .rewriteAsMiddle:
+            if let recognizedPhysicalClick {
+                recognizePhysicalClick(
+                    recognizedPhysicalClick.gesture,
+                    recognizedPhysicalClick.deviceID
+                )
+            }
             rewriteAsMiddle(event, isDown: nativeEvent.isDown)
             return Unmanaged.passUnretained(event)
         case .suppress:
+            if let recognizedPhysicalClick {
+                recognizePhysicalClick(
+                    recognizedPhysicalClick.gesture,
+                    recognizedPhysicalClick.deviceID
+                )
+            }
             return nil
         case .suppressAndBuffer:
             guard let eventCopy = event.copy() else {
@@ -758,7 +827,7 @@ private extension TrackpadMiddleClickArbiter.NativeEvent {
 
 private extension TrackpadGesture {
     var middleClickContactCount: Int? {
-        if let count = fingerTapCount ?? longTouchFingerCount {
+        if let count = physicalClickFingerCount ?? fingerTapCount ?? longTouchFingerCount {
             return count
         }
         return tipTapConfiguration.map { $0.fixedFingerCount + 1 }

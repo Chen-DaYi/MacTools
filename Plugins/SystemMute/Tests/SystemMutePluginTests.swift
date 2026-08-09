@@ -107,8 +107,12 @@ final class SystemMutePluginTests: XCTestCase {
             ActionInvocation(reference: reference, source: .test, mode: .background)
         ).result()
 
-        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["set-enabled"])
-        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["静音系统音频", "恢复系统音频"])
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(
+            plugin.actionCatalogEntries.map(\.title),
+            ["恢复系统音频", "静音系统音频", "恢复系统音频"]
+        )
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
         XCTAssertEqual(result, .succeeded())
         XCTAssertTrue(plugin.primaryPanelState.isOn)
     }

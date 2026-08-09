@@ -300,7 +300,7 @@ final class DisplayBrightnessPlugin:
                     )
                 ),
                 externalInvocationPolicy: .unavailable,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration]
             ),
             ActionDefinition(
                 key: ActionKey(
@@ -315,7 +315,7 @@ final class DisplayBrightnessPlugin:
                 keywords: [metadata.title, "display", "restore"],
                 systemImage: "display",
                 externalInvocationPolicy: .unavailable,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration]
             ),
         ]
     }

@@ -16,6 +16,9 @@ final class DisplaySleepPluginTests: XCTestCase {
         XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["execute"])
         XCTAssertEqual(plugin.actionDefinitions.first?.externalInvocationPolicy, .confirmAlways)
         XCTAssertNotNil(plugin.actionDefinitions.first?.confirmation)
+        XCTAssertTrue(plugin.actionDefinitions.first?.capabilities.contains(
+            .changesDisplayConfiguration
+        ) == true)
     }
 
     func testRunLinkConfirmationSwitchesLanguageWithoutRecreatingPlugin() throws {

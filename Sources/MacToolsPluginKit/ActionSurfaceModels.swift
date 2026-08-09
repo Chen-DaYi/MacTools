@@ -14,6 +14,7 @@ public struct ActionSurfaceCatalogItem: Identifiable, Hashable, Sendable {
     public let availability: ActionAvailability
     public let isSafe: Bool
     public let canOpenOwner: Bool
+    public let presentationState: ActionPresentationState?
 
     public init(
         reference: ActionReference,
@@ -23,7 +24,8 @@ public struct ActionSurfaceCatalogItem: Identifiable, Hashable, Sendable {
         systemImage: String,
         availability: ActionAvailability,
         isSafe: Bool,
-        canOpenOwner: Bool = false
+        canOpenOwner: Bool = false,
+        presentationState: ActionPresentationState? = nil
     ) {
         self.reference = reference
         self.title = title
@@ -33,6 +35,7 @@ public struct ActionSurfaceCatalogItem: Identifiable, Hashable, Sendable {
         self.availability = availability
         self.isSafe = isSafe
         self.canOpenOwner = canOpenOwner
+        self.presentationState = presentationState
     }
 
     public var id: ActionReference { reference }

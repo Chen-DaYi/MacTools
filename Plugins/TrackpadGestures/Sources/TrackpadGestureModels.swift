@@ -22,10 +22,33 @@ enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Sendable {
     case threeFingerDoubleTap
     case fourFingerDoubleTap
     case fiveFingerDoubleTap
+    case twoFingerClick
+    case threeFingerClick
 
     var id: String { rawValue }
 
-    static let configurableCases = allCases
+    static let configurableCases: [TrackpadGesture] = [
+        .tipTapLeftOneFixed,
+        .tipTapRightOneFixed,
+        .tipTapLeftTwoFixed,
+        .tipTapMiddleTwoFixed,
+        .tipTapRightTwoFixed,
+        .threeFingerTap,
+        .fourFingerTap,
+        .fiveFingerTap,
+        .threeFingerDoubleTap,
+        .fourFingerDoubleTap,
+        .fiveFingerDoubleTap,
+        .twoFingerClick,
+        .threeFingerClick,
+        .threeFingerLongTouch,
+        .fourFingerLongTouch,
+        .fiveFingerLongTouch,
+    ]
+
+    var settingsOrder: Int {
+        Self.configurableCases.firstIndex(of: self) ?? Self.configurableCases.count
+    }
 
     var tipTapConfiguration: (fixedFingerCount: Int, region: TipTapRegion)? {
         switch self {
@@ -71,6 +94,14 @@ enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var physicalClickFingerCount: Int? {
+        switch self {
+        case .twoFingerClick: 2
+        case .threeFingerClick: 3
+        default: nil
+        }
+    }
+
     static func fingerTap(count: Int) -> TrackpadGesture {
         switch count {
         case 4: .fourFingerTap
@@ -78,6 +109,26 @@ enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Sendable {
         default: .threeFingerTap
         }
     }
+}
+
+enum TrackpadGestureMappingSort: String, CaseIterable, Sendable {
+    case gesture
+    case enabledFirst
+    case actionName
+    case addedOrder
+}
+
+enum TrackpadGestureMappingStatusFilter: String, CaseIterable, Sendable {
+    case all
+    case enabled
+    case disabled
+}
+
+enum TrackpadGestureMappingActionFilter: String, CaseIterable, Sendable {
+    case all
+    case macToolsAction
+    case keyboardShortcut
+    case middleClick
 }
 
 enum TrackpadGestureAction: Codable, Equatable, Sendable {
@@ -188,6 +239,9 @@ final class TrackpadGestureStore: ObservableObject {
         static let middleClickMigrationRecord = "migration.mouse-enhancer-middle-click.v2"
         static let ignoreWhileTyping = "ignore-while-typing"
         static let typingGracePeriod = "typing-grace-period"
+        static let mappingSort = "settings.mapping-sort"
+        static let mappingStatusFilter = "settings.mapping-status-filter"
+        static let mappingActionFilter = "settings.mapping-action-filter"
     }
 
     @Published private(set) var mappings: [TrackpadGestureMapping]
@@ -195,6 +249,9 @@ final class TrackpadGestureStore: ObservableObject {
     @Published private(set) var lastTestGesture: TrackpadGesture?
     @Published private(set) var ignoresGesturesWhileTyping: Bool
     @Published private(set) var typingGracePeriod: TimeInterval
+    @Published private(set) var mappingSort: TrackpadGestureMappingSort
+    @Published private(set) var mappingStatusFilter: TrackpadGestureMappingStatusFilter
+    @Published private(set) var mappingActionFilter: TrackpadGestureMappingActionFilter
 
     private let storage: any PluginStorage
     private let encoder = JSONEncoder()
@@ -214,6 +271,15 @@ final class TrackpadGestureStore: ObservableObject {
         let storedGracePeriod = (storage.object(forKey: Key.typingGracePeriod) as? NSNumber)?.doubleValue
             ?? TrackpadTypingSuppressionGate.defaultGracePeriod
         self.typingGracePeriod = TrackpadTypingSuppressionGate.clamped(storedGracePeriod)
+        self.mappingSort = storage.string(forKey: Key.mappingSort)
+            .flatMap(TrackpadGestureMappingSort.init(rawValue:))
+            ?? .gesture
+        self.mappingStatusFilter = storage.string(forKey: Key.mappingStatusFilter)
+            .flatMap(TrackpadGestureMappingStatusFilter.init(rawValue:))
+            ?? .all
+        self.mappingActionFilter = storage.string(forKey: Key.mappingActionFilter)
+            .flatMap(TrackpadGestureMappingActionFilter.init(rawValue:))
+            ?? .all
         migrateLegacyMiddleClickIfNeeded(legacyMiddleClick)
     }
 
@@ -310,6 +376,30 @@ final class TrackpadGestureStore: ObservableObject {
         guard typingGracePeriod != clamped else { return }
         typingGracePeriod = clamped
         storage.set(clamped, forKey: Key.typingGracePeriod)
+    }
+
+    func setMappingSort(_ sort: TrackpadGestureMappingSort) {
+        guard mappingSort != sort else { return }
+        mappingSort = sort
+        storage.set(sort.rawValue, forKey: Key.mappingSort)
+    }
+
+    func setMappingStatusFilter(_ filter: TrackpadGestureMappingStatusFilter) {
+        guard mappingStatusFilter != filter else { return }
+        mappingStatusFilter = filter
+        storage.set(filter.rawValue, forKey: Key.mappingStatusFilter)
+    }
+
+    func setMappingActionFilter(_ filter: TrackpadGestureMappingActionFilter) {
+        guard mappingActionFilter != filter else { return }
+        mappingActionFilter = filter
+        storage.set(filter.rawValue, forKey: Key.mappingActionFilter)
+    }
+
+    func resetMappingViewPreferences() {
+        setMappingSort(.gesture)
+        setMappingStatusFilter(.all)
+        setMappingActionFilter(.all)
     }
 
     @discardableResult

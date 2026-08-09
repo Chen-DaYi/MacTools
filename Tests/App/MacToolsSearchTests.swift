@@ -528,6 +528,28 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
+    func testUnifiedSearchShowsCommandAccessoriesOnlyForSelectedActionRows() {
+        let action = MacToolsSearchAction.executeAction(
+            ActionReference(key: ActionKey(providerID: "sidecar", actionID: "connect"))
+        )
+        let navigation = MacToolsSearchAction.navigate(destination: .general, target: nil)
+
+        XCTAssertTrue(UnifiedSearchResultRowLayout.showsInlineActions(
+            for: action,
+            isSelected: true
+        ))
+        XCTAssertFalse(UnifiedSearchResultRowLayout.showsInlineActions(
+            for: action,
+            isSelected: false
+        ))
+        XCTAssertFalse(UnifiedSearchResultRowLayout.showsInlineActions(
+            for: navigation,
+            isSelected: true
+        ))
+        XCTAssertEqual(UnifiedSearchResultRowLayout.quickSelectionColumnWidth, 32)
+        XCTAssertEqual(UnifiedSearchResultRowLayout.primaryActionColumnWidth, 56)
+    }
+
     func testPluginHostPerformsOnlyDeclaredCommands() {
         let plugin = SearchableTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])

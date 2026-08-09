@@ -73,6 +73,7 @@ final class XcodeCleanConfirmWindowPresenter: XcodeCleanConfirmationPresenting {
             self?.window = nil
         }
         position(window: window, anchorRect: anchorRect)
+        PluginPresentationSafety.prepareForWindowOrdering(window)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window

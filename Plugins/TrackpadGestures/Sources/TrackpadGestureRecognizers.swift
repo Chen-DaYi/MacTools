@@ -573,6 +573,7 @@ private enum TrackpadGestureRecognizer: Sendable {
     case tap(MultiFingerTapRecognizer)
     case doubleTap(MultiFingerDoubleTapRecognizer)
     case longTouch(LongTouchRecognizer)
+    case nativeClick
 
     mutating func process(_ frame: TrackpadContactFrame) -> Bool {
         switch self {
@@ -592,6 +593,10 @@ private enum TrackpadGestureRecognizer: Sendable {
             let recognized = recognizer.process(frame)
             self = .longTouch(recognizer)
             return recognized
+        case .nativeClick:
+            // Physical clicks are correlated with native mouse events by the session's
+            // click coordinator. Contact frames only establish the originating trackpad.
+            return false
         }
     }
 }
@@ -756,6 +761,9 @@ struct TrackpadGestureEngine: Sendable {
     }
 
     private func makeRecognizer(for gesture: TrackpadGesture) -> TrackpadGestureRecognizer {
+        if gesture.physicalClickFingerCount != nil {
+            return .nativeClick
+        }
         if let tipTap = gesture.tipTapConfiguration {
             return .tipTap(TipTapRecognizer(
                 fixedFingerCount: tipTap.fixedFingerCount,

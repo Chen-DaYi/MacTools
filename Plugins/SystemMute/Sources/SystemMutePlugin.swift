@@ -87,6 +87,7 @@ struct CoreAudioSystemOutputController: SystemAudioControlling {
 final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
     private enum ActionID {
         static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
     }
 
     private enum ErrorState {
@@ -165,15 +166,27 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     var actionDefinitions: [ActionDefinition] {
         [
             ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("metadata.title", defaultValue: "系统静音"),
+                description: localization.string("metadata.description", defaultValue: "快速静音或恢复系统音频输出"),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "系统静音"),
+                    localization.string("metadata.description", defaultValue: "快速静音或恢复系统音频输出"),
+                ],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: localization.string("action.setMute.title", defaultValue: "设置系统静音"),
                 description: localization.string(
                     "metadata.description",
-                    defaultValue: "切换系统输出静音"
+                    defaultValue: "快速静音或恢复系统音频输出"
                 ),
                 keywords: [
                     localization.string("metadata.title", defaultValue: "系统静音"),
-                    localization.string("metadata.description", defaultValue: "切换系统输出静音"),
+                    localization.string("metadata.description", defaultValue: "快速静音或恢复系统音频输出"),
                 ],
                 systemImage: metadata.iconName,
                 parameters: [
@@ -191,6 +204,16 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isMuted
+                    ? localization.string("action.unmute.title", defaultValue: "恢复系统音频")
+                    : localization.string("action.mute.title", defaultValue: "静音系统音频"),
+                subtitle: isMuted
+                    ? localization.string("panel.subtitle.muted", defaultValue: "已静音")
+                    : localization.string("panel.subtitle.unmuted", defaultValue: "未静音"),
+                presentationState: isMuted ? .active : .inactive
+            ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
                 title: localization.string("action.mute.title", defaultValue: "静音系统音频")
@@ -231,7 +254,16 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !controller.readMuteState()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = applyMute(enabled)
@@ -252,6 +284,10 @@ final class SystemMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
             parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
         )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
     }
 
     @discardableResult

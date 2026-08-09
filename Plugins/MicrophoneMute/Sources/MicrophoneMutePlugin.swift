@@ -87,6 +87,7 @@ struct CoreAudioMicrophoneController: MicrophoneControlling {
 final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
     private enum ActionID {
         static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
     }
 
     private enum ErrorState {
@@ -166,6 +167,19 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
     var actionDefinitions: [ActionDefinition] {
         [
             ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("metadata.title", defaultValue: "麦克风静音"),
+                description: localization.string("metadata.description", defaultValue: "快速静音或恢复默认麦克风输入"),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "麦克风静音"),
+                    localization.string("metadata.description", defaultValue: "快速静音或恢复默认麦克风输入"),
+                ],
+                systemImage: metadata.iconName,
+                confirmation: toggleConfirmation,
+                externalInvocationPolicy: .confirmAlways,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: localization.string(
                     "action.setMute.title",
@@ -173,11 +187,11 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
                 ),
                 description: localization.string(
                     "metadata.description",
-                    defaultValue: "快速切换麦克风静音"
+                    defaultValue: "快速静音或恢复默认麦克风输入"
                 ),
                 keywords: [
                     localization.string("metadata.title", defaultValue: "麦克风静音"),
-                    localization.string("metadata.description", defaultValue: "快速切换麦克风静音"),
+                    localization.string("metadata.description", defaultValue: "快速静音或恢复默认麦克风输入"),
                 ],
                 systemImage: metadata.iconName,
                 parameters: [
@@ -190,20 +204,7 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
                         kind: .boolean
                     ),
                 ],
-                confirmation: ActionConfirmation(
-                    title: localization.string(
-                        "action.confirmation.title",
-                        defaultValue: "确认更改麦克风状态"
-                    ),
-                    message: localization.string(
-                        "action.confirmation.message",
-                        defaultValue: "外部运行链接将更改默认麦克风的静音状态。"
-                    ),
-                    confirmButtonTitle: localization.string(
-                        "action.confirmation.confirm",
-                        defaultValue: "继续"
-                    )
-                ),
+                confirmation: toggleConfirmation,
                 externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive]
             ),
@@ -212,6 +213,16 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isMuted
+                    ? localization.string("action.unmute.title", defaultValue: "恢复麦克风")
+                    : localization.string("action.mute.title", defaultValue: "麦克风静音"),
+                subtitle: isMuted
+                    ? localization.string("panel.subtitle.muted", defaultValue: "已静音")
+                    : localization.string("panel.subtitle.unmuted", defaultValue: "未静音"),
+                presentationState: isMuted ? .active : .inactive
+            ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
                 title: localization.string("action.mute.title", defaultValue: "麦克风静音")
@@ -245,7 +256,16 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !controller.readMuteState()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = applyMute(enabled)
@@ -265,6 +285,27 @@ final class MicrophoneMutePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActi
         ActionReference(
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
             parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
+    }
+
+    private var toggleConfirmation: ActionConfirmation {
+        ActionConfirmation(
+            title: localization.string(
+                "action.confirmation.title",
+                defaultValue: "确认更改麦克风状态"
+            ),
+            message: localization.string(
+                "action.confirmation.message",
+                defaultValue: "外部运行链接将更改默认麦克风的静音状态。"
+            ),
+            confirmButtonTitle: localization.string(
+                "action.confirmation.confirm",
+                defaultValue: "继续"
+            )
         )
     }
 

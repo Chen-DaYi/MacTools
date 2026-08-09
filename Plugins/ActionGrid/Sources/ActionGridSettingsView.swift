@@ -425,6 +425,28 @@ private enum ActionGridAddKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+struct ActionGridActionPickerPresentation: Equatable {
+    let title: String
+    let detail: String
+    let badge: String?
+
+    init(
+        item: ActionSurfaceCatalogItem,
+        toggleLabel: String,
+        nextActionDetail: String
+    ) {
+        if item.presentationState != nil {
+            title = item.ownerTitle
+            detail = nextActionDetail
+            badge = toggleLabel
+        } else {
+            title = item.title
+            detail = item.ownerTitle
+            badge = nil
+        }
+    }
+}
+
 private struct ActionGridActionEditorSheet: View {
     private enum Field: Hashable {
         case search
@@ -484,12 +506,23 @@ private struct ActionGridActionEditorSheet: View {
                     .focused($focusedField, equals: .title)
 
                 List(filteredItems, selection: $selectedReference) { item in
+                    let presentation = pickerPresentation(for: item)
                     HStack(spacing: 10) {
-                        Image(systemName: item.systemImage)
+                        Image(systemName: PluginSystemImage.resolvedName(item.systemImage))
                             .frame(width: 22)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.title)
-                            Text(item.ownerTitle)
+                            HStack(spacing: 6) {
+                                Text(presentation.title)
+                                if let badge = presentation.badge {
+                                    Text(badge)
+                                        .font(PluginSettingsTheme.Typography.statusBadge)
+                                        .foregroundStyle(Color.accentColor)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                                }
+                            }
+                            Text(presentation.detail)
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .foregroundStyle(.secondary)
                         }
@@ -547,10 +580,28 @@ private struct ActionGridActionEditorSheet: View {
     private var filteredItems: [ActionSurfaceCatalogItem] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return plugin.catalogItems(excluding: request.entryID, in: folderID).filter { item in
-            query.isEmpty || [item.title, item.subtitle, item.ownerTitle]
+            let presentation = pickerPresentation(for: item)
+            return query.isEmpty || [
+                item.title,
+                item.subtitle,
+                item.ownerTitle,
+                presentation.title,
+                presentation.detail,
+                presentation.badge,
+            ]
                 .compactMap { $0 }
                 .contains { $0.localizedCaseInsensitiveContains(query) }
         }
+    }
+
+    private func pickerPresentation(
+        for item: ActionSurfaceCatalogItem
+    ) -> ActionGridActionPickerPresentation {
+        ActionGridActionPickerPresentation(
+            item: item,
+            toggleLabel: plugin.localized("切换"),
+            nextActionDetail: plugin.localizedFormat("下次执行：%@", item.title)
+        )
     }
 
     private var editorTitle: String {
@@ -693,7 +744,9 @@ struct ActionGridEntryRow: View {
             copy: plugin.accessibilityCopy
         )
         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Image(systemName: item?.systemImage ?? "questionmark.square.dashed")
+            Image(systemName: PluginSystemImage.resolvedName(
+                item?.systemImage ?? PluginSystemImage.fallbackName
+            ))
                 .frame(width: 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {

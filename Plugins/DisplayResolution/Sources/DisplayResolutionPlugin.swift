@@ -168,11 +168,31 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
                         kind: .string,
                         portability: .localOnly
                     ),
-                    ActionParameterDefinition(id: ActionParameterID.width, title: "Width", kind: .integer),
-                    ActionParameterDefinition(id: ActionParameterID.height, title: "Height", kind: .integer),
-                    ActionParameterDefinition(id: ActionParameterID.pixelWidth, title: "Pixel Width", kind: .integer),
-                    ActionParameterDefinition(id: ActionParameterID.pixelHeight, title: "Pixel Height", kind: .integer),
-                    ActionParameterDefinition(id: ActionParameterID.refreshRate, title: "Refresh Rate", kind: .double),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.width,
+                        title: localization.string("action.parameter.width", defaultValue: "宽度"),
+                        kind: .integer
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.height,
+                        title: localization.string("action.parameter.height", defaultValue: "高度"),
+                        kind: .integer
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.pixelWidth,
+                        title: localization.string("action.parameter.pixelWidth", defaultValue: "像素宽度"),
+                        kind: .integer
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.pixelHeight,
+                        title: localization.string("action.parameter.pixelHeight", defaultValue: "像素高度"),
+                        kind: .integer
+                    ),
+                    ActionParameterDefinition(
+                        id: ActionParameterID.refreshRate,
+                        title: localization.string("action.parameter.refreshRate", defaultValue: "刷新率"),
+                        kind: .double
+                    ),
                 ],
                 confirmation: ActionConfirmation(
                     title: metadata.title,
@@ -180,7 +200,7 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
                     confirmButtonTitle: metadata.title
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration]
             ),
         ]
     }

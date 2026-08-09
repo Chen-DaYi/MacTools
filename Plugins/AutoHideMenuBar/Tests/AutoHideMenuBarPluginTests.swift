@@ -67,6 +67,8 @@ final class AutoHideMenuBarPluginTests: XCTestCase {
 
         XCTAssertEqual(result, .succeeded())
         XCTAssertEqual(runner.calls, [true])
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
     }
 
     private func makePlugin(

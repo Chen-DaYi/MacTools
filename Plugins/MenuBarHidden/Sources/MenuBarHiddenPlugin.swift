@@ -284,7 +284,7 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
         [
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
-                title: "\(metadata.title) · \(localization.string("panel.subtitle.enabled", defaultValue: "已开启"))"
+                title: "\(metadata.title) · \(localization.string("panel.subtitle.enabled", defaultValue: "已启用"))"
             ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: false),

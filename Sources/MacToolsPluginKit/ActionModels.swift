@@ -252,6 +252,10 @@ public struct ActionExecutionCapabilities: OptionSet, Hashable, Codable, Sendabl
     public static let foregroundInteractive = ActionExecutionCapabilities(rawValue: 1 << 1)
     public static let cancellable = ActionExecutionCapabilities(rawValue: 1 << 2)
     public static let reportsProgress = ActionExecutionCapabilities(rawValue: 1 << 3)
+    /// The action can change the connected-display topology or active display mode.
+    /// The host uses this to detach AppKit's remote text-completion UI before the
+    /// display server wakes or reorders status-item windows.
+    public static let changesDisplayConfiguration = ActionExecutionCapabilities(rawValue: 1 << 4)
 
     public init(rawValue: UInt8) {
         self.rawValue = rawValue
@@ -357,15 +361,27 @@ public struct ActionReference: Hashable, Codable, Sendable, Identifiable {
     }
 }
 
+public enum ActionPresentationState: String, Hashable, Codable, Sendable {
+    case inactive
+    case active
+}
+
 public struct ActionCatalogEntry: Hashable, Codable, Sendable, Identifiable {
     public let reference: ActionReference
     public let title: String
     public let subtitle: String?
+    public let presentationState: ActionPresentationState?
 
-    public init(reference: ActionReference, title: String, subtitle: String? = nil) {
+    public init(
+        reference: ActionReference,
+        title: String,
+        subtitle: String? = nil,
+        presentationState: ActionPresentationState? = nil
+    ) {
         self.reference = reference
         self.title = title
         self.subtitle = subtitle
+        self.presentationState = presentationState
     }
 
     public var id: ActionReference {

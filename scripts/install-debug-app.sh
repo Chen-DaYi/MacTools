@@ -87,6 +87,39 @@ fi
 
 lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 if [[ -x "$lsregister" ]]; then
+    bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$installed_app/Contents/Info.plist")"
+    while IFS= read -r registered_app; do
+        [[ -n "$registered_app" && "$registered_app" != "$installed_app" ]] || continue
+        "$lsregister" -u "$registered_app" >/dev/null 2>&1 || true
+    done < <(
+        "$lsregister" -dump | /usr/bin/awk \
+            -v target="$bundle_identifier" \
+            -v keep="$installed_app" '
+                function emit() {
+                    if (identifier == target && path != "" && path != keep) print path
+                }
+                /^-+$/ {
+                    emit()
+                    path = ""
+                    identifier = ""
+                    next
+                }
+                /^[[:space:]]*path:[[:space:]]*/ {
+                    value = $0
+                    sub(/^[[:space:]]*path:[[:space:]]*/, "", value)
+                    sub(/ \(0x[0-9a-fA-F]+\)$/, "", value)
+                    path = value
+                    next
+                }
+                /^[[:space:]]*identifier:[[:space:]]*/ {
+                    value = $0
+                    sub(/^[[:space:]]*identifier:[[:space:]]*/, "", value)
+                    identifier = value
+                    next
+                }
+                END { emit() }
+            '
+    )
     "$lsregister" -u "$source_app" >/dev/null 2>&1 || true
     "$lsregister" -f "$installed_app" >/dev/null 2>&1 || true
 fi

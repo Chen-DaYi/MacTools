@@ -166,6 +166,7 @@ struct DiskCleanPurgeRootsView: View {
             "detail.purgeRoots.chooseMessage",
             defaultValue: "选择具体的工程文件夹（不要选个人文件夹或系统目录）"
         )
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
             model.add(url.path)

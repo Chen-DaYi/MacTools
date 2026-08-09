@@ -421,7 +421,7 @@ struct ActivityBarComponentView: View {
 
     private func codingToolRow(row: CodingToolDisplayRow) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: row.systemImage)
+            Image(systemName: PluginSystemImage.resolvedName(row.systemImage))
                 .font(.system(size: row.iconSize, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 26, height: 26)

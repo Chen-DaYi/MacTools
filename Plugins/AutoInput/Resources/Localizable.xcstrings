@@ -1,6 +1,38 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "action.disable.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "إيقاف تبديل الإدخال التلقائي مؤقتًا" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Automatischen Eingabewechsel pausieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pause Auto Input" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Pausar cambio automático de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Suspendre le changement automatique" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力の自動切り替えを一時停止" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 자동 전환 일시 정지" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Pausar troca automática de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Приостановить автопереключение ввода" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂停自动切换输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫停自動切換輸入法" } }
+      }
+    },
+    "action.enable.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تشغيل تبديل الإدخال التلقائي" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Automatischen Eingabewechsel aktivieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Turn On Auto Input" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Activar cambio automático de entrada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Activer le changement automatique" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "入力の自動切り替えをオン" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "입력 자동 전환 켜기" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ativar troca automática de entrada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Включить автопереключение ввода" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开启自动切换输入法" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開啟自動切換輸入法" } }
+      }
+    },
     "error.switchFailed" : {
       "extractionState" : "manual",
       "localizations" : {

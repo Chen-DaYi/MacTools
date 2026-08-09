@@ -18,6 +18,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
     private let store: any DisplayDisableStateStoring
     private let localization: PluginLocalization
     private let verificationSettleDelay: Duration
+    private let presentationPreparation: @MainActor @Sendable () -> Void
 
     private(set) var snapshot: DisplayDisableSnapshot
 
@@ -25,12 +26,16 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         service: any DisplayDisableServicing,
         store: any DisplayDisableStateStoring,
         localization: PluginLocalization = DisplayBrightnessLocalization.fallback,
-        verificationSettleDelay: Duration = .milliseconds(800)
+        verificationSettleDelay: Duration = .milliseconds(800),
+        presentationPreparation: @escaping @MainActor @Sendable () -> Void = {
+            PluginPresentationSafety.prepareForWindowOrdering()
+        }
     ) {
         self.service = service
         self.store = store
         self.localization = localization
         self.verificationSettleDelay = verificationSettleDelay
+        self.presentationPreparation = presentationPreparation
         self.snapshot = Self.unsupportedSnapshot(localization: localization)
         refreshSnapshot()
     }
@@ -146,6 +151,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         store.snapshot = recoverySnapshot
 
         do {
+            presentationPreparation()
             try service.setDisplay(builtIn.id, enabled: false)
         } catch {
             store.snapshot = nil
@@ -188,6 +194,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             return
         }
 
+        presentationPreparation()
         try? service.setDisplay(builtIn.id, enabled: true)
         snapshot = DisplayDisableSnapshot(
             status: .failed,
@@ -215,6 +222,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
 
         for displayID in restoreCandidates {
             do {
+                presentationPreparation()
                 try service.setDisplay(displayID, enabled: true)
                 store.snapshot = nil
                 updateAvailableSnapshot(displays: service.listDisplays())
@@ -244,6 +252,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         }
 
         do {
+            presentationPreparation()
             try service.setDisplay(builtIn.id, enabled: true)
             store.snapshot = nil
             updateAvailableSnapshot(displays: service.listDisplays())

@@ -257,7 +257,7 @@ struct HomebrewDetailView: View {
         color: Color
     ) -> some View {
         HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
-            Image(systemName: systemImage)
+            Image(systemName: PluginSystemImage.resolvedName(systemImage))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(color)
             Text(title)

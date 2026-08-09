@@ -171,6 +171,7 @@ final class DisplayBrightnessPluginTests: XCTestCase {
 
         XCTAssertEqual(disableDefinition.risk, .confirmationRequired)
         XCTAssertEqual(disableDefinition.externalInvocationPolicy, .unavailable)
+        XCTAssertTrue(disableDefinition.capabilities.contains(.changesDisplayConfiguration))
         XCTAssertTrue(plugin.actionAvailability(for: disable.reference).isAvailable)
 
         let disableResult = try await plugin.beginAction(
@@ -184,6 +185,10 @@ final class DisplayBrightnessPluginTests: XCTestCase {
                 $0.reference.key.actionID == "restore-built-in-display"
             }
         )
+        let restoreDefinition = try XCTUnwrap(
+            plugin.actionDefinitions.first { $0.key == restore.reference.key }
+        )
+        XCTAssertTrue(restoreDefinition.capabilities.contains(.changesDisplayConfiguration))
         XCTAssertTrue(plugin.actionAvailability(for: restore.reference).isAvailable)
         let restoreResult = try await plugin.beginAction(
             ActionInvocation(reference: restore.reference, source: .test, mode: .background)

@@ -83,7 +83,7 @@ final class MacToolsCommandWindow: NSWindow {
 }
 
 enum StandaloneCommandPaletteLayout {
-    static let contentSize = NSSize(width: 720, height: 660)
+    static let contentSize = NSSize(width: 720, height: 710)
 
     static func frame(
         contentSize: NSSize = contentSize,
@@ -290,6 +290,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private(set) var commandPaletteState: StandaloneCommandPaletteState?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var appDeactivationObserver: NSObjectProtocol?
+    private var appearanceObserver: NSObjectProtocol?
     private var panelPresentationActions = SettingsPanelPresentationActions()
     private var onProgrammaticSettingsPresentation: () -> Void = {}
 
@@ -334,12 +335,24 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 self?.dismissCommandPalette()
             }
         }
+        appearanceObserver = NotificationCenter.default.addObserver(
+            forName: AppAppearancePreference.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in
+                self?.applyCommandPaletteAppearance()
+            }
+        }
     }
 
     isolated deinit {
         runtimeLocaleCancellable?.cancel()
         if let appDeactivationObserver {
             NotificationCenter.default.removeObserver(appDeactivationObserver)
+        }
+        if let appearanceObserver {
+            NotificationCenter.default.removeObserver(appearanceObserver)
         }
     }
 
@@ -389,6 +402,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             $0.action == .openCommandPalette
         }?.bindingText ?? ""
         state.prepareForPresentation(shortcutLabel: shortcutLabel)
+        applyCommandPaletteAppearance()
 
         let screens = NSScreen.screens
         let pointerLocation = NSEvent.mouseLocation
@@ -405,11 +419,18 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             display: true
         )
         NSApplication.shared.activate(ignoringOtherApps: true)
+        PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.makeKeyAndOrderFront(nil)
     }
 
     func dismissCommandPalette() {
         commandPalettePanel?.orderOut(nil)
+    }
+
+    private func applyCommandPaletteAppearance() {
+        let preference = AppAppearancePreference.stored(in: appearanceUserDefaults)
+        preference.apply(to: commandPalettePanel)
+        preference.apply(to: commandPalettePanel?.contentView)
     }
 
     func setPanelPresentationActions(
@@ -436,6 +457,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 window.deminiaturize(nil)
             },
             orderFront: {
+                PluginPresentationSafety.prepareForWindowOrdering(window)
                 window.makeKeyAndOrderFront(nil)
             }
         )
@@ -509,6 +531,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         )
         hostingView.sizingOptions = []
         panel.contentView = hostingView
+        let preference = AppAppearancePreference.stored(in: appearanceUserDefaults)
+        preference.apply(to: panel)
+        preference.apply(to: hostingView)
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true

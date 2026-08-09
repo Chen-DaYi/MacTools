@@ -516,7 +516,7 @@ private struct AppShortcutSettingsRow: View {
                 RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
                     .fill(Color.accentColor.opacity(0.12))
 
-                Image(systemName: item.systemImage)
+                Image(systemName: PluginSystemImage.resolvedName(item.systemImage))
                     .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                     .foregroundStyle(Color.accentColor)
             }
@@ -701,6 +701,7 @@ private struct PreferencesBackupSettingsRow: View {
         panel.nameFieldStringValue = PreferencesBackupExportFileName.make()
         panel.message = AppL10n.preferencesBackup("preferencesBackup.export.prompt", defaultValue: "将可移植的 MacTools 偏好设置保存为 JSON 文件。")
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK, let url = panel.url else {
             return
         }
@@ -722,6 +723,7 @@ private struct PreferencesBackupSettingsRow: View {
         panel.canChooseDirectories = false
         panel.message = AppL10n.preferencesBackup("preferencesBackup.import.prompt", defaultValue: "选择 MacTools 导出的偏好设置 JSON 文件。")
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK, let url = panel.url else {
             return
         }
@@ -1730,7 +1732,7 @@ private struct FeatureSettingsSidebarRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         } icon: {
-            Image(systemName: systemImage)
+            Image(systemName: PluginSystemImage.resolvedName(systemImage))
                 .imageScale(.small)
                 .foregroundStyle(iconTint)
                 .frame(width: Layout.iconWidth)
@@ -2353,7 +2355,7 @@ private struct SettingsPageHeader: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(iconTint.opacity(0.14))
 
-                Image(systemName: systemImage)
+                Image(systemName: PluginSystemImage.resolvedName(systemImage))
                     .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                     .foregroundStyle(iconTint)
             }
@@ -2553,7 +2555,7 @@ private struct PluginConfigurationSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(title, systemImage: systemImage)
+            Label(title, systemImage: PluginSystemImage.resolvedName(systemImage))
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
 

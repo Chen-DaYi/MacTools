@@ -133,15 +133,20 @@ final class ActionExecutor {
     private let registry: ActionRegistry
     private let confirmationService: any ActionConfirmationRequesting
     private let confirmationTimeout: Duration
+    private let presentationPreparation: @MainActor @Sendable () -> Void
 
     init(
         registry: ActionRegistry,
         confirmationService: any ActionConfirmationRequesting = RejectingActionConfirmationService(),
-        confirmationTimeout: Duration = .seconds(60)
+        confirmationTimeout: Duration = .seconds(60),
+        presentationPreparation: @escaping @MainActor @Sendable () -> Void = {
+            PluginPresentationSafety.prepareForWindowOrdering()
+        }
     ) {
         self.registry = registry
         self.confirmationService = confirmationService
         self.confirmationTimeout = confirmationTimeout
+        self.presentationPreparation = presentationPreparation
     }
 
     func execute(
@@ -211,6 +216,10 @@ final class ActionExecutor {
         let currentAvailability = registry.availability(for: invocation.reference)
         guard currentAvailability.isAvailable else {
             return .rejected(.unavailable(currentAvailability.reason))
+        }
+
+        if revalidated.definition.capabilities.contains(.changesDisplayConfiguration) {
+            presentationPreparation()
         }
 
         let handle: ActionExecutionHandle

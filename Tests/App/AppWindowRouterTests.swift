@@ -570,6 +570,37 @@ final class AppWindowRouterTests: XCTestCase {
         )
     }
 
+    func testUnifiedPaletteViewportFitsCompleteNavigationRowsWhenSpaceAllows() {
+        XCTAssertEqual(
+            UnifiedSearchPaletteLayout.resultListHeight(for: 710),
+            UnifiedSearchPaletteLayout.maximumResultListHeight
+        )
+        XCTAssertEqual(
+            UnifiedSearchPaletteLayout.resultListHeight(for: 600),
+            398
+        )
+        XCTAssertGreaterThanOrEqual(
+            StandaloneCommandPaletteLayout.contentSize.height,
+            UnifiedSearchPaletteLayout.maximumResultListHeight
+                + UnifiedSearchPaletteLayout.verticalChromeHeight
+        )
+    }
+
+    func testStandalonePaletteUsesStoredAppearanceOnItsPanelAndContent() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(AppAppearancePreference.light.rawValue, forKey: AppAppearancePreference.userDefaultsKey)
+        let router = makeRouter(defaults: defaults)
+
+        router.toggleCommandPalette()
+        let panel = try XCTUnwrap(router.commandPalettePanel)
+
+        XCTAssertEqual(panel.appearance?.name, .aqua)
+        XCTAssertEqual(panel.contentView?.appearance?.name, .aqua)
+        router.dismissCommandPalette()
+    }
+
     func testStandalonePaletteUsesRightToLeftLayoutForArabicLocale() {
         XCTAssertEqual(
             StandaloneCommandPaletteRootView.layoutDirection(for: Locale(identifier: "ar")),

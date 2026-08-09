@@ -86,6 +86,9 @@ final class DisplayResolutionPluginTests: XCTestCase {
         let controller = MockDisplayResolutionController(display: display, modes: [mode])
         let plugin = DisplayResolutionPlugin(controller: controller)
         let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+        XCTAssertTrue(try XCTUnwrap(plugin.actionDefinitions.first).capabilities.contains(
+            .changesDisplayConfiguration
+        ))
 
         let result = try await plugin.beginAction(
             ActionInvocation(reference: reference, source: .test, mode: .background)

@@ -1,27 +1,153 @@
 import AppKit
 import MacToolsPluginKit
+import OSLog
 import SwiftUI
 
 struct ResolvedActionGridEntry: Identifiable, Equatable {
     let id: String
     let reference: ActionReference
     let title: String
+    let invocationTitle: String?
+    let subtitle: String?
+    let compactDetail: String?
     let ownerTitle: String
     let systemImage: String
     let availability: ActionAvailability
+    let presentationState: ActionPresentationState?
     var slotIndex: Int = 0
     var children: [ActionGridPresentationEntry]? = nil
 
     var isFolder: Bool { children != nil }
 
-    var accessibilityLabel: String {
-        FeatureL10n.joined([
+    var stateLabel: String? {
+        switch presentationState {
+        case .active:
+            FeatureL10n.string("已开启")
+        case .inactive:
+            FeatureL10n.string("已关闭")
+        case nil:
+            nil
+        }
+    }
+
+    var tileStatus: String? {
+        guard availability.isAvailable else {
+            return FeatureL10n.string("不可用")
+        }
+        if let children {
+            switch children.count {
+            case 0:
+                return FeatureL10n.string("空文件夹")
+            case 1:
+                return FeatureL10n.string("1 个操作")
+            default:
+                return FeatureL10n.format("%d 个操作", children.count)
+            }
+        }
+        if let stateLabel {
+            return Self.compactJoined([stateLabel, compactDetail])
+        }
+        return distinct(compactDetail, from: [title])
+    }
+
+    var helpText: String {
+        Self.uniqueLines([
             title,
-            ownerTitle,
+            tileStatus,
+            distinct(invocationTitle, from: [title]),
+            distinct(subtitle, from: [title, tileStatus, invocationTitle]),
+            availability.isAvailable ? nil : availability.reason,
+            distinct(ownerTitle, from: [title, tileStatus, invocationTitle, subtitle]),
+        ])
+        .joined(separator: "\n")
+    }
+
+    var accessibilityValue: String {
+        Self.uniqueLines([
+            tileStatus,
             availability.isAvailable
                 ? FeatureL10n.string("可用")
                 : (availability.reason ?? FeatureL10n.string("不可用")),
         ])
+        .joined(separator: ", ")
+    }
+
+    init(
+        id: String,
+        reference: ActionReference,
+        title: String,
+        invocationTitle: String? = nil,
+        subtitle: String? = nil,
+        compactDetail: String? = nil,
+        ownerTitle: String,
+        systemImage: String,
+        availability: ActionAvailability,
+        presentationState: ActionPresentationState? = nil,
+        slotIndex: Int = 0,
+        children: [ActionGridPresentationEntry]? = nil
+    ) {
+        self.id = id
+        self.reference = reference
+        self.title = title
+        self.invocationTitle = invocationTitle
+        self.subtitle = subtitle
+        self.compactDetail = compactDetail
+        self.ownerTitle = ownerTitle
+        self.systemImage = systemImage
+        self.availability = availability
+        self.presentationState = presentationState
+        self.slotIndex = slotIndex
+        self.children = children
+    }
+
+    var accessibilityLabel: String {
+        FeatureL10n.joined(Self.uniqueLines([
+            title,
+            distinct(ownerTitle, from: [title]),
+        ]))
+    }
+
+    var accessibilityHint: String {
+        guard availability.isAvailable else {
+            return availability.reason ?? FeatureL10n.string("操作不可用。")
+        }
+        return distinct(invocationTitle, from: [title]) ?? ""
+    }
+
+    private func distinct(_ value: String?, from comparisons: [String?]) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        let normalizedComparisons = comparisons.compactMap {
+            $0?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !normalizedComparisons.contains(where: {
+            value.localizedCaseInsensitiveCompare($0) == .orderedSame
+        }) else {
+            return nil
+        }
+        return value
+    }
+
+    private static func compactJoined(_ values: [String?]) -> String? {
+        let values = uniqueLines(values)
+        return values.isEmpty ? nil : values.joined(separator: " · ")
+    }
+
+    private static func uniqueLines(_ values: [String?]) -> [String] {
+        var seen: [String] = []
+        for value in values {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty,
+                  !seen.contains(where: {
+                      value.localizedCaseInsensitiveCompare($0) == .orderedSame
+                  }) else {
+                continue
+            }
+            seen.append(value)
+        }
+        return seen
     }
 }
 
@@ -125,25 +251,42 @@ enum ActionGridKeyboardNavigation {
 }
 
 enum ActionGridOverlayGeometry {
+    static let tileWidth: CGFloat = 160
+    static let tileHeight: CGFloat = 116
+    static let gridSpacing: CGFloat = 12
+    static let contentPadding: CGFloat = 16
+    static let nestedMinimumContentWidth: CGFloat = 256
+    static let emptyStateHeight: CGFloat = 104
     private static let navigationHeaderHeight: CGFloat = 28
     private static let navigationHeaderSpacing: CGFloat = 12
+    private static let feedbackHeight: CGFloat = 36
+    private static let feedbackSpacing: CGFloat = 12
 
-    static func columnCount(for itemCount: Int) -> Int {
-        itemCount > 0 ? 3 : 0
+    static func columnCount(for itemCount: Int, isNested: Bool = false) -> Int {
+        guard itemCount > 0 else { return 0 }
+        return isNested ? min(3, itemCount) : 3
     }
 
     static func contentSize(
         for itemCount: Int,
-        includesNavigationHeader: Bool = false
+        includesNavigationHeader: Bool = false,
+        includesFeedback: Bool = false
     ) -> CGSize {
-        let columns = max(1, columnCount(for: itemCount))
+        let isNested = includesNavigationHeader
+        let columns = max(1, columnCount(for: itemCount, isNested: isNested))
         let rows = max(1, Int(ceil(Double(max(1, itemCount)) / Double(columns))))
+        let gridWidth = CGFloat(columns) * tileWidth
+            + CGFloat(columns - 1) * gridSpacing
+        let contentWidth = isNested ? max(gridWidth, nestedMinimumContentWidth) : gridWidth
+        let contentHeight = itemCount == 0 ? emptyStateHeight : CGFloat(rows) * tileHeight
+            + CGFloat(rows - 1) * gridSpacing
         return CGSize(
-            width: CGFloat(columns) * 160 + CGFloat(columns - 1) * 12 + 32,
-            height: CGFloat(rows) * 104 + CGFloat(rows - 1) * 12 + 32
+            width: contentWidth + contentPadding * 2,
+            height: contentHeight + contentPadding * 2
                 + (includesNavigationHeader
                     ? navigationHeaderHeight + navigationHeaderSpacing
                     : 0)
+                + (includesFeedback ? feedbackHeight + feedbackSpacing : 0)
         )
     }
 
@@ -151,11 +294,13 @@ enum ActionGridOverlayGeometry {
         pointer: CGPoint,
         visibleFrame: CGRect,
         itemCount: Int,
-        includesNavigationHeader: Bool = false
+        includesNavigationHeader: Bool = false,
+        includesFeedback: Bool = false
     ) -> CGRect {
         let size = contentSize(
             for: itemCount,
-            includesNavigationHeader: includesNavigationHeader
+            includesNavigationHeader: includesNavigationHeader,
+            includesFeedback: includesFeedback
         )
         let margin: CGFloat = 10
         let preferredOrigin = CGPoint(
@@ -175,6 +320,28 @@ enum ActionGridOverlayGeometry {
                 : visibleFrame.midY - size.height / 2
         )
         return CGRect(origin: origin, size: size)
+    }
+}
+
+enum ActionGridScreenSelection {
+    static func screenIndex(
+        containing pointer: CGPoint,
+        screenFrames: [CGRect]
+    ) -> Int? {
+        guard !screenFrames.isEmpty else { return nil }
+        if let containingIndex = screenFrames.firstIndex(where: { $0.contains(pointer) }) {
+            return containingIndex
+        }
+        return screenFrames.indices.min { lhs, rhs in
+            squaredDistance(from: pointer, to: screenFrames[lhs])
+                < squaredDistance(from: pointer, to: screenFrames[rhs])
+        }
+    }
+
+    private static func squaredDistance(from point: CGPoint, to frame: CGRect) -> CGFloat {
+        let deltaX = max(max(frame.minX - point.x, 0), point.x - frame.maxX)
+        let deltaY = max(max(frame.minY - point.y, 0), point.y - frame.maxY)
+        return deltaX * deltaX + deltaY * deltaY
     }
 }
 
@@ -216,6 +383,7 @@ final class ActionGridOverlayModel: ObservableObject {
     @Published var selectedIndex = 0
     @Published private(set) var feedback: String?
     @Published private(set) var isExecuting = false
+    @Published private(set) var executingEntryID: String?
     @Published private(set) var folderPath: [String] = []
 
     private let resolver: (ActionGridPresentationEntry) -> ResolvedActionGridEntry
@@ -223,7 +391,7 @@ final class ActionGridOverlayModel: ObservableObject {
     private var sourceEntries: [ActionGridPresentationEntry] = []
     private var navigationStack: [NavigationLevel] = []
     var onSuccessfulExecution: (() -> Void)?
-    var onLayoutChange: ((Int, Bool) -> Void)?
+    var onLayoutChange: ((Int, Bool, Bool) -> Void)?
 
     init(
         resolver: @escaping (ActionGridPresentationEntry) -> ResolvedActionGridEntry,
@@ -233,7 +401,9 @@ final class ActionGridOverlayModel: ObservableObject {
         self.executor = executor
     }
 
-    var columns: Int { ActionGridOverlayGeometry.columnCount(for: slotCount) }
+    var columns: Int {
+        ActionGridOverlayGeometry.columnCount(for: slotCount, isNested: !isAtRoot)
+    }
     @Published private(set) var slotCount = 0
     var isAtRoot: Bool { navigationStack.isEmpty }
     var navigationTitle: String? { folderPath.last }
@@ -244,7 +414,7 @@ final class ActionGridOverlayModel: ObservableObject {
         sourceEntries = entries
         refreshLocalization()
         selectedIndex = preferredInitialSelection()
-        feedback = nil
+        setFeedback(nil)
     }
 
     func refreshLocalization() {
@@ -254,11 +424,13 @@ final class ActionGridOverlayModel: ObservableObject {
             return resolved
         }
         .sorted { $0.slotIndex < $1.slotIndex }
-        slotCount = min(
-            ActionGridPresentationLimits.maximumEntriesPerGrid,
-            max(1, (entries.map(\.slotIndex).max() ?? 0) + 1)
-        )
-        onLayoutChange?(slotCount, !isAtRoot)
+        slotCount = entries.isEmpty
+            ? 0
+            : min(
+                ActionGridPresentationLimits.maximumEntriesPerGrid,
+                (entries.map(\.slotIndex).max() ?? 0) + 1
+            )
+        notifyLayoutChange()
         if entry(at: selectedIndex) == nil {
             selectedIndex = preferredInitialSelection()
         }
@@ -297,30 +469,32 @@ final class ActionGridOverlayModel: ObservableObject {
             )
             folderPath.append(entry.title)
             sourceEntries = children
-            feedback = nil
+            setFeedback(nil)
             refreshLocalization()
             selectedIndex = preferredInitialSelection()
             return
         }
         guard entry.availability.isAvailable else {
-            feedback = entry.availability.reason ?? FeatureL10n.string("操作不可用。")
+            setFeedback(entry.availability.reason ?? FeatureL10n.string("操作不可用。"))
             return
         }
         isExecuting = true
-        feedback = nil
+        executingEntryID = entry.id
+        setFeedback(nil)
         Task { @MainActor [weak self] in
             guard let self else { return }
             let outcome = await executor(entry.reference)
             isExecuting = false
+            executingEntryID = nil
             switch outcome {
             case .completed(.succeeded):
                 onSuccessfulExecution?()
             case let .completed(.failed(message)):
-                feedback = message
+                setFeedback(message)
             case .completed(.cancelled):
-                feedback = FeatureL10n.string("操作已取消。")
+                setFeedback(FeatureL10n.string("操作已取消。"))
             case let .rejected(rejection):
-                feedback = Self.message(for: rejection)
+                setFeedback(Self.message(for: rejection))
             }
         }
     }
@@ -338,9 +512,19 @@ final class ActionGridOverlayModel: ObservableObject {
         sourceEntries = level.entries
         selectedIndex = level.selectedIndex
         if !folderPath.isEmpty { folderPath.removeLast() }
-        feedback = nil
+        setFeedback(nil)
         refreshLocalization()
         return true
+    }
+
+    private func setFeedback(_ value: String?) {
+        guard feedback != value else { return }
+        feedback = value
+        notifyLayoutChange()
+    }
+
+    private func notifyLayoutChange() {
+        onLayoutChange?(slotCount, !isAtRoot, feedback != nil)
     }
 
     private static func message(for rejection: ActionExecutionRejection) -> String {
@@ -406,6 +590,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     private var presentationSource = ActionExecutionSource.manual
     private var presentationPointer: CGPoint?
     private var presentationVisibleFrame: CGRect?
+    private var presentationGeneration: UInt = 0
 
     init(pluginHost: PluginHost) {
         self.pluginHost = pluginHost
@@ -436,13 +621,24 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
                 let ownerTitle = pluginHost.actionSurfaceOwnerTitle(
                     providerID: entry.reference.key.providerID
                 )
+                let invocationTitle = action.catalogEntry?.title ?? action.definition.title
                 return ResolvedActionGridEntry(
                     id: entry.id,
                     reference: entry.reference,
-                    title: entry.customTitle ?? action.catalogEntry?.title ?? action.definition.title,
+                    title: entry.customTitle ?? Self.compactTitle(
+                        for: entry.reference,
+                        action: action
+                    ),
+                    invocationTitle: invocationTitle,
+                    subtitle: action.catalogEntry?.subtitle,
+                    compactDetail: Self.compactDetail(
+                        for: entry.reference,
+                        action: action
+                    ),
                     ownerTitle: ownerTitle,
                     systemImage: action.definition.systemImage,
-                    availability: pluginHost.actionRegistry.availability(for: entry.reference)
+                    availability: pluginHost.actionRegistry.availability(for: entry.reference),
+                    presentationState: action.catalogEntry?.presentationState
                 )
             },
             executor: { [weak pluginHost] reference in
@@ -456,16 +652,47 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         )
         super.init()
         model.onSuccessfulExecution = { [weak self] in self?.close() }
-        model.onLayoutChange = { [weak self] slotCount, includesNavigationHeader in
+        model.onLayoutChange = { [weak self] slotCount, includesNavigationHeader, includesFeedback in
             self?.resizePanel(
                 for: slotCount,
-                includesNavigationHeader: includesNavigationHeader
+                includesNavigationHeader: includesNavigationHeader,
+                includesFeedback: includesFeedback
             )
         }
     }
 
+    private static func compactTitle(
+        for reference: ActionReference,
+        action: RegisteredAction
+    ) -> String {
+        if reference.key.providerID == "mactools",
+           let hostAction = AppShortcutAction(rawValue: reference.key.actionID) {
+            return hostAction.compactTitle
+        }
+        if action.catalogEntry?.presentationState != nil {
+            return action.definition.title
+        }
+        return action.catalogEntry?.title ?? action.definition.title
+    }
+
+    private static func compactDetail(
+        for reference: ActionReference,
+        action: RegisteredAction
+    ) -> String? {
+        guard reference.key.providerID != "mactools" else { return nil }
+        guard action.catalogEntry?.presentationState != nil else {
+            return action.catalogEntry?.subtitle
+        }
+        guard action.catalogEntry?.presentationState == .active,
+              ["auto-input", "keep-awake"].contains(reference.key.providerID) else {
+            return nil
+        }
+        return action.catalogEntry?.subtitle
+    }
+
     var isShown: Bool { panel != nil }
     var presentedEntryIDs: [String] { model.entries.map(\.id) }
+    var presentedEntries: [ResolvedActionGridEntry] { model.entries }
     var presentedPanelFrame: CGRect? { panel?.frame }
     var presentedPanelCollectionBehavior: NSWindow.CollectionBehavior? {
         panel?.collectionBehavior
@@ -480,17 +707,38 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
               Self.hasValidSlots(entries) else {
             return false
         }
+        pluginHost.refreshActionPresentations(
+            providerIDs: statefulProviderIDs(in: entries)
+        )
         presentationUptime = ProcessInfo.processInfo.systemUptime
         presentationSource = source
-        if let panel {
-            panel.makeKeyAndOrderFront(nil)
-            return true
-        }
         let pointer = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
-        guard let screen else { return false }
+        let screens = NSScreen.screens
+        guard let screenIndex = ActionGridScreenSelection.screenIndex(
+            containing: pointer,
+            screenFrames: screens.map(\.frame)
+        ) else {
+            return false
+        }
+        let screen = screens[screenIndex]
+        presentationGeneration &+= 1
+        let generation = presentationGeneration
         presentationPointer = pointer
         presentationVisibleFrame = screen.visibleFrame
+        AppLog.actionGrid.debug(
+            "Present requested at pointer (\(pointer.x, privacy: .public), \(pointer.y, privacy: .public)) on \(screen.localizedName, privacy: .public) with visible frame \(String(describing: screen.visibleFrame), privacy: .public)"
+        )
+        if let panel {
+            let frame = ActionGridOverlayGeometry.targetFrame(
+                pointer: pointer,
+                visibleFrame: screen.visibleFrame,
+                itemCount: model.slotCount,
+                includesNavigationHeader: !model.isAtRoot,
+                includesFeedback: model.feedback != nil
+            )
+            orderPanel(panel, at: frame, intendedScreen: screen, generation: generation)
+            return true
+        }
         model.update(entries)
         let frame = ActionGridOverlayGeometry.targetFrame(
             pointer: pointer,
@@ -513,7 +761,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         panel.isMovable = false
         panel.isReleasedWhenClosed = false
         panel.level = .popUpMenu
-        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .transient, .ignoresCycle]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.keyEventHandler = { [weak self] event in self?.processKeyEvent(event) ?? false }
         panel.contentView = NSHostingView(
             rootView: ActionGridOverlayRootView(
@@ -527,8 +775,42 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         self.panel = panel
         installDismissHandlers(panel: panel)
         NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        orderPanel(panel, at: frame, intendedScreen: screen, generation: generation)
         return true
+    }
+
+    private func orderPanel(
+        _ panel: NSPanel,
+        at frame: CGRect,
+        intendedScreen: NSScreen,
+        generation: UInt
+    ) {
+        // AppKit may apply its Space placement policy while ordering a panel. Set the
+        // desired frame on both sides of that operation so the pointer's display wins.
+        panel.setFrame(frame, display: true, animate: false)
+        PluginPresentationSafety.prepareForWindowOrdering(panel)
+        panel.makeKeyAndOrderFront(nil)
+        panel.setFrame(frame, display: true, animate: false)
+        logPanelPlacement(panel, intendedScreen: intendedScreen)
+
+        // Reassert once after AppKit finishes the current ordering transaction. A
+        // generation guard prevents an older request from overriding a newer display.
+        DispatchQueue.main.async { [weak self, weak panel] in
+            guard let self, let panel,
+                  self.panel === panel,
+                  self.presentationGeneration == generation else {
+                return
+            }
+            panel.setFrame(frame, display: true, animate: false)
+            self.logPanelPlacement(panel, intendedScreen: intendedScreen)
+        }
+    }
+
+    private func logPanelPlacement(_ panel: NSPanel, intendedScreen: NSScreen) {
+        let actualScreen = panel.screen?.localizedName ?? "None"
+        AppLog.actionGrid.debug(
+            "Action Grid frame \(String(describing: panel.frame), privacy: .public); intended screen \(intendedScreen.localizedName, privacy: .public); actual screen \(actualScreen, privacy: .public)"
+        )
     }
 
     private static func hasValidSlots(_ entries: [ActionGridPresentationEntry]) -> Bool {
@@ -538,8 +820,31 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         } && Set(resolvedSlots).count == resolvedSlots.count
     }
 
+    private func statefulProviderIDs(
+        in entries: [ActionGridPresentationEntry]
+    ) -> Set<String> {
+        Set(entries.flatMap(actionReferences(in:)).compactMap { reference in
+            guard case let .success(action) = pluginHost.actionRegistry.registeredAction(
+                for: reference
+            ), action.catalogEntry?.presentationState != nil else {
+                return nil
+            }
+            return reference.key.providerID
+        })
+    }
+
+    private func actionReferences(
+        in entry: ActionGridPresentationEntry
+    ) -> [ActionReference] {
+        if let children = entry.children {
+            return children.flatMap(actionReferences(in:))
+        }
+        return [entry.reference]
+    }
+
     func close(restoringFocus: Bool = true) {
         guard let panel else { return }
+        presentationGeneration &+= 1
         tokens.removeAll()
         panel.keyEventHandler = nil
         panel.delegate = nil
@@ -554,13 +859,18 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         presentationVisibleFrame = nil
     }
 
-    private func resizePanel(for slotCount: Int, includesNavigationHeader: Bool) {
+    private func resizePanel(
+        for slotCount: Int,
+        includesNavigationHeader: Bool,
+        includesFeedback: Bool
+    ) {
         guard let panel, let presentationPointer, let presentationVisibleFrame else { return }
         let frame = ActionGridOverlayGeometry.targetFrame(
             pointer: presentationPointer,
             visibleFrame: presentationVisibleFrame,
             itemCount: slotCount,
-            includesNavigationHeader: includesNavigationHeader
+            includesNavigationHeader: includesNavigationHeader,
+            includesFeedback: includesFeedback
         )
         panel.setFrame(frame, display: true, animate: false)
     }
@@ -636,6 +946,83 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     }
 }
 
+private struct ActionGridTileLabel: View {
+    private enum Layout {
+        static let primaryVerticalOffset: CGFloat = -1
+        static let primarySpacing: CGFloat = 6
+        static let titleHeight: CGFloat = 38
+        static let statusHeight: CGFloat = 16
+        static let statusBottomPadding: CGFloat = 6
+    }
+
+    let entry: ResolvedActionGridEntry
+    let isExecuting: Bool
+
+    private var status: String? {
+        isExecuting ? FeatureL10n.string("运行中") : entry.tileStatus
+    }
+
+    var body: some View {
+        ZStack {
+            primaryContent
+                .offset(y: Layout.primaryVerticalOffset)
+
+            if let status {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(statusColor)
+                    .lineLimit(1)
+                    .allowsTightening(true)
+                    .minimumScaleFactor(0.90)
+                    .frame(height: Layout.statusHeight)
+                    .padding(.bottom, Layout.statusBottomPadding)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .bottom
+                    )
+            }
+        }
+    }
+
+    private var primaryContent: some View {
+        VStack(spacing: Layout.primarySpacing) {
+            Group {
+                if isExecuting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.accentColor)
+                } else {
+                    Image(systemName: PluginSystemImage.resolvedName(entry.systemImage))
+                        .font(.system(size: 27, weight: .medium))
+                        .foregroundStyle(iconColor)
+                }
+            }
+            .frame(height: 30)
+
+            Text(entry.title)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(entry.availability.isAvailable ? .primary : .secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .allowsTightening(true)
+                .minimumScaleFactor(0.92)
+                .frame(height: Layout.titleHeight, alignment: .center)
+        }
+    }
+
+    private var iconColor: Color {
+        guard entry.availability.isAvailable else { return .secondary }
+        return entry.presentationState == .active ? .accentColor : .primary
+    }
+
+    private var statusColor: Color {
+        if isExecuting || entry.presentationState == .active { return .accentColor }
+        if !entry.availability.isAvailable { return .orange }
+        return .secondary
+    }
+}
+
 struct ActionGridOverlayRootView: View {
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
     @ObservedObject var model: ActionGridOverlayModel
@@ -663,6 +1050,8 @@ private struct ActionGridOverlayView: View {
     let onDismiss: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @State private var hoveredSlot: Int?
 
     private var accessibilityPolicy: ActionGridOverlayAccessibilityPolicy {
         ActionGridOverlayAccessibilityPolicy(
@@ -691,41 +1080,64 @@ private struct ActionGridOverlayView: View {
                 }
             }
 
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.fixed(160), spacing: 12), count: model.columns),
-                spacing: 12
-            ) {
-                ForEach(0 ..< model.slotCount, id: \.self) { slot in
-                    if let entry = model.entry(at: slot) {
-                    Button { model.activate(entry) } label: {
-                        VStack(spacing: 8) {
-                            Image(systemName: entry.systemImage)
-                                .font(.system(size: 27, weight: .medium))
-                            Text(entry.title)
-                                .font(.headline)
-                                .lineLimit(1)
-                            Text(
-                                entry.isFolder
-                                    ? FeatureL10n.string("打开文件夹")
-                                    : entry.availability.isAvailable
-                                    ? entry.ownerTitle
-                                    : (entry.availability.reason ?? FeatureL10n.string("不可用"))
-                            )
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+            if model.entries.isEmpty {
+                emptyFolderView
+            } else {
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(
+                            .fixed(ActionGridOverlayGeometry.tileWidth),
+                            spacing: ActionGridOverlayGeometry.gridSpacing
+                        ),
+                        count: model.columns
+                    ),
+                    spacing: ActionGridOverlayGeometry.gridSpacing
+                ) {
+                    ForEach(0 ..< model.slotCount, id: \.self) { slot in
+                        if let entry = model.entry(at: slot) {
+                            let isExecuting = model.executingEntryID == entry.id
+                            Button { model.activate(entry) } label: {
+                                ActionGridTileLabel(
+                                    entry: entry,
+                                    isExecuting: isExecuting
+                                )
+                                .padding(.horizontal, 10)
+                                .frame(
+                                    width: ActionGridOverlayGeometry.tileWidth,
+                                    height: ActionGridOverlayGeometry.tileHeight
+                                )
+                                .contentShape(Rectangle())
+                                .opacity(tileOpacity(for: entry, isExecuting: isExecuting))
+                                .background(tileBackground(
+                                    selected: slot == model.selectedIndex,
+                                    hovered: hoveredSlot == slot && !model.isExecuting
+                                ))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(model.isExecuting)
+                            .help(entry.helpText)
+                            .onHover { hovering in
+                                if hovering {
+                                    hoveredSlot = slot
+                                } else if hoveredSlot == slot {
+                                    hoveredSlot = nil
+                                }
+                            }
+                            .accessibilityLabel(FeatureL10n.joined([String(slot + 1), entry.accessibilityLabel]))
+                            .accessibilityValue(isExecuting
+                                ? FeatureL10n.string("运行中")
+                                : entry.accessibilityValue)
+                            .accessibilityHint(entry.accessibilityHint)
+                            .accessibilityAddTraits(slot == model.selectedIndex ? .isSelected : [])
+                            .accessibilityIdentifier("mactools.action-grid.cell.\(slot + 1)")
+                        } else {
+                            Color.clear
+                                .frame(
+                                    width: ActionGridOverlayGeometry.tileWidth,
+                                    height: ActionGridOverlayGeometry.tileHeight
+                                )
+                                .accessibilityHidden(true)
                         }
-                        .frame(width: 160, height: 104)
-                        .contentShape(Rectangle())
-                        .background(tileBackground(selected: slot == model.selectedIndex))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(model.isExecuting)
-                    .accessibilityLabel(FeatureL10n.joined([String(slot + 1), entry.accessibilityLabel]))
-                    } else {
-                        Color.clear
-                            .frame(width: 160, height: 104)
-                            .accessibilityHidden(true)
                     }
                 }
             }
@@ -733,39 +1145,95 @@ private struct ActionGridOverlayView: View {
                 Label(feedback, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .topLeading)
+                    .help(feedback)
             }
         }
-        .padding(16)
+        .padding(ActionGridOverlayGeometry.contentPadding)
         .background {
-            RoundedRectangle(cornerRadius: 18)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
                     accessibilityPolicy.usesMaterialBackground
-                        ? Color.clear
-                        : Color(nsColor: .windowBackgroundColor)
+                        ? AnyShapeStyle(.regularMaterial)
+                        : AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
                 )
-                .background(
-                    accessibilityPolicy.usesMaterialBackground
-                        ? AnyShapeStyle(.ultraThinMaterial)
-                        : AnyShapeStyle(Color.clear)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(
+                    Color(nsColor: .separatorColor).opacity(
+                        colorSchemeContrast == .increased ? 0.80 : 0.45
+                    ),
+                    lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .allowsHitTesting(false)
         }
         .animation(
             accessibilityPolicy.animatesSelection ? .easeOut(duration: 0.16) : nil,
             value: model.selectedIndex
         )
+        .animation(
+            accessibilityPolicy.animatesSelection ? .easeOut(duration: 0.12) : nil,
+            value: hoveredSlot
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(FeatureL10n.string("操作网格"))
     }
 
-    private func tileBackground(selected: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(selected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.06))
+    private var emptyFolderView: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "folder")
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Text(FeatureL10n.string("此文件夹为空"))
+                .font(.headline)
+
+            Text(FeatureL10n.string("在操作网格设置中添加操作。"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: ActionGridOverlayGeometry.emptyStateHeight
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private func tileBackground(selected: Bool, hovered: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        return shape
+            .fill(selected
+                ? Color.accentColor.opacity(0.08)
+                : Color(nsColor: .controlBackgroundColor).opacity(
+                    accessibilityPolicy.usesMaterialBackground && colorSchemeContrast != .increased
+                        ? 0.72
+                        : 1
+                ))
             .overlay {
-                if selected {
-                    RoundedRectangle(cornerRadius: 12).stroke(Color.accentColor, lineWidth: 2)
+                if hovered, !selected {
+                    shape.fill(Color.primary.opacity(0.045))
                 }
             }
+            .overlay {
+                if selected {
+                    shape.strokeBorder(
+                        Color.accentColor,
+                        lineWidth: colorSchemeContrast == .increased ? 3 : 2
+                    )
+                }
+            }
+    }
+
+    private func tileOpacity(
+        for entry: ResolvedActionGridEntry,
+        isExecuting: Bool
+    ) -> Double {
+        if model.isExecuting && !isExecuting { return 0.58 }
+        return 1
     }
 }

@@ -13,6 +13,7 @@ WORKSPACE_FILE := $(PROJECT_NAME).xcworkspace
 DERIVED_DATA := build/DerivedData
 APP_PATH := $(DERIVED_DATA)/Build/Products/Debug/$(APP_PRODUCT_NAME).app
 APP_EXECUTABLE := $(APP_PATH)/Contents/MacOS/$(APP_PRODUCT_NAME)
+ALLOW_MULTIPLE_DEBUG_APPS ?= 0
 LOCAL_APP_INSTALL_DIR ?= $(HOME)/Applications
 INSTALLED_APP_PATH := $(LOCAL_APP_INSTALL_DIR)/$(APP_PRODUCT_NAME).app
 INSTALLED_APP_EXECUTABLE := $(INSTALLED_APP_PATH)/Contents/MacOS/$(APP_PRODUCT_NAME)
@@ -111,19 +112,18 @@ package-plugins-release: generate
 		--xcodebuild "$(XCODEBUILD)" \
 		--release-notes-url "https://github.com/$(PLUGIN_RELEASE_REPO)/releases/tag/$(PLUGIN_RELEASE_TAG)"
 
-# Stop only this worktree's build and its stable installed copy. Other
-# worktrees may intentionally run their own debug app at the same time.
+# The default development flow is singleton across installed, worktree,
+# sanitizer, and other DerivedData copies. Use ALLOW_MULTIPLE_DEBUG_APPS=1
+# only when a deliberately isolated bundle needs to coexist.
 stop-debug-app:
+	@if [[ "$(ALLOW_MULTIPLE_DEBUG_APPS)" == "1" ]]; then exit 0; fi
 	@PIDS=(); \
-	while read -r PID COMMAND; do \
-		if [[ "$$COMMAND" == "$(CURDIR)/$(APP_EXECUTABLE)" || "$$COMMAND" == "$(INSTALLED_APP_EXECUTABLE)" ]]; then \
-			PIDS+=("$$PID"); \
-		fi; \
-	done < <(/bin/ps -axo pid=,command=); \
+	while read -r PID; do PIDS+=("$$PID"); done \
+		< <(/usr/bin/pgrep -x "$(APP_PRODUCT_NAME)" 2>/dev/null || true); \
 	if (( $${#PIDS[@]} == 0 )); then \
 		exit 0; \
 	fi; \
-	echo "Stopping existing $(APP_PRODUCT_NAME) instance(s) for this worktree..."; \
+	echo "Stopping existing $(APP_PRODUCT_NAME) instance(s)..."; \
 	/bin/kill -TERM $${PIDS[@]} >/dev/null 2>&1 || true; \
 	for attempt in {1..50}; do \
 		REMAINING=(); \
@@ -157,6 +157,9 @@ run: stop-debug-app install-debug-app
 		echo "Using icon catalog: $$ICON_CATALOG_URL"; \
 	fi; \
 	RUN_ENV=(); \
+	if [[ "$(ALLOW_MULTIPLE_DEBUG_APPS)" == "1" ]]; then \
+		RUN_ENV+=("MACTOOLS_ALLOW_MULTIPLE_DEBUG_INSTANCES=1"); \
+	fi; \
 	if [ -n "$$CATALOG_URL" ]; then \
 		RUN_ENV+=("MACTOOLS_PLUGIN_CATALOG_URL=$$CATALOG_URL"); \
 	fi; \

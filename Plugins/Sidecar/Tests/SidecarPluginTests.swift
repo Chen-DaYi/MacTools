@@ -18,6 +18,9 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertTrue(plugin.actionDefinitions.contains {
             $0.key.actionID == "disconnect-all"
         })
+        XCTAssertTrue(plugin.actionDefinitions.allSatisfy {
+            $0.capabilities.contains(.changesDisplayConfiguration)
+        })
         let deviceAction = try XCTUnwrap(plugin.actionDefinitions.first {
             $0.title.contains("My iPad")
         })
@@ -78,6 +81,54 @@ final class SidecarPluginTests: XCTestCase {
         service.complete(.success(()))
         let result = await resultTask.value
         XCTAssertEqual(result, .succeeded())
+    }
+
+    func testConnectPreparesPresentationBeforeCallingSidecarCore() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        var didPrepare = false
+        service.onOperation = {
+            XCTAssertTrue(didPrepare)
+        }
+        let plugin = makePlugin(
+            service: service,
+            presentationPreparation: { didPrepare = true }
+        )
+        plugin.activate(context: PluginRuntimeContext(
+            pluginID: "sidecar",
+            storage: InMemoryPluginStorage()
+        ))
+        let reference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+        )
+
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        ))
+        let resultTask = Task { await handle.result() }
+        for _ in 0 ..< 20 where service.operations.isEmpty {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(didPrepare)
+        service.complete(.success(()))
+        _ = await resultTask.value
+    }
+
+    func testPublishedActionSymbolsAreAvailable() {
+        let plugin = makePlugin(service: FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ]))
+
+        for definition in plugin.actionDefinitions {
+            XCTAssertTrue(
+                PluginSystemImage.isAvailable(definition.systemImage),
+                "Unavailable Sidecar action symbol: \(definition.systemImage)"
+            )
+        }
     }
 
     func testLegacySidecarShortcutsMigrateToCanonicalActionReferences() {
@@ -531,7 +582,8 @@ final class SidecarPluginTests: XCTestCase {
         operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
         terminalFeedbackExpiration: TimeInterval = 30,
         initialDeviceRefreshDelayNanoseconds: UInt64 = 750_000_000,
-        deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000
+        deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000,
+        presentationPreparation: @escaping @MainActor @Sendable () -> Void = {}
     ) -> SidecarPlugin {
         SidecarPlugin(
             service: service,
@@ -539,7 +591,8 @@ final class SidecarPluginTests: XCTestCase {
             operationFeedbackNanoseconds: operationFeedbackNanoseconds,
             terminalFeedbackExpiration: terminalFeedbackExpiration,
             initialDeviceRefreshDelayNanoseconds: initialDeviceRefreshDelayNanoseconds,
-            deviceRefreshIntervalNanoseconds: deviceRefreshIntervalNanoseconds
+            deviceRefreshIntervalNanoseconds: deviceRefreshIntervalNanoseconds,
+            presentationPreparation: presentationPreparation
         )
     }
 }
@@ -557,6 +610,7 @@ private final class FakeSidecarService: SidecarServicing {
     private(set) var connectedDeviceID: String?
     private(set) var operations: [String] = []
     private(set) var reachableDevicesCallCount = 0
+    var onOperation: (() -> Void)?
     private var devices: [SidecarDevice]
 
     init(devices: [SidecarDevice] = [], availability: SidecarServiceAvailability = .available) {
@@ -571,6 +625,7 @@ private final class FakeSidecarService: SidecarServicing {
     func updateDevices(_ devices: [SidecarDevice]) { self.devices = devices }
 
     func connect(to device: SidecarDevice, wiredOnly: Bool, completion: @escaping (Result<Void, SidecarServiceError>) -> Void) {
+        onOperation?()
         didConnect = true
         receivedWiredOnly = wiredOnly
         connectedDeviceID = device.id
@@ -579,6 +634,7 @@ private final class FakeSidecarService: SidecarServicing {
     }
 
     func disconnect(from device: SidecarDevice, completion: @escaping (Result<Void, SidecarServiceError>) -> Void) {
+        onOperation?()
         didDisconnect = true
         operations.append("disconnect:\(device.id)")
         pendingCompletion = completion

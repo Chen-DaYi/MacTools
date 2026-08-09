@@ -229,6 +229,27 @@ final class AutoInputPluginPanelTests: XCTestCase {
         XCTAssertEqual(result, .succeeded())
         XCTAssertFalse(plugin.primaryPanelState.isOn)
     }
+
+    func testAdaptiveActionReflectsAndTogglesCurrentState() async throws {
+        let storage = AutoInputMemoryStorage()
+        let plugin = AutoInputPlugin(
+            context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
+            sourceController: FakeAutoInputSourceController(sources: [], currentSourceID: nil),
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+        )
+
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+    }
 }
 
 private func makeRule(bundleID: String, sourceID: String) -> AutoInputRule {

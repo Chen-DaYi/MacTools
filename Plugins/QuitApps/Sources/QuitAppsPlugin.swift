@@ -223,6 +223,7 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
             return
         }
         if let existing = selectionWindow, existing.isVisible {
+            PluginPresentationSafety.prepareForWindowOrdering(existing)
             existing.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -235,6 +236,7 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
             }
         )
         positionWindow(window)
+        PluginPresentationSafety.prepareForWindowOrdering(window)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         selectionWindow = window

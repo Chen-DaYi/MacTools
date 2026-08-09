@@ -301,7 +301,7 @@ private struct ActionShortcutCatalogRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
             HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Image(systemName: item.systemImage)
+                Image(systemName: PluginSystemImage.resolvedName(item.systemImage))
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 24)
 
@@ -733,7 +733,7 @@ private struct ShortcutBindingControl: View {
     @ViewBuilder
     private var controlLabel: some View {
         if let systemImage {
-            Image(systemName: systemImage)
+            Image(systemName: PluginSystemImage.resolvedName(systemImage))
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(.secondary)

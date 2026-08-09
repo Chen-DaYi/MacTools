@@ -870,7 +870,7 @@ private struct SystemStatusWideInfoCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
-                Image(systemName: iconName)
+                Image(systemName: PluginSystemImage.resolvedName(iconName))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 14, height: 14)
@@ -905,7 +905,7 @@ private struct SystemStatusNetworkSpeedRow: View {
 
     var body: some View {
         HStack(spacing: SystemStatusNetworkRowLayout.columnSpacing) {
-            Image(systemName: iconName)
+            Image(systemName: PluginSystemImage.resolvedName(iconName))
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(tint)
                 .frame(width: SystemStatusNetworkRowLayout.leadingColumnWidth, alignment: .center)

@@ -46,6 +46,8 @@ final class StageManagerPluginTests: XCTestCase {
 
         XCTAssertEqual(result, .succeeded())
         XCTAssertEqual(runner.calls, [true])
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
     }
 
     func testCanonicalActionReportsCommandFailure() async throws {

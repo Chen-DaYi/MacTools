@@ -42,6 +42,7 @@ struct CBNightShiftController: NightShiftControlling {
 final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
     private enum ActionID {
         static let setEnabled = "set-enabled"
+        static let toggle = "toggle"
     }
 
     private enum ErrorState {
@@ -111,15 +112,27 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     var actionDefinitions: [ActionDefinition] {
         [
             ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: localization.string("metadata.title", defaultValue: "夜览"),
+                description: localization.string("metadata.description", defaultValue: "降低蓝光，使屏幕颜色更暖"),
+                keywords: [
+                    localization.string("metadata.title", defaultValue: "夜览"),
+                    localization.string("metadata.description", defaultValue: "降低蓝光，使屏幕颜色更暖"),
+                ],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+            ActionDefinition(
                 key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
                 title: localization.string("metadata.title", defaultValue: "夜览"),
                 description: localization.string(
                     "metadata.description",
-                    defaultValue: "减少夜间蓝光"
+                    defaultValue: "降低蓝光，使屏幕颜色更暖"
                 ),
                 keywords: [
                     localization.string("metadata.title", defaultValue: "夜览"),
-                    localization.string("metadata.description", defaultValue: "减少夜间蓝光"),
+                    localization.string("metadata.description", defaultValue: "降低蓝光，使屏幕颜色更暖"),
                 ],
                 systemImage: metadata.iconName,
                 parameters: [
@@ -137,6 +150,16 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: isEnabled
+                    ? localization.string("action.disable.title", defaultValue: "停用夜览")
+                    : localization.string("action.enable.title", defaultValue: "启用夜览"),
+                subtitle: isEnabled
+                    ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
+                    : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
+                presentationState: isEnabled ? .active : .inactive
+            ),
             ActionCatalogEntry(
                 reference: actionReference(enabled: true),
                 title: localization.string("action.enable.title", defaultValue: "启用夜览")
@@ -170,7 +193,16 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
+        let enabled: Bool
+        switch invocation.reference.key.actionID {
+        case ActionID.toggle:
+            enabled = !controller.getStatus()
+        case ActionID.setEnabled:
+            guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
+                return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
+            }
+            enabled = value
+        default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
         let succeeded = setNightShift(enabled)
@@ -191,6 +223,10 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setEnabled),
             parameters: try! ActionParameterSet(["enabled": .boolean(enabled)])
         )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
     }
 
     @discardableResult

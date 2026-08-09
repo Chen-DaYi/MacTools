@@ -349,6 +349,7 @@ final class MenuBarPanelPresenter: NSObject {
 
     private func show(_ popover: NSPopover, relativeTo button: NSStatusBarButton) {
         applyCurrentAppearance()
+        PluginPresentationSafety.prepareForWindowOrdering()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         applyCurrentAppearance()
         focus(popover)
@@ -933,7 +934,7 @@ private struct MenuBarPanelTabSwitcher: View {
 
                     onTabSelection(tab)
                 } label: {
-                    Image(systemName: tab.systemImage)
+                    Image(systemName: PluginSystemImage.resolvedName(tab.systemImage))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(selectedTab == tab ? Color.primary : Color.secondary)
                         .frame(width: 28, height: 24)
@@ -965,7 +966,7 @@ private struct MenuBarPanelIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage)
+            Image(systemName: PluginSystemImage.resolvedName(systemImage))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.secondary)
                 .overlay(alignment: .bottomTrailing) {

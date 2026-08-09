@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import SwiftUI
 
 private enum WindowSwitcherOverlayPresentation {
@@ -190,11 +191,13 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate {
         case .direct:
             removeKeyMonitor()
             removeClickMonitor()
+            PluginPresentationSafety.prepareForWindowOrdering(panel)
             panel.orderFrontRegardless()
         case .keyWindow:
             installKeyMonitor()
             installClickMonitor()
             NSApp.activate(ignoringOtherApps: true)
+            PluginPresentationSafety.prepareForWindowOrdering(panel)
             panel.makeKeyAndOrderFront(nil)
         }
     }

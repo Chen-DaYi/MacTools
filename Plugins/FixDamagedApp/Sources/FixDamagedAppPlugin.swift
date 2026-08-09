@@ -269,6 +269,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
             panel.allowedContentTypes = [appBundleType]
         }
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        PluginPresentationSafety.prepareForWindowOrdering()
         let response = panel.runModal()
         guard response == .OK else { return nil }
         return panel.url
@@ -408,6 +409,7 @@ final class FixDamagedAppPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnc
         )
         let panel = FixDamagedAppDropZonePanel(viewModel: vm, localization: localization)
         positionDropZonePanel(panel)
+        PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.makeKeyAndOrderFront(nil)
         dropZonePanel = panel
     }

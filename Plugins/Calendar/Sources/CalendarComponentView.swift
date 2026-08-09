@@ -390,6 +390,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
             CalendarAppearancePreference.stored().apply(to: popover)
 
             if !popover.isShown {
+                PluginPresentationSafety.prepareForWindowOrdering()
                 popover.show(relativeTo: sourceView.bounds, of: sourceView, preferredEdge: .maxY)
                 CalendarAppearancePreference.stored().apply(to: popover)
             }

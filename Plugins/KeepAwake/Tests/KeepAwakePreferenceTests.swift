@@ -126,14 +126,17 @@ final class KeepAwakePreferenceTests: XCTestCase {
     func testIdempotentActionEnablesKeepAwakeThroughSessionFactory() async throws {
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
-        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+        let reference = try XCTUnwrap(
+            plugin.actionCatalogEntries.first { $0.title == "阻止休眠 · 永不" }?.reference
+        )
 
         let result = try await plugin.beginAction(
             ActionInvocation(reference: reference, source: .test, mode: .background)
         ).result()
 
         XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), [
-            "启用阻止休眠 · 永不",
+            "停用阻止休眠",
+            "阻止休眠 · 永不",
             "停用阻止休眠",
             "阻止休眠 · 30min",
             "阻止休眠 · 1h",
@@ -143,6 +146,33 @@ final class KeepAwakePreferenceTests: XCTestCase {
         XCTAssertEqual(result, .succeeded())
         XCTAssertTrue(plugin.primaryPanelState.isOn)
         XCTAssertEqual(factory.sessions.count, 1)
+    }
+
+    func testToggleActionReflectsAndChangesCurrentState() async throws {
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
+        let toggle = try XCTUnwrap(
+            plugin.actionCatalogEntries.first { $0.presentationState != nil }?.reference
+        )
+
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "启用阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+
+        let startResult = try await plugin.beginAction(
+            ActionInvocation(reference: toggle, source: .actionGrid, mode: .foreground)
+        ).result()
+        XCTAssertEqual(startResult, .succeeded())
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "停用阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.subtitle, "不会自动停止")
+
+        let stopResult = try await plugin.beginAction(
+            ActionInvocation(reference: toggle, source: .actionGrid, mode: .foreground)
+        ).result()
+        XCTAssertEqual(stopResult, .succeeded())
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "启用阻止休眠")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
     }
 
     func testDurationActionsStartBoundedKeepAwakeSessions() async throws {

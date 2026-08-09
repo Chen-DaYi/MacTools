@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import MacToolsPluginKit
 
 struct SystemStatusMenuBarMetricBlock: Equatable {
     let kind: SystemStatusMetricKind
@@ -379,6 +380,7 @@ final class SystemStatusMenuBarMetricsController: NSObject {
             return statusItem
         }
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.autosaveName = Self.autosaveName
         if let button = item.button {
@@ -416,6 +418,7 @@ final class SystemStatusMenuBarMetricsController: NSObject {
             return
         }
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         NSStatusBar.system.removeStatusItem(statusItem)
         self.statusItem = nil
         metricsView = nil

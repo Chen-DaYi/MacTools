@@ -101,6 +101,7 @@ final class MenuBarStatusItemController: NSObject {
         self.windowRouter = windowRouter
         self.iconSettings = iconSettings
         MenuBarControlItemDefaults.prepareVisibleControlItem()
+        PluginPresentationSafety.prepareForWindowOrdering()
         self.statusItem = NSStatusBar.system.statusItem(withLength: 0)
         self.statusItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
         super.init()
@@ -379,10 +380,12 @@ final class MenuBarStatusItemController: NSObject {
         requestPanelClose()
 
         let oldItem = statusItem
+        PluginPresentationSafety.prepareForWindowOrdering()
         NSStatusBar.system.removeStatusItem(oldItem)
         MenuBarControlItemDefaults.resetVisibleControlItemPosition()
         MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition()
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         let newItem = NSStatusBar.system.statusItem(withLength: 0)
         newItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
         statusItem = newItem

@@ -248,6 +248,7 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
             host.layer?.masksToBounds = true
         }
 
+        PluginPresentationSafety.prepareForWindowOrdering(win)
         win.makeKeyAndOrderFront(nil)
         win.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)

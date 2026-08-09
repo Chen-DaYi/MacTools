@@ -28,6 +28,11 @@ final class SavedScriptsPluginTests: XCTestCase {
         XCTAssertNotNil(definition.confirmation)
         XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
         XCTAssertTrue(definition.capabilities.contains(.cancellable))
+
+        let catalogEntry = try XCTUnwrap(plugin.actionCatalogEntries.first)
+        XCTAssertEqual(catalogEntry.reference.key.actionID, script.actionID)
+        XCTAssertEqual(catalogEntry.title, "Daily Report")
+        XCTAssertEqual(catalogEntry.subtitle, "zsh")
     }
 
     func testExternalInvocationIsAlwaysConfirmedWhenExplicitlyEnabled() throws {

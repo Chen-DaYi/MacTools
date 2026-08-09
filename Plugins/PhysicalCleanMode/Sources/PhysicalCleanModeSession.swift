@@ -552,6 +552,7 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
             throw SessionError.overlayWindowCreationFailed
         }
 
+        PluginPresentationSafety.prepareForWindowOrdering(focusWindow)
         focusWindow.makeKeyAndOrderFront(nil)
 
         let previousWindows = overlayWindows
@@ -589,6 +590,7 @@ final class PhysicalCleanModeSession: NSObject, NSWindowDelegate {
             window.contentView = NSHostingView(
                 rootView: OverlayWatermarkView(model: overlayHintModel)
             )
+            PluginPresentationSafety.prepareForWindowOrdering(window)
             window.orderFrontRegardless()
             windows.append(window)
         }

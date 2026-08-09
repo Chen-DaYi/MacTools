@@ -1,4 +1,6 @@
+import AppKit
 import MacToolsPluginKit
+import SwiftUI
 import XCTest
 @testable import MacTools
 
@@ -32,6 +34,41 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertEqual(ActionGridOverlayGeometry.columnCount(for: 7), 3)
     }
 
+    func testNestedGeometryAdaptsColumnsAndKeepsNavigationReadable() {
+        XCTAssertEqual(
+            ActionGridOverlayGeometry.columnCount(for: 1, isNested: true),
+            1
+        )
+        XCTAssertEqual(
+            ActionGridOverlayGeometry.columnCount(for: 2, isNested: true),
+            2
+        )
+        XCTAssertEqual(
+            ActionGridOverlayGeometry.columnCount(for: 3, isNested: true),
+            3
+        )
+        XCTAssertEqual(ActionGridOverlayGeometry.columnCount(for: 1), 3)
+
+        let empty = ActionGridOverlayGeometry.contentSize(
+            for: 0,
+            includesNavigationHeader: true
+        )
+        let oneItem = ActionGridOverlayGeometry.contentSize(
+            for: 1,
+            includesNavigationHeader: true
+        )
+        let twoItems = ActionGridOverlayGeometry.contentSize(
+            for: 2,
+            includesNavigationHeader: true
+        )
+
+        XCTAssertEqual(empty.width, 288)
+        XCTAssertEqual(oneItem.width, 288)
+        XCTAssertEqual(twoItems.width, 364)
+        XCTAssertLessThan(empty.height, oneItem.height)
+        XCTAssertLessThan(twoItems.width, ActionGridOverlayGeometry.contentSize(for: 9).width)
+    }
+
     func testGeometryPlacesCenterCellAtPointerWhenDisplayHasRoom() {
         let visible = CGRect(x: 0, y: 0, width: 1_440, height: 900)
         let pointer = CGPoint(x: 720, y: 450)
@@ -56,6 +93,47 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertEqual(frame.maxX, visible.maxX - 10, accuracy: 0.001)
         XCTAssertEqual(frame.maxY, visible.maxY - 10, accuracy: 0.001)
         XCTAssertTrue(visible.insetBy(dx: 9, dy: 9).contains(frame))
+    }
+
+    func testScreenSelectionUsesPointerDisplayAcrossOffsetCoordinateSpaces() {
+        let screens = [
+            CGRect(x: 0, y: 0, width: 1_512, height: 982),
+            CGRect(x: 1_512, y: -42, width: 1_366, height: 1_024),
+        ]
+
+        XCTAssertEqual(
+            ActionGridScreenSelection.screenIndex(
+                containing: CGPoint(x: 2_400, y: 300),
+                screenFrames: screens
+            ),
+            1
+        )
+        XCTAssertEqual(
+            ActionGridScreenSelection.screenIndex(
+                containing: CGPoint(x: 800, y: 500),
+                screenFrames: screens
+            ),
+            0
+        )
+    }
+
+    func testScreenSelectionFallsBackToNearestDisplayInsteadOfPrimaryDisplay() {
+        let screens = [
+            CGRect(x: 0, y: 0, width: 1_000, height: 800),
+            CGRect(x: 1_200, y: 100, width: 800, height: 600),
+        ]
+
+        XCTAssertEqual(
+            ActionGridScreenSelection.screenIndex(
+                containing: CGPoint(x: 1_150, y: 400),
+                screenFrames: screens
+            ),
+            1
+        )
+        XCTAssertNil(ActionGridScreenSelection.screenIndex(
+            containing: .zero,
+            screenFrames: []
+        ))
     }
 
     func testKeyboardNavigationUsesStableRowMajorPositions() {
@@ -204,8 +282,204 @@ final class ActionGridOverlayControllerTests: XCTestCase {
             availability: .unavailable("需要权限。")
         )
 
-        XCTAssertEqual(available.accessibilityLabel, "运行, 测试插件, and Available")
-        XCTAssertEqual(unavailable.accessibilityLabel, "运行, 测试插件, and 需要权限。")
+        XCTAssertEqual(available.accessibilityLabel, "运行 and 测试插件")
+        XCTAssertEqual(available.accessibilityValue, "Available")
+        XCTAssertEqual(unavailable.accessibilityLabel, "运行 and 测试插件")
+        XCTAssertEqual(unavailable.accessibilityValue, "Not available, 需要权限。")
+    }
+
+    func testTilePresentationSeparatesStableTitleStatusAndInvocationDetail() {
+        let reference = ActionReference(key: ActionKey(providerID: "provider", actionID: "run"))
+        let active = ResolvedActionGridEntry(
+            id: "active",
+            reference: reference,
+            title: "Keep Awake",
+            invocationTitle: "Turn Off Keep Awake",
+            subtitle: "No automatic stop",
+            compactDetail: "No automatic stop",
+            ownerTitle: "Keep Awake",
+            systemImage: "moon",
+            availability: .available,
+            presentationState: .active
+        )
+        let unavailable = ResolvedActionGridEntry(
+            id: "unavailable",
+            reference: reference,
+            title: "Connect First Available Display",
+            ownerTitle: "Sidecar",
+            systemImage: "display",
+            availability: .unavailable(
+                "A Sidecar display is already connected; use the device’s Switch action"
+            )
+        )
+
+        XCTAssertEqual(active.tileStatus, "On · No automatic stop")
+        XCTAssertEqual(active.accessibilityValue, "On · No automatic stop, Available")
+        XCTAssertEqual(active.accessibilityHint, "Turn Off Keep Awake")
+        XCTAssertEqual(unavailable.tileStatus, "Not available")
+        XCTAssertTrue(unavailable.helpText.contains("A Sidecar display is already connected"))
+        XCTAssertTrue(unavailable.helpText.contains("Sidecar"))
+    }
+
+    func testTilePresentationRemovesDuplicateMetadataAndShowsFolderCounts() {
+        let reference = ActionReference(key: ActionKey(providerID: "provider", actionID: "run"))
+        let duplicateOwner = ResolvedActionGridEntry(
+            id: "lock",
+            reference: reference,
+            title: "Lock Screen",
+            ownerTitle: "Lock Screen",
+            systemImage: "lock",
+            availability: .available
+        )
+        let folder = ResolvedActionGridEntry(
+            id: "folder",
+            reference: reference,
+            title: "System",
+            ownerTitle: "Folder",
+            systemImage: "folder",
+            availability: .available,
+            children: []
+        )
+        let folderWithOneAction = ResolvedActionGridEntry(
+            id: "one-action-folder",
+            reference: reference,
+            title: "System",
+            ownerTitle: "Folder",
+            systemImage: "folder",
+            availability: .available,
+            children: [ActionGridPresentationEntry(id: "one", reference: reference)]
+        )
+        let folderWithTwoActions = ResolvedActionGridEntry(
+            id: "two-action-folder",
+            reference: reference,
+            title: "System",
+            ownerTitle: "Folder",
+            systemImage: "folder",
+            availability: .available,
+            children: [
+                ActionGridPresentationEntry(id: "one", reference: reference),
+                ActionGridPresentationEntry(id: "two", reference: reference),
+            ]
+        )
+
+        XCTAssertNil(duplicateOwner.tileStatus)
+        XCTAssertEqual(duplicateOwner.helpText, "Lock Screen")
+        XCTAssertEqual(folder.tileStatus, "Empty folder")
+        XCTAssertEqual(folderWithOneAction.tileStatus, "1 action")
+        XCTAssertEqual(folderWithTwoActions.tileStatus, "2 actions")
+    }
+
+    func testFeedbackAddsReservedBannerHeight() {
+        let base = ActionGridOverlayGeometry.contentSize(for: 9)
+        let withFeedback = ActionGridOverlayGeometry.contentSize(
+            for: 9,
+            includesFeedback: true
+        )
+
+        XCTAssertEqual(withFeedback.width, base.width)
+        XCTAssertEqual(withFeedback.height - base.height, 48)
+    }
+
+    func testOverlayRendersLightAndDarkLocalizedFixtures() throws {
+        let fixtures: [(locale: String, appearance: NSAppearance.Name, title: String)] = [
+            ("en", .aqua, "Connect First Available Display"),
+            ("ar", .darkAqua, "الاتصال بأول شاشة Sidecar متاحة"),
+        ]
+
+        for fixture in fixtures {
+            PluginRuntimeLocalization.source.setPreference(fixture.locale)
+            let reference = ActionReference(
+                key: ActionKey(providerID: "fixture", actionID: "run")
+            )
+            let model = ActionGridOverlayModel(
+                resolver: { entry in
+                    switch entry.id {
+                    case "active":
+                        return ResolvedActionGridEntry(
+                            id: entry.id,
+                            reference: reference,
+                            title: "Keep Awake",
+                            invocationTitle: "Turn Off Keep Awake",
+                            subtitle: "No automatic stop",
+                            compactDetail: "No automatic stop",
+                            ownerTitle: "Keep Awake",
+                            systemImage: "moon",
+                            availability: .available,
+                            presentationState: .active
+                        )
+                    case "unavailable":
+                        return ResolvedActionGridEntry(
+                            id: entry.id,
+                            reference: reference,
+                            title: fixture.title,
+                            ownerTitle: "Sidecar",
+                            systemImage: "display",
+                            availability: .unavailable(
+                                "A Sidecar display is already connected; use the device’s Switch action"
+                            )
+                        )
+                    case "folder":
+                        return ResolvedActionGridEntry(
+                            id: entry.id,
+                            reference: reference,
+                            title: "System",
+                            ownerTitle: "Folder",
+                            systemImage: "folder.fill",
+                            availability: .available,
+                            children: []
+                        )
+                    default:
+                        return ResolvedActionGridEntry(
+                            id: entry.id,
+                            reference: reference,
+                            title: "Action \(entry.id)",
+                            ownerTitle: "MacTools",
+                            systemImage: "bolt",
+                            availability: .available
+                        )
+                    }
+                },
+                executor: { _ in .completed(.succeeded()) }
+            )
+            model.update([
+                ActionGridPresentationEntry(id: "one", reference: reference, slotIndex: 0),
+                ActionGridPresentationEntry(id: "two", reference: reference, slotIndex: 1),
+                ActionGridPresentationEntry(id: "three", reference: reference, slotIndex: 2),
+                ActionGridPresentationEntry(id: "four", reference: reference, slotIndex: 3),
+                ActionGridPresentationEntry(id: "unavailable", reference: reference, slotIndex: 4),
+                ActionGridPresentationEntry(id: "six", reference: reference, slotIndex: 5),
+                ActionGridPresentationEntry(id: "folder", reference: reference, slotIndex: 6),
+                ActionGridPresentationEntry(id: "active", reference: reference, slotIndex: 7),
+                ActionGridPresentationEntry(id: "nine", reference: reference, slotIndex: 8),
+            ])
+            if fixture.locale == "en" {
+                model.activateSelected()
+            }
+
+            let size = ActionGridOverlayGeometry.contentSize(
+                for: 9,
+                includesFeedback: model.feedback != nil
+            )
+            let host = NSHostingView(
+                rootView: ActionGridOverlayRootView(model: model, onDismiss: {})
+            )
+            host.appearance = try XCTUnwrap(NSAppearance(named: fixture.appearance))
+            host.frame = CGRect(origin: .zero, size: size)
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(
+                host.bitmapImageRepForCachingDisplay(in: host.bounds)
+            )
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+
+            XCTAssertGreaterThan(png.count, 10_000)
+            let image = NSImage(size: size)
+            image.addRepresentation(bitmap)
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "Action Grid \(fixture.locale) \(fixture.appearance.rawValue)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     func testRepeatedPresentationReusesOneOverlayPanel() throws {
@@ -237,6 +511,81 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
     }
 
+    func testPresentationRefreshesOnlyStatefulActionProvidersBeforeResolvingCells() throws {
+        let plugin = StatefulActionGridTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let reference = plugin.toggleReference
+
+        let initial = try host.actionRegistry.registeredAction(for: reference).get()
+        XCTAssertEqual(initial.catalogEntry?.presentationState, .inactive)
+        let refreshCountBeforePresentation = plugin.refreshCount
+
+        plugin.nextState = true
+        XCTAssertTrue(controller.present(entries: [
+            ActionGridPresentationEntry(id: "stateful", reference: reference),
+        ]))
+
+        XCTAssertEqual(plugin.refreshCount, refreshCountBeforePresentation + 1)
+        let refreshedAction = try host.actionRegistry.registeredAction(for: reference).get()
+        let refreshed = try XCTUnwrap(refreshedAction.catalogEntry)
+        XCTAssertEqual(refreshed.title, "Turn Off Test State")
+        XCTAssertEqual(refreshed.presentationState, .active)
+
+        let tile = try XCTUnwrap(controller.presentedEntries.first)
+        XCTAssertEqual(tile.title, "Toggle Test State")
+        XCTAssertEqual(tile.invocationTitle, "Turn Off Test State")
+        XCTAssertEqual(tile.tileStatus, "On")
+        XCTAssertEqual(tile.accessibilityHint, "Turn Off Test State")
+    }
+
+    func testHostActionUsesCompactTitleWithoutProviderFooter() throws {
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let reference = ActionReference(
+            key: ActionKey(
+                providerID: "mactools",
+                actionID: AppShortcutAction.toggleFeaturePanel.rawValue
+            )
+        )
+
+        XCTAssertTrue(controller.present(entries: [
+            ActionGridPresentationEntry(id: "feature-panel", reference: reference),
+        ]))
+
+        let tile = try XCTUnwrap(controller.presentedEntries.first)
+        XCTAssertEqual(tile.title, "Feature Panel")
+        XCTAssertEqual(tile.invocationTitle, "Toggle Feature Panel")
+        XCTAssertNil(tile.tileStatus)
+        XCTAssertTrue(tile.helpText.contains("MacTools"))
+    }
+
+    func testHostActionUsesLocalizedCompactTitleUnlessUserCustomizedIt() throws {
+        PluginRuntimeLocalization.source.setPreference("zh-Hans")
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let reference = ActionReference(
+            key: ActionKey(
+                providerID: "mactools",
+                actionID: AppShortcutAction.toggleDashboard.rawValue
+            )
+        )
+
+        XCTAssertTrue(controller.present(entries: [
+            ActionGridPresentationEntry(id: "localized", reference: reference),
+            ActionGridPresentationEntry(
+                id: "customized",
+                reference: reference,
+                customTitle: "Dashboard"
+            ),
+        ]))
+
+        XCTAssertEqual(controller.presentedEntries.map(\.title), ["仪表盘", "Dashboard"])
+    }
+
     func testRepeatedCloseAndPresentationKeepsOneLiveOverlayPanel() throws {
         let host = makePluginHostForTests(plugins: [])
         let controller = ActionGridOverlayController(pluginHost: host)
@@ -264,7 +613,8 @@ final class ActionGridOverlayControllerTests: XCTestCase {
 
         XCTAssertTrue(controller.present(entries: [testEntry()]))
         let behavior = try XCTUnwrap(controller.presentedPanelCollectionBehavior)
-        XCTAssertTrue(behavior.contains(.moveToActiveSpace))
+        XCTAssertTrue(behavior.contains(.canJoinAllSpaces))
+        XCTAssertFalse(behavior.contains(.moveToActiveSpace))
         XCTAssertTrue(behavior.contains(.fullScreenAuxiliary))
         XCTAssertTrue(behavior.contains(.transient))
         XCTAssertTrue(behavior.contains(.ignoresCycle))
@@ -480,6 +830,44 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertTrue(dismissed)
     }
 
+    func testModelPublishesExecutingCellAndReservesFeedbackLayout() async {
+        let reference = ActionReference(key: ActionKey(providerID: "provider", actionID: "run"))
+        var continuation: CheckedContinuation<ActionExecutionOutcome, Never>?
+        var layoutStates: [(slotCount: Int, navigation: Bool, feedback: Bool)] = []
+        let model = ActionGridOverlayModel(
+            resolver: { entry in
+                ResolvedActionGridEntry(
+                    id: entry.id,
+                    reference: entry.reference,
+                    title: "Run",
+                    ownerTitle: "Test",
+                    systemImage: "bolt",
+                    availability: .available
+                )
+            },
+            executor: { _ in
+                await withCheckedContinuation { continuation = $0 }
+            }
+        )
+        model.onLayoutChange = { layoutStates.append(($0, $1, $2)) }
+        model.update([ActionGridPresentationEntry(id: "run", reference: reference)])
+
+        model.activateSelected()
+        await Task.yield()
+        XCTAssertTrue(model.isExecuting)
+        XCTAssertEqual(model.executingEntryID, "run")
+
+        continuation?.resume(returning: .completed(.failed(message: "The test action failed.")))
+        for _ in 0 ..< 20 where model.isExecuting {
+            await Task.yield()
+        }
+
+        XCTAssertFalse(model.isExecuting)
+        XCTAssertNil(model.executingEntryID)
+        XCTAssertEqual(model.feedback, "The test action failed.")
+        XCTAssertEqual(layoutStates.last?.feedback, true)
+    }
+
     func testFolderNavigationStaysInOverlayAndDoesNotExecuteFolderSentinel() {
         let actionReference = ActionReference(
             key: ActionKey(providerID: "lock-screen", actionID: "lock")
@@ -531,6 +919,37 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertFalse(model.navigateBack())
     }
 
+    func testEmptyNestedFolderPublishesCompactEmptyLayout() {
+        let folder = ActionGridPresentationEntry(
+            id: "empty",
+            folderTitle: "Empty",
+            children: []
+        )
+        let model = ActionGridOverlayModel(
+            resolver: { entry in
+                ResolvedActionGridEntry(
+                    id: entry.id,
+                    reference: entry.reference,
+                    title: entry.customTitle ?? "Folder",
+                    ownerTitle: "Folder",
+                    systemImage: "folder.fill",
+                    availability: .available,
+                    children: entry.children
+                )
+            },
+            executor: { _ in .completed(.succeeded()) }
+        )
+        model.update([folder])
+
+        model.activateSelected()
+
+        XCTAssertEqual(model.navigationTitle, "Empty")
+        XCTAssertTrue(model.entries.isEmpty)
+        XCTAssertEqual(model.slotCount, 0)
+        XCTAssertEqual(model.columns, 0)
+        XCTAssertEqual(model.selectedIndex, 0)
+    }
+
     private func testEntry() -> ActionGridPresentationEntry {
         ActionGridPresentationEntry(
             id: "one",
@@ -553,5 +972,61 @@ final class ActionGridOverlayControllerTests: XCTestCase {
             isARepeat: false,
             keyCode: keyCode
         ))
+    }
+}
+
+@MainActor
+private final class StatefulActionGridTestPlugin: MacToolsPlugin, PluginActionProviding {
+    let metadata = PluginMetadata(
+        id: "stateful-action-grid-test",
+        title: "Stateful Test",
+        iconName: "bolt",
+        iconTint: Color.accentColor,
+        order: 0,
+        defaultDescription: "Tests state refresh."
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var nextState = false
+    private(set) var currentState = false
+    private(set) var refreshCount = 0
+
+    var toggleReference: ActionReference {
+        ActionReference(key: actionDefinitions[0].key)
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: "toggle"),
+                title: "Toggle Test State",
+                description: "Toggle test state.",
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .allowed,
+                capabilities: [.background]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleReference,
+                title: currentState ? "Turn Off Test State" : "Turn On Test State",
+                subtitle: currentState ? "On" : "Off",
+                presentationState: currentState ? .active : .inactive
+            ),
+        ]
+    }
+
+    func refresh() {
+        refreshCount += 1
+        currentState = nextState
+        onStateChange?()
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        ActionExecutionHandle { .succeeded() }
     }
 }

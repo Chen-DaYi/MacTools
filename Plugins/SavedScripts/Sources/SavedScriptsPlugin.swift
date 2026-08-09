@@ -211,6 +211,18 @@ final class SavedScriptsPlugin:
         }
     }
 
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        store.scripts.map { script in
+            ActionCatalogEntry(
+                reference: ActionReference(
+                    key: ActionKey(providerID: metadata.id, actionID: script.actionID)
+                ),
+                title: script.name,
+                subtitle: kindTitle(script.kind)
+            )
+        }
+    }
+
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         guard let script = script(for: reference) else {
             return .unavailable(localization.string(

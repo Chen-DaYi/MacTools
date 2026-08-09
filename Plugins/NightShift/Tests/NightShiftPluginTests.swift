@@ -94,7 +94,9 @@ final class NightShiftPluginTests: XCTestCase {
             ActionInvocation(reference: reference, source: .test, mode: .background)
         ).result()
 
-        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["启用夜览", "停用夜览"])
+        XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["toggle", "set-enabled"])
+        XCTAssertEqual(plugin.actionCatalogEntries.map(\.title), ["停用夜览", "启用夜览", "停用夜览"])
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
         XCTAssertEqual(result, .succeeded())
         XCTAssertTrue(plugin.primaryPanelState.isOn)
     }

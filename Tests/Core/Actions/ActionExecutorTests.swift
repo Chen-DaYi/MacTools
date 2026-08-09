@@ -142,6 +142,56 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(provider.beginCount, 1)
     }
 
+    func testDisplayChangingActionPreparesPresentationBeforeProviderBegin() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        var didPrepare = false
+        provider.onBegin = {
+            XCTAssertTrue(didPrepare)
+        }
+        let definition = makeActionDefinition(
+            capabilities: [
+                .background,
+                .foregroundInteractive,
+                .changesDisplayConfiguration,
+            ]
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(
+            registry: registry,
+            presentationPreparation: { didPrepare = true }
+        )
+
+        let outcome = await executor.execute(ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .workflow,
+            mode: .background
+        ))
+
+        XCTAssertEqual(outcome, .completed(.succeeded()))
+        XCTAssertTrue(didPrepare)
+    }
+
+    func testOrdinaryBackgroundActionDoesNotInterruptActiveEditing() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        var preparationCount = 0
+        let definition = makeActionDefinition(capabilities: [.background])
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(
+            registry: registry,
+            presentationPreparation: { preparationCount += 1 }
+        )
+
+        _ = await executor.execute(ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .workflow,
+            mode: .background
+        ))
+
+        XCTAssertEqual(preparationCount, 0)
+    }
+
     func testPerInvocationConfirmationServiceCannotSkipExecutorRevalidation() async {
         let registry = ActionRegistry()
         let provider = ActionExecutorTestProvider()
@@ -330,6 +380,7 @@ final class ActionExecutorTestProvider {
     var operation: @MainActor @Sendable () async -> ActionExecutionResult = { .succeeded() }
     var beginCount = 0
     var didCancel = false
+    var onBegin: (() -> Void)?
 
     func registration(definition: ActionDefinition) -> ActionProviderRegistration {
         ActionProviderRegistration(
@@ -349,6 +400,7 @@ final class ActionExecutorTestProvider {
                 guard let self else {
                     return .failure(.providerFailure("missing"))
                 }
+                self.onBegin?()
                 self.beginCount += 1
                 let operation = self.operation
                 return .success(

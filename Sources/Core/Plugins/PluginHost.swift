@@ -55,6 +55,19 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         }
     }
 
+    var compactTitle: String {
+        switch self {
+        case .openSettings:
+            return AppL10n.settings("settings.window.title", defaultValue: "设置")
+        case .openCommandPalette:
+            return title
+        case .toggleDashboard:
+            return AppL10n.settings("plugins.dashboard.title", defaultValue: "仪表盘")
+        case .toggleFeaturePanel:
+            return AppL10n.settings("plugins.featurePanel.title", defaultValue: "功能面板")
+        }
+    }
+
     var description: String {
         switch self {
         case .openSettings:
@@ -596,6 +609,7 @@ final class PluginHost: ObservableObject {
         }
 
         self.displayConfigurationObserver?.onConfigurationChange = { [weak self] in
+            PluginPresentationSafety.prepareForWindowOrdering()
             self?.scheduleDisplayTopologyRefresh()
         }
 
@@ -648,6 +662,24 @@ final class PluginHost: ObservableObject {
         actionRegistry.invalidateAvailability()
         rebuildDerivedState()
         syncGlobalShortcuts()
+    }
+
+    /// Refreshes only providers whose live presentation is about to be shown.
+    /// Stateful action surfaces use this to avoid stale external system state
+    /// without turning Action Grid presentation into a full plugin refresh.
+    func refreshActionPresentations(providerIDs: Set<String>) {
+        guard !providerIDs.isEmpty else { return }
+
+        handlePluginAction(rebuildAfterAction: false) {
+            for plugin in activePlugins where providerIDs.contains(plugin.metadata.id) {
+                guardPluginCall(plugin, operation: "refresh action presentation") {
+                    plugin.refresh()
+                }
+            }
+        }
+
+        actionRegistry.invalidateAvailability()
+        rebuildDerivedState(dirtyPluginIDs: providerIDs)
     }
 
     func makePreferencesBackup(
@@ -3206,7 +3238,8 @@ final class PluginHost: ObservableObject {
             systemImage: action.definition.systemImage,
             availability: actionRegistry.availability(for: reference),
             isSafe: action.definition.risk == .safe,
-            canOpenOwner: canPresentActionOwner(for: reference)
+            canOpenOwner: canPresentActionOwner(for: reference),
+            presentationState: action.catalogEntry?.presentationState
         )
     }
 

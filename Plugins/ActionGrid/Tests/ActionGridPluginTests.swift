@@ -108,6 +108,52 @@ final class ActionGridPluginTests: XCTestCase {
         )
     }
 
+    func testActionPickerDistinguishesAdaptiveToggleFromExplicitActions() {
+        let toggleReference = ActionReference(
+            key: ActionKey(providerID: "keep-awake", actionID: "toggle")
+        )
+        let toggleItem = ActionSurfaceCatalogItem(
+            reference: toggleReference,
+            title: "Turn Off Keep Awake",
+            subtitle: "On · Never",
+            ownerTitle: "Keep Awake",
+            systemImage: "moon",
+            availability: .available,
+            isSafe: true,
+            presentationState: .active
+        )
+        let togglePresentation = ActionGridActionPickerPresentation(
+            item: toggleItem,
+            toggleLabel: "Toggle",
+            nextActionDetail: "Next action: Turn Off Keep Awake"
+        )
+
+        XCTAssertEqual(togglePresentation.title, "Keep Awake")
+        XCTAssertEqual(togglePresentation.detail, "Next action: Turn Off Keep Awake")
+        XCTAssertEqual(togglePresentation.badge, "Toggle")
+
+        let explicitItem = ActionSurfaceCatalogItem(
+            reference: ActionReference(
+                key: ActionKey(providerID: "keep-awake", actionID: "set-disabled")
+            ),
+            title: "Turn Off Keep Awake",
+            subtitle: nil,
+            ownerTitle: "Keep Awake",
+            systemImage: "moon",
+            availability: .available,
+            isSafe: true
+        )
+        let explicitPresentation = ActionGridActionPickerPresentation(
+            item: explicitItem,
+            toggleLabel: "Toggle",
+            nextActionDetail: "Next action: Turn Off Keep Awake"
+        )
+
+        XCTAssertEqual(explicitPresentation.title, "Turn Off Keep Awake")
+        XCTAssertEqual(explicitPresentation.detail, "Keep Awake")
+        XCTAssertNil(explicitPresentation.badge)
+    }
+
     func testNativeSettingsControlsExposeDistinctOperableAccessibilityElements() throws {
         let accessibility = ActionGridEntryAccessibility(
             title: "锁定屏幕",

@@ -182,14 +182,14 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
                 title: localization.string("settings.limit.title", defaultValue: "充电上限"),
                 description: localization.string(
                     "settings.limit.description",
-                    defaultValue: "设置电池停止充电的目标百分比。"
+                    defaultValue: "达到此电量后自动停止充电。"
                 ),
                 keywords: [metadata.title, "battery", "limit"],
                 systemImage: metadata.iconName,
                 parameters: [
                     ActionParameterDefinition(
                         id: ActionParameterID.limit,
-                        title: localization.string("settings.limit.target", defaultValue: "目标上限"),
+                        title: localization.string("settings.limit.target", defaultValue: "目标电量"),
                         kind: .integer
                     ),
                 ],

@@ -38,9 +38,16 @@ final class DisplaySleepPlugin:
         category: "DisplaySleepPlugin"
     )
     private let localization: PluginLocalization
+    private let presentationPreparation: @MainActor @Sendable () -> Void
 
-    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+    init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        presentationPreparation: @escaping @MainActor @Sendable () -> Void = {
+            PluginPresentationSafety.prepareForWindowOrdering()
+        }
+    ) {
         self.localization = localization
+        self.presentationPreparation = presentationPreparation
         self.metadata = PluginMetadata(
             id: "display-sleep",
             title: localization.string("metadata.title", defaultValue: "显示器休眠"),
@@ -114,7 +121,7 @@ final class DisplaySleepPlugin:
                     )
                 ),
                 externalInvocationPolicy: .confirmAlways,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration]
             ),
         ]
     }
@@ -141,6 +148,7 @@ final class DisplaySleepPlugin:
     }
 
     private func sleepDisplays() {
+        presentationPreparation()
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
         task.arguments = ["displaysleepnow"]

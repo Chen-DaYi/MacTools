@@ -587,6 +587,7 @@ private final class ShadeOverlayController {
         let window = self.window ?? self.makeWindow(screen: screen)
         window.setFrame(screen.frame, display: true)
         window.alphaValue = alpha
+        PluginPresentationSafety.prepareForWindowOrdering(window)
         window.orderFrontRegardless()
         self.window = window
     }

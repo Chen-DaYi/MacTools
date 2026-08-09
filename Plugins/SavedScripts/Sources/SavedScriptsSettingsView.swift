@@ -156,7 +156,7 @@ struct SavedScriptsSettingsView: View {
         let isRunning = record?.status == .running
 
         return HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Image(systemName: script.kind.systemImage)
+            Image(systemName: PluginSystemImage.resolvedName(script.kind.systemImage))
                 .pluginSettingsRowIconStyle(Color.accentColor)
 
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
@@ -455,7 +455,10 @@ private struct SavedScriptEditorSheet: View {
 
                     Picker(plugin.localized("editor.kind.title", defaultValue: "类型"), selection: $draft.kind) {
                         ForEach(SavedScriptKind.allCases) { kind in
-                            Label(plugin.kindTitle(kind), systemImage: kind.systemImage).tag(kind)
+                            Label(
+                                plugin.kindTitle(kind),
+                                systemImage: PluginSystemImage.resolvedName(kind.systemImage)
+                            ).tag(kind)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -499,7 +502,10 @@ private struct SavedScriptEditorSheet: View {
                                 ))
                                 .onSubmit(clampTimeout)
 
-                            Text("s")
+                            Text(plugin.localized(
+                                "editor.timeout.unit.short",
+                                defaultValue: "秒"
+                            ))
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .foregroundStyle(.secondary)
                                 .fixedSize()
@@ -513,11 +519,11 @@ private struct SavedScriptEditorSheet: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(plugin.localized(
                                 "editor.confirm.title",
-                                defaultValue: "从其他功能运行前询问"
+                                defaultValue: "从其他入口运行前要求确认"
                             ))
                             Text(plugin.localized(
                                 "editor.confirm.description",
-                                defaultValue: "关闭后，从操作网格、触控板手势、快捷键和工作流运行此脚本时会立即执行。"
+                                defaultValue: "关闭后，从操作网格、触控板手势、快捷键和工作流运行时会立即执行。"
                             ))
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary)
@@ -525,11 +531,11 @@ private struct SavedScriptEditorSheet: View {
                     }
                     .accessibilityLabel(Text(plugin.localized(
                         "editor.confirm.title",
-                        defaultValue: "从其他功能运行前询问"
+                        defaultValue: "从其他入口运行前要求确认"
                     )))
                     .accessibilityHint(Text(plugin.localized(
                         "editor.confirm.description",
-                        defaultValue: "关闭后，从操作网格、触控板手势、快捷键和工作流运行此脚本时会立即执行。"
+                        defaultValue: "关闭后，从操作网格、触控板手势、快捷键和工作流运行时会立即执行。"
                     )))
                     Toggle(
                         plugin.localized("editor.runLink.title", defaultValue: "允许 Run Link"),

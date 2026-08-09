@@ -294,6 +294,61 @@ private final class MockTrackpadListenerLease: TrackpadListenerLeaseManaging {
 
 @MainActor
 final class TrackpadGestureStoreTests: XCTestCase {
+    func testCanonicalSettingsOrderGroupsGestureFamilies() {
+        XCTAssertEqual(TrackpadGesture.configurableCases, [
+            .tipTapLeftOneFixed,
+            .tipTapRightOneFixed,
+            .tipTapLeftTwoFixed,
+            .tipTapMiddleTwoFixed,
+            .tipTapRightTwoFixed,
+            .threeFingerTap,
+            .fourFingerTap,
+            .fiveFingerTap,
+            .threeFingerDoubleTap,
+            .fourFingerDoubleTap,
+            .fiveFingerDoubleTap,
+            .twoFingerClick,
+            .threeFingerClick,
+            .threeFingerLongTouch,
+            .fourFingerLongTouch,
+            .fiveFingerLongTouch,
+        ])
+        XCTAssertEqual(TrackpadGesture.threeFingerTap.settingsOrder, 5)
+        XCTAssertEqual(TrackpadGesture.threeFingerClick.settingsOrder, 12)
+    }
+
+    func testMappingViewPreferencesPersistWithoutChangingMappingOrder() throws {
+        let storage = TrackpadGestureMemoryStorage()
+        let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let first = TrackpadGestureMapping(
+            gesture: .fiveFingerLongTouch,
+            action: .middleClick
+        )
+        let second = TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )
+        XCTAssertTrue(store.save(first))
+        XCTAssertTrue(store.save(second))
+
+        store.setMappingSort(.actionName)
+        store.setMappingStatusFilter(.disabled)
+        store.setMappingActionFilter(.middleClick)
+
+        let reloaded = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reloaded.mappingSort, .actionName)
+        XCTAssertEqual(reloaded.mappingStatusFilter, .disabled)
+        XCTAssertEqual(reloaded.mappingActionFilter, .middleClick)
+        XCTAssertEqual(reloaded.mappings.map(\.id), [first.id, second.id])
+
+        reloaded.resetMappingViewPreferences()
+        let reset = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reset.mappingSort, .gesture)
+        XCTAssertEqual(reset.mappingStatusFilter, .all)
+        XCTAssertEqual(reset.mappingActionFilter, .all)
+        XCTAssertEqual(reset.mappings.map(\.id), [first.id, second.id])
+    }
+
     func testTypingProtectionDefaultsPersistAndClampGracePeriod() {
         let storage = TrackpadGestureMemoryStorage()
         let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
@@ -490,6 +545,23 @@ final class TrackpadGestureStoreTests: XCTestCase {
             )))
         }
         XCTAssertEqual(store.mappings.count, 3)
+    }
+
+    func testPhysicalClickGesturesCanBePersistedAsMappings() {
+        let store = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .twoFingerClick,
+            action: .keyboardShortcut(ShortcutBinding(keyCode: 0, modifiers: .command))
+        )))
+        XCTAssertTrue(store.save(TrackpadGestureMapping(
+            gesture: .threeFingerClick,
+            action: .middleClick
+        )))
+        XCTAssertEqual(store.mappings.map(\.gesture), [.twoFingerClick, .threeFingerClick])
     }
 
     func testShortcutReuseLookupAllowsButReportsOtherMappings() {
@@ -793,6 +865,45 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertNil(fixture.session.nativeClickResolutionUpdates.last?[.fourFingerTap])
     }
 
+    func testPhysicalClickShortcutConsumesNativeClickAndExecutesWithoutResolvingTwice() {
+        let fixture = makePlugin()
+        let shortcut = ShortcutBinding(keyCode: 0, modifiers: [.command, .shift])
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .twoFingerClick,
+            action: .keyboardShortcut(shortcut)
+        )))
+
+        fixture.plugin.configurationDidChange()
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.twoFingerClick],
+            .consume
+        )
+
+        fixture.session.recognize(.twoFingerClick)
+
+        XCTAssertEqual(fixture.executor.actions, [.keyboardShortcut(shortcut)])
+        XCTAssertTrue(fixture.session.resolvedMiddleClicks.isEmpty)
+    }
+
+    func testPhysicalClickMappedToMiddleClickUsesNativeRewriteOnly() {
+        let fixture = makePlugin()
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .threeFingerClick,
+            action: .middleClick
+        )))
+
+        fixture.plugin.configurationDidChange()
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.threeFingerClick],
+            .middleClick
+        )
+
+        fixture.session.recognize(.threeFingerClick)
+
+        XCTAssertTrue(fixture.executor.actions.isEmpty)
+        XCTAssertTrue(fixture.session.resolvedMiddleClicks.isEmpty)
+    }
+
     func testTypingProtectionConfigurationIsForwardedToSession() {
         let fixture = makePlugin()
         fixture.plugin.store.setIgnoresGesturesWhileTyping(false)
@@ -914,6 +1025,14 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         fixture.plugin.configurationDidChange()
 
         XCTAssertEqual(fixture.session.activations.last, Set(TrackpadGesture.allCases))
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.twoFingerClick],
+            .consume
+        )
+        XCTAssertEqual(
+            fixture.session.nativeClickResolutionUpdates.last?[.threeFingerClick],
+            .consume
+        )
         fixture.session.recognize(.threeFingerTap)
         XCTAssertEqual(fixture.plugin.store.lastTestGesture, .threeFingerTap)
         XCTAssertTrue(fixture.executor.actions.isEmpty)

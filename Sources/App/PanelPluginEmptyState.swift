@@ -1,3 +1,4 @@
+import MacToolsPluginKit
 import SwiftUI
 
 struct PanelPluginEmptyState: View {
@@ -12,7 +13,7 @@ struct PanelPluginEmptyState: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(iconTint.opacity(0.14))
 
-                Image(systemName: systemImage)
+                Image(systemName: PluginSystemImage.resolvedName(systemImage))
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(iconTint)
             }

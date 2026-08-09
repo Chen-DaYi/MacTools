@@ -55,7 +55,8 @@ final class SystemDisplayConfigurationObserver: DisplayConfigurationObserving {
     nonisolated private static let displayReconfigurationCallback: CGDisplayReconfigurationCallBack = {
         _, flags, userInfo in
         guard
-            flags.contains(.addFlag)
+            flags.contains(.beginConfigurationFlag)
+                || flags.contains(.addFlag)
                 || flags.contains(.removeFlag)
                 || flags.contains(.setModeFlag)
                 || flags.contains(.enabledFlag)

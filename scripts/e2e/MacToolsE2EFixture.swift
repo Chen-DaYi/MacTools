@@ -681,12 +681,12 @@ private enum Fixture {
             ActionGridEntry(
                 id: UUID(uuidString: "00000000-0000-4000-8000-000000000311")!,
                 reference: toggleDashboard,
-                customTitle: "Dashboard"
+                customTitle: nil
             ),
             ActionGridEntry(
                 id: UUID(uuidString: "00000000-0000-4000-8000-000000000312")!,
                 reference: toggleFeaturePanel,
-                customTitle: "Feature Panel"
+                customTitle: nil
             ),
         ]
     )
@@ -748,12 +748,12 @@ private enum Fixture {
             ActionGridEntry(
                 id: UUID(uuidString: "00000000-0000-4000-8000-000000000341")!,
                 reference: openSettings,
-                customTitle: "Settings"
+                customTitle: nil
             ),
             ActionGridEntry(
                 id: UUID(uuidString: "00000000-0000-4000-8000-000000000342")!,
                 reference: toggleLaunchpad,
-                customTitle: "Launchpad"
+                customTitle: nil
             ),
         ]
     )
@@ -762,22 +762,22 @@ private enum Fixture {
         ActionGridEntry(
             id: UUID(uuidString: "00000000-0000-4000-8000-000000000255")!,
             reference: openSettings,
-            customTitle: "Settings"
+            customTitle: nil
         ),
         ActionGridEntry(
             id: UUID(uuidString: "00000000-0000-4000-8000-000000000256")!,
             reference: toggleLaunchpad,
-            customTitle: "Launchpad"
+            customTitle: nil
         ),
         ActionGridEntry(
             id: UUID(uuidString: "00000000-0000-4000-8000-000000000300")!,
             reference: toggleDashboard,
-            customTitle: "Dashboard"
+            customTitle: nil
         ),
         ActionGridEntry(
             id: UUID(uuidString: "00000000-0000-4000-8000-000000000301")!,
             reference: toggleFeaturePanel,
-            customTitle: "Feature Panel"
+            customTitle: nil
         ),
         ActionGridEntry(
             id: UUID(uuidString: "00000000-0000-4000-8000-000000000302")!,

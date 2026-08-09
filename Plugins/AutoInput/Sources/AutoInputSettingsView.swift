@@ -187,6 +187,7 @@ struct AutoInputSettingsView: View {
         panel.canChooseDirectories = false
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK,
               let url = panel.url,
               let bundle = Bundle(url: url),
