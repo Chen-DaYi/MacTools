@@ -1345,12 +1345,7 @@ private struct FeatureSettingsSidebar: View {
             }
         }
         .background {
-            ZStack {
-                SettingsStyle.contentBackground
-
-                SettingsSidebarMaterialBackground()
-                    .allowsHitTesting(false)
-            }
+            SettingsSidebarBackground()
         }
     }
 
@@ -1496,6 +1491,30 @@ private struct FeatureSettingsSidebar: View {
                 selection = newSelection
             }
         )
+    }
+}
+
+private struct SettingsSidebarBackground: View {
+    private enum Layout {
+        /// Aqua's sidebar material is intentionally gray. Let some of the
+        /// semantic window surface show through while preserving its depth.
+        static let lightMaterialWashOpacity = 0.45
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            SettingsStyle.contentBackground
+
+            SettingsSidebarMaterialBackground()
+
+            if colorScheme == .light {
+                SettingsStyle.contentBackground
+                    .opacity(Layout.lightMaterialWashOpacity)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
