@@ -552,7 +552,7 @@ private func rapooHIDDeviceMatchedCallback(
     }
 
     let monitor = Unmanaged<RapooHIDBatteryMonitor>.fromOpaque(context).takeUnretainedValue()
-    DispatchQueue.main.async {
+    MainActor.assumeIsolated {
         monitor.handleDeviceMatched(device)
     }
 }
@@ -568,7 +568,7 @@ private func rapooHIDDeviceRemovedCallback(
     }
 
     let monitor = Unmanaged<RapooHIDBatteryMonitor>.fromOpaque(context).takeUnretainedValue()
-    DispatchQueue.main.async {
+    MainActor.assumeIsolated {
         monitor.handleDeviceRemoved(device)
     }
 }
@@ -588,7 +588,7 @@ private func rapooHIDInputReportCallback(
 
     let session = Unmanaged<RapooHIDDeviceSession>.fromOpaque(context).takeUnretainedValue()
     let bytes = Array(UnsafeBufferPointer(start: report, count: reportLength))
-    DispatchQueue.main.async {
+    MainActor.assumeIsolated {
         session.monitor?.handleInputReport(
             session: session,
             result: result,
