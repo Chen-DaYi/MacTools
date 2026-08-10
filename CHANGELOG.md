@@ -7,6 +7,25 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.2.1] - 2026-08-10
+
+### Added
+
+- Added navigation-only deep links for Settings, installed plugin settings, Dashboard, Feature Panel, and search.
+- Command Palette can now set the app appearance, manage Launch at Login, and show or hide installed plugins on each supported surface.
+- An optional global shortcut can now open a standalone Command Palette from any app.
+
+### Changed
+
+- Dashboard and Feature Panel context menus can now move plugins to either end of the list and show or hide them on the current surface.
+- Settings pages now use native macOS backgrounds, appearance-aware sidebars and cards, consistent spacing, responsive widths, compact shortcuts, and live slider readouts; General preferences retain a readable width.
+- Common application shortcuts can now be used after confirming their global effect.
+- Plugin updates now install and validate Trackpad Gestures before Mouse Enhancer retires legacy middle-click behavior, with rollback on failure and a compatibility fallback for temporary app downgrades.
+
+### Fixed
+
+- Plugin settings now use a lighter sidebar surface in Light appearance.
+
 ## [plugins-1.1.6] - 2026-08-10
 
 ### Added
