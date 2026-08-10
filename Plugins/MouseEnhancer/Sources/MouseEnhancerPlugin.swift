@@ -57,7 +57,13 @@ enum MouseEnhancerHostCompatibility {
 }
 
 @MainActor
-final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing, PluginSettingsPresenting {
+final class MouseEnhancerPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    AccessibilityPermissionRefreshing,
+    PluginApplicationActivityStateHandling,
+    DisplayTopologyRefreshing,
+    PluginSettingsPresenting {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -98,6 +104,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
 
     private var isAccessibilityGranted: Bool
     private var lastErrorMessage: String?
+    private var applicationActivityState: PluginApplicationActivityState = .interactive
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "mouse-enhancer"),
@@ -165,6 +172,23 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         applyCurrentConfiguration()
         applyMiddleClickConfiguration()
         onStateChange?()
+    }
+
+    func applicationActivityStateDidChange(_ state: PluginApplicationActivityState) {
+        let wasInteractive = applicationActivityState == .interactive
+        let isInteractive = state == .interactive
+        applicationActivityState = state
+
+        guard wasInteractive != isInteractive else { return }
+        if isInteractive {
+            session.inputActivityDidBecomeAvailable()
+        } else {
+            session.inputActivityDidBecomeUnavailable()
+        }
+    }
+
+    func refreshDisplayTopology() {
+        session.displayTopologyDidChange()
     }
 
     var primaryPanelState: PluginPanelState {

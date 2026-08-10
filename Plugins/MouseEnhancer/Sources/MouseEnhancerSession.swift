@@ -13,6 +13,56 @@ struct MouseEnhancerSessionState: Equatable, Sendable {
     )
 }
 
+enum MouseEnhancerRecoveryCause: Equatable, Sendable {
+    case applicationActivity
+    case displayTopology
+
+    var delay: TimeInterval {
+        switch self {
+        case .applicationActivity:
+            // The host already holds `.waking` for two seconds after a full system wake. A short
+            // final delay also covers lock-only and display-only wake transitions.
+            return 0.25
+        case .displayTopology:
+            // Physical display changes can briefly re-enumerate the multitouch path.
+            return 2
+        }
+    }
+
+    var logName: String {
+        switch self {
+        case .applicationActivity:
+            return "applicationActivityChanged"
+        case .displayTopology:
+            return "displayTopologyChanged"
+        }
+    }
+}
+
+struct MouseEnhancerRecoveryState: Equatable, Sendable {
+    private(set) var isInputAvailable = true
+    private(set) var pendingCause: MouseEnhancerRecoveryCause?
+
+    mutating func setInputAvailable(_ isAvailable: Bool) {
+        isInputAvailable = isAvailable
+    }
+
+    mutating func request(_ cause: MouseEnhancerRecoveryCause) {
+        guard let pendingCause else {
+            self.pendingCause = cause
+            return
+        }
+
+        if cause.delay >= pendingCause.delay {
+            self.pendingCause = cause
+        }
+    }
+
+    mutating func clearPending() {
+        pendingCause = nil
+    }
+}
+
 @MainActor
 protocol MouseEnhancerSessionManaging: AnyObject {
     var state: MouseEnhancerSessionState { get }
@@ -20,14 +70,13 @@ protocol MouseEnhancerSessionManaging: AnyObject {
     @discardableResult
     func activate(configuration: MouseEnhancerConfiguration) -> Bool
     func update(configuration: MouseEnhancerConfiguration)
+    func inputActivityDidBecomeUnavailable()
+    func inputActivityDidBecomeAvailable()
+    func displayTopologyDidChange()
     func deactivate()
 }
 
 final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Sendable {
-    private enum Timing {
-        static let wakeRestartDelay: TimeInterval = 2
-    }
-
     private static let gestureEventType = CGEventType(rawValue: UInt32(NSEvent.EventType.gesture.rawValue))!
     private static weak var activeSession: MouseEnhancerSession?
 
@@ -37,8 +86,10 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
     private var scrollRunLoopSource: CFRunLoopSource?
     private var gestureTap: CFMachPort?
     private var gestureRunLoopSource: CFRunLoopSource?
-    private var wakeObserver: (any NSObjectProtocol)?
     private var restartWorkItem: DispatchWorkItem?
+    private var restartGeneration = 0
+    private var recoveryState = MouseEnhancerRecoveryState()
+    private var isActivated = false
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -60,8 +111,22 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
     func activate(configuration: MouseEnhancerConfiguration) -> Bool {
         Self.activeSession?.deactivate()
         Self.activeSession = self
+        isActivated = true
         processor.configuration = configuration
         start()
+        if scrollTap == nil {
+            isActivated = false
+            recoveryState.clearPending()
+            if Self.activeSession === self {
+                Self.activeSession = nil
+            }
+        } else if recoveryState.isInputAvailable {
+            // The taps were created after the latest interruption, so no older recovery request
+            // needs to rebuild them again.
+            recoveryState.clearPending()
+        } else {
+            requestRecovery(.applicationActivity)
+        }
         return scrollTap != nil
     }
 
@@ -70,6 +135,8 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
     }
 
     func deactivate() {
+        isActivated = false
+        recoveryState.clearPending()
         if Self.activeSession === self {
             Self.activeSession = nil
         }
@@ -86,12 +153,10 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
         startScrollTap()
         guard scrollTap != nil else {
             stopGestureTap()
-            removeSystemWakeObserver()
             logger.error("scroll reverser session failed to start")
             return
         }
 
-        observeSystemWake()
         logger.info(
             "scroll reverser session started scrollTap=\(self.scrollTap != nil, privacy: .public) gestureTap=\(self.gestureTap != nil, privacy: .public)"
         )
@@ -99,7 +164,6 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
 
     private func stop() {
         cancelPendingRestart()
-        removeSystemWakeObserver()
         stopScrollTap()
         stopGestureTap()
         logger.info("scroll reverser session stopped")
@@ -215,40 +279,55 @@ final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Senda
         }
     }
 
-    private func observeSystemWake() {
-        guard wakeObserver == nil else {
-            return
-        }
-
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.scheduleRestart(after: Timing.wakeRestartDelay)
-            }
-        }
-    }
-
-    private func removeSystemWakeObserver() {
-        if let wakeObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
-        }
-        wakeObserver = nil
-    }
-
-    private func scheduleRestart(after delay: TimeInterval) {
+    func inputActivityDidBecomeUnavailable() {
+        recoveryState.setInputAvailable(false)
         cancelPendingRestart()
+        processor.resetClassificationState()
+        recoveryState.request(.applicationActivity)
+    }
+
+    func inputActivityDidBecomeAvailable() {
+        recoveryState.setInputAvailable(true)
+        requestRecovery(.applicationActivity)
+    }
+
+    func displayTopologyDidChange() {
+        guard isActivated else { return }
+        requestRecovery(.displayTopology)
+    }
+
+    private func requestRecovery(_ cause: MouseEnhancerRecoveryCause) {
+        // Reset immediately so scrolling during the short driver-settle window cannot inherit a
+        // stale mouse classification. The taps themselves are rebuilt after the debounce delay.
+        processor.resetClassificationState()
+        recoveryState.request(cause)
+        cancelPendingRestart()
+
+        guard isActivated,
+              recoveryState.isInputAvailable,
+              let pendingCause = recoveryState.pendingCause else { return }
+        logger.info(
+            "scheduled scroll tap restart reason=\(pendingCause.logName, privacy: .public) delay=\(pendingCause.delay, privacy: .public)"
+        )
+        let generation = restartGeneration
         let workItem = DispatchWorkItem { [weak self] in
-            self?.restartWorkItem = nil
-            self?.restartTaps()
+            guard let self,
+                  self.restartGeneration == generation,
+                  self.isActivated,
+                  self.recoveryState.isInputAvailable else { return }
+            self.restartWorkItem = nil
+            self.recoveryState.clearPending()
+            self.restartTaps()
         }
         restartWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + pendingCause.delay,
+            execute: workItem
+        )
     }
 
     private func cancelPendingRestart() {
+        restartGeneration &+= 1
         restartWorkItem?.cancel()
         restartWorkItem = nil
     }
