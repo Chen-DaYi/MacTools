@@ -49,7 +49,7 @@
     }
   },
   "version": "1.0.11",
-  "minHostVersion": "1.2.0",
+  "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "PhysicalCleanMode.bundle",
   "factoryClass": "PhysicalCleanModePlugin.PhysicalCleanModePluginFactory",

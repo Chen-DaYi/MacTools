@@ -49,7 +49,7 @@
     }
   },
   "version": "2.0.1",
-  "minHostVersion": "1.2.0",
+  "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "DiskClean.bundle",
   "factoryClass": "DiskCleanPlugin.DiskCleanPluginFactory",

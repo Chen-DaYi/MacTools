@@ -44,6 +44,6 @@ Declarative search indexes titles, descriptions, keywords, and picker option lab
 
 ## Compatibility and release
 
-PluginKit 4 is an ABI break. MacTools 1.2.0 loads only v4 binaries. Every plugin manifest increases its package version, declares `minHostVersion` 1.2.0, and uses catalog schema 2.
+PluginKit 4 is an ABI break. MacTools 1.1.6 loads only v4 binaries. Every plugin manifest increases its package version, declares `minHostVersion` 1.1.6, and uses catalog schema 2.
 
 The package store tolerantly decodes the outer capabilities of an installed v3 manifest so the catalog manager can identify and update it. No v3 settings model, view, or action compatibility remains. Older app releases continue using their existing versioned catalogs; publishing the v4 catalog is a separate signed release operation.

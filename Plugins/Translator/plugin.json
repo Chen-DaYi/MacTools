@@ -49,7 +49,7 @@
     }
   },
   "version": "0.1.11",
-  "minHostVersion": "1.2.0",
+  "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "Translator.bundle",
   "factoryClass": "TranslatorPlugin.TranslatorPluginFactory",

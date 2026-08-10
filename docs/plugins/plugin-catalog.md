@@ -14,7 +14,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
   "schemaVersion": 2,
   "catalogID": "com.ggbond.mactools.plugins",
   "generatedAt": "2026-05-16T12:00:00Z",
-  "minimumHostVersion": "1.2.0",
+  "minimumHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "plugins": [
     {
@@ -32,7 +32,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
         }
       },
       "version": "1.0.0",
-      "minimumHostVersion": "1.2.0",
+      "minimumHostVersion": "1.1.6",
       "pluginKitVersion": 4,
       "capabilities": {
         "primaryPanel": true,

@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
-## [v1.2.1] - 2026-08-10
+## [v1.1.6] - 2026-08-10
 
 ### Added
 

@@ -38,7 +38,7 @@ Example.mactoolsplugin/
     }
   },
   "version": "1.0.0",
-  "minHostVersion": "1.2.0",
+  "minHostVersion": "1.1.6",
   "pluginKitVersion": 4,
   "bundleRelativePath": "Example.bundle",
   "factoryClass": "Example.ExamplePluginFactory",
