@@ -1,0 +1,3 @@
+settings:
+  base:
+    SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/Core/MultitouchSupport

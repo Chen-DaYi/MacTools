@@ -51,6 +51,7 @@ const iconByPlugin: Record<string, string> = {
   "launch-control": "power.png",
   launchpad: "square.grid.3x3.fill.png",
   "menu-bar-hidden": "menubar.arrow.up.rectangle.png",
+  "middle-click": "cursorarrow.click.2.png",
   "mouse-enhancer": "computermouse.png",
   "right-click": "contextualmenu.and.cursorarrow.png",
   sidecar: "rectangle.2.swap.png",
@@ -441,7 +442,7 @@ const settingsModels: Record<string, SettingSection[]> = {
       rows: [
         {
           title: t("辅助功能", "Accessibility"),
-          description: t("用于监听滚动事件和发送中键点击。", "Used to observe scrolling and send middle-button clicks."),
+          description: t("用于监听和调整滚动事件。", "Used to observe and adjust scrolling events."),
           control: "status",
           tone: "success",
           value: "已授权",
@@ -489,9 +490,30 @@ const settingsModels: Record<string, SettingSection[]> = {
           control: "toggle",
           enabled: false,
         },
+      ],
+    },
+  ],
+  "middle-click": [
+    {
+      title: t("权限", "Permissions"),
+      icon: "lock.png",
+      rows: [
         {
-          title: t("模拟鼠标中键", "Simulate middle click"),
-          description: t("触控板轻点模拟鼠标中键点击。", "Tap the trackpad to simulate a middle-button click."),
+          title: t("辅助功能", "Accessibility"),
+          description: t("用于将触控板轻点转换为鼠标中键点击。", "Used to turn trackpad taps into middle-button clicks."),
+          control: "status",
+          tone: "success",
+          value: "已授权",
+        },
+      ],
+    },
+    {
+      title: t("设置", "Settings"),
+      icon: "cursorarrow.click.2.png",
+      rows: [
+        {
+          title: t("模拟鼠标中键", "Middle Click"),
+          description: t("启用后，用指定数量的手指轻点触控板来模拟鼠标中键。", "When enabled, tap the trackpad with the selected number of fingers to simulate a middle click."),
           control: "toggle",
           enabled: true,
         },

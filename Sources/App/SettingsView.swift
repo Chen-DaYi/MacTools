@@ -2283,27 +2283,38 @@ private struct PluginSettingsRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                if let systemImage = row.systemImage {
-                    Image(systemName: systemImage)
-                        .pluginSettingsRowIconStyle(.secondary)
-                }
+            HStack(alignment: .center, spacing: 0) {
+                HStack(
+                    alignment: .center,
+                    spacing: PluginSettingsTheme.Spacing.rowContentControl
+                ) {
+                    if let systemImage = row.systemImage {
+                        Image(systemName: systemImage)
+                            .pluginSettingsRowIconStyle(.secondary)
+                    }
 
-                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                    Text(row.title)
-                        .font(PluginSettingsTheme.Typography.rowTitle)
+                    VStack(
+                        alignment: .leading,
+                        spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+                    ) {
+                        Text(row.title)
+                            .font(PluginSettingsTheme.Typography.rowTitle)
 
-                    if let description = row.description {
-                        Text(description)
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if let description = row.description {
+                            Text(description)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+
+                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
 
                 control
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if let error = row.error {
                 Text(error)
