@@ -1,0 +1,83 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "metadata.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dock Lock" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Verrouillage du Dock" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "锁定程序坞" } }
+      }
+    },
+    "metadata.description" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Prevent the Dock from moving between displays accidentally." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Empêche le Dock de passer accidentellement d’un écran à l’autre." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "防止程序坞在多显示器之间意外移动" } }
+      }
+    },
+    "panel.subtitle.enabled" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "On" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Activé" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已开启" } }
+      }
+    },
+    "panel.subtitle.disabled" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Off" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Désactivé" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已关闭" } }
+      }
+    },
+    "panel.subtitle.needsPermission" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility permission required" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Autorisation Accessibilité requise" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要辅助功能授权" } }
+      }
+    },
+    "permission.accessibility.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Accessibilité" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "辅助功能" } }
+      }
+    },
+    "permission.accessibility.description" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Intercepts pointer movement at the bottom of screens to stop the Dock jumping between displays." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Intercepte le pointeur au bas des écrans afin d’empêcher le Dock de changer d’écran." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于在屏幕底部拦截鼠标移动，防止程序坞跳到其他显示器。" } }
+      }
+    },
+    "permission.accessibility.footnote" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow MacTools in System Settings > Privacy & Security > Accessibility." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Autorisez MacTools dans Réglages Système > Confidentialité et sécurité > Accessibilité." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在系统设置的“隐私与安全性 > 辅助功能”中允许 MacTools。" } }
+      }
+    },
+    "error.accessibilityRequired" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dock Lock needs Accessibility permission." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le verrouillage du Dock nécessite l’autorisation Accessibilité." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Dock 锁定需要辅助功能权限。" } }
+      }
+    },
+    "error.accessibilityRevoked" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility permission was revoked; Dock Lock is paused." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’autorisation Accessibilité a été révoquée ; le verrouillage du Dock est en pause." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "辅助功能权限已关闭，Dock 锁定已暂停。" } }
+      }
+    },
+    "error.startFailed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dock Lock could not start. Check Accessibility permission." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de démarrer le verrouillage du Dock. Vérifiez l’autorisation Accessibilité." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法启动 Dock 锁定，请检查辅助功能权限。" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
