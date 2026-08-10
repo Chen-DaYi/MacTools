@@ -978,21 +978,62 @@ def app_check_label(skip_check: bool) -> str:
     return "make build"
 
 
+def resolve_app_release_target(
+    current_version: str,
+    latest_tag: str | None,
+    requested_version: str | None,
+    requested_level: str | None,
+) -> tuple[str, str, bool]:
+    baseline_version = latest_tag or current_version
+    uses_declared_version = False
+
+    if requested_version:
+        next_version = requested_version
+        if latest_tag and compare_versions(next_version, latest_tag) <= 0:
+            fail(f"目标版本必须高于最新 app tag：{latest_tag} -> {next_version}")
+        if compare_versions(next_version, current_version) < 0:
+            fail(
+                "目标版本不能低于 AppVersion.xcconfig 已声明的版本："
+                f"{current_version} -> {next_version}"
+            )
+        level = requested_level or infer_bump_level(baseline_version, requested_version)
+    elif requested_level:
+        level = requested_level
+        next_version = bump_version(baseline_version, level)
+    elif latest_tag and compare_versions(current_version, latest_tag) > 0:
+        level = infer_bump_level(latest_tag, current_version)
+        next_version = current_version
+        uses_declared_version = True
+    else:
+        level = choose_level(
+            None,
+            baseline_version,
+            "选择 app 版本递增级别（回车默认 patch）：",
+        )
+        next_version = bump_version(baseline_version, level)
+
+    if latest_tag and compare_versions(next_version, latest_tag) <= 0:
+        fail(f"目标版本必须高于最新 app tag：{latest_tag} -> {next_version}")
+    if compare_versions(next_version, current_version) < 0:
+        fail(
+            "目标版本不能低于 AppVersion.xcconfig 已声明的版本："
+            f"{current_version} -> {next_version}"
+        )
+
+    return next_version, level, uses_declared_version
+
+
 def release_app(args: argparse.Namespace) -> None:
     validate_changelog("app", require_pending=True)
     current_version, current_build = read_app_versions()
     latest_tag = latest_tag_version("v*", APP_TAG_RE)
-    base_version = max_version(
-        [value for value in [current_version, latest_tag] if value],
-        current_version,
-    )
     requested_version = normalize_requested_version(args.version)
-    if requested_version:
-        level = args.level or infer_bump_level(base_version, requested_version)
-        next_version = requested_version
-    else:
-        level = choose_level(args.level, base_version, "选择 app 版本递增级别（回车默认 patch）：")
-        next_version = bump_version(base_version, level)
+    next_version, level, uses_declared_version = resolve_app_release_target(
+        current_version,
+        latest_tag,
+        requested_version,
+        args.level,
+    )
     next_build = current_build + 1
     tag = f"v{next_version}"
     check_tag_available(tag, args.remote)
@@ -1002,6 +1043,8 @@ def release_app(args: argparse.Namespace) -> None:
     print(f"  当前 AppVersion.xcconfig: {current_version} ({current_build})")
     print(f"  最新 app tag: {latest_tag or '(none)'}")
     print(f"  下一版本: {next_version} ({next_build})")
+    if uses_declared_version:
+        print("  版本来源: AppVersion.xcconfig 已预声明")
     print(f"  tag: {tag}")
     print(f"  check: {app_check_label(args.skip_check)}")
     print(f"  changelog: {changelog_status_label('app')}")
@@ -1011,19 +1054,12 @@ def release_app(args: argparse.Namespace) -> None:
     validate_changelog("app", require_pending=True)
     current_version_after_sync, current_build_after_sync = read_app_versions()
     latest_tag_after_sync = latest_tag_version("v*", APP_TAG_RE)
-    base_version_after_sync = max_version(
-        [value for value in [current_version_after_sync, latest_tag_after_sync] if value],
+    resolve_app_release_target(
         current_version_after_sync,
+        latest_tag_after_sync,
+        next_version,
+        level,
     )
-    if requested_version and semver_tuple(next_version) <= semver_tuple(base_version_after_sync):
-        fail(f"同步远端后目标版本不再高于基准版本：{base_version_after_sync} -> {next_version}")
-    if not requested_version:
-        expected_version_after_sync = bump_version(base_version_after_sync, level)
-        if expected_version_after_sync != next_version:
-            fail(
-                "同步远端后计算出的下一版本发生变化："
-                f"{next_version} -> {expected_version_after_sync}。请重新运行 make release。"
-            )
     next_build = current_build_after_sync + 1
     check_tag_available(tag, args.remote)
     run_app_check(args.skip_check, args.dry_run)

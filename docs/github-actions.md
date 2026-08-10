@@ -121,6 +121,8 @@ MARKETING_VERSION = 0.9.3
 CURRENT_PROJECT_VERSION = 15
 ```
 
+功能分支若因插件兼容性检查提前声明了尚未发布的 `MARKETING_VERSION`，且该版本高于最新 `v*` tag，`make release` 会把它作为默认目标版本，并只递增 `CURRENT_PROJECT_VERSION`。显式传入相同的 `--version` 也会被接受；目标版本仍必须高于最新 tag，且不能低于源码已声明的版本。例如源码为 `1.2.0 (68)`、最新 tag 为 `v1.1.6` 时，发布计划应为 `v1.2.0 (69)`。
+
 提交并推送版本号变更：
 
 ```bash

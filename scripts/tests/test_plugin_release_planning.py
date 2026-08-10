@@ -23,6 +23,65 @@ RELEASE_SPEC.loader.exec_module(release)
 
 
 class InteractiveReleasePlanningTests(unittest.TestCase):
+    def test_predeclared_app_version_is_the_default_release_target(self) -> None:
+        with mock.patch.object(release, "choose_level") as choose_level:
+            target, level, uses_declared_version = release.resolve_app_release_target(
+                current_version="1.2.0",
+                latest_tag="1.1.6",
+                requested_version=None,
+                requested_level=None,
+            )
+
+        self.assertEqual(target, "1.2.0")
+        self.assertEqual(level, "minor")
+        self.assertTrue(uses_declared_version)
+        choose_level.assert_not_called()
+
+    def test_requested_version_may_match_predeclared_version(self) -> None:
+        target, level, uses_declared_version = release.resolve_app_release_target(
+            current_version="1.2.0",
+            latest_tag="1.1.6",
+            requested_version="1.2.0",
+            requested_level=None,
+        )
+
+        self.assertEqual(target, "1.2.0")
+        self.assertEqual(level, "minor")
+        self.assertFalse(uses_declared_version)
+
+    def test_app_release_target_cannot_precede_declared_version(self) -> None:
+        with self.assertRaisesRegex(
+            release.ReleaseError,
+            "不能低于 AppVersion.xcconfig 已声明的版本",
+        ):
+            release.resolve_app_release_target(
+                current_version="1.2.0",
+                latest_tag="1.1.6",
+                requested_version="1.1.7",
+                requested_level=None,
+            )
+
+    def test_app_release_target_must_exceed_latest_tag(self) -> None:
+        with self.assertRaisesRegex(release.ReleaseError, "必须高于最新 app tag"):
+            release.resolve_app_release_target(
+                current_version="1.1.6",
+                latest_tag="1.1.6",
+                requested_version="1.1.6",
+                requested_level=None,
+            )
+
+    def test_explicit_major_release_can_advance_past_declared_version(self) -> None:
+        target, level, uses_declared_version = release.resolve_app_release_target(
+            current_version="1.2.0",
+            latest_tag="1.1.6",
+            requested_version=None,
+            requested_level="major",
+        )
+
+        self.assertEqual(target, "2.0.0")
+        self.assertEqual(level, "major")
+        self.assertFalse(uses_declared_version)
+
     def test_release_preflight_skips_confirmation_without_plugin_kit_changes(self) -> None:
         with (
             mock.patch.object(release, "latest_tag_version", return_value="1.1.3"),
