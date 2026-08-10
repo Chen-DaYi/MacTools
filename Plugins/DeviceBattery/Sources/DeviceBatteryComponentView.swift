@@ -70,7 +70,7 @@ struct DeviceBatteryComponentView: View {
         .padding(12)
         .frame(maxWidth: .infinity)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
+        .background(PluginComponentCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
     }
 
     private var emptyTitle: String {
@@ -239,7 +239,7 @@ private struct DeviceBatteryListCard: View {
         .padding(.vertical, DeviceBatteryLayout.cardVerticalPadding)
         .frame(maxWidth: .infinity)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
+        .background(PluginComponentCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
     }
 }
 
@@ -273,7 +273,7 @@ private struct DeviceBatteryGaugeGrid: View {
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
+        .background(PluginComponentCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
     }
 
     private var tileSize: CGFloat {
@@ -359,10 +359,12 @@ private struct DeviceBatteryChargingBadge: View {
     let color: Color
     let size: CGFloat
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color.white)
+                .fill(theme.surfaces.backplate)
 
             Image(systemName: systemName)
                 .font(.system(size: max(7.2, size * 0.54), weight: .black))
@@ -379,13 +381,15 @@ private struct DeviceBatteryRing: View {
     let lineWidth: CGFloat
     var localization: PluginLocalization = PluginLocalization(bundle: .main)
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     var body: some View {
         ZStack {
             Circle()
                 .inset(by: ringPathInset)
                 .trim(from: 0, to: DeviceBatteryLayout.ringSpan)
                 .stroke(
-                    Color.primary.opacity(0.12),
+                    theme.surfaces.track,
                     style: StrokeStyle(
                         lineWidth: lineWidth * DeviceBatteryLayout.ringTrackLineWidthScale,
                         lineCap: .round,
@@ -600,15 +604,6 @@ private struct DeviceBatterySystemBattery: View {
         }
 
         return max(2.8, 14.2 * CGFloat(level) / 100)
-    }
-}
-
-private struct DeviceBatteryCardBackground: View {
-    let cornerRadius: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.primary.opacity(0.045))
     }
 }
 

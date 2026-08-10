@@ -884,7 +884,11 @@ private struct SystemStatusCompactMetricCard: View {
         }
         .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
+        .background(
+            PluginComponentCardBackground(
+                cornerRadius: SystemStatusComponentLayout.cardCornerRadius
+            )
+        )
     }
 }
 private struct SystemStatusWideInfoCard<Content: View>: View {
@@ -916,7 +920,11 @@ private struct SystemStatusWideInfoCard<Content: View>: View {
         }
         .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
+        .background(
+            PluginComponentCardBackground(
+                cornerRadius: SystemStatusComponentLayout.cardCornerRadius
+            )
+        )
     }
 }
 
@@ -1033,7 +1041,11 @@ private struct SystemStatusTopProcessesCard: View {
         }
         .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
+        .background(
+            PluginComponentCardBackground(
+                cornerRadius: SystemStatusComponentLayout.cardCornerRadius
+            )
+        )
     }
 
     private var header: some View {
@@ -1114,6 +1126,8 @@ private struct SystemStatusCircularProgress: View {
     let value: Double?
     let tint: Color
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     private var clampedValue: Double {
         min(max(value ?? 0, 0), 1)
     }
@@ -1121,7 +1135,7 @@ private struct SystemStatusCircularProgress: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.primary.opacity(0.08), lineWidth: 4)
+                .stroke(theme.surfaces.track, lineWidth: 4)
 
             Circle()
                 .trim(from: 0, to: clampedValue)
@@ -1131,14 +1145,5 @@ private struct SystemStatusCircularProgress: View {
                 )
                 .rotationEffect(.degrees(-90))
         }
-    }
-}
-
-private struct SystemStatusCardBackground: View {
-    let cornerRadius: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.primary.opacity(0.045))
     }
 }

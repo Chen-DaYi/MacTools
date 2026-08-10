@@ -61,7 +61,11 @@ struct CalendarComponentView: View {
         }
         .padding(Layout.contentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(CalendarComponentBackground(cornerRadius: Layout.cornerRadius))
+        .background(
+            PluginComponentCardBackground(
+                cornerRadius: Layout.cornerRadius
+            )
+        )
     }
 
 }
@@ -211,6 +215,8 @@ private struct CalendarDayCell: View {
     let localization: PluginLocalization
     let onOpen: () -> Void
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     var body: some View {
         Button(action: onOpen) {
             ZStack(alignment: .topTrailing) {
@@ -253,14 +259,16 @@ private struct CalendarDayCell: View {
 
     private var backgroundColor: Color {
         if isSelected {
-            return Color.accentColor.opacity(0.16)
+            return theme.interaction.selection(.accentColor)
         }
 
         if day.isToday {
-            return Color.accentColor.opacity(0.08)
+            return theme.interaction.emphasis(.accentColor)
         }
 
-        return Color(nsColor: .controlBackgroundColor).opacity(day.isInDisplayedMonth ? 0.35 : 0.12)
+        return day.isInDisplayedMonth
+            ? theme.surfaces.nested
+            : theme.surfaces.nestedMuted
     }
 
     private var borderColor: Color {
@@ -539,15 +547,6 @@ private struct CalendarEventRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-    }
-}
-
-private struct CalendarComponentBackground: View {
-    let cornerRadius: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.primary.opacity(0.045))
     }
 }
 

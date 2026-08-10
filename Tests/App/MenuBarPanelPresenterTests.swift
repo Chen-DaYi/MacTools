@@ -5,6 +5,28 @@ import XCTest
 
 @MainActor
 final class MenuBarPanelPresenterTests: XCTestCase {
+    func testFullSizePopoverPreservesOriginalContentArea() {
+        let contentSize = NSSize(width: 316, height: 500)
+        let insets = NSEdgeInsets(top: 13, left: 13, bottom: 13, right: 13)
+
+        XCTAssertEqual(
+            MenuBarPopoverGeometry.popoverSize(
+                preserving: contentSize,
+                safeAreaInsets: insets
+            ),
+            NSSize(width: 342, height: 526)
+        )
+    }
+
+    func testPopoverGeometryRejectsUnavailableSafeAreaInsets() {
+        XCTAssertFalse(MenuBarPopoverGeometry.hasUsableInsets(NSEdgeInsetsZero))
+        XCTAssertTrue(
+            MenuBarPopoverGeometry.hasUsableInsets(
+                NSEdgeInsets(top: 13, left: 13, bottom: 13, right: 13)
+            )
+        )
+    }
+
     func testPanelCommandResolverAddsSettingsWithoutCapturingSearchCloseOrQuit() {
         XCTAssertEqual(
             MenuBarPanelKeyboardAction.resolve(

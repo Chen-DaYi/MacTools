@@ -5,6 +5,98 @@ import MacToolsPluginKit
 @testable import MacTools
 
 final class PluginComponentModelsTests: XCTestCase {
+    func testComponentCardTintAdaptsToAppearanceAndContrast() {
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.cardTint(
+                colorScheme: .light,
+                contrast: .standard
+            ),
+            0.05,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.cardTint(
+                colorScheme: .dark,
+                contrast: .standard
+            ),
+            0.07,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.cardTint(
+                colorScheme: .light,
+                contrast: .increased
+            ),
+            0.08,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.cardTint(
+                colorScheme: .dark,
+                contrast: .increased
+            ),
+            0.12,
+            accuracy: 0.001
+        )
+    }
+
+    func testComponentInternalSurfaceTintsAdaptToAppearanceAndContrast() {
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.nestedTint(
+                colorScheme: .light,
+                contrast: .standard
+            ),
+            0.58,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.nestedTint(
+                colorScheme: .dark,
+                contrast: .standard
+            ),
+            0.06,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.controlTint(
+                colorScheme: .light,
+                contrast: .standard
+            ),
+            0.055,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.controlHoverTint(
+                colorScheme: .light,
+                contrast: .standard
+            ),
+            0.10,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.controlHoverTint(
+                colorScheme: .dark,
+                contrast: .increased
+            ),
+            0.20,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PluginComponentTheme.Opacity.trackTint(
+                colorScheme: .dark,
+                contrast: .standard
+            ),
+            0.12,
+            accuracy: 0.001
+        )
+
+        let darkIncreasedTheme = PluginComponentTheme.system(
+            colorScheme: .dark,
+            contrast: .increased
+        )
+        XCTAssertEqual(darkIncreasedTheme.interaction.selectionOpacity, 0.24, accuracy: 0.001)
+        XCTAssertEqual(darkIncreasedTheme.interaction.emphasisOpacity, 0.15, accuracy: 0.001)
+    }
 }
 
 final class MenuBarControlItemDefaultsTests: XCTestCase {

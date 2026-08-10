@@ -230,6 +230,9 @@ struct ComponentPanelContent: View {
     let contentBodyHeight: CGFloat
     let onDismiss: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
     private var placements: [ComponentGridPlacement] {
         ComponentGridPlacementEngine.placements(for: pluginHost.componentItems)
     }
@@ -261,6 +264,13 @@ struct ComponentPanelContent: View {
             width: ComponentPanelLayout.gridWidth,
             height: contentBodyHeight,
             alignment: .topLeading
+        )
+        .environment(
+            \.pluginComponentTheme,
+            PluginComponentTheme.system(
+                colorScheme: colorScheme,
+                contrast: colorSchemeContrast
+            )
         )
     }
 

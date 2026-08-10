@@ -70,6 +70,8 @@
 
 > **Shortcut settings:** Plugin and app shortcut rows keep the action icon/name beside the recorder field, wrapping groups between rows without splitting an individual shortcut control.
 
+> **Menu-bar panels:** Dashboard cards and their nested controls use shared semantic surfaces and text levels in Light, Dark, and Increased Contrast appearances, without decorative borders or shadows. The surrounding popover and its attachment arrow use one opaque semantic window background so wallpaper colors do not reduce contrast.
+
 > **Preferences backup:** Import restores portable host preferences, plugin display settings, shortcut customizations, and supported plugin settings (including Sidecar device priority and shortcut configuration). Permissions, caches, credentials, and other non-portable data are excluded. Missing plugins are never installed automatically: the preview lets you explicitly select catalog-verified plugins to install, while unavailable or unselected plugins and their settings are skipped.
 
 > **Right-click action:** You can use Option + left-click on the MacTools icon to trigger the right-click action.

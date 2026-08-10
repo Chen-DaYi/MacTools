@@ -119,6 +119,101 @@ final class MenuBarPanelHostingController<Content: View>: NSHostingController<Co
 }
 
 @MainActor
+final class MenuBarPanelContainerController<Content: View>: NSViewController {
+    private let hostingController: MenuBarPanelHostingController<Content>
+    private let onUnhandledEscape: () -> Void
+
+    init(
+        hostingController: MenuBarPanelHostingController<Content>,
+        onUnhandledEscape: @escaping () -> Void
+    ) {
+        self.hostingController = hostingController
+        self.onUnhandledEscape = onUnhandledEscape
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        view = MenuBarPanelBackgroundView()
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        addChild(hostingController)
+        let hostedView = hostingController.view
+        hostedView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(hostedView)
+
+        let safeArea = view.safeAreaLayoutGuide
+        NSLayoutConstraint.activate([
+            hostedView.leadingAnchor.constraint(equalTo: safeArea.leadingAnchor),
+            hostedView.trailingAnchor.constraint(equalTo: safeArea.trailingAnchor),
+            hostedView.topAnchor.constraint(equalTo: safeArea.topAnchor),
+            hostedView.bottomAnchor.constraint(equalTo: safeArea.bottomAnchor)
+        ])
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard MenuBarPanelKeyboardAction.resolve(for: event) == .dismissPanel else {
+            super.keyDown(with: event)
+            return
+        }
+
+        onUnhandledEscape()
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        onUnhandledEscape()
+    }
+}
+
+private final class MenuBarPanelBackgroundView: NSView {
+    override var isOpaque: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.windowBackgroundColor.setFill()
+        NSBezierPath.fill(dirtyRect)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+enum MenuBarPopoverGeometry {
+    /// `hasFullSizeContent` makes `contentSize` describe the complete popover
+    /// window instead of the unobscured content rect. The supported systems
+    /// currently report 13 points on each edge. This is only a first-frame
+    /// fallback; the live AppKit safe-area insets replace it after presentation.
+    static let fallbackSafeAreaInsets = NSEdgeInsets(
+        top: 13,
+        left: 13,
+        bottom: 13,
+        right: 13
+    )
+
+    static func popoverSize(
+        preserving contentSize: NSSize,
+        safeAreaInsets: NSEdgeInsets
+    ) -> NSSize {
+        NSSize(
+            width: contentSize.width + safeAreaInsets.left + safeAreaInsets.right,
+            height: contentSize.height + safeAreaInsets.top + safeAreaInsets.bottom
+        )
+    }
+
+    static func hasUsableInsets(_ insets: NSEdgeInsets) -> Bool {
+        insets.top > 0 || insets.left > 0 || insets.bottom > 0 || insets.right > 0
+    }
+}
+
+@MainActor
 final class MenuBarPanelPresenter: NSObject {
     static let popoverBehavior: NSPopover.Behavior = .applicationDefined
 
@@ -140,11 +235,17 @@ final class MenuBarPanelPresenter: NSObject {
     private let popover = NSPopover()
     private let panelModel: MenuBarUnifiedPanelModel
     private let hostingController: MenuBarPanelHostingController<MenuBarUnifiedPanelContent>
+    private let containerController: MenuBarPanelContainerController<MenuBarUnifiedPanelContent>
     private var appearanceObserver: NSObjectProtocol?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var heightRefreshCancellables: Set<AnyCancellable> = []
     private var keyboardShortcutMonitor: Any?
     private var selectedPanel: PanelKind = .components
+    private var panelContentSize = NSSize(
+        width: MenuBarPanelLayout.baseWidth,
+        height: MenuBarPanelLayout.minimumPanelHeight
+    )
+    private var popoverSafeAreaInsets = MenuBarPopoverGeometry.fallbackSafeAreaInsets
 
     init(
         pluginHost: PluginHost,
@@ -174,7 +275,7 @@ final class MenuBarPanelPresenter: NSObject {
             isPanelVisible: false
         )
         self.panelModel = panelModel
-        self.hostingController = MenuBarPanelHostingController(
+        let hostingController = MenuBarPanelHostingController(
             rootView: MenuBarUnifiedPanelContent(
                 pluginHost: pluginHost,
                 appUpdater: appUpdater,
@@ -185,6 +286,11 @@ final class MenuBarPanelPresenter: NSObject {
                 onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
                 onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
             ),
+            onUnhandledEscape: onDismiss
+        )
+        self.hostingController = hostingController
+        self.containerController = MenuBarPanelContainerController(
+            hostingController: hostingController,
             onUnhandledEscape: onDismiss
         )
 
@@ -318,23 +424,23 @@ final class MenuBarPanelPresenter: NSObject {
         popover.behavior = Self.popoverBehavior
         popover.animates = false
         popover.delegate = self
-        popover.contentViewController = hostingController
+        popover.contentViewController = containerController
         // Keep popover sizing single-sourced from MenuBarPanelLayout.
         // Letting SwiftUI also publish preferredContentSize can make AppKit
         // resize the shown popover a second time during tab switches.
         if #available(macOS 14.0, *) {
+            // Extend the app-owned background into AppKit's attachment arrow
+            // so it uses the same adaptive color as the panel body.
+            popover.hasFullSizeContent = true
             hostingController.sizingOptions = []
         }
-        AppAppearancePreference.stored().apply(to: hostingController.view)
+        AppAppearancePreference.stored().apply(to: containerController.view)
     }
 
     private func prewarm() {
-        popover.contentSize = NSSize(
-            width: MenuBarPanelLayout.baseWidth,
-            height: MenuBarPanelLayout.minimumPanelHeight
-        )
-        hostingController.loadViewIfNeeded()
-        hostingController.view.setFrameSize(popover.contentSize)
+        applyPopoverSize()
+        containerController.loadViewIfNeeded()
+        containerController.view.setFrameSize(popover.contentSize)
     }
 
     private func scheduleComponentViewPrewarm() {
@@ -502,7 +608,7 @@ final class MenuBarPanelPresenter: NSObject {
 
     private func setPopoverHeight(_ height: CGFloat) {
         let width = MenuBarPanelLayout.baseWidth
-        let currentSize = popover.contentSize
+        let currentSize = panelContentSize
         guard
             abs(currentSize.width - width) > 0.5
                 || abs(currentSize.height - height) > 0.5
@@ -510,7 +616,44 @@ final class MenuBarPanelPresenter: NSObject {
             return
         }
 
-        popover.contentSize = NSSize(width: width, height: height)
+        panelContentSize = NSSize(width: width, height: height)
+        applyPopoverSize()
+    }
+
+    private func applyPopoverSize() {
+        let resolvedSize = MenuBarPopoverGeometry.popoverSize(
+            preserving: panelContentSize,
+            safeAreaInsets: popoverSafeAreaInsets
+        )
+        let currentSize = popover.contentSize
+        guard
+            abs(currentSize.width - resolvedSize.width) > 0.5
+                || abs(currentSize.height - resolvedSize.height) > 0.5
+        else {
+            return
+        }
+
+        popover.contentSize = resolvedSize
+    }
+
+    private func synchronizePopoverSafeAreaInsets() {
+        containerController.view.layoutSubtreeIfNeeded()
+        let resolvedInsets = containerController.view.safeAreaInsets
+        guard MenuBarPopoverGeometry.hasUsableInsets(resolvedInsets) else {
+            return
+        }
+
+        guard
+            abs(popoverSafeAreaInsets.top - resolvedInsets.top) > 0.5
+                || abs(popoverSafeAreaInsets.left - resolvedInsets.left) > 0.5
+                || abs(popoverSafeAreaInsets.bottom - resolvedInsets.bottom) > 0.5
+                || abs(popoverSafeAreaInsets.right - resolvedInsets.right) > 0.5
+        else {
+            return
+        }
+
+        popoverSafeAreaInsets = resolvedInsets
+        applyPopoverSize()
     }
 
     private func updateContent(
@@ -644,6 +787,14 @@ extension MenuBarPanelPresenter: NSPopoverDelegate {
         }
 
         installKeyboardShortcutMonitorIfNeeded()
+    }
+
+    func popoverDidShow(_ notification: Notification) {
+        guard let shownPopover = notification.object as? NSPopover, shownPopover === popover else {
+            return
+        }
+
+        synchronizePopoverSafeAreaInsets()
     }
 
     func popoverDidClose(_ notification: Notification) {
@@ -780,6 +931,9 @@ struct MenuBarUnifiedPanelContent: View {
             height: MenuBarPanelLayout.panelHeight(forContentHeight: model.contentHeight),
             alignment: .topLeading
         )
+        .background {
+            MenuBarPanelBackground()
+        }
         .id(runtimeLocale.revision)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
@@ -836,6 +990,12 @@ struct MenuBarUnifiedPanelContent: View {
         model.selectTab(tab)
     }
 
+}
+
+struct MenuBarPanelBackground: View {
+    var body: some View {
+        Color(nsColor: .windowBackgroundColor)
+    }
 }
 
 private struct MenuBarPanelContentSurface<Content: View>: View {

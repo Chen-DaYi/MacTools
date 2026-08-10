@@ -2475,7 +2475,10 @@ private struct SecondarySlidingPanel: View {
         .padding(MenuBarPanelLayout.outerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            PopoverMaterialBackground()
+            ZStack {
+                PopoverMaterialBackground()
+                MenuBarPanelBackground()
+            }
         }
         .clipShape(
             RoundedRectangle(
