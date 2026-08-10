@@ -77,45 +77,30 @@ public enum PluginSettingsTheme {
         public static let pageIcon: CGFloat = 42
         public static let rowIcon: CGFloat = 18
         public static let controlHeight: CGFloat = 30
+        public static let shortcutRecorderWidth: CGFloat = 126
         public static let metricIcon: CGFloat = 36
         public static let emptyStateIcon: CGFloat = 28
     }
 
     public enum Palette {
-        public static var windowBackground: Color {
-            dynamic(light: 0xF4F5F7, dark: 0x1E1F22)
-        }
-
-        public static var sidebarBackground: Color {
-            dynamic(light: 0xEEF0F3, dark: 0x25262A)
-        }
-
-        public static var contentBackground: Color {
-            dynamic(light: 0xF7F8FA, dark: 0x1F2023)
-        }
-
-        public static var cardBackground: Color {
-            dynamic(light: 0xFFFFFF, dark: 0x2A2B2F)
-        }
-
         public static var recessedControlBackground: Color {
-            dynamic(light: 0xF1F3F6, dark: 0x222327)
+            Color(nsColor: .unemphasizedSelectedContentBackgroundColor)
         }
 
         public static var fieldBackground: Color {
-            dynamic(light: 0xFFFFFF, dark: 0x1C1D20)
+            Color(nsColor: .textBackgroundColor)
         }
 
         public static var keycapBackground: Color {
-            dynamic(light: 0xF8F9FB, dark: 0x2F3035)
+            Color(nsColor: .controlBackgroundColor)
         }
 
         public static var separator: Color {
-            dynamic(light: 0xD9DDE4, dark: 0x3A3B40)
+            Color(nsColor: .separatorColor)
         }
 
         public static var cardBorder: Color {
-            dynamic(light: 0xDDE1E7, dark: 0x3B3C42)
+            Color(nsColor: .separatorColor)
         }
 
         public static var sidebarHoverBackground: Color {
@@ -134,36 +119,27 @@ public enum PluginSettingsTheme {
             Color.accentColor.opacity(0.08)
         }
 
-        public static var nativeCardBackground: Color {
-            Color(nsColor: .controlBackgroundColor)
+    }
+
+    public enum Surface {
+        /// A raised control inside a recessed surface, such as the selected
+        /// segment in a custom tab strip. Outer settings cards must use
+        /// `pluginSettingsCardBackground(_:)` so their material and clipping
+        /// stay consistent across appearances.
+        public static var raisedControl: AnyShapeStyle {
+            AnyShapeStyle(.background)
         }
 
-        public static var nativeFieldBackground: Color {
-            Color(nsColor: .textBackgroundColor)
-        }
-
-        public static var nativeSeparator: Color {
-            Color(nsColor: .separatorColor)
-        }
-
-        private static func dynamic(light lightHex: UInt32, dark darkHex: UInt32) -> Color {
-            Color(
-                nsColor: NSColor(
-                    name: nil,
-                    dynamicProvider: { appearance in
-                        appearance.pluginSettingsThemeIsDark
-                            ? .pluginSettingsThemeRGB(darkHex)
-                            : .pluginSettingsThemeRGB(lightHex)
-                    }
-                )
-            )
+        fileprivate static var standardCard: AnyShapeStyle {
+            // Match the subtle adaptive separation of macOS grouped Form
+            // cards without introducing fixed light/dark color branches.
+            AnyShapeStyle(.ultraThinMaterial)
         }
     }
 }
 
 public enum PluginSettingsCardBackgroundStyle {
-    case host
-    case plugin
+    case standard
     case recessed
 }
 
@@ -175,35 +151,37 @@ public enum PluginSettingsListDividerStyle {
 public struct PluginSettingsCardBackground: ViewModifier {
     private let style: PluginSettingsCardBackgroundStyle
 
-    public init(_ style: PluginSettingsCardBackgroundStyle = .host) {
+    public init(_ style: PluginSettingsCardBackgroundStyle = .standard) {
         self.style = style
     }
 
     public func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+
         content
             .background(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(background)
+                shape.fill(backgroundStyle)
             )
+            // A card owns its visible surface. Clipping prevents native list
+            // or editor backgrounds from punching square corners through it.
+            .clipShape(shape)
     }
 
     private var radius: CGFloat {
         switch style {
-        case .host:
+        case .standard:
             return PluginSettingsTheme.Radius.hostCard
-        case .plugin, .recessed:
+        case .recessed:
             return PluginSettingsTheme.Radius.card
         }
     }
 
-    private var background: Color {
+    private var backgroundStyle: AnyShapeStyle {
         switch style {
-        case .host:
-            return PluginSettingsTheme.Palette.cardBackground
-        case .plugin:
-            return PluginSettingsTheme.Palette.nativeCardBackground
+        case .standard:
+            return PluginSettingsTheme.Surface.standardCard
         case .recessed:
-            return PluginSettingsTheme.Palette.recessedControlBackground
+            return AnyShapeStyle(PluginSettingsTheme.Palette.recessedControlBackground)
         }
     }
 
@@ -240,9 +218,152 @@ public struct PluginSettingsListDivider: View {
     }
 }
 
+/// Keeps a shortcut's icon/title and recorder in one compact line. The first
+/// child is the only compressible label; recorder fields and trailing actions
+/// retain their intrinsic sizes as the settings window narrows.
+public struct PluginSettingsShortcutControlLayout: Layout {
+    private let spacing: CGFloat
+    private let maximumLabelWidth: CGFloat
+
+    public init(
+        spacing: CGFloat = PluginSettingsTheme.Spacing.controlCluster,
+        maximumLabelWidth: CGFloat = 160
+    ) {
+        self.spacing = max(spacing, 0)
+        self.maximumLabelWidth = max(maximumLabelWidth, 0)
+    }
+
+    public func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        guard let label = subviews.first else {
+            return .zero
+        }
+
+        let trailingSizes = subviews.dropFirst().map {
+            $0.sizeThatFits(.unspecified)
+        }
+        let totalSpacing = spacing * CGFloat(max(subviews.count - 1, 0))
+        let trailingWidth = trailingSizes.reduce(0) { $0 + $1.width }
+        let proposedLabelWidth = proposal.width.map {
+            max($0 - trailingWidth - totalSpacing, 0)
+        } ?? maximumLabelWidth
+        let labelWidth = min(
+            label.sizeThatFits(.unspecified).width,
+            maximumLabelWidth,
+            proposedLabelWidth
+        )
+        let labelSize = label.sizeThatFits(
+            ProposedViewSize(width: labelWidth, height: proposal.height)
+        )
+        let measuredLabelWidth = min(labelSize.width, labelWidth)
+        let height = ([labelSize] + trailingSizes).map(\.height).max() ?? 0
+
+        return CGSize(
+            width: measuredLabelWidth + trailingWidth + totalSpacing,
+            height: height
+        )
+    }
+
+    public func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard let label = subviews.first else {
+            return
+        }
+
+        let trailingSizes = subviews.dropFirst().map {
+            $0.sizeThatFits(.unspecified)
+        }
+        let totalSpacing = spacing * CGFloat(max(subviews.count - 1, 0))
+        let trailingWidth = trailingSizes.reduce(0) { $0 + $1.width }
+        let availableLabelWidth = max(bounds.width - trailingWidth - totalSpacing, 0)
+        let labelWidth = min(
+            label.sizeThatFits(.unspecified).width,
+            maximumLabelWidth,
+            availableLabelWidth
+        )
+        let labelProposal = ProposedViewSize(width: labelWidth, height: bounds.height)
+        let labelSize = label.sizeThatFits(labelProposal)
+        var x = bounds.minX
+
+        label.place(
+            at: CGPoint(x: x, y: bounds.midY),
+            anchor: .leading,
+            proposal: labelProposal
+        )
+        x += min(labelSize.width, labelWidth)
+
+        for (subview, size) in zip(subviews.dropFirst(), trailingSizes) {
+            x += spacing
+            subview.place(
+                at: CGPoint(x: x, y: bounds.midY),
+                anchor: .leading,
+                proposal: ProposedViewSize(size)
+            )
+            x += size.width
+        }
+    }
+}
+
+/// A stepped settings slider without macOS's dense tick-mark presentation.
+/// Values are snapped relative to the lower bound before being written back,
+/// so declarative and custom plugin settings share the same interaction model.
+public struct PluginSettingsSlider: View {
+    @Binding private var value: Double
+    private let range: ClosedRange<Double>
+    private let step: Double?
+    private let onEditingChanged: (Bool) -> Void
+
+    public init(
+        value: Binding<Double>,
+        in range: ClosedRange<Double>,
+        step: Double? = nil,
+        onEditingChanged: @escaping (Bool) -> Void = { _ in }
+    ) {
+        _value = value
+        self.range = range
+        self.step = step
+        self.onEditingChanged = onEditingChanged
+    }
+
+    public var body: some View {
+        Slider(
+            value: Binding(
+                get: { value },
+                set: {
+                    value = Self.snappedValue($0, in: range, step: step)
+                }
+            ),
+            in: range,
+            onEditingChanged: onEditingChanged
+        )
+    }
+
+    public static func snappedValue(
+        _ value: Double,
+        in range: ClosedRange<Double>,
+        step: Double?
+    ) -> Double {
+        let clamped = min(max(value, range.lowerBound), range.upperBound)
+        guard let step, step.isFinite, step > 0 else {
+            return clamped
+        }
+
+        let offset = ((clamped - range.lowerBound) / step).rounded()
+        let snapped = range.lowerBound + offset * step
+        return min(max(snapped, range.lowerBound), range.upperBound)
+    }
+}
+
 public extension View {
     func pluginSettingsCardBackground(
-        _ style: PluginSettingsCardBackgroundStyle = .host
+        _ style: PluginSettingsCardBackgroundStyle = .standard
     ) -> some View {
         modifier(PluginSettingsCardBackground(style))
     }
@@ -278,22 +399,5 @@ public extension View {
                     ? PluginSettingsTheme.Spacing.interactiveRowVertical
                     : PluginSettingsTheme.Spacing.rowVertical
             )
-    }
-}
-
-private extension NSAppearance {
-    var pluginSettingsThemeIsDark: Bool {
-        bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-    }
-}
-
-private extension NSColor {
-    static func pluginSettingsThemeRGB(_ hex: UInt32, alpha: CGFloat = 1) -> NSColor {
-        NSColor(
-            srgbRed: CGFloat((hex >> 16) & 0xff) / 255,
-            green: CGFloat((hex >> 8) & 0xff) / 255,
-            blue: CGFloat(hex & 0xff) / 255,
-            alpha: alpha
-        )
     }
 }

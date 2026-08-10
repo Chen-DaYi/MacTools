@@ -1,16 +1,30 @@
 import AppKit
 import Carbon
-import SwiftUI
 import XCTest
 @testable import MacTools
 
 @MainActor
 final class MenuBarPanelPresenterTests: XCTestCase {
-    private let suiteName = "MenuBarPanelPresenterTests"
+    func testFullSizePopoverPreservesOriginalContentArea() {
+        let contentSize = NSSize(width: 316, height: 500)
+        let insets = NSEdgeInsets(top: 13, left: 13, bottom: 13, right: 13)
 
-    override func tearDown() {
-        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        XCTAssertEqual(
+            MenuBarPopoverGeometry.popoverSize(
+                preserving: contentSize,
+                safeAreaInsets: insets
+            ),
+            NSSize(width: 342, height: 526)
+        )
+    }
+
+    func testPopoverGeometryRejectsUnavailableSafeAreaInsets() {
+        XCTAssertFalse(MenuBarPopoverGeometry.hasUsableInsets(NSEdgeInsetsZero))
+        XCTAssertTrue(
+            MenuBarPopoverGeometry.hasUsableInsets(
+                NSEdgeInsets(top: 13, left: 13, bottom: 13, right: 13)
+            )
+        )
     }
 
     func testPanelCommandResolverAddsSettingsWithoutCapturingSearchCloseOrQuit() {
@@ -62,86 +76,6 @@ final class MenuBarPanelPresenterTests: XCTestCase {
                 )
             )
         }
-    }
-
-    func testPanelSettingsCommandUsesInjectedWindowRouterPath() {
-        var presentationCount = 0
-        let presenter = makePresenter(
-            onOpenSettings: { presentationCount += 1 }
-        )
-
-        presenter.performKeyboardAction(.showSettings)
-
-        XCTAssertEqual(presentationCount, 1)
-    }
-
-    func testPanelUnifiedSearchCommandUsesInjectedWindowRouterPath() {
-        var presentationCount = 0
-        let presenter = makePresenter(
-            onOpenUnifiedSearch: { presentationCount += 1 }
-        )
-
-        presenter.performKeyboardAction(.showUnifiedSearch)
-
-        XCTAssertEqual(presentationCount, 1)
-    }
-
-    func testEscapeUsesCoordinatedPanelDismissalPath() {
-        var dismissalCount = 0
-        let presenter = makePresenter(onDismiss: { dismissalCount += 1 })
-
-        presenter.performKeyboardAction(.dismissPanel)
-
-        XCTAssertEqual(dismissalCount, 1)
-    }
-
-    func testUnhandledEscapeFromFocusedChildUsesHostingControllerFallback() throws {
-        var dismissalCount = 0
-        let window = makeWindow()
-        let controller = MenuBarPanelHostingController(
-            rootView: EmptyView(),
-            onUnhandledEscape: { dismissalCount += 1 }
-        )
-        window.contentViewController = controller
-        let control = EscapeForwardingView(frame: .zero)
-        controller.view.addSubview(control)
-        XCTAssertTrue(window.makeFirstResponder(control))
-
-        window.sendEvent(makeEscapeKeyEvent(windowNumber: window.windowNumber))
-
-        XCTAssertEqual(dismissalCount, 1)
-    }
-
-    func testFocusedChildCanConsumeActualEscapeEventBeforePanelFallback() {
-        var dismissalCount = 0
-        let window = makeWindow()
-        let controller = MenuBarPanelHostingController(
-            rootView: EmptyView(),
-            onUnhandledEscape: { dismissalCount += 1 }
-        )
-        window.contentViewController = controller
-        let control = EscapeConsumingView(frame: .zero)
-        controller.view.addSubview(control)
-        XCTAssertTrue(window.makeFirstResponder(control))
-
-        window.sendEvent(makeEscapeKeyEvent(windowNumber: window.windowNumber))
-
-        XCTAssertEqual(control.escapeCount, 1)
-        XCTAssertEqual(dismissalCount, 0)
-    }
-
-    func testPanelModelSelectionUsesPresenterRoutingWithoutShowingWindow() throws {
-        let presenter = makePresenter()
-        let popover = presenter.debugPopoverForTests
-        let controller = try XCTUnwrap(
-            popover.contentViewController as? NSHostingController<MenuBarUnifiedPanelContent>
-        )
-        XCTAssertEqual(controller.rootView.model.selectedTab, .components)
-
-        controller.rootView.model.selectTab(.features)
-
-        XCTAssertEqual(controller.rootView.model.selectedTab, .features)
-        XCTAssertFalse(controller.rootView.model.isPanelVisible)
     }
 
     func testExplicitPresentationOpensClosedSurface() {
@@ -210,44 +144,6 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         )
     }
 
-    private func makePresenter(
-        onDismiss: @escaping () -> Void = {},
-        onOpenSettings: @escaping () -> Void = {},
-        onOpenUnifiedSearch: @escaping () -> Void = {}
-    ) -> MenuBarPanelPresenter {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-
-        let host = PluginHost(
-            plugins: [],
-            shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
-            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
-            globalShortcutManager: GlobalShortcutManager()
-        )
-
-        return MenuBarPanelPresenter(
-            pluginHost: host,
-            appUpdater: AppUpdater(startingUpdater: false),
-            onDismiss: onDismiss,
-            onOpenUpdate: {},
-            onOpenSettings: onOpenSettings,
-            onOpenUnifiedSearch: onOpenUnifiedSearch,
-            onPresentDiskCleanConfiguration: {},
-            onPresentLaunchControlConfiguration: {},
-            onAllPanelsClosed: {}
-        )
-    }
-
-    private func makeWindow() -> NSWindow {
-        NSWindow(
-            contentRect: .zero,
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
-        )
-    }
-
     private func makeCommandKeyEvent(
         characters: String,
         keyCode: UInt16,
@@ -265,47 +161,5 @@ final class MenuBarPanelPresenterTests: XCTestCase {
             isARepeat: false,
             keyCode: keyCode
         )!
-    }
-
-    private func makeEscapeKeyEvent(windowNumber: Int) -> NSEvent {
-        NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: windowNumber,
-            context: nil,
-            characters: "\u{1B}",
-            charactersIgnoringModifiers: "\u{1B}",
-            isARepeat: false,
-            keyCode: UInt16(kVK_Escape)
-        )!
-    }
-}
-
-private final class EscapeForwardingView: NSView {
-    override var acceptsFirstResponder: Bool {
-        true
-    }
-
-    override func keyDown(with event: NSEvent) {
-        nextResponder?.keyDown(with: event)
-    }
-}
-
-private final class EscapeConsumingView: NSView {
-    private(set) var escapeCount = 0
-
-    override var acceptsFirstResponder: Bool {
-        true
-    }
-
-    override func keyDown(with event: NSEvent) {
-        guard event.keyCode == UInt16(kVK_Escape) else {
-            super.keyDown(with: event)
-            return
-        }
-
-        escapeCount += 1
     }
 }

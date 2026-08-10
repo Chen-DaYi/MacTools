@@ -24,7 +24,7 @@ final class SavedScriptsPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
     PluginActionProviding,
-    PluginConfigurationPresenting,
+    PluginSettingsPresenting,
     PluginPrimaryPanelIndicatorProviding,
     PluginPortablePreferencesProviding,
     PluginPortablePreferencesRestorationReporting,
@@ -44,7 +44,7 @@ final class SavedScriptsPlugin:
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var requestConfigurationPresentation: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
 
     private let localization: PluginLocalization
     private let runner: any SavedScriptRunning
@@ -97,13 +97,13 @@ final class SavedScriptsPlugin:
         }
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(
+    var settingsPage: PluginSettingsPage? {
+        .workspace(
             description: localization.string(
                 "metadata.description",
                 defaultValue: "保存并运行 AppleScript 和 Shell 脚本"
             ),
-            prefersFullHeight: true
+            scrolling: .host
         ) { [weak self] _ in
             if let self {
                 SavedScriptsSettingsView(plugin: self)
@@ -294,7 +294,7 @@ final class SavedScriptsPlugin:
             onStateChange?()
         case let .invokeAction(controlID):
             if controlID == ControlID.openManager {
-                requestConfigurationPresentation?()
+                requestSettingsPresentation?()
             } else if let scriptID = scriptID(from: controlID) {
                 runManual(scriptID: scriptID)
             }

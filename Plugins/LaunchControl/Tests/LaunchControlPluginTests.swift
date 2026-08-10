@@ -45,7 +45,7 @@ final class LaunchControlCanonicalActionTests: XCTestCase {
     func testOpenManagerRequestsConfigurationPresentation() {
         let plugin = LaunchControlPlugin()
         var requests = 0
-        plugin.requestConfigurationPresentation = { requests += 1 }
+        plugin.requestSettingsPresentation = { requests += 1 }
 
         plugin.handleAction(.invokeAction(controlID: LaunchControlPlugin.ControlID.openManager))
 

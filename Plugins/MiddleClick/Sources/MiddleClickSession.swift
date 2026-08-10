@@ -1,0 +1,537 @@
+import AppKit
+import CoreFoundation
+import CoreGraphics
+import Darwin
+import Foundation
+import IOKit
+import MultitouchSupport
+import OSLog
+
+@MainActor
+protocol MiddleClickSessionManaging: AnyObject {
+    var requiredFingerCount: Int { get set }
+
+    func activate()
+    func deactivate()
+}
+
+final class MiddleClickMultitouchRuntime: @unchecked Sendable {
+    typealias CreateDeviceListFunction = @convention(c) () -> Unmanaged<CFMutableArray>?
+    typealias RegisterCallbackFunction = @convention(c) (MTDevice, MTFrameCallbackFunction) -> Bool
+    typealias UnregisterCallbackFunction = @convention(c) (MTDevice, MTFrameCallbackFunction) -> Bool
+    typealias StartDeviceFunction = @convention(c) (MTDevice, Int32) -> Void
+    typealias StopDeviceFunction = @convention(c) (MTDevice) -> Void
+    typealias ReleaseDeviceFunction = @convention(c) (MTDevice) -> Void
+
+    private static let frameworkPath =
+        "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
+
+    private let libraryHandle: UnsafeMutableRawPointer
+    private let createDeviceListFunction: CreateDeviceListFunction
+    private let registerCallbackFunction: RegisterCallbackFunction
+    private let unregisterCallbackFunction: UnregisterCallbackFunction
+    private let startDeviceFunction: StartDeviceFunction
+    private let stopDeviceFunction: StopDeviceFunction
+    private let releaseDeviceFunction: ReleaseDeviceFunction
+
+    static func load() -> MiddleClickMultitouchRuntime? {
+        guard let handle = dlopen(frameworkPath, RTLD_LAZY | RTLD_LOCAL) else { return nil }
+        guard
+            let createDeviceList: CreateDeviceListFunction = loadSymbol(
+                "MTDeviceCreateList", from: handle
+            ),
+            let registerCallback: RegisterCallbackFunction = loadSymbol(
+                "MTRegisterContactFrameCallback", from: handle
+            ),
+            let unregisterCallback: UnregisterCallbackFunction = loadSymbol(
+                "MTUnregisterContactFrameCallback", from: handle
+            ),
+            let startDevice: StartDeviceFunction = loadSymbol("MTDeviceStart", from: handle),
+            let stopDevice: StopDeviceFunction = loadSymbol("MTDeviceStop", from: handle),
+            let releaseDevice: ReleaseDeviceFunction = loadSymbol("MTDeviceRelease", from: handle)
+        else {
+            dlclose(handle)
+            return nil
+        }
+        return MiddleClickMultitouchRuntime(
+            libraryHandle: handle,
+            createDeviceListFunction: createDeviceList,
+            registerCallbackFunction: registerCallback,
+            unregisterCallbackFunction: unregisterCallback,
+            startDeviceFunction: startDevice,
+            stopDeviceFunction: stopDevice,
+            releaseDeviceFunction: releaseDevice
+        )
+    }
+
+    private static func loadSymbol<Function>(
+        _ name: String,
+        from handle: UnsafeMutableRawPointer
+    ) -> Function? {
+        guard let symbol = dlsym(handle, name) else { return nil }
+        return unsafeBitCast(symbol, to: Function.self)
+    }
+
+    private init(
+        libraryHandle: UnsafeMutableRawPointer,
+        createDeviceListFunction: CreateDeviceListFunction,
+        registerCallbackFunction: RegisterCallbackFunction,
+        unregisterCallbackFunction: UnregisterCallbackFunction,
+        startDeviceFunction: StartDeviceFunction,
+        stopDeviceFunction: StopDeviceFunction,
+        releaseDeviceFunction: ReleaseDeviceFunction
+    ) {
+        self.libraryHandle = libraryHandle
+        self.createDeviceListFunction = createDeviceListFunction
+        self.registerCallbackFunction = registerCallbackFunction
+        self.unregisterCallbackFunction = unregisterCallbackFunction
+        self.startDeviceFunction = startDeviceFunction
+        self.stopDeviceFunction = stopDeviceFunction
+        self.releaseDeviceFunction = releaseDeviceFunction
+    }
+
+    deinit {
+        dlclose(libraryHandle)
+    }
+
+    func createDeviceList() -> [MTDevice] {
+        createDeviceListFunction()?.takeUnretainedValue() as? [MTDevice] ?? []
+    }
+
+    func register(_ device: MTDevice, callback: MTFrameCallbackFunction) {
+        _ = registerCallbackFunction(device, callback)
+    }
+
+    func unregister(_ device: MTDevice, callback: MTFrameCallbackFunction) {
+        _ = unregisterCallbackFunction(device, callback)
+    }
+
+    func start(_ device: MTDevice) {
+        startDeviceFunction(device, 0)
+    }
+
+    func stop(_ device: MTDevice) {
+        stopDeviceFunction(device)
+    }
+
+    func release(_ device: MTDevice) {
+        releaseDeviceFunction(device)
+    }
+}
+
+private enum MiddleClickEventPoster {
+    static func postClick() {
+        guard let location = CGEvent(source: nil)?.location,
+              let mouseDown = makeEvent(type: .otherMouseDown, location: location),
+              let mouseUp = makeEvent(type: .otherMouseUp, location: location)
+        else {
+            return
+        }
+        mouseDown.post(tap: .cghidEventTap)
+        mouseUp.post(tap: .cghidEventTap)
+    }
+
+    private static func makeEvent(type: CGEventType, location: CGPoint) -> CGEvent? {
+        let event = CGEvent(
+            mouseEventSource: nil,
+            mouseType: type,
+            mouseCursorPosition: location,
+            mouseButton: .center
+        )
+        event?.setIntegerValueField(
+            .mouseEventButtonNumber,
+            value: Int64(CGMouseButton.center.rawValue)
+        )
+        return event
+    }
+}
+
+/// Manages raw trackpad contact frames and emits a middle-click for a completed multi-finger tap.
+///
+/// Behavior follows artginzburg/MiddleClick and the current TrackpadGestures recognizer:
+/// - raw active contacts are filtered from MultitouchSupport frames;
+/// - a tap is recognized only after all configured fingers release within time/movement limits;
+/// - `otherMouseDown/Up` is synthesized at the current cursor location;
+/// - a physical left/right click made with the configured fingers is rewritten in place, and its
+///   matching release tap is suppressed to avoid emitting two middle clicks.
+///
+/// Recovery hooks match artginzburg/MiddleClick:
+/// - `didWakeNotification`: after wake, the multitouch driver may not be ready; rebuild listeners
+///   after a delay.
+/// - `CGDisplayRegisterReconfigurationCallback`: also schedule a rebuild after display changes.
+/// - IOKit `AppleMultitouchDevice` first-match notification: rebuild when built-in or external
+///   trackpads are re-enumerated.
+///
+/// Mutable state is read and written both by multitouch / CGEvent tap C callback threads and by the
+/// main thread, so the type is explicitly marked `@unchecked Sendable`. All lifecycle methods
+/// (`start`, `stop`, `activate`, `deactivate`) and internal restart scheduling are expected to run
+/// on the main thread.
+final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable {
+    // MARK: - Config (set on the main thread, read from callback threads)
+
+    nonisolated(unsafe) var requiredFingerCount: Int = 3 {
+        didSet {
+            tapPipeline.updateFingerCount(requiredFingerCount)
+        }
+    }
+
+    // MARK: - Infrastructure
+
+    private var devices: [MTDevice] = []
+    private var eventTap: CFMachPort?
+    private var runLoopSrc: CFRunLoopSource?
+    private var wakeObserver: NSObjectProtocol?
+    private var ioNotificationPort: IONotificationPortRef?
+    private var ioIterator: io_iterator_t = 0
+    private var displayCallbackRegistered = false
+    private var restartWorkItem: DispatchWorkItem?
+    private let multitouchRuntime: MiddleClickMultitouchRuntime?
+    nonisolated private let tapPipeline = MiddleClickTapPipeline(fingerCount: 3)
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "MiddleClickSession")
+
+    /// After wake, the multitouch driver may not be ready; delay before rebuilding listeners.
+    /// Keep this aligned with artginzburg/MiddleClick at 10 seconds: long sleep can make driver
+    /// re-enumeration vary across hardware, and 2-3 second delays reproduced "MiddleClick stopped
+    /// working" in testing. Users rarely need middle-click in the first few seconds after unlock.
+    private static let wakeRestartDelay: TimeInterval = 10
+
+    // MARK: - Singleton Reference (for C callback access)
+
+    nonisolated(unsafe) static weak var activeSession: MiddleClickSession?
+
+    init(multitouchRuntime: MiddleClickMultitouchRuntime? = .load()) {
+        self.multitouchRuntime = multitouchRuntime
+    }
+
+    // MARK: - Multitouch Callback
+    //
+    // Converts private-framework frames into the same normalized contact snapshots used by the
+    // current TrackpadGestures implementation. Stage values 3 and 4 are make-touch/touching;
+    // hover, break-touch, and linger samples are not active fingers.
+
+    private let touchCallback: MTFrameCallbackFunction = { device, data, nFingers, timestamp, _ in
+        guard let session = MiddleClickSession.activeSession else { return }
+        guard nFingers >= 0 else { return }
+
+        let count = Int(nFingers)
+        var contacts: [MiddleClickContactSnapshot] = []
+        contacts.reserveCapacity(count)
+        if count > 0, let data {
+            for index in 0..<count {
+                let touch = data[index]
+                guard touch.stage.rawValue == 3 || touch.stage.rawValue == 4 else { continue }
+                contacts.append(MiddleClickContactSnapshot(
+                    identifier: Int(touch.identifier),
+                    x: Double(touch.normalizedVector.position.x),
+                    y: Double(touch.normalizedVector.position.y)
+                ))
+            }
+        }
+
+        let pointer = Unmanaged.passUnretained(device).toOpaque()
+        let frame = MiddleClickContactFrame(
+            deviceID: UInt64(UInt(bitPattern: pointer)),
+            timestamp: timestamp,
+            contacts: contacts
+        )
+        if session.tapPipeline.process(frame) {
+            MiddleClickEventPoster.postClick()
+        }
+    }
+
+    // MARK: - CGEvent Tap
+
+    private func startEventTap() {
+        let mask: CGEventMask =
+            (1 << CGEventType.leftMouseDown.rawValue)
+            | (1 << CGEventType.leftMouseUp.rawValue)
+            | (1 << CGEventType.rightMouseDown.rawValue)
+            | (1 << CGEventType.rightMouseUp.rawValue)
+
+        // `@convention(c)` closures cannot capture context, so `self` is passed through `userInfo`.
+        let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
+            guard let ptr = userInfo else { return Unmanaged.passUnretained(event) }
+            let session = Unmanaged<MiddleClickSession>.fromOpaque(ptr).takeUnretainedValue()
+            let kCenter = Int64(CGMouseButton.center.rawValue)
+            let passthrough = Unmanaged.passUnretained(event)
+
+            let nativeEvent: MiddleClickNativeMouseEvent?
+            switch type {
+            case .leftMouseDown:
+                nativeEvent = .down(.left)
+            case .leftMouseUp:
+                nativeEvent = .up(.left)
+            case .rightMouseDown:
+                nativeEvent = .down(.right)
+            case .rightMouseUp:
+                nativeEvent = .up(.right)
+            default:
+                nativeEvent = nil
+            }
+
+            if let nativeEvent,
+               session.tapPipeline.handleNativeMouseEvent(nativeEvent) == .rewriteAsMiddle {
+                let isDown = type == .leftMouseDown || type == .rightMouseDown
+                event.type = isDown ? .otherMouseDown : .otherMouseUp
+                event.setIntegerValueField(.mouseEventButtonNumber, value: kCenter)
+            }
+
+            return passthrough
+        }
+
+        guard let tap = CGEvent.tapCreate(
+            tap: .cghidEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: tapCallback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else {
+            logger.error("failed to create CGEvent tap; check Accessibility permission")
+            return
+        }
+
+        guard let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            CFMachPortInvalidate(tap)
+            return
+        }
+
+        CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+
+        self.eventTap = tap
+        self.runLoopSrc = src
+        logger.info("CGEvent tap started")
+    }
+
+    private func stopEventTap() {
+        guard let tap = eventTap, CFMachPortIsValid(tap) else {
+            eventTap = nil
+            runLoopSrc = nil
+            return
+        }
+        CGEvent.tapEnable(tap: tap, enable: false)
+        if let src = runLoopSrc {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), src, .commonModes)
+            runLoopSrc = nil
+        }
+        CFMachPortInvalidate(tap)
+        eventTap = nil
+        logger.info("CGEvent tap stopped")
+    }
+
+    // MARK: - Multitouch Listeners
+
+    private func startTouchListeners() {
+        guard devices.isEmpty else { return }
+        guard let multitouchRuntime else {
+            logger.error("MultitouchSupport is unavailable; middle click cannot start")
+            return
+        }
+        devices = multitouchRuntime.createDeviceList()
+        if devices.isEmpty {
+            logger.warning("no multitouch devices detected; waiting for IOKit notification or wake retry")
+        }
+        devices.forEach {
+            multitouchRuntime.register($0, callback: touchCallback)
+            multitouchRuntime.start($0)
+        }
+    }
+
+    private func stopTouchListeners() {
+        devices.forEach {
+            multitouchRuntime?.unregister($0, callback: touchCallback)
+            multitouchRuntime?.stop($0)
+            multitouchRuntime?.release($0)
+        }
+        devices.removeAll()
+        tapPipeline.reset()
+    }
+
+    // MARK: - Start / Stop
+
+    func start() {
+        startTouchListeners()
+        startEventTap()
+        observeSystemWake()
+        observeMultitouchDeviceArrival()
+        observeDisplayReconfiguration()
+        logger.info("multitouch listener started deviceCount=\(self.devices.count, privacy: .public)")
+    }
+
+    func stop() {
+        cancelPendingRestart()
+        removeDisplayReconfigurationObserver()
+        removeMultitouchDeviceObserver()
+        removeSystemWakeObserver()
+        stopEventTap()
+        stopTouchListeners()
+        logger.info("multitouch listener stopped")
+    }
+
+    func activate() {
+        MiddleClickSession.activeSession?.stop()
+        MiddleClickSession.activeSession = self
+        start()
+    }
+
+    func deactivate() {
+        if MiddleClickSession.activeSession === self {
+            MiddleClickSession.activeSession = nil
+        }
+        stop()
+    }
+
+    // MARK: - System Recovery: Listener Restart
+
+    /// Rebuilds fragile listeners (`CGEvent tap` and `MTDevice`) while keeping the session object.
+    /// Used after wake, display reconfiguration, and trackpad re-enumeration.
+    private func restartListeners() {
+        logger.info("rebuilding multitouch and CGEvent tap listeners")
+        stopEventTap()
+        stopTouchListeners()
+        startTouchListeners()
+        startEventTap()
+        logger.info("listener rebuild completed deviceCount=\(self.devices.count, privacy: .public)")
+    }
+
+    private func scheduleRestart(after delay: TimeInterval, reason: String) {
+        logger.info("scheduled listener restart reason=\(reason, privacy: .public) delay=\(delay, privacy: .public)")
+        cancelPendingRestart()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.restartWorkItem = nil
+            self.restartListeners()
+        }
+        restartWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func cancelPendingRestart() {
+        restartWorkItem?.cancel()
+        restartWorkItem = nil
+    }
+
+    // MARK: - NSWorkspace Wake Notification
+
+    private func observeSystemWake() {
+        guard wakeObserver == nil else { return }
+        let restartDelay = Self.wakeRestartDelay
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.scheduleRestart(after: restartDelay, reason: "systemWake")
+            }
+        }
+    }
+
+    private func removeSystemWakeObserver() {
+        if let observer = wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            wakeObserver = nil
+        }
+    }
+
+    // MARK: - IOKit Trackpad Device Arrival Notification
+
+    /// Observes `AppleMultitouchDevice` first-match notifications. When the system re-enumerates
+    /// trackpads after wake, external attach/detach, or driver reset, schedule a short-delay rebuild
+    /// so the MTDevice list matches the actual hardware.
+    private func observeMultitouchDeviceArrival() {
+        guard ioNotificationPort == nil else { return }
+        guard let port = IONotificationPortCreate(kIOMainPortDefault) else {
+            logger.error("failed to create IONotificationPort; skipping device arrival observer")
+            return
+        }
+
+        if let source = IONotificationPortGetRunLoopSource(port)?.takeUnretainedValue() {
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+        }
+
+        let userInfo = Unmanaged.passUnretained(self).toOpaque()
+        var iterator: io_iterator_t = 0
+        let result = IOServiceAddMatchingNotification(
+            port,
+            kIOFirstMatchNotification,
+            IOServiceMatching("AppleMultitouchDevice"),
+            { userData, iterator in
+                // The iterator must be drained or subsequent notifications will not fire.
+                MiddleClickSession.drainIterator(iterator)
+                guard let userData else { return }
+                let session = Unmanaged<MiddleClickSession>.fromOpaque(userData).takeUnretainedValue()
+                DispatchQueue.main.async {
+                    session.scheduleRestart(after: 2, reason: "multitouchDeviceArrived")
+                }
+            },
+            userInfo,
+            &iterator
+        )
+
+        guard result == KERN_SUCCESS else {
+            logger.error("IOServiceAddMatchingNotification failed result=\(result, privacy: .public)")
+            IONotificationPortDestroy(port)
+            return
+        }
+
+        // Initial registration must drain once to arm notifications.
+        Self.drainIterator(iterator)
+
+        ioNotificationPort = port
+        ioIterator = iterator
+    }
+
+    private func removeMultitouchDeviceObserver() {
+        if ioIterator != 0 {
+            IOObjectRelease(ioIterator)
+            ioIterator = 0
+        }
+        if let port = ioNotificationPort {
+            IONotificationPortDestroy(port)
+            ioNotificationPort = nil
+        }
+    }
+
+    private static func drainIterator(_ iterator: io_iterator_t) {
+        while true {
+            let next = IOIteratorNext(iterator)
+            if next == 0 { break }
+            IOObjectRelease(next)
+        }
+    }
+
+    // MARK: - Display Reconfiguration Callback
+
+    private static let displayReconfigurationCallback: CGDisplayReconfigurationCallBack = { _, flags, userData in
+        let interesting: CGDisplayChangeSummaryFlags = [.setModeFlag, .addFlag, .removeFlag, .disabledFlag]
+        guard !flags.intersection(interesting).isEmpty else { return }
+        guard let userData else { return }
+        let session = Unmanaged<MiddleClickSession>.fromOpaque(userData).takeUnretainedValue()
+        DispatchQueue.main.async {
+            session.scheduleRestart(after: 2, reason: "displayReconfigured")
+        }
+    }
+
+    /// Observes display reconfiguration. Clamshell changes, external-display attach, and topology
+    /// changes can invalidate the multitouch path. Match artginzburg/MiddleClick by restarting only
+    /// for substantive changes such as setMode, add, remove, or disabled.
+    private func observeDisplayReconfiguration() {
+        guard !displayCallbackRegistered else { return }
+        let userInfo = Unmanaged.passUnretained(self).toOpaque()
+        let result = CGDisplayRegisterReconfigurationCallback(Self.displayReconfigurationCallback, userInfo)
+        if result == .success {
+            displayCallbackRegistered = true
+        } else {
+            logger.error("CGDisplayRegisterReconfigurationCallback failed result=\(result.rawValue, privacy: .public)")
+        }
+    }
+
+    private func removeDisplayReconfigurationObserver() {
+        guard displayCallbackRegistered else { return }
+        let userInfo = Unmanaged.passUnretained(self).toOpaque()
+        CGDisplayRemoveReconfigurationCallback(Self.displayReconfigurationCallback, userInfo)
+        displayCallbackRegistered = false
+    }
+}

@@ -45,7 +45,7 @@ struct PluginFilterBarView: View {
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(SettingsStyle.fieldBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -150,9 +150,9 @@ private struct PluginFilterChip: View {
         }
 
         if isHovered {
-            return Color(nsColor: .controlBackgroundColor)
+            return SettingsStyle.recessedControlBackground.opacity(0.72)
         }
 
-        return Color(nsColor: .controlBackgroundColor).opacity(0.5)
+        return SettingsStyle.recessedControlBackground.opacity(0.42)
     }
 }

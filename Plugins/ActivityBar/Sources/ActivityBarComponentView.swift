@@ -123,6 +123,8 @@ struct ActivityBarComponentView: View {
     let localization: PluginLocalization
     let dismiss: () -> Void
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     @State private var hoveredDate: String?
     @State private var hoveredScreenTimeDate: String?
     @State private var expandedAppName: String?
@@ -205,7 +207,11 @@ struct ActivityBarComponentView: View {
             footerBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(ActivityBarComponentBackground(cornerRadius: ActivityBarComponentLayout.cardCornerRadius))
+        .background(
+            PluginComponentCardBackground(
+                cornerRadius: ActivityBarComponentLayout.cardCornerRadius
+            )
+        )
         .clipShape(
             RoundedRectangle(
                 cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
@@ -305,7 +311,7 @@ struct ActivityBarComponentView: View {
             if let fact = inputInsightText {
                 Text(fact)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.primary.opacity(0.7))
+                    .foregroundStyle(theme.text.secondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -313,7 +319,7 @@ struct ActivityBarComponentView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        .blue.opacity(0.08),
+                        theme.interaction.subtleTint(.blue),
                         in: RoundedRectangle(
                             cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
                             style: .continuous
@@ -343,7 +349,7 @@ struct ActivityBarComponentView: View {
 
                 Text(label)
                     .font(.system(size: 10))
-                    .foregroundStyle(.primary.opacity(0.5))
+                    .foregroundStyle(theme.text.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -354,7 +360,7 @@ struct ActivityBarComponentView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            .primary.opacity(0.04),
+            theme.surfaces.nested,
             in: RoundedRectangle(
                 cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
                 style: .continuous
@@ -435,7 +441,7 @@ struct ActivityBarComponentView: View {
                 if let detail = row.detail {
                     Text(detail)
                         .font(.caption)
-                        .foregroundStyle(.primary.opacity(0.55))
+                        .foregroundStyle(theme.text.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
@@ -445,14 +451,14 @@ struct ActivityBarComponentView: View {
 
             Text(ActivityBarFormatting.duration(row.duration))
                 .font(.body.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.primary.opacity(0.55))
+                .foregroundStyle(theme.text.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(
-            .primary.opacity(0.04),
+            theme.surfaces.nested,
             in: RoundedRectangle(
                 cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
                 style: .continuous
@@ -1332,14 +1338,5 @@ struct ActivityBarComponentView: View {
         let tint: Color
         let systemImage: String
         let iconSize: CGFloat
-    }
-}
-
-private struct ActivityBarComponentBackground: View {
-    let cornerRadius: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.primary.opacity(0.045))
     }
 }

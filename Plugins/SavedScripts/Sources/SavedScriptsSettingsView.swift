@@ -99,7 +99,7 @@ struct SavedScriptsSettingsView: View {
             } else if filteredScripts.isEmpty {
                 ContentUnavailableView.search(text: query)
                     .frame(maxWidth: .infinity, minHeight: 180)
-                    .pluginSettingsCardBackground(.host)
+                    .pluginSettingsCardBackground(.standard)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(filteredScripts.enumerated()), id: \.element.id) { index, script in
@@ -109,7 +109,7 @@ struct SavedScriptsSettingsView: View {
                         }
                     }
                 }
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
             }
 
             if let loadError = store.loadError {
@@ -148,7 +148,7 @@ struct SavedScriptsSettingsView: View {
             .disabled(store.loadError != nil)
         }
         .frame(maxWidth: .infinity, minHeight: 220)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private func scriptRow(_ script: SavedScript) -> some View {
@@ -312,7 +312,7 @@ struct SavedScriptsSettingsView: View {
             }
             .padding(PluginSettingsTheme.Spacing.cardContent)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -334,7 +334,7 @@ struct SavedScriptsSettingsView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(PluginSettingsTheme.Spacing.cardContent)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -468,7 +468,7 @@ private struct SavedScriptEditorSheet: View {
                         .frame(minHeight: 210)
                         .padding(6)
                         .background(
-                            PluginSettingsTheme.Palette.nativeFieldBackground,
+                            PluginSettingsTheme.Palette.fieldBackground,
                             in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field)
                         )
                 }

@@ -31,7 +31,7 @@ struct SettingsView: View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
         let orderedPluginPanes = FeatureSettingsPane.settingsSidebarOrder(
-            configurationIDs: pluginHost.pluginConfigurationItems.map(\.id)
+            configurationIDs: pluginHost.pluginSettingsItems.map(\.id)
         )
 
         return ZStack {
@@ -99,7 +99,7 @@ struct SettingsView: View {
                 SettingsHistoryNavigationControls(coordinator: navigationCoordinator)
                     .opacity(navigationCoordinator.isUnifiedSearchPresented ? 0 : 1)
                     .allowsHitTesting(!navigationCoordinator.isUnifiedSearchPresented)
-                    .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
+                .accessibilityHidden(navigationCoordinator.isUnifiedSearchPresented)
             }
         }
         .id(runtimeLocale.revision)
@@ -308,17 +308,20 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            Form {
+            SettingsGroupedFormLayout(widthPolicy: .general) { widths in
                 Section {
                     LaunchAtLoginSettingsRow(controller: launchAtLoginController)
                         .generalSettingsSearchAnchor(
                             target: .launchAtLogin,
                             activeTarget: activeSearchTarget
                         )
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
                 } header: {
-                    Text(AppL10n.settings("general.section.startup", defaultValue: "启动"))
+                    SettingsGroupedFormSectionHeader(
+                        title: AppL10n.settings("general.section.startup", defaultValue: "启动"),
+                        layoutWidth: widths.readableContent
+                    )
                 }
-
                 Section {
                     AppearanceSettingsRow(
                         selectionRawValue: $appearancePreferenceRawValue,
@@ -333,10 +336,13 @@ struct GeneralSettingsView: View {
                             target: .language,
                             activeTarget: activeSearchTarget
                         )
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
                 } header: {
-                    Text(AppL10n.settings("general.section.appearance", defaultValue: "外观"))
+                    SettingsGroupedFormSectionHeader(
+                        title: AppL10n.settings("general.section.appearance", defaultValue: "外观"),
+                        layoutWidth: widths.readableContent
+                    )
                 }
-
                 Section {
                     MenuBarIconSettingsView(
                         iconSettings: menuBarIconSettings,
@@ -346,36 +352,49 @@ struct GeneralSettingsView: View {
                         target: .menuBarIcon,
                         activeTarget: activeSearchTarget
                     )
+                    .settingsGroupedFormRowWidth(widths.sectionLayout)
                     MenuBarClickBehaviorSettingsRow(selectionRawValue: $clickBehaviorRawValue)
                         .generalSettingsSearchAnchor(
                             target: .menuBarClickBehavior,
                             activeTarget: activeSearchTarget
                         )
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
                 } header: {
-                    Text(AppL10n.settings("general.section.menuBarIcon", defaultValue: "状态栏图标"))
+                    SettingsGroupedFormSectionHeader(
+                        title: AppL10n.settings("general.section.menuBarIcon", defaultValue: "状态栏图标"),
+                        layoutWidth: widths.readableContent
+                    )
                 }
-
                 Section {
                     AppShortcutSettingsRows(pluginHost: pluginHost)
                         .generalSettingsSearchAnchor(
                             target: .appShortcuts,
                             activeTarget: activeSearchTarget
                         )
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
                 } header: {
-                    Text(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"))
+                    SettingsGroupedFormSectionHeader(
+                        title: AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"),
+                        layoutWidth: widths.readableContent
+                    )
                 }
-
                 Section {
                     PreferencesBackupSettingsRow(pluginHost: pluginHost)
                         .generalSettingsSearchAnchor(
                             target: .preferencesBackup,
                             activeTarget: activeSearchTarget
                         )
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
                 } header: {
-                    Text(AppL10n.preferencesBackup("general.section.preferencesBackup", defaultValue: "偏好设置备份"))
+                    SettingsGroupedFormSectionHeader(
+                        title: AppL10n.preferencesBackup(
+                            "general.section.preferencesBackup",
+                            defaultValue: "偏好设置备份"
+                        ),
+                        layoutWidth: widths.readableContent
+                    )
                 }
             }
-            .formStyle(.grouped)
             .onAppear {
                 applySearchRevealRequest(
                     navigationCoordinator.searchRevealRequest,
@@ -501,91 +520,131 @@ private struct AppShortcutSettingsRows: View {
 
 private struct AppShortcutSettingsRow: View {
     private enum Layout {
-        static let recorderWidth: CGFloat = 126
+        static let recorderWidth = PluginSettingsTheme.Size.shortcutRecorderWidth
         static let actionButtonSize: CGFloat = 22
         static let controlSpacing = PluginSettingsTheme.Spacing.controlCluster
         static let controlClusterWidth = recorderWidth + controlSpacing + actionButtonSize
+        static let summaryMinWidth: CGFloat = 220
     }
 
     @ObservedObject var pluginHost: PluginHost
     let item: AppShortcutSettingsItem
+    @State private var pendingWarning: CommonShortcutBindingWarning?
 
     var body: some View {
-        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
-            ZStack {
-                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.12))
-
-                Image(systemName: PluginSystemImage.resolvedName(item.systemImage))
-                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+                appIcon
+                summary
+                    .frame(minWidth: Layout.summaryMinWidth)
+                shortcutControl
             }
-            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.title)
-                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-
-                Text(item.errorMessage ?? item.description)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(item.errorMessage == nil ? Color.secondary : Color.red)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack(spacing: Layout.controlSpacing) {
-                PluginShortcutRecorder(
-                    title: item.title,
-                    displayText: item.bindingText,
-                    minWidth: Layout.recorderWidth,
-                    onRecord: { binding in
-                        PluginShortcutRecordingResult.from(
-                            errorMessage: pluginHost.setAppShortcutBindingAndReturnError(
-                                binding,
-                                for: item.action,
-                                assignmentID: item.assignmentID
-                            )
-                        )
-                    },
-                    onBeginRecording: {
-                        pluginHost.clearAppShortcutError(item.action)
-                    }
-                )
-                .frame(width: Layout.recorderWidth)
-
-                if item.canClear {
-                    Button {
-                        pluginHost.clearAppShortcut(
-                            item.action,
-                            assignmentID: item.assignmentID
-                        )
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(PluginSettingsTheme.Typography.rowIcon)
-                            .symbolRenderingMode(.monochrome)
-                            .frame(
-                                width: Layout.actionButtonSize,
-                                height: Layout.actionButtonSize
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.secondary)
-                    .help(AppL10n.settings("shortcuts.clearHelp", defaultValue: "清除快捷键"))
-                } else {
-                    Color.clear
-                        .frame(
-                            width: Layout.actionButtonSize,
-                            height: Layout.actionButtonSize
-                        )
-                        .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+                    appIcon
+                    summary
                 }
+
+                shortcutControl
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .frame(width: Layout.controlClusterWidth, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+        .alert(item: $pendingWarning) { warning in
+            commonShortcutBindingWarningAlert(warning) {
+                _ = save(warning.binding)
+            }
+        }
+    }
+
+    private func record(_ binding: ShortcutBinding) -> PluginShortcutRecordingResult {
+        if MacToolsReservedShortcutBindings.requiresConflictWarning(for: binding) {
+            pendingWarning = CommonShortcutBindingWarning(shortcutID: item.id, binding: binding)
+            return .accepted
+        }
+
+        return PluginShortcutRecordingResult.from(errorMessage: save(binding))
+    }
+
+    private func save(_ binding: ShortcutBinding) -> String? {
+        pluginHost.setAppShortcutBindingAndReturnError(
+            binding,
+            for: item.action,
+            assignmentID: item.assignmentID
+        )
+    }
+
+    private var appIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                .fill(Color.accentColor.opacity(0.12))
+
+            Image(systemName: item.systemImage)
+                .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+        }
+        .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+    }
+
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(item.title)
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Text(item.errorMessage ?? item.description)
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(item.errorMessage == nil ? Color.secondary : Color.red)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var shortcutControl: some View {
+        HStack(spacing: Layout.controlSpacing) {
+            PluginShortcutRecorder(
+                title: item.title,
+                displayText: item.bindingText,
+                minWidth: Layout.recorderWidth,
+                onRecord: { binding in
+                    record(binding)
+                },
+                onBeginRecording: {
+                    pluginHost.clearAppShortcutError(item.action)
+                }
+            )
+            .frame(width: Layout.recorderWidth)
+
+            if item.canClear {
+                Button {
+                    pluginHost.clearAppShortcut(
+                        item.action,
+                        assignmentID: item.assignmentID
+                    )
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(PluginSettingsTheme.Typography.rowIcon)
+                        .symbolRenderingMode(.monochrome)
+                        .frame(
+                            width: Layout.actionButtonSize,
+                            height: Layout.actionButtonSize
+                        )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.secondary)
+                .help(AppL10n.settings("shortcuts.clearHelp", defaultValue: "清除快捷键"))
+            } else {
+                Color.clear
+                    .frame(width: Layout.actionButtonSize, height: Layout.actionButtonSize)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(width: Layout.controlClusterWidth, alignment: .trailing)
     }
 }
 
@@ -994,7 +1053,7 @@ private struct PreferencesSelectionFields: View {
         .toggleStyle(.checkbox)
         .font(PluginSettingsTheme.Typography.rowTitle)
         .padding(16)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private func selectionRow(
@@ -1489,7 +1548,7 @@ private struct FeatureSettingsView: View {
     var body: some View {
         HSplitView {
             FeatureSettingsSidebar(
-                configurationItems: pluginHost.pluginConfigurationItems,
+                configurationItems: pluginHost.pluginSettingsItems,
                 orderedPanes: orderedPanes,
                 selection: selectionBinding,
                 onSearch: {
@@ -1516,7 +1575,7 @@ private struct FeatureSettingsView: View {
                 maxHeight: .infinity
             )
         }
-        .onChange(of: pluginHost.pluginConfigurationItems.map(\.id)) {
+        .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
             navigationCoordinator.reconcileCurrentDestinationAvailability()
         }
     }
@@ -1536,7 +1595,7 @@ private struct FeatureSettingsView: View {
 }
 
 private struct FeatureSettingsSidebar: View {
-    let configurationItems: [PluginConfigurationItem]
+    let configurationItems: [PluginSettingsPageItem]
     let orderedPanes: [FeatureSettingsPane]
     @Binding var selection: FeatureSettingsPane
     let onSearch: () -> Void
@@ -1594,8 +1653,7 @@ private struct FeatureSettingsSidebar: View {
             }
         }
         .background {
-            SettingsSidebarMaterialBackground()
-                .allowsHitTesting(false)
+            SettingsSidebarBackground()
         }
     }
 
@@ -1768,6 +1826,30 @@ private struct FeatureSettingsSidebar: View {
     }
 }
 
+private struct SettingsSidebarBackground: View {
+    private enum Layout {
+        /// Aqua's sidebar material is intentionally gray. Let some of the
+        /// semantic window surface show through while preserving its depth.
+        static let lightMaterialWashOpacity = 0.45
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            SettingsStyle.contentBackground
+
+            SettingsSidebarMaterialBackground()
+
+            if colorScheme == .light {
+                SettingsStyle.contentBackground
+                    .opacity(Layout.lightMaterialWashOpacity)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 private struct SettingsSidebarMaterialBackground: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
@@ -1781,7 +1863,9 @@ private struct SettingsSidebarMaterialBackground: NSViewRepresentable {
 
     private func configure(_ view: NSVisualEffectView) {
         view.material = .sidebar
-        view.blendingMode = .behindWindow
+        // Keep the semantic sidebar material, but sample the app-owned settings
+        // surface so a fixed App appearance cannot pick up the opposite Desktop tone.
+        view.blendingMode = .withinWindow
         view.state = .followsWindowActiveState
     }
 }
@@ -1861,9 +1945,9 @@ private struct FeatureSettingsDetailPane: View {
                 },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .dashboard) },
                 onOpenPanel: showDashboard,
-                configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
+                configurationPluginIDs: Set(pluginHost.pluginSettingsItems.map(\.pluginID)),
                 uninstallConfirmationSession: uninstallConfirmationSession,
-                onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
+                onOpenSettings: pluginHost.presentPluginSettings(pluginID:),
                 onOpenMarketplace: pluginHost.presentPluginMarketplace,
                 onUninstall: { pluginID in
                     try pluginHost.uninstallDynamicPlugin(pluginID: pluginID)
@@ -1896,9 +1980,9 @@ private struct FeatureSettingsDetailPane: View {
                 },
                 onResetOrder: { pluginHost.resetPluginOrder(on: .featurePanel) },
                 onOpenPanel: showFeaturePanel,
-                configurationPluginIDs: Set(pluginHost.pluginConfigurationItems.map(\.pluginID)),
+                configurationPluginIDs: Set(pluginHost.pluginSettingsItems.map(\.pluginID)),
                 uninstallConfirmationSession: uninstallConfirmationSession,
-                onOpenSettings: pluginHost.presentPluginConfiguration(pluginID:),
+                onOpenSettings: pluginHost.presentPluginSettings(pluginID:),
                 onOpenMarketplace: pluginHost.presentPluginMarketplace,
                 onUninstall: { pluginID in
                     try pluginHost.uninstallDynamicPlugin(pluginID: pluginID)
@@ -1911,7 +1995,7 @@ private struct FeatureSettingsDetailPane: View {
                 uninstallConfirmationSession: uninstallConfirmationSession
             )
         case let .configuration(pluginID):
-            PluginConfigurationDetailPane(
+            PluginSettingsDetailPane(
                 pluginHost: pluginHost,
                 navigationCoordinator: navigationCoordinator,
                 item: configurationItem(for: pluginID)
@@ -1919,8 +2003,8 @@ private struct FeatureSettingsDetailPane: View {
         }
     }
 
-    private func configurationItem(for pluginID: String) -> PluginConfigurationItem? {
-        pluginHost.pluginConfigurationItems.first { $0.id == pluginID }
+    private func configurationItem(for pluginID: String) -> PluginSettingsPageItem? {
+        pluginHost.pluginSettingsItems.first { $0.id == pluginID }
     }
 }
 
@@ -1952,106 +2036,109 @@ private struct SurfaceLayoutSettingsView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    HStack(alignment: .center, spacing: 12) {
-                        SettingsPageHeader(
-                            title: title,
-                            description: description,
-                            systemImage: systemImage,
-                            iconTint: iconTint
-                        )
-
-                        Button(AppL10n.settings(
-                            "plugins.layout.restoreDefaultOrder",
-                            defaultValue: "恢复默认排列"
-                        ), action: onResetOrder)
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(items.count < 2)
-
-                        Button(action: onOpenPanel) {
-                            Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
-                        }
-                        .buttonStyle(.borderedProminent)
+            SettingsGroupedFormPageScaffold(
+                header: SettingsPageHeaderConfiguration(
+                    title: title,
+                    description: description,
+                    systemImage: systemImage,
+                    iconTint: iconTint
+                ),
+                headerAccessory: {
+                    Button(AppL10n.settings(
+                        "plugins.layout.restoreDefaultOrder",
+                        defaultValue: "恢复默认排列"
+                    ), action: onResetOrder)
+                        .buttonStyle(.bordered)
                         .controlSize(.small)
-                    }
+                        .disabled(items.count < 2)
 
-                    if uninstallConfirmationSession.isConfirmationPaused {
+                    Button(action: onOpenPanel) {
+                        Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            ) { widths in
+                if uninstallConfirmationSession.isConfirmationPaused {
+                    Section {
                         PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
-                    }
-
-                    SettingsCardContainer {
-                        if items.isEmpty {
-                            ContentUnavailableView(
-                                emptyTitle,
-                                systemImage: systemImage,
-                                description: Text(emptyDescription)
-                            )
-                            .frame(maxWidth: .infinity, minHeight: 180)
-                        } else {
-                            FeatureManagementTableView(
-                                items: items.map {
-                                    FeatureManagementTableItem(
-                                        surfaceItem: $0,
-                                        hasSettings: configurationPluginIDs.contains($0.id)
-                                    )
-                                },
-                                mode: .surface(surface),
-                                highlightedPluginID: highlightedPluginID(in: items),
-                                onMove: onMove,
-                                onSetVisible: onSetVisible,
-                                onOpenSettings: onOpenSettings,
-                                onOpenMarketplace: onOpenMarketplace,
-                                onRequestUninstall: requestUninstall
-                            )
-                            .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
-                            .overlay(alignment: .topLeading) {
-                                SurfaceLayoutSearchAnchors(
-                                    surface: surface,
-                                    items: items,
-                                    isHidden: false
-                                )
-                            }
-                        }
-                    }
-
-                    if !hiddenItems.isEmpty {
-                        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                            Label(hiddenSectionTitle, systemImage: "eye.slash")
-                                .font(PluginSettingsTheme.Typography.sectionTitle)
-                                .foregroundStyle(.secondary)
-
-                            SettingsCardContainer {
-                                FeatureManagementTableView(
-                                    items: hiddenItems.map {
-                                        FeatureManagementTableItem(
-                                            surfaceItem: $0,
-                                            hasSettings: configurationPluginIDs.contains($0.id)
-                                        )
-                                    },
-                                    mode: .surface(surface),
-                                    isReorderEnabled: false,
-                                    highlightedPluginID: highlightedPluginID(in: hiddenItems),
-                                    onSetVisible: onSetVisible,
-                                    onOpenSettings: onOpenSettings,
-                                    onOpenMarketplace: onOpenMarketplace,
-                                    onRequestUninstall: requestUninstall
-                                )
-                                .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
-                                .overlay(alignment: .topLeading) {
-                                    SurfaceLayoutSearchAnchors(
-                                        surface: surface,
-                                        items: hiddenItems,
-                                        isHidden: true
-                                    )
-                                }
-                            }
-                        }
+                            .settingsGroupedFormRowWidth(widths.sectionLayout)
                     }
                 }
-                .padding(PluginSettingsTheme.Spacing.pagePadding)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                Section {
+                    if items.isEmpty {
+                        ContentUnavailableView(
+                            emptyTitle,
+                            systemImage: systemImage,
+                            description: Text(emptyDescription)
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
+                    } else {
+                        FeatureManagementTableView(
+                            items: items.map {
+                                FeatureManagementTableItem(
+                                    surfaceItem: $0,
+                                    hasSettings: configurationPluginIDs.contains($0.id)
+                                )
+                            },
+                            mode: .surface(surface),
+                            highlightedPluginID: highlightedPluginID(in: items),
+                            onMove: onMove,
+                            onSetVisible: onSetVisible,
+                            onOpenSettings: onOpenSettings,
+                            onOpenMarketplace: onOpenMarketplace,
+                            onRequestUninstall: requestUninstall
+                        )
+                        .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
+                        .overlay(alignment: .topLeading) {
+                            SurfaceLayoutSearchAnchors(
+                                surface: surface,
+                                items: items,
+                                isHidden: false
+                            )
+                        }
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
+                        .listRowInsets(EdgeInsets())
+                    }
+                }
+
+                if !hiddenItems.isEmpty {
+                    Section {
+                        FeatureManagementTableView(
+                            items: hiddenItems.map {
+                                FeatureManagementTableItem(
+                                    surfaceItem: $0,
+                                    hasSettings: configurationPluginIDs.contains($0.id)
+                                )
+                            },
+                            mode: .surface(surface),
+                            isReorderEnabled: false,
+                            highlightedPluginID: highlightedPluginID(in: hiddenItems),
+                            onSetVisible: onSetVisible,
+                            onOpenSettings: onOpenSettings,
+                            onOpenMarketplace: onOpenMarketplace,
+                            onRequestUninstall: requestUninstall
+                        )
+                        .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
+                        .overlay(alignment: .topLeading) {
+                            SurfaceLayoutSearchAnchors(
+                                surface: surface,
+                                items: hiddenItems,
+                                isHidden: true
+                            )
+                        }
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
+                        .listRowInsets(EdgeInsets())
+                    } header: {
+                        SettingsGroupedFormSectionHeader(
+                            title: hiddenSectionTitle,
+                            systemImage: "eye.slash",
+                            layoutWidth: widths.readableContent
+                        )
+                    }
+                }
             }
             .onAppear {
                 applySearchRevealRequest(
@@ -2063,7 +2150,6 @@ private struct SurfaceLayoutSettingsView: View {
                 applySearchRevealRequest(request, proxy: proxy)
             }
         }
-        .background(SettingsStyle.contentBackground)
         .onDisappear {
             clearSearchTargetTask?.cancel()
             clearSearchTargetTask = nil
@@ -2197,20 +2283,6 @@ private struct SurfaceLayoutSettingsView: View {
     }
 }
 
-private struct SettingsCardContainer<Content: View>: View {
-    let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        content
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .pluginSettingsCardBackground(.host)
-    }
-}
-
 private struct SurfaceLayoutSearchAnchors: View {
     let surface: PluginDisplaySurface
     let items: [PluginSurfaceLayoutItem]
@@ -2237,31 +2309,19 @@ private struct SurfaceLayoutSearchAnchors: View {
     }
 }
 
-private struct PluginConfigurationDetailPane: View {
+private struct PluginSettingsDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
-    let item: PluginConfigurationItem?
+    let item: PluginSettingsPageItem?
     @State private var activeSearchTarget: PluginSettingsSearchTarget?
     @State private var clearSearchTargetTask: Task<Void, Never>?
 
     var body: some View {
         Group {
             if let item {
-                if item.prefersFullHeight {
-                    ScrollViewReader { proxy in
-                        VStack(alignment: .leading, spacing: 0) {
-                            PluginConfigurationHeader(item: item)
-                                .padding(PluginSettingsTheme.Spacing.pagePadding)
-
-                            if item.hasCustomConfiguration {
-                                pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
-                                    .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
-                                    .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
-                                    .padding(.bottom, PluginSettingsTheme.Spacing.pagePadding)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                ScrollViewReader { proxy in
+                    pageContent(item)
+                        .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
                         .onAppear {
                             applySearchRevealRequest(
                                 navigationCoordinator.searchRevealRequest,
@@ -2276,55 +2336,6 @@ private struct PluginConfigurationDetailPane: View {
                                 proxy: proxy
                             )
                         }
-                    }
-                } else {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 18) {
-                                PluginConfigurationHeader(item: item)
-
-                                if !item.settingsCards.isEmpty {
-                                    PluginSettingsCardSection(
-                                        pluginHost: pluginHost,
-                                        cards: item.settingsCards
-                                    )
-                                }
-
-                                if !item.permissionCards.isEmpty {
-                                    PluginPermissionCardSection(
-                                        pluginHost: pluginHost,
-                                        cards: item.permissionCards
-                                    )
-                                }
-
-                                if item.hasCustomConfiguration {
-                                    pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
-                                }
-
-                                if !item.shortcutItems.isEmpty {
-                                    PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
-                                }
-                            }
-                            .environment(\.pluginSettingsSearchTarget, activeSearchTarget)
-                            .padding(PluginSettingsTheme.Spacing.pagePadding)
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-                        }
-                        .background(SettingsStyle.contentBackground)
-                        .onAppear {
-                            applySearchRevealRequest(
-                                navigationCoordinator.searchRevealRequest,
-                                pluginID: item.pluginID,
-                                proxy: proxy
-                            )
-                        }
-                        .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
-                            applySearchRevealRequest(
-                                request,
-                                pluginID: item.pluginID,
-                                proxy: proxy
-                            )
-                        }
-                    }
                 }
             } else {
                 ContentUnavailableView(
@@ -2338,7 +2349,7 @@ private struct PluginConfigurationDetailPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(SettingsStyle.contentBackground)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onDisappear {
             clearSearchTargetTask?.cancel()
             clearSearchTargetTask = nil
@@ -2348,6 +2359,24 @@ private struct PluginConfigurationDetailPane: View {
                 )
             }
             activeSearchTarget = nil
+        }
+    }
+
+    @ViewBuilder
+    private func pageContent(_ item: PluginSettingsPageItem) -> some View {
+        Group {
+            switch item.layout {
+            case .form:
+                PluginFormPage(pluginHost: pluginHost, item: item)
+            case .workspace:
+                PluginWorkspacePage(pluginHost: pluginHost, item: item)
+            }
+        }
+        .onAppear {
+            pluginHost.setPluginSettingsPage(item.pluginID, visible: true)
+        }
+        .onDisappear {
+            pluginHost.setPluginSettingsPage(item.pluginID, visible: false)
         }
     }
 
@@ -2398,196 +2427,523 @@ private struct PluginConfigurationDetailPane: View {
     }
 }
 
-private struct PluginConfigurationHeader: View {
-    let item: PluginConfigurationItem
+private struct PluginFormPage: View {
+    @ObservedObject var pluginHost: PluginHost
+    let item: PluginSettingsPageItem
 
     var body: some View {
-        SettingsPageHeader(
-            title: item.title,
-            description: item.description,
-            systemImage: item.iconName,
-            iconTint: item.iconTint
-        )
-        .padding(.bottom, 2)
-    }
-}
-
-private struct SettingsPageHeader: View {
-    let title: String
-    let description: String
-    let systemImage: String
-    let iconTint: Color
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(iconTint.opacity(0.14))
-
-                Image(systemName: PluginSystemImage.resolvedName(systemImage))
-                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
-                    .foregroundStyle(iconTint)
+        SettingsGroupedFormPageScaffold(header: item.headerConfiguration) { widths in
+            if !item.permissionCards.isEmpty {
+                Section {
+                    ForEach(item.permissionCards) { card in
+                        PermissionSettingsRow(
+                            card: card,
+                            statusColor: statusColor(for: card.statusTone),
+                            onAction: {
+                                pluginHost.performPermissionAction(
+                                    pluginID: card.pluginID,
+                                    permissionID: card.permissionID
+                                )
+                            }
+                        )
+                        .pluginSettingsSearchAnchor(
+                            pluginID: card.pluginID,
+                            entryID: card.id
+                        )
+                        .settingsGroupedFormRowWidth(widths.sectionLayout)
+                    }
+                } header: {
+                    SettingsGroupedFormSectionHeader(
+                        title: AppL10n.settings(
+                            "plugins.configuration.section.permissions",
+                            defaultValue: "权限"
+                        ),
+                        systemImage: "lock.shield",
+                        layoutWidth: widths.readableContent
+                    )
+                }
             }
-            .frame(width: PluginSettingsTheme.Size.pageIcon, height: PluginSettingsTheme.Size.pageIcon)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(PluginSettingsTheme.Typography.pageTitle)
-
-                Text(description)
-                    .font(PluginSettingsTheme.Typography.pageDescription)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+            ForEach(item.sections.filter(\.isVisible)) { section in
+                PluginFormSection(
+                    pluginHost: pluginHost,
+                    pluginID: item.pluginID,
+                    section: section,
+                    shortcutItems: item.shortcutItems,
+                    layoutWidths: widths
+                )
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !item.remainingShortcutItems.isEmpty {
+                Section {
+                    PluginShortcutRowsContent(
+                        pluginHost: pluginHost,
+                        items: item.remainingShortcutItems
+                    )
+                    .settingsGroupedFormRowWidth(widths.sectionLayout)
+                } header: {
+                    SettingsGroupedFormSectionHeader(
+                        title: AppL10n.settings(
+                            "plugins.configuration.section.shortcuts",
+                            defaultValue: "快捷键"
+                        ),
+                        systemImage: "command",
+                        layoutWidth: widths.readableContent
+                    )
+                }
+            }
         }
     }
 }
 
-private struct PluginSettingsCardSection: View {
+private extension PluginSettingsPageItem {
+    var headerConfiguration: SettingsPageHeaderConfiguration {
+        SettingsPageHeaderConfiguration(
+            title: title,
+            description: description,
+            systemImage: iconName,
+            iconTint: iconTint
+        )
+    }
+}
+
+private struct PluginFormSection: View {
     @ObservedObject var pluginHost: PluginHost
-    let cards: [PluginSettingsCard]
+    let pluginID: String
+    let section: PluginSettingsSection
+    let shortcutItems: [ShortcutSettingsItem]
+    let layoutWidths: SettingsGroupedFormWidths
 
     var body: some View {
-        PluginConfigurationSection(title: AppL10n.settings("plugins.configuration.section.settings", defaultValue: "设置"), systemImage: "switch.2") {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                    PluginSettingsCardRow(
-                        card: card,
-                        statusColor: statusColor(for: card.statusTone),
-                        onAction: {
-                            if let actionID = card.actionID {
-                                pluginHost.performSettingsAction(pluginID: card.pluginID, actionID: actionID)
-                            }
+        Section {
+            switch section.content {
+            case let .rows(rows):
+                ForEach(rows.filter(\.isVisible)) { row in
+                    PluginSettingsRowView(
+                        pluginID: pluginID,
+                        row: row,
+                        onAction: { action in
+                            pluginHost.performSettingsAction(
+                                pluginID: pluginID,
+                                action: action
+                            )
                         }
                     )
                     .pluginSettingsSearchAnchor(
-                        pluginID: card.pluginID,
-                        entryID: card.id
+                        pluginID: pluginID,
+                        entryID: row.id
                     )
+                    .settingsGroupedFormRowWidth(layoutWidths.sectionLayout)
+                }
+            case let .shortcutGroup(groupID):
+                PluginShortcutRowsContent(
+                    pluginHost: pluginHost,
+                    items: shortcutItems.filter { $0.settingsGroupID == groupID }
+                )
+                .settingsGroupedFormRowWidth(layoutWidths.sectionLayout)
+            case .custom:
+                customContent
+            }
+        } header: {
+            sectionHeader
+        } footer: {
+            if let footer = section.footer {
+                Text(footer)
+                    .frame(
+                        width: layoutWidths.sectionLayout,
+                        alignment: .leading
+                    )
+            }
+        }
+    }
 
-                    if index < cards.count - 1 {
-                        PluginSettingsListDivider()
-                    }
+    @ViewBuilder
+    private var customContent: some View {
+        let content = pluginHost.pluginSettingsContentViewItem(
+            for: pluginID,
+            sectionID: section.id
+        ).content
+            .settingsGroupedFormRowWidth(layoutWidths.sectionLayout)
+        switch section.presentation {
+        case .standard:
+            content
+        case .edgeToEdge:
+            content
+                .listRowInsets(EdgeInsets())
+        }
+    }
+
+    @ViewBuilder
+    private var sectionHeader: some View {
+        if section.title != nil || section.headerAccessory != nil {
+            SettingsGroupedFormSectionHeader(
+                title: section.title,
+                systemImage: section.systemImage,
+                layoutWidth: layoutWidths.readableContent
+            ) {
+                if section.headerAccessory != nil {
+                    pluginHost.pluginSettingsHeaderAccessoryViewItem(
+                        for: pluginID,
+                        sectionID: section.id
+                    ).content
                 }
             }
         }
     }
 }
 
-private struct PluginSettingsCardRow: View {
-    let card: PluginSettingsCard
-    let statusColor: Color
-    let onAction: () -> Void
+private struct PluginWorkspacePage: View {
+    @ObservedObject var pluginHost: PluginHost
+    let item: PluginSettingsPageItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                    Text(card.title)
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-
-                    Text(card.description)
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        SettingsPageScaffold(header: item.headerConfiguration) {
+            switch item.workspaceScrolling {
+            case .host:
+                ScrollView {
+                    workspaceContent
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Label {
-                    Text(card.statusText)
-                        .lineLimit(1)
-                } icon: {
-                    Image(systemName: card.statusSystemImage)
-                }
-                .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
-                .foregroundStyle(statusColor)
+            case .selfManaged:
+                workspaceContent
             }
+        }
+    }
 
-            if let footnote = card.footnote {
-                Text(footnote)
+    private var workspaceContent: some View {
+        pluginHost.pluginSettingsContentViewItem(for: item.pluginID).content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct PluginSettingsRowView: View {
+    let pluginID: String
+    let row: PluginSettingsRow
+    let onAction: (PluginSettingsAction) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            HStack(alignment: .center, spacing: 0) {
+                HStack(
+                    alignment: .center,
+                    spacing: PluginSettingsTheme.Spacing.rowContentControl
+                ) {
+                    if let systemImage = row.systemImage {
+                        Image(systemName: systemImage)
+                            .pluginSettingsRowIconStyle(.secondary)
+                    }
+
+                    VStack(
+                        alignment: .leading,
+                        spacing: PluginSettingsTheme.Spacing.rowTitleDescription
+                    ) {
+                        Text(row.title)
+                            .font(PluginSettingsTheme.Typography.rowTitle)
+
+                        if let description = row.description {
+                            Text(description)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                control
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let error = row.error {
+                Text(error)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let help = row.help {
+                Text(help)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+        .disabled(!row.isEnabled)
+        .accessibilityElement(children: .contain)
+    }
 
-            if let buttonTitle = card.buttonTitle, card.actionID != nil {
-                HStack {
-                    Spacer()
+    @ViewBuilder
+    private var control: some View {
+        switch row.control {
+        case let .toggle(isOn):
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { isOn },
+                    set: { onAction(.setBoolean(controlID: row.id, value: $0)) }
+                )
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+        case let .picker(selectionID, options, style):
+            PluginSettingsPickerControl(
+                selectionID: selectionID,
+                options: options,
+                style: style,
+                onSelect: {
+                    onAction(.setSelection(controlID: row.id, optionID: $0))
+                }
+            )
+        case let .slider(value, range, step, valueFormat):
+            PluginSettingsSliderControl(
+                controlID: row.id,
+                value: value,
+                range: range,
+                step: step,
+                valueFormat: valueFormat,
+                onAction: onAction
+            )
+        case let .textField(value, prompt, isRequired):
+            PluginSettingsTextControl(
+                controlID: row.id,
+                value: value,
+                prompt: prompt,
+                isRequired: isRequired,
+                isSecure: false,
+                onAction: onAction
+            )
+        case let .secureField(value, prompt, isRequired):
+            PluginSettingsTextControl(
+                controlID: row.id,
+                value: value,
+                prompt: prompt,
+                isRequired: isRequired,
+                isSecure: true,
+                onAction: onAction
+            )
+        case let .action(title, role):
+            PluginSettingsActionButton(title: title, role: role) {
+                onAction(.invoke(controlID: row.id))
+            }
+        case let .status(text, systemImage, tone, actionTitle):
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                Label(text, systemImage: systemImage)
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
+                    .foregroundStyle(statusColor(for: tone))
+                    .lineLimit(1)
 
-                    Button(buttonTitle, action: onAction)
-                        .buttonStyle(.borderedProminent)
+                if let actionTitle {
+                    Button(actionTitle) {
+                        onAction(.invoke(controlID: row.id))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
             }
         }
-        .padding(PluginSettingsTheme.Spacing.cardContent)
     }
 }
 
-private struct PluginPermissionCardSection: View {
-    @ObservedObject var pluginHost: PluginHost
-    let cards: [PluginPermissionCard]
+private struct PluginSettingsPickerControl: View {
+    let selectionID: String
+    let options: [PluginSettingsOption]
+    let style: PluginSettingsPickerStyle
+    let onSelect: (String) -> Void
 
     var body: some View {
-        PluginConfigurationSection(title: AppL10n.settings("plugins.configuration.section.permissions", defaultValue: "权限"), systemImage: "lock.shield") {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                    PermissionSettingsRow(
-                        card: card,
-                        statusColor: statusColor(for: card.statusTone),
-                        onAction: {
-                            pluginHost.performPermissionAction(
-                                pluginID: card.pluginID,
-                                permissionID: card.permissionID
-                            )
-                        }
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .pluginSettingsSearchAnchor(
-                        pluginID: card.pluginID,
-                        entryID: card.id
-                    )
+        switch style {
+        case .automatic:
+            picker
+        case .menu:
+            picker.pickerStyle(.menu)
+        case .segmented:
+            picker.pickerStyle(.segmented)
+        case .radioGroup:
+            picker.pickerStyle(.radioGroup)
+        }
+    }
 
-                    if index < cards.count - 1 {
-                        PluginSettingsListDivider()
-                    }
-                }
+    private var picker: some View {
+        Picker(
+            "",
+            selection: Binding(
+                get: { selectionID },
+                set: { selection in onSelect(selection) }
+            )
+        ) {
+            ForEach(options) { option in
+                Text(option.title).tag(option.id)
             }
+        }
+        .labelsHidden()
+        .frame(minWidth: 120, idealWidth: 180, maxWidth: 240)
+    }
+}
+
+private struct PluginSettingsSliderControl: View {
+    let controlID: String
+    let value: Double
+    let range: ClosedRange<Double>
+    let step: Double?
+    let valueFormat: PluginSettingsSliderValueFormat?
+    let onAction: (PluginSettingsAction) -> Void
+    @State private var currentValue: Double
+
+    init(
+        controlID: String,
+        value: Double,
+        range: ClosedRange<Double>,
+        step: Double?,
+        valueFormat: PluginSettingsSliderValueFormat?,
+        onAction: @escaping (PluginSettingsAction) -> Void
+    ) {
+        self.controlID = controlID
+        self.value = value
+        self.range = range
+        self.step = step
+        self.valueFormat = valueFormat
+        self.onAction = onAction
+        _currentValue = State(initialValue: value)
+    }
+
+    var body: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            PluginSettingsSlider(
+                value: $currentValue,
+                in: range,
+                step: step,
+                onEditingChanged: editingChanged
+            )
+
+            if let valueFormat {
+                Text(valueFormat.text(for: currentValue))
+                    .font(PluginSettingsTheme.Typography.monospacedValue)
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, alignment: .trailing)
+            }
+        }
+        .frame(minWidth: 180, idealWidth: 240, maxWidth: 320)
+        .onChange(of: currentValue) { _, value in
+            onAction(.setNumber(controlID: controlID, value: value, phase: .changed))
+        }
+        .onChange(of: value) { _, value in
+            if currentValue != value {
+                currentValue = value
+            }
+        }
+    }
+
+    private func editingChanged(_ isEditing: Bool) {
+        if !isEditing {
+            onAction(.setNumber(controlID: controlID, value: currentValue, phase: .committed))
         }
     }
 }
 
-private struct PluginShortcutSection: View {
+private struct PluginSettingsTextControl: View {
+    let controlID: String
+    let value: String
+    let prompt: String?
+    let isRequired: Bool
+    let isSecure: Bool
+    let onAction: (PluginSettingsAction) -> Void
+    @State private var text: String
+    @FocusState private var isFocused: Bool
+
+    init(
+        controlID: String,
+        value: String,
+        prompt: String?,
+        isRequired: Bool,
+        isSecure: Bool,
+        onAction: @escaping (PluginSettingsAction) -> Void
+    ) {
+        self.controlID = controlID
+        self.value = value
+        self.prompt = prompt
+        self.isRequired = isRequired
+        self.isSecure = isSecure
+        self.onAction = onAction
+        _text = State(initialValue: value)
+    }
+
+    var body: some View {
+        Group {
+            if isSecure {
+                SecureField(prompt ?? "", text: $text)
+            } else {
+                TextField(prompt ?? "", text: $text)
+            }
+        }
+        .frame(minWidth: 180, idealWidth: 240, maxWidth: 320)
+        .focused($isFocused)
+        .onChange(of: text) { _, value in
+            onAction(.setText(controlID: controlID, value: value, phase: .changed))
+        }
+        .onChange(of: value) { _, value in
+            if text != value {
+                text = value
+            }
+        }
+        .onChange(of: isFocused) { wasFocused, isFocused in
+            if wasFocused && !isFocused {
+                commit()
+            }
+        }
+        .onSubmit(commit)
+    }
+
+    private func commit() {
+        guard !isRequired || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        onAction(.setText(controlID: controlID, value: text, phase: .committed))
+    }
+}
+
+private struct PluginSettingsActionButton: View {
+    let title: String
+    let role: PluginSettingsActionRole
+    let action: () -> Void
+
+    var body: some View {
+        switch role {
+        case .normal:
+            Button(title, action: action)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        case .prominent:
+            Button(title, action: action)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        case .destructive:
+            Button(title, role: .destructive, action: action)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+    }
+}
+
+private struct PluginShortcutRowsContent: View {
     @ObservedObject var pluginHost: PluginHost
     let items: [ShortcutSettingsItem]
 
     var body: some View {
-        PluginConfigurationSection(title: AppL10n.settings("plugins.configuration.section.shortcuts", defaultValue: "快捷键"), systemImage: "command") {
-            VStack(alignment: .leading, spacing: 0) {
-                if groupedItems.isEmpty {
-                    ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
-                } else {
-                    GroupedShortcutSettingsRowsView(pluginHost: pluginHost, groups: groupedItems)
-                }
-            }
+        if groupedItems.isEmpty {
+            ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
+        } else {
+            GroupedShortcutSettingsRowsView(pluginHost: pluginHost, groups: groupedItems)
         }
     }
 
     private var groupedItems: [ShortcutSettingsGroup] {
-        guard items.allSatisfy({ $0.settingsGroupID != nil }) else {
+        guard !items.isEmpty, items.allSatisfy({ $0.settingsGroupID != nil }) else {
             return []
         }
 
         var groupOrder: [String] = []
         var groups: [String: [ShortcutSettingsItem]] = [:]
-
         for item in items {
-            guard let groupID = item.settingsGroupID else {
-                continue
-            }
-
+            guard let groupID = item.settingsGroupID else { continue }
             if groups[groupID] == nil {
                 groupOrder.append(groupID)
             }
@@ -2595,42 +2951,15 @@ private struct PluginShortcutSection: View {
         }
 
         return groupOrder.compactMap { groupID in
-            guard let groupItems = groups[groupID], let firstItem = groupItems.first else { return nil }
-
+            guard let groupItems = groups[groupID], let first = groupItems.first else {
+                return nil
+            }
             return ShortcutSettingsGroup(
                 id: groupID,
-                title: firstItem.settingsGroupTitle ?? firstItem.title,
-                description: firstItem.settingsGroupDescription ?? firstItem.description,
+                title: first.settingsGroupTitle ?? first.title,
+                description: first.settingsGroupDescription ?? first.description,
                 items: groupItems
             )
-        }
-    }
-}
-
-private struct PluginConfigurationSection<Content: View>: View {
-    let title: String
-    let systemImage: String
-    let content: Content
-
-    init(
-        title: String,
-        systemImage: String,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.systemImage = systemImage
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(title, systemImage: PluginSystemImage.resolvedName(systemImage))
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .foregroundStyle(.secondary)
-
-            SettingsCardContainer {
-                content
-            }
         }
     }
 }
@@ -2667,11 +2996,11 @@ struct AboutSettingsView: View {
             AppIconPreview()
 
             Text(AppMetadata.appName)
-                .font(.system(size: 22, weight: .bold))
+                .font(PluginSettingsTheme.Typography.pageTitle)
                 .padding(.top, 8)
 
             Text(AppL10n.settingsFormat("about.versionFormat", defaultValue: "版本 %@", AppMetadata.versionDescription))
-                .font(.title3)
+                .font(PluginSettingsTheme.Typography.pageDescription)
                 .foregroundStyle(.secondary)
                 .padding(.top, 8)
 
@@ -2680,7 +3009,7 @@ struct AboutSettingsView: View {
                 .frame(maxWidth: 420)
 
             Text(AppMetadata.aboutDescription)
-                .font(.title3)
+                .font(PluginSettingsTheme.Typography.rowTitle)
                 .lineLimit(nil)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -2689,7 +3018,7 @@ struct AboutSettingsView: View {
 
             VStack(spacing: 0) {
                 Link(AppMetadata.repositoryDisplayName, destination: AppMetadata.repositoryURL)
-                    .font(.title3)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 28)
@@ -2699,6 +3028,7 @@ struct AboutSettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, 40)
         .padding(.vertical, 28)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onChange(
             of: navigationCoordinator.aboutUpdateActionRequest,
             initial: true
@@ -2737,7 +3067,8 @@ private struct AboutUpdateCard: View {
                     await viewModel.performPrimaryAction()
                 }
             }
-            .buttonStyle(AboutUpdatePrimaryButtonStyle())
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
             .disabled(viewModel.isPrimaryButtonDisabled)
 
             Text(statusText ?? " ")
@@ -2762,30 +3093,6 @@ private struct AboutUpdateCard: View {
     }
 }
 
-private struct AboutUpdatePrimaryButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(PluginSettingsTheme.Typography.rowTitle)
-            .foregroundStyle(.white.opacity(isEnabled ? 1 : 0.82))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .frame(minWidth: 92)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(buttonBackgroundColor(isPressed: configuration.isPressed))
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-    }
-
-    private func buttonBackgroundColor(isPressed: Bool) -> Color {
-        let baseOpacity: CGFloat = isEnabled ? 1 : 0.45
-        let pressedOpacity: CGFloat = isEnabled ? 0.82 : baseOpacity
-        return Color.accentColor.opacity(isPressed ? pressedOpacity : baseOpacity)
-    }
-}
-
 private struct AppIconPreview: View {
     private static let iconSize: CGFloat = 82
 
@@ -2801,7 +3108,7 @@ private struct AppIconPreview: View {
                 .scaledToFit()
                 .padding(12)
                 .foregroundStyle(.secondary)
-                .background(PluginSettingsTheme.Palette.nativeCardBackground)
+                .background(PluginSettingsTheme.Palette.recessedControlBackground)
                 .frame(width: Self.iconSize, height: Self.iconSize)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }

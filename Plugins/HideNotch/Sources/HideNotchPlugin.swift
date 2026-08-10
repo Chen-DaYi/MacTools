@@ -102,7 +102,6 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var actionDefinitions: [ActionDefinition] {
@@ -222,7 +221,7 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     private func actionReference(enabled: Bool) -> ActionReference {

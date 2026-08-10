@@ -103,9 +103,9 @@ final class PluginPackageManifestTests: XCTestCase {
         let expectations = [
             (
                 path: "Plugins/MouseEnhancer/plugin.json",
-                minimum: "1.1.3",
-                compatibleHost: "1.1.5",
-                incompatibleHost: nil as String?
+                minimum: "1.1.6",
+                compatibleHost: "1.1.6",
+                incompatibleHost: "1.1.5" as String?
             ),
             (
                 path: "Plugins/TrackpadGestures/plugin.json",
@@ -196,9 +196,9 @@ final class PluginPackageManifestTests: XCTestCase {
           "displayName": "Demo",
           "version": "1.0.0",
           "minHostVersion": "0.15.0",
-          "pluginKitVersion": 1,
+          "pluginKitVersion": 3,
           "bundleRelativePath": "Demo.bundle",
-          "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": false },
+          "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": true },
           "permissions": [],
           "category": "display",
           "releaseChannel": "beta",
@@ -218,6 +218,7 @@ final class PluginPackageManifestTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginPackageManifest.self, from: json)
         XCTAssertEqual(manifest.category, "display")
         XCTAssertEqual(manifest.releaseChannel, "beta")
+        XCTAssertEqual(manifest.capabilities.settings, .form)
         XCTAssertEqual(manifest.localizedMetadata?["en"]?.summary, "Demo plugin")
     }
 
@@ -229,7 +230,7 @@ final class PluginPackageManifestTests: XCTestCase {
           "displayName": "Demo",
           "version": "1.0.0",
           "minHostVersion": "0.15.0",
-          "pluginKitVersion": 1,
+          "pluginKitVersion": 3,
           "bundleRelativePath": "Demo.bundle",
           "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": false },
           "permissions": []

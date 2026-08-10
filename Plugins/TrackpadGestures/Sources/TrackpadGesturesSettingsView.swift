@@ -3,11 +3,18 @@ import SwiftUI
 import MacToolsPluginKit
 
 struct TrackpadGesturesSettingsView: View {
+    enum SectionKind {
+        case mappings
+        case typingProtection
+        case testing
+    }
+
     @ObservedObject var store: TrackpadGestureStore
     let localization: PluginLocalization
     let actionHostContext: TrackpadActionHostContext?
     let onChange: () -> Void
     let onSetTesting: (Bool) -> Void
+    let section: SectionKind
 
     @State private var editingDraft: TrackpadGestureMappingDraft?
     @State private var isShowingTipTapGuide = false
@@ -15,12 +22,20 @@ struct TrackpadGesturesSettingsView: View {
     @State private var isShowingMappingSearch = false
     @FocusState private var isMappingSearchFocused: Bool
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            mappingsSection
+        switch section {
+        case .mappings:
+            mappingsContent
+        case .typingProtection:
             typingProtectionSection
-            testingSection
+        case .testing:
+            testingContent
         }
+    }
+
+    private var mappingsContent: some View {
+        mappingsSection
         .sheet(item: $editingDraft) { draft in
             TrackpadGestureEditor(
                 draft: draft,
@@ -40,10 +55,10 @@ struct TrackpadGesturesSettingsView: View {
                 }
             )
         }
-        .onDisappear {
-            guard store.isTesting else { return }
-            onSetTesting(false)
-        }
+    }
+
+    private var testingContent: some View {
+        testingSection
         .onChange(of: store.lastTestGesture) { _, gesture in
             guard let gesture else { return }
             announceRecognizedTestGesture(gesture)
@@ -51,15 +66,7 @@ struct TrackpadGesturesSettingsView: View {
     }
 
     private var typingProtectionSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(
-                localization.string("settings.typing.title", defaultValue: "输入保护"),
-                systemImage: "keyboard"
-            )
-            .font(PluginSettingsTheme.Typography.sectionTitle)
-            .foregroundStyle(.secondary)
-
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
                 HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                     VStack(
                         alignment: .leading,
@@ -120,7 +127,7 @@ struct TrackpadGesturesSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-                    Slider(
+                    PluginSettingsSlider(
                         value: Binding(
                             get: { store.typingGracePeriod },
                             set: { gracePeriod in
@@ -152,21 +159,12 @@ struct TrackpadGesturesSettingsView: View {
                     .frame(width: 52, alignment: .trailing)
                 }
                 .pluginSettingsListRowPadding(interactive: true)
-            }
-            .pluginSettingsCardBackground(.host)
         }
     }
 
     private var mappingsSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
-                Label(
-                    localization.string("settings.mappings.title", defaultValue: "手势映射"),
-                    systemImage: "hand.tap"
-                )
-                .font(PluginSettingsTheme.Typography.sectionTitle)
-                .foregroundStyle(.secondary)
-
                 Spacer(minLength: PluginSettingsTheme.Spacing.controlCluster)
 
                 HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
@@ -179,6 +177,7 @@ struct TrackpadGesturesSettingsView: View {
                     tipTapGuide
                 }
             }
+            .pluginSettingsListRowPadding()
 
             if store.mappings.isEmpty {
                 emptyState
@@ -446,7 +445,6 @@ struct TrackpadGesturesSettingsView: View {
             .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             Spacer()
         }
-        .pluginSettingsCardBackground(.host)
     }
 
     private var mappingSearchField: some View {
@@ -484,7 +482,7 @@ struct TrackpadGesturesSettingsView: View {
             }
         }
         .pluginSettingsListRowPadding(interactive: true)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
@@ -511,7 +509,7 @@ struct TrackpadGesturesSettingsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private var mappingList: some View {
@@ -524,7 +522,6 @@ struct TrackpadGesturesSettingsView: View {
                 }
             }
         }
-        .pluginSettingsCardBackground(.host)
     }
 
     private func mappingRow(_ mapping: TrackpadGestureMapping) -> some View {
@@ -738,15 +735,7 @@ struct TrackpadGesturesSettingsView: View {
     }
 
     private var testingSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label(
-                localization.string("settings.testing.title", defaultValue: "测试"),
-                systemImage: "waveform.path"
-            )
-            .font(PluginSettingsTheme.Typography.sectionTitle)
-            .foregroundStyle(.secondary)
-
-            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                     Text(store.isTesting
                         ? localization.string("settings.testing.active", defaultValue: "正在识别手势")
@@ -767,10 +756,8 @@ struct TrackpadGesturesSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-            }
-            .pluginSettingsListRowPadding(interactive: true)
-            .pluginSettingsCardBackground(.host)
         }
+        .pluginSettingsListRowPadding(interactive: true)
     }
 
     private var testingDescription: String {
@@ -1199,17 +1186,31 @@ private struct TrackpadGestureEditor: View {
                         )
 
                         if draft.actionKind == .keyboardShortcut {
-                            PluginShortcutRecorder(
-                                title: localization.string(
-                                    "editor.shortcut.record",
-                                    defaultValue: "录制快捷键"
-                                ),
-                                displayText: shortcutDisplayText,
-                                onRecord: { binding in
-                                    draft.shortcut = binding
-                                    return .accepted
-                                }
-                            )
+                            PluginSettingsShortcutControlLayout {
+                                Label(
+                                    localization.string(
+                                        "editor.shortcut.record",
+                                        defaultValue: "录制快捷键"
+                                    ),
+                                    systemImage: "keyboard"
+                                )
+                                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                                .lineLimit(1)
+
+                                PluginShortcutRecorder(
+                                    title: localization.string(
+                                        "editor.shortcut.record",
+                                        defaultValue: "录制快捷键"
+                                    ),
+                                    displayText: shortcutDisplayText,
+                                    minWidth: PluginSettingsTheme.Size.shortcutRecorderWidth,
+                                    onRecord: { binding in
+                                        draft.shortcut = binding
+                                        return .accepted
+                                    }
+                                )
+                                .frame(width: PluginSettingsTheme.Size.shortcutRecorderWidth)
+                            }
 
                             if let shortcutReuseGuidance {
                                 Label(shortcutReuseGuidance, systemImage: "info.circle")
@@ -1286,7 +1287,7 @@ private struct TrackpadGestureEditor: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .pluginSettingsListRowPadding(interactive: true)
-            .pluginSettingsCardBackground(.plugin)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 

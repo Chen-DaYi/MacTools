@@ -337,10 +337,10 @@ enum MacToolsSearchIndexBuilder {
             uniqueKeysWithValues: pluginHost.pluginManagementItems.map { ($0.id, $0) }
         )
         let configurationItemsByID = Dictionary(
-            uniqueKeysWithValues: pluginHost.pluginConfigurationItems.map { ($0.pluginID, $0) }
+            uniqueKeysWithValues: pluginHost.pluginSettingsItems.map { ($0.pluginID, $0) }
         )
 
-        items += pluginHost.pluginConfigurationItems.map { item in
+        items += pluginHost.pluginSettingsItems.map { item in
             let managementItem = managementItemsByID[item.pluginID]
             return MacToolsSearchResult(
                 id: "plugin.configuration.\(item.pluginID)",
@@ -454,14 +454,14 @@ enum MacToolsSearchIndexBuilder {
             )
         }
 
-        items += pluginHost.pluginConfigurationItems.flatMap { item in
+        items += pluginHost.pluginSettingsItems.flatMap { item in
             settingResults(for: item)
         }
 
         items += pluginHost.pluginSettingsSearchItems.compactMap { providedItem in
             guard
                 let configuration = configurationItemsByID[providedItem.pluginID],
-                configuration.hasCustomConfiguration
+                configuration.hasPluginContent
             else {
                 return nil
             }
@@ -744,18 +744,35 @@ enum MacToolsSearchIndexBuilder {
     }
 
     private static func settingResults(
-        for item: PluginConfigurationItem
+        for item: PluginSettingsPageItem
     ) -> [MacToolsSearchResult] {
-        let settings = item.settingsCards.map { card in
-            settingResult(
-                id: "setting-card.\(card.id)",
-                item: item,
-                title: card.title,
-                detail: card.description,
-                keywords: [card.statusText, card.footnote].compactMap { $0 },
-                systemImage: card.statusSystemImage,
-                entryID: card.id
-            )
+        let settings = item.sections.flatMap { section -> [MacToolsSearchResult] in
+            guard section.isVisible, case let .rows(rows) = section.content else {
+                return []
+            }
+
+            return rows.filter(\.isVisible).map { row in
+                let optionKeywords: [String]
+                if case let .picker(_, options, _) = row.control {
+                    optionKeywords = options.flatMap { option in
+                        [option.title, option.description].compactMap { $0 }
+                    }
+                } else {
+                    optionKeywords = []
+                }
+
+                return settingResult(
+                    id: "setting-row.\(item.pluginID).\(row.id)",
+                    item: item,
+                    title: row.title,
+                    detail: row.description ?? row.help ?? "",
+                    keywords: row.keywords
+                        + optionKeywords
+                        + [section.title, row.help, row.error].compactMap { $0 },
+                    systemImage: row.systemImage ?? section.systemImage ?? "slider.horizontal.3",
+                    entryID: row.id
+                )
+            }
         }
 
         let permissions = item.permissionCards.map { card in
@@ -783,7 +800,7 @@ enum MacToolsSearchIndexBuilder {
     }
 
     private static func shortcutSettingResults(
-        for item: PluginConfigurationItem
+        for item: PluginSettingsPageItem
     ) -> [MacToolsSearchResult] {
         guard item.shortcutItems.allSatisfy({ $0.settingsGroupID != nil }) else {
             return item.shortcutItems.map { shortcut in
@@ -844,7 +861,7 @@ enum MacToolsSearchIndexBuilder {
 
     private static func settingResult(
         id: String,
-        item: PluginConfigurationItem,
+        item: PluginSettingsPageItem,
         title: String,
         detail: String,
         keywords: [String],

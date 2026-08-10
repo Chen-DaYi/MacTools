@@ -1,9 +1,31 @@
 import XCTest
+import Carbon
 import MacToolsPluginKit
 @testable import SidecarPlugin
 
 @MainActor
 final class SidecarPluginTests: XCTestCase {
+    func testCommonApplicationShortcutBindingsRequireConflictWarning() {
+        XCTAssertTrue(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(keyCode: UInt16(kVK_ANSI_1), modifiers: .command)
+            )
+        )
+        XCTAssertTrue(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(keyCode: UInt16(kVK_ANSI_F), modifiers: .command)
+            )
+        )
+        XCTAssertFalse(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(
+                    keyCode: UInt16(kVK_ANSI_1),
+                    modifiers: [.command, .option]
+                )
+            )
+        )
+    }
+
     func testPublishesGlobalAndPerDeviceCanonicalActions() throws {
         let service = FakeSidecarService(devices: [
             SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),

@@ -123,7 +123,6 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAct
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var actionDefinitions: [ActionDefinition] {
@@ -209,7 +208,7 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAct
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {

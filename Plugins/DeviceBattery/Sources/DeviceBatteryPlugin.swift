@@ -152,39 +152,79 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel,
         ]
     }
 
-    var settingsSections: [PluginSettingsSection] { [] }
-
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(
+    var settingsPage: PluginSettingsPage? {
+        .form(
             description: localization.string(
                 "configuration.description",
                 defaultValue: "选择组件面板布局和显示内容。"
-            )
-        ) { [store, viewModel, localization, lowBatteryNotificationController] _ in
-            DeviceBatterySettingsView(
-                store: store,
-                localization: localization,
-                onChange: {
-                    viewModel.refresh(
-                        includeInternalBattery: store.showInternalBattery,
-                        includeBluetoothDevices: store.showBluetoothDevices,
-                        includeAppleMobileDevices: store.showAppleMobileDevices,
-                        includeRapooDevices: store.showRapooDevices
+            ),
+            sections: [
+                PluginSettingsSection(
+                    id: "layout",
+                    title: localization.string("settings.layout.title", defaultValue: "组件布局"),
+                    systemImage: "rectangle.grid.2x2",
+                    presentation: .edgeToEdge
+                ) { [store, viewModel, localization] _ in
+                    DeviceBatterySettingsView(
+                        store: store,
+                        localization: localization,
+                        onChange: {
+                            viewModel.refresh(
+                                includeInternalBattery: store.showInternalBattery,
+                                includeBluetoothDevices: store.showBluetoothDevices,
+                                includeAppleMobileDevices: store.showAppleMobileDevices,
+                                includeRapooDevices: store.showRapooDevices
+                            )
+                        },
+                        section: .layout
                     )
                 },
-                onNotificationSettingsChange: {
-                    viewModel.setLowBatteryMonitoringEnabled(
-                        store.lowBatteryNotificationEnabled
+                PluginSettingsSection(
+                    id: "sources",
+                    title: localization.string("settings.sources.title", defaultValue: "显示内容"),
+                    systemImage: "bolt.horizontal.circle",
+                    presentation: .edgeToEdge
+                ) { [store, viewModel, localization] _ in
+                    DeviceBatterySettingsView(
+                        store: store,
+                        localization: localization,
+                        onChange: {
+                            viewModel.refresh(
+                                includeInternalBattery: store.showInternalBattery,
+                                includeBluetoothDevices: store.showBluetoothDevices,
+                                includeAppleMobileDevices: store.showAppleMobileDevices,
+                                includeRapooDevices: store.showRapooDevices
+                            )
+                        },
+                        section: .sources
                     )
-                    lowBatteryNotificationController.evaluate(
-                        snapshot: viewModel.snapshot,
-                        isEnabled: store.lowBatteryNotificationEnabled,
-                        threshold: store.lowBatteryNotificationThreshold,
-                        localization: localization
+                },
+                PluginSettingsSection(
+                    id: "notifications",
+                    title: localization.string("settings.notification.title", defaultValue: "低电量通知"),
+                    systemImage: "bell.badge",
+                    presentation: .edgeToEdge
+                ) { [store, viewModel, localization, lowBatteryNotificationController] _ in
+                    DeviceBatterySettingsView(
+                        store: store,
+                        localization: localization,
+                        onChange: {},
+                        onNotificationSettingsChange: {
+                            viewModel.setLowBatteryMonitoringEnabled(
+                                store.lowBatteryNotificationEnabled
+                            )
+                            lowBatteryNotificationController.evaluate(
+                                snapshot: viewModel.snapshot,
+                                isEnabled: store.lowBatteryNotificationEnabled,
+                                threshold: store.lowBatteryNotificationThreshold,
+                                localization: localization
+                            )
+                        },
+                        section: .notifications
                     )
                 }
-            )
-        }
+            ]
+        )
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -260,8 +300,9 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel,
         openInputMonitoringSettings()
     }
 
-    func handleSettingsAction(id: String) {
-        if id == ControlID.openInputMonitoring {
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        if case let .invoke(controlID) = action,
+           controlID == ControlID.openInputMonitoring {
             openInputMonitoringSettings()
         }
     }

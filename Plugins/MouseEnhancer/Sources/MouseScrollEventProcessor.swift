@@ -47,7 +47,7 @@ final class MouseScrollEventProcessor: @unchecked Sendable {
     nonisolated(unsafe) private var touchingCount = 0
     nonisolated(unsafe) private var lastTouchTime: UInt64 = 0
     nonisolated(unsafe) private var lastSource: MouseEnhancerDevice = .mouse
-    nonisolated(unsafe) private var hasSeenGestureEvent = false
+    nonisolated(unsafe) private var hasSeenTrackpadTouch = false
     nonisolated(unsafe) private var gestureMonitoringAvailable = false
 
     init(configuration: MouseEnhancerConfiguration) {
@@ -58,15 +58,15 @@ final class MouseScrollEventProcessor: @unchecked Sendable {
         touchingCount = 0
         lastTouchTime = 0
         lastSource = .mouse
-        hasSeenGestureEvent = false
+        hasSeenTrackpadTouch = false
     }
 
     func recordGestureTouchingCount(_ count: Int, timestamp: UInt64 = DispatchTime.now().uptimeNanoseconds) {
-        hasSeenGestureEvent = true
         guard count >= 2 else {
             return
         }
 
+        hasSeenTrackpadTouch = true
         lastTouchTime = timestamp
         touchingCount = max(touchingCount, count)
     }
@@ -101,7 +101,12 @@ final class MouseScrollEventProcessor: @unchecked Sendable {
             return .mouse
         }
 
-        guard gestureMonitoringAvailable || hasSeenGestureEvent else {
+        // A CGEvent tap can remain enabled while secure input, screen locking, or a display
+        // topology transition has interrupted its gesture callbacks. Until a fresh two-finger
+        // contact proves that gesture monitoring is healthy again, prefer the trackpad for a
+        // phased continuous scroll. Discrete and phase-less wheels have already been classified
+        // as mice above, so this conservative fallback does not affect normal mouse wheels.
+        guard gestureMonitoringAvailable, hasSeenTrackpadTouch else {
             lastSource = .trackpad
             return .trackpad
         }

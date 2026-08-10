@@ -18,6 +18,24 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
+    func testPluginKit4UsesVersionedProductionCatalogURL() throws {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.productionCatalogURL(for: 4),
+            URL(string: "https://mactools.ggbond.app/plugins/v4/catalog.json")
+        )
+    }
+
+    func testCurrentVerifierRejectsSchemaVersion1() throws {
+        let catalog = makeCatalog(schemaVersion: 1)
+        let verifier = PluginCatalogVerifier.localDevelopment(hostVersion: "1.0.0")
+
+        XCTAssertThrowsError(
+            try verifier.verify(catalog, sourceKind: .localDevelopment)
+        ) { error in
+            XCTAssertEqual(error as? PluginCatalogVerifierError, .unsupportedSchemaVersion(1))
+        }
+    }
+
     func testCurrentVerifierRejectsLegacyPluginKit2Catalog() throws {
         let catalog = makeCatalog(pluginKitVersion: 2)
         let verifier = PluginCatalogVerifier.localDevelopment(hostVersion: "1.0.0")
@@ -129,6 +147,7 @@ final class PluginCatalogTests: XCTestCase {
     }
 
     private func makeCatalog(
+        schemaVersion: Int = 2,
         minimumHostVersion: String = "0.1.0",
         pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion,
         plugins: [PluginCatalogEntry]? = nil,
@@ -136,6 +155,7 @@ final class PluginCatalogTests: XCTestCase {
         signature: PluginCatalog.Signature? = nil
     ) -> PluginCatalog {
         PluginCatalog(
+            schemaVersion: schemaVersion,
             catalogID: "com.example.catalog",
             generatedAt: Date(timeIntervalSince1970: 0),
             minimumHostVersion: minimumHostVersion,

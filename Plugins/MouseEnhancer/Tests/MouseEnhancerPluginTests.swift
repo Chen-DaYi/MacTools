@@ -55,6 +55,9 @@ private final class MockMouseEnhancerSession: MouseEnhancerSessionManaging {
     private(set) var activatedConfigurations: [MouseEnhancerConfiguration] = []
     private(set) var updatedConfigurations: [MouseEnhancerConfiguration] = []
     private(set) var deactivateCallCount = 0
+    private(set) var inputUnavailableCallCount = 0
+    private(set) var inputAvailableCallCount = 0
+    private(set) var displayTopologyChangeCallCount = 0
     var activationSucceeds = true
 
     @discardableResult
@@ -67,6 +70,18 @@ private final class MockMouseEnhancerSession: MouseEnhancerSessionManaging {
 
     func update(configuration: MouseEnhancerConfiguration) {
         updatedConfigurations.append(configuration)
+    }
+
+    func inputActivityDidBecomeUnavailable() {
+        inputUnavailableCallCount += 1
+    }
+
+    func inputActivityDidBecomeAvailable() {
+        inputAvailableCallCount += 1
+    }
+
+    func displayTopologyDidChange() {
+        displayTopologyChangeCallCount += 1
     }
 
     func deactivate() {
@@ -161,7 +176,7 @@ final class MouseEnhancerPluginTests: XCTestCase {
     func testPanelButtonRequestsConfigurationPresentation() {
         let plugin = makePlugin()
         var didRequestConfigurationPresentation = false
-        plugin.requestConfigurationPresentation = {
+        plugin.requestSettingsPresentation = {
             didRequestConfigurationPresentation = true
         }
 
@@ -232,6 +247,71 @@ final class MouseEnhancerPluginTests: XCTestCase {
         let plugin = makePlugin()
 
         XCTAssertEqual(plugin.permissionRequirements.map(\.id), ["accessibility", "input-monitoring"])
+    }
+
+    func testApplicationActivityTransitionsRecoverSessionOnlyAtInteractiveBoundary() {
+        let session = MockMouseEnhancerSession()
+        let plugin = makePlugin(session: session)
+
+        plugin.applicationActivityStateDidChange(.sessionInactive)
+        plugin.applicationActivityStateDidChange(.displayAsleep)
+        plugin.applicationActivityStateDidChange(.waking)
+
+        XCTAssertEqual(session.inputUnavailableCallCount, 1)
+        XCTAssertEqual(session.inputAvailableCallCount, 0)
+
+        plugin.applicationActivityStateDidChange(.interactive)
+
+        XCTAssertEqual(session.inputUnavailableCallCount, 1)
+        XCTAssertEqual(session.inputAvailableCallCount, 1)
+    }
+
+    func testDisplayTopologyRefreshIsForwardedWhileInputIsUnavailable() {
+        let session = MockMouseEnhancerSession()
+        let plugin = makePlugin(session: session)
+
+        plugin.refreshDisplayTopology()
+        XCTAssertEqual(session.displayTopologyChangeCallCount, 1)
+
+        plugin.applicationActivityStateDidChange(.sessionInactive)
+        plugin.refreshDisplayTopology()
+        XCTAssertEqual(session.displayTopologyChangeCallCount, 2)
+
+        plugin.applicationActivityStateDidChange(.interactive)
+        plugin.refreshDisplayTopology()
+        XCTAssertEqual(session.displayTopologyChangeCallCount, 3)
+    }
+
+    func testRecoveryStatePreservesLongerDisplaySettleAcrossInputInterruption() {
+        var state = MouseEnhancerRecoveryState()
+
+        state.request(.displayTopology)
+        state.setInputAvailable(false)
+        state.request(.applicationActivity)
+
+        XCTAssertFalse(state.isInputAvailable)
+        XCTAssertEqual(state.pendingCause, .displayTopology)
+        XCTAssertEqual(state.pendingCause?.delay, 2)
+
+        state.setInputAvailable(true)
+        state.request(.applicationActivity)
+
+        XCTAssertTrue(state.isInputAvailable)
+        XCTAssertEqual(state.pendingCause, .displayTopology)
+    }
+
+    func testRecoveryStateUsesShortActivitySettleWithoutDisplayChange() {
+        var state = MouseEnhancerRecoveryState()
+
+        state.setInputAvailable(false)
+        state.request(.applicationActivity)
+        state.setInputAvailable(true)
+
+        XCTAssertEqual(state.pendingCause, .applicationActivity)
+        XCTAssertEqual(state.pendingCause?.delay, 0.25)
+
+        state.clearPending()
+        XCTAssertNil(state.pendingCause)
     }
 
     func testProcessorReversesDiscreteMouseVerticalDeltas() {
@@ -438,6 +518,70 @@ final class MouseEnhancerPluginTests: XCTestCase {
         XCTAssertEqual(result.source, .trackpad)
         XCTAssertTrue(result.shouldReverse)
         XCTAssertEqual(result.deltas.deltaAxis1, -1)
+    }
+
+    func testProcessorTreatsPhasedContinuousScrollAsTrackpadUntilTouchEvidenceRecovers() {
+        let processor = MouseScrollEventProcessor(
+            configuration: MouseEnhancerConfiguration(
+                reverseMouseHorizontal: false,
+                reverseMouseVertical: true,
+                reverseTrackpadHorizontal: false,
+                reverseTrackpadVertical: false
+            )
+        )
+
+        // An installed gesture tap can stay enabled but stop delivering useful touch callbacks
+        // across screen locking or display reconfiguration.
+        processor.setGestureMonitoringAvailable(true)
+        processor.recordGestureTouchingCount(1, timestamp: 1_000)
+        let result = processor.process(
+            snapshot: MouseScrollEventSnapshot(
+                isContinuous: true,
+                scrollPhase: 1,
+                momentumPhase: 0
+            ),
+            deltas: MouseScrollDeltas(
+                deltaAxis1: 2,
+                deltaAxis2: 0,
+                pointDeltaAxis1: 10,
+                pointDeltaAxis2: 0,
+                fixedPointDeltaAxis1: 2,
+                fixedPointDeltaAxis2: 0
+            ),
+            timestamp: 1_000_000_000
+        )
+
+        XCTAssertEqual(result.source, .trackpad)
+        XCTAssertFalse(result.shouldReverse)
+        XCTAssertEqual(result.deltas.deltaAxis1, 2)
+    }
+
+    func testProcessorStillTreatsPhaseLessContinuousWheelAsMouseDuringRecovery() {
+        let processor = MouseScrollEventProcessor(
+            configuration: MouseEnhancerConfiguration(
+                reverseMouseHorizontal: false,
+                reverseMouseVertical: true,
+                reverseTrackpadHorizontal: false,
+                reverseTrackpadVertical: false
+            )
+        )
+
+        processor.setGestureMonitoringAvailable(true)
+        let result = processor.process(
+            snapshot: .phaseLessContinuousWheel,
+            deltas: MouseScrollDeltas(
+                deltaAxis1: 2,
+                deltaAxis2: 0,
+                pointDeltaAxis1: 10,
+                pointDeltaAxis2: 0,
+                fixedPointDeltaAxis1: 2,
+                fixedPointDeltaAxis2: 0
+            )
+        )
+
+        XCTAssertEqual(result.source, .mouse)
+        XCTAssertTrue(result.shouldReverse)
+        XCTAssertEqual(result.deltas.deltaAxis1, -2)
     }
 
     private func makePlugin(

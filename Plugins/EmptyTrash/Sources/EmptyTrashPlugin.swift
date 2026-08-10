@@ -108,7 +108,6 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
             )
         ]
     }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var actionDefinitions: [ActionDefinition] {
@@ -196,7 +195,7 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         }
         NSWorkspace.shared.open(url)
     }
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {

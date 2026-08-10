@@ -25,6 +25,7 @@ private struct ActionGridPluginProvider: PluginProvider {
 @MainActor
 final class ActionGridPlugin:
     MacToolsPlugin,
+    PluginSettingsPresenting,
     PluginActionProviding,
     ActionGridHostContextConsuming,
     ActionSurfaceAssignmentSummarizing,
@@ -39,6 +40,7 @@ final class ActionGridPlugin:
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requestSettingsPresentation: (() -> Void)?
     var actionGridHostContext: ActionGridHostContext? {
         didSet {
             if let actionGridHostContext {
@@ -70,13 +72,13 @@ final class ActionGridPlugin:
         )
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(
+    var settingsPage: PluginSettingsPage? {
+        .workspace(
             description: localization.string(
                 "metadata.description",
                 defaultValue: "在指针附近打开常用操作网格"
             ),
-            prefersFullHeight: true
+            scrolling: .host
         ) { [weak self] _ in
             if let self {
                 ActionGridSettingsView(plugin: self, store: self.store)

@@ -23,7 +23,7 @@ private struct LaunchControlPluginProvider: PluginProvider {
 final class LaunchControlPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
-    PluginConfigurationPresenting,
+    PluginSettingsPresenting,
     PluginActionProviding
 {
     private enum ActionID {
@@ -48,7 +48,7 @@ final class LaunchControlPlugin:
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var requestConfigurationPresentation: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
 
     private let controller: LaunchControlController
     private let localization: PluginLocalization
@@ -92,7 +92,6 @@ final class LaunchControlPlugin:
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
     var actionDefinitions: [ActionDefinition] {
         [
@@ -154,9 +153,9 @@ final class LaunchControlPlugin:
         }
     }
 
-    var configuration: PluginConfiguration? {
+    var settingsPage: PluginSettingsPage? {
         let localization = localization
-        return PluginConfiguration(description: metadata.defaultDescription) { _ in
+        return .workspace(description: metadata.defaultDescription, scrolling: .selfManaged) { _ in
             LaunchControlManagerView(controller: self.controller, localization: localization)
         }
     }
@@ -180,7 +179,7 @@ final class LaunchControlPlugin:
             if controlID == ControlID.refresh {
                 controller.refresh()
             } else if controlID == ControlID.openManager {
-                requestConfigurationPresentation?()
+                requestSettingsPresentation?()
             }
         case .setSwitch,
              .setSelection,
@@ -197,7 +196,7 @@ final class LaunchControlPlugin:
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     private func buildDetail(for snapshot: LaunchControlSnapshot) -> PluginPanelDetail {

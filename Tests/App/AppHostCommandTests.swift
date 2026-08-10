@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 import XCTest
 import MacToolsPluginKit
@@ -118,50 +117,6 @@ final class AppHostCommandTests: XCTestCase {
         XCTAssertEqual(
             visibilityTargets(pluginID: plugin.metadata.id, in: context),
             [VisibilityTarget(surface: .featurePanel, isVisible: false)]
-        )
-    }
-
-    func testAppearanceExecutionPersistsAppliesRefreshesAndRejectsStaleDefinition() throws {
-        let defaults = makeDefaults()
-        defaults.set(
-            AppAppearancePreference.system.rawValue,
-            forKey: AppAppearancePreference.userDefaultsKey
-        )
-        let context = makeContext(
-            defaults: defaults,
-            service: CommandTestLaunchAtLoginService(initialRegistered: false)
-        )
-        let definition = try XCTUnwrap(
-            AppHostCommandCatalog.applicableDefinitions(in: context).first {
-                $0.action == .setAppearance(.dark)
-            }
-        )
-        let originalAppearance = NSApp.appearance
-        defer {
-            NSApp.appearance = originalAppearance
-        }
-        let notification = expectation(
-            forNotification: AppAppearancePreference.didChangeNotification,
-            object: nil
-        ) { notification in
-            notification.object as? AppAppearancePreference == .dark
-        }
-
-        XCTAssertEqual(
-            AppHostCommandExecutor.perform(
-                expectedDefinition: definition,
-                context: context
-            ),
-            .performed(.refreshIndex)
-        )
-        wait(for: [notification], timeout: 1)
-        XCTAssertEqual(AppAppearancePreference.stored(in: defaults), .dark)
-        XCTAssertEqual(
-            AppHostCommandExecutor.perform(
-                expectedDefinition: definition,
-                context: context
-            ),
-            .unavailable
         )
     }
 

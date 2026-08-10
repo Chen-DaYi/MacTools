@@ -1,0 +1,69 @@
+{
+  "id": "middle-click",
+  "displayName": "模拟鼠标中键",
+  "summary": "触控板轻点 → 模拟鼠标中键",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "النقر بالزر الأوسط",
+      "summary": "حوّل نقرات لوحة التعقب إلى نقرات بالزر الأوسط."
+    },
+    "de": {
+      "displayName": "Mittelklick",
+      "summary": "Trackpad-Tippen als Mittelklick verwenden."
+    },
+    "en": {
+      "displayName": "Middle Click",
+      "summary": "Turn trackpad taps into middle clicks."
+    },
+    "es": {
+      "displayName": "Clic central",
+      "summary": "Convierte los toques del trackpad en clics centrales."
+    },
+    "fr": {
+      "displayName": "Clic du milieu",
+      "summary": "Transformez les touchers du trackpad en clics du milieu."
+    },
+    "ja": {
+      "displayName": "ミドルクリック",
+      "summary": "トラックパッドのタップをミドルクリックに変換します。"
+    },
+    "ko": {
+      "displayName": "가운데 클릭",
+      "summary": "트랙패드 탭을 가운데 클릭으로 전환합니다."
+    },
+    "pt": {
+      "displayName": "Clique do meio",
+      "summary": "Transforme toques no trackpad em cliques do meio."
+    },
+    "ru": {
+      "displayName": "Средний щелчок",
+      "summary": "Преобразуйте касания трекпада в средние щелчки."
+    },
+    "zh-Hans": {
+      "displayName": "模拟鼠标中键",
+      "summary": "触控板轻点 → 模拟鼠标中键"
+    },
+    "zh-Hant": {
+      "displayName": "模擬滑鼠中鍵",
+      "summary": "觸控板輕點 → 模擬滑鼠中鍵"
+    }
+  },
+  "version": "1.0.15",
+  "minHostVersion": "1.1.6",
+  "pluginKitVersion": 4,
+  "bundleRelativePath": "MiddleClick.bundle",
+  "factoryClass": "MiddleClickPlugin.MiddleClickPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "MiddleClickPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": false,
+    "componentPanel": false,
+    "settings": "form"
+  },
+  "permissions": [
+    "accessibility"
+  ],
+  "category": "productivity"
+}

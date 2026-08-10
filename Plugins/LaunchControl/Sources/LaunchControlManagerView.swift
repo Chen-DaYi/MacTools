@@ -1,7 +1,35 @@
 import SwiftUI
 import MacToolsPluginKit
 
+enum LaunchControlManagerLayout {
+    static let compactWidthThreshold: CGFloat = 720
+    static let compactHeightThreshold: CGFloat = 520
+    static let minimumSidebarWidth: CGFloat = 260
+    static let maximumSidebarWidth: CGFloat = 340
+    static let sidebarWidthRatio: CGFloat = 0.36
+
+    static func usesCompactPresentation(for width: CGFloat) -> Bool {
+        width < compactWidthThreshold
+    }
+
+    static func usesCompactHeight(for height: CGFloat) -> Bool {
+        height < compactHeightThreshold
+    }
+
+    static func sidebarWidth(for width: CGFloat) -> CGFloat {
+        min(
+            max(width * sidebarWidthRatio, minimumSidebarWidth),
+            maximumSidebarWidth
+        )
+    }
+}
+
 struct LaunchControlManagerView: View {
+    private enum CompactPane: String, Hashable {
+        case items
+        case detail
+    }
+
     @ObservedObject var controller: LaunchControlController
     private let localization: PluginLocalization
 
@@ -10,6 +38,8 @@ struct LaunchControlManagerView: View {
     @State private var stateFilter: LaunchControlStateFilter = .all
     @State private var searchText = ""
     @State private var pendingAction: LaunchControlPendingAction?
+    @State private var compactPane: CompactPane = .items
+    @State private var noteDrafts: [String: String] = [:]
 
     init(
         controller: LaunchControlController,
@@ -20,33 +50,21 @@ struct LaunchControlManagerView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            summaryHeader
-            toolbar
-
-            if let message = controller.snapshot.errorMessage {
-                statusBanner(message: message, systemImage: "exclamationmark.triangle.fill", color: .orange)
-            } else if let message = controller.snapshot.operationMessage {
-                statusBanner(message: message, systemImage: "checkmark.circle.fill", color: .green)
-            }
-
-            HStack(alignment: .top, spacing: 0) {
-                itemList
-                    .frame(minWidth: 280, idealWidth: 330, maxWidth: 360)
-
-                Divider()
-
-                detailPane
-                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
-            }
-            .frame(minHeight: 500)
-            .pluginSettingsCardBackground(.plugin)
-
-            scanActivity
+        GeometryReader { geometry in
+            managerContent(
+                availableWidth: geometry.size.width,
+                availableHeight: geometry.size.height
+            )
         }
         .onAppear {
             if controller.snapshot.items.isEmpty {
                 controller.refresh()
+            }
+        }
+        .onChange(of: filteredItems.map(\.id)) { _, visibleIDs in
+            if let selectedID = controller.snapshot.selectedItemID,
+               !visibleIDs.contains(selectedID) {
+                compactPane = .items
             }
         }
         .confirmationDialog(
@@ -74,16 +92,51 @@ struct LaunchControlManagerView: View {
         }
     }
 
-    private var summaryHeader: some View {
-        HStack(alignment: .center, spacing: 12) {
-            metric(localization.string("manager.metric.total", defaultValue: "总数"), value: controller.snapshot.items.count, color: .primary)
-            metric(localization.string("manager.metric.favorite", defaultValue: "关注"), value: controller.snapshot.items.filter(\.isFavorite).count, color: .yellow)
-            metric(localization.string("manager.metric.running", defaultValue: "运行中"), value: controller.snapshot.items.filter { $0.state == .running }.count, color: .green)
-            metric(localization.string("manager.metric.userCreated", defaultValue: "用户创建"), value: controller.snapshot.items.filter { $0.origin == .userCreated }.count, color: .orange)
-            metric(localization.string("manager.metric.appCreated", defaultValue: "应用创建"), value: controller.snapshot.items.filter { $0.origin == .thirdParty }.count, color: .blue)
-            metric(localization.string("manager.metric.failed", defaultValue: "异常"), value: controller.snapshot.items.filter { $0.state == .failed }.count, color: .red)
+    private func managerContent(
+        availableWidth: CGFloat,
+        availableHeight: CGFloat
+    ) -> some View {
+        let usesCompactHeight = LaunchControlManagerLayout.usesCompactHeight(
+            for: availableHeight
+        )
 
-            Spacer()
+        return VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            if !usesCompactHeight || !hasScanActivity {
+                summaryHeader(compact: usesCompactHeight)
+            }
+            toolbar(availableWidth: availableWidth)
+
+            if let message = controller.snapshot.errorMessage {
+                statusBanner(message: message, systemImage: "exclamationmark.triangle.fill", color: .orange)
+            } else if let message = controller.snapshot.operationMessage {
+                statusBanner(message: message, systemImage: "checkmark.circle.fill", color: .green)
+            }
+
+            primaryContent(availableWidth: availableWidth)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .layoutPriority(1)
+
+            scanActivity(compact: usesCompactHeight)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func summaryHeader(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            FlowLayout(spacing: 8, rowSpacing: 8) {
+                metric(localization.string("manager.metric.total", defaultValue: "总数"), value: controller.snapshot.items.count, color: .primary)
+
+                if compact {
+                    metric(localization.string("manager.metric.running", defaultValue: "运行中"), value: controller.snapshot.items.filter { $0.state == .running }.count, color: .green)
+                    metric(localization.string("manager.metric.failed", defaultValue: "异常"), value: controller.snapshot.items.filter { $0.state == .failed }.count, color: .red)
+                } else {
+                    metric(localization.string("manager.metric.favorite", defaultValue: "关注"), value: controller.snapshot.items.filter(\.isFavorite).count, color: .yellow)
+                    metric(localization.string("manager.metric.running", defaultValue: "运行中"), value: controller.snapshot.items.filter { $0.state == .running }.count, color: .green)
+                    metric(localization.string("manager.metric.userCreated", defaultValue: "用户创建"), value: controller.snapshot.items.filter { $0.origin == .userCreated }.count, color: .orange)
+                    metric(localization.string("manager.metric.appCreated", defaultValue: "应用创建"), value: controller.snapshot.items.filter { $0.origin == .thirdParty }.count, color: .blue)
+                    metric(localization.string("manager.metric.failed", defaultValue: "异常"), value: controller.snapshot.items.filter { $0.state == .failed }.count, color: .red)
+                }
+            }
 
             if let target = controller.snapshot.currentScanTarget {
                 HStack(spacing: 6) {
@@ -95,12 +148,23 @@ struct LaunchControlManagerView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                .frame(maxWidth: 260, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    private var toolbar: some View {
+    private func toolbar(availableWidth: CGFloat) -> some View {
+        let layout = LaunchControlManagerLayout.usesCompactPresentation(for: availableWidth)
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: PluginSettingsTheme.Spacing.controlCluster))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+
+        return layout {
+            filterControls
+            searchAndActionControls
+        }
+    }
+
+    private var filterControls: some View {
         HStack(spacing: 10) {
             Picker(localization.string("manager.filter.scope", defaultValue: "范围"), selection: $scopeFilter) {
                 ForEach(LaunchControlFilter.allCases) { filter in
@@ -108,7 +172,7 @@ struct LaunchControlManagerView: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 112)
+            .frame(minWidth: 88, idealWidth: 112, maxWidth: .infinity)
 
             Picker(localization.string("manager.filter.origin", defaultValue: "来源"), selection: $originFilter) {
                 ForEach(LaunchControlOriginFilter.allCases) { filter in
@@ -116,7 +180,7 @@ struct LaunchControlManagerView: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 112)
+            .frame(minWidth: 88, idealWidth: 112, maxWidth: .infinity)
 
             Picker(localization.string("manager.filter.state", defaultValue: "状态"), selection: $stateFilter) {
                 ForEach(LaunchControlStateFilter.allCases) { filter in
@@ -124,13 +188,16 @@ struct LaunchControlManagerView: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 112)
+            .frame(minWidth: 88, idealWidth: 112, maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity)
+    }
 
+    private var searchAndActionControls: some View {
+        HStack(spacing: 10) {
             TextField(localization.string("manager.search.placeholder", defaultValue: "搜索 label、命令或路径"), text: $searchText)
                 .textFieldStyle(.roundedBorder)
-                .frame(minWidth: 180, idealWidth: 260, maxWidth: 320)
-
-            Spacer()
+                .frame(minWidth: 140, idealWidth: 260, maxWidth: .infinity)
 
             Button {
                 originFilter = originFilter == .favorite ? .all : .favorite
@@ -151,6 +218,63 @@ struct LaunchControlManagerView: View {
             }
             .disabled(controller.snapshot.isRefreshing)
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func primaryContent(availableWidth: CGFloat) -> some View {
+        if LaunchControlManagerLayout.usesCompactPresentation(for: availableWidth) {
+            compactPrimaryContent
+        } else {
+            HStack(alignment: .top, spacing: 0) {
+                itemList
+                    .frame(width: LaunchControlManagerLayout.sidebarWidth(for: availableWidth))
+
+                Divider()
+
+                detailPane
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .pluginSettingsCardBackground(.standard)
+        }
+    }
+
+    private var compactPrimaryContent: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Picker("", selection: $compactPane) {
+                    Label(
+                        localization.string("manager.list.title", defaultValue: "启动项"),
+                        systemImage: "list.bullet"
+                    )
+                    .tag(CompactPane.items)
+
+                    Label(
+                        localization.string("manager.compact.detail", defaultValue: "详情"),
+                        systemImage: "sidebar.right"
+                    )
+                    .tag(CompactPane.detail)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 280)
+
+                Spacer(minLength: 0)
+            }
+            .padding(PluginSettingsTheme.Spacing.controlCluster)
+
+            Divider()
+
+            switch compactPane {
+            case .items:
+                itemList
+            case .detail:
+                detailPane
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private var itemList: some View {
@@ -179,6 +303,7 @@ struct LaunchControlManagerView: View {
                 }
             }
             .listStyle(.inset)
+            .scrollContentBackground(.hidden)
             .overlay {
                 if controller.snapshot.isRefreshing && controller.snapshot.items.isEmpty {
                     ProgressView(localization.string("manager.list.scanning", defaultValue: "正在扫描"))
@@ -191,7 +316,6 @@ struct LaunchControlManagerView: View {
                 }
             }
         }
-        .background(PluginSettingsTheme.Palette.nativeFieldBackground)
     }
 
     private var detailPane: some View {
@@ -201,7 +325,12 @@ struct LaunchControlManagerView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         detailHeader(item)
                         actionBar(item)
-                        LaunchControlNoteEditor(item: item, controller: controller, localization: localization)
+                        LaunchControlNoteEditor(
+                            item: item,
+                            controller: controller,
+                            localization: localization,
+                            draft: noteDraftBinding(for: item)
+                        )
                             .id(item.id)
                         keyFields(item)
                         rawPlist(item)
@@ -213,7 +342,6 @@ struct LaunchControlManagerView: View {
                 placeholder
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var placeholder: some View {
@@ -238,45 +366,85 @@ struct LaunchControlManagerView: View {
         .padding()
     }
 
+    private var hasScanActivity: Bool {
+        controller.snapshot.isRefreshing || !controller.snapshot.scanLogEntries.isEmpty
+    }
+
     @ViewBuilder
-    private var scanActivity: some View {
-        if controller.snapshot.isRefreshing || !controller.snapshot.scanLogEntries.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(localization.string("manager.scanActivity.title", defaultValue: "扫描进度"))
-                        .font(PluginSettingsTheme.Typography.sectionTitle)
-                    Spacer()
-                    if controller.snapshot.isRefreshing {
-                        ProgressView()
-                            .controlSize(.small)
-                            .scaleEffect(0.72)
+    private func scanActivity(compact: Bool) -> some View {
+        if hasScanActivity {
+            if compact {
+                compactScanActivity
+            } else {
+                expandedScanActivity
+            }
+        }
+    }
+
+    private var compactScanActivity: some View {
+        HStack(spacing: 8) {
+            if controller.snapshot.isRefreshing {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.72)
+            } else {
+                Image(systemName: "checkmark.circle")
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(localization.string("manager.scanActivity.title", defaultValue: "扫描进度"))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+            if let latestEntry = controller.snapshot.scanLogEntries.last {
+                Text(latestEntry)
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(10)
+        .pluginSettingsCardBackground(.standard)
+    }
+
+    private var expandedScanActivity: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(localization.string("manager.scanActivity.title", defaultValue: "扫描进度"))
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
+                Spacer()
+                if controller.snapshot.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.72)
+                }
+            }
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(controller.snapshot.scanLogEntries.enumerated()), id: \.offset) { index, entry in
+                            Text(entry)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .id(index)
+                        }
                     }
                 }
-
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 4) {
-                            ForEach(Array(controller.snapshot.scanLogEntries.enumerated()), id: \.offset) { index, entry in
-                                Text(entry)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .id(index)
-                            }
-                        }
-                    }
-                    .frame(height: 88)
-                    .onChange(of: controller.snapshot.scanLogEntries.count) {
-                        if let lastIndex = controller.snapshot.scanLogEntries.indices.last {
-                            proxy.scrollTo(lastIndex, anchor: .bottom)
-                        }
+                .frame(height: 88)
+                .onChange(of: controller.snapshot.scanLogEntries.count) {
+                    if let lastIndex = controller.snapshot.scanLogEntries.indices.last {
+                        proxy.scrollTo(lastIndex, anchor: .bottom)
                     }
                 }
             }
-            .padding(10)
-            .pluginSettingsCardBackground(.plugin)
         }
+        .padding(10)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private var filteredItems: [LaunchControlItem] {
@@ -304,18 +472,35 @@ struct LaunchControlManagerView: View {
     }
 
     private var selectedItem: LaunchControlItem? {
-        if let selectedID = controller.snapshot.selectedItemID,
-           let visibleItem = filteredItems.first(where: { $0.id == selectedID }) {
-            return visibleItem
+        guard let selectedID = controller.snapshot.selectedItemID else {
+            return nil
         }
-
-        return filteredItems.first ?? controller.snapshot.selectedItem
+        return filteredItems.first(where: { $0.id == selectedID })
     }
 
     private var selectedItemBinding: Binding<String?> {
         Binding(
-            get: { selectedItem?.id },
-            set: { controller.selectItem(id: $0) }
+            get: {
+                guard let selectedID = controller.snapshot.selectedItemID,
+                      filteredItems.contains(where: { $0.id == selectedID })
+                else {
+                    return nil
+                }
+                return selectedID
+            },
+            set: { itemID in
+                controller.selectItem(id: itemID)
+                if itemID != nil {
+                    compactPane = .detail
+                }
+            }
+        )
+    }
+
+    private func noteDraftBinding(for item: LaunchControlItem) -> Binding<String> {
+        Binding(
+            get: { noteDrafts[item.id] ?? item.note },
+            set: { noteDrafts[item.id] = $0 }
         )
     }
 
@@ -494,25 +679,39 @@ struct LaunchControlManagerView: View {
     }
 
     private func fieldRow(_ title: String, value: String, help: String) -> some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 4) {
-            GridRow {
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 138, alignment: .leading)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(value)
-                        .font(PluginSettingsTheme.Typography.rowTitle)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                    Text(help)
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                fieldTitle(title)
+                    .frame(width: 112, alignment: .leading)
+                fieldValue(value, help: help)
+                    .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                fieldTitle(title)
+                fieldValue(value, help: help)
             }
         }
         .padding(10)
-        .pluginSettingsCardBackground(.plugin)
+        .pluginSettingsCardBackground(.standard)
+    }
+
+    private func fieldTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            .foregroundStyle(.secondary)
+    }
+
+    private func fieldValue(_ value: String, help: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(PluginSettingsTheme.Typography.rowTitle)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            Text(help)
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func statusBanner(message: String, systemImage: String, color: Color) -> some View {
@@ -532,9 +731,9 @@ struct LaunchControlManagerView: View {
 
     private func metric(_ title: String, value: Int, color: Color) -> some View {
         HStack(spacing: 6) {
-                Text("\(value)")
-                    .font(PluginSettingsTheme.Typography.pageTitle)
-                    .foregroundStyle(color)
+            Text("\(value)")
+                .font(PluginSettingsTheme.Typography.pageTitle)
+                .foregroundStyle(color)
                 .monospacedDigit()
             Text(title)
                 .font(PluginSettingsTheme.Typography.secondaryLabel)
@@ -542,7 +741,7 @@ struct LaunchControlManagerView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .pluginSettingsCardBackground(.plugin)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private func badge(_ title: String, color: Color) -> some View {
@@ -846,17 +1045,18 @@ private struct LaunchControlNoteEditor: View {
     let item: LaunchControlItem
     let controller: LaunchControlController
     let localization: PluginLocalization
-    @State private var draft: String
+    @Binding var draft: String
 
     init(
         item: LaunchControlItem,
         controller: LaunchControlController,
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        draft: Binding<String>
     ) {
         self.item = item
         self.controller = controller
         self.localization = localization
-        _draft = State(initialValue: item.note)
+        _draft = draft
     }
 
     private var isDirty: Bool {

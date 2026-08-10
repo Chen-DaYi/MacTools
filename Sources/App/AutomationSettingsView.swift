@@ -45,7 +45,7 @@ struct AutomationSettingsView: View {
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.red)
                     .padding(PluginSettingsTheme.Spacing.cardContent)
-                    .pluginSettingsCardBackground(.host)
+                    .pluginSettingsCardBackground(.standard)
                     .padding(PluginSettingsTheme.Spacing.pagePadding)
             }
         }
@@ -295,7 +295,7 @@ private struct WorkflowDetailView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private var workflowIdentity: some View {
@@ -393,7 +393,7 @@ private struct WorkflowDetailView: View {
                     description: Text(FeatureL10n.string("从操作目录添加第一个步骤。"))
                 )
                 .frame(maxWidth: .infinity, minHeight: 150)
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(workflow.steps.enumerated()), id: \.element.id) { index, step in
@@ -410,7 +410,7 @@ private struct WorkflowDetailView: View {
                         }
                     }
                 }
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
             }
         }
     }
@@ -452,7 +452,8 @@ private struct WorkflowDetailView: View {
                 ForEach(
                     pluginHost.actionSurfaceAssignmentSummaries(
                         for: workflow.actionReference
-                    )
+                    ),
+                    id: \.surfaceID
                 ) { summary in
                     HStack {
                         Label(
@@ -461,7 +462,7 @@ private struct WorkflowDetailView: View {
                         )
                         Spacer()
                         Button(FeatureL10n.string("配置")) {
-                            pluginHost.presentPluginConfiguration(pluginID: summary.surfaceID)
+                            pluginHost.presentPluginSettings(pluginID: summary.surfaceID)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -473,7 +474,7 @@ private struct WorkflowDetailView: View {
             }
             .font(PluginSettingsTheme.Typography.rowDescription)
             .padding(PluginSettingsTheme.Spacing.cardContent)
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -515,7 +516,7 @@ private struct WorkflowDetailView: View {
                     .foregroundStyle(.secondary)
                     .padding(PluginSettingsTheme.Spacing.cardContent)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .pluginSettingsCardBackground(.host)
+                    .pluginSettingsCardBackground(.standard)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(rules.enumerated()), id: \.element.id) { index, rule in
@@ -530,7 +531,7 @@ private struct WorkflowDetailView: View {
                         }
                     }
                 }
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
             }
         }
     }
@@ -548,7 +549,7 @@ private struct WorkflowDetailView: View {
                     .foregroundStyle(.secondary)
                     .padding(PluginSettingsTheme.Spacing.cardContent)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .pluginSettingsCardBackground(.host)
+                    .pluginSettingsCardBackground(.standard)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(runs.enumerated()), id: \.element.id) { index, run in
@@ -558,7 +559,7 @@ private struct WorkflowDetailView: View {
                         }
                     }
                 }
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
             }
         }
     }

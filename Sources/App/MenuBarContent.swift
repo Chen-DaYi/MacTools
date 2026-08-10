@@ -749,13 +749,13 @@ struct MenuBarContent: View {
         }
 
         if isFanControlManagePresetsAction(pluginID: item.id, controlID: controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.fanControlPluginID)
+            pluginHost.presentPluginSettings(pluginID: Self.fanControlPluginID)
             onDismiss()
             return
         }
 
         if isZshConfigOpenSettingsAction(pluginID: item.id, controlID: controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.zshConfigPluginID)
+            pluginHost.presentPluginSettings(pluginID: Self.zshConfigPluginID)
             onDismiss()
             return
         }
@@ -807,17 +807,17 @@ struct MenuBarContent: View {
         }
 
         if isFanControlManagePresetsAction(pluginID: action.pluginID, controlID: action.controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.fanControlPluginID)
+            pluginHost.presentPluginSettings(pluginID: Self.fanControlPluginID)
             return
         }
 
         if isZshConfigOpenSettingsAction(pluginID: action.pluginID, controlID: action.controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.zshConfigPluginID)
+            pluginHost.presentPluginSettings(pluginID: Self.zshConfigPluginID)
             return
         }
 
         if isBatteryChargeLimitManageSettingsAction(pluginID: action.pluginID, controlID: action.controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.batteryChargeLimitPluginID)
+            pluginHost.presentPluginSettings(pluginID: Self.batteryChargeLimitPluginID)
             return
         }
 
@@ -2483,7 +2483,10 @@ private struct SecondarySlidingPanel: View {
         .padding(MenuBarPanelLayout.outerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            PopoverMaterialBackground()
+            ZStack {
+                PopoverMaterialBackground()
+                MenuBarPanelBackground()
+            }
         }
         .clipShape(
             RoundedRectangle(

@@ -198,35 +198,41 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] {
+        let connectFirstAvailableTitle = localization.string(
+            "settings.connectFirstAvailable.title",
+            defaultValue: "连接第一个可用显示器"
+        )
+        let disconnectAllTitle = localization.string(
+            "settings.disconnectAll.title",
+            defaultValue: "断开所有已连接设备"
+        )
         let globalDefinitions = [
             shortcutDefinition(
                 id: SidecarShortcutID.connectFirstAvailable,
                 actionID: SidecarActionID.connectFirstAvailable,
-                title: localization.string(
-                    "settings.connectFirstAvailable.title",
-                    defaultValue: "连接第一个可用显示器"
-                ),
+                title: connectFirstAvailableTitle,
                 description: localization.string(
                     "settings.connectFirstAvailable.description",
                     defaultValue: "按上方的可用显示器优先级连接第一个设备。"
                 ),
                 defaultBinding: preferences.connectFirstAvailableShortcut,
                 groupID: "global",
-                groupTitle: localization.string("settings.globalShortcuts.title", defaultValue: "Sidecar 快捷键")
+                groupTitle: localization.string("settings.globalShortcuts.title", defaultValue: "Sidecar 快捷键"),
+                settingsControlTitle: connectFirstAvailableTitle
             ),
             shortcutDefinition(
                 id: SidecarShortcutID.disconnectAll,
                 actionID: SidecarActionID.disconnectAll,
-                title: localization.string("settings.disconnectAll.title", defaultValue: "断开所有已连接设备"),
+                title: disconnectAllTitle,
                 description: localization.string(
                     "settings.disconnectAll.description",
                     defaultValue: "只会断开 Sidecar 明确报告为已连接的显示器。"
                 ),
                 defaultBinding: preferences.disconnectAllShortcut,
                 groupID: "global",
-                groupTitle: localization.string("settings.globalShortcuts.title", defaultValue: "Sidecar 快捷键")
+                groupTitle: localization.string("settings.globalShortcuts.title", defaultValue: "Sidecar 快捷键"),
+                settingsControlTitle: disconnectAllTitle
             )
         ]
 
@@ -420,26 +426,46 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         }
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(
+    var settingsPage: PluginSettingsPage? {
+        .form(
             description: metadata.defaultDescription,
-            integratedShortcutGroupIDs: ["devices"]
-        ) { [weak self] context in
-            if let self {
-                SidecarSettingsView(
-                    store: self.preferences,
-                    liveDevices: self.devices,
-                    localization: self.localization,
-                    configurationContext: context,
-                    onRefresh: { [weak self] in self?.refresh() },
-                    onUpdate: { [weak self] in
-                        self?.onStateChange?()
+            sections: [
+                PluginSettingsSection(
+                    id: "device-settings",
+                    title: localization.string("settings.devices.title", defaultValue: "Sidecar 设备"),
+                    systemImage: "display.2",
+                    presentation: .edgeToEdge,
+                    embeddedShortcutGroupIDs: ["devices"]
+                ) { [weak self] context in
+                    if let self {
+                        SidecarSettingsView(
+                            store: self.preferences,
+                            liveDevices: self.devices,
+                            localization: self.localization,
+                            settingsContext: context,
+                            onRefresh: { [weak self] in self?.refresh() },
+                            onUpdate: { [weak self] in
+                                self?.onStateChange?()
+                            }
+                        )
+                    } else {
+                        EmptyView()
                     }
-                )
-            } else {
-                EmptyView()
-            }
-        }
+                }
+                .headerAccessory { [weak self] _ in
+                    Button {
+                        self?.refresh()
+                    } label: {
+                        Label(
+                            self?.localization.string("settings.refresh", defaultValue: "刷新") ?? "刷新",
+                            systemImage: "arrow.clockwise"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            ]
+        )
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -521,7 +547,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {
         handleConfiguredShortcut(id: id)
     }
@@ -1664,7 +1690,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         description: String,
         defaultBinding: ShortcutBinding?,
         groupID: String,
-        groupTitle: String
+        groupTitle: String,
+        settingsControlTitle: String? = nil
     ) -> PluginShortcutDefinition {
         PluginShortcutDefinition(
             id: id,
@@ -1677,7 +1704,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             settingsGroupID: groupID,
             settingsGroupTitle: groupTitle,
             settingsGroupDescription: nil,
-            settingsControlTitle: nil,
+            settingsControlTitle: settingsControlTitle,
             settingsControlSystemImage: nil
         )
     }

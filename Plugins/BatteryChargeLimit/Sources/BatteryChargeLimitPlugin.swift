@@ -151,7 +151,6 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var actionDefinitions: [ActionDefinition] {
@@ -279,18 +278,66 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
         }
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
-            BatteryChargeLimitSettingsView(
-                store: self.store,
-                capabilities: self.capabilities,
-                snapshot: self.batterySnapshot,
-                localization: self.localization,
-                onSetLimit: { [weak self] value in
-                    self?.handleLimitChange(value)
-                }
-            )
-        }
+
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "charge-limit",
+                    title: localization.string("settings.limit.title", defaultValue: "充电上限"),
+                    systemImage: "battery.75",
+                    rows: [
+                        PluginSettingsRow(
+                            id: ControlID.limitSlider,
+                            title: localization.string("settings.limit.target", defaultValue: "目标电量"),
+                            description: localization.string(
+                                "settings.limit.description",
+                                defaultValue: "达到此电量后自动停止充电。"
+                            ),
+                            systemImage: "battery.75percent",
+                            control: .slider(
+                                value: Double(store.limitPercent),
+                                range: Double(BatteryChargeLimits.minimumPercent)...Double(BatteryChargeLimits.maximumPercent),
+                                step: Double(BatteryChargeLimits.percentStep),
+                                valueFormat: .percentage
+                            )
+                        )
+                    ]
+                ),
+                PluginSettingsSection(
+                    id: "charging-behavior",
+                    title: localization.string("settings.behavior.title", defaultValue: "充电行为"),
+                    systemImage: "bolt.badge.checkmark",
+                    rows: [
+                        PluginSettingsRow(
+                            id: "no-auto-resume",
+                            title: localization.string(
+                                "settings.behavior.noAutoResume.title",
+                                defaultValue: "不自动恢复充电"
+                            ),
+                            description: localization.string(
+                                "settings.behavior.noAutoResume.description",
+                                defaultValue: "电量低于上限时不会自动充电，需要在菜单栏点击「开始充电」才会继续。"
+                            ),
+                            systemImage: "pause.circle",
+                            control: .status(
+                                text: localization.string("settings.status.enabled", defaultValue: "默认行为"),
+                                systemImage: "checkmark.circle.fill",
+                                tone: .positive,
+                                actionTitle: nil
+                            )
+                        )
+                    ]
+                ),
+                PluginSettingsSection(
+                    id: "hardware-compatibility",
+                    title: localization.string("settings.compatibility.title", defaultValue: "硬件兼容"),
+                    systemImage: "cpu",
+                    rows: hardwareCompatibilityRows
+                )
+            ]
+        )
     }
 
     func handleAction(_ action: PluginPanelAction) {
@@ -317,7 +364,13 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        guard case let .setNumber(controlID, value, phase) = action,
+              controlID == ControlID.limitSlider,
+              phase == .committed
+        else { return }
+        handleLimitChange(Int(value.rounded()))
+    }
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
@@ -371,6 +424,72 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
 
         let failureMessage = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
         return succeeded ? .succeeded() : .failed(message: failureMessage)
+    }
+
+    private var hardwareCompatibilityRows: [PluginSettingsRow] {
+        var rows = [
+            PluginSettingsRow(
+                id: "control-method",
+                title: localization.string("settings.compatibility.controlMethod", defaultValue: "充电控制方式"),
+                systemImage: "cpu",
+                control: .status(
+                    text: capabilityDescription,
+                    systemImage: capabilities.canInhibit ? "checkmark.circle.fill" : "xmark.circle.fill",
+                    tone: capabilities.canInhibit ? .positive : .caution,
+                    actionTitle: nil
+                )
+            )
+        ]
+
+        if capabilities.canForceDischarge {
+            rows.append(
+                PluginSettingsRow(
+                    id: "force-discharge",
+                    title: localization.string("settings.compatibility.forceDischarge", defaultValue: "强制放电"),
+                    systemImage: "battery.25",
+                    control: .status(
+                        text: localization.string(
+                            "settings.compatibility.forceDischarge.supported",
+                            defaultValue: "支持（CH0I）"
+                        ),
+                        systemImage: "checkmark.circle.fill",
+                        tone: .positive,
+                        actionTitle: nil
+                    )
+                )
+            )
+        }
+
+        if capabilities.isBCLMOnly {
+            rows.append(
+                PluginSettingsRow(
+                    id: "intel-limit",
+                    title: localization.string("settings.compatibility.intelLimit.title", defaultValue: "Intel Mac 限制"),
+                    description: localization.string(
+                        "settings.compatibility.intelLimit.description",
+                        defaultValue: "当前 Mac 仅支持 BCLM，电量低于上限时仍可能被系统自动充至上限。"
+                    ),
+                    systemImage: "exclamationmark.triangle",
+                    control: .status(
+                        text: localization.string("settings.status.limited", defaultValue: "有限支持"),
+                        systemImage: "exclamationmark.triangle.fill",
+                        tone: .caution,
+                        actionTitle: nil
+                    )
+                )
+            )
+        }
+        return rows
+    }
+
+    private var capabilityDescription: String {
+        if capabilities.hasCHTE { return "CHTE (macOS 26+)" }
+        if capabilities.hasCH0BC { return "CH0B + CH0C (Apple Silicon)" }
+        if capabilities.hasBCLM { return "BCLM (Intel)" }
+        return localization.string(
+            "settings.compatibility.noSMCKey",
+            defaultValue: "未检测到可用的 SMC 充电控制键"
+        )
     }
 
     // MARK: - User Actions

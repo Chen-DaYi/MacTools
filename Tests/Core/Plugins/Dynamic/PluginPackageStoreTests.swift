@@ -91,6 +91,49 @@ final class PluginPackageStoreTests: XCTestCase {
         )
     }
 
+    func testExistingV3ManifestRemainsDiscoverableForCatalogUpdate() throws {
+        let store = makeStore()
+        let installedURL = store.installedDirectory
+            .appendingPathComponent("com.example.legacy", isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        let bundleURL = installedURL.appendingPathComponent("Legacy.bundle", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        let manifestData = """
+        {
+          "id": "com.example.legacy",
+          "displayName": "Legacy",
+          "version": "3.2.1",
+          "minHostVersion": "1.1.6",
+          "pluginKitVersion": 3,
+          "bundleRelativePath": "Legacy.bundle",
+          "capabilities": {
+            "primaryPanel": true,
+            "componentPanel": false,
+            "configuration": true
+          },
+          "permissions": []
+        }
+        """.data(using: .utf8)!
+        try manifestData.write(to: installedURL.appendingPathComponent("plugin.json"))
+
+        let record = try XCTUnwrap(store.installedRecords().first)
+
+        XCTAssertEqual(record.id, "com.example.legacy")
+        XCTAssertEqual(record.manifest.version, "3.2.1")
+        XCTAssertEqual(record.manifest.capabilities.settings, .form)
+        XCTAssertEqual(
+            record.state,
+            .incompatible(
+                AppL10n.pluginsFormat(
+                    "plugin.error.store.installedSDKIncompatibleFormat",
+                    defaultValue: "插件 SDK 版本不兼容，已安装版本为 %d，当前支持版本为 %d。请更新插件。",
+                    3,
+                    PluginPackageManifestLoader.supportedPluginKitVersion
+                )
+            )
+        )
+    }
+
     func testUninstallDeletesPackageAndCanRemoveStorage() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()

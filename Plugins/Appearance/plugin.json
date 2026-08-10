@@ -50,7 +50,7 @@
   },
   "version": "1.0.10",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 3,
+  "pluginKitVersion": 4,
   "bundleRelativePath": "Appearance.bundle",
   "factoryClass": "AppearancePlugin.AppearancePluginFactory",
   "build": {
@@ -60,7 +60,7 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": false
+    "settings": "none"
   },
   "permissions": [],
   "category": "display"

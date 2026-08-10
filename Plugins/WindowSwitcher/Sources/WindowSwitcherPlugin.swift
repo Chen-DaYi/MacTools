@@ -26,6 +26,11 @@ private struct WindowSwitcherPluginProvider: PluginProvider {
 @MainActor
 final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing,
     PluginShortcutEventHandling, PluginActionProviding, PluginActionPermissionProviding {
+    private enum SettingsID {
+        static let enabled = "enabled"
+        static let mode = "mode"
+        static let sortMode = "sort-mode"
+    }
     private enum Session {
         case direct(entries: [WindowSwitcherAppEntry], selectedIndex: Int)
         case keyWindow(entries: [WindowSwitcherAppEntry])
@@ -119,8 +124,6 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         ]
     }
 
-    var settingsSections: [PluginSettingsSection] { [] }
-
     var shortcutDefinitions: [PluginShortcutDefinition] {
         [
             PluginShortcutDefinition(
@@ -139,9 +142,7 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
                 settingsGroupDescription: localization.string(
                     "shortcut.group.description",
                     defaultValue: "修改用于唤起窗口切换的快捷键。"
-                ),
-                settingsControlTitle: localization.string("shortcut.control.title", defaultValue: "切换快捷键"),
-                settingsControlSystemImage: "command"
+                )
             ),
         ]
     }
@@ -217,22 +218,75 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         }
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [weak self] _ in
-            guard let self else {
-                return AnyView(EmptyView())
-            }
-
-            return AnyView(
-                WindowSwitcherSettingsView(
-                    store: self.store,
-                    localization: self.localization,
-                    onChange: { [weak self] in
-                        self?.configurationDidChange()
-                    }
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "status",
+                    title: localization.string("settings.status.sectionTitle", defaultValue: "状态"),
+                    systemImage: "power",
+                    rows: [
+                        PluginSettingsRow(
+                            id: SettingsID.enabled,
+                            title: localization.string("settings.status.title", defaultValue: "启用窗口切换"),
+                            description: store.configuration.isEnabled
+                                ? localization.string("settings.status.enabled.description", defaultValue: "接管切换快捷键，显示并切换应用窗口。")
+                                : localization.string("settings.status.disabled.description", defaultValue: "暂停快捷键监听，系统默认切换保持不变。"),
+                            systemImage: "rectangle.2.swap",
+                            control: .toggle(isOn: store.configuration.isEnabled)
+                        )
+                    ]
+                ),
+                PluginSettingsSection(
+                    id: "switching-mode",
+                    title: localization.string("settings.mode.sectionTitle", defaultValue: "切换模式"),
+                    systemImage: "rectangle.2.swap",
+                    rows: [
+                        PluginSettingsRow(
+                            id: SettingsID.mode,
+                            title: localization.string("settings.mode.title", defaultValue: "默认行为"),
+                            description: settingsModeDescription,
+                            systemImage: "keyboard",
+                            control: .picker(
+                                selectionID: store.configuration.mode.rawValue,
+                                options: [
+                                    PluginSettingsOption(
+                                        id: WindowSwitcherMode.keyWindow.rawValue,
+                                        title: localization.string("settings.mode.keyWindow", defaultValue: "按键直达")
+                                    ),
+                                    PluginSettingsOption(
+                                        id: WindowSwitcherMode.directCycle.rawValue,
+                                        title: localization.string("settings.mode.directCycle", defaultValue: "连续切换")
+                                    )
+                                ],
+                                style: .segmented
+                            )
+                        ),
+                        PluginSettingsRow(
+                            id: SettingsID.sortMode,
+                            title: localization.string("settings.sort.title", defaultValue: "排序"),
+                            description: settingsSortDescription,
+                            systemImage: "arrow.up.arrow.down",
+                            control: .picker(
+                                selectionID: store.configuration.sortMode.rawValue,
+                                options: [
+                                    PluginSettingsOption(
+                                        id: WindowSwitcherSortMode.recentUse.rawValue,
+                                        title: localization.string("settings.sort.recentUse", defaultValue: "最近使用")
+                                    ),
+                                    PluginSettingsOption(
+                                        id: WindowSwitcherSortMode.fixed.rawValue,
+                                        title: localization.string("settings.sort.fixed", defaultValue: "固定排序")
+                                    )
+                                ],
+                                style: .segmented
+                            )
+                        )
+                    ]
                 )
-            )
-        }
+            ]
+        )
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -278,7 +332,27 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         handleAccessibilityPermissionAction()
     }
 
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        switch action {
+        case let .setBoolean(controlID, value):
+            guard controlID == SettingsID.enabled else { return }
+            store.setEnabled(value)
+        case let .setSelection(controlID, optionID):
+            switch controlID {
+            case SettingsID.mode:
+                guard let mode = WindowSwitcherMode(rawValue: optionID) else { return }
+                store.setMode(mode)
+            case SettingsID.sortMode:
+                guard let sortMode = WindowSwitcherSortMode(rawValue: optionID) else { return }
+                store.setSortMode(sortMode)
+            default:
+                return
+            }
+        default:
+            return
+        }
+        configurationDidChange()
+    }
 
     func handleShortcutAction(id: String) {
         guard id == WindowSwitcherConstants.shortcutActionID,
@@ -326,6 +400,36 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
 
         if previous != isAccessibilityGranted {
             onStateChange?()
+        }
+    }
+
+    private var settingsModeDescription: String {
+        switch store.configuration.mode {
+        case .keyWindow:
+            localization.string(
+                "settings.mode.keyWindow.description",
+                defaultValue: "显示固定窗口，按条目上方字母直达。"
+            )
+        case .directCycle:
+            localization.string(
+                "settings.mode.directCycle.description",
+                defaultValue: "按住快捷键循环选择，松开后切换窗口。"
+            )
+        }
+    }
+
+    private var settingsSortDescription: String {
+        switch store.configuration.sortMode {
+        case .recentUse:
+            localization.string(
+                "settings.sort.recentUse.description",
+                defaultValue: "按最近使用的应用排列，便于快速回到上一个窗口。"
+            )
+        case .fixed:
+            localization.string(
+                "settings.sort.fixed.description",
+                defaultValue: "按应用名称稳定排列，位置更容易记住。"
+            )
         }
     }
 

@@ -90,7 +90,7 @@ final class DiskCleanPluginTests: XCTestCase {
         let controller = FakeDiskCleanPluginController()
         let plugin = DiskCleanPlugin(controller: controller)
         var presentationRequests = 0
-        plugin.requestConfigurationPresentation = { presentationRequests += 1 }
+        plugin.requestSettingsPresentation = { presentationRequests += 1 }
         let definition = try XCTUnwrap(plugin.actionDefinitions.first)
 
         XCTAssertEqual(definition.key.actionID, "scan-and-review")
@@ -186,7 +186,7 @@ final class DiskCleanPluginTests: XCTestCase {
     func testOpenDetailsRequestsConfigurationPresentation() {
         let plugin = DiskCleanPlugin(controller: FakeDiskCleanPluginController())
         var presentationRequests = 0
-        plugin.requestConfigurationPresentation = { presentationRequests += 1 }
+        plugin.requestSettingsPresentation = { presentationRequests += 1 }
 
         plugin.handleAction(.invokeAction(controlID: DiskCleanPlugin.ControlID.openDetails))
 

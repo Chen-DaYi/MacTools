@@ -28,6 +28,8 @@ struct SystemStatusDashboardView: View {
     let visibleKinds: [SystemStatusMetricKind]
     let localization: PluginLocalization
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     private var metricColumns: [GridItem] {
         [
             GridItem(.flexible(), spacing: SystemStatusHUDLayout.metricSpacing),
@@ -103,14 +105,14 @@ struct SystemStatusDashboardView: View {
         VStack(spacing: 8) {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(SystemStatusHUDPalette.textSecondary)
+                .foregroundStyle(theme.text.secondary)
 
             Text(localization.string("component.empty.title", defaultValue: "未选择显示内容"))
                 .font(SystemStatusHUDFont.sans(11, .semibold))
-                .foregroundStyle(SystemStatusHUDPalette.textSecondary)
+                .foregroundStyle(theme.text.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: SystemStatusComponentLayout.emptyContentHeight)
-        .background(SystemStatusHUDCardBackground())
+        .background(PluginComponentCardBackground(cornerRadius: 10))
     }
 
     private func cpuTile(history: [SystemStatusHistoryPoint]) -> some View {
@@ -264,7 +266,7 @@ struct SystemStatusDashboardView: View {
             SystemStatusHUDEyebrow(
                 text: SystemStatusMetricKind.topProcesses.title(localization: localization),
                 glyph: "list.bullet",
-                color: SystemStatusHUDPalette.textSecondary
+                color: theme.text.secondary
             )
             .frame(height: SystemStatusHUDLayout.metricTitleHeight, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -272,7 +274,7 @@ struct SystemStatusDashboardView: View {
             if snapshot.topProcesses.isEmpty {
                 Text(localization.string("topProcesses.collecting", defaultValue: "采集中…"))
                     .font(SystemStatusHUDFont.mono(10))
-                    .foregroundStyle(SystemStatusHUDPalette.textSecondary)
+                    .foregroundStyle(theme.text.secondary)
                     .frame(
                         maxWidth: .infinity,
                         minHeight: SystemStatusHUDLayout.processListHeight,
@@ -293,7 +295,7 @@ struct SystemStatusDashboardView: View {
         .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(height: SystemStatusHUDLayout.lowerTileHeight, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(SystemStatusHUDCardBackground())
+        .background(PluginComponentCardBackground(cornerRadius: 10))
     }
 
     private var diskFreeBytes: UInt64? {
@@ -321,7 +323,7 @@ struct SystemStatusDashboardView: View {
     }
 
     private var memoryChip: (text: String, color: Color)? {
-        (SystemStatusFormatter.bytes(snapshot.memory.totalBytes), SystemStatusHUDPalette.badgeText)
+        (SystemStatusFormatter.bytes(snapshot.memory.totalBytes), theme.text.secondary)
     }
 
     private var networkChip: (text: String, color: Color)? {
@@ -329,7 +331,7 @@ struct SystemStatusDashboardView: View {
             return nil
         }
 
-        return (name, SystemStatusHUDPalette.badgeText)
+        return (name, theme.text.secondary)
     }
 
     private var cpuFootnote: String {
@@ -452,7 +454,7 @@ struct SystemStatusDashboardView: View {
 
     private var batteryColor: Color {
         guard snapshot.battery.isAvailable else {
-            return SystemStatusHUDPalette.textTertiary
+            return theme.text.tertiary
         }
 
         if snapshot.battery.state == .charging || snapshot.battery.state == .charged || snapshot.battery.state == .acPower {
@@ -476,7 +478,7 @@ struct SystemStatusDashboardView: View {
             return nil
         }
 
-        return (SystemStatusFormatter.temperature(temperature), SystemStatusHUDPalette.badgeText)
+        return (SystemStatusFormatter.temperature(temperature), theme.text.secondary)
     }
 
     private func percentParts(_ value: Double?) -> (value: String, unit: String) {
@@ -604,6 +606,8 @@ private struct SystemStatusHUDEyebrow: View {
     let glyph: String
     let color: Color
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: glyph)
@@ -613,7 +617,7 @@ private struct SystemStatusHUDEyebrow: View {
 
             Text(text)
                 .font(SystemStatusHUDFont.sans(10, .semibold))
-                .foregroundStyle(SystemStatusHUDPalette.textSecondary)
+                .foregroundStyle(theme.text.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .layoutPriority(0)
@@ -624,6 +628,8 @@ private struct SystemStatusHUDEyebrow: View {
 private struct SystemStatusHUDChip: View {
     let text: String
     let color: Color
+
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         Text(text)
@@ -636,7 +642,7 @@ private struct SystemStatusHUDChip: View {
             .frame(height: 18, alignment: .center)
             .background(
                 Capsule(style: .continuous)
-                    .fill(SystemStatusHUDPalette.chipFill)
+                    .fill(theme.surfaces.chip)
             )
             .fixedSize(horizontal: true, vertical: true)
     }
@@ -681,6 +687,8 @@ private struct SystemStatusHUDMetricTile<Visual: View, Footer: View>: View {
     let footnote: String?
     @ViewBuilder let footer: Footer
     @ViewBuilder let visual: Visual
+
+    @Environment(\.pluginComponentTheme) private var theme
 
     init(
         title: String,
@@ -747,7 +755,7 @@ private extension SystemStatusHUDMetricTile {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
                     .font(SystemStatusHUDFont.mono(15, .semibold))
-                    .foregroundStyle(SystemStatusHUDPalette.textPrimary)
+                    .foregroundStyle(theme.text.primary)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.58)
@@ -755,7 +763,7 @@ private extension SystemStatusHUDMetricTile {
                 if !unit.isEmpty {
                     Text(unit)
                         .font(SystemStatusHUDFont.mono(9))
-                        .foregroundStyle(SystemStatusHUDPalette.textSecondary)
+                        .foregroundStyle(theme.text.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
@@ -774,7 +782,7 @@ private extension SystemStatusHUDMetricTile {
             } else {
                 Text(footnote ?? "")
                     .font(SystemStatusHUDFont.mono(8.5))
-                    .foregroundStyle(SystemStatusHUDPalette.textTertiary)
+                    .foregroundStyle(theme.text.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .minimumScaleFactor(0.6)
@@ -784,7 +792,7 @@ private extension SystemStatusHUDMetricTile {
         .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(height: SystemStatusHUDLayout.metricTileHeight, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(SystemStatusHUDCardBackground())
+        .background(PluginComponentCardBackground(cornerRadius: 10))
     }
 }
 
@@ -800,6 +808,8 @@ private struct SystemStatusHUDDiskTile: View {
     let readColor: Color
     let writeColor: Color
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     var body: some View {
         SystemStatusHUDMetricTile(
             title: title,
@@ -807,7 +817,7 @@ private struct SystemStatusHUDDiskTile: View {
             accent: readColor,
             value: freeValue,
             unit: freeUnit,
-            chip: (totalText, SystemStatusHUDPalette.badgeText),
+            chip: (totalText, theme.text.secondary),
             footnote: nil,
             footer: {
                 SystemStatusHUDRateFooter(
@@ -835,6 +845,7 @@ private struct SystemStatusHUDProcessRow: View {
     let localization: PluginLocalization
     @State private var cachedIcon: NSImage?
     @State private var cachedIconKey: String?
+    @Environment(\.pluginComponentTheme) private var theme
 
     private var iconKey: String {
         "\(process.pid)|\(process.displayName)|\(process.command)"
@@ -851,17 +862,17 @@ private struct SystemStatusHUDProcessRow: View {
             } else {
                 ZStack {
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(SystemStatusHUDPalette.chipFill)
+                        .fill(theme.surfaces.chip)
                     Image(systemName: "app.dashed")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(SystemStatusHUDPalette.textTertiary)
+                        .foregroundStyle(theme.text.tertiary)
                 }
                 .frame(width: 15, height: 15)
             }
 
             Text(process.displayName)
                 .font(SystemStatusHUDFont.sans(11))
-                .foregroundStyle(SystemStatusHUDPalette.textPrimary)
+                .foregroundStyle(theme.text.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
 
@@ -896,7 +907,7 @@ private struct SystemStatusHUDProcessRow: View {
     private func processMetricText(_ text: String) -> some View {
         Text(text)
             .font(SystemStatusHUDFont.mono(10))
-            .foregroundStyle(SystemStatusHUDPalette.textSecondary)
+            .foregroundStyle(theme.text.secondary)
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -1016,6 +1027,8 @@ private struct SystemStatusHUDRateFooter: View {
     let secondText: String
     let secondColor: Color
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     var body: some View {
         HStack(spacing: Layout.itemSpacing) {
             rateItem(label: firstLabel, text: firstText, color: firstColor)
@@ -1035,7 +1048,7 @@ private struct SystemStatusHUDRateFooter: View {
 
             Text(text)
                 .font(SystemStatusHUDFont.mono(8.5))
-                .foregroundStyle(SystemStatusHUDPalette.textTertiary)
+                .foregroundStyle(theme.text.secondary)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
@@ -1309,22 +1322,7 @@ private struct SystemStatusHUDRateChart: View {
     }
 }
 
-private struct SystemStatusHUDCardBackground: View {
-    var body: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(SystemStatusHUDPalette.cardFill)
-    }
-}
-
 private enum SystemStatusHUDPalette {
-    static let textPrimary = Color.primary
-    static let textSecondary = Color.secondary
-    static let textTertiary = Color.secondary.opacity(0.72)
-
-    static let cardFill = Color.primary.opacity(0.045)
-    static let chipFill = Color.primary.opacity(0.06)
-    static let badgeText = textSecondary
-
     static let green = Color(nsColor: .systemGreen)
     static let gold = Color(nsColor: .systemYellow)
     static let amber = Color(nsColor: .systemOrange)

@@ -5,45 +5,59 @@
         <description>Latest release metadata for MacTools.</description>
         <language>en</language>
         <item>
-            <title>Version 1.1.5</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.1.5</link>
-            <sparkle:version>67</sparkle:version>
-            <sparkle:shortVersionString>1.1.5</sparkle:shortVersionString>
+            <title>Version 1.1.6</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.1.6</link>
+            <sparkle:version>68</sparkle:version>
+            <sparkle:shortVersionString>1.1.6</sparkle:shortVersionString>
             <description sparkle:format="markdown"><![CDATA[## App Updates
 
 ### Added
 
-- Press Command-K or use the Plugins sidebar to search app destinations, settings, plugins, and supported commands in one accessible palette. Results support number-key selection, exact navigation, and protected shortcuts.
+- Added navigation-only deep links for Settings, installed plugin settings, Dashboard, Feature Panel, and search.
+- Command Palette can now set the app appearance, manage Launch at Login, and show or hide installed plugins on each supported surface.
+- An optional global shortcut can now open a standalone Command Palette from any app.
 
 ### Changed
 
-- MacTools now explains its local-only System Audio Recording use when an installed plugin provides per-app volume controls.
-- Plugin settings now use an adaptive, resizable native sidebar with focused keyboard navigation and no extra focus outlines. Settings keeps a usable window size and adds Back and Forward toolbar controls.
+- Dashboard and Feature Panel context menus can now move plugins to either end of the list and show or hide them on the current surface.
+- Settings pages now use native macOS backgrounds, appearance-aware sidebars and cards, consistent spacing, responsive widths, compact shortcuts, and live slider readouts; General preferences retain a readable width.
+- Common application shortcuts can now be used after confirming their global effect.
+- Plugin updates now install and validate Trackpad Gestures before Mouse Enhancer retires legacy middle-click behavior, with rollback on failure and a compatibility fallback for temporary app downgrades.
 
 ### Fixed
 
-- The Settings sidebar search field now opens search when clicking anywhere inside its visible bounds.
+- Plugin settings now use a lighter sidebar surface in Light appearance.
 
 ## Plugin Updates
 
 ### Added
 
-- Added App Volume controls for adjusting and remembering the volume of each app currently playing audio on macOS 15 or later.
-- Added Auto Input to remember the last input source used in each app and apply fixed per-app input sources.
-- Keep Awake can create a built-in virtual display while a powered MacBook's lid is closed, allowing screen sharing, remote control, and desktop automation without an external display.
-- Display Brightness and Prevent Sleep expose direct setting destinations, while Display Sleep and Lock Screen opt in to safe command discovery.
+- Calendar now lets you choose any weekday as the start of the week, with Sunday as the default.
+- Added a dedicated Trackpad Gestures plugin with configurable TipTap, three- to five-finger taps, double taps, and long touches that can trigger keyboard shortcuts or middle clicks.
+- TipTap actions can repeat for each additional-finger tap while fixed fingers remain on the trackpad, and can consume matching native clicks.
+- Adjustable typing protection is enabled by default to prevent palm-triggered gestures while using the keyboard.
+- Responsive mapping controls provide focused editing, unique gesture choices, visible deletion, guidance, accessibility labels, and a safe no-action test mode.
+- Automatic updates install Trackpad Gestures before migrating affected Mouse Enhancer middle-click settings; Mouse Enhancer then focuses on scrolling.
 
 ### Changed
 
-- Disk Cleanup now scans system caches, developer artifacts, and leftover installers faster. Cleanup moves items to Trash by default and blocks protected, incomplete, locked, or overly broad targets.
+- App Hotkey now asks before assigning a common application shortcut globally.
+- Keep Awake now offers three modes: allow display sleep, keep the display on, or keep screen tools active. Screen Tools can prevent automatic locking and support closed-lid use on power; manual locking still works.
+- All plugins now use a unified settings layout with native forms, adaptive system cards for complex managers, single-line shortcut controls, compact menus for long choices, and tick-free stepped sliders.
+- Window Switcher and Physical Clean Mode shortcut fields no longer repeat their row labels, while Display Brightness keeps compact direction icons and aligns both shortcut fields beside the description.
+- Sidecar now asks before assigning a common application shortcut globally.
 
 ### Fixed
 
-- Device Battery command sampling no longer stalls when a spawned helper leaves output pipes open, and preserves partial output when a command times out.
+- Fan Control now reports an error when its helper is not running with administrator privileges or when macOS does not apply the requested SMC fan value, instead of showing an unapplied speed change as successful.
+- Launch Items settings now adapt to smaller windows without clipping filters, lists, details, or scan progress.
+- Mouse Enhancer now preserves separate mouse and trackpad scroll directions after screen locking, sleep and wake, or external-display changes.
+- Sidecar's two global shortcut fields now show their actions beside the recorder, making connect-first and disconnect-all settings easy to distinguish.
+- Translator settings now show their section title in every supported app language.
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Sun, 02 Aug 2026 16:44:10 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.1.5/MacTools.dmg" length="6600816" type="application/octet-stream" sparkle:edSignature="rUYZRFIaMJfZQCi84teY54ECs3gf+TEarhTBshssAREwdAIGLOOoj1qR9ymlYbHyCfCPltKnLzJ2sQGBq94aBA==" />
+            <pubDate>Mon, 10 Aug 2026 05:56:13 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.1.6/MacTools.dmg" length="5816736" type="application/octet-stream" sparkle:edSignature="e1wmDEq7Zd1b/+OGdMVPIgYciuVd3mCtQKNraIS7DptPU+bCqdsD87EnhteVdkBMxhs8KcpGM5HeoGBtW1ihAg==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>

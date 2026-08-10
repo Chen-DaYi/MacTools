@@ -130,21 +130,45 @@ final class AppHotkeyPlugin:
     func refresh() {}
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     // App-launch actions use the host action shortcut service. Specialized plugin shortcuts
     // remain available through `shortcutDefinitions` in other plugins.
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
-            AppHotkeyManagerView(
-                store: self.store,
-                localization: self.localization,
-                onUpdate: { [weak self] in
-                    self?.onStateChange?()
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [
+            PluginSettingsSection(
+                id: "hotkey-manager",
+                title: localization.string("settings.section.bindings", defaultValue: "应用绑定"),
+                systemImage: "keyboard",
+                presentation: .edgeToEdge
+            ) { [self] _ in
+                AppHotkeyManagerView(
+                    store: self.store,
+                    localization: self.localization,
+                    onUpdate: { [weak self] in
+                        self?.onStateChange?()
+                    }
+                )
+            }
+            .headerAccessory { [self] _ in
+                Button {
+                    AppHotkeyManagerView.addApp(
+                        store: self.store,
+                        localization: self.localization,
+                        onUpdate: { [weak self] in
+                            self?.onStateChange?()
+                        }
+                    )
+                } label: {
+                    Label(
+                        localization.string("settings.add", defaultValue: "添加"),
+                        systemImage: "plus"
+                    )
                 }
-            )
-        }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        ])
     }
 
     // MARK: PluginPrimaryPanel

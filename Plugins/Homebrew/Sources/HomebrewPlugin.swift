@@ -24,7 +24,7 @@ private struct HomebrewPluginProvider: PluginProvider {
 }
 
 @MainActor
-public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting, PluginActionProviding {
+public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginSettingsPresenting, PluginActionProviding {
     private enum ActionID {
         static let update = "update"
         static let upgradeAll = "upgrade-all"
@@ -42,7 +42,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
     public var onStateChange: (() -> Void)?
     public var requestPermissionGuidance: ((String) -> Void)?
     public var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    public var requestConfigurationPresentation: (() -> Void)?
+    public var requestSettingsPresentation: (() -> Void)?
 
     private let controller: HomebrewController
     private let localization: PluginLocalization
@@ -100,7 +100,6 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
     }
 
     public var permissionRequirements: [PluginPermissionRequirement] { [] }
-    public var settingsSections: [PluginSettingsSection] { [] }
     public var shortcutDefinitions: [PluginShortcutDefinition] { [] }
     public var actionDefinitions: [ActionDefinition] {
         [
@@ -193,13 +192,10 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
         )
     }
 
-    public var configuration: PluginConfiguration? {
+    public var settingsPage: PluginSettingsPage? {
         let controller = self.controller
         let localization = self.localization
-        return PluginConfiguration(
-            description: metadata.defaultDescription,
-            prefersFullHeight: true
-        ) { _ in
+        return .workspace(description: metadata.defaultDescription, scrolling: .selfManaged) { _ in
             HomebrewDetailView(
                 controller: controller,
                 localization: localization,
@@ -224,7 +220,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
     }
 
     public func handlePermissionAction(id: String) {}
-    public func handleSettingsAction(id: String) {}
+    public func handleSettingsAction(_ action: PluginSettingsAction) {}
     public func handleShortcutAction(id: String) {}
 
     // MARK: - Private
@@ -242,7 +238,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
     private func handleInvoke(controlID: String) {
         switch controlID {
         case ControlID.manage:
-            requestConfigurationPresentation?()
+            requestSettingsPresentation?()
         default:
             break
         }

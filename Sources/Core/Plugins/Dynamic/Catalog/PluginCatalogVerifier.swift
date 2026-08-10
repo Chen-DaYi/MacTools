@@ -45,7 +45,7 @@ struct PluginCatalogVerifier {
         sourceKind: PluginCatalogSnapshot.SourceKind,
         rawData: Data? = nil
     ) throws {
-        guard catalog.schemaVersion == 1 else {
+        guard catalog.schemaVersion == 2 else {
             throw PluginCatalogVerifierError.unsupportedSchemaVersion(catalog.schemaVersion)
         }
 

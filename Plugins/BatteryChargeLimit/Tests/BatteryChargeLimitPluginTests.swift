@@ -439,6 +439,32 @@ final class BatteryChargeLimitPluginTests: XCTestCase {
         XCTAssertTrue(message.contains("恢复先前状态失败"))
     }
 
+    func testSettingsSliderDeclaresLivePercentageFormatting() throws {
+        let plugin = makePlugin()
+        guard case let .form(sections) = plugin.settingsPage?.body,
+              case let .rows(rows) = sections.first?.content,
+              case let .slider(value, range, step, valueFormat) = rows.first?.control
+        else {
+            return XCTFail("Expected the declarative charge-limit slider")
+        }
+
+        XCTAssertEqual(value, Double(BatteryChargeLimits.defaultPercent))
+        XCTAssertEqual(
+            range,
+            Double(BatteryChargeLimits.minimumPercent)
+                ... Double(BatteryChargeLimits.maximumPercent)
+        )
+        XCTAssertEqual(step, Double(BatteryChargeLimits.percentStep))
+        XCTAssertEqual(valueFormat, .percentage)
+        XCTAssertEqual(
+            try XCTUnwrap(valueFormat).text(
+                for: 76.6,
+                locale: Locale(identifier: "en_US_POSIX")
+            ),
+            "77%"
+        )
+    }
+
     // MARK: Mode Transitions
 
     func testStartChargingResumesAndTransitionsToCharging() {

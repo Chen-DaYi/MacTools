@@ -1,9 +1,28 @@
+import Carbon
 import XCTest
 import MacToolsPluginKit
 @testable import AppHotkeyPlugin
 
 @MainActor
 final class AppHotkeyStoreTests: XCTestCase {
+    func testCommonApplicationShortcutBindingsRequireConflictWarning() {
+        XCTAssertTrue(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(keyCode: UInt16(kVK_ANSI_1), modifiers: [.command])
+            )
+        )
+        XCTAssertTrue(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(keyCode: UInt16(kVK_ANSI_F), modifiers: [.command])
+            )
+        )
+        XCTAssertFalse(
+            CommonApplicationShortcutBindings.requiresConflictWarning(
+                for: ShortcutBinding(keyCode: UInt16(kVK_ANSI_1), modifiers: [.command, .shift])
+            )
+        )
+    }
+
     func testAddUpdateDeleteAndPersistEntries() {
         let storage = InMemoryPluginStorage()
         let store = AppHotkeyStore(storage: storage)

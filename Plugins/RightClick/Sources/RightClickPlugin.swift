@@ -97,16 +97,71 @@ final class RightClickPlugin: MacToolsPlugin {
         ]
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(
+    var settingsPage: PluginSettingsPage? {
+        let session = RightClickSettingsSession()
+        return .form(
             description: localization.string(
                 "configuration.description",
                 defaultValue: "选择 Finder 右键菜单显示哪些项，并管理「用应用打开」的应用列表。"
             ),
-            prefersFullHeight: false
-        ) { [localization] _ in
-            AnyView(RightClickMenuSettingsView(localization: localization))
-        }
+            sections: [
+                PluginSettingsSection(
+                    id: "directory-actions",
+                    title: localization.string("settings.directory.title", defaultValue: "目录操作"),
+                    systemImage: "folder",
+                    presentation: .edgeToEdge
+                ) { [localization, session] _ in
+                    RightClickMenuSettingsView(
+                        session: session,
+                        localization: localization,
+                        section: .directory
+                    )
+                },
+                PluginSettingsSection(
+                    id: "copy-actions",
+                    title: localization.string("settings.copy.title", defaultValue: "复制菜单项"),
+                    systemImage: "doc.on.doc",
+                    presentation: .edgeToEdge
+                ) { [localization, session] _ in
+                    RightClickMenuSettingsView(
+                        session: session,
+                        localization: localization,
+                        section: .copy
+                    )
+                },
+                PluginSettingsSection(
+                    id: "open-with",
+                    title: localization.string("settings.openWith.title", defaultValue: "用应用打开"),
+                    systemImage: "app.badge",
+                    footer: localization.string(
+                        "settings.openWith.footnote",
+                        defaultValue: "扩展名留空表示对所有文件显示，多个扩展名用逗号分隔。"
+                    ),
+                    presentation: .edgeToEdge
+                ) { [localization, session] _ in
+                    RightClickMenuSettingsView(
+                        session: session,
+                        localization: localization,
+                        section: .openWith
+                    )
+                }
+                .headerAccessory { [localization, session] _ in
+                    Button {
+                        RightClickMenuSettingsView.addApp(
+                            to: session,
+                            localization: localization
+                        )
+                    } label: {
+                        Label(
+                            localization.string("settings.addApp.button", defaultValue: "添加"),
+                            systemImage: "plus"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            ]
+        )
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {

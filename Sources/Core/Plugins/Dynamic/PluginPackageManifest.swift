@@ -3,14 +3,67 @@ import MacToolsPluginKit
 
 struct PluginPackageManifest: Codable, Equatable {
     struct Capabilities: Codable, Equatable {
+        enum Settings: String, Codable, CaseIterable {
+            case none
+            case form
+            case workspace
+
+            var layout: PluginSettingsLayout? {
+                switch self {
+                case .none:
+                    return nil
+                case .form:
+                    return .form
+                case .workspace:
+                    return .workspace
+                }
+            }
+        }
+
         let primaryPanel: Bool
         let componentPanel: Bool
-        let configuration: Bool
+        let settings: Settings
 
-        init(primaryPanel: Bool = false, componentPanel: Bool = false, configuration: Bool = false) {
+        init(
+            primaryPanel: Bool = false,
+            componentPanel: Bool = false,
+            settings: Settings = .none
+        ) {
             self.primaryPanel = primaryPanel
             self.componentPanel = componentPanel
-            self.configuration = configuration
+            self.settings = settings
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case primaryPanel
+            case componentPanel
+            case settings
+            case configuration
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            primaryPanel = try container.decodeIfPresent(Bool.self, forKey: .primaryPanel) ?? false
+            componentPanel = try container.decodeIfPresent(Bool.self, forKey: .componentPanel) ?? false
+            if let settings = try container.decodeIfPresent(Settings.self, forKey: .settings) {
+                self.settings = settings
+            } else {
+                // The package store must still decode a v3 envelope before it can
+                // identify the ABI mismatch and update the package. This does not
+                // expose or render the removed v3 settings API.
+                let hadConfiguration = try container.decodeIfPresent(
+                    Bool.self,
+                    forKey: .configuration
+                ) ?? false
+                settings = hadConfiguration ? .form : .none
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(primaryPanel, forKey: .primaryPanel)
+            try container.encode(componentPanel, forKey: .componentPanel)
+            try container.encode(settings, forKey: .settings)
         }
     }
 

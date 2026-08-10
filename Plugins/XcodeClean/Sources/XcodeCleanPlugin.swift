@@ -109,7 +109,7 @@ final class XcodeCleanPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
     DropZoneAnchorProviding,
-    PluginConfigurationPresenting,
+    PluginSettingsPresenting,
     PluginActionProviding
 {
     private enum ActionID {
@@ -133,7 +133,7 @@ final class XcodeCleanPlugin:
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var requestConfigurationPresentation: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
 
     let controller: XcodeCleanControlling
     private let runningMonitor: XcodeCleanRunningMonitoring
@@ -202,7 +202,6 @@ final class XcodeCleanPlugin:
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
     var actionDefinitions: [ActionDefinition] {
         let scanTitle = localization.string("panel.action.scan", defaultValue: "扫描")
@@ -242,7 +241,7 @@ final class XcodeCleanPlugin:
                         message: controller.snapshot.errorMessage ?? PluginKitLocalization.actionUnavailable
                     )
                 }
-                self.requestConfigurationPresentation?()
+                self.requestSettingsPresentation?()
                 controller.scan()
                 while controller.snapshot.isBusy {
                     if Task.isCancelled { return .cancelled }
@@ -259,10 +258,10 @@ final class XcodeCleanPlugin:
         )
     }
 
-    var configuration: PluginConfiguration? {
+    var settingsPage: PluginSettingsPage? {
         guard let controller = controller as? XcodeCleanController else { return nil }
         let localization = localization
-        return PluginConfiguration(description: metadata.defaultDescription) { _ in
+        return .workspace(description: metadata.defaultDescription, scrolling: .host) { _ in
             XcodeCleanDetailView(
                 controller: controller,
                 localization: localization,
@@ -295,7 +294,7 @@ final class XcodeCleanPlugin:
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     // MARK: - Private

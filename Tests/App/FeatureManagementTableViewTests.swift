@@ -5,6 +5,56 @@ import MacToolsPluginKit
 @testable import MacTools
 
 final class FeatureManagementTableViewTests: XCTestCase {
+    func testSettingsPageReadableWidthExpandsBeforeCapping() {
+        XCTAssertEqual(SettingsPageLayout.readableContentWidth(for: 560), 520)
+        XCTAssertEqual(SettingsPageLayout.readableContentWidth(for: 800), 760)
+        XCTAssertEqual(SettingsPageLayout.readableContentWidth(for: 1_200), 960)
+    }
+
+    func testGeneralSettingsUsesACompactReadableColumn() {
+        XCTAssertEqual(
+            SettingsPageLayout.readableContentWidth(for: 560, policy: .general),
+            520
+        )
+        XCTAssertEqual(
+            SettingsPageLayout.readableContentWidth(for: 800, policy: .general),
+            720
+        )
+        XCTAssertEqual(
+            SettingsPageLayout.readableContentWidth(for: 1_200, policy: .general),
+            720
+        )
+        XCTAssertEqual(
+            SettingsPageLayout.groupedSectionLayoutWidth(
+                for: 1_200,
+                policy: .general
+            ),
+            700
+        )
+    }
+
+    func testGroupedSectionWidthPreservesNativeCardChrome() {
+        XCTAssertEqual(SettingsPageLayout.groupedSectionLayoutWidth(for: 560), 500)
+        XCTAssertEqual(SettingsPageLayout.groupedSectionLayoutWidth(for: 800), 740)
+        XCTAssertEqual(SettingsPageLayout.groupedSectionLayoutWidth(for: 1_200), 940)
+    }
+
+    func testGroupedSectionCardAndHeaderShareTheReadableOuterGuide() {
+        for viewportWidth in [560.0, 800.0, 1_200.0] {
+            let readableWidth = SettingsPageLayout.readableContentWidth(
+                for: viewportWidth
+            )
+            let sectionLayoutWidth = SettingsPageLayout.groupedSectionLayoutWidth(
+                for: viewportWidth
+            )
+
+            XCTAssertEqual(
+                sectionLayoutWidth + SettingsPageLayout.groupedSectionHorizontalChrome,
+                readableWidth
+            )
+        }
+    }
+
     func testUpdatePolicySkipsUnchangedItems() {
         let items = [
             makeItem(id: "activity-bar", isActive: false)
@@ -350,7 +400,7 @@ final class FeatureManagementTableViewTests: XCTestCase {
         PluginHostCapabilities(
             supportsDashboard: dashboard,
             supportsFeaturePanel: featurePanel,
-            hasCustomConfiguration: false
+            settingsLayout: nil
         )
     }
 

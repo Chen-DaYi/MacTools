@@ -117,7 +117,7 @@ final class AppShortcutTests: XCTestCase {
         XCTAssertFalse(try item(.toggleDashboard, in: host).canClear)
     }
 
-    func testFixedMacToolsCommandsAreReservedFromConfigurableShortcuts() {
+    func testCommonApplicationShortcutsRequireWarningButRemainConfigurable() {
         let commandKeyCodes = [
             kVK_ANSI_Comma,
             kVK_ANSI_F,
@@ -136,23 +136,35 @@ final class AppShortcutTests: XCTestCase {
         ]
 
         for keyCode in commandKeyCodes {
-            XCTAssertNotNil(
+            let binding = ShortcutBinding(
+                keyCode: UInt16(keyCode),
+                modifiers: .command
+            )
+            XCTAssertTrue(
+                MacToolsReservedShortcutBindings.requiresConflictWarning(
+                    for: binding
+                )
+            )
+            XCTAssertNil(
                 MacToolsReservedShortcutBindings.validationError(
-                    for: ShortcutBinding(
-                        keyCode: UInt16(keyCode),
-                        modifiers: .command
-                    )
+                    for: binding
                 )
             )
         }
 
         for keyCode in [kVK_UpArrow, kVK_DownArrow] {
+            let binding = ShortcutBinding(
+                keyCode: UInt16(keyCode),
+                modifiers: [.control, .command]
+            )
+            XCTAssertFalse(
+                MacToolsReservedShortcutBindings.requiresConflictWarning(
+                    for: binding
+                )
+            )
             XCTAssertNotNil(
                 MacToolsReservedShortcutBindings.validationError(
-                    for: ShortcutBinding(
-                        keyCode: UInt16(keyCode),
-                        modifiers: [.control, .command]
-                    )
+                    for: binding
                 )
             )
         }
@@ -175,9 +187,13 @@ final class AppShortcutTests: XCTestCase {
         )
     }
 
-    func testAppAndPluginShortcutRecordersRejectReservedBindings() throws {
-        let reservedBinding = ShortcutBinding(
+    func testAppAndPluginShortcutRecordersAllowCommonApplicationShortcuts() throws {
+        let appBinding = ShortcutBinding(
             keyCode: UInt16(kVK_ANSI_K),
+            modifiers: .command
+        )
+        let pluginBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_4),
             modifiers: .command
         )
         let manager = GlobalShortcutManager()
@@ -186,44 +202,44 @@ final class AppShortcutTests: XCTestCase {
             plugins: [AppShortcutTestPlugin(defaultBinding: nil)],
             manager: manager
         )
-        let expectedError = ShortcutValidationError.duplicate(
-            ownerDescription: AppMetadata.appName
-        ).localizedDescription
 
-        XCTAssertEqual(
+        XCTAssertNil(
             host.setAppShortcutBindingAndReturnError(
-                reservedBinding,
+                appBinding,
                 for: .toggleDashboard
             ),
-            expectedError
         )
-        XCTAssertEqual(
+        XCTAssertNil(
             host.setShortcutBindingAndReturnError(
-                reservedBinding,
+                pluginBinding,
                 for: AppShortcutTestPlugin.shortcutItemID
             ),
-            expectedError
         )
-        XCTAssertFalse(
-            manager.debugRegistrationsForTests.contains {
-                $0.binding == reservedBinding
-            }
+        XCTAssertTrue(
+            manager.debugRegistrationsForTests.contains { $0.binding == appBinding }
+        )
+        XCTAssertTrue(
+            manager.debugRegistrationsForTests.contains { $0.binding == pluginBinding }
         )
     }
 
-    func testStoredReservedBindingsRemainVisibleButDoNotRegisterGlobally() throws {
+    func testStoredCommonApplicationShortcutsRemainActive() throws {
         let defaults = try makeDefaults()
-        let reservedBinding = ShortcutBinding(
+        let appBinding = ShortcutBinding(
             keyCode: UInt16(kVK_ANSI_K),
+            modifiers: .command
+        )
+        let pluginBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_4),
             modifiers: .command
         )
         let store = ShortcutStore(userDefaults: defaults)
         store.setCustomization(
-            .custom(reservedBinding),
+            .custom(appBinding),
             for: AppShortcutAction.toggleDashboard.rawValue
         )
         store.setCustomization(
-            .custom(reservedBinding),
+            .custom(pluginBinding),
             for: AppShortcutTestPlugin.shortcutItemID
         )
         let manager = GlobalShortcutManager()
@@ -232,30 +248,41 @@ final class AppShortcutTests: XCTestCase {
             plugins: [AppShortcutTestPlugin(defaultBinding: nil)],
             manager: manager
         )
-        let expectedError = ShortcutValidationError.duplicate(
-            ownerDescription: AppMetadata.appName
-        ).localizedDescription
 
-        XCTAssertEqual(
-            try item(.toggleDashboard, in: host).errorMessage,
-            expectedError
-        )
-        XCTAssertEqual(
+        XCTAssertNil(try item(.toggleDashboard, in: host).errorMessage)
+        XCTAssertNil(
             host.shortcutItems.first {
                 $0.id == AppShortcutTestPlugin.shortcutItemID
-            }?.errorMessage,
-            expectedError
+            }?.errorMessage
         )
         XCTAssertTrue(
-            manager.debugRegistrationsForTests.allSatisfy {
-                $0.binding != reservedBinding
-            }
+            manager.debugRegistrationsForTests.contains { $0.binding == appBinding }
+        )
+        XCTAssertTrue(
+            manager.debugRegistrationsForTests.contains { $0.binding == pluginBinding }
         )
     }
 
-    func testImportRejectsReservedBindingsAtomically() throws {
+    func testImportAcceptsCommonApplicationShortcuts() throws {
         let plugin = AppShortcutTestPlugin(defaultBinding: nil)
         let host = makeHost(defaults: try makeDefaults(), plugins: [plugin])
+        let appBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_K),
+            modifiers: .command
+        )
+        let pluginBinding = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_4),
+            modifiers: .command
+        )
+        let appAssignment = ActionShortcutAssignmentRecord(
+            reference: ActionReference(
+                key: ActionKey(
+                    providerID: "mactools",
+                    actionID: AppShortcutAction.openSettings.rawValue
+                )
+            ),
+            binding: appBinding
+        )
         let backup = PreferencesBackup(
             application: validApplicationPreferences,
             pluginDisplay: PluginDisplayPreferencesBackup(
@@ -263,31 +290,23 @@ final class AppShortcutTests: XCTestCase {
                 hiddenPluginIDs: []
             ),
             shortcutCustomizations: [
-                AppShortcutAction.openSettings.rawValue: .custom(
-                    ShortcutBinding(
-                        keyCode: UInt16(kVK_ANSI_K),
-                        modifiers: .command
-                    )
-                ),
-                AppShortcutTestPlugin.shortcutItemID: .custom(
-                    ShortcutBinding(
-                        keyCode: UInt16(kVK_ANSI_4),
-                        modifiers: .command
-                    )
-                )
-            ]
+                AppShortcutTestPlugin.shortcutItemID: .custom(pluginBinding)
+            ],
+            actionShortcutAssignments: [appAssignment]
         )
 
         let result = try host.importPreferences(backup)
 
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        let restoredBackup = host.makePreferencesBackup()
         XCTAssertEqual(
-            Set(result.shortcutErrors.keys),
+            restoredBackup.shortcutCustomizations,
             [
-                AppShortcutAction.openSettings.rawValue,
-                AppShortcutTestPlugin.shortcutItemID
+                AppShortcutTestPlugin.shortcutItemID: .custom(pluginBinding),
+                AppShortcutAction.openSettings.rawValue: .custom(appBinding),
             ]
         )
-        XCTAssertTrue(host.makePreferencesBackup().shortcutCustomizations.isEmpty)
+        XCTAssertEqual(restoredBackup.actionShortcutAssignments, [appAssignment])
     }
 
     func testAppAndPluginShortcutsRejectConflictsInBothDirections() throws {

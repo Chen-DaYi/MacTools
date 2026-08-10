@@ -70,6 +70,42 @@ final class PluginHostSliderActionTests: XCTestCase {
         XCTAssertGreaterThan(plugin.primaryPanelStateReadCount, readCountAfterInitialBuild)
     }
 
+    func testChangedSettingsValueForwardsTypedActionWithoutRebuilding() {
+        let plugin = MockSliderPlugin()
+        let host = makeHost(plugin: plugin)
+        _ = host.panelItems
+        let readCountAfterInitialBuild = plugin.primaryPanelStateReadCount
+
+        host.performSettingsAction(
+            pluginID: plugin.metadata.id,
+            action: .setNumber(controlID: "level", value: 42, phase: .changed)
+        )
+
+        XCTAssertEqual(
+            plugin.receivedSettingsActions,
+            [.setNumber(controlID: "level", value: 42, phase: .changed)]
+        )
+        XCTAssertEqual(plugin.primaryPanelStateReadCount, readCountAfterInitialBuild)
+    }
+
+    func testCommittedSettingsValueRebuildsDerivedState() {
+        let plugin = MockSliderPlugin()
+        let host = makeHost(plugin: plugin)
+        _ = host.panelItems
+        let readCountAfterInitialBuild = plugin.primaryPanelStateReadCount
+
+        host.performSettingsAction(
+            pluginID: plugin.metadata.id,
+            action: .setText(controlID: "name", value: "Display", phase: .committed)
+        )
+
+        XCTAssertEqual(
+            plugin.receivedSettingsActions,
+            [.setText(controlID: "name", value: "Display", phase: .committed)]
+        )
+        XCTAssertGreaterThan(plugin.primaryPanelStateReadCount, readCountAfterInitialBuild)
+    }
+
     private func makeHost(plugin: MockSliderPlugin) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -104,6 +140,7 @@ private final class MockSliderPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var receivedActions: [PluginPanelAction] = []
+    var receivedSettingsActions: [PluginSettingsAction] = []
     var primaryPanelStateReadCount = 0
 
     var primaryPanelState: PluginPanelState {
@@ -120,7 +157,6 @@ private final class MockSliderPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {}
@@ -134,6 +170,8 @@ private final class MockSliderPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        receivedSettingsActions.append(action)
+    }
     func handleShortcutAction(id: String) {}
 }

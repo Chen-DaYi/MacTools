@@ -98,12 +98,99 @@ final class LaunchpadPlugin:
         preferences.$hotCorner
             .sink { [weak hotCornerMonitor] corner in hotCornerMonitor?.update(corner: corner) }
             .store(in: &cancellables)
+        layoutStore.$layout
+            .dropFirst()
+            .sink { [weak self] _ in self?.onStateChange?() }
+            .store(in: &cancellables)
+        preferences.$hiddenAppIDs
+            .dropFirst()
+            .sink { [weak self] _ in self?.onStateChange?() }
+            .store(in: &cancellables)
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [preferences, layoutStore, localization] _ in
-            LaunchpadSettingsView(preferences: preferences, layoutStore: layoutStore, localization: localization)
-        }
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [
+            PluginSettingsSection(
+                id: "window",
+                title: localization.string("settings.window.title", defaultValue: "窗口"),
+                systemImage: "macwindow",
+                presentation: .edgeToEdge
+            ) { [preferences, layoutStore, localization] _ in
+                LaunchpadSettingsView(
+                    preferences: preferences,
+                    layoutStore: layoutStore,
+                    localization: localization,
+                    sectionKind: .window
+                )
+            },
+            PluginSettingsSection(
+                id: "appearance",
+                title: localization.string("settings.appearance.title", defaultValue: "外观"),
+                systemImage: "paintbrush",
+                presentation: .edgeToEdge
+            ) { [preferences, layoutStore, localization] _ in
+                LaunchpadSettingsView(
+                    preferences: preferences,
+                    layoutStore: layoutStore,
+                    localization: localization,
+                    sectionKind: .appearance
+                )
+            },
+            PluginSettingsSection(
+                id: "background",
+                title: localization.string("settings.background.title", defaultValue: "背景"),
+                systemImage: "circle.lefthalf.filled",
+                presentation: .edgeToEdge
+            ) { [preferences, layoutStore, localization] _ in
+                LaunchpadSettingsView(
+                    preferences: preferences,
+                    layoutStore: layoutStore,
+                    localization: localization,
+                    sectionKind: .background
+                )
+            },
+            PluginSettingsSection(
+                id: "grid",
+                title: localization.string("settings.grid.title", defaultValue: "网格"),
+                systemImage: "square.grid.3x3",
+                presentation: .edgeToEdge
+            ) { [preferences, layoutStore, localization] _ in
+                LaunchpadSettingsView(
+                    preferences: preferences,
+                    layoutStore: layoutStore,
+                    localization: localization,
+                    sectionKind: .grid
+                )
+            },
+            PluginSettingsSection(
+                id: "sorting",
+                title: localization.string("settings.sorting.title", defaultValue: "排序"),
+                systemImage: "arrow.up.arrow.down",
+                presentation: .edgeToEdge,
+                isVisible: layoutStore.layout != nil
+            ) { [preferences, layoutStore, localization] _ in
+                LaunchpadSettingsView(
+                    preferences: preferences,
+                    layoutStore: layoutStore,
+                    localization: localization,
+                    sectionKind: .sorting
+                )
+            },
+            PluginSettingsSection(
+                id: "hidden-apps",
+                title: localization.string("settings.hiddenApps.title", defaultValue: "隐藏的应用"),
+                systemImage: "eye.slash",
+                presentation: .edgeToEdge,
+                isVisible: !preferences.hiddenAppIDs.isEmpty
+            ) { [preferences, layoutStore, localization] _ in
+                LaunchpadSettingsView(
+                    preferences: preferences,
+                    layoutStore: layoutStore,
+                    localization: localization,
+                    sectionKind: .hiddenApps
+                )
+            }
+        ])
     }
 
     var primaryPanelState: PluginPanelState {

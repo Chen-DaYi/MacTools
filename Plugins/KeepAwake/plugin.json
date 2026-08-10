@@ -48,9 +48,9 @@
       "summary": "保持 Mac 喚醒；可選保持螢幕常亮或讓螢幕工具繼續運作。MacBook 闔蓋運作要求連接電源"
     }
   },
-  "version": "1.2.0",
+  "version": "1.2.1",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 3,
+  "pluginKitVersion": 4,
   "bundleRelativePath": "KeepAwake.bundle",
   "factoryClass": "KeepAwakePlugin.KeepAwakePluginFactory",
   "build": {
@@ -65,7 +65,7 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": true
+    "settings": "form"
   },
   "permissions": [],
   "category": "system"

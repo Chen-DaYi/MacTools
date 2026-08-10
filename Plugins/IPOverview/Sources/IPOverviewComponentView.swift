@@ -11,6 +11,8 @@ struct IPOverviewComponentView: View {
     let localization: PluginLocalization
     let startsInDetails: Bool
     let showsBackButton: Bool
+    let showsDetailHeader: Bool
+    let managesScrolling: Bool
     @State private var customName = ""
     @State private var customURL = ""
     @State private var addError = ""
@@ -20,12 +22,16 @@ struct IPOverviewComponentView: View {
         viewModel: IPOverviewViewModel,
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         startsInDetails: Bool = false,
-        showsBackButton: Bool = true
+        showsBackButton: Bool = true,
+        showsDetailHeader: Bool = true,
+        managesScrolling: Bool = true
     ) {
         self.viewModel = viewModel
         self.localization = localization
         self.startsInDetails = startsInDetails
         self.showsBackButton = showsBackButton
+        self.showsDetailHeader = showsDetailHeader
+        self.managesScrolling = managesScrolling
     }
 
     var body: some View {
@@ -111,22 +117,32 @@ struct IPOverviewComponentView: View {
 
     private var detailPage: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            detailHeader
+            if showsDetailHeader {
+                detailHeader
+            }
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-                    networkQualitySection
-                    publicIPSection
-                    localAddressSection
-                    connectivitySection
-                    webRTCLeakSection
-                    dnsLeakSection
-                    privacyFooter
+            if managesScrolling {
+                ScrollView(.vertical, showsIndicators: false) {
+                    detailSections
                 }
-                .padding(.bottom, 2)
+            } else {
+                detailSections
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var detailSections: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            networkQualitySection
+            publicIPSection
+            localAddressSection
+            connectivitySection
+            webRTCLeakSection
+            dnsLeakSection
+            privacyFooter
+        }
+        .padding(.bottom, 2)
     }
 
     private var detailHeader: some View {
@@ -240,7 +256,7 @@ struct IPOverviewComponentView: View {
                     result: viewModel.snapshot.internationalIPv6
                 )
             }
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -286,7 +302,7 @@ struct IPOverviewComponentView: View {
                     }
                 }
             }
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -368,7 +384,7 @@ struct IPOverviewComponentView: View {
                 customTargetForm
             }
             .padding(PluginSettingsTheme.Spacing.cardContent)
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -500,10 +516,7 @@ struct IPOverviewComponentView: View {
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
         .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            PluginSettingsTheme.Palette.nativeCardBackground,
-            in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card, style: .continuous)
-        )
+        .pluginSettingsCardBackground(.standard)
     }
 
     private func leakDetailsPopover(
@@ -1031,14 +1044,14 @@ private struct NetworkQualityCardView: View {
             }
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private func chartContent(
         progress: IPOverviewNetworkQualityProgress,
         measurement: IPOverviewNetworkQualityMeasurement?
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             NetworkQualityGraphPanel(
                 progress: progress,
                 measurement: measurement,
@@ -1101,21 +1114,29 @@ private struct NetworkQualityCardView: View {
 }
 
 private struct NetworkQualityGraphPanel: View {
+    private enum Layout {
+        static let contentSpacing: CGFloat = 16
+        static let gaugeSize: CGFloat = 132
+        static let sparklineSpacing: CGFloat = 10
+        static let minimumHeight: CGFloat = 144
+        static let verticalPadding: CGFloat = 2
+    }
+
     let progress: IPOverviewNetworkQualityProgress
     let measurement: IPOverviewNetworkQualityMeasurement?
     let localization: PluginLocalization
 
     var body: some View {
-        HStack(alignment: .center, spacing: 18) {
+        HStack(alignment: .center, spacing: Layout.contentSpacing) {
             NetworkQualityGaugeView(
                 value: gaugeValue,
                 maximumValue: gaugeMaximum,
                 subtitle: gaugeSubtitle,
                 tint: gaugeTint
             )
-            .frame(width: 148, height: 148)
+            .frame(width: Layout.gaugeSize, height: Layout.gaugeSize)
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Layout.sparklineSpacing) {
                 NetworkQualitySparklineView(
                     title: localization.string("speed.download", defaultValue: "下载"),
                     valueText: valueText(measurement?.downloadMbps ?? progress.latestDownloadMbps, unit: "Mbps"),
@@ -1129,16 +1150,10 @@ private struct NetworkQualityGraphPanel: View {
                     tint: Color(nsColor: .systemCyan)
                 )
             }
-            .frame(minHeight: 150, alignment: .center)
             .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 174, alignment: .center)
-        .background(
-            PluginSettingsTheme.Palette.recessedControlBackground.opacity(0.55),
-            in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous)
-        )
+        .padding(.vertical, Layout.verticalPadding)
+        .frame(maxWidth: .infinity, minHeight: Layout.minimumHeight, alignment: .center)
     }
 
     private var gaugeValue: Double? {
@@ -1205,6 +1220,12 @@ private struct NetworkQualityGraphPanel: View {
 }
 
 private struct NetworkQualityGaugeView: View {
+    private enum Layout {
+        static let backgroundSize: CGFloat = 104
+        static let lineWidth: CGFloat = 9
+        static let valueFontSize: CGFloat = 18
+    }
+
     let value: Double?
     let maximumValue: Double
     let subtitle: String
@@ -1213,15 +1234,22 @@ private struct NetworkQualityGaugeView: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(PluginSettingsTheme.Palette.cardBackground.opacity(0.66))
-                .frame(width: 116, height: 116)
+                .fill(PluginSettingsTheme.Surface.raisedControl)
+                .opacity(0.66)
+                .frame(width: Layout.backgroundSize, height: Layout.backgroundSize)
             GaugeArc(progress: 1)
-                .stroke(.secondary.opacity(0.15), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                .stroke(
+                    .secondary.opacity(0.15),
+                    style: StrokeStyle(lineWidth: Layout.lineWidth, lineCap: .round)
+                )
             GaugeArc(progress: progress)
-                .stroke(tint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                .stroke(
+                    tint,
+                    style: StrokeStyle(lineWidth: Layout.lineWidth, lineCap: .round)
+                )
             VStack(spacing: 0) {
                 Text(subtitle)
-                    .font(.system(size: 19.5, weight: .semibold, design: .rounded))
+                    .font(.system(size: Layout.valueFontSize, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .monospacedDigit()
                     .lineLimit(1)
@@ -1256,14 +1284,20 @@ private struct GaugeArc: Shape {
 }
 
 private struct NetworkQualitySparklineView: View {
+    private enum Layout {
+        static let contentSpacing: CGFloat = 5
+        static let headerSpacing: CGFloat = 6
+        static let chartHeight: CGFloat = 48
+    }
+
     let title: String
     let valueText: String
     let samples: [Double]
     let tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+            HStack(alignment: .firstTextBaseline, spacing: Layout.headerSpacing) {
                 Text(title)
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                 Text(valueText)
@@ -1281,7 +1315,8 @@ private struct NetworkQualitySparklineView: View {
             GeometryReader { proxy in
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(PluginSettingsTheme.Palette.cardBackground.opacity(0.42))
+                        .fill(PluginSettingsTheme.Surface.raisedControl)
+                        .opacity(0.42)
                     NetworkQualityGrid()
                         .stroke(.secondary.opacity(0.11), lineWidth: 0.7)
                     if normalizedSamples.isEmpty {
@@ -1301,7 +1336,7 @@ private struct NetworkQualitySparklineView: View {
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
-            .frame(height: 54)
+            .frame(height: Layout.chartHeight)
         }
     }
 

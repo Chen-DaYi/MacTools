@@ -7,6 +7,8 @@ struct MenuBarHiddenComponentView: View {
     @ObservedObject var controller: MenuBarHiddenController
     let context: PluginComponentContext
 
+    @Environment(\.pluginComponentTheme) private var theme
+
     private var canShowIcons: Bool { controller.permissions.canManageItems }
 
     var body: some View {
@@ -24,6 +26,8 @@ struct MenuBarHiddenComponentView: View {
                         MenuBarHiddenComponentIconButton(
                             item: item,
                             iconCache: controller.manager.iconCache,
+                            restingFill: theme.surfaces.control,
+                            hoverFill: theme.surfaces.controlHover,
                             onLeftClick: { click(item, button: .left) },
                             onRightClick: { click(item, button: .right) }
                         )
@@ -32,7 +36,7 @@ struct MenuBarHiddenComponentView: View {
                 .padding(.horizontal, MenuBarHiddenComponentIconLayout.horizontalPadding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 .background(
-                    MenuBarHiddenComponentBackground(
+                    PluginComponentCardBackground(
                         cornerRadius: MenuBarHiddenComponentIconLayout.cardCornerRadius
                     )
                 )
@@ -147,27 +151,6 @@ enum MenuBarHiddenComponentIconLayout {
             availableWidth: metrics.itemWidth(forSpanWidth: PluginComponentSpan.maximumWidth)
         )
         return rows * 4 + 1
-    }
-}
-
-private struct MenuBarHiddenComponentBackground: View {
-    let cornerRadius: CGFloat
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(MenuBarHiddenComponentColor.cardFill)
-    }
-}
-
-private enum MenuBarHiddenComponentColor {
-    static let cardFill = Color.primary.opacity(0.045)
-
-    static func itemFill(isHovered: Bool, isLightAppearance: Bool) -> NSColor {
-        if isLightAppearance {
-            return NSColor.black.withAlphaComponent(isHovered ? 0.26 : 0.18)
-        } else {
-            return NSColor.white.withAlphaComponent(isHovered ? 0.16 : 0.10)
-        }
     }
 }
 
@@ -311,6 +294,8 @@ private struct MenuBarHiddenComponentIconFlowLayout: Layout {
 private struct MenuBarHiddenComponentIconButton: NSViewRepresentable {
     let item: MenuBarItem
     let iconCache: MenuBarHiddenIconCache
+    let restingFill: Color
+    let hoverFill: Color
     let onLeftClick: () -> Void
     let onRightClick: () -> Void
 
@@ -318,6 +303,8 @@ private struct MenuBarHiddenComponentIconButton: NSViewRepresentable {
         MenuBarHiddenComponentIconNSView(
             item: item,
             iconCache: iconCache,
+            restingFill: NSColor(restingFill),
+            hoverFill: NSColor(hoverFill),
             onLeftClick: onLeftClick,
             onRightClick: onRightClick
         )
@@ -327,6 +314,8 @@ private struct MenuBarHiddenComponentIconButton: NSViewRepresentable {
         nsView.update(
             item: item,
             iconCache: iconCache,
+            restingFill: NSColor(restingFill),
+            hoverFill: NSColor(hoverFill),
             onLeftClick: onLeftClick,
             onRightClick: onRightClick
         )
@@ -340,6 +329,8 @@ private struct MenuBarHiddenComponentIconButton: NSViewRepresentable {
 private final class MenuBarHiddenComponentIconNSView: NSView {
     private var item: MenuBarItem
     private var iconCache: MenuBarHiddenIconCache
+    private var restingFill: NSColor
+    private var hoverFill: NSColor
     private var onLeftClick: () -> Void
     private var onRightClick: () -> Void
     private var cachedImage: MenuBarHiddenIconCache.CapturedImage? {
@@ -361,11 +352,15 @@ private final class MenuBarHiddenComponentIconNSView: NSView {
     init(
         item: MenuBarItem,
         iconCache: MenuBarHiddenIconCache,
+        restingFill: NSColor,
+        hoverFill: NSColor,
         onLeftClick: @escaping () -> Void,
         onRightClick: @escaping () -> Void
     ) {
         self.item = item
         self.iconCache = iconCache
+        self.restingFill = restingFill
+        self.hoverFill = hoverFill
         self.onLeftClick = onLeftClick
         self.onRightClick = onRightClick
         let image = iconCache.image(for: item.tag)
@@ -424,6 +419,8 @@ private final class MenuBarHiddenComponentIconNSView: NSView {
     func update(
         item: MenuBarItem,
         iconCache: MenuBarHiddenIconCache,
+        restingFill: NSColor,
+        hoverFill: NSColor,
         onLeftClick: @escaping () -> Void,
         onRightClick: @escaping () -> Void
     ) {
@@ -431,6 +428,8 @@ private final class MenuBarHiddenComponentIconNSView: NSView {
         let didChangeCache = self.iconCache !== iconCache
         self.item = item
         self.iconCache = iconCache
+        self.restingFill = restingFill
+        self.hoverFill = hoverFill
         self.onLeftClick = onLeftClick
         self.onRightClick = onRightClick
         cachedImage = iconCache.image(for: item.tag)
@@ -545,18 +544,12 @@ private final class MenuBarHiddenComponentIconNSView: NSView {
 
     private func drawItemBackground() {
         let r = min(MenuBarHiddenComponentIconLayout.itemCornerRadius, bounds.height / 2)
-        MenuBarHiddenComponentColor
-            .itemFill(isHovered: isHovered, isLightAppearance: isLightAppearance)
-            .setFill()
+        (isHovered ? hoverFill : restingFill).setFill()
         NSBezierPath(
             roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
             xRadius: r,
             yRadius: r
         ).fill()
-    }
-
-    private var isLightAppearance: Bool {
-        effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) != .darkAqua
     }
 
     private func aspectFitRect(imageSize: CGSize, in rect: CGRect) -> CGRect {

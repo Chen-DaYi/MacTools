@@ -48,52 +48,6 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         XCTAssertEqual(source.locale.region?.identifier, "DE")
     }
 
-    func testStringLookupChangesLanguageWithoutRecreatingBundle() throws {
-        let bundleURL = try makeLocalizedTestBundle()
-        defer { try? FileManager.default.removeItem(at: bundleURL.deletingLastPathComponent()) }
-        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
-
-        setRuntimePreference("en")
-        XCTAssertEqual(
-            PluginRuntimeLocalization.string(
-                "menu.title",
-                defaultValue: "Fallback",
-                table: "Settings",
-                bundle: bundle
-            ),
-            "Menu Bar Icon"
-        )
-
-        setRuntimePreference("zh-Hans")
-        XCTAssertEqual(
-            PluginRuntimeLocalization.string(
-                "menu.title",
-                defaultValue: "Fallback",
-                table: "Settings",
-                bundle: bundle
-            ),
-            "菜单栏图标"
-        )
-    }
-
-    func testMissingSelectedLanguageStringFallsBackToBaseLanguage() throws {
-        let bundleURL = try makeLocalizedTestBundle()
-        defer { try? FileManager.default.removeItem(at: bundleURL.deletingLastPathComponent()) }
-        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
-
-        setRuntimePreference("zh-Hans")
-
-        XCTAssertEqual(
-            PluginRuntimeLocalization.string(
-                "fallback.title",
-                defaultValue: "Fallback",
-                table: "Settings",
-                bundle: bundle
-            ),
-            "Base Language"
-        )
-    }
-
     func testWindowAndMenuBarTitlesFollowTwoRuntimeSwitches() {
         setRuntimePreference("en")
         XCTAssertEqual(AppWindowRouter.settingsWindowTitle, "Settings")

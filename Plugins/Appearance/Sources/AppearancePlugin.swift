@@ -79,7 +79,6 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var actionDefinitions: [ActionDefinition] {
@@ -152,7 +151,7 @@ final class AppearancePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {

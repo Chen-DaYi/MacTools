@@ -134,7 +134,7 @@ struct ZshConfigEditorView: View {
                     Group {
                         if isSelected {
                             RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card - 2, style: .continuous)
-                                .fill(PluginSettingsTheme.Palette.cardBackground)
+                                .fill(PluginSettingsTheme.Surface.raisedControl)
                                 .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
                         }
                     }
@@ -211,7 +211,7 @@ struct ZshConfigEditorView: View {
             .help(localization.string("editor.fileInfo.help", defaultValue: "查看加载时机与推荐用途"))
         }
         .pluginSettingsListRowPadding()
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
 
         if showFileInfo {
             fileInfoPanel
@@ -232,7 +232,7 @@ struct ZshConfigEditorView: View {
         }
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
         .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
         .transition(.opacity.combined(with: .offset(y: -4)))
     }
 
@@ -369,7 +369,7 @@ struct ZshConfigEditorView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 200)
         .padding(PluginSettingsTheme.Spacing.rowHorizontal)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
 
     // MARK: - Quick Insert Tab
@@ -415,7 +415,7 @@ struct ZshConfigEditorView: View {
                     }
                 }
             }
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -487,7 +487,7 @@ struct ZshConfigEditorView: View {
         }
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
         .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
-        .background(PluginSettingsTheme.Palette.cardBackground)
+        .background(PluginSettingsTheme.Surface.raisedControl)
         .overlay(alignment: .top) {
             PluginSettingsListDivider(leadingInset: 0, trailingInset: 0)
         }
@@ -581,7 +581,7 @@ struct ZshConfigEditorView: View {
                     .padding(.vertical, 7)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color(.controlBackgroundColor))
+                            .fill(PluginSettingsTheme.Surface.raisedControl)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)

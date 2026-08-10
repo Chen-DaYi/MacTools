@@ -339,8 +339,12 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             forName: AppAppearancePreference.didChangeNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            DispatchQueue.main.async { [weak self] in
+        ) { [weak self] notification in
+            guard let preference = notification.object as? AppAppearancePreference else {
+                return
+            }
+            Task { @MainActor [weak self] in
+                preference.apply(to: self?.settingsWindow)
                 self?.applyCommandPaletteAppearance()
             }
         }
@@ -472,6 +476,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             defer: false
         )
         window.title = Self.settingsWindowTitle
+        AppAppearancePreference.stored(in: appearanceUserDefaults).apply(to: window)
         let hostingView = NSHostingView(
             rootView: SettingsView(
                 pluginHost: pluginHost,

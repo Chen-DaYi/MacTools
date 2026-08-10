@@ -209,7 +209,7 @@ struct DiskCleanDetailView: View {
                 )
             }
             .pluginSettingsListRowPadding(interactive: true)
-            .pluginSettingsCardBackground(.plugin)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 
@@ -280,7 +280,7 @@ struct DiskCleanDetailView: View {
                     }
                     summaryRow(executionResult)
                 }
-                .pluginSettingsCardBackground(.plugin)
+                .pluginSettingsCardBackground(.standard)
             }
         }
     }
@@ -411,7 +411,7 @@ struct DiskCleanDetailView: View {
                     .pluginSettingsListRowPadding(interactive: true)
                 }
             }
-            .pluginSettingsCardBackground(.plugin)
+            .pluginSettingsCardBackground(.standard)
         }
     }
 

@@ -1982,6 +1982,38 @@
         }
       }
     },
+    "settings.status.enabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "السلوك الافتراضي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Standardverhalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Default Behavior" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Comportamiento predeterminado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Comportement par défaut" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "デフォルト動作" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "기본 동작" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Comportamento padrão" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Поведение по умолчанию" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "默认行为" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "預設行為" } }
+      }
+    },
+    "settings.status.limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "دعم محدود" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Eingeschränkte Unterstützung" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Limited Support" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Compatibilidad limitada" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Prise en charge limitée" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "一部対応" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "제한적 지원" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Suporte limitado" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Ограниченная поддержка" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "有限支持" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "有限支援" } }
+      }
+    },
     "settings.behavior.noAutoResume.description": {
       "extractionState": "manual",
       "localizations": {

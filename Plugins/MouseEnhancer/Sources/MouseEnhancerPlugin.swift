@@ -57,10 +57,25 @@ enum MouseEnhancerHostCompatibility {
 }
 
 @MainActor
-final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing, PluginConfigurationPresenting {
+final class MouseEnhancerPlugin:
+    MacToolsPlugin,
+    PluginPrimaryPanel,
+    AccessibilityPermissionRefreshing,
+    PluginApplicationActivityStateHandling,
+    DisplayTopologyRefreshing,
+    PluginSettingsPresenting {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
+    }
+
+    private enum SettingsID {
+        static let mouseVertical = "mouse-vertical"
+        static let mouseHorizontal = "mouse-horizontal"
+        static let trackpadVertical = "trackpad-vertical"
+        static let trackpadHorizontal = "trackpad-horizontal"
+        static let middleClick = "middle-click"
+        static let middleClickFingerCount = "middle-click-finger-count"
     }
 
     let metadata: PluginMetadata
@@ -69,7 +84,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var requestConfigurationPresentation: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
 
     let store: MouseEnhancerStore
 
@@ -89,6 +104,7 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
 
     private var isAccessibilityGranted: Bool
     private var lastErrorMessage: String?
+    private var applicationActivityState: PluginApplicationActivityState = .interactive
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "mouse-enhancer"),
@@ -158,6 +174,23 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         onStateChange?()
     }
 
+    func applicationActivityStateDidChange(_ state: PluginApplicationActivityState) {
+        let wasInteractive = applicationActivityState == .interactive
+        let isInteractive = state == .interactive
+        applicationActivityState = state
+
+        guard wasInteractive != isInteractive else { return }
+        if isInteractive {
+            session.inputActivityDidBecomeAvailable()
+        } else {
+            session.inputActivityDidBecomeUnavailable()
+        }
+    }
+
+    func refreshDisplayTopology() {
+        session.displayTopologyDidChange()
+    }
+
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: panelSubtitle,
@@ -193,32 +226,95 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         ]
     }
 
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [weak self] _ in
-            guard let self else {
-                return AnyView(EmptyView())
-            }
-
-            return AnyView(
-                MouseEnhancerSettingsView(
-                    store: self.store,
-                    localization: self.localization,
-                    showsLegacyMiddleClick: self.ownsLegacyMiddleClick,
-                    onChange: { [weak self] in
-                        self?.configurationDidChange()
-                    }
+    var settingsPage: PluginSettingsPage? {
+        var trackpadRows = [
+            toggleRow(
+                id: SettingsID.trackpadVertical,
+                title: localization.string("settings.trackpad.vertical.title", defaultValue: "垂直反转"),
+                description: localization.string("settings.trackpad.vertical.description", defaultValue: "反转触控板和 Magic Mouse 上下滚动方向。"),
+                icon: "arrow.up.and.down",
+                isOn: store.configuration.reverseTrackpadVertical
+            ),
+            toggleRow(
+                id: SettingsID.trackpadHorizontal,
+                title: localization.string("settings.trackpad.horizontal.title", defaultValue: "水平反转"),
+                description: localization.string("settings.trackpad.horizontal.description", defaultValue: "反转触控板和 Magic Mouse 左右滚动方向。"),
+                icon: "arrow.left.and.right",
+                isOn: store.configuration.reverseTrackpadHorizontal
+            )
+        ]
+        if ownsLegacyMiddleClick {
+            trackpadRows.append(
+                toggleRow(
+                    id: SettingsID.middleClick,
+                    title: localization.string("settings.middleClick.title", defaultValue: "模拟鼠标中键"),
+                    description: localization.string("settings.middleClick.description", defaultValue: "触控板轻点模拟鼠标中键点击。"),
+                    icon: "hand.tap",
+                    isOn: store.configuration.middleClickEnabled
+                )
+            )
+            trackpadRows.append(
+                PluginSettingsRow(
+                    id: SettingsID.middleClickFingerCount,
+                    title: localization.string("settings.middleClick.fingerCount.title", defaultValue: "手指数量"),
+                    description: localization.string(
+                        "settings.middleClick.fingerCount.description",
+                        defaultValue: "用指定数量的手指在触控板上轻点，将模拟鼠标中键点击。"
+                    ),
+                    systemImage: "hand.raised",
+                    isEnabled: store.configuration.middleClickEnabled,
+                    isVisible: store.configuration.middleClickEnabled,
+                    control: .picker(
+                        selectionID: String(store.configuration.middleClickFingerCount),
+                        options: [3, 4, 5].map {
+                            PluginSettingsOption(id: String($0), title: "\($0)")
+                        },
+                        style: .segmented
+                    )
                 )
             )
         }
+
+        return .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "mouse",
+                    title: localization.string("settings.mouse.sectionTitle", defaultValue: "鼠标"),
+                    systemImage: "computermouse",
+                    rows: [
+                        toggleRow(
+                            id: SettingsID.mouseVertical,
+                            title: localization.string("settings.mouse.vertical.title", defaultValue: "垂直反转"),
+                            description: localization.string("settings.mouse.vertical.description", defaultValue: "反转鼠标上下滚动方向。"),
+                            icon: "arrow.up.and.down",
+                            isOn: store.configuration.reverseMouseVertical
+                        ),
+                        toggleRow(
+                            id: SettingsID.mouseHorizontal,
+                            title: localization.string("settings.mouse.horizontal.title", defaultValue: "水平反转"),
+                            description: localization.string("settings.mouse.horizontal.description", defaultValue: "反转鼠标左右滚动方向。"),
+                            icon: "arrow.left.and.right",
+                            isOn: store.configuration.reverseMouseHorizontal
+                        )
+                    ]
+                ),
+                PluginSettingsSection(
+                    id: "trackpad",
+                    title: localization.string("settings.trackpad.sectionTitle", defaultValue: "触控板"),
+                    systemImage: "hand.draw",
+                    rows: trackpadRows
+                )
+            ]
+        )
     }
 
     func handleAction(_ action: PluginPanelAction) {
         switch action {
         case .invokeAction(controlID: _):
-            requestConfigurationPresentation?()
+            requestSettingsPresentation?()
         default:
             return
         }
@@ -254,8 +350,52 @@ final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibili
         }
     }
 
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        switch action {
+        case let .setBoolean(controlID, value):
+            switch controlID {
+            case SettingsID.mouseVertical:
+                store.setReverseMouseVertical(value)
+            case SettingsID.mouseHorizontal:
+                store.setReverseMouseHorizontal(value)
+            case SettingsID.trackpadVertical:
+                store.setReverseTrackpadVertical(value)
+            case SettingsID.trackpadHorizontal:
+                store.setReverseTrackpadHorizontal(value)
+            case SettingsID.middleClick:
+                store.setMiddleClickEnabled(value)
+            default:
+                return
+            }
+            configurationDidChange()
+        case let .setSelection(controlID, optionID):
+            guard controlID == SettingsID.middleClickFingerCount,
+                  let count = Int(optionID),
+                  (3...5).contains(count)
+            else { return }
+            store.setMiddleClickFingerCount(count)
+            configurationDidChange()
+        default:
+            return
+        }
+    }
     func handleShortcutAction(id: String) {}
+
+    private func toggleRow(
+        id: String,
+        title: String,
+        description: String,
+        icon: String,
+        isOn: Bool
+    ) -> PluginSettingsRow {
+        PluginSettingsRow(
+            id: id,
+            title: title,
+            description: description,
+            systemImage: icon,
+            control: .toggle(isOn: isOn)
+        )
+    }
 
     func refreshAccessibilityPermission() {
         let previous = isAccessibilityGranted

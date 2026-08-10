@@ -170,10 +170,10 @@ final class SettingsNavigationCoordinator: ObservableObject {
             pluginSettingsLandingPage: { pluginHost.pluginSettingsLandingPage() },
             pluginSubpageOrder: {
                 FeatureSettingsPane.settingsSidebarOrder(
-                    configurationIDs: pluginHost.pluginConfigurationItems.map(\.id)
+                    configurationIDs: pluginHost.pluginSettingsItems.map(\.id)
                 )
             },
-            isPluginConfigurationAvailable: { pluginHost.hasPluginConfiguration(pluginID: $0) },
+            isPluginConfigurationAvailable: { pluginHost.hasPluginSettings(pluginID: $0) },
             isPluginSettingsSearchTargetAvailable: {
                 pluginHost.hasPluginSettingsSearchTarget($0)
             },

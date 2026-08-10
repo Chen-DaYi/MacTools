@@ -303,7 +303,7 @@ struct HomebrewDetailView: View {
                     installedPackageList(filtered)
                 }
             }
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
             .frame(width: 340)
             .frame(maxHeight: .infinity)
 
@@ -402,7 +402,7 @@ struct HomebrewDetailView: View {
                     icon: "info.circle",
                     title: localization.string("detail.detail.selectionHint", defaultValue: "选择一个包查看详情")
                 )
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
             }
         }
     }
@@ -427,7 +427,7 @@ struct HomebrewDetailView: View {
                 PluginSettingsListDivider(leadingInset: 0, trailingInset: 0)
                 searchResultsContent
             }
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
             .frame(width: 340)
             .frame(maxHeight: .infinity)
 
@@ -498,12 +498,12 @@ struct HomebrewDetailView: View {
     private var searchDetailPane: some View {
         if isFetchingOnlineDetail {
             emptyState(icon: "arrow.clockwise", title: localization.string("detail.search.fetchingDetail", defaultValue: "正在加载包详情"))
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
         } else if let pkg = onlinePackageDetail {
             onlinePackageDetailView(for: pkg)
         } else {
             emptyState(icon: "plus.circle", title: localization.string("detail.detail.onlineHint", defaultValue: "选择搜索结果后安装"))
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
         }
     }
     
@@ -529,7 +529,7 @@ struct HomebrewDetailView: View {
                     .disabled(newTapName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.isBusy)
                 }
                 .pluginSettingsListRowPadding(interactive: true)
-                .pluginSettingsCardBackground(.host)
+                .pluginSettingsCardBackground(.standard)
             }
 
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
@@ -575,7 +575,7 @@ struct HomebrewDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
 
     private func tapRow(_ tap: BrewTap) -> some View {
@@ -621,7 +621,7 @@ struct HomebrewDetailView: View {
                         .disabled(customBrewPath == controller.brewPath || customBrewPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .pluginSettingsListRowPadding(interactive: true)
-                    .pluginSettingsCardBackground(.host)
+                    .pluginSettingsCardBackground(.standard)
                 }
 
                 VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
@@ -660,7 +660,7 @@ struct HomebrewDetailView: View {
                             action: { pendingAction = .cleanup }
                         )
                     }
-                    .pluginSettingsCardBackground(.host)
+                    .pluginSettingsCardBackground(.standard)
                 }
             }
             .padding(.top, PluginSettingsTheme.Spacing.sectionHeaderContent)
@@ -719,7 +719,7 @@ struct HomebrewDetailView: View {
         }
         .padding(PluginSettingsTheme.Spacing.pagePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
     
     private func diagnosticRow(
@@ -915,7 +915,7 @@ struct HomebrewDetailView: View {
             }
         }
         .padding(14)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
     
     private func onlinePackageDetailView(for pkg: BrewPackage) -> some View {
@@ -987,7 +987,7 @@ struct HomebrewDetailView: View {
             }
         }
         .padding(14)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsCardBackground(.standard)
     }
     
     private func infoRow(label: String, value: String) -> some View {

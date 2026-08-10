@@ -1213,10 +1213,18 @@ final class KeepAwakePreferenceTests: XCTestCase {
         let plugin = KeepAwakeSessionFactory()
             .makePlugin(storage: KeepAwakeMemoryStorage())
 
-        XCTAssertEqual(
-            plugin.settingsSearchEntries.map(\.id),
-            [KeepAwakeSettingsSearchEntryID.behavior]
-        )
+        guard case let .form(sections) = plugin.settingsPage?.body,
+              case let .rows(rows) = sections.first?.content else {
+            return XCTFail("Expected declarative settings rows")
+        }
+
+        XCTAssertEqual(rows.map(\.id), [KeepAwakeSettingsSearchEntryID.behavior])
+        guard case let .picker(_, options, style) = rows[0].control,
+              case .menu = style
+        else {
+            return XCTFail("Expected the long behavior choices to use a menu picker")
+        }
+        XCTAssertEqual(options.count, KeepAwakeBehavior.allCases.count)
     }
 
     func testFeaturePanelOnlyShowsDurationControl() throws {

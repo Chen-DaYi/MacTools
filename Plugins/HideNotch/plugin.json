@@ -48,9 +48,9 @@
       "summary": "自動遮擋劉海螢幕頂部區域"
     }
   },
-  "version": "1.0.9",
+  "version": "1.0.10",
   "minHostVersion": "1.2.0",
-  "pluginKitVersion": 3,
+  "pluginKitVersion": 4,
   "bundleRelativePath": "HideNotch.bundle",
   "factoryClass": "HideNotchPlugin.HideNotchPluginFactory",
   "build": {
@@ -60,7 +60,7 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": false
+    "settings": "none"
   },
   "permissions": [],
   "category": "display"

@@ -108,6 +108,29 @@ public struct ShortcutBinding: Hashable, Codable, Sendable {
     }
 }
 
+public enum CommonApplicationShortcutBindings {
+    private static let commandKeyCodes: Set<UInt16> = [
+        UInt16(kVK_ANSI_Comma),
+        UInt16(kVK_ANSI_F),
+        UInt16(kVK_ANSI_K),
+        UInt16(kVK_ANSI_1),
+        UInt16(kVK_ANSI_2),
+        UInt16(kVK_ANSI_3),
+        UInt16(kVK_ANSI_4),
+        UInt16(kVK_ANSI_5),
+        UInt16(kVK_ANSI_6),
+        UInt16(kVK_ANSI_7),
+        UInt16(kVK_ANSI_8),
+        UInt16(kVK_ANSI_9),
+        UInt16(kVK_ANSI_LeftBracket),
+        UInt16(kVK_ANSI_RightBracket)
+    ]
+
+    public static func requiresConflictWarning(for binding: ShortcutBinding) -> Bool {
+        binding.modifiers == .command && commandKeyCodes.contains(binding.keyCode)
+    }
+}
+
 public enum ShortcutCustomization: Equatable, Codable, Sendable {
     case inheritDefault
     case custom(ShortcutBinding)

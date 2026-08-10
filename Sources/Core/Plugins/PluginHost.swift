@@ -169,7 +169,11 @@ private extension FeatureSettingsPane {
 struct PluginHostCapabilities: Equatable, Sendable {
     let supportsDashboard: Bool
     let supportsFeaturePanel: Bool
-    let hasCustomConfiguration: Bool
+    let settingsLayout: PluginSettingsLayout?
+
+    var hasSettings: Bool {
+        settingsLayout != nil
+    }
 
     var supportedSurfaces: Set<PluginDisplaySurface> {
         var surfaces: Set<PluginDisplaySurface> = []
@@ -328,6 +332,28 @@ struct PluginAutomaticUpdateVersionStore {
 
 @MainActor
 final class PluginHost: ObservableObject {
+    private struct SettingsViewCacheKey: Hashable {
+        enum Content: Hashable {
+            case workspace
+            case section(String)
+            case sectionAccessory(String)
+        }
+
+        let pluginID: String
+        let content: Content
+
+        var itemID: String {
+            switch content {
+            case .workspace:
+                return "\(pluginID).workspace"
+            case let .section(sectionID):
+                return "\(pluginID).section.\(sectionID)"
+            case let .sectionAccessory(sectionID):
+                return "\(pluginID).section.\(sectionID).accessory"
+            }
+        }
+    }
+
     private struct PluginDescriptor {
         let metadata: PluginMetadata
         let plugin: any MacToolsPlugin
@@ -341,8 +367,8 @@ final class PluginHost: ObservableObject {
             capabilities.supportsDashboard
         }
 
-        var hasConfiguration: Bool {
-            capabilities.hasCustomConfiguration
+        var hasSettings: Bool {
+            capabilities.hasSettings
         }
     }
 
@@ -398,7 +424,7 @@ final class PluginHost: ObservableObject {
     private var shortcutErrors: [String: String] = [:]
     private var appShortcutErrors: [AppShortcutAction: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
-    private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
+    private var settingsViewCache: [SettingsViewCacheKey: PluginSettingsContentViewItem] = [:]
     private var visiblePanelSurfaces: Set<PluginPanelSurface> = []
     private var visiblePanelSurfacePluginIDs: [PluginPanelSurface: Set<String>] = [:]
     private var isolatedPluginFailures: [String: String] = [:]
@@ -430,9 +456,8 @@ final class PluginHost: ObservableObject {
     @Published private(set) var dashboardHiddenLayoutItems: [PluginSurfaceLayoutItem] = []
     @Published private(set) var featurePanelLayoutItems: [PluginSurfaceLayoutItem] = []
     @Published private(set) var featurePanelHiddenLayoutItems: [PluginSurfaceLayoutItem] = []
-    @Published private(set) var pluginConfigurationItems: [PluginConfigurationItem] = []
+    @Published private(set) var pluginSettingsItems: [PluginSettingsPageItem] = []
     @Published private(set) var permissionCards: [PluginPermissionCard] = []
-    @Published private(set) var settingsCards: [PluginSettingsCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
     private var shortcutMutationMetadataByRowID: [String: ShortcutMutationMetadata] = [:]
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
@@ -1103,7 +1128,7 @@ final class PluginHost: ObservableObject {
             }
         }
         componentViewCache.removeAll()
-        configurationViewCache.removeAll()
+        settingsViewCache.removeAll()
         cachedPanelStatesByID.removeAll()
         cachedComponentStatesByID.removeAll()
         syncPluginManagementState()
@@ -1260,14 +1285,22 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    func performSettingsAction(pluginID: String, actionID: String) {
+    func performSettingsAction(pluginID: String, action: PluginSettingsAction) {
         guard let plugin = corePlugin(for: pluginID) else {
             return
         }
 
-        handlePluginAction {
+        let rebuildAfterAction: Bool
+        switch action {
+        case let .setNumber(_, _, phase), let .setText(_, _, phase):
+            rebuildAfterAction = phase == .committed
+        default:
+            rebuildAfterAction = true
+        }
+
+        handlePluginAction(rebuildAfterAction: rebuildAfterAction) {
             guardPluginCall(plugin, operation: "settings action") {
-                plugin.handleSettingsAction(id: actionID)
+                plugin.handleSettingsAction(action)
             }
         }
     }
@@ -1529,10 +1562,10 @@ final class PluginHost: ObservableObject {
         )
     }
 
-    func presentPluginConfiguration(pluginID: String) {
+    func presentPluginSettings(pluginID: String) {
         rebuildDerivedState()
 
-        guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
+        guard pluginSettingsItems.contains(where: { $0.id == pluginID }) else {
             return
         }
 
@@ -1585,7 +1618,7 @@ final class PluginHost: ObservableObject {
             }
             return true
         case let .configuration(pluginID):
-            guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
+            guard pluginSettingsItems.contains(where: { $0.id == pluginID }) else {
                 return false
             }
 
@@ -1593,8 +1626,8 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    func hasPluginConfiguration(pluginID: String) -> Bool {
-        pluginConfigurationItems.contains(where: { $0.id == pluginID })
+    func hasPluginSettings(pluginID: String) -> Bool {
+        pluginSettingsItems.contains(where: { $0.id == pluginID })
     }
 
     func hasPluginSettingsSearchTarget(
@@ -1603,15 +1636,24 @@ final class PluginHost: ObservableObject {
         cancelScheduledPluginStateRebuild()
         rebuildDerivedState()
 
-        guard let item = pluginConfigurationItems.first(where: {
+        guard let item = pluginSettingsItems.first(where: {
             $0.pluginID == target.pluginID
         }) else {
             return false
         }
 
-        if item.settingsCards.contains(where: { $0.id == target.entryID })
-            || item.permissionCards.contains(where: { $0.id == target.entryID }) {
+        if item.permissionCards.contains(where: { $0.id == target.entryID }) {
             return true
+        }
+
+        for section in item.sections where section.isVisible {
+            if section.id == target.entryID {
+                return true
+            }
+            if case let .rows(rows) = section.content,
+               rows.contains(where: { $0.isVisible && $0.id == target.entryID }) {
+                return true
+            }
         }
 
         if item.shortcutItems.allSatisfy({ $0.settingsGroupID != nil }) {
@@ -1626,7 +1668,7 @@ final class PluginHost: ObservableObject {
             return true
         }
 
-        return item.hasCustomConfiguration
+        return item.hasPluginContent
             && pluginSettingsSearchItems.contains {
                 $0.pluginID == target.pluginID
                     && $0.entry.id == target.entryID
@@ -1814,88 +1856,119 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    func pluginConfigurationViewItem(for pluginID: String) -> PluginConfigurationViewItem {
-        if let cachedItem = configurationViewCache[pluginID] {
+    func pluginSettingsContentViewItem(
+        for pluginID: String,
+        sectionID: String? = nil
+    ) -> PluginSettingsContentViewItem {
+        let cacheKey = SettingsViewCacheKey(
+            pluginID: pluginID,
+            content: sectionID.map(SettingsViewCacheKey.Content.section) ?? .workspace
+        )
+        if let cachedItem = settingsViewCache[cacheKey] {
             return cachedItem
         }
 
-        let configurations = orderedPluginDescriptors()
-            .filter { $0.metadata.id == pluginID && $0.hasConfiguration }
-            .compactMap { descriptor -> (any MacToolsPlugin, PluginConfiguration)? in
-                guard let configuration = guardedOptionalValue(
-                    for: descriptor.plugin,
-                    operation: "read plugin configuration",
-                    descriptor.plugin.configuration
-                ) else {
-                    return nil
-                }
-
-                return (descriptor.plugin, configuration)
-            }
-
-        guard corePlugin(for: pluginID) != nil else {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let page = pluginSettingsItems.first(where: { $0.pluginID == pluginID })?.page
+        else {
             rebuildDerivedState()
-            return PluginConfigurationViewItem(id: pluginID, content: AnyView(EmptyView()))
+            return PluginSettingsContentViewItem(id: cacheKey.itemID, content: AnyView(EmptyView()))
         }
 
-        let context = PluginConfigurationContext(
-            pluginID: pluginID,
-            shortcutItems: shortcutItems.filter { $0.pluginID == pluginID },
-            recordShortcut: { [weak self] itemID, binding in
-                self?.clearShortcutError(for: itemID)
-                return self?.setShortcutBindingAndReturnError(binding, for: itemID)
-            },
-            beginShortcutRecording: { [weak self] itemID in
-                self?.clearShortcutError(for: itemID)
-            },
-            clearShortcut: { [weak self] itemID in
-                self?.clearShortcutError(for: itemID)
-                self?.clearShortcut(for: itemID)
-            },
-            resetShortcut: { [weak self] itemID in
-                self?.clearShortcutError(for: itemID)
-                self?.resetShortcut(for: itemID)
-            }
-        )
+        let context = makePluginSettingsContext(pluginID: pluginID)
         let content: AnyView
 
-        switch configurations.count {
-        case 0:
-            content = AnyView(EmptyView())
-        case 1:
-            content = guardedConfigurationView(
-                for: configurations[0].0,
-                configuration: configurations[0].1,
-                context: context
+        switch (page.body, sectionID) {
+        case let (.workspace(workspace), nil):
+            content = guardedSettingsView(
+                for: plugin,
+                operation: "make settings workspace",
+                workspace.makeView(context)
+            )
+        case let (.form(sections), .some(sectionID)):
+            guard
+                let section = sections.first(where: { $0.id == sectionID }),
+                case let .custom(customContent) = section.content
+            else {
+                return PluginSettingsContentViewItem(id: cacheKey.itemID, content: AnyView(EmptyView()))
+            }
+            content = guardedSettingsView(
+                for: plugin,
+                operation: "make custom settings section",
+                customContent.makeView(context)
             )
         default:
-            let views = configurations.map {
-                guardedConfigurationView(
-                    for: $0.0,
-                    configuration: $0.1,
-                    context: context
-                )
-            }
-            content = AnyView(
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(Swift.Array(views.enumerated()), id: \.offset) { entry in
-                        entry.element
-                    }
-                }
-            )
+            content = AnyView(EmptyView())
         }
 
         guard corePlugin(for: pluginID) != nil else {
             rebuildDerivedState()
-            return PluginConfigurationViewItem(id: pluginID, content: AnyView(EmptyView()))
+            return PluginSettingsContentViewItem(id: cacheKey.itemID, content: AnyView(EmptyView()))
         }
 
-        let item = PluginConfigurationViewItem(
-            id: pluginID,
+        let item = PluginSettingsContentViewItem(
+            id: cacheKey.itemID,
             content: AnyView(content.id(localizationRevision))
         )
-        configurationViewCache[pluginID] = item
+        settingsViewCache[cacheKey] = item
         return item
+    }
+
+    func pluginSettingsHeaderAccessoryViewItem(
+        for pluginID: String,
+        sectionID: String
+    ) -> PluginSettingsContentViewItem {
+        let cacheKey = SettingsViewCacheKey(
+            pluginID: pluginID,
+            content: .sectionAccessory(sectionID)
+        )
+        if let cachedItem = settingsViewCache[cacheKey] {
+            return cachedItem
+        }
+
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let page = pluginSettingsItems.first(where: { $0.pluginID == pluginID })?.page,
+            case let .form(sections) = page.body,
+            let section = sections.first(where: { $0.id == sectionID }),
+            let accessory = section.headerAccessory
+        else {
+            return PluginSettingsContentViewItem(
+                id: cacheKey.itemID,
+                content: AnyView(EmptyView())
+            )
+        }
+
+        let context = makePluginSettingsContext(pluginID: pluginID)
+        let content = guardedSettingsView(
+            for: plugin,
+            operation: "make settings section header accessory",
+            accessory.makeView(context)
+        )
+        let item = PluginSettingsContentViewItem(
+            id: cacheKey.itemID,
+            content: AnyView(content.id(localizationRevision))
+        )
+        settingsViewCache[cacheKey] = item
+        return item
+    }
+
+    func setPluginSettingsPage(_ pluginID: String, visible: Bool) {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let page = pluginSettingsItems.first(where: { $0.pluginID == pluginID })?.page,
+            let visibilityHandler = page.visibilityHandler
+        else {
+            return
+        }
+
+        guardPluginCall(
+            plugin,
+            operation: visible ? "show settings page" : "hide settings page"
+        ) {
+            visibilityHandler(visible)
+        }
     }
 
     func discardComponentViews() {
@@ -2516,9 +2589,9 @@ final class PluginHost: ObservableObject {
                     self?.statusItemButtonFrameProvider?()
                 }
             }
-            if let configurationPresenting = plugin as? any PluginConfigurationPresenting {
-                configurationPresenting.requestConfigurationPresentation = { [weak self] in
-                    self?.presentPluginConfiguration(pluginID: pluginID)
+            if let settingsPresenting = plugin as? any PluginSettingsPresenting {
+                settingsPresenting.requestSettingsPresentation = { [weak self] in
+                    self?.presentPluginSettings(pluginID: pluginID)
                 }
             }
             if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
@@ -2569,7 +2642,7 @@ final class PluginHost: ObservableObject {
         hideAllPanelSurfaces()
         visiblePanelSurfaces = previouslyVisibleSurfaces
         discardComponentViews()
-        configurationViewCache.removeAll()
+        settingsViewCache.removeAll()
         loggedCapabilityMismatchPluginIDs.removeAll()
         dynamicResolvedCapabilitiesByID.removeAll()
         syncPluginManagementState()
@@ -2870,29 +2943,6 @@ final class PluginHost: ObservableObject {
             )
         }
 
-        settingsCards = orderedCorePlugins().flatMap { plugin in
-            let sections = guardedValue(
-                for: plugin,
-                operation: "read settings sections",
-                plugin.settingsSections
-            ) ?? []
-
-            return sections.map { section in
-                PluginSettingsCard(
-                    id: "\(plugin.metadata.id).\(section.id)",
-                    pluginID: plugin.metadata.id,
-                    title: section.title,
-                    description: section.description,
-                    statusText: section.status.text,
-                    statusSystemImage: section.status.systemImage,
-                    statusTone: section.status.tone,
-                    footnote: section.footnote,
-                    buttonTitle: section.buttonTitle,
-                    actionID: section.actionID
-                )
-            }
-        }
-
         permissionCards = orderedCorePlugins().flatMap { plugin -> [PluginPermissionCard] in
             let requirements = guardedValue(
                 for: plugin,
@@ -3059,19 +3109,18 @@ final class PluginHost: ObservableObject {
             }
         }
 
-        pluginConfigurationItems = buildPluginConfigurationItems(
-            settingsCards: settingsCards,
+        pluginSettingsItems = buildPluginSettingsItems(
             permissionCards: permissionCards,
             shortcutItems: shortcutItems
         )
         if let dirtyPluginIDs {
             for pluginID in dirtyPluginIDs {
-                configurationViewCache.removeValue(forKey: pluginID)
+                settingsViewCache = settingsViewCache.filter { $0.key.pluginID != pluginID }
             }
         } else {
-            configurationViewCache.removeAll()
+            settingsViewCache.removeAll()
         }
-        trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
+        trimSettingsViewCache(keeping: Set(pluginSettingsItems.map(\.id)))
 
         let newHasActivePlugin = panelStatesByID.contains { $0.value.isOn }
             || componentStatesByID.contains { $0.value.isActive }
@@ -3371,7 +3420,7 @@ final class PluginHost: ObservableObject {
             }
         case let pluginID:
             rebuildDerivedState()
-            guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
+            guard pluginSettingsItems.contains(where: { $0.id == pluginID }) else {
                 return false
             }
             appPresentationHandler(.settings(.pluginConfiguration(pluginID)))
@@ -3387,7 +3436,7 @@ final class PluginHost: ObservableObject {
         case AutomationController.providerID:
             return true
         case let pluginID:
-            return pluginConfigurationItems.contains(where: { $0.id == pluginID })
+            return pluginSettingsItems.contains(where: { $0.id == pluginID })
         }
     }
 
@@ -3691,16 +3740,38 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func guardedConfigurationView(
+    private func guardedSettingsView(
         for plugin: any MacToolsPlugin,
-        configuration: PluginConfiguration,
-        context: PluginConfigurationContext
+        operation: String,
+        _ view: @autoclosure () -> AnyView
     ) -> AnyView {
         guardedValue(
             for: plugin,
-            operation: "make configuration view",
-            configuration.makeView(context)
+            operation: operation,
+            view()
         ) ?? AnyView(EmptyView())
+    }
+
+    private func makePluginSettingsContext(pluginID: String) -> PluginSettingsContext {
+        PluginSettingsContext(
+            pluginID: pluginID,
+            shortcutItems: shortcutItems.filter { $0.pluginID == pluginID },
+            recordShortcut: { [weak self] itemID, binding in
+                self?.clearShortcutError(for: itemID)
+                return self?.setShortcutBindingAndReturnError(binding, for: itemID)
+            },
+            beginShortcutRecording: { [weak self] itemID in
+                self?.clearShortcutError(for: itemID)
+            },
+            clearShortcut: { [weak self] itemID in
+                self?.clearShortcutError(for: itemID)
+                self?.clearShortcut(for: itemID)
+            },
+            resetShortcut: { [weak self] itemID in
+                self?.clearShortcutError(for: itemID)
+                self?.resetShortcut(for: itemID)
+            }
+        )
     }
 
     private func isPluginIsolated(_ plugin: any MacToolsPlugin) -> Bool {
@@ -3724,7 +3795,7 @@ final class PluginHost: ObservableObject {
         cachedPanelStatesByID.removeValue(forKey: pluginID)
         cachedComponentStatesByID.removeValue(forKey: pluginID)
         componentViewCache.removeValue(forKey: pluginID)
-        configurationViewCache.removeValue(forKey: pluginID)
+        settingsViewCache = settingsViewCache.filter { $0.key.pluginID != pluginID }
         shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }
 
         AppLog.pluginHost.error(
@@ -3745,8 +3816,9 @@ final class PluginHost: ObservableObject {
         plugin.onStateChange = nil
         plugin.requestPermissionGuidance = nil
         plugin.shortcutBindingResolver = nil
-        (plugin as? any PluginConfigurationPresenting)?.requestConfigurationPresentation = nil
+        (plugin as? any PluginSettingsPresenting)?.requestSettingsPresentation = nil
         (plugin as? any ActionGridHostContextConsuming)?.actionGridHostContext = nil
+        (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionHostContext = nil
         syncGlobalShortcuts()
     }
 
@@ -3793,62 +3865,68 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func buildPluginConfigurationItems(
-        settingsCards: [PluginSettingsCard],
+    private func buildPluginSettingsItems(
         permissionCards: [PluginPermissionCard],
         shortcutItems: [ShortcutSettingsItem]
-    ) -> [PluginConfigurationItem] {
+    ) -> [PluginSettingsPageItem] {
         orderedPluginDescriptors().compactMap { descriptor in
             let pluginID = descriptor.metadata.id
-            let matchingSettingsCards = settingsCards.filter { $0.pluginID == pluginID }
             let matchingPermissionCards = permissionCards.filter { $0.pluginID == pluginID }
-            let allMatchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
-            let configurations: [PluginConfiguration]
-            if descriptor.hasConfiguration,
-               let configuration = guardedOptionalValue(
+            let matchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
+            let rawPage: PluginSettingsPage?
+            if descriptor.hasSettings {
+                rawPage = guardedOptionalValue(
                     for: descriptor.plugin,
-                    operation: "read plugin configuration",
-                    descriptor.plugin.configuration
-               ) {
-                configurations = [configuration]
+                    operation: "read plugin settings page",
+                    descriptor.plugin.settingsPage
+                )
             } else {
-                configurations = []
+                rawPage = nil
             }
-            let integratedShortcutGroupIDs = Set(
-                configurations.flatMap(\.integratedShortcutGroupIDs)
-            )
-            let matchingShortcutItems = allMatchingShortcutItems.filter { item in
-                guard let groupID = item.settingsGroupID else { return true }
-                return !integratedShortcutGroupIDs.contains(groupID)
+            let page: PluginSettingsPage?
+            if let rawPage {
+                do {
+                    if rawPage.body.layout != descriptor.capabilities.settingsLayout {
+                        AppLog.pluginHost.error(
+                            "Plugin \(pluginID, privacy: .public) settings layout does not match its manifest"
+                        )
+                        page = nil
+                    } else {
+                        try PluginSettingsValidator.validate(
+                            rawPage,
+                            availableShortcutGroupIDs: Set(
+                                matchingShortcutItems.compactMap(\.settingsGroupID)
+                            )
+                        )
+                        page = rawPage
+                    }
+                } catch {
+                    AppLog.pluginHost.error(
+                        "Plugin \(pluginID, privacy: .public) returned invalid settings: \(String(describing: error), privacy: .public)"
+                    )
+                    page = nil
+                }
+            } else {
+                page = nil
             }
-            let hasConfigurationSurface = !matchingSettingsCards.isEmpty
-                || !matchingPermissionCards.isEmpty
+            let hasSettingsSurface = !matchingPermissionCards.isEmpty
                 || !matchingShortcutItems.isEmpty
-                || !configurations.isEmpty
+                || page != nil
 
-            guard hasConfigurationSurface else {
+            guard hasSettingsSurface else {
                 return nil
             }
 
-            let configurationDescription = configurations.first?.description
-                ?? descriptor.metadata.defaultDescription
-
-            return PluginConfigurationItem(
+            return PluginSettingsPageItem(
                 id: pluginID,
                 pluginID: pluginID,
                 title: descriptor.metadata.title,
-                description: localizedDescription(
-                    configurationDescription,
-                    pluginMetadata: descriptor.plugin.metadata,
-                    localizedMetadata: descriptor.metadata
-                ),
+                description: page?.description ?? descriptor.metadata.defaultDescription,
                 iconName: descriptor.metadata.iconName,
                 iconTint: descriptor.metadata.iconTint,
-                settingsCards: matchingSettingsCards,
+                page: page,
                 permissionCards: matchingPermissionCards,
-                shortcutItems: matchingShortcutItems,
-                hasCustomConfiguration: !configurations.isEmpty,
-                prefersFullHeight: configurations.first?.prefersFullHeight ?? false
+                shortcutItems: matchingShortcutItems
             )
         }
     }
@@ -4047,7 +4125,7 @@ final class PluginHost: ObservableObject {
         let capabilities = PluginHostCapabilities(
             supportsDashboard: plugin.componentPanel != nil,
             supportsFeaturePanel: plugin.primaryPanel != nil,
-            hasCustomConfiguration: plugin.configuration != nil
+            settingsLayout: plugin.settingsPage?.body.layout
         )
         builtInCapabilitiesByID[plugin.metadata.id] = capabilities
         return capabilities
@@ -4062,7 +4140,7 @@ final class PluginHost: ObservableObject {
             let capabilities = PluginHostCapabilities(
                 supportsDashboard: plugin.componentPanel != nil,
                 supportsFeaturePanel: plugin.primaryPanel != nil,
-                hasCustomConfiguration: plugin.configuration != nil
+                settingsLayout: plugin.settingsPage?.body.layout
             )
             dynamicResolvedCapabilitiesByID[plugin.metadata.id] = capabilities
             return capabilities
@@ -4083,7 +4161,7 @@ final class PluginHost: ObservableObject {
         let capabilities = PluginHostCapabilities(
             supportsDashboard: declared.componentPanel && runtimeSupportsDashboard,
             supportsFeaturePanel: declared.primaryPanel && runtimeSupportsFeaturePanel,
-            hasCustomConfiguration: declared.configuration
+            settingsLayout: declared.settings.layout
         )
         dynamicResolvedCapabilitiesByID[plugin.metadata.id] = capabilities
         return capabilities
@@ -4218,9 +4296,9 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func trimConfigurationViewCache(keeping configurationPluginIDs: Set<String>) {
-        configurationViewCache = configurationViewCache.filter {
-            configurationPluginIDs.contains($0.key)
+    private func trimSettingsViewCache(keeping settingsPluginIDs: Set<String>) {
+        settingsViewCache = settingsViewCache.filter {
+            settingsPluginIDs.contains($0.key.pluginID)
         }
     }
 
@@ -5028,7 +5106,7 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        presentPluginConfiguration(pluginID: pluginID)
+        presentPluginSettings(pluginID: pluginID)
     }
 
     private func permissionActionTitle(

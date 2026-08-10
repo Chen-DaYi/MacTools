@@ -53,61 +53,6 @@ final class PluginPanelControlLayoutTests: XCTestCase {
         )
     }
 
-    func testShortcutSettingsItemStoredPropertyLayoutMatchesPluginKitV3ABI() {
-        let item = ShortcutSettingsItem(
-            id: "demo",
-            pluginID: "plugin",
-            pluginTitle: "Plugin",
-            title: "Shortcut",
-            description: "Description",
-            bindingText: "⌘A",
-            isRequired: false,
-            canClear: true,
-            usesDefaultValue: false,
-            errorMessage: nil
-        )
-
-        XCTAssertEqual(
-            Mirror(reflecting: item).children.compactMap(\.label),
-            [
-                "id", "pluginID", "pluginTitle", "title", "description",
-                "bindingText", "isRequired", "canClear", "usesDefaultValue",
-                "errorMessage", "settingsGroupID", "settingsGroupTitle",
-                "settingsGroupDescription", "settingsControlTitle",
-                "settingsControlSystemImage",
-            ]
-        )
-    }
-
-    @MainActor
-    func testShortcutRecorderStoredPropertyLayoutMatchesPluginKitV3ABI() {
-        let recorder = PluginShortcutRecorder(
-            title: "Shortcut",
-            displayText: "⌘A",
-            onRecord: { _ in .accepted }
-        )
-
-        XCTAssertEqual(
-            Mirror(reflecting: recorder).children.compactMap(\.label),
-            [
-                "title", "displayText", "placeholder", "minWidth", "onRecord",
-                "onBeginRecording", "onEndRecording", "_isPresented",
-            ]
-        )
-    }
-
-    func testShortcutRecordingResultKeepsThePluginKitV3Cases() {
-        func label(_ result: PluginShortcutRecordingResult) -> String {
-            switch result {
-            case .accepted: "accepted"
-            case .rejected: "rejected"
-            }
-        }
-
-        XCTAssertEqual(label(.accepted), "accepted")
-        XCTAssertEqual(label(.rejected("conflict")), "rejected")
-    }
-
     private func tag(of kind: PluginPanelControlKind) -> UInt8 {
         withUnsafeBytes(of: kind) { bytes in
             bytes[0]

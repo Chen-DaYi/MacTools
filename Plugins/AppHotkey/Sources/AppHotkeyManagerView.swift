@@ -11,28 +11,7 @@ struct AppHotkeyManagerView: View {
     let onUpdate: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
-            bindingSection
-        }
-    }
-
-    // MARK: Binding Section
-
-    private var bindingSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack {
-                Label(localization.string("settings.section.bindings", defaultValue: "应用绑定"), systemImage: "keyboard")
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(action: addApp) {
-                    Label(localization.string("settings.add", defaultValue: "添加"), systemImage: "plus")
-                        .font(PluginSettingsTheme.Typography.controlLabel)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
+        Group {
             if store.entries.isEmpty {
                 emptyView
             } else {
@@ -55,7 +34,6 @@ struct AppHotkeyManagerView: View {
             .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             Spacer()
         }
-        .pluginSettingsCardBackground(.host)
     }
 
     private var entryList: some View {
@@ -74,12 +52,15 @@ struct AppHotkeyManagerView: View {
                 }
             }
         }
-        .pluginSettingsCardBackground(.host)
     }
 
     // MARK: Actions
 
-    private func addApp() {
+    static func addApp(
+        store: AppHotkeyStore,
+        localization: PluginLocalization,
+        onUpdate: () -> Void
+    ) {
         let panel = NSOpenPanel()
         panel.title = localization.string("openPanel.title", defaultValue: "选择应用")
         panel.message = localization.string("openPanel.message", defaultValue: "选择要绑定快捷键的应用")
@@ -102,6 +83,10 @@ struct AppHotkeyManagerView: View {
 // MARK: - Entry Row
 
 private struct AppShortcutEntryRow: View {
+    private enum Layout {
+        static let summaryMinWidth: CGFloat = 220
+    }
+
     let entry: AppShortcutEntry
     let localization: PluginLocalization
     let onDelete: () -> Void
@@ -122,7 +107,24 @@ private struct AppShortcutEntryRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                appSummary
+                    .frame(minWidth: Layout.summaryMinWidth)
+                rowActions
+            }
+
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                appSummary
+                rowActions
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .pluginSettingsListRowPadding()
+    }
+
+    private var appSummary: some View {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
             Image(nsImage: appIcon)
                 .resizable()
                 .frame(width: PluginSettingsTheme.Size.rowIcon, height: PluginSettingsTheme.Size.rowIcon)
@@ -131,6 +133,7 @@ private struct AppShortcutEntryRow: View {
                 Text(entry.displayName)
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     .lineLimit(1)
+                    .truncationMode(.tail)
 
                 Text(subtitle)
                     .font(PluginSettingsTheme.Typography.rowDescription)
@@ -138,8 +141,13 @@ private struct AppShortcutEntryRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
+    private var rowActions: some View {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
             Text(localization.string("settings.configureInActions", defaultValue: "前往“操作与快捷键”设置"))
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
@@ -151,6 +159,5 @@ private struct AppShortcutEntryRow: View {
             .buttonStyle(.plain)
             .help(localization.string("settings.deleteBinding", defaultValue: "删除此绑定"))
         }
-        .pluginSettingsListRowPadding()
     }
 }

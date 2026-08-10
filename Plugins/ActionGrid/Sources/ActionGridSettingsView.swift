@@ -125,7 +125,7 @@ struct ActionGridSettingsView: View {
                 }
             }
             .padding(12)
-            .pluginSettingsCardBackground(.host)
+            .pluginSettingsCardBackground(.standard)
             .disabled(store.loadError != nil)
 
             if let dropTargetSlot {
@@ -153,6 +153,9 @@ struct ActionGridSettingsView: View {
         let image = entry.folder?.systemImage
             ?? item?.systemImage
             ?? "questionmark.square.dashed"
+        let subtitle = entry.folder != nil
+            ? plugin.localized("文件夹")
+            : (item?.ownerTitle ?? plugin.localized("提供者缺失"))
 
         return Button {
             if entry.folder != nil {
@@ -172,9 +175,7 @@ struct ActionGridSettingsView: View {
                     .font(PluginSettingsTheme.Typography.rowTitle)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                Text(entry.folder != nil
-                    ? plugin.localized("文件夹")
-                    : (item?.ownerTitle ?? plugin.localized("提供者缺失")))
+                Text(subtitle)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -182,7 +183,7 @@ struct ActionGridSettingsView: View {
             .frame(maxWidth: .infinity, minHeight: 104)
             .contentShape(Rectangle())
             .background(
-                PluginSettingsTheme.Palette.nativeCardBackground,
+                PluginSettingsTheme.Surface.raisedControl,
                 in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
             )
             .overlay {
@@ -336,7 +337,7 @@ struct ActionGridSettingsView: View {
         }
         .frame(width: 168, height: 104)
         .background(
-            PluginSettingsTheme.Palette.nativeCardBackground,
+            PluginSettingsTheme.Surface.raisedControl,
             in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
         )
         .overlay {

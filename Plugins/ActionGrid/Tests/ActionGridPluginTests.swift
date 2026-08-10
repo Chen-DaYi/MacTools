@@ -67,7 +67,7 @@ final class ActionGridPluginTests: XCTestCase {
         XCTAssertEqual(accessibility.removeLabel, "Remove “Lock Screen”")
         XCTAssertEqual(accessibility.copy.settingsButtonTitle, "Settings")
         XCTAssertEqual(accessibility.copy.replacementMenuTitle, "Replace")
-        XCTAssertEqual(plugin.configuration?.description, "Open favorite actions near the pointer")
+        XCTAssertEqual(plugin.settingsPage?.description, "Open favorite actions near the pointer")
         let reference = ActionReference(key: ActionKey(providerID: "example", actionID: "run"))
         XCTAssertTrue(plugin.store.add(reference: reference))
         XCTAssertEqual(
@@ -77,7 +77,7 @@ final class ActionGridPluginTests: XCTestCase {
 
         PluginRuntimeLocalization.source.setPreference("ar")
         XCTAssertEqual(
-            plugin.configuration?.description,
+            plugin.settingsPage?.description,
             "افتح شبكة إجراءات مفضلة بالقرب من المؤشر"
         )
         XCTAssertEqual(

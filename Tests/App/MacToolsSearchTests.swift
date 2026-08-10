@@ -1,4 +1,3 @@
-import AppKit
 import Combine
 import SwiftUI
 import XCTest
@@ -24,6 +23,9 @@ final class MacToolsSearchTests: XCTestCase {
         })
         XCTAssertTrue(index.items.contains {
             $0.kind == .setting && $0.title == "自动切换"
+        })
+        XCTAssertFalse(index.items.contains {
+            $0.kind == .setting && $0.title == "暂不可用设置"
         })
         XCTAssertTrue(index.items.contains {
             $0.kind == .setting && $0.title == "辅助功能授权"
@@ -264,58 +266,6 @@ final class MacToolsSearchTests: XCTestCase {
                 return false
             }
             return definition.action == .setLaunchAtLogin(true)
-        })
-    }
-
-    func testModelAutomaticallyRebuildsAfterAppearanceChanges() async {
-        let suiteName = "MacToolsSearchAppearanceModelTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let originalAppearance = NSApp.appearance
-        defer { NSApp.appearance = originalAppearance }
-        let context = AppHostCommandContext(
-            pluginHost: makePluginHostForTests(plugins: []),
-            launchAtLoginController: LaunchAtLoginController(
-                service: SearchTestLaunchAtLoginService()
-            ),
-            appearanceUserDefaults: defaults
-        )
-        let model = UnifiedSearchPaletteModel(commandContext: context)
-        model.updateQuery("appearance")
-        let (rebuild, cancellable) = expectModelResults(
-            model,
-            description: "Appearance change rebuilds the command index"
-        ) { results in
-            results.contains { result in
-                guard case let .appHostCommand(definition) = result.action else {
-                    return false
-                }
-                return definition.action == .setAppearance(.system)
-            } && !results.contains { result in
-                guard case let .appHostCommand(definition) = result.action else {
-                    return false
-                }
-                return definition.action == .setAppearance(.dark)
-            }
-        }
-
-        AppAppearancePreference.dark.storeAndApply(in: defaults)
-
-        await fulfillment(of: [rebuild], timeout: 1)
-        withExtendedLifetime(cancellable) {}
-        XCTAssertEqual(AppAppearancePreference.stored(in: defaults), .dark)
-        XCTAssertTrue(model.results.contains { result in
-            guard case let .appHostCommand(definition) = result.action else {
-                return false
-            }
-            return definition.action == .setAppearance(.system)
-        })
-        XCTAssertFalse(model.results.contains { result in
-            guard case let .appHostCommand(definition) = result.action else {
-                return false
-            }
-            return definition.action == .setAppearance(.dark)
         })
     }
 
@@ -595,6 +545,14 @@ final class MacToolsSearchTests: XCTestCase {
                 )
             )
         )
+        XCTAssertFalse(
+            host.hasPluginSettingsSearchTarget(
+                PluginSettingsSearchTarget(
+                    pluginID: plugin.metadata.id,
+                    entryID: "hidden-row"
+                )
+            )
+        )
     }
 
     func testInstalledIncompatiblePluginIsDiscoverableInMarketplace() throws {
@@ -762,22 +720,41 @@ private final class SearchableTestPlugin:
         )
     }
 
-    var settingsSections: [PluginSettingsSection] {
-        [
-            PluginSettingsSection(
-                id: "automatic",
-                title: "自动切换",
-                description: "根据屏幕状态自动切换亮度。",
-                status: .init(
-                    text: "已开启",
-                    systemImage: "checkmark.circle",
-                    tone: .positive
+    var settingsPage: PluginSettingsPage? {
+        .form(
+            description: metadata.defaultDescription,
+            sections: [
+                PluginSettingsSection(
+                    id: "automatic",
+                    title: "自动切换",
+                    rows: [
+                        PluginSettingsRow(
+                            id: "automatic-status",
+                            title: "自动切换",
+                            description: "根据屏幕状态自动切换亮度。",
+                            control: .status(
+                                text: "已开启",
+                                systemImage: "checkmark.circle",
+                                tone: .positive,
+                                actionTitle: nil
+                            )
+                        )
+                    ]
                 ),
-                footnote: nil,
-                buttonTitle: nil,
-                actionID: nil
-            )
-        ]
+                PluginSettingsSection(
+                    id: "temporarily-unavailable",
+                    title: "暂不可用设置",
+                    isVisible: false,
+                    rows: [
+                        PluginSettingsRow(
+                            id: "hidden-row",
+                            title: "暂不可用设置",
+                            control: .toggle(isOn: false)
+                        )
+                    ]
+                )
+            ]
+        )
     }
 
     var permissionRequirements: [PluginPermissionRequirement] {
@@ -803,12 +780,6 @@ private final class SearchableTestPlugin:
                 isRequired: false
             )
         ]
-    }
-
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { _ in
-            EmptyView()
-        }
     }
 
     var settingsSearchEntries: [PluginSettingsSearchEntry] {

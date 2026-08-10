@@ -21,7 +21,7 @@ struct PluginCatalog: Codable, Equatable {
     let signature: Signature?
 
     init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = 2,
         catalogID: String,
         generatedAt: Date,
         minimumHostVersion: String,

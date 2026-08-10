@@ -4,75 +4,57 @@ import UniformTypeIdentifiers
 import MacToolsPluginKit
 
 struct AutoInputSettingsView: View {
+    enum SectionKind {
+        case behavior
+        case rules
+    }
+
     @ObservedObject var store: AutoInputStore
     @ObservedObject var controller: AutoInputController
     let localization: PluginLocalization
     let onChange: () -> Void
+    let section: SectionKind
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+        switch section {
+        case .behavior:
             behaviorSection
+        case .rules:
             rulesSection
         }
     }
 
     private var behaviorSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(
-                localization.string("settings.behavior.title", defaultValue: "切换行为"),
-                icon: "character.cursor.ibeam"
+        settingToggle(
+            icon: "arrow.counterclockwise",
+            title: localization.string("settings.memory.title", defaultValue: "自动记忆"),
+            description: localization.string(
+                "settings.memory.description",
+                defaultValue: "切回应用时恢复上次使用的输入法。"
+            ),
+            isOn: Binding(
+                get: { store.remembersLastInputSource },
+                set: { value in
+                    store.setRemembersLastInputSource(value)
+                    onChange()
+                }
             )
-
-            VStack(spacing: 0) {
-                settingToggle(
-                    icon: "arrow.counterclockwise",
-                    title: localization.string("settings.memory.title", defaultValue: "自动记忆"),
-                    description: localization.string(
-                        "settings.memory.description",
-                        defaultValue: "切回应用时恢复上次使用的输入法。"
-                    ),
-                    isOn: Binding(
-                        get: { store.remembersLastInputSource },
-                        set: { value in
-                            store.setRemembersLastInputSource(value)
-                            onChange()
-                        }
-                    )
-                )
-            }
-            .pluginSettingsCardBackground(.host)
-        }
+        )
     }
 
+    @ViewBuilder
     private var rulesSection: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            HStack {
-                sectionHeader(
-                    localization.string("settings.rules.title", defaultValue: "固定规则"),
-                    icon: "app.badge.checkmark"
-                )
-                Spacer()
-                Button(action: addApplication) {
-                    Label(localization.string("settings.rules.add", defaultValue: "添加"), systemImage: "plus")
-                        .font(PluginSettingsTheme.Typography.controlLabel)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(controller.sources.isEmpty)
-            }
-
-            if store.rules.isEmpty {
-                emptyRulesView
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(store.rules) { rule in
-                        ruleRow(rule)
-                        if rule.id != store.rules.last?.id {
-                            PluginSettingsListDivider()
-                        }
+        if store.rules.isEmpty {
+            emptyRulesView
+        } else {
+            VStack(spacing: 0) {
+                ForEach(store.rules) { rule in
+                    ruleRow(rule)
+                    if rule.id != store.rules.last?.id {
+                        PluginSettingsListDivider()
                     }
                 }
-                .pluginSettingsCardBackground(.host)
             }
         }
     }
@@ -94,7 +76,6 @@ struct AutoInputSettingsView: View {
             .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             Spacer()
         }
-        .pluginSettingsCardBackground(.host)
     }
 
     private func ruleRow(_ rule: AutoInputRule) -> some View {
@@ -171,13 +152,12 @@ struct AutoInputSettingsView: View {
         .pluginSettingsListRowPadding(interactive: true)
     }
 
-    private func sectionHeader(_ title: String, icon: String) -> some View {
-        Label(title, systemImage: icon)
-            .font(PluginSettingsTheme.Typography.sectionTitle)
-            .foregroundStyle(.secondary)
-    }
-
-    private func addApplication() {
+    static func addApplication(
+        store: AutoInputStore,
+        controller: AutoInputController,
+        localization: PluginLocalization,
+        onChange: () -> Void
+    ) {
         guard let defaultSource = controller.sources.first else { return }
         let panel = NSOpenPanel()
         panel.title = localization.string("openPanel.title", defaultValue: "选择应用")
@@ -197,7 +177,7 @@ struct AutoInputSettingsView: View {
 
         let existingSourceID = store.rule(for: bundleIdentifier)?.inputSourceID
         let sourceID = existingSourceID
-            ?? controller.sources.first(where: { $0.id == currentInputSourceID })?.id
+            ?? controller.sources.first(where: { $0.id == controller.currentSourceID })?.id
             ?? defaultSource.id
         store.upsertRule(AutoInputRule(
             bundleIdentifier: bundleIdentifier,
@@ -206,10 +186,6 @@ struct AutoInputSettingsView: View {
             inputSourceID: sourceID
         ))
         onChange()
-    }
-
-    private var currentInputSourceID: String? {
-        controller.currentSourceID
     }
 
     private func applicationIcon(for rule: AutoInputRule) -> NSImage {

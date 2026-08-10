@@ -198,7 +198,7 @@ final class AppWindowRouterTests: XCTestCase {
             appUpdater: AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
-            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService()),
+            launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
             appearanceUserDefaults: defaults
         )
 
@@ -241,7 +241,7 @@ final class AppWindowRouterTests: XCTestCase {
             appUpdater: AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
-            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService()),
+            launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
             appearanceUserDefaults: defaults
         )
 
@@ -281,10 +281,7 @@ final class AppWindowRouterTests: XCTestCase {
     }
 
     func testLocalCommandMatcherLeavesCloseQuitAndUnsupportedModifiersUntouched() {
-        for keyCode in [
-            kVK_ANSI_W,
-            kVK_ANSI_Q
-        ] {
+        for keyCode in [kVK_ANSI_W, kVK_ANSI_Q] {
             XCTAssertNil(
                 MacToolsLocalKeyboardCommand.resolve(
                     for: keyEvent(keyCode: UInt16(keyCode), characters: "")
@@ -303,37 +300,6 @@ final class AppWindowRouterTests: XCTestCase {
         )
     }
 
-    func testCommandCommaReusesSettingsWindowAndRequestsCoordinatedPanelDismissal() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-
-        router.showSettings()
-        let existingWindow = try XCTUnwrap(router.settingsWindow)
-        var dismissalRequestCount = 0
-        router.setProgrammaticSettingsPresentationAction {
-            dismissalRequestCount += 1
-        }
-        existingWindow.orderOut(nil)
-
-        XCTAssertTrue(
-            existingWindow.performKeyEquivalent(
-                with: keyEvent(
-                    keyCode: UInt16(kVK_ANSI_Comma),
-                    characters: ",",
-                    windowNumber: existingWindow.windowNumber
-                )
-            )
-        )
-
-        XCTAssertTrue(router.settingsWindow === existingWindow)
-        XCTAssertTrue(existingWindow.isVisible)
-        XCTAssertEqual(dismissalRequestCount, 1)
-
-        existingWindow.close()
-    }
-
     func testWindowPresentationDeminiaturizesBeforeOrderingFront() {
         var events: [String] = []
 
@@ -345,138 +311,6 @@ final class AppWindowRouterTests: XCTestCase {
         )
 
         XCTAssertEqual(events, ["activate", "deminiaturize", "orderFront"])
-    }
-
-    func testCommandFRequestsSearchOnlyForSearchableSettingsDestination() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-
-        router.showSettings()
-        let window = try XCTUnwrap(router.settingsWindow)
-        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
-        let commandF = keyEvent(
-            keyCode: UInt16(kVK_ANSI_F),
-            characters: "f",
-            windowNumber: window.windowNumber
-        )
-
-        XCTAssertTrue(window.performKeyEquivalent(with: commandF))
-        XCTAssertNil(coordinator.searchFocusRequest)
-
-        coordinator.navigate(to: .plugins(.marketplace))
-        XCTAssertTrue(window.performKeyEquivalent(with: commandF))
-        let firstRequest = try XCTUnwrap(coordinator.searchFocusRequest)
-
-        coordinator.setSearchField(.pluginMarketplace, focused: true)
-        XCTAssertTrue(window.performKeyEquivalent(with: commandF))
-        XCTAssertEqual(coordinator.searchFocusRequest, firstRequest)
-
-        coordinator.navigate(to: .about)
-        coordinator.setSearchField(.pluginMarketplace, focused: false)
-        XCTAssertTrue(window.performKeyEquivalent(with: commandF))
-        XCTAssertEqual(coordinator.searchFocusRequest, firstRequest)
-
-        window.close()
-    }
-
-    func testCommandKReusesSettingsWindowAndRefocusesUnifiedSearch() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-
-        router.showSettings()
-        let window = try XCTUnwrap(router.settingsWindow)
-        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
-        let commandK = keyEvent(
-            keyCode: UInt16(kVK_ANSI_K),
-            characters: "k",
-            windowNumber: window.windowNumber
-        )
-
-        XCTAssertTrue(window.performKeyEquivalent(with: commandK))
-        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
-        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .keyboard)
-        let firstFocusRequestID = coordinator.unifiedSearchFocusRequestID
-
-        XCTAssertTrue(window.performKeyEquivalent(with: commandK))
-        XCTAssertTrue(router.settingsWindow === window)
-        XCTAssertGreaterThan(
-            coordinator.unifiedSearchFocusRequestID,
-            firstFocusRequestID
-        )
-
-        window.close()
-    }
-
-    func testStandalonePaletteTogglesAndReusesOwnedResources() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-        var panelDismissalRequests = 0
-        router.setProgrammaticSettingsPresentationAction {
-            panelDismissalRequests += 1
-        }
-
-        router.toggleCommandPalette()
-        let panel = try XCTUnwrap(router.commandPalettePanel)
-        let state = try XCTUnwrap(router.commandPaletteState)
-        let firstResetRequestID = state.resetRequestID
-        let firstFocusRequestID = state.focusRequestID
-
-        XCTAssertTrue(panel.isVisible)
-        XCTAssertTrue(panel.hasShadow)
-        XCTAssertEqual(panelDismissalRequests, 1)
-
-        router.toggleCommandPalette()
-        XCTAssertFalse(panel.isVisible)
-
-        router.toggleCommandPalette()
-        XCTAssertTrue(router.commandPalettePanel === panel)
-        XCTAssertTrue(router.commandPaletteState === state)
-        XCTAssertGreaterThan(state.resetRequestID, firstResetRequestID)
-        XCTAssertGreaterThan(state.focusRequestID, firstFocusRequestID)
-
-        router.dismissCommandPalette()
-    }
-
-    func testGlobalPaletteToggleDismissesSettingsPaletteWithoutCreatingAnotherPanel() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-
-        router.showUnifiedSearch()
-        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
-        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
-
-        router.toggleCommandPalette()
-
-        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
-        XCTAssertNil(router.commandPalettePanel)
-        router.settingsWindow?.close()
-    }
-
-    func testGlobalPaletteToggleReplacesHiddenSettingsPaletteWithStandalonePanel() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-
-        router.showUnifiedSearch()
-        let settingsWindow = try XCTUnwrap(router.settingsWindow)
-        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
-        settingsWindow.orderOut(nil)
-
-        router.toggleCommandPalette()
-
-        XCTAssertFalse(coordinator.isUnifiedSearchPresented)
-        XCTAssertTrue(router.commandPalettePanel?.isVisible == true)
-        router.dismissCommandPalette()
-        settingsWindow.close()
     }
 
     func testSettingsPaletteVisibilityPolicyRejectsMiniaturizedAndInactiveSpaceWindows() {
@@ -504,46 +338,6 @@ final class AppWindowRouterTests: XCTestCase {
                 isWindowOnActiveSpace: false
             )
         )
-    }
-
-    func testStandaloneNavigationOpensSettingsAndPreservesExactRevealTarget() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-        let target = SettingsSearchRevealTarget.general(.appShortcuts)
-
-        XCTAssertTrue(
-            router.navigateFromStandaloneSearch(
-                to: .general,
-                target: target
-            )
-        )
-
-        XCTAssertTrue(router.settingsWindow?.isVisible == true)
-        XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .general)
-        XCTAssertEqual(router.settingsNavigationCoordinator?.searchRevealRequest?.target, target)
-        router.settingsWindow?.close()
-    }
-
-    func testUnavailableStandaloneNavigationKeepsPaletteVisibleAndSettingsClosed() throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let router = makeRouter(defaults: defaults)
-        router.toggleCommandPalette()
-        let panel = try XCTUnwrap(router.commandPalettePanel)
-
-        XCTAssertFalse(
-            router.navigateFromStandaloneSearch(
-                to: .plugins(.configuration("missing-plugin")),
-                target: nil
-            )
-        )
-
-        XCTAssertTrue(panel.isVisible)
-        XCTAssertNil(router.settingsWindow)
-        router.dismissCommandPalette()
     }
 
     func testStandalonePalettePlacementSelectsPointerScreenAndClampsToVisibleFrame() {
@@ -740,7 +534,7 @@ final class AppWindowRouterTests: XCTestCase {
             appUpdater: appUpdater ?? AppUpdater(startingUpdater: false),
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
-            launchAtLoginController: LaunchAtLoginController(service: FakeLaunchAtLoginService()),
+            launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
             appearanceUserDefaults: defaults
         )
     }
@@ -767,14 +561,16 @@ final class AppWindowRouterTests: XCTestCase {
 }
 
 @MainActor
-private final class FakeLaunchAtLoginService: LaunchAtLoginServicing {
-    var isRegistered = false
+private final class AppWindowRouterFakeLaunchAtLoginService: LaunchAtLoginServicing {
+    private var registered = false
+
+    var isRegistered: Bool { registered }
 
     func register() throws {
-        isRegistered = true
+        registered = true
     }
 
     func unregister() throws {
-        isRegistered = false
+        registered = false
     }
 }

@@ -12,7 +12,7 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertEqual(plugin.metadata.title, "翻译")
         XCTAssertEqual(plugin.metadata.defaultDescription, "划词与截图快捷键翻译")
         XCTAssertNotNil(plugin.primaryPanel)
-        XCTAssertNotNil(plugin.configuration)
+        XCTAssertNotNil(plugin.settingsPage)
     }
 
     func testShortcutDefinitionsIncludeSelectAndScreenshotTranslation() {

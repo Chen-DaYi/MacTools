@@ -62,17 +62,27 @@ final class PluginHostComponentSupportTests: XCTestCase {
                     description: "需要辅助功能权限。"
                 )
             ],
-            settingsSections: [
-                PluginSettingsSection(
-                    id: "settings",
-                    title: "组件设置",
-                    description: "组件设置说明。",
-                    status: .init(text: "正常", systemImage: "checkmark", tone: .positive),
-                    footnote: nil,
-                    buttonTitle: "执行",
-                    actionID: "settings-action"
-                )
-            ],
+            settingsPage: .form(
+                description: "组件设置说明。",
+                sections: [
+                    PluginSettingsSection(
+                        id: "settings",
+                        title: "组件设置",
+                        rows: [
+                            PluginSettingsRow(
+                                id: "settings-action",
+                                title: "组件状态",
+                                control: .status(
+                                    text: "正常",
+                                    systemImage: "checkmark",
+                                    tone: .positive,
+                                    actionTitle: "执行"
+                                )
+                            )
+                        ]
+                    )
+                ]
+            ),
             shortcutDefinitions: [
                 PluginShortcutDefinition(
                     id: "shortcut",
@@ -90,12 +100,11 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.permissionCards.map(\.pluginID), ["component"])
         XCTAssertEqual(host.permissionCards.map(\.iconSystemImage), ["accessibility"])
         XCTAssertEqual(host.permissionCards.map(\.iconVisualScale), [1.0])
-        XCTAssertEqual(host.settingsCards.map(\.pluginID), ["component"])
         XCTAssertEqual(host.shortcutItems.map(\.pluginID), ["component"])
-        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["component"])
-        XCTAssertEqual(host.pluginConfigurationItems.first?.settingsCards.map(\.id), ["component.settings"])
-        XCTAssertEqual(host.pluginConfigurationItems.first?.permissionCards.map(\.permissionID), ["accessibility"])
-        XCTAssertEqual(host.pluginConfigurationItems.first?.shortcutItems.map(\.pluginID), ["component"])
+        XCTAssertEqual(host.pluginSettingsItems.map(\.id), ["component"])
+        XCTAssertEqual(host.pluginSettingsItems.first?.sections.map(\.id), ["settings"])
+        XCTAssertEqual(host.pluginSettingsItems.first?.permissionCards.map(\.permissionID), ["accessibility"])
+        XCTAssertEqual(host.pluginSettingsItems.first?.shortcutItems.map(\.pluginID), ["component"])
     }
 
     func testShortcutsInSameSharedBindingGroupCanUseSameBinding() {
@@ -196,44 +205,107 @@ final class PluginHostComponentSupportTests: XCTestCase {
             plugins: [primaryPanelPlugin, componentPanelPlugin]
         )
 
-        XCTAssertTrue(host.pluginConfigurationItems.isEmpty)
-        XCTAssertFalse(host.hasPluginConfiguration(pluginID: "component"))
+        XCTAssertTrue(host.pluginSettingsItems.isEmpty)
+        XCTAssertFalse(host.hasPluginSettings(pluginID: "component"))
     }
 
     func testCustomPluginConfigurationContributesConfigurationItemAndCachesView() {
-        let configurationCounter = ConfigurationRenderCounter()
+        let configurationCounter = SettingsRenderCounter()
         let componentPanelPlugin = MockComponentPanelPlugin(
             id: "component",
-            configuration: PluginConfiguration(description: "自定义配置") { context in
-                configurationCounter.makeView(context: context)
-            }
+            settingsPage: customSettingsPage(counter: configurationCounter)
         )
         let host = makeHost(plugins: [componentPanelPlugin])
 
-        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["component"])
-        XCTAssertEqual(host.pluginConfigurationItems.first?.description, "自定义配置")
-        XCTAssertEqual(host.pluginConfigurationItems.first?.hasCustomConfiguration, true)
+        XCTAssertEqual(host.pluginSettingsItems.map(\.id), ["component"])
+        XCTAssertEqual(host.pluginSettingsItems.first?.description, "自定义配置")
+        XCTAssertEqual(host.pluginSettingsItems.first?.hasPluginContent, true)
 
-        _ = host.pluginConfigurationViewItem(for: "component")
-        _ = host.pluginConfigurationViewItem(for: "component")
+        _ = host.pluginSettingsContentViewItem(for: "component", sectionID: "custom")
+        _ = host.pluginSettingsContentViewItem(for: "component", sectionID: "custom")
 
         XCTAssertEqual(configurationCounter.callCount, 1)
     }
 
+    func testEmbeddedShortcutSectionKeepsAllShortcutsInContextAndSearchModel() throws {
+        let renderCounter = SettingsRenderCounter()
+        let page = PluginSettingsPage.form(
+            sections: [
+                PluginSettingsSection(
+                    id: "devices",
+                    embeddedShortcutGroupIDs: ["devices"]
+                ) { context in
+                    renderCounter.makeView(context: context)
+                }
+            ]
+        )
+        let plugin = MockComponentPanelPlugin(
+            id: "component",
+            settingsPage: page,
+            shortcutDefinitions: [
+                shortcutDefinition(id: "device", groupID: "devices"),
+                shortcutDefinition(id: "general", groupID: "general")
+            ]
+        )
+        let host = makeHost(plugins: [plugin])
+        let item = try XCTUnwrap(host.pluginSettingsItems.first)
+
+        XCTAssertEqual(item.shortcutItems.map(\.id), [
+            "component.shortcut.device",
+            "component.shortcut.general"
+        ])
+        XCTAssertEqual(item.remainingShortcutItems.map(\.id), ["component.shortcut.general"])
+
+        _ = host.pluginSettingsContentViewItem(for: "component", sectionID: "devices")
+
+        XCTAssertEqual(renderCounter.lastContext?.shortcutItems.count, 2)
+    }
+
+    func testDynamicSettingsLayoutMismatchKeepsHostShortcutSurfaceButHidesPluginPage() throws {
+        let plugin = MockComponentPanelPlugin(
+            id: "dynamic",
+            settingsPage: .workspace { _ in Text("Workspace") },
+            shortcutDefinitions: [shortcutDefinition(id: "open", groupID: nil)]
+        )
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        let store = PluginPackageStore(
+            rootDirectory: rootDirectory,
+            userDefaults: UserDefaults(suiteName: suiteName)!,
+            hostVersion: "1.0.0"
+        )
+        _ = installTestPluginPackage(
+            id: "dynamic",
+            bundleName: "Dynamic.bundle",
+            capabilities: .init(componentPanel: true, settings: .form),
+            store: store
+        )
+        let manager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { records in
+                records.map { DynamicPluginLoadResult(record: $0, plugins: [plugin], errorMessage: nil) }
+            }
+        )
+        let host = makeHost(plugins: [], dynamicPluginManager: manager)
+        let item = try XCTUnwrap(host.pluginSettingsItems.first)
+
+        XCTAssertNil(item.page)
+        XCTAssertEqual(item.shortcutItems.map(\.id), ["dynamic.shortcut.open"])
+    }
+
     func testPluginStateChangesAreCoalescedAndInvalidateDirtyConfigurationViewCache() async {
-        let configurationCounter = ConfigurationRenderCounter()
+        let configurationCounter = SettingsRenderCounter()
         let componentPanelPlugin = MutableComponentPanelPlugin(
             id: "component",
-            configuration: PluginConfiguration(description: "自定义配置") { context in
-                configurationCounter.makeView(context: context)
-            }
+            settingsPage: customSettingsPage(counter: configurationCounter)
         )
         let host = makeHost(
             plugins: [componentPanelPlugin],
             pluginStateChangeRebuildDelay: .milliseconds(20)
         )
 
-        _ = host.pluginConfigurationViewItem(for: "component")
+        _ = host.pluginSettingsContentViewItem(for: "component", sectionID: "custom")
         XCTAssertEqual(configurationCounter.callCount, 1)
         XCTAssertEqual(componentPanelPlugin.componentStateReadCount, 1)
 
@@ -251,7 +323,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(componentPanelPlugin.componentStateReadCount, 2)
         XCTAssertEqual(host.featureManagementItems.first?.isActive, true)
 
-        _ = host.pluginConfigurationViewItem(for: "component")
+        _ = host.pluginSettingsContentViewItem(for: "component", sectionID: "custom")
 
         XCTAssertEqual(configurationCounter.callCount, 2)
     }
@@ -326,7 +398,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         XCTAssertEqual(host.dashboardLayoutItems.map(\.id), ["dashboard", "dual"])
         XCTAssertEqual(host.featurePanelLayoutItems.map(\.id), ["feature", "dual"])
-        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["settings"])
+        XCTAssertEqual(host.pluginSettingsItems.map(\.id), ["settings"])
         XCTAssertFalse(host.featureManagementItems.contains { $0.id == "settings" })
     }
 
@@ -423,7 +495,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         _ = installTestPluginPackage(
             id: "dynamic",
             bundleName: "Dynamic.bundle",
-            capabilities: .init(primaryPanel: true, configuration: false),
+            capabilities: .init(primaryPanel: true, settings: .none),
             store: store
         )
         let loader = StubDynamicPluginLoader { records in
@@ -438,8 +510,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let host = makeHost(plugins: [], dynamicPluginManager: manager)
 
         XCTAssertEqual(host.panelItems.map(\.id), ["dynamic"])
-        XCTAssertTrue(host.pluginConfigurationItems.isEmpty)
-        XCTAssertEqual(plugin.configurationReadCount, 0)
+        XCTAssertTrue(host.pluginSettingsItems.isEmpty)
+        XCTAssertEqual(plugin.settingsPageReadCount, 0)
         try? FileManager.default.removeItem(at: rootDirectory)
     }
 
@@ -456,7 +528,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         _ = installTestPluginPackage(
             id: "settings-only",
             bundleName: "SettingsOnly.bundle",
-            capabilities: .init(configuration: true),
+            capabilities: .init(settings: .workspace),
             store: store
         )
         let loader = StubDynamicPluginLoader { records in
@@ -467,7 +539,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
         let host = makeHost(plugins: [], dynamicPluginManager: manager)
 
-        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["settings-only"])
+        XCTAssertEqual(host.pluginSettingsItems.map(\.id), ["settings-only"])
         XCTAssertTrue(host.dashboardLayoutItems.isEmpty)
         XCTAssertTrue(host.featurePanelLayoutItems.isEmpty)
         XCTAssertTrue(host.componentItems.isEmpty)
@@ -489,7 +561,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         let plugin = MockComponentPanelPlugin(
             id: "localized",
-            configuration: PluginConfiguration(description: "Component localized") { _ in
+            settingsPage: .workspace { _ in
                 Text("Settings")
             }
         )
@@ -504,7 +576,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         _ = installTestPluginPackage(
             id: "localized",
             bundleName: "Localized.bundle",
-            capabilities: .init(componentPanel: true, configuration: true),
+            capabilities: .init(componentPanel: true, settings: .workspace),
             localizedMetadata: [
                 "zh-Hans": PluginLocalizedMetadata(
                     displayName: "本地化插件",
@@ -521,8 +593,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
         let host = makeHost(plugins: [], dynamicPluginManager: manager)
 
-        XCTAssertEqual(host.pluginConfigurationItems.first?.title, "本地化插件")
-        XCTAssertEqual(host.pluginConfigurationItems.first?.description, "本地化说明")
+        XCTAssertEqual(host.pluginSettingsItems.first?.title, "本地化插件")
+        XCTAssertEqual(host.pluginSettingsItems.first?.description, "本地化说明")
     }
 
     func testDeferredDynamicLoadingMigratesLegacyOrderIntoBothSurfaces() throws {
@@ -671,10 +743,34 @@ final class PluginHostComponentSupportTests: XCTestCase {
             PluginHostCapabilities(
                 supportsDashboard: true,
                 supportsFeaturePanel: false,
-                hasCustomConfiguration: false
+                settingsLayout: nil
             )
         )
         try? FileManager.default.removeItem(at: rootDirectory)
+    }
+
+    private func customSettingsPage(counter: SettingsRenderCounter) -> PluginSettingsPage {
+        .form(
+            description: "自定义配置",
+            sections: [
+                PluginSettingsSection(id: "custom") { context in
+                    counter.makeView(context: context)
+                }
+            ]
+        )
+    }
+
+    private func shortcutDefinition(id: String, groupID: String?) -> PluginShortcutDefinition {
+        PluginShortcutDefinition(
+            id: id,
+            title: id,
+            description: id,
+            actionID: id,
+            scope: .global,
+            defaultBinding: nil,
+            isRequired: false,
+            settingsGroupID: groupID
+        )
     }
 
     private func makeHost(
@@ -765,9 +861,8 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     let metadata: PluginMetadata
     let descriptor: PluginComponentDescriptor
     let permissionRequirements: [PluginPermissionRequirement]
-    let settingsSections: [PluginSettingsSection]
     let shortcutDefinitions: [PluginShortcutDefinition]
-    let configuration: PluginConfiguration?
+    let settingsPage: PluginSettingsPage?
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
@@ -785,9 +880,8 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
         span: PluginComponentSpan = .oneByOne,
         isActive: Bool = false,
         permissionRequirements: [PluginPermissionRequirement] = [],
-        settingsSections: [PluginSettingsSection] = [],
-        shortcutDefinitions: [PluginShortcutDefinition] = [],
-        configuration: PluginConfiguration? = nil
+        settingsPage: PluginSettingsPage? = nil,
+        shortcutDefinitions: [PluginShortcutDefinition] = []
     ) {
         self.metadata = PluginMetadata(
             id: id,
@@ -800,9 +894,8 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
         self.descriptor = PluginComponentDescriptor(span: span)
         self.isActive = isActive
         self.permissionRequirements = permissionRequirements
-        self.settingsSections = settingsSections
         self.shortcutDefinitions = shortcutDefinitions
-        self.configuration = configuration
+        self.settingsPage = settingsPage
     }
 
     var componentPanelState: PluginComponentState {
@@ -842,7 +935,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
     func shortcutBindingDidChange(id: String, binding: ShortcutBinding?) {
         shortcutBindingChanges.append(.init(id: id, binding: binding))
@@ -853,7 +946,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
 private final class MutableComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel {
     let metadata: PluginMetadata
     let descriptor = PluginComponentDescriptor(span: .oneByOne)
-    let configuration: PluginConfiguration?
+    let settingsPage: PluginSettingsPage?
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
@@ -861,7 +954,7 @@ private final class MutableComponentPanelPlugin: MacToolsPlugin, PluginComponent
     var onComponentStateRead: (() -> Void)?
     private(set) var componentStateReadCount = 0
 
-    init(id: String, configuration: PluginConfiguration? = nil) {
+    init(id: String, settingsPage: PluginSettingsPage? = nil) {
         self.metadata = PluginMetadata(
             id: id,
             title: id,
@@ -870,7 +963,7 @@ private final class MutableComponentPanelPlugin: MacToolsPlugin, PluginComponent
             order: 1,
             defaultDescription: "Component \(id)"
         )
-        self.configuration = configuration
+        self.settingsPage = settingsPage
     }
 
     var componentPanelState: PluginComponentState {
@@ -895,11 +988,11 @@ private final class MutableComponentPanelPlugin: MacToolsPlugin, PluginComponent
 }
 
 @MainActor
-private final class ConfigurationRenderCounter {
+private final class SettingsRenderCounter {
     private(set) var callCount = 0
-    private(set) var lastContext: PluginConfigurationContext?
+    private(set) var lastContext: PluginSettingsContext?
 
-    func makeView(context: PluginConfigurationContext) -> AnyView {
+    func makeView(context: PluginSettingsContext) -> AnyView {
         callCount += 1
         lastContext = context
         return AnyView(Text(context.pluginID))
@@ -949,7 +1042,6 @@ private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { definedShortcuts }
 
     func refresh() {
@@ -962,7 +1054,7 @@ private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 }
 
@@ -1006,7 +1098,6 @@ private final class CountingPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPan
     }
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
-    var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {}
@@ -1017,7 +1108,7 @@ private final class CountingPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPan
     }
 
     func handlePermissionAction(id: String) {}
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
     func handleShortcutAction(id: String) {}
 }
 
@@ -1032,7 +1123,7 @@ private final class ConfigurationTrapPlugin: MacToolsPlugin, PluginPrimaryPanel 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    private(set) var configurationReadCount = 0
+    private(set) var settingsPageReadCount = 0
 
     init(id: String) {
         self.metadata = PluginMetadata(
@@ -1057,11 +1148,9 @@ private final class ConfigurationTrapPlugin: MacToolsPlugin, PluginPrimaryPanel 
         )
     }
 
-    var configuration: PluginConfiguration? {
-        configurationReadCount += 1
-        return PluginConfiguration(description: "Should not be read") { _ in
-            Text("Unexpected")
-        }
+    var settingsPage: PluginSettingsPage? {
+        settingsPageReadCount += 1
+        return .workspace(description: "Should not be read") { _ in Text("Unexpected") }
     }
 
     func handleAction(_ action: PluginPanelAction) {}
@@ -1161,9 +1250,7 @@ private final class MockSettingsOnlyPlugin: MacToolsPlugin {
         )
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: "Settings only") { _ in
-            Text("Settings")
-        }
+    var settingsPage: PluginSettingsPage? {
+        .workspace(description: "Settings only") { _ in Text("Settings") }
     }
 }

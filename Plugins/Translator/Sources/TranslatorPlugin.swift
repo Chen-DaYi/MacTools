@@ -26,7 +26,7 @@ typealias ScreenshotRegionCapturerFactory = @MainActor (@escaping () -> Bool) ->
 final class TranslatorPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
-    PluginConfigurationPresenting,
+    PluginSettingsPresenting,
     PluginActionProviding,
     PluginActionPermissionProviding,
     PluginLegacyActionShortcutProviding
@@ -48,7 +48,7 @@ final class TranslatorPlugin:
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
-    var requestConfigurationPresentation: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
 
     private let storage: PluginStorage
     private let accessibilityTrustProvider: () -> Bool
@@ -170,7 +170,6 @@ final class TranslatorPlugin:
         ]
     }
 
-    var settingsSections: [PluginSettingsSection] { [] }
 
     var shortcutDefinitions: [PluginShortcutDefinition] {
         [
@@ -310,34 +309,39 @@ final class TranslatorPlugin:
         return ActionExecutionHandle { .succeeded() }
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription, prefersFullHeight: false) { [weak self] _ in
-            if let self {
-                TranslatorSettingsView(
-                    profiles: self.providerProfiles,
-                    apiKeys: self.cachedAPIKeys,
-                    languagePair: self.languagePair,
-                    localization: self.localization,
-                    onSave: { [weak self] profiles, apiKeys, languagePair in
-                        self?.saveConfiguration(
-                            profiles: profiles,
-                            apiKeys: apiKeys,
-                            languagePair: languagePair
-                        )
-                    },
-                    onMakeNewProfile: { [weak self] profiles in
-                        self?.providerProfileStore.makeNewProfile(existingProfiles: profiles)
-                            ?? TranslatorProviderProfile(
-                                name: self?.localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译")
-                                    ?? "OpenAI",
-                                isEnabled: false
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [
+            PluginSettingsSection(
+                id: "translator-settings",
+                title: localization.string("settings.title", defaultValue: "翻译设置"),
+                systemImage: "character.book.closed",
+                presentation: .edgeToEdge
+            ) { [weak self] _ in
+                if let self {
+                    TranslatorSettingsView(
+                        profiles: self.providerProfiles,
+                        apiKeys: self.cachedAPIKeys,
+                        languagePair: self.languagePair,
+                        localization: self.localization,
+                        onSave: { [weak self] profiles, apiKeys, languagePair in
+                            self?.saveConfiguration(
+                                profiles: profiles,
+                                apiKeys: apiKeys,
+                                languagePair: languagePair
                             )
-                    }
-                )
-            } else {
-                EmptyView()
+                        },
+                        onMakeNewProfile: { [weak self] profiles in
+                            self?.providerProfileStore.makeNewProfile(existingProfiles: profiles)
+                                ?? TranslatorProviderProfile(
+                                    name: self?.localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译")
+                                        ?? "OpenAI",
+                                    isEnabled: false
+                                )
+                        }
+                    )
+                }
             }
-        }
+        ])
     }
 
     func handleAction(_ action: PluginPanelAction) {
@@ -407,7 +411,7 @@ final class TranslatorPlugin:
         }
     }
 
-    func handleSettingsAction(id: String) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {}
 
     func deactivate(reason: PluginDeactivationReason) {
         guard reason.requiresStateCleanup else {
@@ -609,7 +613,7 @@ final class TranslatorPlugin:
 
     private func handlePanelAction(_ action: TranslatorPanelAction) {
         if action == .openSettings {
-            requestConfigurationPresentation?()
+            requestSettingsPresentation?()
             return
         }
 

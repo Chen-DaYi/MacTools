@@ -87,21 +87,64 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         )
     }
 
-    var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
-            AutoInputSettingsView(
-                store: store,
-                controller: controller,
-                localization: localization,
-                onChange: { [weak self] in
-                    guard let self else { return }
-                    if self.store.persistenceFailure == nil {
-                        self.controller.configurationDidChange()
-                    }
-                    self.onStateChange?()
+    var settingsPage: PluginSettingsPage? {
+        .form(description: metadata.defaultDescription, sections: [
+            PluginSettingsSection(
+                id: "behavior",
+                title: localization.string("settings.behavior.title", defaultValue: "切换行为"),
+                systemImage: "character.cursor.ibeam",
+                presentation: .edgeToEdge
+            ) { [self] _ in
+                AutoInputSettingsView(
+                    store: store,
+                    controller: controller,
+                    localization: localization,
+                    onChange: { [weak self] in
+                        self?.controller.configurationDidChange()
+                        self?.onStateChange?()
+                    },
+                    section: .behavior
+                )
+            },
+            PluginSettingsSection(
+                id: "rules",
+                title: localization.string("settings.rules.title", defaultValue: "固定规则"),
+                systemImage: "app.badge.checkmark",
+                presentation: .edgeToEdge
+            ) { [self] _ in
+                AutoInputSettingsView(
+                    store: store,
+                    controller: controller,
+                    localization: localization,
+                    onChange: { [weak self] in
+                        self?.controller.configurationDidChange()
+                        self?.onStateChange?()
+                    },
+                    section: .rules
+                )
+            }
+            .headerAccessory { [self] _ in
+                Button {
+                    AutoInputSettingsView.addApplication(
+                        store: self.store,
+                        controller: self.controller,
+                        localization: self.localization,
+                        onChange: { [weak self] in
+                            self?.controller.configurationDidChange()
+                            self?.onStateChange?()
+                        }
+                    )
+                } label: {
+                    Label(
+                        localization.string("settings.rules.add", defaultValue: "添加"),
+                        systemImage: "plus"
+                    )
                 }
-            )
-        }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(controller.sources.isEmpty)
+            }
+        ])
     }
 
     var actionDefinitions: [ActionDefinition] {

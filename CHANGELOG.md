@@ -7,6 +7,52 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v1.1.6] - 2026-08-10
+
+### Added
+
+- Added navigation-only deep links for Settings, installed plugin settings, Dashboard, Feature Panel, and search.
+- Command Palette can now set the app appearance, manage Launch at Login, and show or hide installed plugins on each supported surface.
+- An optional global shortcut can now open a standalone Command Palette from any app.
+
+### Changed
+
+- Dashboard and Feature Panel context menus can now move plugins to either end of the list and show or hide them on the current surface.
+- Settings pages now use native macOS backgrounds, appearance-aware sidebars and cards, consistent spacing, responsive widths, compact shortcuts, and live slider readouts; General preferences retain a readable width.
+- Common application shortcuts can now be used after confirming their global effect.
+- Plugin updates now install and validate Trackpad Gestures before Mouse Enhancer retires legacy middle-click behavior, with rollback on failure and a compatibility fallback for temporary app downgrades.
+
+### Fixed
+
+- Plugin settings now use a lighter sidebar surface in Light appearance.
+
+## [plugins-1.1.6] - 2026-08-10
+
+### Added
+
+- Calendar now lets you choose any weekday as the start of the week, with Sunday as the default.
+- Added a dedicated Trackpad Gestures plugin with configurable TipTap, three- to five-finger taps, double taps, and long touches that can trigger keyboard shortcuts or middle clicks.
+- TipTap actions can repeat for each additional-finger tap while fixed fingers remain on the trackpad, and can consume matching native clicks.
+- Adjustable typing protection is enabled by default to prevent palm-triggered gestures while using the keyboard.
+- Responsive mapping controls provide focused editing, unique gesture choices, visible deletion, guidance, accessibility labels, and a safe no-action test mode.
+- Automatic updates install Trackpad Gestures before migrating affected Mouse Enhancer middle-click settings; Mouse Enhancer then focuses on scrolling.
+
+### Changed
+
+- App Hotkey now asks before assigning a common application shortcut globally.
+- Keep Awake now offers three modes: allow display sleep, keep the display on, or keep screen tools active. Screen Tools can prevent automatic locking and support closed-lid use on power; manual locking still works.
+- All plugins now use a unified settings layout with native forms, adaptive system cards for complex managers, single-line shortcut controls, compact menus for long choices, and tick-free stepped sliders.
+- Window Switcher and Physical Clean Mode shortcut fields no longer repeat their row labels, while Display Brightness keeps compact direction icons and aligns both shortcut fields beside the description.
+- Sidecar now asks before assigning a common application shortcut globally.
+
+### Fixed
+
+- Fan Control now reports an error when its helper is not running with administrator privileges or when macOS does not apply the requested SMC fan value, instead of showing an unapplied speed change as successful.
+- Launch Items settings now adapt to smaller windows without clipping filters, lists, details, or scan progress.
+- Mouse Enhancer now preserves separate mouse and trackpad scroll directions after screen locking, sleep and wake, or external-display changes.
+- Sidecar's two global shortcut fields now show their actions beside the recorder, making connect-first and disconnect-all settings easy to distinguish.
+- Translator settings now show their section title in every supported app language.
+
 ## [v1.1.5] - 2026-08-03
 
 ### Added

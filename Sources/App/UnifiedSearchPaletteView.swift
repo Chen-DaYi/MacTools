@@ -1111,12 +1111,12 @@ private struct UnifiedSearchPaletteSurface: View {
         shape
             .fill(
                 reducesTransparency
-                    ? AnyShapeStyle(PluginSettingsTheme.Palette.cardBackground)
+                    ? AnyShapeStyle(SettingsStyle.contentBackground)
                     : AnyShapeStyle(.regularMaterial)
             )
             .overlay {
                 if !reducesTransparency {
-                    shape.fill(PluginSettingsTheme.Palette.cardBackground.opacity(0.88))
+                    shape.fill(SettingsStyle.contentBackground.opacity(0.88))
                 }
             }
     }
