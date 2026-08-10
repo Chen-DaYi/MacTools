@@ -71,29 +71,78 @@ private final class TrackpadFrameDeliveryBarrier: @unchecked Sendable {
 }
 
 private final class FakeMultitouchRuntime: MultitouchRuntimeProviding {
-    private let retainedDevices: [NSObject]
-    var registerSucceeds = true
+    private struct Registration {
+        let deviceSourceID: UInt
+        let callback: MTFrameCallbackWithRefconFunction
+        let refcon: UnsafeMutableRawPointer
+        var isActive: Bool
+    }
+
+    private var retainedDevices: [NSObject]
+    private var descriptors: [MultitouchDeviceDescriptor]
+    private var registrations: [Registration] = []
+    private(set) weak var collectionLifetimeOwner: NSObject?
     private(set) var registerCount = 0
     private(set) var unregisterCount = 0
     private(set) var startCount = 0
     private(set) var stopCount = 0
-    private(set) var releaseCount = 0
 
     init(deviceCount: Int) {
         retainedDevices = (0 ..< deviceCount).map { _ in NSObject() }
+        descriptors = (0 ..< deviceCount).map { index in
+            MultitouchDeviceDescriptor(
+                deviceID: UInt64(index + 1),
+                isBuiltIn: index == 0,
+                transport: index == 0 ? .builtIn : .bluetooth
+            )
+        }
     }
 
-    func createDeviceList() -> [MTDevice] {
-        retainedDevices.map { unsafeBitCast($0, to: MTDevice.self) }
+    init(descriptors: [MultitouchDeviceDescriptor]) {
+        retainedDevices = descriptors.map { _ in NSObject() }
+        self.descriptors = descriptors
     }
 
-    func register(_ device: MTDevice, callback: MTFrameCallbackFunction) -> Bool {
+    func replaceDevices(with descriptors: [MultitouchDeviceDescriptor]) {
+        retainedDevices = descriptors.map { _ in NSObject() }
+        self.descriptors = descriptors
+    }
+
+    func createDeviceCollection() -> MultitouchDeviceCollection? {
+        let owner = NSObject()
+        collectionLifetimeOwner = owner
+        return MultitouchDeviceCollection(
+            entries: zip(retainedDevices, descriptors).map { object, descriptor in
+                MultitouchDeviceEntry(
+                    device: unsafeBitCast(object, to: MTDevice.self),
+                    descriptor: descriptor
+                )
+            },
+            lifetimeOwner: owner
+        )
+    }
+
+    func register(
+        _ device: MTDevice,
+        callback: MTFrameCallbackWithRefconFunction,
+        refcon: UnsafeMutableRawPointer
+    ) {
         registerCount += 1
-        return registerSucceeds
+        registrations.append(Registration(
+            deviceSourceID: callbackSourceID(device),
+            callback: callback,
+            refcon: refcon,
+            isActive: true
+        ))
     }
 
-    func unregister(_ device: MTDevice, callback: MTFrameCallbackFunction) {
+    func unregister(_ device: MTDevice, callback: MTFrameCallbackWithRefconFunction) {
         unregisterCount += 1
+        let sourceID = callbackSourceID(device)
+        guard let index = registrations.lastIndex(where: {
+            $0.deviceSourceID == sourceID && $0.isActive
+        }) else { return }
+        registrations[index].isActive = false
     }
 
     func start(_ device: MTDevice) {
@@ -104,8 +153,40 @@ private final class FakeMultitouchRuntime: MultitouchRuntimeProviding {
         stopCount += 1
     }
 
-    func release(_ device: MTDevice) {
-        releaseCount += 1
+    func emitFrame(
+        deviceIndex: Int,
+        timestamp: TimeInterval,
+        registrationOrdinal: Int? = nil
+    ) {
+        let device = unsafeBitCast(retainedDevices[deviceIndex], to: MTDevice.self)
+        let sourceID = callbackSourceID(device)
+        let matchingRegistrations = registrations.filter { $0.deviceSourceID == sourceID }
+        let registration: Registration?
+        if let registrationOrdinal {
+            registration = matchingRegistrations.indices.contains(registrationOrdinal)
+                ? matchingRegistrations[registrationOrdinal]
+                : nil
+        } else {
+            registration = matchingRegistrations.last(where: \.isActive)
+        }
+        registration?.callback(device, nil, 0, timestamp, 0, registration?.refcon)
+    }
+
+    private func callbackSourceID(_ device: MTDevice) -> UInt {
+        UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
+    }
+}
+
+private final class LockedFrameRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var frames: [TrackpadContactFrame] = []
+
+    func append(_ frame: TrackpadContactFrame) {
+        lock.withLock { frames.append(frame) }
+    }
+
+    var snapshot: [TrackpadContactFrame] {
+        lock.withLock { frames }
     }
 }
 
@@ -853,6 +934,27 @@ final class TrackpadGestureStoreTests: XCTestCase {
 
 @MainActor
 final class TrackpadGesturesPluginTests: XCTestCase {
+    func testGestureRawValuesRemainCompatibleWithExistingMappingsAndBackups() {
+        XCTAssertEqual(TrackpadGesture.allCases.map(\.rawValue), [
+            "tipTapLeftOneFixed",
+            "tipTapRightOneFixed",
+            "tipTapLeftTwoFixed",
+            "tipTapMiddleTwoFixed",
+            "tipTapRightTwoFixed",
+            "threeFingerTap",
+            "fourFingerTap",
+            "fiveFingerTap",
+            "threeFingerLongTouch",
+            "fourFingerLongTouch",
+            "fiveFingerLongTouch",
+            "threeFingerDoubleTap",
+            "fourFingerDoubleTap",
+            "fiveFingerDoubleTap",
+            "twoFingerClick",
+            "threeFingerClick",
+        ])
+    }
+
     func testMultitouchRuntimeResolvesRequiredSymbolsDynamically() {
         XCTAssertNotNil(MultitouchSupportRuntime.load())
     }
@@ -872,25 +974,117 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(driver.deviceCount, 2)
         XCTAssertEqual(runtime.registerCount, 2)
         XCTAssertEqual(runtime.startCount, 2)
+        XCTAssertNotNil(runtime.collectionLifetimeOwner)
 
         driver.stop()
         XCTAssertEqual(runtime.unregisterCount, 2)
         XCTAssertEqual(runtime.stopCount, 2)
-        XCTAssertEqual(runtime.releaseCount, 2)
+        XCTAssertNil(runtime.collectionLifetimeOwner)
     }
 
-    func testMultitouchDriverFailsClosedWhenCallbackRegistrationFails() {
-        let runtime = FakeMultitouchRuntime(deviceCount: 1)
-        runtime.registerSucceeds = false
+    func testMultitouchDriverTranslatesCallbackPointerToStableDeviceIDWithoutClockFiltering() {
+        let runtime = FakeMultitouchRuntime(descriptors: [
+            MultitouchDeviceDescriptor(
+                deviceID: 42,
+                isBuiltIn: false,
+                transport: .bluetooth
+            ),
+        ])
         let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
 
-        XCTAssertFalse(driver.start { _ in })
-        XCTAssertEqual(driver.deviceCount, 0)
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 0.01)
+
+        XCTAssertEqual(recorder.snapshot.map(\.deviceID), [42])
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [0.01])
+        XCTAssertEqual(driver.deviceDiagnostics, [
+            MultitouchDeviceDiagnostics(
+                descriptor: MultitouchDeviceDescriptor(
+                    deviceID: 42,
+                    isBuiltIn: false,
+                    transport: .bluetooth
+                ),
+                deliveredFrameCount: 1,
+                lastFrameTimestamp: 0.01
+            ),
+        ])
+        driver.stop()
+    }
+
+    func testMultitouchDriverKeepsStableIDWhenRuntimeReturnsANewDevicePointer() {
+        let descriptor = MultitouchDeviceDescriptor(
+            deviceID: 42,
+            isBuiltIn: false,
+            transport: .usb
+        )
+        let runtime = FakeMultitouchRuntime(descriptors: [descriptor])
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 1)
+        driver.stop()
+
+        runtime.replaceDevices(with: [descriptor])
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 0.001)
+
+        XCTAssertEqual(recorder.snapshot.map(\.deviceID), [42, 42])
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [1, 0.001])
+        driver.stop()
+    }
+
+    func testMultitouchDriverSeparatesDuplicateOrUnavailableDeviceIDs() {
+        let runtime = FakeMultitouchRuntime(descriptors: [
+            MultitouchDeviceDescriptor(deviceID: 0, isBuiltIn: true, transport: .builtIn),
+            MultitouchDeviceDescriptor(deviceID: 0, isBuiltIn: false, transport: .bluetooth),
+        ])
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 0.1)
+        runtime.emitFrame(deviceIndex: 1, timestamp: 0.2)
+
+        XCTAssertEqual(Set(recorder.snapshot.map(\.deviceID)).count, 2)
+        XCTAssertFalse(recorder.snapshot.map(\.deviceID).contains(0))
+        driver.stop()
+    }
+
+    func testMultitouchDriverRejectsLateCallbackAfterStop() {
+        let runtime = FakeMultitouchRuntime(deviceCount: 1)
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 1)
+        driver.stop()
+        runtime.emitFrame(deviceIndex: 0, timestamp: 2)
+
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [1])
         XCTAssertEqual(runtime.registerCount, 1)
-        XCTAssertEqual(runtime.startCount, 0)
         XCTAssertEqual(runtime.unregisterCount, 1)
         XCTAssertEqual(runtime.stopCount, 1)
-        XCTAssertEqual(runtime.releaseCount, 1)
+    }
+
+    func testMultitouchDriverRejectsPreviousRegistrationAfterRestartWithReusedDevicePointer() {
+        let runtime = FakeMultitouchRuntime(deviceCount: 1)
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 1)
+        driver.stop()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        runtime.emitFrame(deviceIndex: 0, timestamp: 2, registrationOrdinal: 0)
+        runtime.emitFrame(deviceIndex: 0, timestamp: 3, registrationOrdinal: 1)
+
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [1, 3])
+        XCTAssertEqual(runtime.registerCount, 2)
+        XCTAssertEqual(runtime.unregisterCount, 1)
+        driver.stop()
     }
 
     func testMetadataAndEmptyState() {
@@ -1494,27 +1688,43 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         session.deactivate()
     }
 
-    func testFrameCallbackGateRejectsWrongDeviceOldTimestampAndInvalidatedRegistration() {
+    func testSessionCoalescesRepeatedDeviceChangeNotifications() async throws {
+        let driver = MockMultitouchFrameListener()
+        let session = MultitouchDeviceSession(
+            driver: driver,
+            testEventTapStart: { true },
+            testEventTapStop: {},
+            deviceChangeRestartDelay: 0.01
+        )
+
+        XCTAssertTrue(session.activate(gestures: [.threeFingerTap]))
+        session.simulateDeviceRemovalNotificationForTests()
+        session.simulateDeviceRemovalNotificationForTests()
+        try await Task.sleep(nanoseconds: 40_000_000)
+
+        XCTAssertEqual(driver.startCount, 2)
+        session.deactivate()
+    }
+
+    func testFrameCallbackGateMapsStableDeviceIDAndAcceptsIndependentDeviceClock() {
         let gate = MultitouchFrameCallbackGate()
-        let deliveryCount = LockedTestCounter()
-        gate.activate(deviceIDs: [7], startedAt: 10) { _ in deliveryCount.increment() }
+        let recorder = LockedFrameRecorder()
+        gate.activate(deviceIDsByCallbackSource: [7: 70]) { recorder.append($0) }
 
         XCTAssertFalse(gate.deliver(TrackpadContactFrame(
             deviceID: 8, timestamp: 11, contacts: []
         )))
-        XCTAssertFalse(gate.deliver(TrackpadContactFrame(
-            deviceID: 7, timestamp: 9.99, contacts: []
-        )))
         XCTAssertTrue(gate.deliver(TrackpadContactFrame(
-            deviceID: 7, timestamp: 10, contacts: []
+            deviceID: 7, timestamp: 0.001, contacts: []
         )))
-        XCTAssertEqual(deliveryCount.value, 1)
+        XCTAssertEqual(recorder.snapshot.map(\.deviceID), [70])
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [0.001])
 
         gate.invalidate()
         XCTAssertFalse(gate.deliver(TrackpadContactFrame(
             deviceID: 7, timestamp: 11, contacts: []
         )))
-        XCTAssertEqual(deliveryCount.value, 1)
+        XCTAssertEqual(recorder.snapshot.count, 1)
     }
 
     func testFrameCallbackGateInvalidationWaitsForAdmittedHandler() {
@@ -1522,7 +1732,7 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         let barrier = TrackpadFrameDeliveryBarrier()
         let deliveryFinished = DispatchSemaphore(value: 0)
         let invalidationFinished = DispatchSemaphore(value: 0)
-        gate.activate(deviceIDs: [7], startedAt: 10) { _ in barrier.pauseDelivery() }
+        gate.activate(deviceIDsByCallbackSource: [7: 70]) { _ in barrier.pauseDelivery() }
 
         DispatchQueue.global().async {
             gate.deliver(TrackpadContactFrame(deviceID: 7, timestamp: 10, contacts: []))

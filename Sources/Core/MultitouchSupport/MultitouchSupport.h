@@ -59,14 +59,28 @@ typedef void (*MTFrameCallbackFunction)(
     int frame
 );
 
+typedef void (*MTFrameCallbackWithRefconFunction)(
+    MTDeviceRef device,
+    MTTouch touches[],
+    int numTouches,
+    double timestamp,
+    int frame,
+    void * _Nullable refcon
+);
+
 bool MTDeviceIsAlive(MTDeviceRef)
     CF_SWIFT_NAME(getter:MTDevice.isAlive(self:));
 bool MTDeviceIsRunning(MTDeviceRef)
     CF_SWIFT_NAME(getter:MTDevice.isRunning(self:));
 
-bool MTRegisterContactFrameCallback(MTDeviceRef, MTFrameCallbackFunction)
+void MTRegisterContactFrameCallback(MTDeviceRef, MTFrameCallbackFunction)
     CF_SWIFT_NAME(MTDevice.register(self:contactFrameCallback:));
-bool MTUnregisterContactFrameCallback(MTDeviceRef, MTFrameCallbackFunction)
+void MTRegisterContactFrameCallbackWithRefcon(
+    MTDeviceRef,
+    MTFrameCallbackWithRefconFunction,
+    void * _Nullable
+);
+void MTUnregisterContactFrameCallback(MTDeviceRef, MTFrameCallbackFunction)
     CF_SWIFT_NAME(MTDevice.unregister(self:contactFrameCallback:));
 
 void MTDeviceStart(MTDeviceRef, int runMode)
