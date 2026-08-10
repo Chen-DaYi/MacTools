@@ -67,6 +67,12 @@ struct CalendarComponentView: View {
 }
 
 private struct CalendarHeaderView: View {
+    private enum Layout {
+        static let todayButtonMinimumWidth: CGFloat = 32
+        static let todayButtonMaximumWidth: CGFloat = 48
+        static let todayButtonHorizontalPadding: CGFloat = 4
+    }
+
     let title: String
     let localization: PluginLocalization
     let onPrevious: () -> Void
@@ -85,13 +91,23 @@ private struct CalendarHeaderView: View {
                 help: localization.string("header.previous.help", defaultValue: "上个月"),
                 action: onPrevious
             )
-            Button(localization.string("header.today.button", defaultValue: "今天"), action: onToday)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
-                .frame(width: 32, height: 20)
-                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .help(localization.string("header.today.help", defaultValue: "回到今天"))
+            Button(action: onToday) {
+                Text(localization.string("header.today.button", defaultValue: "今天"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, Layout.todayButtonHorizontalPadding)
+                    .frame(
+                        minWidth: Layout.todayButtonMinimumWidth,
+                        maxWidth: Layout.todayButtonMaximumWidth,
+                        minHeight: 20,
+                        maxHeight: 20
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help(localization.string("header.today.help", defaultValue: "回到今天"))
             CalendarIconButton(
                 systemName: "chevron.right",
                 help: localization.string("header.next.help", defaultValue: "下个月"),

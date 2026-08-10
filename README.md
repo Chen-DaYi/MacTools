@@ -55,7 +55,7 @@
 | Finder Right Click | Add Finder context menu actions: new folder, new file (.txt / .md / .json), open in Terminal, open with a configurable app list, copy selected item names, and copy absolute / relative / shell-escaped paths / file:// URLs for selected items or the current folder when clicking the background — each item toggleable in Settings. |
 | Lock Screen | Lock the screen immediately, equivalent to Cmd+Ctrl+Q. |
 | Launch Items | Browse LaunchAgent/LaunchDaemon entries with search, field explanations, and user-level enable/disable controls. |
-| Calendar Widget | View a monthly calendar, lunar calendar data, holidays, and today's events, with any weekday as the start of the week. |
+| Calendar Widget | View a monthly calendar, lunar calendar data, holidays, and today's events, with any weekday as the start of the week and compact localized navigation controls. |
 | System Status | Show 1-hour charts for CPU, GPU, memory, disk, network, battery, and high-usage processes. |
 | Activity Stats | Track keyboard, mouse, scroll, and foreground app usage, with install/update and uninstall actions for Claude Code, Cursor, and Codex activity hooks. |
 | Device Battery | Aggregate battery levels for the Mac, trusted iPhone/iPad/Apple Watch devices over USB or Wi-Fi, Bluetooth peripherals, AirPods/Beats split batteries and charging state, and Rapoo VT series mice, with multiple widget layouts and optional low-battery notifications. Background sampling pauses when the widget is hidden unless notifications are enabled. |
