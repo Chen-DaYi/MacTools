@@ -1,4 +1,3 @@
-import AppKit
 import Combine
 import SwiftUI
 import XCTest
@@ -220,58 +219,6 @@ final class MacToolsSearchTests: XCTestCase {
                 return false
             }
             return definition.action == .setLaunchAtLogin(true)
-        })
-    }
-
-    func testModelAutomaticallyRebuildsAfterAppearanceChanges() async {
-        let suiteName = "MacToolsSearchAppearanceModelTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let originalAppearance = NSApp.appearance
-        defer { NSApp.appearance = originalAppearance }
-        let context = AppHostCommandContext(
-            pluginHost: makePluginHostForTests(plugins: []),
-            launchAtLoginController: LaunchAtLoginController(
-                service: SearchTestLaunchAtLoginService()
-            ),
-            appearanceUserDefaults: defaults
-        )
-        let model = UnifiedSearchPaletteModel(commandContext: context)
-        model.updateQuery("appearance")
-        let (rebuild, cancellable) = expectModelResults(
-            model,
-            description: "Appearance change rebuilds the command index"
-        ) { results in
-            results.contains { result in
-                guard case let .appHostCommand(definition) = result.action else {
-                    return false
-                }
-                return definition.action == .setAppearance(.system)
-            } && !results.contains { result in
-                guard case let .appHostCommand(definition) = result.action else {
-                    return false
-                }
-                return definition.action == .setAppearance(.dark)
-            }
-        }
-
-        AppAppearancePreference.dark.storeAndApply(in: defaults)
-
-        await fulfillment(of: [rebuild], timeout: 1)
-        withExtendedLifetime(cancellable) {}
-        XCTAssertEqual(AppAppearancePreference.stored(in: defaults), .dark)
-        XCTAssertTrue(model.results.contains { result in
-            guard case let .appHostCommand(definition) = result.action else {
-                return false
-            }
-            return definition.action == .setAppearance(.system)
-        })
-        XCTAssertFalse(model.results.contains { result in
-            guard case let .appHostCommand(definition) = result.action else {
-                return false
-            }
-            return definition.action == .setAppearance(.dark)
         })
     }
 

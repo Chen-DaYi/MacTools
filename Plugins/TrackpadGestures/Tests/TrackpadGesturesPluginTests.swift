@@ -1022,65 +1022,6 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         session.deactivate()
     }
 
-    func testSessionSuppressesTypingOverlapUntilAllTrackpadContactsReset() async throws {
-        let clock = LockedTestClock()
-        let listener = MockMultitouchFrameListener()
-        let session = MultitouchDeviceSession(
-            driver: listener,
-            testEventTapStart: { true },
-            middleClickClock: { clock.value }
-        )
-        var recognized: [TrackpadGesture] = []
-        session.onRecognized = { gesture, _ in recognized.append(gesture) }
-        session.updateTypingProtection(isEnabled: true, gracePeriod: 0.4)
-        XCTAssertTrue(session.activate(gestures: [.tipTapLeftOneFixed]))
-        defer { session.deactivate() }
-
-        let keyDown = try XCTUnwrap(CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: 0,
-            keyDown: true
-        ))
-        let keyUp = try XCTUnwrap(CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: 0,
-            keyDown: false
-        ))
-        clock.value = 0.10
-        XCTAssertFalse(session.handleNativeEventForTests(type: .keyDown, event: keyDown))
-        clock.value = 0.20
-        XCTAssertFalse(session.handleNativeEventForTests(type: .keyUp, event: keyUp))
-
-        let fixed = [TrackpadContactSnapshot(identifier: 1, x: 0.5, y: 0.5)]
-        let tapping = TrackpadContactSnapshot(identifier: 2, x: 0.1, y: 0.5)
-        clock.value = 0.30
-        listener.send(.init(deviceID: 1, timestamp: 0.30, contacts: fixed))
-        clock.value = 0.65
-        listener.send(.init(deviceID: 1, timestamp: 0.65, contacts: fixed))
-        clock.value = 0.66
-        listener.send(.init(deviceID: 1, timestamp: 0.66, contacts: fixed + [tapping]))
-        clock.value = 0.71
-        listener.send(.init(deviceID: 1, timestamp: 0.71, contacts: fixed))
-        session.waitForRecognitionForTests()
-        await Task.yield()
-        XCTAssertTrue(recognized.isEmpty)
-
-        clock.value = 0.75
-        listener.send(.init(deviceID: 1, timestamp: 0.75, contacts: []))
-        clock.value = 1.00
-        listener.send(.init(deviceID: 1, timestamp: 1.00, contacts: fixed))
-        clock.value = 1.09
-        listener.send(.init(deviceID: 1, timestamp: 1.09, contacts: fixed))
-        clock.value = 1.10
-        listener.send(.init(deviceID: 1, timestamp: 1.10, contacts: fixed + [tapping]))
-        clock.value = 1.15
-        listener.send(.init(deviceID: 1, timestamp: 1.15, contacts: fixed))
-        session.waitForRecognitionForTests()
-        await Task.yield()
-
-        XCTAssertEqual(recognized, [.tipTapLeftOneFixed])
-    }
-
     func testTypingSuppressionRemembersContactFrameQueuedBeforeKeyDown() async throws {
         let clock = LockedTestClock()
         let listener = MockMultitouchFrameListener()

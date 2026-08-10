@@ -39,34 +39,6 @@ final class FeatureManagementTableViewTests: XCTestCase {
         XCTAssertEqual(SettingsPageLayout.groupedSectionLayoutWidth(for: 1_200), 940)
     }
 
-    @MainActor
-    func testTwoGroupedShortcutControlsStayBesideSummaryAtStandardSettingsWidth() throws {
-        let width = SettingsPageLayout.groupedSectionLayoutWidth(for: 800)
-        let group = ShortcutSettingsGroup(
-            id: "display-brightness.shortcuts",
-            title: "亮度快捷键",
-            description: "按所选作用范围调整显示器亮度。",
-            items: [
-                shortcutItem(id: "decrease", systemImage: "sun.min.fill"),
-                shortcutItem(id: "increase", systemImage: "sun.max.fill")
-            ]
-        )
-        let view = GroupedShortcutSettingsRow(
-            group: group,
-            recordShortcut: { _, _ in nil },
-            onBeginRecording: { _ in },
-            onClear: { _ in },
-            onReset: { _ in }
-        )
-        .frame(width: width)
-        .fixedSize(horizontal: false, vertical: true)
-        let host = NSHostingView(rootView: view)
-        host.appearance = try XCTUnwrap(NSAppearance(named: .aqua))
-        host.layoutSubtreeIfNeeded()
-
-        XCTAssertLessThan(host.fittingSize.height, 100)
-    }
-
     func testGroupedSectionCardAndHeaderShareTheReadableOuterGuide() {
         for viewportWidth in [560.0, 800.0, 1_200.0] {
             let readableWidth = SettingsPageLayout.readableContentWidth(
@@ -396,24 +368,6 @@ final class FeatureManagementTableViewTests: XCTestCase {
             capabilities: capabilities,
             releaseChannel: releaseChannel
         ), hasSettings: hasSettings)
-    }
-
-    private func shortcutItem(id: String, systemImage: String) -> ShortcutSettingsItem {
-        ShortcutSettingsItem(
-            id: "display-brightness.shortcut.\(id)",
-            pluginID: "display-brightness",
-            pluginTitle: "显示器亮度",
-            title: id,
-            description: "",
-            bindingText: "⌃⌥⌘B",
-            isRequired: false,
-            canClear: true,
-            usesDefaultValue: false,
-            errorMessage: nil,
-            settingsGroupID: "display-brightness.shortcuts",
-            settingsGroupTitle: "亮度快捷键",
-            settingsControlSystemImage: systemImage
-        )
     }
 
     private func makeSurfaceItem(

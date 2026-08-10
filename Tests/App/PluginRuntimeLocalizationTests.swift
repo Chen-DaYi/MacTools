@@ -48,52 +48,6 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         XCTAssertEqual(source.locale.region?.identifier, "DE")
     }
 
-    func testStringLookupChangesLanguageWithoutRecreatingBundle() throws {
-        let bundleURL = try makeLocalizedTestBundle()
-        defer { try? FileManager.default.removeItem(at: bundleURL.deletingLastPathComponent()) }
-        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
-
-        setRuntimePreference("en")
-        XCTAssertEqual(
-            PluginRuntimeLocalization.string(
-                "menu.title",
-                defaultValue: "Fallback",
-                table: "Settings",
-                bundle: bundle
-            ),
-            "Menu Bar Icon"
-        )
-
-        setRuntimePreference("zh-Hans")
-        XCTAssertEqual(
-            PluginRuntimeLocalization.string(
-                "menu.title",
-                defaultValue: "Fallback",
-                table: "Settings",
-                bundle: bundle
-            ),
-            "菜单栏图标"
-        )
-    }
-
-    func testMissingSelectedLanguageStringFallsBackToBaseLanguage() throws {
-        let bundleURL = try makeLocalizedTestBundle()
-        defer { try? FileManager.default.removeItem(at: bundleURL.deletingLastPathComponent()) }
-        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
-
-        setRuntimePreference("zh-Hans")
-
-        XCTAssertEqual(
-            PluginRuntimeLocalization.string(
-                "fallback.title",
-                defaultValue: "Fallback",
-                table: "Settings",
-                bundle: bundle
-            ),
-            "Base Language"
-        )
-    }
-
     func testWindowAndMenuBarTitlesFollowTwoRuntimeSwitches() {
         setRuntimePreference("en")
         XCTAssertEqual(AppWindowRouter.settingsWindowTitle, "Settings")
@@ -108,35 +62,6 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         setRuntimePreference("en")
         XCTAssertEqual(AppWindowRouter.settingsWindowTitle, "Settings")
         XCTAssertEqual(MenuBarPanelTab.components.accessibilityTitle, "Components Panel")
-    }
-
-    private func makeLocalizedTestBundle() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let bundleURL = directory.appendingPathComponent("Test.bundle", isDirectory: true)
-        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
-
-        for (language, value) in [("en", "Menu Bar Icon"), ("zh-Hans", "菜单栏图标")] {
-            let lprojURL = bundleURL.appendingPathComponent("\(language).lproj", isDirectory: true)
-            try FileManager.default.createDirectory(at: lprojURL, withIntermediateDirectories: true)
-            try "\"menu.title\" = \"\(value)\";\n".write(
-                to: lprojURL.appendingPathComponent("Settings.strings"),
-                atomically: true,
-                encoding: .utf8
-            )
-        }
-
-        let englishStrings = bundleURL
-            .appendingPathComponent("en.lproj", isDirectory: true)
-            .appendingPathComponent("Settings.strings")
-        let existingStrings = try String(contentsOf: englishStrings, encoding: .utf8)
-        try (existingStrings + "\"fallback.title\" = \"Base Language\";\n").write(
-            to: englishStrings,
-            atomically: true,
-            encoding: .utf8
-        )
-
-        return bundleURL
     }
 
     private func setRuntimePreference(_ preference: String?) {

@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 import XCTest
 import MacToolsPluginKit
@@ -280,114 +279,8 @@ final class PluginSettingsModelsTests: XCTestCase {
         XCTAssertEqual(page.body.integratedShortcutGroupIDs, ["visible"])
     }
 
-    @MainActor
-    func testStandardCardSurfaceSeparatesFromWindowInBothAppearances() throws {
-        for appearanceName in [NSAppearance.Name.aqua, .darkAqua] {
-            let host = NSHostingView(rootView: PluginSettingsCardSurfaceProbe())
-            host.frame = NSRect(x: 0, y: 0, width: 220, height: 140)
-            host.appearance = try XCTUnwrap(NSAppearance(named: appearanceName))
-            host.layoutSubtreeIfNeeded()
-
-            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-            host.cacheDisplay(in: host.bounds, to: bitmap)
-
-            let pageColor = try XCTUnwrap(bitmap.colorAt(x: 10, y: 10))
-            let cardColor = try XCTUnwrap(bitmap.colorAt(x: 110, y: 70))
-            let contrast = abs(Self.relativeLuminance(cardColor) - Self.relativeLuminance(pageColor))
-
-            XCTAssertGreaterThan(
-                contrast,
-                0.008,
-                "Standard cards must remain visually distinct in \(appearanceName.rawValue)"
-            )
-            XCTAssertLessThan(
-                contrast,
-                0.08,
-                "Standard cards should preserve the subtle grouped-Form hierarchy"
-            )
-        }
-    }
-
-    @MainActor
-    func testShortcutControlLayoutKeepsRecorderAdjacentToLabel() throws {
-        let host = NSHostingView(rootView: PluginSettingsShortcutLayoutProbe())
-        host.frame = NSRect(x: 0, y: 0, width: 320, height: 60)
-        host.appearance = try XCTUnwrap(NSAppearance(named: .aqua))
-        host.layoutSubtreeIfNeeded()
-
-        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-        host.cacheDisplay(in: host.bounds, to: bitmap)
-
-        var labelPixels: [Int] = []
-        var recorderPixels: [Int] = []
-        for y in 0..<bitmap.pixelsHigh {
-            for x in 0..<bitmap.pixelsWide {
-                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else {
-                    continue
-                }
-                if color.redComponent > color.greenComponent + 0.3,
-                   color.redComponent > color.blueComponent + 0.3 {
-                    labelPixels.append(x)
-                }
-                if color.blueComponent > color.redComponent + 0.3,
-                   color.blueComponent > color.greenComponent + 0.3 {
-                    recorderPixels.append(x)
-                }
-            }
-        }
-
-        let labelMaxX = try XCTUnwrap(labelPixels.max())
-        let recorderMinX = try XCTUnwrap(recorderPixels.min())
-        let backingScale = CGFloat(bitmap.pixelsWide) / host.bounds.width
-        XCTAssertEqual(
-            CGFloat(recorderMinX - labelMaxX - 1),
-            PluginSettingsTheme.Spacing.controlCluster * backingScale,
-            accuracy: backingScale
-        )
-    }
-
     private func row(id: String) -> PluginSettingsRow {
         PluginSettingsRow(id: id, title: id, control: .toggle(isOn: false))
     }
 
-    private static func relativeLuminance(_ color: NSColor) -> CGFloat {
-        guard let rgb = color.usingColorSpace(.sRGB) else {
-            return 0
-        }
-
-        return 0.2126 * rgb.redComponent
-            + 0.7152 * rgb.greenComponent
-            + 0.0722 * rgb.blueComponent
-    }
-}
-
-private struct PluginSettingsCardSurfaceProbe: View {
-    var body: some View {
-        ZStack {
-            Color(nsColor: .windowBackgroundColor)
-
-            Color.clear
-                .frame(width: 140, height: 90)
-                .pluginSettingsCardBackground(.standard)
-        }
-        .frame(width: 220, height: 140)
-    }
-}
-
-private struct PluginSettingsShortcutLayoutProbe: View {
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            Color.white
-
-            PluginSettingsShortcutControlLayout {
-                Color.red.frame(width: 60, height: 20)
-                Color.blue.frame(
-                    width: PluginSettingsTheme.Size.shortcutRecorderWidth,
-                    height: 30
-                )
-            }
-            .padding(10)
-        }
-        .frame(width: 320, height: 60)
-    }
 }

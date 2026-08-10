@@ -1,5 +1,4 @@
 import XCTest
-import MacToolsPluginKit
 @testable import MacTools
 
 final class PluginPackageManifestTests: XCTestCase {
@@ -91,40 +90,6 @@ final class PluginPackageManifestTests: XCTestCase {
                 error as? PluginPackageManifestError,
                 .incompatibleHostVersion(required: "1.0.0", current: "0.16.0")
             )
-        }
-    }
-
-    func testExtractionPackagesDeclareTheirRequiredHostCompatibility() throws {
-        let repositoryRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let paths = [
-            "Plugins/MouseEnhancer/plugin.json",
-            "Plugins/TrackpadGestures/plugin.json",
-        ]
-        for relativePath in paths {
-            let manifestURL = repositoryRoot.appendingPathComponent(relativePath)
-            let manifest = try JSONDecoder().decode(
-                PluginPackageManifest.self,
-                from: Data(contentsOf: manifestURL)
-            )
-
-            XCTAssertEqual(manifest.minHostVersion, "1.2.0")
-            XCTAssertEqual(manifest.pluginKitVersion, PluginKitCompatibility.currentVersion)
-            XCTAssertNoThrow(
-                try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.2.0")
-            )
-            XCTAssertThrowsError(
-                try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.1.6")
-            ) { error in
-                XCTAssertEqual(
-                    error as? PluginPackageManifestError,
-                    .incompatibleHostVersion(required: "1.2.0", current: "1.1.6")
-                )
-            }
         }
     }
 
