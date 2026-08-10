@@ -88,14 +88,23 @@ private final class FakeMultitouchRuntime: MultitouchRuntimeProviding {
     private(set) var stopCount = 0
 
     init(deviceCount: Int) {
-        retainedDevices = (0 ..< deviceCount).map { _ in NSObject() }
-        descriptors = (0 ..< deviceCount).map { index in
-            MultitouchDeviceDescriptor(
+        var retainedDevices: [NSObject] = []
+        var descriptors: [MultitouchDeviceDescriptor] = []
+        retainedDevices.reserveCapacity(deviceCount)
+        descriptors.reserveCapacity(deviceCount)
+
+        for index in 0 ..< deviceCount {
+            retainedDevices.append(NSObject())
+            let transport: MultitouchDeviceTransport = index == 0 ? .builtIn : .bluetooth
+            descriptors.append(MultitouchDeviceDescriptor(
                 deviceID: UInt64(index + 1),
                 isBuiltIn: index == 0,
-                transport: index == 0 ? .builtIn : .bluetooth
-            )
+                transport: transport
+            ))
         }
+
+        self.retainedDevices = retainedDevices
+        self.descriptors = descriptors
     }
 
     init(descriptors: [MultitouchDeviceDescriptor]) {

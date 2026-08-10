@@ -53,154 +53,31 @@ protocol DeviceBatteryBluetoothConnectionObserving: AnyObject {
 }
 
 @MainActor
-final class SystemDeviceBatteryBluetoothConnectionObserver:
+final class SystemDeviceBatteryBluetoothConnectionObserver: NSObject,
     DeviceBatteryBluetoothConnectionObserving {
     var onConnectionChange: (() -> Void)?
 
-    private let worker: DeviceBatteryBluetoothConnectionWorker
-    private var isStarted = false
-
-    init(
-        registrationBackend: any DeviceBatteryBluetoothConnectionRegistering =
-            SystemDeviceBatteryBluetoothConnectionRegistrationBackend()
-    ) {
-        worker = DeviceBatteryBluetoothConnectionWorker(
-            registrationBackend: registrationBackend
-        )
-    }
+    private var connectionNotification: IOBluetoothUserNotification?
+    private nonisolated let disconnectRegistry = DeviceBatteryBluetoothDisconnectRegistry()
 
     func start() {
-        guard !isStarted else { return }
-        isStarted = true
-        worker.start { [weak self] in
-            Task { @MainActor in
-                guard let self, self.isStarted else { return }
-                self.onConnectionChange?()
-            }
-        }
-    }
-
-    func stop() {
-        guard isStarted else { return }
-        isStarted = false
-        worker.stop()
-    }
-
-    isolated deinit {
-        worker.stop()
-    }
-}
-
-protocol DeviceBatteryBluetoothConnectionRegistering: Sendable {
-    func registerForConnect(
-        observer: Any,
-        selector: Selector
-    ) -> IOBluetoothUserNotification?
-    func connectedPairedDevices() -> [IOBluetoothDevice]
-}
-
-struct SystemDeviceBatteryBluetoothConnectionRegistrationBackend:
-    DeviceBatteryBluetoothConnectionRegistering,
-    @unchecked Sendable {
-    func registerForConnect(
-        observer: Any,
-        selector: Selector
-    ) -> IOBluetoothUserNotification? {
-        IOBluetoothDevice.register(
-            forConnectNotifications: observer,
-            selector: selector
-        )
-    }
-
-    func connectedPairedDevices() -> [IOBluetoothDevice] {
-        let pairedDevices = IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] ?? []
-        return pairedDevices.filter { $0.isConnected() }
-    }
-}
-
-private final class DeviceBatteryBluetoothConnectionWorker: NSObject, @unchecked Sendable {
-    typealias Delivery = @Sendable () -> Void
-
-    private struct RequestState {
-        var generation: UInt = 0
-        var isActive = false
-        var delivery: Delivery?
-    }
-
-    private let queue = DispatchQueue(
-        label: "cc.ggbond.mactools.device-battery.bluetooth-observer",
-        qos: .utility
-    )
-    private let stateLock = NSLock()
-    private let registrationBackend: any DeviceBatteryBluetoothConnectionRegistering
-    private let disconnectRegistry = DeviceBatteryBluetoothDisconnectRegistry()
-    private var requestState = RequestState()
-    private var connectionNotification: IOBluetoothUserNotification?
-
-    init(registrationBackend: any DeviceBatteryBluetoothConnectionRegistering) {
-        self.registrationBackend = registrationBackend
-    }
-
-    func start(delivery: @escaping Delivery) {
-        stateLock.lock()
-        requestState.delivery = delivery
-        guard !requestState.isActive else {
-            stateLock.unlock()
-            return
-        }
-        requestState.isActive = true
-        requestState.generation &+= 1
-        let generation = requestState.generation
-        stateLock.unlock()
-
-        queue.async { [self] in
-            install(generation: generation)
-        }
-    }
-
-    func stop() {
-        stateLock.lock()
-        requestState.delivery = nil
-        requestState.isActive = false
-        requestState.generation &+= 1
-        stateLock.unlock()
-
-        queue.async { [self] in
-            uninstall()
-        }
-    }
-
-    private func install(generation: UInt) {
         guard connectionNotification == nil else { return }
         disconnectRegistry.start()
-        let notification = registrationBackend.registerForConnect(
-            observer: self,
+        connectionNotification = IOBluetoothDevice.register(
+            forConnectNotifications: self,
             selector: #selector(deviceDidConnect(notification:device:))
         )
 
-        guard isCurrent(generation: generation) else {
-            notification?.unregister()
-            disconnectRegistry.stop()
-            return
-        }
-
-        connectionNotification = notification
-        for device in registrationBackend.connectedPairedDevices() {
+        let pairedDevices = IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] ?? []
+        for device in pairedDevices where device.isConnected() {
             registerForDisconnect(of: device)
         }
     }
 
-    private func uninstall() {
+    func stop() {
         connectionNotification?.unregister()
         connectionNotification = nil
         disconnectRegistry.stop()
-    }
-
-    private func isCurrent(generation: UInt) -> Bool {
-        stateLock.lock()
-        let isCurrent = requestState.isActive && requestState.generation == generation
-        stateLock.unlock()
-        return isCurrent
     }
 
     @objc nonisolated private func deviceDidConnect(
@@ -228,10 +105,13 @@ private final class DeviceBatteryBluetoothConnectionWorker: NSObject, @unchecked
     }
 
     nonisolated private func publishConnectionChange() {
-        stateLock.lock()
-        let delivery = requestState.isActive ? requestState.delivery : nil
-        stateLock.unlock()
-        delivery?()
+        Task { @MainActor [weak self] in
+            self?.onConnectionChange?()
+        }
+    }
+
+    isolated deinit {
+        stop()
     }
 }
 
