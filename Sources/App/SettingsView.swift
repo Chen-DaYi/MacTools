@@ -2211,7 +2211,7 @@ private struct PluginFormSection: View {
             if let footer = section.footer {
                 Text(footer)
                     .frame(
-                        width: layoutWidths.readableContent,
+                        width: layoutWidths.sectionLayout,
                         alignment: .leading
                     )
             }
