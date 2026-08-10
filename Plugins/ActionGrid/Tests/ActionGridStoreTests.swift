@@ -163,6 +163,55 @@ final class ActionGridStoreTests: XCTestCase {
         XCTAssertNotEqual(destination.entries.first?.id, nil)
     }
 
+    func testCorruptingWriteRestoresPreviousLayoutBytes() throws {
+        let storage = ActionGridTestStorage()
+        let store = ActionGridStore(storage: storage)
+        let original = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "original")
+        )
+        XCTAssertTrue(store.add(reference: original))
+        let originalEntries = store.entries
+        let storedData = try XCTUnwrap(storage.data(forKey: "layout.v1"))
+        storage.enqueueWriteBehaviors([.corrupt, .accept], forKey: "layout.v1")
+
+        XCTAssertFalse(store.add(reference: ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "rejected")
+        )))
+
+        XCTAssertEqual(store.entries, originalEntries)
+        XCTAssertEqual(storage.data(forKey: "layout.v1"), storedData)
+        XCTAssertEqual(ActionGridStore(storage: storage).entries, originalEntries)
+    }
+
+    func testFailedWriteRollbackReloadsRecoveryRequiredLayoutState() {
+        let storage = ActionGridTestStorage()
+        let store = ActionGridStore(storage: storage)
+        XCTAssertTrue(store.add(reference: ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "original")
+        )))
+        storage.enqueueWriteBehaviors([.corrupt, .ignore], forKey: "layout.v1")
+
+        XCTAssertFalse(store.add(reference: ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "rejected")
+        )))
+
+        XCTAssertTrue(store.entries.isEmpty)
+        XCTAssertEqual(store.loadError, "invalid-grid-layout")
+        XCTAssertEqual(storage.object(forKey: "layout.v1") as? String, "corrupt")
+    }
+
+    func testWrongTypedLayoutIsRecoveryRequiredAndNotOverwritten() {
+        let storage = ActionGridTestStorage()
+        storage.values["layout.v1"] = "invalid"
+        let store = ActionGridStore(storage: storage)
+
+        XCTAssertEqual(store.loadError, "invalid-grid-layout")
+        XCTAssertFalse(store.add(reference: ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "must-not-overwrite")
+        )))
+        XCTAssertEqual(storage.object(forKey: "layout.v1") as? String, "invalid")
+    }
+
     func testNestedFoldersPersistReorderAndRespectDepthLimit() throws {
         let storage = ActionGridTestStorage()
         let store = ActionGridStore(storage: storage)

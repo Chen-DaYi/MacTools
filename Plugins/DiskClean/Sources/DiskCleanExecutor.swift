@@ -76,10 +76,16 @@ struct DiskCleanExecutionItemResult: Equatable, Sendable {
 struct DiskCleanExecutionResult: Equatable, Sendable {
     let itemResults: [DiskCleanExecutionItemResult]
     let mode: DiskCleanRemovalMode
+    let wasCancelled: Bool
 
-    init(itemResults: [DiskCleanExecutionItemResult], mode: DiskCleanRemovalMode = .trash) {
+    init(
+        itemResults: [DiskCleanExecutionItemResult],
+        mode: DiskCleanRemovalMode = .trash,
+        wasCancelled: Bool = false
+    ) {
         self.itemResults = itemResults
         self.mode = mode
+        self.wasCancelled = wasCancelled
     }
 
     /// Disposed item count: permanent delete and move-to-Trash both count as success.
@@ -185,10 +191,23 @@ struct DiskCleanExecutor: DiskCleanExecuting {
         itemResults.reserveCapacity(plan.items.count)
 
         for item in plan.items {
-            try Task.checkCancellation()
+            if Task.isCancelled {
+                return DiskCleanExecutionResult(
+                    itemResults: itemResults,
+                    mode: plan.mode,
+                    wasCancelled: true
+                )
+            }
 
             // Per-item lock recheck: refresh bundle IDs; keep process names from the preflight snapshot (trade-off noted on the protocol).
             snapshot = await runningAppLock.refreshingBundleIDs(in: snapshot)
+            if Task.isCancelled {
+                return DiskCleanExecutionResult(
+                    itemResults: itemResults,
+                    mode: plan.mode,
+                    wasCancelled: true
+                )
+            }
             if let processName = snapshot.lockingProcessName(
                 bundleIDs: item.lockedByBundleIDs,
                 processNames: item.skipWhenProcessIsRunning

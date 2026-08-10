@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 import SwiftUI
@@ -22,6 +23,9 @@ private struct EmptyTrashPluginProvider: PluginProvider {
 final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling,
     PluginActionProviding
 {
+    private enum PermissionID {
+        static let finderAutomation = "finder-automation"
+    }
     private enum ActionID {
         static let empty = "empty"
     }
@@ -35,7 +39,7 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let localization: PluginLocalization
-    private let countItems: @Sendable () async -> Int
+    private let countItems: @Sendable () async throws -> Int
     private let emptyItems: () async throws -> Void
     private let countRefreshDelay: Duration
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EmptyTrashPlugin")
@@ -47,7 +51,7 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
 
     init(
         localization: PluginLocalization = PluginLocalization(bundle: .main),
-        countItems: @escaping @Sendable () async -> Int = EmptyTrashPlugin.fetchTrashItemCount,
+        countItems: @escaping @Sendable () async throws -> Int = EmptyTrashPlugin.fetchTrashItemCount,
         emptyItems: (() async throws -> Void)? = nil,
         countRefreshDelay: Duration = .milliseconds(150)
     ) {
@@ -91,7 +95,19 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
         )
     }
 
-    var permissionRequirements: [PluginPermissionRequirement] { [] }
+    var permissionRequirements: [PluginPermissionRequirement] {
+        [
+            PluginPermissionRequirement(
+                id: PermissionID.finderAutomation,
+                kind: .automation,
+                title: localization.string("permission.automation.title", defaultValue: "Finder 自动化"),
+                description: localization.string(
+                    "permission.automation.description",
+                    defaultValue: "用于读取并清空废纸篓。"
+                )
+            )
+        ]
+    }
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
@@ -164,10 +180,22 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
-        PluginPermissionState(isGranted: true, footnote: nil)
+        guard permissionID == PermissionID.finderAutomation else {
+            return PluginPermissionState(isGranted: true, footnote: nil)
+        }
+        return PluginPermissionState(
+            isGranted: lastErrorMessage == nil,
+            footnote: lastErrorMessage
+        )
     }
 
-    func handlePermissionAction(id: String) {}
+    func handlePermissionAction(id: String) {
+        guard id == PermissionID.finderAutomation,
+              let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
 
@@ -197,13 +225,18 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
                 return
             }
 
-            let count = await self.countItems()
-            guard !Task.isCancelled else {
-                return
-            }
-
-            if self.itemCount != count {
-                self.itemCount = count
+            do {
+                let count = try await self.countItems()
+                guard !Task.isCancelled else { return }
+                self.lastErrorMessage = nil
+                if self.itemCount != count {
+                    self.itemCount = count
+                    self.onStateChange?()
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.itemCount = 0
+                self.lastErrorMessage = error.localizedDescription
                 self.onStateChange?()
             }
             self.countRefreshTask = nil
@@ -242,10 +275,17 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
 
     // MARK: - AppleScript helpers
 
-    private static func fetchTrashItemCount() async -> Int {
+    private static func fetchTrashItemCount() async throws -> Int {
         let script = "tell application \"Finder\" to count items of trash"
-        return await Task.detached(priority: .userInitiated) {
-            runOsascriptStandalone(script).flatMap { Int($0) } ?? 0
+        return try await Task.detached(priority: .userInitiated) {
+            guard let output = runOsascriptStandalone(script), let count = Int(output) else {
+                throw NSError(
+                    domain: "EmptyTrashPlugin",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "无法读取废纸篓，请检查“自动化”权限。"]
+                )
+            }
+            return count
         }.value
     }
 
@@ -267,8 +307,17 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSur
             return .failed(message: subtitle)
         }
 
-        let count = await countItems()
-        itemCount = count
+        let count: Int
+        do {
+            count = try await countItems()
+            itemCount = count
+            lastErrorMessage = nil
+        } catch {
+            itemCount = 0
+            lastErrorMessage = error.localizedDescription
+            onStateChange?()
+            return .failed(message: error.localizedDescription)
+        }
         guard count > 0 else {
             onStateChange?()
             return .succeeded(message: localization.string(

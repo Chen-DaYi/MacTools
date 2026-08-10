@@ -21,6 +21,11 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertTrue(plugin.actionDefinitions.allSatisfy {
             $0.capabilities.contains(.changesDisplayConfiguration)
         })
+        XCTAssertTrue(plugin.actionDefinitions.allSatisfy {
+            $0.externalInvocationPolicy == .confirmAlways
+                && $0.confirmation != nil
+                && $0.risk == .safe
+        })
         let deviceAction = try XCTUnwrap(plugin.actionDefinitions.first {
             $0.title.contains("My iPad")
         })
@@ -57,7 +62,7 @@ final class SidecarPluginTests: XCTestCase {
         )
     }
 
-    func testCanonicalConnectActionWaitsForTheSidecarRequestResult() async throws {
+    func testCanonicalConnectActionWaitsForCallbackAndConfirmedTopology() async throws {
         let service = FakeSidecarService(devices: [
             SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
         ])
@@ -79,8 +84,292 @@ final class SidecarPluginTests: XCTestCase {
 
         XCTAssertEqual(service.operations, ["connect:ipad-1"])
         service.complete(.success(()))
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected),
+        ])
+        plugin.refresh()
         let result = await resultTask.value
         XCTAssertEqual(result, .succeeded())
+    }
+
+    func testCanonicalDisconnectAllWaitsForConfirmedTopology() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected),
+        ])
+        let plugin = makePlugin(service: service)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "sidecar", storage: InMemoryPluginStorage()))
+        let reference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "disconnect-all")
+        )
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        ))
+        let resultTask = Task { await handle.result() }
+        for _ in 0 ..< 20 where service.operations.isEmpty {
+            await Task.yield()
+        }
+
+        service.complete(.success(()))
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        plugin.refresh()
+
+        let result = await resultTask.value
+        XCTAssertEqual(result, .succeeded())
+    }
+
+    func testTimedOutCanonicalActionStaysBlockedUntilLateCallbackReconciles() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let plugin = makePlugin(service: service, operationTimeoutNanoseconds: 1_000_000)
+        plugin.activate(context: PluginRuntimeContext(
+            pluginID: "sidecar",
+            storage: InMemoryPluginStorage()
+        ))
+        let reference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected timeout failure, got \(result)")
+        }
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+        XCTAssertFalse(
+            plugin.primaryPanelState.detail?.controls.first?.isEnabled ?? true
+        )
+
+        service.complete(.success(()))
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected),
+        ])
+        plugin.refresh()
+
+        let disconnectReference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "disconnect-all")
+        )
+        XCTAssertTrue(plugin.actionAvailability(for: disconnectReference).isAvailable)
+        XCTAssertTrue(
+            plugin.primaryPanelState.detail?.controls.first?.isEnabled ?? false
+        )
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testTimedOutConnectUnblocksWhenSnapshotConfirmsTopology() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let plugin = makePlugin(service: service, operationTimeoutNanoseconds: 1_000_000)
+        plugin.activate(context: PluginRuntimeContext(
+            pluginID: "sidecar",
+            storage: InMemoryPluginStorage()
+        ))
+        let connectReference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: connectReference,
+            source: .actionGrid,
+            mode: .foreground
+        )).result()
+        guard case .failed = result else {
+            return XCTFail("Expected timeout failure, got \(result)")
+        }
+
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected),
+        ])
+        plugin.refresh()
+        let disconnectReference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "disconnect-all")
+        )
+
+        XCTAssertTrue(plugin.actionAvailability(for: disconnectReference).isAvailable)
+        XCTAssertTrue(plugin.primaryPanelState.detail?.controls.first?.isEnabled ?? false)
+    }
+
+    func testTimedOutDisconnectAllUnblocksWhenSnapshotConfirmsTopology() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected),
+        ])
+        let plugin = makePlugin(service: service, operationTimeoutNanoseconds: 1_000_000)
+        plugin.activate(context: PluginRuntimeContext(
+            pluginID: "sidecar",
+            storage: InMemoryPluginStorage()
+        ))
+        let disconnectReference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "disconnect-all")
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: disconnectReference,
+            source: .actionGrid,
+            mode: .foreground
+        )).result()
+        guard case .failed = result else {
+            return XCTFail("Expected timeout failure, got \(result)")
+        }
+
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        plugin.refresh()
+        let connectReference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+        )
+
+        XCTAssertTrue(plugin.actionAvailability(for: connectReference).isAvailable)
+        XCTAssertTrue(plugin.primaryPanelState.detail?.controls.first?.isEnabled ?? false)
+    }
+
+    func testTimedOutCanonicalActionStaysBlockedAcrossReactivation() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let plugin = makePlugin(service: service, operationTimeoutNanoseconds: 1_000_000)
+        let context = PluginRuntimeContext(
+            pluginID: "sidecar",
+            storage: InMemoryPluginStorage()
+        )
+        plugin.activate(context: context)
+        let reference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        )).result()
+        guard case .failed = result else {
+            return XCTFail("Expected timeout failure, got \(result)")
+        }
+
+        plugin.deactivate(reason: .updating)
+        plugin.activate(context: context)
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+
+        service.complete(.success(()))
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected),
+        ])
+        plugin.refresh()
+        let disconnectReference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "disconnect-all")
+        )
+        XCTAssertTrue(plugin.actionAvailability(for: disconnectReference).isAvailable)
+    }
+
+    func testDeactivationRecoveryTerminalizesPendingOperationAndAllowsRetry() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let plugin = makePlugin(
+            service: service,
+            operationTimeoutNanoseconds: 1_000_000_000,
+            operationRecoveryNanoseconds: 1_000_000
+        )
+        let context = PluginRuntimeContext(
+            pluginID: "sidecar",
+            storage: InMemoryPluginStorage()
+        )
+        let reference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+        )
+        plugin.activate(context: context)
+        let firstHandle = try plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        ))
+        let firstResult = Task { await firstHandle.result() }
+        for _ in 0 ..< 20 where service.operations.isEmpty {
+            await Task.yield()
+        }
+
+        plugin.deactivate(reason: .updating)
+        let completedFirstResult = await firstResult.value
+        XCTAssertEqual(completedFirstResult, .cancelled)
+        try await Task.sleep(nanoseconds: 10_000_000)
+        plugin.activate(context: context)
+
+        XCTAssertFalse(plugin.primaryPanelState.subtitle.contains("正在"))
+        XCTAssertEqual(
+            plugin.primaryPanelState.errorMessage,
+            "Sidecar 请求已提交，但未能确认显示器状态"
+        )
+        XCTAssertTrue(plugin.actionAvailability(for: reference).isAvailable)
+
+        service.complete(.success(()))
+        XCTAssertFalse(plugin.primaryPanelState.subtitle.contains("正在"))
+
+        let retryHandle = try plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        ))
+        let retryResult = Task { await retryHandle.result() }
+        for _ in 0 ..< 20 where service.operations.count < 2 {
+            await Task.yield()
+        }
+        service.complete(.success(()))
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected),
+        ])
+        plugin.refresh()
+
+        let completedRetryResult = await retryResult.value
+        XCTAssertEqual(completedRetryResult, .succeeded())
+    }
+
+    func testTimedOutCanonicalActionRecoversWhenSidecarCoreNeverCallsBack() async throws {
+        let service = FakeSidecarService(devices: [
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .disconnected),
+        ])
+        let plugin = makePlugin(
+            service: service,
+            operationTimeoutNanoseconds: 1_000_000,
+            operationRecoveryNanoseconds: 1_000_000
+        )
+        plugin.activate(context: PluginRuntimeContext(
+            pluginID: "sidecar",
+            storage: InMemoryPluginStorage()
+        ))
+        let reference = ActionReference(
+            key: ActionKey(providerID: "sidecar", actionID: "connect-first-available")
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        )).result()
+        guard case .failed = result else {
+            return XCTFail("Expected timeout failure, got \(result)")
+        }
+
+        for _ in 0 ..< 100 where !plugin.actionAvailability(for: reference).isAvailable {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        XCTAssertTrue(plugin.actionAvailability(for: reference).isAvailable)
+        XCTAssertTrue(plugin.primaryPanelState.detail?.controls.first?.isEnabled ?? false)
     }
 
     func testConnectPreparesPresentationBeforeCallingSidecarCore() async throws {
@@ -115,6 +404,10 @@ final class SidecarPluginTests: XCTestCase {
 
         XCTAssertTrue(didPrepare)
         service.complete(.success(()))
+        service.updateDevices([
+            SidecarDevice(id: "ipad-1", name: "My iPad", connectionState: .connected),
+        ])
+        plugin.refresh()
         _ = await resultTask.value
     }
 
@@ -447,6 +740,18 @@ final class SidecarPluginTests: XCTestCase {
         XCTAssertNil(reloaded.connectFirstAvailableShortcut)
     }
 
+    func testPortablePreferencesRejectWrongTypedRawDeviceValueWithoutRemovingIt() throws {
+        let source = SidecarPreferencesStore(storage: InMemoryPluginStorage())
+        source.reconcile(with: [SidecarDevice(id: "new-ipad", name: "New iPad")])
+        let backup = try XCTUnwrap(source.portablePreferencesData())
+        let storage = InMemoryPluginStorage()
+        storage.setRawValue("sentinel", forKey: "savedDevices")
+        let destination = SidecarPreferencesStore(storage: storage)
+
+        XCTAssertFalse(destination.restorePortablePreferences(from: backup))
+        XCTAssertEqual(storage.rawValue(forKey: "savedDevices") as? String, "sentinel")
+    }
+
     func testOnlyCustomizedOfflineDevicePreferencesNeedToRemainVisible() {
         let defaultPreference = SidecarDevicePreference(id: "ipad-1", name: "My iPad")
         let wiredPreference = SidecarDevicePreference(
@@ -605,7 +910,9 @@ final class SidecarPluginTests: XCTestCase {
     private func makePlugin(
         service: FakeSidecarService,
         preferences: SidecarPreferencesStore? = nil,
+        operationTimeoutNanoseconds: UInt64 = 15_000_000_000,
         operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
+        operationRecoveryNanoseconds: UInt64 = 5_000_000_000,
         terminalFeedbackExpiration: TimeInterval = 30,
         initialDeviceRefreshDelayNanoseconds: UInt64 = 750_000_000,
         deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000,
@@ -614,7 +921,9 @@ final class SidecarPluginTests: XCTestCase {
         SidecarPlugin(
             service: service,
             preferences: preferences ?? SidecarPreferencesStore(storage: InMemoryPluginStorage()),
+            operationTimeoutNanoseconds: operationTimeoutNanoseconds,
             operationFeedbackNanoseconds: operationFeedbackNanoseconds,
+            operationRecoveryNanoseconds: operationRecoveryNanoseconds,
             terminalFeedbackExpiration: terminalFeedbackExpiration,
             initialDeviceRefreshDelayNanoseconds: initialDeviceRefreshDelayNanoseconds,
             deviceRefreshIntervalNanoseconds: deviceRefreshIntervalNanoseconds,
@@ -693,5 +1002,13 @@ private final class InMemoryPluginStorage: PluginStorage {
         guard store[key] == nil, let value = store[legacyKey] else { return }
         store[key] = value
         store.removeValue(forKey: legacyKey)
+    }
+
+    func setRawValue(_ value: Any, forKey key: String) {
+        store[key] = value
+    }
+
+    func rawValue(forKey key: String) -> Any? {
+        store[key]
     }
 }

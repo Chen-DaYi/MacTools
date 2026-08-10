@@ -299,40 +299,13 @@ restore_recording_visibility() {
 
 stop_privacy_helpers() {
     local session_dir="$1"
-    local variant executable output
+    local variant executable
     local cleanup_failed=false
     for variant in primary secondary backdrop; do
         executable="$(privacy_helper_executable_path "$session_dir" "$variant")"
-        output="$(/bin/ps -axo pid=,command= | awk -v executable="$executable" '
-            {
-                pid = $1
-                sub(/^[[:space:]]*[0-9]+[[:space:]]+/, "", $0)
-                if ($0 == executable || index($0, executable " ") == 1) print pid
-            }
-        ')"
-        if [[ -n "$output" ]]; then
-            local -a helper_pids
-            helper_pids=("${(@f)output}")
-            /bin/kill -TERM -- "${helper_pids[@]}"
-            local attempt=0
-            for attempt in {1..50}; do
-                local still_running=false
-                local helper_pid=""
-                for helper_pid in "${helper_pids[@]}"; do
-                    if /bin/kill -0 "$helper_pid" >/dev/null 2>&1; then
-                        still_running=true
-                        break
-                    fi
-                done
-                [[ "$still_running" == false ]] && break
-                sleep 0.1
-            done
-            for helper_pid in "${helper_pids[@]}"; do
-                if /bin/kill -0 "$helper_pid" >/dev/null 2>&1; then
-                    cleanup_failed=true
-                    /bin/kill -KILL "$helper_pid" >/dev/null 2>&1 || true
-                fi
-            done
+        if [[ -x "$executable" ]] && ! "$executable" \
+            --terminate-running-copies "$executable" >/dev/null 2>&1; then
+            cleanup_failed=true
         fi
     done
     sleep 0.25
@@ -769,10 +742,20 @@ recording_marker_path() {
     print -r -- "$session_dir/privacy-recorder/$base_name.$marker"
 }
 
+validate_recording_label() {
+    local label="${1:-}"
+    [[ -z "$label" || "$label" != *[^a-z0-9-]* ]] || {
+        print -u2 -r -- "error: recording label must contain only lowercase letters, digits, and hyphens"
+        return 1
+    }
+}
+
 wait_recording_ready() {
     local session_dir="$1"
     local label="${2:-}"
     local timeout="${3:-15}"
+    validate_recording_label "$label" || return 1
+    validate_session_identity "$session_dir" || return 1
     [[ "$timeout" == <-> ]] && (( timeout >= 1 && timeout <= 60 )) || {
         print -u2 -r -- "error: ready timeout must be between 1 and 60 seconds"
         return 1
@@ -794,6 +777,8 @@ wait_recording_ready() {
 start_recording() {
     local session_dir="$1"
     local label="${2:-}"
+    validate_recording_label "$label" || return 1
+    validate_session_identity "$session_dir" || return 1
     local start_marker
     start_marker="$(recording_marker_path "$session_dir" "$label" start)"
     mkdir -p "${start_marker:h}"
@@ -804,6 +789,8 @@ start_recording() {
 stop_recording() {
     local session_dir="$1"
     local label="${2:-}"
+    validate_recording_label "$label" || return 1
+    validate_session_identity "$session_dir" || return 1
     local stop_marker
     stop_marker="$(recording_marker_path "$session_dir" "$label" stop)"
     mkdir -p "${stop_marker:h}"
@@ -813,16 +800,7 @@ stop_recording() {
 
 resume_session() {
     local session_dir="$1"
-    [[ -f "$session_dir/session.plist" ]] || {
-        print -u2 -r -- "error: invalid E2E session directory $session_dir"
-        return 1
-    }
-    local prepared_app_path
-    prepared_app_path="$(session_value "$session_dir" appPath)"
-    [[ "$prepared_app_path" == "$APP_PATH" ]] || {
-        print -u2 -r -- "error: session app path $prepared_app_path does not match $APP_PATH"
-        return 1
-    }
+    validate_session_identity "$session_dir" || return 1
 
     ensure_privacy_helpers "$session_dir"
     preflight "$session_dir/preflight.json"
@@ -845,17 +823,10 @@ PY
 rebuild_session() {
     local session_dir="$1"
     local mode="${2:-}"
-    [[ -f "$session_dir/session.plist" ]] || {
-        print -u2 -r -- "error: invalid E2E session directory $session_dir"
-        return 1
-    }
-    local prepared_app_path expected_bundle_id
-    prepared_app_path="$(session_value "$session_dir" appPath)"
+    validate_session_identity "$session_dir" || return 1
+
+    local expected_bundle_id
     expected_bundle_id="$(session_value "$session_dir" bundleIdentifier)"
-    [[ "$prepared_app_path" == "$APP_PATH" ]] || {
-        print -u2 -r -- "error: session app path $prepared_app_path does not match $APP_PATH"
-        return 1
-    }
 
     print -r -- "env DEVELOPER_DIR='$E2E_DEVELOPER_DIR' make -C '$REPO_ROOT' sync-debug-plugins"
     print -r -- "Replace '$APP_PATH' from '$BUILT_APP_PATH'"
@@ -981,18 +952,11 @@ prepare() {
 
 reseed_session() {
     local session_dir="$1"
-    [[ -f "$session_dir/session.plist" ]] || {
-        print -u2 -r -- "error: invalid E2E session directory $session_dir"
-        return 1
-    }
-    local prepared_app_path bundle_id
-    prepared_app_path="$(session_value "$session_dir" appPath)"
+    validate_session_identity "$session_dir" || return 1
+    local bundle_id
     bundle_id="$(session_value "$session_dir" bundleIdentifier)"
-    [[ "$prepared_app_path" == "$APP_PATH" ]] || {
-        print -u2 -r -- "error: session app path $prepared_app_path does not match $APP_PATH"
-        return 1
-    }
 
+    build_privacy_helpers "$session_dir"
     stop_app
     stop_privacy_helpers "$session_dir"
     ensure_privacy_helpers "$session_dir"
@@ -1018,10 +982,7 @@ reseed_session() {
 
 upgrade_session() {
     local session_dir="$1"
-    [[ -f "$session_dir/session.plist" ]] || {
-        print -u2 -r -- "error: invalid E2E session directory $session_dir"
-        return 1
-    }
+    validate_session_identity "$session_dir" || return 1
     invalidate_session_recordings "$session_dir"
     plutil -replace preparedAtEpoch -integer "$(date '+%s')" "$session_dir/session.plist"
     write_pending_checkpoints "$session_dir/ui-checkpoints.json"
@@ -1045,6 +1006,64 @@ invalidate_session_recordings() {
 
 session_value() {
     plist_value "$1/session.plist" "$2"
+}
+
+validate_session_identity() {
+    local session_dir="$1"
+    local metadata="$session_dir/session.plist"
+    [[ -f "$metadata" ]] || {
+        print -u2 -r -- "error: invalid E2E session directory $session_dir"
+        return 1
+    }
+    require_app || return 1
+
+    local canonical_session canonical_root canonical_app recorded_app
+    canonical_session="${session_dir:A}"
+    canonical_root="${ARTIFACT_ROOT:A}"
+    canonical_app="${APP_PATH:A}"
+    recorded_app="$(session_value "$session_dir" appPath)"
+    [[ "$canonical_session" == "$canonical_root"/* ]] || {
+        print -u2 -r -- "error: session is outside the E2E artifact root"
+        return 1
+    }
+    [[ "${recorded_app:A}" == "$canonical_app" ]] || {
+        print -u2 -r -- "error: session app path does not match $APP_PATH"
+        return 1
+    }
+
+    local recorded_bundle actual_bundle recorded_extension actual_extension
+    recorded_bundle="$(session_value "$session_dir" bundleIdentifier)"
+    actual_bundle="$(app_bundle_identifier)"
+    recorded_extension="$(session_value "$session_dir" extensionBundleIdentifier)"
+    actual_extension="$(extension_bundle_identifier)"
+    [[ -n "$actual_bundle" && "$recorded_bundle" == "$actual_bundle" ]] || {
+        print -u2 -r -- "error: session app bundle identifier does not match the installed app"
+        return 1
+    }
+    [[ "$recorded_extension" == "$actual_extension" ]] || {
+        print -u2 -r -- "error: session extension bundle identifier does not match the installed app"
+        return 1
+    }
+
+    local had_preferences had_extension_preferences
+    had_preferences="$(session_value "$session_dir" hadPreferences)"
+    had_extension_preferences="$(session_value "$session_dir" hadExtensionPreferences)"
+    [[ "$had_preferences" == true || "$had_preferences" == false ]] || {
+        print -u2 -r -- "error: session hadPreferences value is invalid"
+        return 1
+    }
+    [[ "$had_extension_preferences" == true || "$had_extension_preferences" == false ]] || {
+        print -u2 -r -- "error: session hadExtensionPreferences value is invalid"
+        return 1
+    }
+    [[ "$had_preferences" != true || -f "$session_dir/preferences.before.plist" ]] || {
+        print -u2 -r -- "error: session preferences backup is missing"
+        return 1
+    }
+    [[ "$had_extension_preferences" != true || -f "$session_dir/extension-preferences.before.plist" ]] || {
+        print -u2 -r -- "error: session extension preferences backup is missing"
+        return 1
+    }
 }
 
 audit_session() {
@@ -1180,6 +1199,7 @@ send_shortcut() {
         key_sender_tool describe "$shortcut_name"
         return
     fi
+    validate_session_identity "$session_dir" || return 1
     key_sender_tool check >/dev/null || {
         print -u2 -r -- "error: synthetic shortcut access is not granted; no key was sent"
         return 1
@@ -1222,6 +1242,7 @@ send_pointer_click() {
         print -r -- "Pointer click at ($local_x,$local_y) in ${reference_width}x${reference_height} focused MacTools window"
         return 0
     fi
+    validate_session_identity "$session_dir" || return 1
     ensure_input_driver "$session_dir"
     local process_output process_id
     process_output="$(matching_pids)"
@@ -1245,6 +1266,7 @@ send_input_select_all() {
         print -r -- "Select all in the focused MacTools control"
         return 0
     fi
+    validate_session_identity "$session_dir" || return 1
     ensure_input_driver "$session_dir"
     input_driver_tool "$session_dir" select-all
 }
@@ -1261,6 +1283,7 @@ send_input_text() {
         print -r -- "Type ${#input_text} characters into the focused MacTools control"
         return 0
     fi
+    validate_session_identity "$session_dir" || return 1
     ensure_input_driver "$session_dir"
     input_driver_tool "$session_dir" type-text "$input_text"
 }
@@ -1281,6 +1304,7 @@ send_input_key() {
         print -r -- "Press $input_key in MacTools"
         return 0
     fi
+    validate_session_identity "$session_dir" || return 1
     ensure_input_driver "$session_dir"
     input_driver_tool "$session_dir" press-key "$input_key"
 }
@@ -1302,6 +1326,7 @@ launch_privacy_helper_session() {
         print -r -- "$(privacy_helper_executable_path "$session_dir" "$variant")"
         return
     fi
+    validate_session_identity "$session_dir" || return 1
     ensure_privacy_helpers "$session_dir"
     launch_privacy_helper_process "$session_dir" "$variant"
 }
@@ -1321,10 +1346,7 @@ record_session() {
         return 1
     }
     session_dir="${session_dir:A}"
-    if [[ -n "$label" && "$label" == *[^a-z0-9-]* ]]; then
-        print -u2 -r -- "error: recording label must contain only lowercase letters, digits, and hyphens"
-        return 1
-    fi
+    validate_recording_label "$label" || return 1
     local base_name="screencast"
     [[ -z "$label" ]] || base_name="screencast.$label"
     local mov="$session_dir/$base_name.mov"
@@ -1338,6 +1360,7 @@ record_session() {
         print -r -- "MacToolsE2ERecorder '$mov' '$duration' '<visible-MacTools-window>' '<ready-file>' '<first-action-file>' '<assertion-stop-file>' '<allowed-bundle-id>@<pid>...>'"
         return 0
     fi
+    validate_session_identity "$session_dir" || return 1
 
     stop_privacy_helpers "$session_dir"
     build_privacy_helpers "$session_dir"
@@ -1359,7 +1382,9 @@ record_session() {
     /usr/bin/open -a "$APP_PATH" "mactools-dev://app/$start_route"
     sleep 0.75
     launch_privacy_helper_process "$session_dir" backdrop \
-        --recording-privacy --visibility-state "$visibility_state"
+        --recording-privacy \
+        --visibility-state "$visibility_state" \
+        --protected-bundle-id "$(app_bundle_identifier)"
     trap 'stop_privacy_helpers "$session_dir"' EXIT INT TERM
     sleep 0.75
     launch_privacy_helper_process "$session_dir" primary
@@ -1708,10 +1733,8 @@ PY
 
 restore_session() {
     local session_dir="$1"
-    [[ -f "$session_dir/session.plist" ]] || {
-        print -u2 -r -- "error: invalid E2E session directory $session_dir"
-        return 1
-    }
+    validate_session_identity "$session_dir" || return 1
+    build_privacy_helpers "$session_dir"
     stop_app
     stop_privacy_helpers "$session_dir"
 
@@ -1720,9 +1743,6 @@ restore_session() {
     extension_id="$(session_value "$session_dir" extensionBundleIdentifier)"
     had_preferences="$(session_value "$session_dir" hadPreferences)"
     had_extension_preferences="$(session_value "$session_dir" hadExtensionPreferences)"
-    [[ "$had_preferences" == true ]] || had_preferences=false
-    [[ "$had_extension_preferences" == true ]] || had_extension_preferences=false
-
     restore_domain "$bundle_id" "$had_preferences" "$session_dir/preferences.before.plist"
     if [[ -n "$extension_id" ]]; then
         restore_domain \
@@ -1732,6 +1752,76 @@ restore_session() {
     touch "$session_dir/restored.ok"
     /usr/bin/open -n -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
     print -r -- "Restored preferences from $session_dir"
+}
+
+session_identity_self_test() {
+    (
+    local test_root
+    test_root="$(mktemp -d "${TMPDIR:-/tmp}/mactools-e2e-session-test.XXXXXX")"
+    local APP_PATH="$test_root/MacTools Test.app"
+    local ARTIFACT_ROOT="$test_root/artifacts"
+    local session_dir="$ARTIFACT_ROOT/session-valid"
+    local app_plist="$APP_PATH/Contents/Info.plist"
+    local extension_plist="$APP_PATH/Contents/PlugIns/RightClickFinderSync.appex/Contents/Info.plist"
+    trap '/bin/rm -rf -- "$test_root"' EXIT
+    mkdir -p "$session_dir" "${app_plist:h}" "${extension_plist:h}"
+    plutil -create xml1 "$app_plist"
+    plutil -insert CFBundleIdentifier -string "com.example.mactools-test" "$app_plist"
+    plutil -insert CFBundleExecutable -string "MacToolsTest" "$app_plist"
+    plutil -create xml1 "$extension_plist"
+    plutil -insert CFBundleIdentifier -string "com.example.mactools-test.finder" "$extension_plist"
+    write_session_metadata \
+        "$session_dir/session.plist" \
+        "com.example.mactools-test" \
+        "com.example.mactools-test.finder" \
+        false false
+    validate_session_identity "$session_dir"
+
+    plutil -replace bundleIdentifier -string "com.example.forged" "$session_dir/session.plist"
+    if validate_session_identity "$session_dir" 2>/dev/null; then
+        print -u2 -r -- "error: forged session bundle identifier was accepted"
+        return 1
+    fi
+    print -r -- '{"sentinel":true}' >"$session_dir/ui-checkpoints.json"
+    /usr/bin/touch "$session_dir/screencast.invalid.mov"
+    /bin/cp "$session_dir/session.plist" "$session_dir/session.before-invalid-upgrade.plist"
+    /bin/cp "$session_dir/ui-checkpoints.json" "$session_dir/ui-checkpoints.before-invalid-upgrade.json"
+    if upgrade_session "$session_dir" 2>/dev/null; then
+        print -u2 -r -- "error: upgrade accepted forged session identity"
+        return 1
+    fi
+    [[ -f "$session_dir/screencast.invalid.mov" ]] \
+        && cmp -s "$session_dir/session.plist" "$session_dir/session.before-invalid-upgrade.plist" \
+        && cmp -s "$session_dir/ui-checkpoints.json" "$session_dir/ui-checkpoints.before-invalid-upgrade.json" || {
+        print -u2 -r -- "error: invalid upgrade mutated session artifacts before validation"
+        return 1
+    }
+    if rebuild_session "$session_dir" --dry-run >/dev/null 2>&1; then
+        print -u2 -r -- "error: rebuild accepted forged session identity"
+        return 1
+    fi
+    plutil -replace bundleIdentifier -string "com.example.mactools-test" "$session_dir/session.plist"
+    plutil -replace appPath -string "$test_root/Other.app" "$session_dir/session.plist"
+    if validate_session_identity "$session_dir" 2>/dev/null; then
+        print -u2 -r -- "error: forged session app path was accepted"
+        return 1
+    fi
+    plutil -replace appPath -string "$APP_PATH" "$session_dir/session.plist"
+    plutil -replace hadPreferences -bool true "$session_dir/session.plist"
+    if validate_session_identity "$session_dir" 2>/dev/null; then
+        print -u2 -r -- "error: session with a missing preferences backup was accepted"
+        return 1
+    fi
+    plutil -replace hadPreferences -bool false "$session_dir/session.plist"
+
+    local outside_session="$test_root/outside-session"
+    mkdir -p "$outside_session"
+    /bin/cp "$session_dir/session.plist" "$outside_session/session.plist"
+    if validate_session_identity "$outside_session" 2>/dev/null; then
+        print -u2 -r -- "error: session outside the artifact root was accepted"
+        return 1
+    fi
+    )
 }
 
 self_test() {
@@ -1744,6 +1834,7 @@ self_test() {
         "$KEY_SENDER_TOOL"
     env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" xcrun swiftc \
         -typecheck -parse-as-library -framework AppKit "$PRIVACY_HELPER_SOURCE"
+    session_identity_self_test
     fixture_tool seed --bundle-id "$domain" >/dev/null
     fixture_tool audit --bundle-id "$domain"
     fixture_tool clear-test-domain --bundle-id "$domain"

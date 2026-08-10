@@ -19,6 +19,7 @@ final class MockHideNotchWallpaperController: HideNotchWallpaperControlling {
     )
     private(set) var refreshCallCount = 0
     private(set) var setEnabledCalls: [Bool] = []
+    var syncResult: HideNotchSyncResult = .succeeded
 
     func snapshot() -> HideNotchSnapshot {
         snapshotValue
@@ -42,11 +43,37 @@ final class MockHideNotchWallpaperController: HideNotchWallpaperControlling {
             errorMessage: snapshotValue.errorMessage
         )
     }
+
+    func setEnabledAndWait(_ isEnabled: Bool) async -> HideNotchSyncResult {
+        setEnabled(isEnabled)
+        return syncResult
+    }
 }
 
 @MainActor
 final class InMemoryHideNotchStateStore: HideNotchStateStoring {
     var desiredEnabled = false
+}
+
+@MainActor
+final class StubHideNotchDesktopMaskManager: HideNotchDesktopMaskManaging {
+    var managedDisplayIdentifiers: Set<String> = []
+    var synchronizeErrors: [Error?] = []
+    private(set) var synchronizeCallCount = 0
+    private(set) var hideAllCallCount = 0
+
+    func synchronizeMasks(for displays: [HideNotchDisplayContext]) throws {
+        synchronizeCallCount += 1
+        if !synchronizeErrors.isEmpty, let error = synchronizeErrors.removeFirst() {
+            throw error
+        }
+        managedDisplayIdentifiers = Set(displays.map(\.displayIdentifier))
+    }
+
+    func hideAllMasks() {
+        hideAllCallCount += 1
+        managedDisplayIdentifiers.removeAll()
+    }
 }
 
 struct StubHideNotchDisplayCatalog: HideNotchDisplayCatalogProviding {

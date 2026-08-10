@@ -210,6 +210,11 @@ struct AppShortcutSettingsItem: Identifiable, Equatable {
 
 }
 
+private struct ShortcutMutationMetadata {
+    let shortcutID: String
+    let assignmentID: UUID?
+}
+
 struct PluginProvidedSettingsSearchItem: Identifiable, Hashable {
     let pluginID: String
     let entry: PluginSettingsSearchEntry
@@ -429,6 +434,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var permissionCards: [PluginPermissionCard] = []
     @Published private(set) var settingsCards: [PluginSettingsCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
+    private var shortcutMutationMetadataByRowID: [String: ShortcutMutationMetadata] = [:]
     @Published private(set) var appShortcutItems: [AppShortcutSettingsItem] = []
     @Published private(set) var actionShortcutItems: [ActionShortcutSettingsItem] = []
     @Published private(set) var actionShortcutCatalogItems: [ActionShortcutCatalogItem] = []
@@ -778,7 +784,7 @@ final class PluginHost: ObservableObject {
 
     var deviceLocalAutomationRuleCount: Int {
         automationController.rules.filter {
-            AutomationRulePortabilityAnalysis.containsDeviceLocalDisplayReference($0)
+            AutomationRulePortabilityAnalysis.containsDeviceLocalReference($0)
         }.count
     }
 
@@ -947,7 +953,10 @@ final class PluginHost: ObservableObject {
                         ? migratedWorkflowForRestore(workflow)
                         : nil
                 },
-                rules: rules.filter { restorableIDs.contains($0.workflowID) }
+                rules: rules.filter {
+                    restorableIDs.contains($0.workflowID)
+                        && AutomationRulePortabilityAnalysis.isPortable($0)
+                }
             )
             if !restored {
                 shortcutErrors["automation"] = FeatureL10n.string("无法保存工作流。")
@@ -977,27 +986,89 @@ final class PluginHost: ObservableObject {
             )
         }
         if selection.includesShortcuts {
-            shortcutErrors.merge(
-                applyImportedShortcutCustomizations(
-                    backup.shortcutCustomizations,
-                    bridgesLegacyActionAssignments:
-                        !backup.actionShortcutAssignmentsWereEncoded
-                ),
-                uniquingKeysWith: { existing, _ in existing }
-            )
-        }
-        if selection.includesShortcuts, backup.actionShortcutAssignmentsWereEncoded {
-            if case let .failure(error) = shortcutAssignmentService.replaceAllForImport(
-                backup.actionShortcutAssignments.filter {
-                    actionReferenceRestorePortability($0.reference) != .knownNonPortable
+            if backup.actionShortcutAssignmentsWereEncoded {
+                let descriptors = shortcutDescriptors()
+                let appCustomizations = Dictionary(
+                    uniqueKeysWithValues: AppShortcutAction.allCases.map { action in
+                        (
+                            action,
+                            backup.shortcutCustomizations[action.rawValue]
+                                ?? .inheritDefault
+                        )
+                    }
+                )
+                let targetCustomizations = Dictionary(
+                    descriptors.map { descriptor in
+                        (
+                            descriptor.itemID,
+                            backup.shortcutCustomizations[descriptor.itemID]
+                                ?? .inheritDefault
+                        )
+                    },
+                    uniquingKeysWith: { first, _ in first }
+                )
+                let customizationErrors = validateImportedShortcutCustomizations(
+                    targetCustomizations,
+                    descriptors: descriptors,
+                    appCustomizations: appCustomizations
+                )
+                if !customizationErrors.isEmpty {
+                    shortcutErrors.merge(
+                        importShortcutErrorMessages(
+                            customizationErrors,
+                            descriptors: descriptors
+                        ),
+                        uniquingKeysWith: { existing, _ in existing }
+                    )
+                } else {
+                    let reservedState = importedReservedShortcutState(
+                        customizations: targetCustomizations,
+                        descriptors: descriptors
+                    )
+                    let importedAssignments = backup.actionShortcutAssignments.filter {
+                        actionReferenceRestorePortability($0.reference) != .knownNonPortable
+                    }
+                    switch shortcutAssignmentService.validateImport(
+                        importedAssignments,
+                        reservedRegistrations: reservedState.registrations,
+                        reservedOwnerDescriptions: reservedState.ownerDescriptions
+                    ) {
+                    case let .failure(error):
+                        shortcutErrors["action-shortcuts"] = error.localizedDescription
+                    case .success:
+                        switch shortcutAssignmentService.replaceAllForImport(
+                            importedAssignments,
+                            reservedRegistrations: reservedState.registrations,
+                            reservedOwnerDescriptions: reservedState.ownerDescriptions
+                        ) {
+                        case let .failure(error):
+                            shortcutErrors["action-shortcuts"] = error.localizedDescription
+                        case .success:
+                            shortcutErrors.merge(
+                                applyImportedShortcutCustomizations(
+                                    backup.shortcutCustomizations,
+                                    bridgesLegacyActionAssignments: false,
+                                    notifiesActionBackedDescriptors: false
+                                ),
+                                uniquingKeysWith: { existing, _ in existing }
+                            )
+                            notifyAllActionBackedShortcutBindings()
+                        }
+                    }
                 }
-            ) {
-                shortcutErrors["action-shortcuts"] = error.localizedDescription
+            } else {
+                shortcutErrors.merge(
+                    applyImportedShortcutCustomizations(
+                        backup.shortcutCustomizations,
+                        bridgesLegacyActionAssignments: true
+                    ),
+                    uniquingKeysWith: { existing, _ in existing }
+                )
             }
         }
         if selection.includesRunLinks,
            let presets = backup.actionInvocationPresets,
-           !actionPresetStore.replaceAll(presets.compactMap { preset in
+           !actionPresetStore.replaceAllForRecovery(presets.compactMap { preset in
                guard actionReferenceRestorePortability(preset.reference) != .knownNonPortable else {
                    return nil
                }
@@ -1301,8 +1372,13 @@ final class PluginHost: ObservableObject {
         let reference = actionReference(for: action)
         let targetID = assignmentID
             ?? shortcutAssignmentService.assignment(for: reference)?.id
-        shortcutAssignmentService.clear(reference, assignmentID: targetID)
-        appShortcutErrors.removeValue(forKey: action)
+        let result = shortcutAssignmentService.clear(reference, assignmentID: targetID)
+        switch result {
+        case .success:
+            appShortcutErrors.removeValue(forKey: action)
+        case let .failure(error):
+            appShortcutErrors[action] = error.localizedDescription
+        }
         rebuildDerivedState()
         syncGlobalShortcuts()
     }
@@ -1343,6 +1419,7 @@ final class PluginHost: ObservableObject {
         assignmentID: UUID? = nil,
         replacingConflictingActionAssignments: Bool = false
     ) -> ActionShortcutMutationResult {
+        let previousBindings = actionBackedShortcutBindings()
         let result = shortcutAssignmentService.assign(
             binding,
             to: reference,
@@ -1353,6 +1430,7 @@ final class PluginHost: ObservableObject {
         case .success:
             rebuildDerivedState()
             syncGlobalShortcuts()
+            notifyChangedActionBackedShortcutBindings(previous: previousBindings)
         case .failure:
             break
         }
@@ -1360,11 +1438,16 @@ final class PluginHost: ObservableObject {
     }
 
     func clearActionShortcut(for reference: ActionReference, assignmentID: UUID? = nil) {
-        guard shortcutAssignmentService.clear(reference, assignmentID: assignmentID) else {
+        let previousBindings = actionBackedShortcutBindings()
+        guard case .success = shortcutAssignmentService.clear(
+            reference,
+            assignmentID: assignmentID
+        ) else {
             return
         }
         rebuildDerivedState()
         syncGlobalShortcuts()
+        notifyChangedActionBackedShortcutBindings(previous: previousBindings)
     }
 
     func actionShortcutSettingsItem(
@@ -1551,7 +1634,7 @@ final class PluginHost: ObservableObject {
     }
 
     func clearShortcutError(for shortcutID: String) {
-        let errorID = shortcutItems.first(where: { $0.id == shortcutID })?.shortcutID
+        let errorID = shortcutMutationMetadataByRowID[shortcutID]?.shortcutID
             ?? shortcutID
         guard shortcutErrors.removeValue(forKey: errorID) != nil else {
             return
@@ -2850,6 +2933,7 @@ final class PluginHost: ObservableObject {
         synchronizeActionRegistry()
 
         let shortcutDescriptors = shortcutDescriptors()
+        var shortcutMutationMetadataByRowID: [String: ShortcutMutationMetadata] = [:]
         shortcutItems = shortcutDescriptors.flatMap { descriptor -> [ShortcutSettingsItem] in
             let customization = shortcutStore.customization(for: descriptor.itemID)
             let reference = actionReference(for: descriptor)
@@ -2873,10 +2957,12 @@ final class PluginHost: ObservableObject {
                 let rowID = index == 0
                     ? descriptor.itemID
                     : "\(descriptor.itemID).assignment.\(assignment?.id.uuidString.lowercased() ?? String(index))"
+                shortcutMutationMetadataByRowID[rowID] = ShortcutMutationMetadata(
+                    shortcutID: descriptor.itemID,
+                    assignmentID: assignment?.id
+                )
                 return ShortcutSettingsItem(
                     id: rowID,
-                    shortcutID: descriptor.itemID,
-                    assignmentID: assignment?.id,
                     pluginID: descriptor.pluginID,
                     pluginTitle: descriptor.pluginTitle,
                     title: descriptor.definition.title,
@@ -2898,6 +2984,7 @@ final class PluginHost: ObservableObject {
                 )
             }
         }
+        self.shortcutMutationMetadataByRowID = shortcutMutationMetadataByRowID
 
         appShortcutItems = AppShortcutAction.allCases.flatMap { action -> [AppShortcutSettingsItem] in
             let reference = actionReference(for: action)
@@ -3218,9 +3305,16 @@ final class PluginHost: ObservableObject {
         _ entries: [ActionGridPresentationEntry],
         depth: Int = 0
     ) -> Bool {
+        let resolvedSlots = entries.enumerated().map { offset, entry in
+            entry.slotIndex ?? offset
+        }
         guard depth <= ActionGridPresentationLimits.maximumFolderDepth,
               entries.count <= ActionGridPresentationLimits.maximumEntriesPerGrid,
-              Set(entries.map(\.id)).count == entries.count else {
+              Set(entries.map(\.id)).count == entries.count,
+              resolvedSlots.allSatisfy({
+                  (0 ..< ActionGridPresentationLimits.maximumEntriesPerGrid).contains($0)
+              }),
+              Set(resolvedSlots).count == resolvedSlots.count else {
             return false
         }
         return entries.allSatisfy { entry in
@@ -4152,12 +4246,12 @@ final class PluginHost: ObservableObject {
     private func shortcutMutationTarget(
         for rowID: String
     ) -> (descriptor: ShortcutDescriptor, assignmentID: UUID?)? {
-        let item = shortcutItems.first(where: { $0.id == rowID })
-        let shortcutID = item?.shortcutID ?? rowID
+        let metadata = shortcutMutationMetadataByRowID[rowID]
+        let shortcutID = metadata?.shortcutID ?? rowID
         guard let descriptor = shortcutDescriptor(for: shortcutID) else {
             return nil
         }
-        return (descriptor, item?.assignmentID)
+        return (descriptor, metadata?.assignmentID)
     }
 
     private func shortcutItemID(pluginID: String, shortcutDefinitionID: String) -> String {
@@ -4253,7 +4347,8 @@ final class PluginHost: ObservableObject {
 
     private func applyImportedShortcutCustomizations(
         _ importedCustomizations: [String: ShortcutCustomization],
-        bridgesLegacyActionAssignments: Bool
+        bridgesLegacyActionAssignments: Bool,
+        notifiesActionBackedDescriptors: Bool = true
     ) -> [String: String] {
         let descriptors = shortcutDescriptors()
         let appCustomizations = Dictionary(
@@ -4300,13 +4395,17 @@ final class PluginHost: ObservableObject {
                         mutationErrors[descriptor.itemID] = error.localizedDescription
                     }
                 } else {
-                    shortcutAssignmentService.clear(reference)
+                    if case let .failure(error) = shortcutAssignmentService.clear(reference) {
+                        mutationErrors[descriptor.itemID] = error.localizedDescription
+                    }
                 }
             }
-            notifyShortcutBindingChange(
-                for: descriptor,
-                binding: binding
-            )
+            if notifiesActionBackedDescriptors || actionReference(for: descriptor) == nil {
+                notifyShortcutBindingChange(
+                    for: descriptor,
+                    binding: binding
+                )
+            }
         }
         for action in AppShortcutAction.allCases where bridgesLegacyActionAssignments {
             guard let customization = importedCustomizations[action.rawValue] else {
@@ -4324,7 +4423,11 @@ final class PluginHost: ObservableObject {
                     mutationErrors[action.rawValue] = error.localizedDescription
                 }
             } else {
-                shortcutAssignmentService.clear(actionReference(for: action))
+                if case let .failure(error) = shortcutAssignmentService.clear(
+                    actionReference(for: action)
+                ) {
+                    mutationErrors[action.rawValue] = error.localizedDescription
+                }
             }
             appShortcutErrors.removeValue(forKey: action)
         }
@@ -4495,8 +4598,10 @@ final class PluginHost: ObservableObject {
                     assignmentID: assignmentID
                 )
             } else {
-                shortcutAssignmentService.clear(reference, assignmentID: assignmentID)
-                result = .success
+                result = shortcutAssignmentService.clear(
+                    reference,
+                    assignmentID: assignmentID
+                )
             }
 
             switch result {
@@ -4643,6 +4748,79 @@ final class PluginHost: ObservableObject {
         guardPluginCall(descriptor.plugin, operation: "update shortcut binding") {
             handling.shortcutBindingDidChange(id: descriptor.definition.id, binding: binding)
         }
+    }
+
+    private func actionBackedShortcutBindings() -> [String: ShortcutBinding] {
+        Dictionary(
+            uniqueKeysWithValues: shortcutDescriptors().compactMap { descriptor in
+                guard let reference = actionReference(for: descriptor),
+                      let binding = shortcutAssignmentService.assignment(
+                          for: reference
+                      )?.binding else {
+                    return nil
+                }
+                return (descriptor.itemID, binding)
+            }
+        )
+    }
+
+    private func notifyChangedActionBackedShortcutBindings(
+        previous: [String: ShortcutBinding]
+    ) {
+        let current = actionBackedShortcutBindings()
+        for descriptor in shortcutDescriptors() {
+            guard actionReference(for: descriptor) != nil,
+                  previous[descriptor.itemID] != current[descriptor.itemID] else {
+                continue
+            }
+            notifyShortcutBindingChange(
+                for: descriptor,
+                binding: current[descriptor.itemID]
+            )
+        }
+    }
+
+    private func notifyAllActionBackedShortcutBindings() {
+        let current = actionBackedShortcutBindings()
+        for descriptor in shortcutDescriptors() where actionReference(for: descriptor) != nil {
+            notifyShortcutBindingChange(
+                for: descriptor,
+                binding: current[descriptor.itemID]
+            )
+        }
+    }
+
+    private func importedReservedShortcutState(
+        customizations: [String: ShortcutCustomization],
+        descriptors: [ShortcutDescriptor]
+    ) -> (
+        registrations: [GlobalShortcutManager.Registration],
+        ownerDescriptions: [String: String]
+    ) {
+        let eligibleDescriptors = descriptors.filter {
+            $0.definition.scope == .global && actionReference(for: $0) == nil
+        }
+        let registrations = eligibleDescriptors.compactMap {
+            descriptor -> GlobalShortcutManager.Registration? in
+            let customization = customizations[descriptor.itemID] ?? .inheritDefault
+            guard let binding = ShortcutStore.resolve(
+                customization: customization,
+                defaultBinding: descriptor.definition.defaultBinding
+            ) else {
+                return nil
+            }
+            return GlobalShortcutManager.Registration(
+                shortcutID: descriptor.itemID,
+                binding: binding
+            )
+        }
+        let ownerDescriptions = Dictionary(
+            eligibleDescriptors.map {
+                ($0.itemID, "\($0.pluginTitle) · \($0.definition.title)")
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return (registrations, ownerDescriptions)
     }
 
     private func syncGlobalShortcuts() {

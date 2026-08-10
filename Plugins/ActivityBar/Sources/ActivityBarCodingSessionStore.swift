@@ -17,6 +17,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
 
     @Published private(set) var days: [String: ActivityBarCodingDailyStats]
     @Published private(set) var activeSessionCount = 0
+    private(set) var loadError: String?
 
     private var activeSessions: [String: ActiveSession] = [:]
     private let storage: PluginStorage
@@ -33,7 +34,9 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         self.storage = storage
         self.calendar = calendar
         self.dateProvider = dateProvider
-        self.days = Self.loadDays(storage: storage, decoder: decoder)
+        let loaded = Self.loadDays(storage: storage, decoder: decoder)
+        self.days = loaded.days
+        self.loadError = loaded.error
     }
 
     var today: ActivityBarCodingDailyStats {
@@ -60,6 +63,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
     }
 
     func handleEvent(_ event: ActivityBarHookEvent) {
+        guard loadError == nil else { return }
         let now = dateProvider()
         let project = projectName(from: event.cwd)
         let sessionID = event.sessionID.isEmpty ? "unknown" : event.sessionID
@@ -93,6 +97,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
     }
 
     func flushActiveDurations() {
+        guard loadError == nil else { return }
         let now = dateProvider()
         for sessionID in activeSessions.keys {
             closeElapsedTime(for: sessionID, now: now)
@@ -101,9 +106,67 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         persist()
     }
 
-    func resetToday() {
-        days[dateKey(for: dateProvider())] = ActivityBarCodingDailyStats(date: dateKey(for: dateProvider()))
-        persist()
+    struct PreparedTodayReset {
+        fileprivate let previousDays: [String: ActivityBarCodingDailyStats]
+        fileprivate let previousRawValue: Any?
+        fileprivate let candidateDays: [String: ActivityBarCodingDailyStats]
+        fileprivate let candidateData: Data
+    }
+
+    func prepareTodayReset() -> PreparedTodayReset? {
+        guard loadError == nil else { return nil }
+        var candidateDays = days
+        let key = dateKey(for: dateProvider())
+        candidateDays[key] = ActivityBarCodingDailyStats(date: key)
+        guard let candidateData = try? encoder.encode(candidateDays) else { return nil }
+        return PreparedTodayReset(
+            previousDays: days,
+            previousRawValue: storage.object(forKey: StorageKey.days),
+            candidateDays: candidateDays,
+            candidateData: candidateData
+        )
+    }
+
+    @discardableResult
+    func commitTodayReset(_ prepared: PreparedTodayReset) -> ActivityBarPersistenceMutationResult {
+        storage.set(prepared.candidateData, forKey: StorageKey.days)
+        guard activityBarStorageValuesMatch(storage.object(forKey: StorageKey.days), prepared.candidateData) else {
+            let rollbackSucceeded = restoreActivityBarStorageValue(
+                prepared.previousRawValue,
+                forKey: StorageKey.days,
+                storage: storage
+            )
+            if !rollbackSucceeded {
+                reloadFromStorage()
+            }
+            return .rejected(rollbackSucceeded: rollbackSucceeded)
+        }
+
+        days = prepared.candidateDays
+        loadError = nil
+        return .committed
+    }
+
+    @discardableResult
+    func rollbackTodayReset(_ prepared: PreparedTodayReset) -> Bool {
+        let succeeded = restoreActivityBarStorageValue(
+            prepared.previousRawValue,
+            forKey: StorageKey.days,
+            storage: storage
+        )
+        guard succeeded else {
+            reloadFromStorage()
+            return false
+        }
+        days = prepared.previousDays
+        loadError = nil
+        return true
+    }
+
+    @discardableResult
+    func resetToday() -> ActivityBarPersistenceMutationResult {
+        guard let prepared = prepareTodayReset() else { return .recoveryRequired }
+        return commitTodayReset(prepared)
     }
 
     private func closeElapsedTime(for sessionID: String, now: Date) {
@@ -153,6 +216,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         tool rawTool: String,
         update: (inout ActivityBarCodingDailyStats, inout ActivityBarProjectStats, inout ActivityBarProjectStats) -> Void
     ) {
+        guard loadError == nil else { return }
         let project = rawProject.isEmpty ? "Unknown" : rawProject
         let tool = rawTool.isEmpty ? ActivityBarCodingTool.claudeCode.rawValue : rawTool
         let key = dateKey(for: dateProvider())
@@ -190,6 +254,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
     }
 
     private func persist() {
+        guard loadError == nil else { return }
         do {
             let data = try encoder.encode(days)
             storage.set(data, forKey: StorageKey.days)
@@ -198,16 +263,30 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         }
     }
 
-    private static func loadDays(storage: PluginStorage, decoder: JSONDecoder) -> [String: ActivityBarCodingDailyStats] {
-        guard let data = storage.data(forKey: StorageKey.days) else {
-            return [:]
+    private func reloadFromStorage() {
+        let loaded = Self.loadDays(storage: storage, decoder: decoder)
+        days = loaded.days
+        loadError = loaded.error
+    }
+
+    private static func loadDays(
+        storage: PluginStorage,
+        decoder: JSONDecoder
+    ) -> (days: [String: ActivityBarCodingDailyStats], error: String?) {
+        guard let rawValue = storage.object(forKey: StorageKey.days) else {
+            return ([:], nil)
+        }
+        guard let data = rawValue as? Data else {
+            let message = "Stored coding statistics have an invalid format."
+            ActivityBarLog.hooks.error("\(message, privacy: .public)")
+            return ([:], message)
         }
 
         do {
-            return try decoder.decode([String: ActivityBarCodingDailyStats].self, from: data)
+            return (try decoder.decode([String: ActivityBarCodingDailyStats].self, from: data), nil)
         } catch {
             ActivityBarLog.hooks.error("Failed to load coding stats: \(error.localizedDescription, privacy: .public)")
-            return [:]
+            return ([:], error.localizedDescription)
         }
     }
 }

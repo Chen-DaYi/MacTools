@@ -261,6 +261,22 @@
           }
         }
       }
+    },
+    "error.lockFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر قفل الشاشة فورًا." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der Bildschirm konnte nicht sofort gesperrt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The screen could not be locked immediately." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudo bloquear la pantalla inmediatamente." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de verrouiller l’écran immédiatement." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "画面をすぐにロックできませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "화면을 즉시 잠글 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível bloquear o ecrã imediatamente." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось немедленно заблокировать экран." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法立即锁定屏幕。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法立即鎖定螢幕。" } }
+      }
     }
   },
   "version": "1.0"

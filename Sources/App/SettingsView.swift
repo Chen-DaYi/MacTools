@@ -648,6 +648,12 @@ private struct PreferencesBackupSettingsRow: View {
         .sheet(item: $pendingImport) { pending in
             PreferencesImportPreviewSheet(
                 preview: pending.preview,
+                previewProvider: { selection in
+                    try pluginHost.preferencesImportPreview(
+                        for: pending.backup,
+                        selection: selection
+                    )
+                },
                 pluginOptions: pluginOptions(for: Set(pending.backup.pluginPreferences.keys)),
                 isImporting: isImporting,
                 onCancel: { pendingImport = nil },
@@ -1036,21 +1042,26 @@ enum PreferencesBackupExportFileName {
 
 private struct PreferencesImportPreviewSheet: View {
     let preview: PreferencesImportPreview
+    let previewProvider: (PreferencesBackupSelection) throws -> PreferencesImportPreview
     let pluginOptions: [PreferencesPluginOption]
     let isImporting: Bool
     let onCancel: () -> Void
     let onImport: (Set<String>, PreferencesBackupSelection) -> Void
     @State private var selectedInstallablePluginIDs: Set<String> = []
     @State private var selection: PreferencesBackupSelection
+    @State private var currentPreview: PreferencesImportPreview
+    @State private var previewErrorMessage: String?
 
     init(
         preview: PreferencesImportPreview,
+        previewProvider: @escaping (PreferencesBackupSelection) throws -> PreferencesImportPreview,
         pluginOptions: [PreferencesPluginOption],
         isImporting: Bool,
         onCancel: @escaping () -> Void,
         onImport: @escaping (Set<String>, PreferencesBackupSelection) -> Void
     ) {
         self.preview = preview
+        self.previewProvider = previewProvider
         self.pluginOptions = pluginOptions
         self.isImporting = isImporting
         self.onCancel = onCancel
@@ -1058,6 +1069,13 @@ private struct PreferencesImportPreviewSheet: View {
         var availableSelection = preview.selection
         availableSelection.pluginPreferenceIDs.formIntersection(pluginOptions.map(\.id))
         _selection = State(initialValue: availableSelection)
+        do {
+            _currentPreview = State(initialValue: try previewProvider(availableSelection))
+            _previewErrorMessage = State(initialValue: nil)
+        } catch {
+            _currentPreview = State(initialValue: preview)
+            _previewErrorMessage = State(initialValue: error.localizedDescription)
+        }
     }
 
     var body: some View {
@@ -1076,6 +1094,12 @@ private struct PreferencesImportPreviewSheet: View {
                 availableSelection: preview.selection
             )
 
+            if let previewErrorMessage {
+                Text(previewErrorMessage)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.red)
+            }
+
             Text(AppL10n.preferencesBackup(
                 "preferencesBackup.preview.replaceNotice",
                 defaultValue: "将替换以上偏好类别；备份中未包含的设置会恢复为默认值。"
@@ -1084,7 +1108,7 @@ private struct PreferencesImportPreviewSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !preview.installablePlugins.isEmpty {
+            if !currentPreview.installablePlugins.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(AppL10n.preferencesBackup(
                         "preferencesBackup.preview.installablePlugins",
@@ -1100,7 +1124,7 @@ private struct PreferencesImportPreviewSheet: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    ForEach(preview.installablePlugins) { plugin in
+                    ForEach(currentPreview.installablePlugins) { plugin in
                         Toggle(isOn: installationSelectionBinding(for: plugin.id)) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(plugin.title)
@@ -1116,15 +1140,25 @@ private struct PreferencesImportPreviewSheet: View {
                 }
             }
 
-            if !preview.unavailablePluginIDs.isEmpty
-                || !preview.unavailableShortcutIDs.isEmpty
-                || !preview.unavailableActionReferences.isEmpty {
+            if !currentPreview.unavailablePluginIDs.isEmpty
+                || !currentPreview.unavailableShortcutIDs.isEmpty
+                || !currentPreview.unavailableActionReferences.isEmpty {
                 Text(AppL10n.preferencesBackupFormat(
                     "preferencesBackup.preview.skipped",
                     defaultValue: "将跳过 %d 个本机不可用的插件设置、%d 项快捷键和 %d 个不可用或不可移植的操作；不会安装缺失插件。",
-                    preview.unavailablePluginIDs.count,
-                    preview.unavailableShortcutIDs.count,
-                    preview.unavailableActionReferences.count
+                    currentPreview.unavailablePluginIDs.count,
+                    currentPreview.unavailableShortcutIDs.count,
+                    currentPreview.unavailableActionReferences.count
+                ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !currentPreview.retainedUnavailableActionReferences.isEmpty {
+                Text(AppL10n.preferencesBackupFormat(
+                    "preferencesBackup.preview.retainedUnavailableActions",
+                    defaultValue: "将保留 %d 个当前不可用的操作；对应插件恢复后可继续使用。",
+                    currentPreview.retainedUnavailableActionReferences.count
                 ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
@@ -1139,7 +1173,7 @@ private struct PreferencesImportPreviewSheet: View {
                     onImport(selectedInstallablePluginIDs, selection)
                 }
                     .buttonStyle(.borderedProminent)
-                    .disabled(isImporting || selection.isEmpty)
+                    .disabled(isImporting || selection.isEmpty || previewErrorMessage != nil)
             }
 
             if isImporting {
@@ -1149,6 +1183,9 @@ private struct PreferencesImportPreviewSheet: View {
         }
         .padding(24)
         .frame(width: 500)
+        .onChange(of: selection) { _, selection in
+            refreshPreview(for: selection)
+        }
     }
 
     private var confirmTitle: String {
@@ -1185,6 +1222,20 @@ private struct PreferencesImportPreviewSheet: View {
             } else {
                 selectedInstallablePluginIDs.remove(pluginID)
             }
+        }
+    }
+
+    private func refreshPreview(for selection: PreferencesBackupSelection) {
+        do {
+            let refreshed = try previewProvider(selection)
+            currentPreview = refreshed
+            selectedInstallablePluginIDs.formIntersection(
+                refreshed.installablePlugins.map(\.id)
+            )
+            previewErrorMessage = nil
+        } catch {
+            previewErrorMessage = error.localizedDescription
+            selectedInstallablePluginIDs.removeAll()
         }
     }
 }

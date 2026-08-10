@@ -162,6 +162,46 @@ final class AutomationRuntimeTests: XCTestCase {
         )
     }
 
+    func testStoppedRunCompletionDoesNotClearNewerRunForTheSameRule() async throws {
+        let fixture = try makeFixture(completesImmediately: false)
+        let rule = try fixture.ruleStore.upsert(
+            AutomationRule(
+                workflowID: fixture.workflow.id,
+                trigger: .network(NetworkAutomationTrigger(status: .available))
+            )
+        ).get()
+        let firstDate = fixture.date
+        fixture.runtime.start()
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: firstDate)
+        )
+        for _ in 0 ..< 100 where fixture.starter.pendingCompletionCount < 1 {
+            await Task.yield()
+        }
+
+        fixture.runtime.stop()
+        fixture.runtime.start()
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: firstDate.addingTimeInterval(3))
+        )
+        for _ in 0 ..< 100 where fixture.starter.pendingCompletionCount < 2 {
+            await Task.yield()
+        }
+
+        fixture.starter.completePendingRun(at: 0)
+        await Task.yield()
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: firstDate.addingTimeInterval(6))
+        )
+
+        XCTAssertEqual(fixture.starter.starts.count, 2)
+        XCTAssertEqual(
+            fixture.workflowStore.history().first?.source,
+            .automatic(ruleID: rule.id, triggerKind: AutomationTriggerKind.network.rawValue)
+        )
+        fixture.starter.completePendingRun(at: 0)
+    }
+
     func testCalendarEventRunsOnlyTheRuleForItsScheduledOffset() throws {
         let fixture = try makeFixture()
         let matchingRule = try fixture.ruleStore.upsert(
@@ -375,6 +415,9 @@ private final class FakeWorkflowStarter: WorkflowStarting {
     private let completesImmediately: Bool
     private let startError: WorkflowStartError?
     private(set) var starts: [Start] = []
+    private var completions: [CheckedContinuation<ActionExecutionResult, Never>] = []
+
+    var pendingCompletionCount: Int { completions.count }
 
     init(completesImmediately: Bool, startError: WorkflowStartError? = nil) {
         self.completesImmediately = completesImmediately
@@ -390,12 +433,19 @@ private final class FakeWorkflowStarter: WorkflowStarting {
             return .failure(startError)
         }
         starts.append(Start(workflowID: workflowID, source: source, mode: mode))
-        let handle = ActionExecutionHandle(operation: { [completesImmediately] in
+        let handle = ActionExecutionHandle(operation: { [weak self, completesImmediately] in
             if !completesImmediately {
-                await withUnsafeContinuation { (_: UnsafeContinuation<Void, Never>) in }
+                return await withCheckedContinuation { continuation in
+                    self?.completions.append(continuation)
+                }
             }
             return .succeeded()
         })
         return .success(WorkflowExecutionHandle(runID: UUID(), actionHandle: handle))
+    }
+
+    func completePendingRun(at index: Int, result: ActionExecutionResult = .succeeded()) {
+        guard completions.indices.contains(index) else { return }
+        completions.remove(at: index).resume(returning: result)
     }
 }

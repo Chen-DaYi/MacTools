@@ -372,17 +372,28 @@ final class ActionGridStore: ObservableObject {
               data.count <= Self.maximumPayloadByteCount else {
             return false
         }
+        let previousRawValue = storage.object(forKey: Self.storageKey)
         storage.set(data, forKey: Self.storageKey)
-        guard storage.data(forKey: Self.storageKey) == data else { return false }
+        guard storage.data(forKey: Self.storageKey) == data else {
+            if !restore(previousRawValue) {
+                reload(performLegacyMigration: false)
+            }
+            return false
+        }
         self.entries = entries
         loadError = nil
         return true
     }
 
-    private func reload() {
-        guard let data = storage.data(forKey: Self.storageKey) else {
+    private func reload(performLegacyMigration: Bool = true) {
+        guard let rawValue = storage.object(forKey: Self.storageKey) else {
             entries = []
             loadError = nil
+            return
+        }
+        guard let data = rawValue as? Data else {
+            entries = []
+            loadError = "invalid-grid-layout"
             return
         }
         guard data.count <= Self.maximumPayloadByteCount,
@@ -397,11 +408,35 @@ final class ActionGridStore: ObservableObject {
             return
         }
         if envelope.formatVersion < Self.currentFormatVersion {
-            _ = replace(decodedEntries)
+            entries = decodedEntries.sorted(by: Self.slotOrder)
+            loadError = nil
+            if performLegacyMigration {
+                _ = replace(decodedEntries)
+            }
             return
         }
         entries = decodedEntries.sorted(by: Self.slotOrder)
         loadError = nil
+    }
+
+    private func restore(_ value: Any?) -> Bool {
+        if let value {
+            storage.set(value, forKey: Self.storageKey)
+        } else {
+            storage.removeObject(forKey: Self.storageKey)
+        }
+        return valuesMatch(storage.object(forKey: Self.storageKey), value)
+    }
+
+    private func valuesMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case let (lhs as NSObject, rhs as NSObject):
+            return lhs.isEqual(rhs)
+        default:
+            return false
+        }
     }
 
     private func validate(_ entries: [ActionGridEntry]) -> Bool {

@@ -118,10 +118,14 @@ final class MenuBarHiddenController: ObservableObject {
 
     var isEnabled: Bool {
         get { manager.isEnabled }
-        set {
-            manager.isEnabled = newValue
-            updateObservation()
-        }
+        set { _ = setEnabled(newValue) }
+    }
+
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> MenuBarHiddenPersistenceMutationResult {
+        let result = manager.setEnabled(enabled)
+        updateObservation()
+        return result
     }
 
     var isAlwaysHiddenEnabled: Bool {

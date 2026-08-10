@@ -1,6 +1,232 @@
 import Foundation
 import MacToolsPluginKit
 
+@MainActor
+final class AutomationDefinitionStore {
+    struct Snapshot: Equatable {
+        let workflows: [WorkflowDefinition]
+        let rules: [AutomationRule]
+    }
+
+    struct LoadResult {
+        let snapshot: Snapshot
+        let workflowError: String?
+        let ruleError: String?
+
+        var isValid: Bool { workflowError == nil && ruleError == nil }
+    }
+
+    private struct CombinedEnvelope: Codable {
+        let formatVersion: Int
+        let workflows: [WorkflowDefinition]
+        let rules: [AutomationRule]
+    }
+
+    private struct LegacyWorkflowEnvelope: Codable {
+        let formatVersion: Int
+        let workflows: [WorkflowDefinition]
+    }
+
+    private struct LegacyRuleEnvelope: Codable {
+        let formatVersion: Int
+        let rules: [AutomationRule]
+    }
+
+    private enum DefaultsKey {
+        static let combined = "automation.definitions.v1"
+        static let workflows = "automation.workflows.v1"
+        static let rules = "automation.rules.v1"
+    }
+
+    private static let currentFormatVersion = 1
+    private static let maximumCombinedPayloadByteCount = 3 * 1_024 * 1_024 + 4_096
+
+    let userDefaults: UserDefaults
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+    private let setCombinedValue: (Any?) -> Void
+
+    init(
+        userDefaults: UserDefaults,
+        setCombinedValue: ((Any?) -> Void)? = nil
+    ) {
+        self.userDefaults = userDefaults
+        self.setCombinedValue = setCombinedValue ?? { value in
+            if let value {
+                userDefaults.set(value, forKey: DefaultsKey.combined)
+            } else {
+                userDefaults.removeObject(forKey: DefaultsKey.combined)
+            }
+        }
+    }
+
+    func sharesStorage(with other: AutomationDefinitionStore) -> Bool {
+        userDefaults === other.userDefaults
+    }
+
+    func load() -> LoadResult {
+        if userDefaults.object(forKey: DefaultsKey.combined) != nil {
+            return loadCombined()
+        }
+        return loadLegacy()
+    }
+
+    func replaceWorkflows(_ workflows: [WorkflowDefinition]) -> Bool {
+        let current = load()
+        guard current.isValid else { return false }
+        return replace(
+            Snapshot(workflows: workflows, rules: current.snapshot.rules),
+            allowsRecovery: false
+        )
+    }
+
+    func replaceRules(_ rules: [AutomationRule]) -> Bool {
+        let current = load()
+        guard current.isValid else { return false }
+        return replace(
+            Snapshot(workflows: current.snapshot.workflows, rules: rules),
+            allowsRecovery: false
+        )
+    }
+
+    func replace(_ snapshot: Snapshot, allowsRecovery: Bool) -> Bool {
+        if !allowsRecovery {
+            guard load().isValid else { return false }
+        }
+        guard WorkflowStore.validationFailure(snapshot.workflows) == nil,
+              AutomationRuleStore.validationFailure(snapshot.rules) == nil else {
+            return false
+        }
+        do {
+            let workflowData = try encoder.encode(
+                LegacyWorkflowEnvelope(
+                    formatVersion: WorkflowDefinition.currentFormatVersion,
+                    workflows: snapshot.workflows
+                )
+            )
+            let ruleData = try encoder.encode(
+                LegacyRuleEnvelope(
+                    formatVersion: AutomationRule.currentFormatVersion,
+                    rules: snapshot.rules
+                )
+            )
+            guard workflowData.count <= WorkflowStore.maximumPayloadByteCount,
+                  ruleData.count <= AutomationRuleStore.maximumPayloadByteCount else {
+                return false
+            }
+            let data = try encoder.encode(
+                CombinedEnvelope(
+                    formatVersion: Self.currentFormatVersion,
+                    workflows: snapshot.workflows,
+                    rules: snapshot.rules
+                )
+            )
+            guard data.count <= Self.maximumCombinedPayloadByteCount else { return false }
+
+            let previousValue = userDefaults.object(forKey: DefaultsKey.combined)
+            setCombinedValue(data)
+            guard userDefaults.data(forKey: DefaultsKey.combined) == data else {
+                _ = restore(previousValue, forKey: DefaultsKey.combined)
+                return false
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func loadCombined() -> LoadResult {
+        guard let data = userDefaults.data(forKey: DefaultsKey.combined),
+              data.count <= Self.maximumCombinedPayloadByteCount else {
+            return invalidCombined("definition-payload-too-large-or-invalid")
+        }
+        do {
+            let envelope = try decoder.decode(CombinedEnvelope.self, from: data)
+            guard envelope.formatVersion == Self.currentFormatVersion,
+                  WorkflowStore.validationFailure(envelope.workflows) == nil,
+                  AutomationRuleStore.validationFailure(envelope.rules) == nil else {
+                return invalidCombined("invalid-definition-format")
+            }
+            return LoadResult(
+                snapshot: Snapshot(workflows: envelope.workflows, rules: envelope.rules),
+                workflowError: nil,
+                ruleError: nil
+            )
+        } catch {
+            return invalidCombined("invalid-definition-payload")
+        }
+    }
+
+    private func loadLegacy() -> LoadResult {
+        let workflows = loadLegacyWorkflows()
+        let rules = loadLegacyRules()
+        return LoadResult(
+            snapshot: Snapshot(workflows: workflows.value, rules: rules.value),
+            workflowError: workflows.error,
+            ruleError: rules.error
+        )
+    }
+
+    private func loadLegacyWorkflows() -> (value: [WorkflowDefinition], error: String?) {
+        guard let data = userDefaults.data(forKey: DefaultsKey.workflows) else {
+            return ([], nil)
+        }
+        guard data.count <= WorkflowStore.maximumPayloadByteCount else {
+            return ([], "workflow-payload-too-large")
+        }
+        do {
+            let envelope = try decoder.decode(LegacyWorkflowEnvelope.self, from: data)
+            guard envelope.formatVersion == WorkflowDefinition.currentFormatVersion,
+                  WorkflowStore.validationFailure(envelope.workflows) == nil else {
+                return ([], "invalid-workflow-format")
+            }
+            return (envelope.workflows, nil)
+        } catch {
+            return ([], "invalid-workflow-payload")
+        }
+    }
+
+    private func loadLegacyRules() -> (value: [AutomationRule], error: String?) {
+        guard let data = userDefaults.data(forKey: DefaultsKey.rules) else {
+            return ([], nil)
+        }
+        guard data.count <= AutomationRuleStore.maximumPayloadByteCount else {
+            return ([], "rule-payload-too-large")
+        }
+        do {
+            let envelope = try decoder.decode(LegacyRuleEnvelope.self, from: data)
+            guard envelope.formatVersion == AutomationRule.currentFormatVersion,
+                  AutomationRuleStore.validationFailure(envelope.rules) == nil else {
+                return ([], "invalid-rule-format")
+            }
+            return (envelope.rules, nil)
+        } catch {
+            return ([], "invalid-rule-payload")
+        }
+    }
+
+    private func invalidCombined(_ error: String) -> LoadResult {
+        LoadResult(
+            snapshot: Snapshot(workflows: [], rules: []),
+            workflowError: error,
+            ruleError: error
+        )
+    }
+
+    private func restore(_ value: Any?, forKey key: String) -> Bool {
+        precondition(key == DefaultsKey.combined)
+        setCombinedValue(value)
+        switch (userDefaults.object(forKey: key), value) {
+        case (nil, nil):
+            return true
+        case let (actual as Data, expected as Data):
+            return actual == expected
+        default:
+            return false
+        }
+    }
+}
+
 private struct WorkflowHistoryEnvelope: Codable {
     let formatVersion: Int
     let runs: [WorkflowRun]
@@ -70,11 +296,6 @@ private actor WorkflowHistoryPersistence {
 
 @MainActor
 final class WorkflowStore {
-    private struct WorkflowEnvelope: Codable {
-        let formatVersion: Int
-        let workflows: [WorkflowDefinition]
-    }
-
     private struct PortableWorkflowEnvelope: Codable {
         let formatVersion: Int
         let rootWorkflowID: UUID?
@@ -90,7 +311,6 @@ final class WorkflowStore {
     }
 
     private enum DefaultsKey {
-        static let workflows = "automation.workflows.v1"
         static let history = "automation.history.v1"
     }
 
@@ -100,6 +320,7 @@ final class WorkflowStore {
 
     private let defaults: WorkflowHistoryDefaults
     private var userDefaults: UserDefaults { defaults.value }
+    let definitionStore: AutomationDefinitionStore
     private let historyPersistence: WorkflowHistoryPersistence
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -110,6 +331,7 @@ final class WorkflowStore {
     private(set) var historyLoadError: String?
 
     init(userDefaults: UserDefaults = .standard) {
+        self.definitionStore = AutomationDefinitionStore(userDefaults: userDefaults)
         let defaults = WorkflowHistoryDefaults(userDefaults)
         self.defaults = defaults
         self.historyPersistence = WorkflowHistoryPersistence(
@@ -120,28 +342,22 @@ final class WorkflowStore {
         recoverInterruptedRuns()
     }
 
+    init(definitionStore: AutomationDefinitionStore) {
+        self.definitionStore = definitionStore
+        let defaults = WorkflowHistoryDefaults(definitionStore.userDefaults)
+        self.defaults = defaults
+        self.historyPersistence = WorkflowHistoryPersistence(
+            defaults: defaults,
+            key: DefaultsKey.history,
+            maximumPayloadByteCount: Self.maximumPayloadByteCount
+        )
+        recoverInterruptedRuns()
+    }
+
     func workflows() -> [WorkflowDefinition] {
-        guard let data = userDefaults.data(forKey: DefaultsKey.workflows) else {
-            workflowLoadError = nil
-            return []
-        }
-        guard data.count <= Self.maximumPayloadByteCount else {
-            workflowLoadError = "workflow-payload-too-large"
-            return []
-        }
-        do {
-            let envelope = try decoder.decode(WorkflowEnvelope.self, from: data)
-            guard envelope.formatVersion == WorkflowDefinition.currentFormatVersion,
-                  validate(envelope.workflows) == nil else {
-                workflowLoadError = "invalid-workflow-format"
-                return []
-            }
-            workflowLoadError = nil
-            return envelope.workflows
-        } catch {
-            workflowLoadError = "invalid-workflow-payload"
-            return []
-        }
+        let result = definitionStore.load()
+        workflowLoadError = result.workflowError
+        return result.snapshot.workflows
     }
 
     func workflow(id: UUID) -> WorkflowDefinition? {
@@ -167,7 +383,7 @@ final class WorkflowStore {
 
     @discardableResult
     func upsert(_ workflow: WorkflowDefinition) -> Result<WorkflowDefinition, WorkflowStoreError> {
-        if let failure = validate(workflow) {
+        if let failure = Self.validationFailure(workflow) {
             return .failure(.invalidWorkflow(failure))
         }
         var stored = workflows()
@@ -257,24 +473,22 @@ final class WorkflowStore {
 
     @discardableResult
     func replaceWorkflows(_ workflows: [WorkflowDefinition]) -> Bool {
-        guard validate(workflows) == nil else {
+        guard Self.validationFailure(workflows) == nil else {
             return false
         }
-        do {
-            let data = try encoder.encode(
-                WorkflowEnvelope(
-                    formatVersion: WorkflowDefinition.currentFormatVersion,
-                    workflows: workflows
-                )
-            )
-            guard data.count <= Self.maximumPayloadByteCount else {
-                return false
-            }
-            userDefaults.set(data, forKey: DefaultsKey.workflows)
-            return userDefaults.data(forKey: DefaultsKey.workflows) == data
-        } catch {
-            return false
-        }
+        return definitionStore.replaceWorkflows(workflows)
+    }
+
+    @discardableResult
+    func replaceDefinitions(
+        workflows: [WorkflowDefinition],
+        rules: [AutomationRule],
+        allowsRecovery: Bool
+    ) -> Bool {
+        definitionStore.replace(
+            AutomationDefinitionStore.Snapshot(workflows: workflows, rules: rules),
+            allowsRecovery: allowsRecovery
+        )
     }
 
     @discardableResult
@@ -409,7 +623,26 @@ final class WorkflowStore {
         if runs.count > Self.maximumHistoryCount {
             runs.removeLast(runs.count - Self.maximumHistoryCount)
         }
+        while runs.count > 1, !historyPayloadFits(runs) {
+            runs.removeLast()
+        }
+        guard historyPayloadFits(runs) else {
+            historyLoadError = "history-payload-too-large"
+            return nil
+        }
         return (runs, previousRuns)
+    }
+
+    private func historyPayloadFits(_ runs: [WorkflowRun]) -> Bool {
+        guard let data = try? encoder.encode(
+            WorkflowHistoryEnvelope(
+                formatVersion: WorkflowRun.currentFormatVersion,
+                runs: runs
+            )
+        ) else {
+            return false
+        }
+        return data.count <= Self.maximumPayloadByteCount
     }
 
     func exportWorkflow(
@@ -466,7 +699,7 @@ final class WorkflowStore {
                   rootID: rootID,
                   workflows: importedWorkflows
               ),
-              validate(importedWorkflows) == nil else {
+              Self.validationFailure(importedWorkflows) == nil else {
             return .failure(.invalidImport)
         }
 
@@ -660,15 +893,15 @@ final class WorkflowStore {
         return runs
     }
 
-    private func validate(_ workflows: [WorkflowDefinition]) -> String? {
+    static func validationFailure(_ workflows: [WorkflowDefinition]) -> String? {
         guard workflows.count <= Self.maximumWorkflowCount,
               Set(workflows.map(\.id)).count == workflows.count else {
             return "workflow-count-or-id"
         }
-        return workflows.lazy.compactMap(validate).first
+        return workflows.lazy.compactMap(validationFailure).first
     }
 
-    private func validate(_ workflow: WorkflowDefinition) -> String? {
+    private static func validationFailure(_ workflow: WorkflowDefinition) -> String? {
         let trimmedName = workflow.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard workflow.formatVersion == WorkflowDefinition.currentFormatVersion,
               !trimmedName.isEmpty,

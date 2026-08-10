@@ -118,8 +118,12 @@ package-plugins-release: generate
 stop-debug-app:
 	@if [[ "$(ALLOW_MULTIPLE_DEBUG_APPS)" == "1" ]]; then exit 0; fi
 	@PIDS=(); \
-	while read -r PID; do PIDS+=("$$PID"); done \
-		< <(/usr/bin/pgrep -x "$(APP_PRODUCT_NAME)" 2>/dev/null || true); \
+	while read -r PID COMMAND; do \
+		if [[ "$$COMMAND" == "$(INSTALLED_APP_EXECUTABLE)" \
+			|| "$$COMMAND" == "$(INSTALLED_APP_EXECUTABLE) "* ]]; then \
+			PIDS+=("$$PID"); \
+		fi; \
+	done < <(/bin/ps -axo pid=,command=); \
 	if (( $${#PIDS[@]} == 0 )); then \
 		exit 0; \
 	fi; \

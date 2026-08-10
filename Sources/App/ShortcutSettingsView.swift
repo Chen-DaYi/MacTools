@@ -282,7 +282,7 @@ struct ActionShortcutSettingsView: View {
                 binding: binding,
                 ownerDescription: ownerDescription
             )
-            return .pendingConfirmation
+            return .accepted
         case let .failure(error):
             return .rejected(error.localizedDescription)
         }

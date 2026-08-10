@@ -311,10 +311,12 @@ quarantine_stale_installed_packages() {
 }
 
 packages=()
+state_paths=()
 synced_count=0
 installed_count=0
 skipped_count=0
 quarantined_count=0
+removed_count=0
 
 echo "Discovering Debug plugin bundles..."
 if plugin_records="$(discover_plugin_records)"; then
@@ -362,6 +364,7 @@ while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bund
     fi
 
     packages+=("$package_path")
+    state_paths+=("$state_path")
 done <<< "$plugin_records"
 
 plugin_filter_count=0
@@ -378,12 +381,38 @@ if [[ ${#packages[@]} -eq 0 ]]; then
     exit 1
 fi
 
+if [[ "$plugin_filter_count" -eq 0 && "$SOURCE_IS_SINGLE_PLUGIN" -eq 0 ]]; then
+    for existing_package in "$PACKAGES_DIR"/*.mactoolsplugin(N/); do
+        is_expected=0
+        for package_path in "${packages[@]}"; do
+            if [[ "$existing_package" == "$package_path" ]]; then
+                is_expected=1
+                break
+            fi
+        done
+        [[ "$is_expected" == 0 ]] || continue
+        rm -rf -- "$existing_package"
+        removed_count=$((removed_count + 1))
+    done
+    for existing_state in "$STATE_DIR"/*.sha256(N); do
+        is_expected=0
+        for state_path in "${state_paths[@]}"; do
+            if [[ "$existing_state" == "$state_path" ]]; then
+                is_expected=1
+                break
+            fi
+        done
+        [[ "$is_expected" == 0 ]] || continue
+        rm -f -- "$existing_state"
+    done
+fi
+
 catalog_args=()
 for package in "${packages[@]}"; do
     catalog_args+=(--package "$package")
 done
 
-if [[ "$synced_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
+if [[ "$synced_count" -gt 0 || "$removed_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
     echo "Generating local plugin catalog..."
     "$REPO_ROOT/scripts/plugins/generate-plugin-catalog.sh" \
         --mode debug \
@@ -398,6 +427,9 @@ if [[ "$SKIP_INSTALL" != "1"
 fi
 
 echo "Synced $synced_count changed debug plugin package(s); skipped $skipped_count unchanged."
+if [[ "$removed_count" -gt 0 ]]; then
+    echo "Removed $removed_count stale debug output package(s)."
+fi
 echo "Catalog: $CATALOG_PATH"
 if [[ "$SKIP_INSTALL" != "1" ]]; then
     echo "Installed $installed_count debug plugin package(s)."

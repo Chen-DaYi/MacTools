@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import MacToolsPluginKit
 
 struct SavedScriptProcessResult: Equatable, Sendable {
     let exitCode: Int32
@@ -175,7 +176,7 @@ private final class SavedScriptProcessExecution: @unchecked Sendable {
     private let controlQueue = DispatchQueue(label: "cc.ggbond.mactools.saved-scripts.control")
 
     private var continuation: Continuation?
-    private var processID: pid_t = 0
+    private var processLease: PluginProcessGroupLease?
     private var outputDescriptor: Int32 = -1
     private var errorDescriptor: Int32 = -1
     private var outputSource: DispatchSourceRead?
@@ -219,8 +220,9 @@ private final class SavedScriptProcessExecution: @unchecked Sendable {
 
         do {
             let launch = try spawn()
+            let lease = PluginProcessGroupLease(processID: launch.processID)
             lock.withLock {
-                processID = launch.processID
+                processLease = lease
                 outputDescriptor = launch.outputDescriptor
                 errorDescriptor = launch.errorDescriptor
             }
@@ -236,15 +238,10 @@ private final class SavedScriptProcessExecution: @unchecked Sendable {
 
             DispatchQueue.global(qos: .utility).async { [weak self] in
                 guard let self else { return }
-                var status: Int32 = 0
-                var result: pid_t
-                repeat {
-                    result = waitpid(launch.processID, &status, 0)
-                } while result < 0 && errno == EINTR
+                let observedExit = lease.waitForLeaderExit()
                 self.markProcessExited()
-                let finalStatus = status
                 self.controlQueue.async { [weak self] in
-                    self?.processDidExit(status: finalStatus)
+                    self?.processDidExit(lease: lease, observedExit: observedExit)
                 }
             }
         } catch {
@@ -383,13 +380,13 @@ private final class SavedScriptProcessExecution: @unchecked Sendable {
     }
 
     private func requestStop(_ reason: SavedScriptStopReason) {
-        let pid = lock.withLock { () -> pid_t in
-            guard !processExited else { return -1 }
+        let lease = lock.withLock { () -> PluginProcessGroupLease? in
+            guard !didFinish else { return nil }
             if requestedStopReason == nil { requestedStopReason = reason }
-            return processID
+            return processLease
         }
-        guard pid > 0 else { return }
-        signalProcessGroup(SIGTERM)
+        guard let lease else { return }
+        lease.signal(SIGTERM)
         scheduleForcedKill()
     }
 
@@ -409,9 +406,7 @@ private final class SavedScriptProcessExecution: @unchecked Sendable {
     }
 
     private func signalProcessGroup(_ signal: Int32) {
-        let pid = lock.withLock { processID }
-        guard pid > 0 else { return }
-        _ = Darwin.kill(-pid, signal)
+        lock.withLock { processLease }?.signal(signal)
     }
 
     private func markProcessExited() {
@@ -422,20 +417,36 @@ private final class SavedScriptProcessExecution: @unchecked Sendable {
         }
     }
 
-    private func processDidExit(status: Int32) {
+    private func processDidExit(lease: PluginProcessGroupLease, observedExit: Bool) {
+        guard observedExit else {
+            _ = lease.reapLeader()
+            lock.withLock {
+                if processLease === lease {
+                    processLease = nil
+                }
+            }
+            completeAfterExit(status: nil)
+            return
+        }
         // A background descendant may still own the pipes. Process control intentionally uses
         // a queue independent from pipe draining so continuous output cannot delay termination.
-        signalProcessGroup(SIGTERM)
+        lease.signal(SIGTERM)
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.signalProcessGroup(SIGKILL)
+            lease.signal(SIGKILL)
+            let status = lease.reapLeader()
+            self.lock.withLock {
+                if self.processLease === lease {
+                    self.processLease = nil
+                }
+            }
             self.completeAfterExit(status: status)
         }
         lock.withLock { completionWorkItem = workItem }
         controlQueue.asyncAfter(deadline: .now() + 0.25, execute: workItem)
     }
 
-    private func completeAfterExit(status: Int32) {
+    private func completeAfterExit(status: Int32?) {
         // Serialize the last bounded reads with source callbacks before closing descriptors.
         ioQueue.sync {
             drain(descriptor: outputDescriptor, stream: .standardOutput)
@@ -449,6 +460,10 @@ private final class SavedScriptProcessExecution: @unchecked Sendable {
         case .timedOut:
             finish(throwing: SavedScriptProcessError.timedOut)
         case nil:
+            guard let status else {
+                finish(throwing: POSIXError(.ECHILD))
+                return
+            }
             finish(returning: SavedScriptProcessResult(
                 exitCode: Self.exitCode(from: status),
                 standardOutput: outputBuffer.string,

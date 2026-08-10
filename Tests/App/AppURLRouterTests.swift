@@ -440,4 +440,41 @@ final class AppURLRouterTests: XCTestCase {
 
         XCTAssertEqual(recursiveResult, .rejected(.recursiveActionInvocation))
     }
+
+    func testMutuallyRecursiveActionsAreRejectedUsingQueueAncestry() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in }
+        )
+        let first = try XCTUnwrap(URL(string: "mactools://app/actions/test-provider/first"))
+        let second = try XCTUnwrap(URL(string: "mactools://app/actions/test-provider/second"))
+        var nestedResults: [AppURLHandlingResult] = []
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionHandler: { request in
+                switch request {
+                case let .direct(key) where key.providerID == "test-provider"
+                    && key.actionID == "first":
+                    nestedResults.append(router.handle(second))
+                case let .direct(key) where key.providerID == "test-provider"
+                    && key.actionID == "second":
+                    nestedResults.append(router.handle(first))
+                default:
+                    break
+                }
+            }
+        )
+
+        _ = router.handle(first)
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(
+            nestedResults,
+            [
+                .queuedAction(.direct(ActionKey(providerID: "test-provider", actionID: "second"))),
+                .rejected(.recursiveActionInvocation),
+            ]
+        )
+    }
 }

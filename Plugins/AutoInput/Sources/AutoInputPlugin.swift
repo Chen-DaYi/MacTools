@@ -83,7 +83,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
             isEnabled: true,
             isVisible: true,
             detail: nil,
-            errorMessage: controller.errorMessage
+            errorMessage: persistenceErrorMessage ?? controller.errorMessage
         )
     }
 
@@ -94,8 +94,11 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
                 controller: controller,
                 localization: localization,
                 onChange: { [weak self] in
-                    self?.controller.configurationDidChange()
-                    self?.onStateChange?()
+                    guard let self else { return }
+                    if self.store.persistenceFailure == nil {
+                        self.controller.configurationDidChange()
+                    }
+                    self.onStateChange?()
                 }
             )
         }
@@ -166,24 +169,27 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
 
     func handleAction(_ action: PluginPanelAction) {
         guard case let .setSwitch(value) = action else { return }
-        setEnabled(value)
+        _ = setEnabled(value)
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        let enabled: Bool
         switch invocation.reference.key.actionID {
         case ActionID.toggle:
-            enabled = !store.isEnabled
+            return ActionExecutionHandle { [weak self] in
+                guard let self else { return .cancelled }
+                return self.setEnabled(!self.store.isEnabled)
+            }
         case ActionID.setEnabled:
             guard case let .boolean(value)? = invocation.reference.parameters["enabled"] else {
                 return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
             }
-            enabled = value
+            return ActionExecutionHandle { [weak self] in
+                guard let self else { return .cancelled }
+                return self.setEnabled(value)
+            }
         default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
-        setEnabled(enabled)
-        return ActionExecutionHandle { .succeeded() }
     }
 
     func applicationActivityStateDidChange(_ state: PluginApplicationActivityState) {
@@ -218,9 +224,28 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
     }
 
-    private func setEnabled(_ enabled: Bool) {
-        store.setEnabled(enabled)
+    private var persistenceErrorMessage: String? {
+        guard case let .rejected(rollbackSucceeded)? = store.persistenceFailure else {
+            return nil
+        }
+        return rollbackSucceeded
+            ? localization.string(
+                "error.persistenceFailed",
+                defaultValue: "无法保存自动切换输入法设置。"
+            )
+            : localization.string(
+                "error.persistenceRollbackFailed",
+                defaultValue: "无法保存自动切换输入法设置，且恢复先前设置失败。"
+            )
+    }
+
+    private func setEnabled(_ enabled: Bool) -> ActionExecutionResult {
+        guard store.setEnabled(enabled) == .committed else {
+            onStateChange?()
+            return .failed(message: persistenceErrorMessage ?? PluginKitLocalization.actionUnavailable)
+        }
         controller.configurationDidChange()
         onStateChange?()
+        return .succeeded()
     }
 }

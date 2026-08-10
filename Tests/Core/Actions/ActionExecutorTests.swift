@@ -33,6 +33,31 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(provider.beginCount, 0)
     }
 
+    func testRunLinkRejectsSuppliedSensitiveParameterBeforeProviderBegins() async throws {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(parameters: [
+            ActionParameterDefinition(
+                id: "token",
+                title: "Token",
+                kind: .string,
+                privacy: .sensitive
+            ),
+        ])
+        registry.synchronize([provider.registration(definition: definition)])
+        let reference = ActionReference(
+            key: definition.key,
+            parameters: try ActionParameterSet(["token": .string("secret")])
+        )
+
+        let outcome = await ActionExecutor(registry: registry).execute(
+            ActionInvocation(reference: reference, source: .runLink, mode: .foreground)
+        )
+
+        XCTAssertEqual(outcome, .rejected(.externalInvocationUnavailable))
+        XCTAssertEqual(provider.beginCount, 0)
+    }
+
     func testExecutorConfirmsThenRevalidatesProviderGeneration() async {
         let registry = ActionRegistry()
         let provider = ActionExecutorTestProvider()

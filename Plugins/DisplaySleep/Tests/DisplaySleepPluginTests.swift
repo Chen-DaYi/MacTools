@@ -45,6 +45,26 @@ final class DisplaySleepPluginTests: XCTestCase {
         )
     }
 
+    func testCanonicalActionReportsDisplaySleepFailure() async throws {
+        let plugin = DisplaySleepPlugin(
+            presentationPreparation: {},
+            displaySleepRequest: { false }
+        )
+        let reference = ActionReference(
+            key: ActionKey(providerID: "display-sleep", actionID: "execute")
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected display sleep failure, got \(result)")
+        }
+    }
+
     private func makeLocalizationBundle() throws -> (bundle: Bundle, directory: URL) {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

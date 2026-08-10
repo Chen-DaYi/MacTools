@@ -459,7 +459,79 @@ final class SavedScriptsPluginTests: XCTestCase {
         XCTAssertEqual(result, .cancelled)
     }
 
-    func testDeletingScriptCanCancelCanonicalExecutionBeforeRemovingItsRecord() async throws {
+    func testSavingChangedScriptCancelsItsActiveExecutionAfterPersistence() async throws {
+        let runner = SuspendingSavedScriptRunnerStub()
+        let plugin = SavedScriptsPlugin(
+            context: PluginRuntimeContext(
+                pluginID: "saved-scripts",
+                storage: SavedScriptsTestStorage()
+            ),
+            runner: runner
+        )
+        var script = try plugin.store.save(SavedScript(
+            name: "Redefine While Running",
+            kind: .zsh,
+            source: "sleep 60"
+        )).get()
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: ActionReference(
+                key: ActionKey(providerID: plugin.metadata.id, actionID: script.actionID)
+            ),
+            source: .workflow,
+            mode: .background
+        ))
+        let resultTask = Task { @MainActor in await handle.result() }
+        for _ in 0..<50 where !(await runner.didStart()) { await Task.yield() }
+
+        script.source = "echo changed"
+        _ = try plugin.saveScript(script).get()
+
+        let result = await resultTask.value
+        let wasCancelled = await runner.wasCancelled()
+        XCTAssertEqual(result, .cancelled)
+        XCTAssertTrue(wasCancelled)
+        XCTAssertEqual(plugin.store.script(id: script.id)?.source, "echo changed")
+    }
+
+    func testFailedScriptSaveDoesNotCancelItsActiveExecution() async throws {
+        let storage = SavedScriptsTestStorage()
+        let runner = SuspendingSavedScriptRunnerStub()
+        let plugin = SavedScriptsPlugin(
+            context: PluginRuntimeContext(pluginID: "saved-scripts", storage: storage),
+            runner: runner
+        )
+        var script = try plugin.store.save(SavedScript(
+            name: "Rejected Redefinition",
+            kind: .zsh,
+            source: "sleep 60"
+        )).get()
+        let originalSource = script.source
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: ActionReference(
+                key: ActionKey(providerID: plugin.metadata.id, actionID: script.actionID)
+            ),
+            source: .workflow,
+            mode: .background
+        ))
+        let resultTask = Task { @MainActor in await handle.result() }
+        for _ in 0..<50 where !(await runner.didStart()) { await Task.yield() }
+
+        storage.blocksWrites = true
+        script.source = "echo rejected"
+        guard case .failure = plugin.saveScript(script) else {
+            return XCTFail("expected persistence failure")
+        }
+        await Task.yield()
+
+        let wasCancelledBeforeCleanup = await runner.wasCancelled()
+        XCTAssertFalse(wasCancelledBeforeCleanup)
+        XCTAssertEqual(plugin.store.script(id: script.id)?.source, originalSource)
+        plugin.cancelExecution(scriptID: script.id)
+        let result = await resultTask.value
+        XCTAssertEqual(result, .cancelled)
+    }
+
+    func testDeletingScriptCancelsCanonicalExecutionAfterPersistence() async throws {
         let runner = SuspendingSavedScriptRunnerStub()
         let plugin = SavedScriptsPlugin(
             context: PluginRuntimeContext(
@@ -486,15 +558,48 @@ final class SavedScriptsPluginTests: XCTestCase {
             await Task.yield()
         }
 
-        plugin.cancelExecution(scriptID: script.id)
-        XCTAssertTrue(plugin.store.remove(id: script.id))
-        plugin.executionStore.removeRecord(for: script.id)
+        XCTAssertTrue(plugin.deleteScript(id: script.id))
 
         let result = await resultTask.value
         let wasCancelled = await runner.wasCancelled()
         XCTAssertEqual(result, .cancelled)
         XCTAssertTrue(wasCancelled)
         XCTAssertNil(plugin.executionStore.record(for: script.id))
+    }
+
+    func testFailedScriptDeleteDoesNotCancelExecutionOrRemoveRecord() async throws {
+        let storage = SavedScriptsTestStorage()
+        let runner = SuspendingSavedScriptRunnerStub()
+        let plugin = SavedScriptsPlugin(
+            context: PluginRuntimeContext(pluginID: "saved-scripts", storage: storage),
+            runner: runner
+        )
+        let script = try plugin.store.save(SavedScript(
+            name: "Rejected Delete",
+            kind: .zsh,
+            source: "sleep 60"
+        )).get()
+        let handle = try plugin.beginAction(ActionInvocation(
+            reference: ActionReference(
+                key: ActionKey(providerID: plugin.metadata.id, actionID: script.actionID)
+            ),
+            source: .workflow,
+            mode: .background
+        ))
+        let resultTask = Task { @MainActor in await handle.result() }
+        for _ in 0..<50 where !(await runner.didStart()) { await Task.yield() }
+
+        storage.blocksWrites = true
+        XCTAssertFalse(plugin.deleteScript(id: script.id))
+        await Task.yield()
+
+        XCTAssertNotNil(plugin.store.script(id: script.id))
+        XCTAssertNotNil(plugin.executionStore.record(for: script.id))
+        let wasCancelledBeforeCleanup = await runner.wasCancelled()
+        XCTAssertFalse(wasCancelledBeforeCleanup)
+        plugin.cancelExecution(scriptID: script.id)
+        let result = await resultTask.value
+        XCTAssertEqual(result, .cancelled)
     }
 }
 

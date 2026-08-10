@@ -1279,6 +1279,22 @@
         }
       }
     },
+    "preferencesBackup.preview.retainedUnavailableActions": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "سيتم الاحتفاظ بـ %d من الإجراءات غير المتاحة حاليًا؛ ويمكن استخدامها بعد استعادة الإضافات المقابلة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "%d derzeit nicht verfügbare Aktionen werden beibehalten und können nach Wiederherstellung der zugehörigen Plugins verwendet werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "%d currently unavailable actions will be retained and can be used after their plugins are restored." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Se conservarán %d acciones no disponibles actualmente y podrán usarse cuando se restauren sus plugins." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "%d actions actuellement indisponibles seront conservées et pourront être utilisées après la restauration de leurs extensions." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "現在利用できないアクション %d 件は保持され、対応するプラグインの復元後に使用できます。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "현재 사용할 수 없는 동작 %d개를 유지하며 해당 플러그인을 복원한 후 사용할 수 있습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Serão mantidas %d ações atualmente indisponíveis, que poderão ser usadas depois de restaurar os respetivos plugins." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "%d временно недоступных действий будут сохранены и станут доступны после восстановления соответствующих плагинов." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "将保留 %d 个当前不可用的操作；对应插件恢复后可继续使用。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "將保留 %d 個目前無法使用的操作；還原對應插件後即可繼續使用。" } }
+      }
+    },
     "preferencesBackup.preview.skipped": {
       "extractionState": "manual",
       "localizations": {

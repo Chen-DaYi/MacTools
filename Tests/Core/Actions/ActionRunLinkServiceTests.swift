@@ -156,6 +156,10 @@ final class ActionRunLinkServiceTests: XCTestCase {
             setup.service.resolve(.preset(forged.id)),
             .failure(.sensitiveParametersUnsupported)
         )
+        XCTAssertEqual(
+            setup.service.presentation(for: reference),
+            .unavailable(FeatureL10n.string("包含敏感参数的操作不能创建运行链接。"))
+        )
     }
 
     func testPresetReferenceMigratesAndPersistsBeforeResolution() throws {

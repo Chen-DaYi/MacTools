@@ -1,6 +1,7 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import MacToolsPluginKit
 
 struct HideNotchSnapshot: Equatable, Sendable {
     let hasSupportedDisplay: Bool
@@ -12,6 +13,11 @@ struct HideNotchSnapshot: Equatable, Sendable {
     let isProcessing: Bool
     let isAwaitingDisplay: Bool
     let errorMessage: String?
+}
+
+enum HideNotchSyncResult: Equatable {
+    case succeeded
+    case failed(message: String)
 }
 
 struct HideNotchDisplayContext: Equatable, Sendable {
@@ -98,4 +104,19 @@ protocol HideNotchWallpaperControlling: AnyObject {
     func snapshot() -> HideNotchSnapshot
     func refresh()
     func setEnabled(_ isEnabled: Bool)
+    func setEnabledAndWait(_ isEnabled: Bool) async -> HideNotchSyncResult
+}
+
+extension HideNotchWallpaperControlling {
+    func setEnabledAndWait(_ isEnabled: Bool) async -> HideNotchSyncResult {
+        setEnabled(isEnabled)
+        await Task.yield()
+        let current = snapshot()
+        if let message = current.errorMessage {
+            return .failed(message: message)
+        }
+        return current.isEnabled == isEnabled
+            ? .succeeded
+            : .failed(message: PluginKitLocalization.actionUnavailable)
+    }
 }

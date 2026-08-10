@@ -323,7 +323,7 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertTrue(references.isEmpty)
     }
 
-    func testExportOmitsRulesBoundToLocalDisplayIdentifiersAndReportsTheirCount() throws {
+    func testExportOmitsRulesBoundToLocalDisplayOrCalendarIdentifiersAndReportsTheirCount() throws {
         let provider = BackupActionProviderPlugin()
         let host = makeHost(plugins: [provider], defaults: makeDefaults())
         let workflow = try XCTUnwrap(host.automationController.createWorkflow())
@@ -359,10 +359,67 @@ final class PreferencesBackupTests: XCTestCase {
         ]
         host.automationController.saveRule(localCondition)
 
+        var localCalendar = try XCTUnwrap(
+            host.automationController.createRule(workflowID: workflow.id)
+        )
+        localCalendar.trigger = .calendar(CalendarAutomationTrigger(
+            phase: .starts,
+            calendarIdentifier: "eventkit-calendar-id"
+        ))
+        host.automationController.saveRule(localCalendar)
+
         let backup = host.makePreferencesBackup()
 
         XCTAssertEqual(backup.automationRules?.map(\.id), [portable.id])
-        XCTAssertEqual(host.deviceLocalAutomationRuleCount, 2)
+        XCTAssertEqual(host.deviceLocalAutomationRuleCount, 3)
+    }
+
+    func testImportDropsDeviceLocalDisplayAndCalendarRulesFromEditedBackup() throws {
+        let provider = BackupActionProviderPlugin()
+        let host = makeHost(plugins: [provider], defaults: makeDefaults())
+        let workflow = WorkflowDefinition(
+            name: "Imported",
+            steps: [WorkflowStep(reference: try provider.references()[0])]
+        )
+        let portableRule = AutomationRule(
+            name: "Portable",
+            workflowID: workflow.id,
+            trigger: .display(DisplayAutomationTrigger(
+                event: .connected,
+                displayNameContains: "Studio"
+            ))
+        )
+        let localRule = AutomationRule(
+            name: "Local",
+            workflowID: workflow.id,
+            trigger: .display(DisplayAutomationTrigger(
+                event: .connected,
+                displayIdentifier: "742311"
+            ))
+        )
+        let localCalendarRule = AutomationRule(
+            name: "Local Calendar",
+            workflowID: workflow.id,
+            trigger: .calendar(CalendarAutomationTrigger(
+                phase: .starts,
+                calendarIdentifier: "eventkit-calendar-id"
+            ))
+        )
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: [],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [:],
+            pluginPreferences: [provider.metadata.id: Data("provider-settings".utf8)],
+            workflows: [workflow],
+            automationRules: [portableRule, localRule, localCalendarRule]
+        )
+
+        _ = try host.importPreferences(backup)
+
+        XCTAssertEqual(host.automationController.rules.map(\.id), [portableRule.id])
     }
 
     func testActionSurfaceBackupPersistsProviderDependencyIndex() throws {
@@ -581,6 +638,101 @@ final class PreferencesBackupTests: XCTestCase {
             host.shortcutAssignmentService.assignment(for: plugin.reference)?.binding,
             imported
         )
+    }
+
+    func testCurrentImportValidatesShortcutCustomizationsAndActionsAsOneDesiredState() throws {
+        let ordinary = BackupTestPlugin(id: "ordinary", order: 1, shortcutID: "toggle")
+        let actionProvider = BackupActionProviderPlugin()
+        let host = makeHost(plugins: [ordinary, actionProvider], defaults: makeDefaults())
+        let binding = ShortcutBinding(keyCode: 18, modifiers: [.command, .option])
+        host.setShortcutBinding(binding, for: "ordinary.shortcut.toggle")
+        let reference = try actionProvider.references()[0]
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: [],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: ["ordinary.shortcut.toggle": .cleared],
+            actionShortcutAssignments: [ActionShortcutAssignmentRecord(
+                reference: reference,
+                binding: binding
+            )],
+            pluginPreferences: [
+                actionProvider.metadata.id: Data("provider-settings".utf8),
+            ]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(
+            host.shortcutAssignmentService.assignment(for: reference)?.binding,
+            binding
+        )
+        XCTAssertFalse(
+            host.shortcutItems.first { $0.id == "ordinary.shortcut.toggle" }?.canClear ?? true
+        )
+    }
+
+    func testCurrentImportRejectsNewShortcutConflictWithoutPartiallyApplyingState() throws {
+        let ordinary = BackupTestPlugin(id: "ordinary", order: 1, shortcutID: "toggle")
+        let actionProvider = BackupActionProviderPlugin()
+        let host = makeHost(plugins: [ordinary, actionProvider], defaults: makeDefaults())
+        let binding = ShortcutBinding(keyCode: 19, modifiers: [.command, .option])
+        let reference = try actionProvider.references()[0]
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: [],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: ["ordinary.shortcut.toggle": .custom(binding)],
+            actionShortcutAssignments: [ActionShortcutAssignmentRecord(
+                reference: reference,
+                binding: binding
+            )],
+            pluginPreferences: [
+                actionProvider.metadata.id: Data("provider-settings".utf8),
+            ]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertNotNil(result.shortcutErrors["action-shortcuts"])
+        XCTAssertNil(host.shortcutAssignmentService.assignment(for: reference))
+        XCTAssertFalse(
+            host.shortcutItems.first { $0.id == "ordinary.shortcut.toggle" }?.canClear ?? true
+        )
+    }
+
+    func testActionBackedShortcutCallbacksReceiveFinalGlobalAndImportedBindings() throws {
+        let plugin = BackupLegacyActionShortcutPlugin()
+        let host = makeHost(plugins: [plugin], defaults: makeDefaults())
+        let direct = ShortcutBinding(keyCode: 20, modifiers: [.command, .option])
+        XCTAssertEqual(host.setActionShortcutBinding(direct, to: plugin.reference), .success)
+        XCTAssertEqual(plugin.receivedBindings.compactMap { $0 }.last, direct)
+        let imported = ShortcutBinding(keyCode: 21, modifiers: [.command, .shift])
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: [],
+                hiddenPluginIDs: []
+            ),
+            shortcutCustomizations: [
+                BackupLegacyActionShortcutPlugin.shortcutItemID: .cleared,
+            ],
+            actionShortcutAssignments: [ActionShortcutAssignmentRecord(
+                reference: plugin.reference,
+                binding: imported
+            )]
+        )
+
+        let result = try host.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(plugin.receivedBindings.compactMap { $0 }.last, imported)
+        XCTAssertTrue(plugin.receivedBindings.allSatisfy { $0 != nil })
     }
 
     func testPreviewAndImportShareSelectedPreferenceDefinedWorkflowContext() throws {
@@ -829,7 +981,54 @@ final class PreferencesBackupTests: XCTestCase {
         let preview = try host.preferencesImportPreview(for: backup)
 
         XCTAssertEqual(preview.shortcutCount, 0)
-        XCTAssertTrue(preview.unavailableActionReferences.contains(unpublished))
+        XCTAssertTrue(preview.unavailableActionReferences.isEmpty)
+        XCTAssertEqual(preview.retainedUnavailableActionReferences, [unpublished])
+    }
+
+    func testPreviewReportsUnavailableRunLinkAndWorkflowReferencesAsRetained() throws {
+        let plugin = BackupMigratingActionPlugin()
+        let host = makeHost(plugins: [plugin], defaults: makeDefaults())
+        let unpublished = try plugin.unpublishedReference()
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:],
+            actionInvocationPresets: [ActionInvocationPreset(reference: unpublished)],
+            workflows: [WorkflowDefinition(
+                name: "Unavailable action",
+                steps: [WorkflowStep(reference: unpublished)]
+            )]
+        )
+        let runLinksOnly = PreferencesBackupSelection(
+            includesApplicationPreferences: false,
+            includesPluginLayout: false,
+            includesShortcuts: false,
+            includesAutomation: false,
+            includesRunLinks: true,
+            pluginPreferenceIDs: []
+        )
+        let automationOnly = PreferencesBackupSelection(
+            includesApplicationPreferences: false,
+            includesPluginLayout: false,
+            includesShortcuts: false,
+            includesAutomation: true,
+            includesRunLinks: false,
+            pluginPreferenceIDs: []
+        )
+
+        let runLinkPreview = try host.preferencesImportPreview(
+            for: backup,
+            selection: runLinksOnly
+        )
+        let automationPreview = try host.preferencesImportPreview(
+            for: backup,
+            selection: automationOnly
+        )
+
+        XCTAssertTrue(runLinkPreview.unavailableActionReferences.isEmpty)
+        XCTAssertEqual(runLinkPreview.retainedUnavailableActionReferences, [unpublished])
+        XCTAssertTrue(automationPreview.unavailableActionReferences.isEmpty)
+        XCTAssertEqual(automationPreview.retainedUnavailableActionReferences, [unpublished])
     }
 
     func testExportMigratesOlderRunLinkSchemaBeforePortabilityFiltering() throws {
@@ -1442,6 +1641,11 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertNil(decoded.workflows)
         XCTAssertNil(decoded.automationRules)
         XCTAssertFalse(decoded.actionShortcutAssignmentsWereEncoded)
+        XCTAssertTrue(decoded.effectiveSelection.includesApplicationPreferences)
+        XCTAssertTrue(decoded.effectiveSelection.includesPluginLayout)
+        XCTAssertTrue(decoded.effectiveSelection.includesShortcuts)
+        XCTAssertFalse(decoded.effectiveSelection.includesAutomation)
+        XCTAssertFalse(decoded.effectiveSelection.includesRunLinks)
     }
 
     func testDecodeTreatsVersionFourBackupWithoutSelectionAsAFullBackup() throws {
@@ -2089,7 +2293,8 @@ private final class DynamicBackupShortcutPlugin: MacToolsPlugin, PluginPortableP
 private final class BackupLegacyActionShortcutPlugin:
     MacToolsPlugin,
     PluginActionProviding,
-    PluginLegacyActionShortcutProviding
+    PluginLegacyActionShortcutProviding,
+    PluginShortcutBindingChangeHandling
 {
     static let shortcutItemID = "backup-legacy-action-shortcut.shortcut.toggle"
 
@@ -2112,6 +2317,7 @@ private final class BackupLegacyActionShortcutPlugin:
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var receivedBindings: [ShortcutBinding?] = []
 
     var reference: ActionReference { ActionReference(key: definition.key) }
     var actionDefinitions: [ActionDefinition] { [definition] }
@@ -2143,6 +2349,11 @@ private final class BackupLegacyActionShortcutPlugin:
     }
 
     func legacyActionShortcutsDidMigrate() {}
+
+    func shortcutBindingDidChange(id: String, binding: ShortcutBinding?) {
+        guard id == "toggle" else { return }
+        receivedBindings.append(binding)
+    }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         ActionExecutionHandle { .succeeded() }

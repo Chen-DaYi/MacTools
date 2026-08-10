@@ -122,6 +122,47 @@ final class DisplayResolutionPluginTests: XCTestCase {
         XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
     }
 
+    func testIdenticalExternalDisplaysResolveToTheSelectedLocalIdentifier() async throws {
+        let first = DisplayInfo(
+            id: 42,
+            name: "Identical Display",
+            isBuiltin: false,
+            isMain: true,
+            vendorNumber: 1,
+            modelNumber: 2,
+            serialNumber: nil
+        )
+        let second = DisplayInfo(
+            id: 43,
+            name: "Identical Display",
+            isBuiltin: false,
+            isMain: false,
+            vendorNumber: 1,
+            modelNumber: 2,
+            serialNumber: nil
+        )
+        let controller = MockDisplayResolutionController(
+            displays: [first, second],
+            modes: [makeMode(modeId: 9, width: 2560, height: 1440)]
+        )
+        let plugin = DisplayResolutionPlugin(
+            controller: controller,
+            displayIdentifier: { "local-display-\($0.id)" }
+        )
+        let secondReference = try XCTUnwrap(plugin.actionCatalogEntries.first(where: {
+            $0.reference.parameters["display"] == .string("local-display-43")
+        })?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: secondReference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        XCTAssertEqual(result, .succeeded())
+        XCTAssertEqual(controller.appliedDisplayIDs, [43])
+    }
+
     private func makeMode(
         modeId: Int32,
         width: Int,
@@ -151,18 +192,23 @@ final class DisplayResolutionPluginTests: XCTestCase {
 
 @MainActor
 private final class MockDisplayResolutionController: DisplayResolutionControlling {
-    let display: DisplayInfo
+    let displays: [DisplayInfo]
     var modes: [DisplayResolutionInfo]
     private(set) var appliedDisplayIDs: [CGDirectDisplayID] = []
     private(set) var appliedModes: [DisplayResolutionInfo] = []
 
     init(display: DisplayInfo, modes: [DisplayResolutionInfo]) {
-        self.display = display
+        self.displays = [display]
+        self.modes = modes
+    }
+
+    init(displays: [DisplayInfo], modes: [DisplayResolutionInfo]) {
+        self.displays = displays
         self.modes = modes
     }
 
     func listConnectedDisplays() -> [DisplayInfo] {
-        [display]
+        displays
     }
 
     func listAvailableResolutions(for displayID: CGDirectDisplayID) -> [DisplayResolutionInfo] {

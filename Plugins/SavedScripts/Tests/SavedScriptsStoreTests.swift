@@ -117,6 +117,95 @@ final class SavedScriptsStoreTests: XCTestCase {
         XCTAssertEqual(storage.data(forKey: "library.v1"), storedData)
     }
 
+    func testCorruptingWriteRestoresPreviousLibraryBytes() throws {
+        let storage = SavedScriptsTestStorage()
+        let store = SavedScriptsStore(storage: storage)
+        let original = try store.save(SavedScript(
+            name: "Original",
+            kind: .zsh,
+            source: "echo original"
+        )).get()
+        let storedData = try XCTUnwrap(storage.data(forKey: "library.v1"))
+        var changed = original
+        changed.source = "echo changed"
+        storage.enqueueWriteBehaviors([.corrupt, .accept], forKey: "library.v1")
+
+        XCTAssertThrowsError(try store.save(changed).get()) { error in
+            XCTAssertEqual(error as? SavedScriptValidationError, .persistenceFailed)
+        }
+        XCTAssertEqual(store.scripts, [original])
+        XCTAssertEqual(storage.data(forKey: "library.v1"), storedData)
+        XCTAssertEqual(SavedScriptsStore(storage: storage).scripts, [original])
+    }
+
+    func testFailedWriteRollbackReloadsRecoveryRequiredState() throws {
+        let storage = SavedScriptsTestStorage()
+        let store = SavedScriptsStore(storage: storage)
+        let original = try store.save(SavedScript(
+            name: "Original",
+            kind: .zsh,
+            source: "echo original"
+        )).get()
+        var changed = original
+        changed.source = "echo changed"
+        storage.enqueueWriteBehaviors([.corrupt, .ignore], forKey: "library.v1")
+
+        XCTAssertThrowsError(try store.save(changed).get()) { error in
+            XCTAssertEqual(error as? SavedScriptValidationError, .persistenceFailed)
+        }
+        XCTAssertTrue(store.scripts.isEmpty)
+        XCTAssertEqual(store.loadError, "invalid-saved-scripts-library")
+        XCTAssertEqual(storage.object(forKey: "library.v1") as? String, "corrupt")
+    }
+
+    func testWrongTypedLibraryIsRecoveryRequiredAndNotOverwritten() {
+        let storage = SavedScriptsTestStorage()
+        storage.values["library.v1"] = "invalid"
+        let store = SavedScriptsStore(storage: storage)
+
+        XCTAssertEqual(store.loadError, "invalid-saved-scripts-library")
+        XCTAssertThrowsError(try store.save(SavedScript(
+            name: "Must Not Overwrite",
+            kind: .zsh,
+            source: "echo protected"
+        )).get()) { error in
+            XCTAssertEqual(error as? SavedScriptValidationError, .recoveryRequired)
+        }
+        XCTAssertEqual(storage.object(forKey: "library.v1") as? String, "invalid")
+    }
+
+    func testUnreadableLibraryDoesNotExportAnEmptyReplacementBackup() throws {
+        let unreadableValues: [Any] = [
+            "wrong-type",
+            Data("malformed".utf8),
+        ]
+
+        for unreadableValue in unreadableValues {
+            let sourceStorage = SavedScriptsTestStorage()
+            sourceStorage.values["library.v1"] = unreadableValue
+            let source = SavedScriptsStore(storage: sourceStorage)
+            let destination = SavedScriptsStore(storage: SavedScriptsTestStorage())
+            let retained = try destination.save(SavedScript(
+                name: "Retained",
+                kind: .zsh,
+                source: "echo retained"
+            )).get()
+
+            let backup = source.portableBackup()
+            if let backup {
+                XCTFail("Unreadable source must not export a replacement payload")
+                _ = destination.restorePortableBackup(backup)
+            }
+
+            XCTAssertNil(backup)
+            XCTAssertEqual(destination.scripts, [retained])
+            XCTAssertTrue(
+                (sourceStorage.object(forKey: "library.v1") as? NSObject)?
+                    .isEqual(unreadableValue) == true
+            )
+        }
+    }
+
     func testValidationRejectsEmptyOversizedAndOutOfRangeScripts() {
         let store = SavedScriptsStore(storage: SavedScriptsTestStorage())
         XCTAssertThrowsError(try store.save(SavedScript(

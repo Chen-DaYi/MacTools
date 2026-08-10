@@ -508,7 +508,7 @@ final class FixDamagedAppProcessExecution: @unchecked Sendable {
     private let executableURL: URL
     private let arguments: [String]
     private let lock = NSLock()
-    private var processID: pid_t = 0
+    private var processLease: PluginProcessGroupLease?
     private var cancellationRequested = false
 
     init(executableURL: URL, arguments: [String]) {
@@ -533,14 +533,14 @@ final class FixDamagedAppProcessExecution: @unchecked Sendable {
     }
 
     func cancel() {
-        let pid = lock.withLock { () -> pid_t in
+        let lease = lock.withLock { () -> PluginProcessGroupLease? in
             cancellationRequested = true
-            return processID
+            return processLease
         }
-        guard pid > 0 else { return }
-        _ = Darwin.kill(-pid, SIGTERM)
+        guard let lease else { return }
+        lease.signal(SIGTERM)
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.forceKillIfStillRunning(pid)
+            self?.forceKillIfStillRunning(lease)
         }
     }
 
@@ -592,31 +592,32 @@ final class FixDamagedAppProcessExecution: @unchecked Sendable {
 
         let reader = FixDamagedAppPipeReader(descriptor: errorPipe[0])
         reader.start()
+        let lease = PluginProcessGroupLease(processID: pid)
         let shouldCancel = lock.withLock { () -> Bool in
-            processID = pid
+            processLease = lease
             return cancellationRequested
         }
         if shouldCancel {
-            _ = Darwin.kill(-pid, SIGTERM)
+            lease.signal(SIGTERM)
         }
 
-        var status: Int32 = 0
-        var waitResult: pid_t
-        repeat {
-            waitResult = waitpid(pid, &status, 0)
-        } while waitResult < 0 && errno == EINTR
-
-        _ = Darwin.kill(-pid, SIGTERM)
-        usleep(100_000)
-        _ = Darwin.kill(-pid, SIGKILL)
+        let observedExit = lease.waitForLeaderExit()
+        if observedExit {
+            lease.signal(SIGTERM)
+            usleep(100_000)
+            lease.signal(SIGKILL)
+        }
+        let status = lease.reapLeader()
         let errorData = reader.waitForData()
         let wasCancelled = lock.withLock { () -> Bool in
-            processID = 0
+            if processLease === lease {
+                processLease = nil
+            }
             return cancellationRequested
         }
         if wasCancelled { throw CancellationError() }
-        guard waitResult == pid else {
-            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .ECHILD)
+        guard observedExit, let status else {
+            throw POSIXError(.ECHILD)
         }
         return FixDamagedAppProcessResult(
             exitCode: Self.exitCode(from: status),
@@ -624,11 +625,9 @@ final class FixDamagedAppProcessExecution: @unchecked Sendable {
         )
     }
 
-    private func forceKillIfStillRunning(_ pid: pid_t) {
-        let isCurrent = lock.withLock { processID == pid }
-        if isCurrent {
-            _ = Darwin.kill(-pid, SIGKILL)
-        }
+    private func forceKillIfStillRunning(_ lease: PluginProcessGroupLease) {
+        let isCurrent = lock.withLock { processLease === lease }
+        if isCurrent { lease.signal(SIGKILL) }
     }
 
     private static func exitCode(from status: Int32) -> Int32 {

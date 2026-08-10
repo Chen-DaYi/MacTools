@@ -157,7 +157,18 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
     }
 
     var effectiveSelection: PreferencesBackupSelection {
-        selection ?? .all(pluginPreferenceIDs: Set(pluginPreferences.keys))
+        if let selection { return selection }
+        if formatVersion <= 3 {
+            return PreferencesBackupSelection(
+                includesApplicationPreferences: true,
+                includesPluginLayout: true,
+                includesShortcuts: true,
+                includesAutomation: false,
+                includesRunLinks: false,
+                pluginPreferenceIDs: Set(pluginPreferences.keys)
+            )
+        }
+        return .all(pluginPreferenceIDs: Set(pluginPreferences.keys))
     }
 
     func encodedJSON() throws -> Data {
@@ -287,6 +298,7 @@ struct PreferencesImportPreview: Equatable {
     let shortcutCount: Int
     let unavailableShortcutIDs: [String]
     let unavailableActionReferences: [ActionReference]
+    let retainedUnavailableActionReferences: [ActionReference]
     let installablePlugins: [PreferencesImportInstallablePlugin]
     let selection: PreferencesBackupSelection
 
@@ -370,14 +382,18 @@ struct PreferencesImportPreview: Equatable {
         let availableActionCount = (selection.includesShortcuts ? backup.actionShortcutAssignments : []).filter {
             canResolve($0.reference)
         }.count
-        let unavailableShortcutActionReferences = (selection.includesShortcuts
-            ? backup.actionShortcutAssignments
-            : [])
-            .map(\.reference)
-            .filter { !canResolve($0) }
         let unavailableActionReferences = Array(Set(
-            unavailableShortcutActionReferences
-                + selectedActionReferences.filter { !actionReferenceIsRestorable($0) }
+            selectedActionReferences.filter { !actionReferenceIsRestorable($0) }
+        )).sorted { lhs, rhs in
+            if lhs.key.providerID != rhs.key.providerID {
+                return lhs.key.providerID < rhs.key.providerID
+            }
+            return lhs.key.actionID < rhs.key.actionID
+        }
+        let retainedUnavailableActionReferences = Array(Set(
+            selectedActionReferences.filter {
+                actionReferenceIsRestorable($0) && !canResolve($0)
+            }
         )).sorted { lhs, rhs in
             if lhs.key.providerID != rhs.key.providerID {
                 return lhs.key.providerID < rhs.key.providerID
@@ -391,6 +407,7 @@ struct PreferencesImportPreview: Equatable {
                 + availableActionCount,
             unavailableShortcutIDs: backedUpShortcutIDs.subtracting(availableShortcutIDs).sorted(),
             unavailableActionReferences: unavailableActionReferences,
+            retainedUnavailableActionReferences: retainedUnavailableActionReferences,
             installablePlugins: installablePlugins.sorted { $0.title.localizedCompare($1.title) == .orderedAscending },
             selection: selection
         )

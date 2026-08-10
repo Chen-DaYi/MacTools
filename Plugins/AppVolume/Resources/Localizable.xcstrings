@@ -1,6 +1,86 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "action.persistenceFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر حفظ إعدادات مستوى صوت التطبيق." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die App-Lautstärkeeinstellungen konnten nicht gesichert werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Unable to save app volume settings." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se han podido guardar los ajustes de volumen de la app." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible d’enregistrer les réglages de volume de l’app." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリの音量設定を保存できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱 음량 설정을 저장할 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível salvar os ajustes de volume do app." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось сохранить настройки громкости приложения." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法保存应用音量设置。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法儲存應用程式音量設定。" } }
+      }
+    },
+    "action.persistenceRouteRollbackFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر حفظ إعدادات مستوى صوت التطبيق، كما تعذرت استعادة التوجيه السابق." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die App-Lautstärkeeinstellungen konnten nicht gesichert und das vorherige Routing nicht wiederhergestellt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Unable to save app volume settings or restore the previous routing." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se han podido guardar los ajustes de volumen ni restaurar el enrutamiento anterior." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible d’enregistrer le volume de l’app et de restaurer le routage précédent." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリの音量設定を保存できず、以前のルーティングも復元できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱 음량 설정을 저장하거나 이전 라우팅을 복원할 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível salvar o volume do app nem restaurar o roteamento anterior." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось сохранить громкость приложения и восстановить предыдущую маршрутизацию." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法保存应用音量设置，且恢复先前路由失败。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法儲存應用程式音量設定，且無法還原先前路由。" } }
+      }
+    },
+    "action.persistenceStorageRollbackFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر حفظ إعدادات مستوى صوت التطبيق، كما تعذرت استعادة القيمة المخزنة السابقة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die App-Lautstärkeeinstellungen konnten nicht gesichert und der vorherige Speicherwert nicht wiederhergestellt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Unable to save app volume settings or restore the previous stored value." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se han podido guardar los ajustes de volumen ni restaurar el valor almacenado anterior." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible d’enregistrer le volume de l’app et de restaurer la valeur précédente." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリの音量設定を保存できず、以前の保存値も復元できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱 음량 설정을 저장하거나 이전 저장 값을 복원할 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível salvar o volume do app nem restaurar o valor anterior." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось сохранить громкость приложения и восстановить предыдущее значение." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法保存应用音量设置，且恢复先前存储值失败。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法儲存應用程式音量設定，且無法還原先前儲存值。" } }
+      }
+    },
+    "action.routeFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر تطبيق إعدادات مستوى صوت التطبيق." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die App-Lautstärkeeinstellungen konnten nicht angewendet werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The app volume settings could not be applied." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudieron aplicar los ajustes de volumen de la app." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible d’appliquer les réglages de volume de l’app." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリの音量設定を適用できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱 음량 설정을 적용하지 못했습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível aplicar as definições de volume da app." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось применить настройки громкости приложения." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法应用应用音量设置。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法套用應用程式音量設定。" } }
+      }
+    },
+    "action.routeRollbackFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر تطبيق إعدادات مستوى صوت التطبيق، كما تعذرت استعادة التوجيه السابق." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die App-Lautstärkeeinstellungen konnten nicht angewendet und das vorherige Routing nicht wiederhergestellt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The app volume settings could not be applied, and the previous routing could not be restored." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudieron aplicar los ajustes de volumen ni restaurar el enrutamiento anterior." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible d’appliquer les réglages de volume et de restaurer le routage précédent." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリの音量設定を適用できず、以前のルーティングも復元できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱 음량 설정을 적용하지 못했고 이전 라우팅도 복원하지 못했습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível aplicar as definições de volume nem restaurar o encaminhamento anterior." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось применить настройки громкости приложения и восстановить прежнюю маршрутизацию." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法应用应用音量设置，且恢复先前路由失败。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法套用應用程式音量設定，且無法還原先前的路由。" } }
+      }
+    },
     "error.permissionDenied": {
       "extractionState": "manual",
       "localizations": {

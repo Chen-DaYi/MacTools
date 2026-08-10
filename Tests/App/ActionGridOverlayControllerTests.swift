@@ -21,6 +21,35 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         super.tearDown()
     }
 
+    func testActionSurfacesChooseSupportedModeAndExposeExecutionFailures() {
+        let backgroundOnly = ActionDefinition(
+            key: ActionKey(providerID: "test", actionID: "background"),
+            title: "Background",
+            description: "",
+            systemImage: "bolt",
+            capabilities: [.background]
+        )
+        let foreground = ActionDefinition(
+            key: ActionKey(providerID: "test", actionID: "foreground"),
+            title: "Foreground",
+            description: "",
+            systemImage: "bolt",
+            capabilities: [.background, .foregroundInteractive]
+        )
+
+        XCTAssertEqual(ActionSurfaceExecutionSupport.preferredMode(for: backgroundOnly), .background)
+        XCTAssertEqual(ActionSurfaceExecutionSupport.preferredMode(for: foreground), .foreground)
+        XCTAssertEqual(
+            ActionSurfaceExecutionSupport.feedback(for: .completed(.failed(message: "failed"))),
+            "failed"
+        )
+        XCTAssertEqual(
+            ActionSurfaceExecutionSupport.feedback(for: .rejected(.executionTimedOut)),
+            "The action timed out."
+        )
+        XCTAssertNil(ActionSurfaceExecutionSupport.feedback(for: .completed(.succeeded())))
+    }
+
     func testGeometryClampsGridToPointerDisplayVisibleFrame() {
         let visible = CGRect(x: 1_000, y: 200, width: 700, height: 500)
         let frame = ActionGridOverlayGeometry.targetFrame(
@@ -556,6 +585,26 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
     }
 
+    func testPresentationRejectsInvalidSlotsInsideNestedFolders() {
+        let host = makePluginHostForTests(plugins: [])
+        let controller = ActionGridOverlayController(pluginHost: host)
+        defer { controller.close(restoringFocus: false) }
+        let reference = ActionReference(
+            key: ActionKey(providerID: "missing", actionID: "run")
+        )
+        let folder = ActionGridPresentationEntry(
+            id: "folder",
+            folderTitle: "Folder",
+            children: [
+                ActionGridPresentationEntry(id: "one", reference: reference, slotIndex: 2),
+                ActionGridPresentationEntry(id: "two", reference: reference, slotIndex: 2),
+            ]
+        )
+
+        XCTAssertFalse(controller.present(entries: [folder]))
+        XCTAssertFalse(controller.isShown)
+    }
+
     func testRepeatedPresentationReturnsNestedGridToFreshRoot() throws {
         let host = makePluginHostForTests(plugins: [])
         let controller = ActionGridOverlayController(pluginHost: host)
@@ -943,6 +992,44 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertNil(model.executingEntryID)
         XCTAssertEqual(model.feedback, "The test action failed.")
         XCTAssertEqual(layoutStates.last?.feedback, true)
+    }
+
+    func testModelIgnoresCompletionFromExecutionInvalidatedByUpdate() async {
+        let reference = ActionReference(
+            key: ActionKey(providerID: "provider", actionID: "run")
+        )
+        var continuation: CheckedContinuation<ActionExecutionOutcome, Never>?
+        var successfulExecutionCount = 0
+        let model = ActionGridOverlayModel(
+            resolver: { entry in
+                ResolvedActionGridEntry(
+                    id: entry.id,
+                    reference: entry.reference,
+                    title: entry.id,
+                    ownerTitle: "Test",
+                    systemImage: "bolt",
+                    availability: .available
+                )
+            },
+            executor: { _ in
+                await withCheckedContinuation { continuation = $0 }
+            }
+        )
+        model.onSuccessfulExecution = { successfulExecutionCount += 1 }
+        model.update([ActionGridPresentationEntry(id: "old", reference: reference)])
+        model.activateSelected()
+        for _ in 0 ..< 100 where continuation == nil {
+            await Task.yield()
+        }
+
+        model.update([ActionGridPresentationEntry(id: "new", reference: reference)])
+        continuation?.resume(returning: .completed(.failed(message: "stale failure")))
+        await Task.yield()
+
+        XCTAssertEqual(model.entries.map(\.id), ["new"])
+        XCTAssertFalse(model.isExecuting)
+        XCTAssertNil(model.feedback)
+        XCTAssertEqual(successfulExecutionCount, 0)
     }
 
     func testFolderNavigationStaysInOverlayAndDoesNotExecuteFolderSentinel() {

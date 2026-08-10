@@ -1,6 +1,16 @@
 import Foundation
 import MacToolsPluginKit
 
+@MainActor
+protocol ActionInvocationPresetPersisting: AnyObject {
+    func object(forKey defaultName: String) -> Any?
+    func data(forKey defaultName: String) -> Data?
+    func set(_ value: Any?, forKey defaultName: String)
+    func removeObject(forKey defaultName: String)
+}
+
+extension UserDefaults: ActionInvocationPresetPersisting {}
+
 struct ActionInvocationPreset: Codable, Equatable, Sendable, Identifiable {
     static let currentFormatVersion = 1
 
@@ -46,15 +56,24 @@ final class ActionInvocationPresetStore {
     static let maximumPresetCount = 256
     static let maximumPayloadByteCount = 512 * 1_024
 
-    private let userDefaults: UserDefaults
+    private let defaults: any ActionInvocationPresetPersisting
     private(set) var loadError: String?
 
     init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+        self.defaults = userDefaults
+    }
+
+    init(defaults: any ActionInvocationPresetPersisting) {
+        self.defaults = defaults
     }
 
     func presets() -> [ActionInvocationPreset] {
-        guard let data = userDefaults.data(forKey: DefaultsKey.presets) else {
+        guard let storedValue = defaults.object(forKey: DefaultsKey.presets) else {
+            loadError = nil
+            return []
+        }
+        guard let data = storedValue as? Data else {
+            loadError = "invalid-preset-payload"
             return []
         }
         guard data.count <= Self.maximumPayloadByteCount else {
@@ -126,7 +145,17 @@ final class ActionInvocationPresetStore {
         }
 
         var stored = presets()
-        if let existing = preset(reference: reference) {
+        guard loadError == nil else {
+            return .failure(.persistenceFailed)
+        }
+        if let existing = stored
+            .filter({ $0.reference == reference })
+            .min(by: { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }) {
             return .success(existing)
         }
         guard stored.count < Self.maximumPresetCount else {
@@ -143,6 +172,7 @@ final class ActionInvocationPresetStore {
     @discardableResult
     func delete(id: UUID) -> Bool {
         var stored = presets()
+        guard loadError == nil else { return false }
         let originalCount = stored.count
         stored.removeAll { $0.id == id }
         guard stored.count != originalCount else {
@@ -154,6 +184,7 @@ final class ActionInvocationPresetStore {
     @discardableResult
     func delete(reference: ActionReference) -> Bool {
         var stored = presets()
+        guard loadError == nil else { return false }
         let originalCount = stored.count
         stored.removeAll { $0.reference == reference }
         guard stored.count != originalCount else {
@@ -165,6 +196,7 @@ final class ActionInvocationPresetStore {
     @discardableResult
     func updateReference(id: UUID, reference: ActionReference) -> Bool {
         var stored = presets()
+        guard loadError == nil else { return false }
         guard let index = stored.firstIndex(where: { $0.id == id }) else {
             return false
         }
@@ -182,6 +214,21 @@ final class ActionInvocationPresetStore {
 
     @discardableResult
     func replaceAll(_ presets: [ActionInvocationPreset]) -> Bool {
+        _ = self.presets()
+        guard loadError == nil else { return false }
+        return replaceAll(presets, allowsRecovery: false)
+    }
+
+    @discardableResult
+    func replaceAllForRecovery(_ presets: [ActionInvocationPreset]) -> Bool {
+        replaceAll(presets, allowsRecovery: true)
+    }
+
+    private func replaceAll(
+        _ presets: [ActionInvocationPreset],
+        allowsRecovery: Bool
+    ) -> Bool {
+        guard allowsRecovery || loadError == nil else { return false }
         guard presets.count <= Self.maximumPresetCount,
               Set(presets.map(\.id)).count == presets.count,
               presets.allSatisfy({
@@ -199,10 +246,37 @@ final class ActionInvocationPresetStore {
             guard data.count <= Self.maximumPayloadByteCount else {
                 return false
             }
-            userDefaults.set(data, forKey: DefaultsKey.presets)
-            return userDefaults.data(forKey: DefaultsKey.presets) == data
+            let previousValue = defaults.object(forKey: DefaultsKey.presets)
+            defaults.set(data, forKey: DefaultsKey.presets)
+            guard defaults.data(forKey: DefaultsKey.presets) == data else {
+                _ = restore(previousValue, forKey: DefaultsKey.presets)
+                _ = self.presets()
+                return false
+            }
+            loadError = nil
+            return true
         } catch {
             return false
+        }
+    }
+
+    private func restore(_ value: Any?, forKey key: String) -> Bool {
+        if let value {
+            defaults.set(value, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+        return valuesMatch(defaults.object(forKey: key), value)
+    }
+
+    private func valuesMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            true
+        case let (lhs as NSObject, rhs as NSObject):
+            lhs.isEqual(rhs)
+        default:
+            false
         }
     }
 }

@@ -538,9 +538,17 @@ final class KeepAwakePlugin:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
 
-        let failedMessage = shouldBeEnabled && session == nil
-            ? localization.string("error.enableFailed", defaultValue: "无法启用阻止休眠。")
-            : nil
+        let failedMessage: String?
+        if shouldBeEnabled, session == nil {
+            failedMessage = localization.string(
+                "error.enableFailed",
+                defaultValue: "无法启用阻止休眠。"
+            )
+        } else if !shouldBeEnabled, let cleanupError = pendingUserActivityCleanupError {
+            failedMessage = cleanupError.localizedDescription
+        } else {
+            failedMessage = nil
+        }
         return ActionExecutionHandle {
             if let failedMessage {
                 return .failed(message: failedMessage)

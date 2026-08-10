@@ -169,6 +169,115 @@ final class WorkflowRunnerTests: XCTestCase {
         XCTAssertTrue(harness.provider.invocations.isEmpty)
     }
 
+    func testCancellationBeforeResultReleasesAllRunnerBookkeeping() throws {
+        let harness = try makeHarness(actionIDs: ["first"])
+        let workflow = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: harness.reference("first"))]
+        )
+        let execution = try harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .manual,
+            mode: .foreground
+        ).get()
+
+        execution.actionHandle.cancel()
+
+        XCTAssertTrue(harness.runner.bookkeepingRunIDs.isEmpty)
+        XCTAssertTrue(harness.provider.invocations.isEmpty)
+    }
+
+    func testCancellationDuringFinalNonCancellableActionCancelsPersistedRun() async throws {
+        let harness = try makeHarness(
+            actionIDs: ["slow"],
+            nonCancellableActionIDs: ["slow"]
+        )
+        harness.provider.nonCooperativeActionIDs.insert("slow")
+        let workflow = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: harness.reference("slow"))]
+        )
+        let execution = try harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .manual,
+            mode: .foreground
+        ).get()
+        let resultTask = Task { @MainActor in await execution.actionHandle.result() }
+        await harness.provider.waitUntilNonCooperativeActionStarts()
+
+        execution.actionHandle.cancel()
+        harness.provider.resumeNonCooperativeActions(with: .succeeded())
+        let result = await resultTask.value
+        let run = try XCTUnwrap(harness.store.history(workflowID: workflow.id).first)
+
+        XCTAssertEqual(result, .cancelled)
+        XCTAssertEqual(run.status, .cancelled)
+        XCTAssertEqual(run.stepResults.map(\.status), [.succeeded])
+        XCTAssertEqual(harness.provider.invocations.count, 1)
+        XCTAssertTrue(harness.provider.cancelledActionIDs.isEmpty)
+    }
+
+    func testCancellationDuringFailedStopTerminalPersistenceCancelsHistory() async throws {
+        let checkpoint = WorkflowRunnerTerminalCheckpoint()
+        let harness = try makeHarness(
+            actionIDs: ["fail"],
+            terminalCheckpoint: checkpoint
+        )
+        harness.provider.results["fail"] = .failed(message: "failure")
+        let workflow = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: harness.reference("fail"), errorPolicy: .stop)]
+        )
+        let execution = try harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .manual,
+            mode: .foreground
+        ).get()
+        let resultTask = Task { @MainActor in await execution.actionHandle.result() }
+        await checkpoint.waitUntilReached()
+
+        execution.actionHandle.cancel()
+        checkpoint.resume()
+
+        let result = await resultTask.value
+        XCTAssertEqual(result, .cancelled)
+        let run = try XCTUnwrap(harness.store.history(workflowID: workflow.id).first)
+        XCTAssertEqual(run.status, .cancelled)
+        XCTAssertEqual(run.stepResults.map(\.status), [.failed])
+    }
+
+    func testCancellationDuringUnavailableStopTerminalPersistenceCancelsHistory() async throws {
+        let checkpoint = WorkflowRunnerTerminalCheckpoint()
+        let harness = try makeHarness(
+            actionIDs: ["missing-version"],
+            terminalCheckpoint: checkpoint
+        )
+        let unavailableReference = ActionReference(
+            key: harness.reference("missing-version").key,
+            schemaVersion: 99
+        )
+        let workflow = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: unavailableReference, errorPolicy: .stop)]
+        )
+        let execution = try harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .manual,
+            mode: .foreground
+        ).get()
+        let resultTask = Task { @MainActor in await execution.actionHandle.result() }
+        await checkpoint.waitUntilReached()
+
+        execution.actionHandle.cancel()
+        checkpoint.resume()
+
+        let result = await resultTask.value
+        XCTAssertEqual(result, .cancelled)
+        let run = try XCTUnwrap(harness.store.history(workflowID: workflow.id).first)
+        XCTAssertEqual(run.status, .cancelled)
+        XCTAssertEqual(run.stepResults.map(\.status), [.unavailable])
+    }
+
     func testNonCooperativeActionStillTimesOutAndReceivesCancellation() async throws {
         let harness = try makeHarness(actionIDs: ["slow"], timeout: 0.01)
         harness.provider.nonCooperativeActionIDs.insert("slow")
@@ -399,6 +508,78 @@ final class WorkflowRunnerTests: XCTestCase {
         XCTAssertTrue(store.history().isEmpty)
     }
 
+    func testRunLinkRejectsNestedSensitiveParameterBeforeAnyStepRuns() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let registry = ActionRegistry()
+        let provider = WorkflowRunnerTestProvider(actionIDs: ["safe"], timeout: 30)
+        let sensitiveKey = ActionKey(providerID: "sensitive-leaf", actionID: "authenticate")
+        let sensitiveReference = ActionReference(
+            key: sensitiveKey,
+            parameters: try ActionParameterSet(["token": .string("secret")])
+        )
+        var sensitiveInvocationCount = 0
+        let sensitiveRegistration = ActionProviderRegistration(
+            providerID: sensitiveKey.providerID,
+            identity: ObjectIdentifier(provider),
+            definitions: [ActionDefinition(
+                key: sensitiveKey,
+                title: "Authenticate",
+                description: "",
+                systemImage: "key",
+                parameters: [ActionParameterDefinition(
+                    id: "token",
+                    title: "Token",
+                    kind: .string,
+                    privacy: .sensitive
+                )],
+                capabilities: [.background, .foregroundInteractive]
+            )],
+            catalogEntries: [],
+            availability: { _ in .available },
+            begin: { _ in
+                sensitiveInvocationCount += 1
+                return .success(ActionExecutionHandle(operation: { .succeeded() }))
+            }
+        )
+        registry.synchronize([provider.registration(), sensitiveRegistration])
+        let child = try saveWorkflow(
+            in: store,
+            steps: [WorkflowStep(reference: sensitiveReference)]
+        )
+        let parent = try saveWorkflow(
+            in: store,
+            steps: [
+                WorkflowStep(reference: ActionReference(key: provider.definitions[0].key)),
+                WorkflowStep(reference: child.actionReference),
+            ]
+        )
+        let executor = ActionExecutor(registry: registry)
+        let runner = WorkflowRunner(store: store, registry: registry, executor: executor)
+        let controller = AutomationController(
+            store: store,
+            registry: registry,
+            executor: executor,
+            runner: runner
+        )
+        registry.synchronize([
+            provider.registration(),
+            sensitiveRegistration,
+            controller.actionRegistration(),
+        ])
+
+        let outcome = await executor.execute(ActionInvocation(
+            reference: parent.actionReference,
+            source: .runLink,
+            mode: .foreground
+        ))
+
+        XCTAssertEqual(outcome, .rejected(.externalInvocationUnavailable))
+        XCTAssertTrue(provider.invocations.isEmpty)
+        XCTAssertEqual(sensitiveInvocationCount, 0)
+        XCTAssertTrue(store.history().isEmpty)
+    }
+
     func testRunLinkRechecksNestedExternalPolicyWhenExecutionStarts() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)
@@ -522,12 +703,18 @@ final class WorkflowRunnerTests: XCTestCase {
 
     private func makeHarness(
         actionIDs: [String],
-        timeout: Double? = 30
+        timeout: Double? = 30,
+        nonCancellableActionIDs: Set<String> = [],
+        terminalCheckpoint: WorkflowRunnerTerminalCheckpoint? = nil
     ) throws -> Harness {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)
         let registry = ActionRegistry()
-        let provider = WorkflowRunnerTestProvider(actionIDs: actionIDs, timeout: timeout)
+        let provider = WorkflowRunnerTestProvider(
+            actionIDs: actionIDs,
+            timeout: timeout,
+            nonCancellableActionIDs: nonCancellableActionIDs
+        )
         registry.synchronize([provider.registration()])
         let executor = ActionExecutor(
             registry: registry,
@@ -539,7 +726,10 @@ final class WorkflowRunnerTests: XCTestCase {
             store: store,
             registry: registry,
             executor: executor,
-            sleeper: sleeper
+            sleeper: sleeper,
+            terminalPersistenceCheckpoint: {
+                await terminalCheckpoint?.suspend()
+            }
         )
         return Harness(
             registry: registry,
@@ -581,6 +771,31 @@ final class WorkflowRunnerTests: XCTestCase {
 }
 
 @MainActor
+private final class WorkflowRunnerTerminalCheckpoint {
+    private var reached = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func suspend() async {
+        reached = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilReached() async {
+        while !reached {
+            await Task.yield()
+        }
+    }
+
+    func resume() {
+        let continuation = continuation
+        self.continuation = nil
+        continuation?.resume()
+    }
+}
+
+@MainActor
 private final class WorkflowRunnerTestSleeper: WorkflowSleeping {
     private(set) var requestedSeconds: [Double] = []
     var shouldBlock = false
@@ -613,7 +828,11 @@ private final class WorkflowRunnerTestProvider {
     private(set) var cancelledActionIDs: Set<String> = []
     private var continuations: [CheckedContinuation<ActionExecutionResult, Never>] = []
 
-    init(actionIDs: [String], timeout: Double?) {
+    init(
+        actionIDs: [String],
+        timeout: Double?,
+        nonCancellableActionIDs: Set<String> = []
+    ) {
         definitions = actionIDs.map { actionID in
             ActionDefinition(
                 key: ActionKey(providerID: Self.providerID, actionID: actionID),
@@ -621,7 +840,9 @@ private final class WorkflowRunnerTestProvider {
                 description: "",
                 systemImage: "bolt",
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive, .cancellable],
+                capabilities: nonCancellableActionIDs.contains(actionID)
+                    ? [.background, .foregroundInteractive]
+                    : [.background, .foregroundInteractive, .cancellable],
                 executionTimeoutSeconds: timeout
             )
         }
@@ -664,9 +885,15 @@ private final class WorkflowRunnerTestProvider {
         )
     }
 
-    func resumeNonCooperativeActions() {
+    func waitUntilNonCooperativeActionStarts() async {
+        while continuations.isEmpty {
+            await Task.yield()
+        }
+    }
+
+    func resumeNonCooperativeActions(with result: ActionExecutionResult = .cancelled) {
         let continuations = continuations
         self.continuations.removeAll()
-        continuations.forEach { $0.resume(returning: .cancelled) }
+        continuations.forEach { $0.resume(returning: result) }
     }
 }

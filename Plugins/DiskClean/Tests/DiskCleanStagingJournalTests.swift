@@ -51,6 +51,21 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         XCTAssertTrue(journal.incompleteEntries().isEmpty)
     }
 
+    func testIrreversiblePhaseSurvivesCompaction() throws {
+        let entry = makeEntry(id: "deleting")
+        try journal.begin(entry)
+        try journal.markIrreversible(entryID: entry.id)
+        journal.releaseActive(entryID: entry.id)
+
+        try journal.compact()
+
+        let reopened = DiskCleanStagingJournal(directory: storage.url)
+        XCTAssertEqual(
+            reopened.pendingEntriesForReconciliation(),
+            [.init(entry: entry, phase: .irreversible)]
+        )
+    }
+
     /// Live cleanup transactions must not be offered to reconciliation between begin and complete/release.
     func testActiveEntriesAreHiddenFromReconciliationUntilCompleteOrRelease() throws {
         let entry = makeEntry(id: "live")
@@ -62,7 +77,7 @@ final class DiskCleanStagingJournalTests: XCTestCase {
             "live begin must not be reconciled or compacted away"
         )
 
-        journal.compact()
+        try journal.compact()
         XCTAssertEqual(journal.incompleteEntries(), [entry], "compact must keep active begins")
 
         // rollbackBlocked path: transaction ended but entry stays incomplete for recovery.
@@ -134,7 +149,7 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         try journal.begin(pending)
         journal.complete(entryID: done.id, status: "removed")
 
-        journal.compact()
+        try journal.compact()
 
         XCTAssertEqual(journal.incompleteEntries(), [pending])
         let contents = try String(contentsOf: storage.resolve(DiskCleanStagingJournal.fileName), encoding: .utf8)
@@ -147,7 +162,7 @@ final class DiskCleanStagingJournalTests: XCTestCase {
         try journal.begin(entry)
         journal.complete(entryID: entry.id, status: "removed")
 
-        journal.compact()
+        try journal.compact()
 
         XCTAssertTrue(journal.incompleteEntries().isEmpty)
     }
@@ -166,6 +181,32 @@ final class DiskCleanStagingJournalTests: XCTestCase {
             try blocked.begin(makeEntry(id: "one")),
             "journal write failure must throw so the caller aborts the rename"
         )
+    }
+
+    func testBeginPropagatesDirectoryDurabilityFailure() throws {
+        struct ExpectedFailure: Error {}
+        let failing = DiskCleanStagingJournal(
+            directory: storage.resolve("durability-failure"),
+            directorySynchronizer: { _ in throw ExpectedFailure() }
+        )
+
+        XCTAssertThrowsError(try failing.begin(makeEntry(id: "one"))) { error in
+            XCTAssertTrue(error is ExpectedFailure)
+        }
+    }
+
+    func testCompactPropagatesDirectoryDurabilityFailure() throws {
+        try journal.begin(makeEntry(id: "one"))
+        let failing = DiskCleanStagingJournal(
+            directory: storage.url,
+            directorySynchronizer: { _ in
+                struct ExpectedFailure: Error {}
+                throw ExpectedFailure()
+            }
+        )
+
+        XCTAssertThrowsError(try failing.compact())
+        XCTAssertEqual(failing.incompleteEntries().map(\.id), ["one"])
     }
 
     private func makeEntry(

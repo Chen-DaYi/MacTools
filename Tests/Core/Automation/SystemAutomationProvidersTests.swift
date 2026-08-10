@@ -29,6 +29,24 @@ final class SystemAutomationProvidersTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testPowerProviderDeinitRemovesItsUnretainedRunLoopSource() throws {
+        var context = CFRunLoopSourceContext()
+        let source = try XCTUnwrap(CFRunLoopSourceCreate(nil, 0, &context))
+        var provider: SystemPowerAutomationTriggerProvider? =
+            SystemPowerAutomationTriggerProvider(
+                notificationSourceFactory: { _ in source }
+            )
+        weak var weakProvider = provider
+        provider?.start { _ in }
+        XCTAssertTrue(CFRunLoopContainsSource(CFRunLoopGetMain(), source, .commonModes))
+
+        provider = nil
+
+        XCTAssertNil(weakProvider)
+        XCTAssertFalse(CFRunLoopContainsSource(CFRunLoopGetMain(), source, .commonModes))
+    }
+
     func testScheduleFindsNextConfiguredWeekdayWithoutCatchUp() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
@@ -129,6 +147,48 @@ final class SystemAutomationProvidersTests: XCTestCase {
                 .network(status: .available, interface: .wifi, date: date),
             ]
         )
+    }
+
+    @MainActor
+    func testNetworkProviderUsesFreshGenerationAndBaselineAfterRestart() async {
+        let first = AutomationNetworkPathMonitorFake()
+        let second = AutomationNetworkPathMonitorFake()
+        var monitors = [first, second]
+        var events: [AutomationTriggerEvent] = []
+        let provider = SystemNetworkAutomationTriggerProvider(
+            monitorFactory: { monitors.removeFirst() },
+            now: { Date(timeIntervalSince1970: 100) }
+        )
+
+        provider.start { events.append($0) }
+        first.emit(status: .available, interface: .wifi)
+        await Task.yield()
+        XCTAssertTrue(events.isEmpty)
+        first.emit(status: .available, interface: .wiredEthernet)
+        await Task.yield()
+        XCTAssertEqual(events.count, 1)
+
+        provider.stop()
+        XCTAssertTrue(first.wasCancelled)
+        XCTAssertEqual(provider.currentStatus, .unavailable)
+        XCTAssertEqual(provider.currentInterface, .any)
+        provider.start { events.append($0) }
+        XCTAssertTrue(second.wasStarted)
+
+        first.emitStale(status: .unavailable, interface: .any)
+        await Task.yield()
+        XCTAssertEqual(provider.currentStatus, .unavailable)
+        XCTAssertEqual(provider.currentInterface, .any)
+        XCTAssertEqual(events.count, 1)
+
+        second.emit(status: .available, interface: .wifi)
+        await Task.yield()
+        XCTAssertEqual(provider.currentStatus, .available)
+        XCTAssertEqual(provider.currentInterface, .wifi)
+        XCTAssertEqual(events.count, 1)
+        second.emit(status: .unavailable, interface: .any)
+        await Task.yield()
+        XCTAssertEqual(events.count, 2)
     }
 
     func testCalendarQueryIncludesEndedEventsWithFuturePositiveOffsets() {
@@ -315,4 +375,44 @@ private actor SlowCalendarEventQuery: CalendarAutomationEventQuerying {
 
     func configurationCount() -> Int { receivedConfigurationCount }
     func isSleeping() -> Bool { sleeping }
+}
+
+private final class AutomationNetworkPathMonitorFake: AutomationNetworkPathMonitoring,
+    @unchecked Sendable {
+    var updateHandler: (@Sendable (
+        AutomationNetworkStatus,
+        AutomationNetworkInterface
+    ) -> Void)? {
+        didSet {
+            if let updateHandler { lastInstalledHandler = updateHandler }
+        }
+    }
+    private var lastInstalledHandler: (@Sendable (
+        AutomationNetworkStatus,
+        AutomationNetworkInterface
+    ) -> Void)?
+    private(set) var wasStarted = false
+    private(set) var wasCancelled = false
+
+    func start(queue _: DispatchQueue) {
+        wasStarted = true
+    }
+
+    func cancel() {
+        wasCancelled = true
+    }
+
+    func emit(
+        status: AutomationNetworkStatus,
+        interface: AutomationNetworkInterface
+    ) {
+        updateHandler?(status, interface)
+    }
+
+    func emitStale(
+        status: AutomationNetworkStatus,
+        interface: AutomationNetworkInterface
+    ) {
+        lastInstalledHandler?(status, interface)
+    }
 }

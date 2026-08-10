@@ -316,6 +316,22 @@ final class SavedScriptsPlugin:
         activeRuns[scriptID]?.task.cancel()
     }
 
+    func saveScript(_ candidate: SavedScript) -> Result<SavedScript, Error> {
+        let previousScripts = scriptsByID
+        let result = store.save(candidate)
+        guard case .success = result else { return result }
+        reconcileActiveRuns(from: previousScripts)
+        return result
+    }
+
+    func deleteScript(id: UUID) -> Bool {
+        let previousScripts = scriptsByID
+        guard store.remove(id: id) else { return false }
+        reconcileActiveRuns(from: previousScripts)
+        executionStore.removeRecord(for: id)
+        return true
+    }
+
     func isManualRun(_ scriptID: UUID) -> Bool {
         activeRuns[scriptID]?.isManual == true
     }
@@ -502,13 +518,21 @@ final class SavedScriptsPlugin:
     }
 
     private func restorePortablePreferencesAndCancelChangedRuns(from data: Data) -> Bool {
-        let previousScripts = Dictionary(uniqueKeysWithValues: store.scripts.map { ($0.id, $0) })
+        let previousScripts = scriptsByID
         guard store.restorePortableBackup(data) else { return false }
+        reconcileActiveRuns(from: previousScripts)
+        return true
+    }
+
+    private var scriptsByID: [UUID: SavedScript] {
+        Dictionary(uniqueKeysWithValues: store.scripts.map { ($0.id, $0) })
+    }
+
+    private func reconcileActiveRuns(from previousScripts: [UUID: SavedScript]) {
         for (scriptID, run) in activeRuns
         where store.script(id: scriptID) != previousScripts[scriptID] {
             run.task.cancel()
         }
-        return true
     }
 
     private func waitForExecution(

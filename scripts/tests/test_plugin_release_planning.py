@@ -167,6 +167,88 @@ class WorkflowReleasePlanningTests(unittest.TestCase):
             self.assertIn("Sources/MacToolsPluginKit/PluginModels.swift", result.stderr)
             self.assertIn("version is still 1.0.0", result.stderr)
 
+    def test_selected_plan_cannot_bypass_shared_plugin_kit_rebuild(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            plugin_kit_directory = root / "Sources" / "MacToolsPluginKit"
+            plugin_kit_directory.mkdir(parents=True)
+            previous_plugins = []
+            for directory, plugin_id, version in (
+                ("Demo", "demo", "1.0.1"),
+                ("Other", "other", "1.0.0"),
+            ):
+                plugin_directory = root / "Plugins" / directory
+                plugin_directory.mkdir(parents=True)
+                (plugin_directory / "plugin.json").write_text(
+                    json.dumps(
+                        {
+                            "id": plugin_id,
+                            "displayName": directory,
+                            "version": version,
+                            "pluginKitVersion": 3,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                previous_plugins.append(
+                    {
+                        "id": plugin_id,
+                        "version": "1.0.0",
+                        "pluginKitVersion": 3,
+                        "package": {
+                            "url": (
+                                "https://example.invalid/releases/download/"
+                                f"plugins-1.0.0/{plugin_id}.zip"
+                            )
+                        },
+                    }
+                )
+            shared_source = plugin_kit_directory / "PluginModels.swift"
+            shared_source.write_text("public struct Model {}\n", encoding="utf-8")
+            previous_catalog = root / "catalog.json"
+            previous_catalog.write_text(
+                json.dumps({"pluginKitVersion": 3, "plugins": previous_plugins}),
+                encoding="utf-8",
+            )
+
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "baseline"], cwd=root, check=True)
+            subprocess.run(["git", "tag", "plugins-1.0.0"], cwd=root, check=True)
+            shared_source.write_text(
+                "public struct Model { public let value: Int }\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "shared change"], cwd=root, check=True)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(PLAN_SCRIPT_PATH),
+                    "--mode", "selected",
+                    "--plugins", "demo",
+                    "--source-dir", "Plugins",
+                    "--previous-catalog", str(previous_catalog),
+                    "--output", str(root / "plan.json"),
+                ],
+                cwd=root,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Use --mode all", result.stderr)
+            self.assertIn("Sources/MacToolsPluginKit/PluginModels.swift", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

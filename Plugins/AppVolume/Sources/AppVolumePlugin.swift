@@ -71,6 +71,16 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     private var isExpanded = false
     private var accessState = AppVolumeAccessState.unknown
     private var accessTask: Task<Void, Never>?
+    private var pendingPanelVolumes: [String: Double] = [:]
+    private var lastRouteErrorMessage: String?
+    private var canonicalRoutingVolumes: [String: Double]?
+    private var canonicalRouteToken: UUID?
+    private var lifecycleGeneration: UInt64 = 0
+    private var isActive = false
+
+    private var isCanonicalRouteInProgress: Bool {
+        canonicalRouteToken != nil
+    }
 
     init(
         storage: PluginStorage? = nil,
@@ -208,16 +218,30 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
                 defaultValue: "正在请求"
             ))
         }
+        guard !isCanonicalRouteInProgress else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
         return .available
     }
 
     func activate(context: PluginRuntimeContext) {
+        lifecycleGeneration &+= 1
+        isActive = true
         monitor.start()
     }
 
     func deactivate(reason: PluginDeactivationReason) {
+        lifecycleGeneration &+= 1
+        isActive = false
+        canonicalRouteToken = nil
+        canonicalRoutingVolumes = nil
+        pendingPanelVolumes.removeAll()
+        lastRouteErrorMessage = nil
         accessTask?.cancel()
         accessTask = nil
+        if accessState == .requesting {
+            accessState = .unknown
+        }
         monitor.stop()
         router.stop()
         snapshot = .empty
@@ -286,19 +310,33 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
             }
             onStateChange?()
         case let .setSlider(controlID, value, phase):
-            guard let applicationID = controlApplicationIDs[controlID] else {
+            guard !isCanonicalRouteInProgress,
+                  let applicationID = controlApplicationIDs[controlID] else {
                 return
             }
 
-            volumes[applicationID] = max(0, min(1, value))
-            if phase == .ended {
-                saveVolumes()
-            }
-            if !Self.isUnity(volume(for: applicationID)), accessState == .unknown {
-                requestAccess(force: false, openSettingsOnFailure: false)
-            }
-            applyCurrentTargets()
+            let gain = max(0, min(1, value))
+            pendingPanelVolumes[applicationID] = gain
             onStateChange?()
+            switch phase {
+            case .changed:
+                if !Self.isUnity(gain), accessState == .unknown {
+                    requestAccess(force: false, openSettingsOnFailure: false)
+                }
+                applyCurrentTargets()
+            case .ended:
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let result = await setVolume(gain, for: applicationID)
+                    if pendingPanelVolumes[applicationID] == gain {
+                        pendingPanelVolumes.removeValue(forKey: applicationID)
+                    }
+                    if case let .failed(message) = result {
+                        lastRouteErrorMessage = message
+                    }
+                    onStateChange?()
+                }
+            }
         case let .invokeAction(controlID) where controlID == ControlID.openPermission:
             requestAccess(force: true, openSettingsOnFailure: true)
         default:
@@ -323,6 +361,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     // MARK: - Snapshot and routing
 
     private func receive(_ snapshot: AudioApplicationSnapshot) {
+        guard isActive else { return }
         self.snapshot = snapshot
         rebuildControlApplicationIDs()
         applyCurrentTargets()
@@ -330,13 +369,11 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     }
 
     private func applyCurrentTargets() {
-        let targets = snapshot.applications.map { application in
-            ApplicationVolumeTarget(
-                id: application.id,
-                processObjectIDs: application.processObjectIDs,
-                gain: volume(for: application.id)
-            )
+        var effectiveVolumes = canonicalRoutingVolumes ?? volumes
+        for (applicationID, gain) in pendingPanelVolumes {
+            effectiveVolumes[applicationID] = gain
         }
+        let targets = routingTargets(volumes: effectiveVolumes)
         let needsProcessing = targets.contains { !Self.isUnity($0.gain) }
 
         guard needsProcessing else {
@@ -377,37 +414,177 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     }
 
     private func setVolume(_ gain: Double, for applicationID: String) async -> ActionExecutionResult {
-        guard snapshot.applications.contains(where: { $0.id == applicationID }) else {
+        guard isActive,
+              snapshot.applications.contains(where: { $0.id == applicationID }) else {
             return .failed(message: localization.string(
                 "panel.subtitle.empty",
                 defaultValue: "暂无正在播放音频的应用"
             ))
         }
 
-        if !Self.isUnity(gain), accessState != .granted {
-            accessState = .requesting
-            onStateChange?()
-            let granted = await router.requestSystemAudioAccess()
-            guard !Task.isCancelled else {
-                accessState = .unknown
+        guard canonicalRouteToken == nil else {
+            return .failed(message: PluginKitLocalization.actionUnavailable)
+        }
+        let operationToken = UUID()
+        let operationGeneration = lifecycleGeneration
+        canonicalRouteToken = operationToken
+        lastRouteErrorMessage = nil
+        onStateChange?()
+        defer {
+            if canonicalRouteToken == operationToken {
+                canonicalRoutingVolumes = nil
+                canonicalRouteToken = nil
                 onStateChange?()
-                return .cancelled
-            }
-            accessState = granted ? .granted : .denied
-            guard granted else {
-                onStateChange?()
-                return .failed(message: localization.string(
-                    "permission.systemAudio.footnote.denied",
-                    defaultValue: "前往系统设置 → 隐私与安全性 → 屏幕与系统音频录制，授权 MacTools。"
-                ))
             }
         }
 
-        volumes[applicationID] = gain
-        saveVolumes()
-        applyCurrentTargets()
-        onStateChange?()
-        return .succeeded()
+        if !Self.isUnity(gain), accessState != .granted {
+            if let accessTask {
+                await accessTask.value
+                guard isCurrentCanonicalOperation(
+                    token: operationToken,
+                    generation: operationGeneration
+                ) else {
+                    return .cancelled
+                }
+                guard !Task.isCancelled else {
+                    return .cancelled
+                }
+                guard accessState == .granted else {
+                    return .failed(message: localization.string(
+                        "permission.systemAudio.footnote.denied",
+                        defaultValue: "前往系统设置 → 隐私与安全性 → 屏幕与系统音频录制，授权 MacTools。"
+                    ))
+                }
+            } else {
+                accessState = .requesting
+                onStateChange?()
+                let granted = await router.requestSystemAudioAccess()
+                guard isCurrentCanonicalOperation(
+                    token: operationToken,
+                    generation: operationGeneration
+                ) else {
+                    return .cancelled
+                }
+                guard !Task.isCancelled else {
+                    accessState = .unknown
+                    onStateChange?()
+                    return .cancelled
+                }
+                accessState = granted ? .granted : .denied
+                guard granted else {
+                    onStateChange?()
+                    return .failed(message: localization.string(
+                        "permission.systemAudio.footnote.denied",
+                        defaultValue: "前往系统设置 → 隐私与安全性 → 屏幕与系统音频录制，授权 MacTools。"
+                    ))
+                }
+            }
+        }
+
+        let previousVolumes = volumes
+        var candidateVolumes = volumes
+        candidateVolumes[applicationID] = gain
+        canonicalRoutingVolumes = candidateVolumes
+        let targets = routingTargets(volumes: candidateVolumes)
+        let applyResult = await router.applyAndWait(
+            targets: targets,
+            outputDeviceUID: snapshot.outputDeviceUID
+        )
+        guard isCurrentCanonicalOperation(
+            token: operationToken,
+            generation: operationGeneration
+        ) else {
+            return .cancelled
+        }
+        switch applyResult {
+        case .succeeded:
+            switch persistVolumes(candidateVolumes) {
+            case .committed:
+                volumes = candidateVolumes
+                lastRouteErrorMessage = nil
+                onStateChange?()
+                return .succeeded()
+            case let .rejected(rollbackSucceeded):
+                canonicalRoutingVolumes = previousVolumes
+                let rollbackResult = await router.applyAndWait(
+                    targets: routingTargets(volumes: previousVolumes),
+                    outputDeviceUID: snapshot.outputDeviceUID
+                )
+                guard isCurrentCanonicalOperation(
+                    token: operationToken,
+                    generation: operationGeneration
+                ) else {
+                    return .cancelled
+                }
+                let message: String
+                if !rollbackSucceeded {
+                    message = localization.string(
+                        "action.persistenceStorageRollbackFailed",
+                        defaultValue: "无法保存应用音量设置，且恢复先前存储值失败。"
+                    )
+                } else if rollbackResult == .failed {
+                    message = localization.string(
+                        "action.persistenceRouteRollbackFailed",
+                        defaultValue: "无法保存应用音量设置，且恢复先前路由失败。"
+                    )
+                } else {
+                    message = localization.string(
+                        "action.persistenceFailed",
+                        defaultValue: "无法保存应用音量设置。"
+                    )
+                }
+                lastRouteErrorMessage = message
+                return .failed(message: message)
+            }
+        case .failed:
+            canonicalRoutingVolumes = previousVolumes
+            let rollbackResult = await router.applyAndWait(
+                targets: routingTargets(volumes: previousVolumes),
+                outputDeviceUID: snapshot.outputDeviceUID
+            )
+            guard isCurrentCanonicalOperation(
+                token: operationToken,
+                generation: operationGeneration
+            ) else {
+                return .cancelled
+            }
+            let message = switch rollbackResult {
+            case .succeeded:
+                localization.string(
+                    "action.routeFailed",
+                    defaultValue: "无法应用应用音量设置。"
+                )
+            case .failed:
+                localization.string(
+                    "action.routeRollbackFailed",
+                    defaultValue: "无法应用应用音量设置，且恢复先前路由失败。"
+                )
+            }
+            lastRouteErrorMessage = message
+            return .failed(message: message)
+        }
+    }
+
+    private func isCurrentCanonicalOperation(
+        token: UUID,
+        generation: UInt64
+    ) -> Bool {
+        isActive
+            && lifecycleGeneration == generation
+            && canonicalRouteToken == token
+    }
+
+    private func routingTargets(
+        volumes: [String: Double]
+    ) -> [ApplicationVolumeTarget] {
+        snapshot.applications.map { application in
+            ApplicationVolumeTarget(
+                id: application.id,
+                processObjectIDs: application.processObjectIDs,
+                gain: volumes[application.id] ?? 1
+            )
+        }
     }
 
     private func requestAccess(force: Bool, openSettingsOnFailure: Bool) {
@@ -475,11 +652,12 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
             )
         }
 
-        guard accessState == .denied else {
-            return nil
+        if let lastRouteErrorMessage {
+            return lastRouteErrorMessage
         }
-
-        return localization.string("error.permissionDenied", defaultValue: "需要系统音频录制权限")
+        return accessState == .denied
+            ? localization.string("error.permissionDenied", defaultValue: "需要系统音频录制权限")
+            : nil
     }
 
     private func panelDetail(applications: [AudioApplication]) -> PluginPanelDetail? {
@@ -503,7 +681,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
                 sliderBounds: 0...1,
                 sliderStep: 0.01,
                 valueLabel: Self.percentLabel(value),
-                isEnabled: accessState != .requesting
+                isEnabled: accessState != .requesting && !isCanonicalRouteInProgress
             )
         }
 
@@ -549,7 +727,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
     }
 
     private func volume(for applicationID: String) -> Double {
-        max(0, min(1, volumes[applicationID] ?? 1))
+        max(0, min(1, pendingPanelVolumes[applicationID] ?? volumes[applicationID] ?? 1))
     }
 
     // MARK: - Persistence
@@ -563,11 +741,46 @@ final class AppVolumePlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
         return decoded.mapValues { max(0, min(1, $0)) }
     }
 
-    private func saveVolumes() {
-        guard let data = try? JSONEncoder().encode(volumes) else {
-            return
+    private enum VolumePersistenceResult {
+        case committed
+        case rejected(rollbackSucceeded: Bool)
+    }
+
+    private func persistVolumes(_ candidate: [String: Double]) -> VolumePersistenceResult {
+        guard let data = try? JSONEncoder().encode(candidate) else {
+            return .rejected(rollbackSucceeded: true)
         }
+        let previousRawValue = storage.object(forKey: StorageKey.volumes)
         storage.set(data, forKey: StorageKey.volumes)
+        guard storage.data(forKey: StorageKey.volumes) == data else {
+            restore(previousRawValue, forKey: StorageKey.volumes)
+            return .rejected(
+                rollbackSucceeded: rawValuesMatch(
+                    storage.object(forKey: StorageKey.volumes),
+                    previousRawValue
+                )
+            )
+        }
+        return .committed
+    }
+
+    private func restore(_ value: Any?, forKey key: String) {
+        if let value {
+            storage.set(value, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
+    }
+
+    private func rawValuesMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            true
+        case let (lhs as NSObject, rhs as NSObject):
+            lhs.isEqual(rhs)
+        default:
+            false
+        }
     }
 
     private static func percentLabel(_ value: Double) -> String {

@@ -377,6 +377,9 @@ struct UnifiedSearchPaletteView: View {
     @State private var query = ""
     @State private var selectedResultID: String?
     @State private var pendingAlert: PendingAlert?
+    @State private var executionFeedback: String?
+    @State private var executionTask: Task<Void, Never>?
+    @State private var executionGeneration: UInt = 0
 
     init(
         pluginHost: PluginHost,
@@ -417,6 +420,14 @@ struct UnifiedSearchPaletteView: View {
 
             metadataRow
 
+            if let executionFeedback {
+                Label(executionFeedback, systemImage: "exclamationmark.triangle.fill")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("mactools.unified-search.execution-feedback")
+            }
+
             resultList
 
             footer
@@ -439,6 +450,7 @@ struct UnifiedSearchPaletteView: View {
             handleQuickSelectionRequest(quickSelectionRequest)
         }
         .onChange(of: query) {
+            executionFeedback = nil
             model.updateQuery(query)
             syncSelection()
         }
@@ -450,6 +462,9 @@ struct UnifiedSearchPaletteView: View {
         }
         .onChange(of: resetRequestID) {
             resetTransientState()
+        }
+        .onDisappear {
+            invalidateExecution()
         }
         .onExitCommand {
             actions.dismiss()
@@ -747,7 +762,7 @@ struct UnifiedSearchPaletteView: View {
                             binding: binding,
                             ownerDescription: ownerDescription
                         )
-                        return .pendingConfirmation
+                        return .accepted
                     case let .failure(error):
                         return .rejected(error.localizedDescription)
                     }
@@ -987,6 +1002,7 @@ struct UnifiedSearchPaletteView: View {
     }
 
     private func activate(_ result: MacToolsSearchResult) {
+        guard executionTask == nil else { return }
         switch MacToolsSearchActivationDecision.resolve(for: result) {
         case .confirm:
             pendingAlert = .execute(result)
@@ -1002,7 +1018,19 @@ struct UnifiedSearchPaletteView: View {
                 model.refresh()
             }
         case let .executeAction(reference):
-            Task { @MainActor in
+            let generation = executionGeneration
+            executionTask = Task { @MainActor in
+                guard case let .success(action) = pluginHost.actionRegistry.registeredAction(
+                    for: reference
+                ), let mode = ActionSurfaceExecutionSupport.preferredMode(
+                    for: action.definition
+                ) else {
+                    guard generation == executionGeneration else { return }
+                    executionTask = nil
+                    executionFeedback = FeatureL10n.string("找不到对应操作。")
+                    model.refresh()
+                    return
+                }
                 let confirmationService: (any ActionConfirmationRequesting)? =
                     result.confirmation.map { confirmation in
                         MatchingApprovedActionConfirmationService(
@@ -1021,13 +1049,16 @@ struct UnifiedSearchPaletteView: View {
                     ActionInvocation(
                         reference: reference,
                         source: .unifiedSearch,
-                        mode: .foreground
+                        mode: mode
                     ),
                     confirmationService: confirmationService
                 )
+                guard generation == executionGeneration else { return }
+                executionTask = nil
                 if case .completed(.succeeded) = outcome {
                     actions.dismiss()
                 } else {
+                    executionFeedback = ActionSurfaceExecutionSupport.feedback(for: outcome)
                     model.refresh()
                 }
             }
@@ -1054,12 +1085,20 @@ struct UnifiedSearchPaletteView: View {
     }
 
     private func resetTransientState() {
+        invalidateExecution()
         query = ""
         pendingAlert = nil
+        executionFeedback = nil
         model.updateQuery("")
         model.refresh()
         selectedResultID = nil
         syncSelection()
+    }
+
+    private func invalidateExecution() {
+        executionGeneration &+= 1
+        executionTask?.cancel()
+        executionTask = nil
     }
 
 }

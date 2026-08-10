@@ -245,13 +245,30 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
             guard case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
                 return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
             }
-            controller.setTrackingEnabled(enabled)
+            return ActionExecutionHandle { [weak self] in
+                guard let self else {
+                    return .failed(message: PluginKitLocalization.actionUnavailable)
+                }
+                return self.actionResult(for: self.controller.setTrackingEnabled(enabled))
+            }
         case ActionID.resetToday:
-            controller.resetToday()
+            return ActionExecutionHandle { [weak self] in
+                guard let self else {
+                    return .failed(message: PluginKitLocalization.actionUnavailable)
+                }
+                return self.actionResult(for: self.controller.resetToday())
+            }
         default:
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
-        return ActionExecutionHandle { .succeeded() }
+    }
+
+    private func actionResult(
+        for mutation: ActivityBarPersistenceMutationResult
+    ) -> ActionExecutionResult {
+        mutation == .committed
+            ? .succeeded()
+            : .failed(message: PluginKitLocalization.actionFailed)
     }
 
     private var panelDetail: PluginPanelDetail {

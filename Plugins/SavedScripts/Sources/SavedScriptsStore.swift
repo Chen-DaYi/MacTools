@@ -97,6 +97,7 @@ final class SavedScriptsStore: ObservableObject {
     }
 
     func portableBackup() -> Data? {
+        guard loadError == nil else { return nil }
         let portableScripts = scripts
             .filter(\.includeSourceInBackup)
             .map { $0.portableCopy() }
@@ -136,9 +137,14 @@ final class SavedScriptsStore: ObservableObject {
     }
 
     private func reload() {
-        guard let data = storage.data(forKey: Self.storageKey) else {
+        guard let rawValue = storage.object(forKey: Self.storageKey) else {
             scripts = []
             loadError = nil
+            return
+        }
+        guard let data = rawValue as? Data else {
+            scripts = []
+            loadError = "invalid-saved-scripts-library"
             return
         }
         guard data.count <= Self.maximumPayloadByteCount,
@@ -155,9 +161,33 @@ final class SavedScriptsStore: ObservableObject {
 
     private func persist(_ scripts: [SavedScript]) throws {
         let data = try encode(try validated(scripts))
+        let previousRawValue = storage.object(forKey: Self.storageKey)
         storage.set(data, forKey: Self.storageKey)
         guard storage.data(forKey: Self.storageKey) == data else {
+            if !restore(previousRawValue) {
+                reload()
+            }
             throw SavedScriptValidationError.persistenceFailed
+        }
+    }
+
+    private func restore(_ value: Any?) -> Bool {
+        if let value {
+            storage.set(value, forKey: Self.storageKey)
+        } else {
+            storage.removeObject(forKey: Self.storageKey)
+        }
+        return valuesMatch(storage.object(forKey: Self.storageKey), value)
+    }
+
+    private func valuesMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case let (lhs as NSObject, rhs as NSObject):
+            return lhs.isEqual(rhs)
+        default:
+            return false
         }
     }
 

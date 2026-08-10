@@ -29,7 +29,7 @@ struct TrackpadGesturesSettingsView: View {
                 actionHostContext: actionHostContext,
                 onCancel: { editingDraft = nil },
                 onDelete: store.mappings.contains(where: { $0.id == draft.id }) ? {
-                    store.delete(id: draft.id)
+                    guard store.delete(id: draft.id) else { return }
                     editingDraft = nil
                     onChange()
                 } : nil,
@@ -598,7 +598,7 @@ struct TrackpadGesturesSettingsView: View {
             Toggle(gestureTitle, isOn: Binding(
                 get: { mapping.isEnabled },
                 set: { enabled in
-                    store.setEnabled(enabled, id: mapping.id)
+                    guard store.setEnabled(enabled, id: mapping.id) else { return }
                     onChange()
                 }
             ))
@@ -625,7 +625,7 @@ struct TrackpadGesturesSettingsView: View {
         }
 
         Button {
-            store.setEnabled(!mapping.isEnabled, id: mapping.id)
+            guard store.setEnabled(!mapping.isEnabled, id: mapping.id) else { return }
             onChange()
         } label: {
             Label(
@@ -639,7 +639,7 @@ struct TrackpadGesturesSettingsView: View {
         Divider()
 
         Button(role: .destructive) {
-            store.delete(id: mapping.id)
+            guard store.delete(id: mapping.id) else { return }
             onChange()
         } label: {
             Label(

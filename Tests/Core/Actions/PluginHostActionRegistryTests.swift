@@ -565,8 +565,9 @@ final class PluginHostActionRegistryTests: XCTestCase {
             reference: reference,
             binding: ShortcutBinding(keyCode: UInt16(kVK_ANSI_B), modifiers: [.command, .shift])
         )
-        XCTAssertTrue(
-            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([first, second])
+        XCTAssertEqual(
+            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([first, second]),
+            .committed
         )
         let host = makeIsolatedHost(
             plugin: plugin,
@@ -574,21 +575,23 @@ final class PluginHostActionRegistryTests: XCTestCase {
             shortcutManager: GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
         )
 
+        let rowPrefix = ActionBackedShortcutTestPlugin.shortcutItemID
         let rows = host.shortcutItems.filter {
-            $0.shortcutID == ActionBackedShortcutTestPlugin.shortcutItemID
+            $0.id == rowPrefix || $0.id.hasPrefix("\(rowPrefix).assignment.")
         }
-        XCTAssertEqual(rows.map(\.assignmentID), [first.id, second.id])
         XCTAssertEqual(Set(rows.map(\.id)).count, 2)
 
-        let secondRow = try XCTUnwrap(rows.first(where: { $0.assignmentID == second.id }))
+        let secondRow = try XCTUnwrap(rows.first(where: {
+            $0.id.hasSuffix(second.id.uuidString.lowercased())
+        }))
         host.clearShortcut(for: secondRow.id)
 
         XCTAssertEqual(host.shortcutAssignmentService.assignments, [first])
         XCTAssertEqual(
             host.shortcutItems.filter {
-                $0.shortcutID == ActionBackedShortcutTestPlugin.shortcutItemID
-            }.map(\.assignmentID),
-            [first.id]
+                $0.id == rowPrefix || $0.id.hasPrefix("\(rowPrefix).assignment.")
+            }.map(\.id),
+            [rowPrefix]
         )
     }
 
@@ -608,8 +611,9 @@ final class PluginHostActionRegistryTests: XCTestCase {
             reference: reference,
             binding: ShortcutBinding(keyCode: UInt16(kVK_ANSI_D), modifiers: [.command, .shift])
         )
-        XCTAssertTrue(
-            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([first, second])
+        XCTAssertEqual(
+            ActionShortcutAssignmentStore(userDefaults: defaults).replaceAll([first, second]),
+            .committed
         )
         let host = PluginHost(
             plugins: [],

@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import pathlib
+import plistlib
 import subprocess
 import tempfile
 import time
@@ -48,6 +49,47 @@ class MacToolsE2ETests(unittest.TestCase):
             text=True,
         )
         return result
+
+    def make_valid_session(self, root: pathlib.Path):
+        app = root / "MacTools Test.app"
+        info_plist = app / "Contents/Info.plist"
+        extension_plist = (
+            app
+            / "Contents/PlugIns/RightClickFinderSync.appex/Contents/Info.plist"
+        )
+        info_plist.parent.mkdir(parents=True)
+        extension_plist.parent.mkdir(parents=True)
+        with info_plist.open("wb") as handle:
+            plistlib.dump(
+                {
+                    "CFBundleIdentifier": "com.example.mactools-test",
+                    "CFBundleExecutable": "MacToolsTest",
+                },
+                handle,
+            )
+        with extension_plist.open("wb") as handle:
+            plistlib.dump(
+                {"CFBundleIdentifier": "com.example.mactools-test.finder"},
+                handle,
+            )
+        artifact_root = root / "artifacts"
+        session = artifact_root / "session-valid"
+        session.mkdir(parents=True)
+        with (session / "session.plist").open("wb") as handle:
+            plistlib.dump(
+                {
+                    "appPath": str(app),
+                    "bundleIdentifier": "com.example.mactools-test",
+                    "extensionBundleIdentifier": "com.example.mactools-test.finder",
+                    "hadPreferences": False,
+                    "hadExtensionPreferences": False,
+                },
+                handle,
+            )
+        environment = os.environ.copy()
+        environment["MACTOOLS_E2E_APP_PATH"] = str(app)
+        environment["MACTOOLS_E2E_ARTIFACT_ROOT"] = str(artifact_root)
+        return session, environment
 
     def test_fixture_seed_is_valid_and_idempotent(self):
         first = json.loads(self.run_fixture("seed").stdout)
@@ -671,8 +713,9 @@ print(json.dumps({
 
     def test_recording_ready_and_assertion_stop_markers_are_addressable(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
-            session = pathlib.Path(temporary_directory)
-            (session / "session.plist").touch()
+            session, environment = self.make_valid_session(
+                pathlib.Path(temporary_directory)
+            )
             ready = (
                 session
                 / "privacy-recorder"
@@ -685,11 +728,12 @@ print(json.dumps({
                 [
                     str(E2E_SCRIPT),
                     "wait-recording-ready",
-                    temporary_directory,
+                    str(session),
                     "saved-scripts",
                     "1",
                 ],
                 cwd=REPO_ROOT,
+                env=environment,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -700,10 +744,11 @@ print(json.dumps({
                 [
                     str(E2E_SCRIPT),
                     "start-recording",
-                    temporary_directory,
+                    str(session),
                     "saved-scripts",
                 ],
                 cwd=REPO_ROOT,
+                env=environment,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -721,10 +766,11 @@ print(json.dumps({
                 [
                     str(E2E_SCRIPT),
                     "stop-recording",
-                    temporary_directory,
+                    str(session),
                     "saved-scripts",
                 ],
                 cwd=REPO_ROOT,
+                env=environment,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -737,6 +783,23 @@ print(json.dumps({
                     / "screencast.saved-scripts.stop"
                 ).is_file()
             )
+
+            escaped = subprocess.run(
+                [
+                    str(E2E_SCRIPT),
+                    "start-recording",
+                    str(session),
+                    "../../outside",
+                ],
+                cwd=REPO_ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(escaped.returncode, 0)
+            self.assertIn("recording label", escaped.stderr)
+            self.assertFalse((pathlib.Path(temporary_directory) / "outside.start").exists())
 
     def test_recording_uses_a_fail_closed_application_filter(self):
         source = CAPTURE_RECT_TOOL.read_text(encoding="utf-8")
@@ -979,11 +1042,17 @@ print(json.dumps({
         self.assertIn("No user files, account data, or clipboard content", source)
         self.assertIn("NSScreen.screens", source)
         self.assertIn('arguments.contains("--recording-privacy")', source)
+        self.assertIn('arguments.firstIndex(of: "--protected-bundle-id")', source)
+        self.assertNotIn('identifier != "com.jennymedia.mactools.dev"', source)
         self.assertIn("application.hide()", source)
         self.assertIn("application.unhide()", source)
         self.assertIn("--visibility-state", source)
         self.assertIn("--restore-visibility", source)
         self.assertIn("SIGTERM", source)
+        self.assertIn("--terminate-running-copies", source)
+        self.assertIn("NSWorkspace.shared.runningApplications.filter", source)
+        self.assertIn("application.executableURL?.standardizedFileURL == targetURL", source)
+        self.assertIn("$0.forceTerminate()", source)
         self.assertNotIn("NSPasteboard", source)
         self.assertNotIn("FileManager", source)
 
@@ -994,7 +1063,8 @@ print(json.dumps({
             'launch_privacy_helper_process "$session_dir" backdrop',
             harness,
         )
-        self.assertIn("--recording-privacy --visibility-state", harness)
+        self.assertIn('--protected-bundle-id "$(app_bundle_identifier)"', harness)
+        self.assertIn('--terminate-running-copies "$executable"', harness)
 
 
 if __name__ == "__main__":

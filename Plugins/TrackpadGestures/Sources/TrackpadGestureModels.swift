@@ -335,31 +335,38 @@ final class TrackpadGestureStore: ObservableObject {
             return false
         }
 
-        if let index = mappings.firstIndex(where: { $0.id == mapping.id }) {
-            mappings[index] = mapping
+        var candidate = mappings
+        if let index = candidate.firstIndex(where: { $0.id == mapping.id }) {
+            candidate[index] = mapping
         } else {
-            mappings.append(mapping)
+            candidate.append(mapping)
         }
-        persist()
+        guard persist(candidate) else { return false }
+        mappings = candidate
         return true
     }
 
-    func setEnabled(_ isEnabled: Bool, id: UUID) {
+    @discardableResult
+    func setEnabled(_ isEnabled: Bool, id: UUID) -> Bool {
         guard let index = mappings.firstIndex(where: { $0.id == id }),
               mappings[index].isEnabled != isEnabled
         else {
-            return
+            return false
         }
-        mappings[index].isEnabled = isEnabled
-        persist()
+        var candidate = mappings
+        candidate[index].isEnabled = isEnabled
+        guard persist(candidate) else { return false }
+        mappings = candidate
+        return true
     }
 
-    func delete(id: UUID) {
-        let originalCount = mappings.count
-        mappings.removeAll { $0.id == id }
-        if mappings.count != originalCount {
-            persist()
-        }
+    @discardableResult
+    func delete(id: UUID) -> Bool {
+        let candidate = mappings.filter { $0.id != id }
+        guard candidate.count != mappings.count,
+              persist(candidate) else { return false }
+        mappings = candidate
+        return true
     }
 
     func setTesting(_ isTesting: Bool) {
@@ -424,8 +431,9 @@ final class TrackpadGestureStore: ObservableObject {
             changed = true
         }
         guard changed else { return false }
-        mappings = Self.normalized(updated)
-        persist()
+        let candidate = Self.normalized(updated)
+        guard persist(candidate) else { return false }
+        mappings = candidate
         return true
     }
 
@@ -494,6 +502,11 @@ final class TrackpadGestureStore: ObservableObject {
     }
 
     private func beginPortableRestoreTransaction() -> Bool {
+        guard Self.hasExpectedData(forKey: Key.mappings, storage: storage),
+              Self.hasExpectedBool(forKey: Key.ignoreWhileTyping, storage: storage),
+              Self.hasExpectedDouble(forKey: Key.typingGracePeriod, storage: storage) else {
+            return false
+        }
         let transaction = PortableRestoreTransaction(
             mappings: storage.data(forKey: Key.mappings),
             ignoresGesturesWhileTyping: Self.storedBool(
@@ -515,9 +528,10 @@ final class TrackpadGestureStore: ObservableObject {
     }
 
     private static func recoverInterruptedPortableRestore(storage: any PluginStorage) -> Bool {
-        guard let transactionData = storage.data(forKey: Key.portableRestoreTransaction) else {
+        guard let rawTransaction = storage.object(forKey: Key.portableRestoreTransaction) else {
             return true
         }
+        guard let transactionData = rawTransaction as? Data else { return false }
         guard let transaction = try? JSONDecoder().decode(
             PortableRestoreTransaction.self,
             from: transactionData
@@ -525,7 +539,7 @@ final class TrackpadGestureStore: ObservableObject {
             return false
         }
         storage.removeObject(forKey: Key.portableRestoreTransaction)
-        return storage.data(forKey: Key.portableRestoreTransaction) == nil
+        return storage.object(forKey: Key.portableRestoreTransaction) == nil
     }
 
     @discardableResult
@@ -535,7 +549,7 @@ final class TrackpadGestureStore: ObservableObject {
 
     private func finishPortableRestoreTransaction() -> Bool {
         storage.removeObject(forKey: Key.portableRestoreTransaction)
-        return storage.data(forKey: Key.portableRestoreTransaction) == nil
+        return storage.object(forKey: Key.portableRestoreTransaction) == nil
     }
 
     private func writePortableValues(
@@ -597,6 +611,21 @@ final class TrackpadGestureStore: ObservableObject {
         return (storage.object(forKey: key) as? NSNumber)?.doubleValue
     }
 
+    private static func hasExpectedData(forKey key: String, storage: any PluginStorage) -> Bool {
+        guard let rawValue = storage.object(forKey: key) else { return true }
+        return rawValue is Data
+    }
+
+    private static func hasExpectedBool(forKey key: String, storage: any PluginStorage) -> Bool {
+        guard storage.object(forKey: key) != nil else { return true }
+        return storedBool(forKey: key, storage: storage) != nil
+    }
+
+    private static func hasExpectedDouble(forKey key: String, storage: any PluginStorage) -> Bool {
+        guard storage.object(forKey: key) != nil else { return true }
+        return storedDouble(forKey: key, storage: storage) != nil
+    }
+
     private func migrateLegacyMiddleClickIfNeeded(_ legacy: LegacyMiddleClickPreferences?) {
         guard let legacy else {
             return
@@ -634,18 +663,22 @@ final class TrackpadGestureStore: ObservableObject {
                gesture: .fingerTap(count: previousRecord.preferences.fingerCount),
                action: .middleClick,
                isEnabled: previousRecord.preferences.isEnabled
-           ) {
+            ) {
             if conflictingMapping(for: desiredGesture, excludingID: mappingID) == nil {
-                mappings[index].gesture = desiredGesture
-                mappings[index].isEnabled = legacy.isEnabled
-                persist()
+                var candidate = mappings
+                candidate[index].gesture = desiredGesture
+                candidate[index].isEnabled = legacy.isEnabled
+                guard persist(candidate) else { return nil }
+                mappings = candidate
                 return mappingID
             }
 
             // A newer explicit mapping wins the desired gesture. Remove only the unchanged
             // migration-owned mapping so the superseded legacy gesture does not remain active.
-            mappings.remove(at: index)
-            persist()
+            var candidate = mappings
+            candidate.remove(at: index)
+            guard persist(candidate) else { return nil }
+            mappings = candidate
             return nil
         }
 
@@ -660,16 +693,21 @@ final class TrackpadGestureStore: ObservableObject {
             action: .middleClick,
             isEnabled: legacy.isEnabled
         )
-        mappings.append(mapping)
-        persist()
+        let candidate = mappings + [mapping]
+        guard persist(candidate) else { return nil }
+        mappings = candidate
         return mapping.id
     }
 
-    private func persist() {
-        guard let data = try? encoder.encode(mappings) else {
-            return
-        }
+    private func persist(_ candidate: [TrackpadGestureMapping]) -> Bool {
+        guard let data = try? encoder.encode(candidate) else { return false }
+        let previousRawValue = storage.object(forKey: Key.mappings)
         storage.set(data, forKey: Key.mappings)
+        guard storage.data(forKey: Key.mappings) == data else {
+            Self.setOptional(previousRawValue, forKey: Key.mappings, storage: storage)
+            return false
+        }
+        return true
     }
 
     private static func normalized(_ candidates: [TrackpadGestureMapping]) -> [TrackpadGestureMapping] {

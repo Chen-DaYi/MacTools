@@ -1,6 +1,70 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "error.persistence.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر حفظ إعدادات شحن البطارية." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Einstellungen zum Laden der Batterie konnten nicht gesichert werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Unable to save battery charging settings." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se han podido guardar los ajustes de carga de la batería." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible d’enregistrer les réglages de charge de la batterie." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "バッテリー充電設定を保存できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "배터리 충전 설정을 저장할 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível salvar os ajustes de carregamento da bateria." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось сохранить настройки зарядки аккумулятора." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法保存电池充电设置。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法儲存電池充電設定。" } }
+      }
+    },
+    "error.persistence.rollbackFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذرت استعادة الإعدادات السابقة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die vorherigen Einstellungen konnten nicht wiederhergestellt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The previous settings could not be restored." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se han podido restaurar los ajustes anteriores." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de restaurer les réglages précédents." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "以前の設定を復元できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이전 설정을 복원할 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível restaurar os ajustes anteriores." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось восстановить предыдущие настройки." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复先前设置失败。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法還原先前設定。" } }
+      }
+    },
+    "error.persistence.hardwareRollbackFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذرت استعادة حالة الجهاز السابقة: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der vorherige Hardwarezustand konnte nicht wiederhergestellt werden: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "The previous hardware state could not be restored: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se ha podido restaurar el estado anterior del hardware: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de restaurer l’état matériel précédent : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "以前のハードウェア状態を復元できませんでした：%@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이전 하드웨어 상태를 복원할 수 없습니다: %@" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível restaurar o estado anterior do hardware: %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось восстановить предыдущее состояние оборудования: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "恢复先前硬件状态失败：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法還原先前硬件狀態：%@" } }
+      }
+    },
+    "error.action.rollbackFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "%@؛ تعذرت استعادة الحالة السابقة: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@; der vorherige Zustand konnte nicht wiederhergestellt werden: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@; the previous state could not be restored: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "%@; no se pudo restaurar el estado anterior: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "%@ ; impossible de restaurer l’état précédent : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@。以前の状態を復元できませんでした：%@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@. 이전 상태를 복원하지 못했습니다: %@" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "%@; não foi possível restaurar o estado anterior: %@" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "%@; не удалось восстановить предыдущее состояние: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@；恢复先前状态失败：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@；無法還原先前狀態：%@" } }
+      }
+    },
     "error.helperInstall.authorizationScriptUnavailable": {
       "extractionState": "manual",
       "localizations": {

@@ -1,7 +1,7 @@
 import Foundation
 import MacToolsPluginKit
 
-enum ActionRunLinkRequest: Equatable, Sendable {
+enum ActionRunLinkRequest: Hashable, Sendable {
     case direct(ActionKey)
     case preset(UUID)
 }
@@ -62,6 +62,12 @@ final class ActionRunLinkService {
                 representation(for: .direct(reference.key)),
                 presetID: nil
             )
+        }
+        guard !containsSensitiveParameters(
+            reference,
+            definitions: action.definition.parameters
+        ) else {
+            return .unavailable(FeatureL10n.string("包含敏感参数的操作不能创建运行链接。"))
         }
         guard let preset = presetStore.preset(reference: reference) else {
             return .needsPreset

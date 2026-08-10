@@ -336,6 +336,53 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
 
     // MARK: - partiallyDeleted
 
+    func testDeleteTreeRechecksStagedRootDeviceAfterPrewalk() throws {
+        try temporary.makeDirectory("Cache")
+        let target = temporary.resolve("Cache").path
+        let plan = try DiskCleanPlanFactory.makePlan(paths: [target])
+        let stagedName = DiskCleanRemovalPrimitive.stagedNamePrefix + "root-recheck"
+        let resolver = SequencedDiskCleanStagedEntryDeviceResolver(
+            crossingsByName: [stagedName: [false, true]]
+        )
+
+        let disposition = makePrimitive(
+            deviceResolver: resolver,
+            stagedNameFactory: { stagedName }
+        ).remove(plan.items[0], mode: .permanent)
+
+        guard case let .partiallyDeleted(actualStagedName, reason) = disposition else {
+            return XCTFail("expected partiallyDeleted, got: \(disposition)")
+        }
+        XCTAssertEqual(actualStagedName, stagedName)
+        XCTAssertTrue(reason.contains("挂载点"))
+        assertPathExists(DiskCleanRemovalPrimitive.join(temporary.path, stagedName))
+    }
+
+    func testDeleteTreeRechecksEntryDeviceImmediatelyBeforeUnlink() throws {
+        try temporary.makeFile("Cache/leaf.bin", bytes: 10)
+        let target = temporary.resolve("Cache").path
+        let plan = try DiskCleanPlanFactory.makePlan(paths: [target])
+        let stagedName = DiskCleanRemovalPrimitive.stagedNamePrefix + "leaf-recheck"
+        let resolver = SequencedDiskCleanStagedEntryDeviceResolver(
+            crossingsByName: ["leaf.bin": [false, true]]
+        )
+
+        let disposition = makePrimitive(
+            deviceResolver: resolver,
+            stagedNameFactory: { stagedName }
+        ).remove(plan.items[0], mode: .permanent)
+
+        guard case let .partiallyDeleted(actualStagedName, reason) = disposition else {
+            return XCTFail("expected partiallyDeleted, got: \(disposition)")
+        }
+        XCTAssertEqual(actualStagedName, stagedName)
+        XCTAssertTrue(reason.contains("挂载点"))
+        assertPathExists(
+            DiskCleanRemovalPrimitive.join(temporary.path, stagedName) + "/leaf.bin",
+            "the revalidated leaf must not be unlinked"
+        )
+    }
+
     /// Mid-delete unwritable subdirectory → honestly report partiallyDeleted; remnants stay under the staged name.
     ///
     /// **Deviation from design §7.4**: the journal entry is explicitly cleared rather than retained. Retention would let
@@ -368,6 +415,39 @@ final class DiskCleanRemovalPrimitiveTests: XCTestCase {
         )
         // Restore permissions so teardown can delete the tree.
         chmod(DiskCleanRemovalPrimitive.join(temporary.path, stagedName) + "/Locked", 0o755)
+    }
+
+    func testFailedTerminalJournalWriteNeverRestoresPartiallyDeletedTree() throws {
+        struct ExpectedFailure: Error {}
+        journal = DiskCleanStagingJournal(
+            directory: storage.url,
+            beforeAppend: { kind in
+                if kind == .end { throw ExpectedFailure() }
+            }
+        )
+        try temporary.makeFile("Cache/top.bin", bytes: 10)
+        try temporary.makeFile("Cache/Locked/inner.bin", bytes: 20)
+        let target = temporary.resolve("Cache").path
+        let plan = try DiskCleanPlanFactory.makePlan(paths: [target])
+        let lockedPath = temporary.resolve("Cache/Locked").path
+        restrictedDirectories.append(lockedPath)
+        XCTAssertEqual(chmod(lockedPath, 0o555), 0)
+
+        let disposition = makePrimitive().remove(plan.items[0], mode: .permanent)
+        guard case let .partiallyDeleted(stagedName, _) = disposition else {
+            return XCTFail("expected partiallyDeleted, got: \(disposition)")
+        }
+        chmod(DiskCleanRemovalPrimitive.join(temporary.path, stagedName) + "/Locked", 0o755)
+
+        let reopened = DiskCleanStagingJournal(directory: storage.url)
+        let outcomes = DiskCleanStagingReconciler().reconcile(
+            journal: reopened,
+            auditLog: DiskCleanAuditLog(directory: storage.url)
+        )
+
+        XCTAssertEqual(outcomes, [.retainedIrreversible(stagedName: stagedName)])
+        assertPathDoesNotExist(target, "a partial tree must never be restored to its original path")
+        assertPathExists(DiskCleanRemovalPrimitive.join(temporary.path, stagedName))
     }
 
     // MARK: - Fixtures

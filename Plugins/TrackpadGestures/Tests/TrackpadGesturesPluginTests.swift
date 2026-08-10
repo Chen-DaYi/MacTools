@@ -403,6 +403,31 @@ final class TrackpadGestureStoreTests: XCTestCase {
         XCTAssertTrue(TrackpadGestureStore(storage: storage, legacyMiddleClick: nil).mappings.isEmpty)
     }
 
+    func testMappingMutationsPublishOnlyAfterDurablePersistence() throws {
+        let storage = TrackpadGestureMemoryStorage()
+        let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        let mapping = TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )
+        XCTAssertTrue(store.save(mapping))
+        storage.blockedSetKeys = ["mappings"]
+        var edited = mapping
+        edited.action = .action(ActionReference(
+            key: ActionKey(providerID: "test", actionID: "blocked-edit")
+        ))
+
+        XCTAssertFalse(store.save(edited))
+        XCTAssertFalse(store.setEnabled(false, id: mapping.id))
+        XCTAssertFalse(store.delete(id: mapping.id))
+        XCTAssertEqual(store.mappings, [mapping])
+        XCTAssertEqual(store.enabledGestures, [mapping.gesture])
+
+        storage.blockedSetKeys = []
+        let reloaded = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+        XCTAssertEqual(reloaded.mappings, [mapping])
+    }
+
     func testMacToolsActionPersistsMigratesAndPortableBackupRoundTrips() throws {
         let storage = TrackpadGestureMemoryStorage()
         let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
@@ -518,6 +543,24 @@ final class TrackpadGestureStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.mappings, [original])
         XCTAssertFalse(reloaded.ignoresGesturesWhileTyping)
         XCTAssertEqual(reloaded.typingGracePeriod, 0.8)
+    }
+
+    func testPortableRestoreRejectsWrongTypedRawMappingWithoutRemovingIt() throws {
+        let source = TrackpadGestureStore(
+            storage: TrackpadGestureMemoryStorage(),
+            legacyMiddleClick: nil
+        )
+        XCTAssertTrue(source.save(TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )))
+        let backup = try XCTUnwrap(source.portableBackup())
+        let storage = TrackpadGestureMemoryStorage()
+        storage.values["mappings"] = "sentinel"
+        let destination = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
+
+        XCTAssertFalse(destination.restorePortableBackup(backup))
+        XCTAssertEqual(storage.object(forKey: "mappings") as? String, "sentinel")
     }
 
     func testInitializationRecoversInterruptedPortableRestoreJournal() throws {

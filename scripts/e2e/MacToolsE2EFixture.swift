@@ -894,7 +894,14 @@ private func seed(bundleIdentifier: String, allowRealDomain: Bool) throws {
     guard let defaults = UserDefaults(suiteName: bundleIdentifier) else {
         throw FixtureError.invalidArguments("Could not open preferences domain \(bundleIdentifier).")
     }
-    guard let systemMuted = SystemAudioMuteState.currentSettableValue() else {
+    let systemMuted: Bool
+    if let currentSystemMute = SystemAudioMuteState.currentSettableValue() {
+        systemMuted = currentSystemMute
+    } else if !allowRealDomain {
+        // Script validation must remain deterministic on Macs whose selected
+        // output device has no writable mute property.
+        systemMuted = false
+    } else {
         throw FixtureError.invalidArguments(
             "The default audio output does not expose a settable mute state for the E2E fixture."
         )
@@ -1046,8 +1053,11 @@ private func audit(bundleIdentifier: String) throws -> AuditReport {
         && runLinkWorkflow?.steps.first?.reference.parameters.count == 1
         && runLinkWorkflow?.steps.first?.reference.parameters.first?.name == "enabled"
         && runLinkMuteSetting == automationMuteSetting
+    let currentSystemMute = SystemAudioMuteState.currentSettableValue()
+    let permitsUnavailableTestAudio = bundleIdentifier.contains(".e2e-test.")
+        && currentSystemMute == nil
     let systemMuteStatePreserved = automationMuteSetting != nil
-        && automationMuteSetting == SystemAudioMuteState.currentSettableValue()
+        && (automationMuteSetting == currentSystemMute || permitsUnavailableTestAudio)
         && runLinkMuteSetting == automationMuteSetting
     let primaryHelperRuleEnabled = rules.contains {
         guard $0.id == Fixture.ruleID,

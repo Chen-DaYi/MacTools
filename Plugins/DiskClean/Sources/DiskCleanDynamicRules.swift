@@ -46,10 +46,24 @@ protocol DiskCleanSubprocessRunning: Sendable {
     ) async throws -> DiskCleanSubprocessResult
 }
 
-/// Real implementation: pipe drain races the timeout—timeout kills the process; process exit yields EOF so the reader returns.
+/// Real implementation: every command runs in a dedicated process group. Timeout and
+/// cancellation terminate the whole group, then escalate to SIGKILL so descendants that
+/// inherited stdout cannot keep the pipe open indefinitely.
 struct LocalDiskCleanSubprocessRunner: DiskCleanSubprocessRunning {
     /// Output cap. Stop reading past it so JSON parsing fails as `malformedOutput` instead of unbounded memory use.
     static let maximumOutputBytes = 8 * 1024 * 1024
+
+    private let onOutputDrained: @Sendable () -> Void
+    private let waitForLeaderExitWithoutReaping: @Sendable (pid_t) -> Bool
+
+    init(
+        onOutputDrained: @escaping @Sendable () -> Void = {},
+        waitForLeaderExitWithoutReaping: (@Sendable (pid_t) -> Bool)? = nil
+    ) {
+        self.onOutputDrained = onOutputDrained
+        self.waitForLeaderExitWithoutReaping = waitForLeaderExitWithoutReaping
+            ?? Self.waitForLeaderExitWithoutReaping(processID:)
+    }
 
     func run(
         executablePath: String,
@@ -60,17 +74,9 @@ struct LocalDiskCleanSubprocessRunner: DiskCleanSubprocessRunning {
             throw DiskCleanSubprocessError.executableUnavailable(path: executablePath)
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = arguments
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = FileHandle.nullDevice
-        process.standardInput = FileHandle.nullDevice
-
-        let box = ProcessBox(process: process)
+        let launch: LaunchResult
         do {
-            try process.run()
+            launch = try Self.spawn(executablePath: executablePath, arguments: arguments)
         } catch {
             throw DiskCleanSubprocessError.launchFailed(
                 path: executablePath,
@@ -78,41 +84,86 @@ struct LocalDiskCleanSubprocessRunner: DiskCleanSubprocessRunning {
             )
         }
 
-        let readDescriptor = outputPipe.fileHandleForReading.fileDescriptor
+        let lifecycle = DiskCleanSubprocessLifecycle()
+        let processGroup = DiskCleanProcessGroupBox(
+            processID: launch.processID,
+            lifecycle: lifecycle
+        )
         let timeoutTask = Task {
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled else { return }
-            box.terminate(markingTimeout: true)
+            processGroup.requestTimeout()
         }
 
-        // Caller cancel also terminates the subprocess: a blocked read(2) ignores task cancel; only process exit closes the pipe.
-        let output = await withTaskCancellationHandler {
-            await Self.drain(fileDescriptor: readDescriptor)
+        // A blocked read(2) and waitid(2) ignore Swift task cancellation. Keep the
+        // cancellation handler installed until the leader is reaped and group signal
+        // ownership is released.
+        let (output, status, leaderExitWasObserved) = await withTaskCancellationHandler {
+            async let leaderExitObservation: Bool = Self.observeExitWithoutReaping(
+                processID: launch.processID,
+                lifecycle: lifecycle,
+                processGroup: processGroup,
+                waitForExit: waitForLeaderExitWithoutReaping
+            )
+            let output = await Self.drain(
+                fileDescriptor: launch.outputDescriptor,
+                lifecycle: lifecycle
+            )
+            onOutputDrained()
+            let leaderExitWasObserved = await leaderExitObservation
+            await processGroup.finishAndTerminateRemainingDescendants()
+            let status = Self.waitForExit(processID: launch.processID)
+            processGroup.releaseOwnership()
+            timeoutTask.cancel()
+            close(launch.outputDescriptor)
+            return (output, status, leaderExitWasObserved)
         } onCancel: {
-            box.terminate(markingTimeout: false)
+            processGroup.requestCancellation()
         }
 
-        box.waitUntilExit()
-        timeoutTask.cancel()
-        try? outputPipe.fileHandleForReading.close()
+        guard leaderExitWasObserved else {
+            throw DiskCleanSubprocessError.launchFailed(
+                path: executablePath,
+                message: "Unable to observe subprocess exit safely."
+            )
+        }
 
-        if box.didTimeOut {
+        switch lifecycle.outcome {
+        case .timedOut:
             throw DiskCleanSubprocessError.timedOut(path: executablePath)
+        case .cancelled:
+            throw CancellationError()
+        case .completed:
+            return DiskCleanSubprocessResult(
+                exitCode: Self.exitCode(from: status),
+                standardOutput: output
+            )
+        case .running:
+            assertionFailure("Subprocess lifecycle did not reach a terminal outcome")
+            throw DiskCleanSubprocessError.launchFailed(
+                path: executablePath,
+                message: "Subprocess lifecycle did not complete."
+            )
         }
-        return DiskCleanSubprocessResult(exitCode: box.terminationStatus, standardOutput: output)
     }
 
-    private static func drain(fileDescriptor: Int32) async -> Data {
+    private static func drain(
+        fileDescriptor: Int32,
+        lifecycle: DiskCleanSubprocessLifecycle
+    ) async -> Data {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 var output = Data()
                 var buffer = [UInt8](repeating: 0, count: 64 * 1024)
-                while output.count < maximumOutputBytes {
+                while true {
                     let count = buffer.withUnsafeMutableBytes {
                         read(fileDescriptor, $0.baseAddress, $0.count)
                     }
                     if count > 0 {
-                        output.append(contentsOf: buffer[0..<count])
+                        let remainingCapacity = max(0, maximumOutputBytes + 1 - output.count)
+                        if remainingCapacity > 0 {
+                            output.append(contentsOf: buffer[0..<min(count, remainingCapacity)])
+                        }
                         continue
                     }
                     if count < 0 && errno == EINTR {
@@ -120,46 +171,275 @@ struct LocalDiskCleanSubprocessRunner: DiskCleanSubprocessRunning {
                     }
                     break
                 }
+                lifecycle.recordDrainFinished()
                 continuation.resume(returning: output)
             }
         }
     }
 
-    /// `Process` is not `Sendable`, but `terminate()`/`isRunning` may be called across threads.
-    /// A lock serializes "terminate + mark timeout" and ensures an already-exited process is not misread as timed out.
-    private final class ProcessBox: @unchecked Sendable {
-        private struct Flags: Sendable {
-            var timedOut = false
-        }
-
-        private let process: Process
-        private let flags = OSAllocatedUnfairLock(initialState: Flags())
-
-        init(process: Process) {
-            self.process = process
-        }
-
-        func terminate(markingTimeout: Bool) {
-            flags.withLock { flags in
-                guard process.isRunning else { return }
-                if markingTimeout {
-                    flags.timedOut = true
+    private static func observeExitWithoutReaping(
+        processID: pid_t,
+        lifecycle: DiskCleanSubprocessLifecycle,
+        processGroup: DiskCleanProcessGroupBox,
+        waitForExit: @escaping @Sendable (pid_t) -> Bool
+    ) async -> Bool {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                let observed = waitForExit(processID)
+                if observed {
+                    lifecycle.recordLeaderExited()
+                } else {
+                    processGroup.revokeGroupSignalOwnership()
                 }
-                process.terminate()
+                continuation.resume(returning: observed)
             }
         }
+    }
 
-        func waitUntilExit() {
-            process.waitUntilExit()
+    private static func waitForLeaderExitWithoutReaping(processID: pid_t) -> Bool {
+        var information = siginfo_t()
+        var result: Int32
+        repeat {
+            result = waitid(P_PID, id_t(processID), &information, WEXITED | WNOWAIT)
+        } while result < 0 && errno == EINTR
+        return result == 0
+    }
+
+    private struct LaunchResult {
+        let processID: pid_t
+        let outputDescriptor: Int32
+    }
+
+    private static func spawn(executablePath: String, arguments: [String]) throws -> LaunchResult {
+        var outputPipe: [Int32] = [-1, -1]
+        guard pipe(&outputPipe) == 0 else { throw POSIXError(.EIO) }
+
+        var actions: posix_spawn_file_actions_t?
+        var attributes: posix_spawnattr_t?
+        guard posix_spawn_file_actions_init(&actions) == 0,
+              posix_spawnattr_init(&attributes) == 0 else {
+            close(outputPipe[0])
+            close(outputPipe[1])
+            throw POSIXError(.EIO)
+        }
+        defer {
+            posix_spawn_file_actions_destroy(&actions)
+            posix_spawnattr_destroy(&attributes)
         }
 
-        var terminationStatus: Int32 {
-            process.terminationStatus
+        guard posix_spawn_file_actions_adddup2(&actions, outputPipe[1], STDOUT_FILENO) == 0,
+              posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0) == 0,
+              posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0) == 0,
+              posix_spawn_file_actions_addclose(&actions, outputPipe[0]) == 0,
+              posix_spawn_file_actions_addclose(&actions, outputPipe[1]) == 0,
+              posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP)) == 0,
+              posix_spawnattr_setpgroup(&attributes, 0) == 0 else {
+            close(outputPipe[0])
+            close(outputPipe[1])
+            throw POSIXError(.EIO)
         }
 
-        var didTimeOut: Bool {
-            flags.withLock { $0.timedOut }
+        var processID: pid_t = 0
+        let spawnArguments = [executablePath] + arguments
+        let environmentEntries = ProcessInfo.processInfo.environment
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+        let spawnResult = withDiskCleanCStringArray(spawnArguments) { argv in
+            withDiskCleanCStringArray(environmentEntries) { environment in
+                posix_spawn(
+                    &processID,
+                    executablePath,
+                    &actions,
+                    &attributes,
+                    argv,
+                    environment
+                )
+            }
         }
+        guard spawnResult == 0 else {
+            close(outputPipe[0])
+            close(outputPipe[1])
+            throw POSIXError(POSIXErrorCode(rawValue: spawnResult) ?? .EIO)
+        }
+        close(outputPipe[1])
+        return LaunchResult(processID: processID, outputDescriptor: outputPipe[0])
+    }
+
+    private static func waitForExit(processID: pid_t) -> Int32 {
+        var status: Int32 = 0
+        var result: pid_t
+        repeat {
+            result = waitpid(processID, &status, 0)
+        } while result < 0 && errno == EINTR
+        return result == processID ? status : 1 << 8
+    }
+
+    private static func exitCode(from status: Int32) -> Int32 {
+        let signal = status & 0x7f
+        return signal == 0 ? (status >> 8) & 0xff : 128 + signal
+    }
+
+}
+
+/// Arbitrates natural completion, timeout, and cancellation under one lock. Natural
+/// completion requires both leader exit and pipe EOF because descendants can inherit
+/// stdout after the leader exits.
+final class DiskCleanSubprocessLifecycle: @unchecked Sendable {
+    enum Outcome: Equatable, Sendable {
+        case running
+        case completed
+        case timedOut
+        case cancelled
+    }
+
+    private struct State: Sendable {
+        var leaderExited = false
+        var drainFinished = false
+        var outcome: Outcome = .running
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    var outcome: Outcome {
+        state.withLock { $0.outcome }
+    }
+
+    func recordLeaderExited() {
+        state.withLock { state in
+            state.leaderExited = true
+            completeIfReady(&state)
+        }
+    }
+
+    func recordDrainFinished() {
+        state.withLock { state in
+            state.drainFinished = true
+            completeIfReady(&state)
+        }
+    }
+
+    func claimTimeout() -> Bool {
+        claim(.timedOut)
+    }
+
+    func claimCancellation() -> Bool {
+        claim(.cancelled)
+    }
+
+    private func claim(_ outcome: Outcome) -> Bool {
+        state.withLock { state in
+            completeIfReady(&state)
+            guard state.outcome == .running else { return false }
+            state.outcome = outcome
+            return true
+        }
+    }
+
+    private func completeIfReady(_ state: inout State) {
+        guard state.outcome == .running,
+              state.leaderExited,
+              state.drainFinished else {
+            return
+        }
+        state.outcome = .completed
+    }
+}
+
+/// Owns process-group escalation until the leader is reaped. Holding the leader as a
+/// zombie reserves its PID/PGID, so no TERM or KILL can target a reused process group.
+final class DiskCleanProcessGroupBox: @unchecked Sendable {
+    typealias SignalGroup = @Sendable (_ processID: pid_t, _ signal: Int32) -> Void
+    typealias WaitForGrace = @Sendable () async -> Void
+
+    private struct State: Sendable {
+        var escalationTask: Task<Void, Never>?
+        var ownsGroupSignals = true
+        var ownershipReleased = false
+    }
+
+    private let processID: pid_t
+    private let lifecycle: DiskCleanSubprocessLifecycle
+    private let signalGroup: SignalGroup
+    private let waitForGrace: WaitForGrace
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    init(
+        processID: pid_t,
+        lifecycle: DiskCleanSubprocessLifecycle,
+        signalGroup: @escaping SignalGroup = { processID, signal in
+            _ = Darwin.kill(-processID, signal)
+        },
+        waitForGrace: @escaping WaitForGrace = {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    ) {
+        self.processID = processID
+        self.lifecycle = lifecycle
+        self.signalGroup = signalGroup
+        self.waitForGrace = waitForGrace
+    }
+
+    func requestTimeout() {
+        guard lifecycle.claimTimeout() else { return }
+        _ = escalationTask()
+    }
+
+    func requestCancellation() {
+        guard lifecycle.claimCancellation() else { return }
+        _ = escalationTask()
+    }
+
+    func finishAndTerminateRemainingDescendants() async {
+        await escalationTask().value
+    }
+
+    func revokeGroupSignalOwnership() {
+        state.withLock { state in
+            state.ownsGroupSignals = false
+        }
+    }
+
+    func releaseOwnership() {
+        state.withLock { state in
+            precondition(state.escalationTask != nil)
+            state.ownsGroupSignals = false
+            state.ownershipReleased = true
+        }
+    }
+
+    private func escalationTask() -> Task<Void, Never> {
+        state.withLock { state in
+            if let escalationTask = state.escalationTask {
+                return escalationTask
+            }
+            precondition(!state.ownershipReleased)
+            let waitForGrace = self.waitForGrace
+            let escalationTask = Task.detached(priority: .utility) { [weak self] in
+                self?.signalIfOwned(SIGTERM)
+                await waitForGrace()
+                self?.signalIfOwned(SIGKILL)
+            }
+            state.escalationTask = escalationTask
+            return escalationTask
+        }
+    }
+
+    private func signalIfOwned(_ signal: Int32) {
+        state.withLock { state in
+            guard state.ownsGroupSignals, !state.ownershipReleased else { return }
+            signalGroup(processID, signal)
+        }
+    }
+}
+
+private func withDiskCleanCStringArray<Result>(
+    _ strings: [String],
+    _ body: (UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Result
+) -> Result {
+    var pointers = strings.map { strdup($0) } + [nil]
+    defer { pointers.compactMap { $0 }.forEach { free($0) } }
+    return pointers.withUnsafeMutableBufferPointer { buffer in
+        body(buffer.baseAddress!)
     }
 }
 

@@ -39,9 +39,16 @@ final class LockScreenPlugin:
         category: "LockScreenPlugin"
     )
     private let localization: PluginLocalization
+    private let lockRequest: @MainActor @Sendable () async -> Bool
 
-    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+    init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        lockRequest: @escaping @MainActor @Sendable () async -> Bool = {
+            await LockScreenPlugin.requestImmediateLock()
+        }
+    ) {
         self.localization = localization
+        self.lockRequest = lockRequest
         self.metadata = PluginMetadata(
             id: "lock-screen",
             title: localization.string("metadata.title", defaultValue: "锁定屏幕"),
@@ -121,8 +128,15 @@ final class LockScreenPlugin:
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        lockScreen()
-        return ActionExecutionHandle { .succeeded() }
+        ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return await self.lockScreen()
+                ? .succeeded()
+                : .failed(message: self.localization.string(
+                    "error.lockFailed",
+                    defaultValue: "无法立即锁定屏幕。"
+                ))
+        }
     }
 
     func handleCommand(id: String) {
@@ -138,36 +152,47 @@ final class LockScreenPlugin:
             return
         }
 
-        lockScreen()
+        Task { @MainActor [weak self] in
+            _ = await self?.lockScreen()
+        }
     }
 
-    private func lockScreen() {
+    private func lockScreen() async -> Bool {
+        let succeeded = await lockRequest()
+        if succeeded {
+            logger.info("Screen locked successfully")
+        } else {
+            logger.error("Immediate screen lock failed")
+        }
+        return succeeded
+    }
+
+    nonisolated private static func requestImmediateLock() async -> Bool {
+        await Task.detached(priority: .userInitiated) {
         let frameworkPath = "/System/Library/PrivateFrameworks/login.framework/login"
         guard let handle = dlopen(frameworkPath, RTLD_LAZY) else {
-            logger.error("Failed to open login.framework; falling back to ScreenSaverEngine")
-            startScreenSaverFallback()
-            return
+            _ = startScreenSaverFallback()
+            return false
         }
         defer { dlclose(handle) }
 
         guard let symbol = dlsym(handle, "SACLockScreenImmediate") else {
-            logger.error("SACLockScreenImmediate not found; falling back to ScreenSaverEngine")
-            startScreenSaverFallback()
-            return
+            _ = startScreenSaverFallback()
+            return false
         }
 
         typealias LockScreenFunction = @convention(c) () -> Int32
         let lockScreenImmediately = unsafeBitCast(symbol, to: LockScreenFunction.self)
         let result = lockScreenImmediately()
-        if result == 0 {
-            logger.info("Screen locked successfully")
-        } else {
-            logger.error("SACLockScreenImmediate returned \(result); falling back to ScreenSaverEngine")
-            startScreenSaverFallback()
+        guard result == 0 else {
+            _ = startScreenSaverFallback()
+            return false
         }
+        return true
+        }.value
     }
 
-    private func startScreenSaverFallback() {
+    nonisolated private static func startScreenSaverFallback() -> Bool {
         let task = Process()
         task.executableURL = URL(
             fileURLWithPath: "/System/Library/CoreServices/ScreenSaverEngine.app/Contents/MacOS/ScreenSaverEngine"
@@ -175,8 +200,9 @@ final class LockScreenPlugin:
 
         do {
             try task.run()
+            return true
         } catch {
-            logger.error("Failed to start ScreenSaverEngine fallback: \(error.localizedDescription)")
+            return false
         }
     }
 }

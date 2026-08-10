@@ -53,14 +53,16 @@ final class AutomationController: ObservableObject {
 
     init(
         store: WorkflowStore,
-        ruleStore: AutomationRuleStore = AutomationRuleStore(),
+        ruleStore: AutomationRuleStore? = nil,
         registry: ActionRegistry,
         executor: ActionExecutor,
         runner: WorkflowRunner? = nil,
         systemServices: SystemAutomationServices? = nil
     ) {
         self.store = store
-        self.ruleStore = ruleStore
+        self.ruleStore = ruleStore ?? AutomationRuleStore(
+            definitionStore: store.definitionStore
+        )
         self.registry = registry
         self.runner = runner ?? WorkflowRunner(
             store: store,
@@ -70,7 +72,7 @@ final class AutomationController: ObservableObject {
         self.calendarProvider = systemServices?.calendarProvider
         if let systemServices {
             self.runtime = AutomationRuntime(
-                ruleStore: ruleStore,
+                ruleStore: self.ruleStore,
                 workflowStore: store,
                 workflowStarter: self.runner,
                 snapshotProvider: systemServices.snapshotProvider,
@@ -120,17 +122,21 @@ final class AutomationController: ObservableObject {
 
     @discardableResult
     func deleteWorkflow(id: UUID) -> Bool {
-        let runsToCancel = activeRunIDs(for: id)
-        let existingRules = ruleStore.rules()
-        let retainedRules = existingRules.filter { $0.workflowID != id }
-        guard retainedRules == existingRules || ruleStore.replace(retainedRules) else {
-            lastError = .cannotDeleteRelatedRules
+        let runsToCancel = runner.trackedRunIDs(for: id)
+        let existingWorkflows = store.workflows()
+        let retainedWorkflows = existingWorkflows.filter { $0.id != id }
+        guard retainedWorkflows.count != existingWorkflows.count,
+              store.definitionStore.sharesStorage(with: ruleStore.definitionStore) else {
+            lastError = .cannotDeleteWorkflow
             return false
         }
-        guard store.delete(id: id) else {
-            if retainedRules != existingRules {
-                _ = ruleStore.replace(existingRules)
-            }
+        let existingRules = ruleStore.rules()
+        let retainedRules = existingRules.filter { $0.workflowID != id }
+        guard store.replaceDefinitions(
+            workflows: retainedWorkflows,
+            rules: retainedRules,
+            allowsRecovery: false
+        ) else {
             lastError = .cannotDeleteWorkflow
             return false
         }
@@ -296,9 +302,7 @@ final class AutomationController: ObservableObject {
     }
 
     func activeRunIDs(for workflowID: UUID) -> [UUID] {
-        history.compactMap { run in
-            run.workflowID == workflowID && activeRunIDs.contains(run.id) ? run.id : nil
-        }
+        runner.activeRunIDs(for: workflowID)
     }
 
     func recentRuns(workflowID: UUID, limit: Int = 20) -> [WorkflowRun] {
@@ -318,15 +322,16 @@ final class AutomationController: ObservableObject {
         guard importedRules.allSatisfy({ workflowIDs.contains($0.workflowID) }) else {
             return false
         }
-
-        let previousWorkflows = store.workflows()
-        guard store.replaceWorkflows(importedWorkflows) else { return false }
-        guard ruleStore.replace(importedRules) else {
-            _ = store.replaceWorkflows(previousWorkflows)
+        guard store.definitionStore.sharesStorage(with: ruleStore.definitionStore),
+              store.replaceDefinitions(
+                  workflows: importedWorkflows,
+                  rules: importedRules,
+                  allowsRecovery: true
+              ) else {
             return false
         }
 
-        activeRunIDs.forEach(cancel(runID:))
+        runner.trackedRunIDs.forEach(cancel(runID:))
         lastError = nil
         reloadAll()
         runtime?.refreshProviders()

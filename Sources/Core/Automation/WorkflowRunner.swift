@@ -20,9 +20,12 @@ final class WorkflowRunner {
     private let executor: ActionExecutor
     private let sleeper: any WorkflowSleeping
     private let now: () -> Date
+    private let terminalPersistenceCheckpoint: @MainActor @Sendable () async -> Void
     private var cancelledRunIDs: Set<UUID> = []
+    private var enteredRunIDs: Set<UUID> = []
     private(set) var activeRunIDs: Set<UUID> = []
     private var executionHandles: [UUID: ActionExecutionHandle] = [:]
+    private var workflowIDsByRunID: [UUID: UUID] = [:]
 
     var onRunChange: (() -> Void)?
 
@@ -31,13 +34,15 @@ final class WorkflowRunner {
         registry: ActionRegistry,
         executor: ActionExecutor,
         sleeper: any WorkflowSleeping = SystemWorkflowSleeper(),
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        terminalPersistenceCheckpoint: @escaping @MainActor @Sendable () async -> Void = {}
     ) {
         self.store = store
         self.registry = registry
         self.executor = executor
         self.sleeper = sleeper
         self.now = now
+        self.terminalPersistenceCheckpoint = terminalPersistenceCheckpoint
     }
 
     func makeExecutionHandle(
@@ -85,16 +90,41 @@ final class WorkflowRunner {
                 )
             },
             cancel: { [weak self] in
-                self?.cancelledRunIDs.insert(runID)
+                self?.requestCancellation(runID: runID)
             }
         )
         executionHandles[runID] = actionHandle
+        workflowIDsByRunID[runID] = workflowID
+        onRunChange?()
         return .success(WorkflowExecutionHandle(runID: runID, actionHandle: actionHandle))
     }
 
     func cancel(runID: UUID) {
-        cancelledRunIDs.insert(runID)
         executionHandles[runID]?.cancel()
+    }
+
+    func activeRunIDs(for workflowID: UUID) -> [UUID] {
+        workflowIDsByRunID.compactMap { runID, trackedWorkflowID in
+            trackedWorkflowID == workflowID && activeRunIDs.contains(runID) ? runID : nil
+        }
+    }
+
+    func trackedRunIDs(for workflowID: UUID) -> [UUID] {
+        workflowIDsByRunID.compactMap { runID, trackedWorkflowID in
+            trackedWorkflowID == workflowID ? runID : nil
+        }
+    }
+
+    var trackedRunIDs: Set<UUID> {
+        Set(workflowIDsByRunID.keys)
+    }
+
+    var bookkeepingRunIDs: Set<UUID> {
+        Set(executionHandles.keys)
+            .union(workflowIDsByRunID.keys)
+            .union(activeRunIDs)
+            .union(enteredRunIDs)
+            .union(cancelledRunIDs)
     }
 
     private func execute(
@@ -103,9 +133,17 @@ final class WorkflowRunner {
         source: WorkflowRunSource,
         mode: ActionExecutionMode
     ) async -> ActionExecutionResult {
+        enteredRunIDs.insert(runID)
         defer {
             cancelledRunIDs.remove(runID)
+            enteredRunIDs.remove(runID)
+            activeRunIDs.remove(runID)
             executionHandles.removeValue(forKey: runID)
+            workflowIDsByRunID.removeValue(forKey: runID)
+            onRunChange?()
+        }
+        guard !isCancelled(runID: runID) else {
+            return .cancelled
         }
         guard let workflow = store.workflow(id: workflowID) else {
             return .failed(message: FeatureL10n.string("找不到工作流。"))
@@ -156,7 +194,6 @@ final class WorkflowRunner {
         source: WorkflowRunSource,
         mode: ActionExecutionMode
     ) async -> ActionExecutionResult {
-        activeRunIDs.insert(runID)
         var run = WorkflowRun(
             id: runID,
             workflowID: workflow.id,
@@ -165,12 +202,8 @@ final class WorkflowRunner {
             startedAt: now()
         )
         _ = await store.record(run)
+        activeRunIDs.insert(runID)
         onRunChange?()
-
-        defer {
-            activeRunIDs.remove(runID)
-            onRunChange?()
-        }
 
         var hadFailure = false
         for (index, originalStep) in workflow.steps.enumerated() {
@@ -216,11 +249,14 @@ final class WorkflowRunner {
                 hadFailure = true
                 if originalStep.errorPolicy == .stop {
                     appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
-                    await finish(
+                    if await finishNonCancelledTerminal(
                         &run,
+                        runID: runID,
                         status: .failed,
                         summaryLocalizationKey: .requiredActionUnavailable
-                    )
+                    ) {
+                        return .cancelled
+                    }
                     return .failed(message: FeatureL10n.string("必需操作不可用。"))
                 }
                 continue
@@ -238,8 +274,18 @@ final class WorkflowRunner {
                 outcome: outcome
             )
             run.stepResults.append(result)
+            if isCancelled(runID: runID) {
+                appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
+                await finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
+                return .cancelled
+            }
             _ = await store.record(run, persistenceMode: .coalesced)
             onRunChange?()
+            if isCancelled(runID: runID) {
+                appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
+                await finish(&run, status: .cancelled, summaryLocalizationKey: .workflowCancelled)
+                return .cancelled
+            }
 
             switch result.status {
             case .succeeded:
@@ -252,21 +298,38 @@ final class WorkflowRunner {
                 hadFailure = true
                 if originalStep.errorPolicy == .stop {
                     appendSkipped(workflow.steps.dropFirst(index + 1), to: &run)
-                    await finish(
+                    if await finishNonCancelledTerminal(
                         &run,
+                        runID: runID,
                         status: .failed,
                         summaryLocalizationKey: .stoppedAtFailedStep
-                    )
+                    ) {
+                        return .cancelled
+                    }
                     return .failed(message: FeatureL10n.string("工作流在失败步骤处停止。"))
                 }
             }
         }
 
         if hadFailure {
-            await finish(&run, status: .failed, summaryLocalizationKey: .completedWithFailures)
+            if await finishNonCancelledTerminal(
+                &run,
+                runID: runID,
+                status: .failed,
+                summaryLocalizationKey: .completedWithFailures
+            ) {
+                return .cancelled
+            }
             return .failed(message: FeatureL10n.string("部分步骤失败。"))
         }
-        await finish(&run, status: .succeeded, summaryLocalizationKey: .completed)
+        if await finishNonCancelledTerminal(
+            &run,
+            runID: runID,
+            status: .succeeded,
+            summaryLocalizationKey: .completed
+        ) {
+            return .cancelled
+        }
         return .succeeded()
     }
 
@@ -378,6 +441,18 @@ final class WorkflowRunner {
         return action.catalogEntry?.title ?? action.definition.title
     }
 
+    private func requestCancellation(runID: UUID) {
+        if enteredRunIDs.contains(runID) {
+            cancelledRunIDs.insert(runID)
+        } else {
+            cancelledRunIDs.remove(runID)
+        }
+        guard !activeRunIDs.contains(runID) else { return }
+        executionHandles.removeValue(forKey: runID)
+        workflowIDsByRunID.removeValue(forKey: runID)
+        onRunChange?()
+    }
+
     private func appendCancelledAndSkipped(
         currentStep: WorkflowStep,
         remainingSteps: ArraySlice<WorkflowStep>,
@@ -421,6 +496,37 @@ final class WorkflowRunner {
         run.summaryLocalizationKey = summaryLocalizationKey
         _ = await store.record(run)
         onRunChange?()
+    }
+
+    private func finishNonCancelledTerminal(
+        _ run: inout WorkflowRun,
+        runID: UUID,
+        status: WorkflowRunStatus,
+        summaryLocalizationKey: WorkflowHistoryLocalizationKey
+    ) async -> Bool {
+        if isCancelled(runID: runID) {
+            await finish(
+                &run,
+                status: .cancelled,
+                summaryLocalizationKey: .workflowCancelled
+            )
+            return true
+        }
+        await finish(
+            &run,
+            status: status,
+            summaryLocalizationKey: summaryLocalizationKey
+        )
+        await terminalPersistenceCheckpoint()
+        guard isCancelled(runID: runID) else {
+            return false
+        }
+        await finish(
+            &run,
+            status: .cancelled,
+            summaryLocalizationKey: .workflowCancelled
+        )
+        return true
     }
 
     private func recordRejectedRun(

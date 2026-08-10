@@ -21,6 +21,11 @@ struct ApplicationVolumeTarget: Equatable, Sendable {
     let gain: Double
 }
 
+enum ApplicationVolumeRouteResult: Equatable, Sendable {
+    case succeeded
+    case failed
+}
+
 @MainActor
 protocol AudioApplicationMonitoring: AnyObject {
     var onUpdate: ((AudioApplicationSnapshot) -> Void)? { get set }
@@ -35,8 +40,23 @@ protocol ApplicationVolumeRouting: AnyObject {
     var isSupported: Bool { get }
 
     func update(targets: [ApplicationVolumeTarget], outputDeviceUID: String?)
+    func applyAndWait(
+        targets: [ApplicationVolumeTarget],
+        outputDeviceUID: String?
+    ) async -> ApplicationVolumeRouteResult
     func requestSystemAudioAccess() async -> Bool
     func stop()
+}
+
+extension ApplicationVolumeRouting {
+    func applyAndWait(
+        targets: [ApplicationVolumeTarget],
+        outputDeviceUID: String?
+    ) async -> ApplicationVolumeRouteResult {
+        update(targets: targets, outputDeviceUID: outputDeviceUID)
+        await Task.yield()
+        return .succeeded
+    }
 }
 
 enum AppVolumeAccessState: Equatable {

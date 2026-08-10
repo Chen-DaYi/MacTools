@@ -238,6 +238,8 @@ const settingsModels: Record<string, SettingSection[]> = {
             option("off", "关闭", "Off"),
             option("top-left", "左上角", "Top left"),
             option("top-right", "右上角", "Top right"),
+            option("bottom-left", "左下角", "Bottom left"),
+            option("bottom-right", "右下角", "Bottom right"),
           ],
         },
       ],
@@ -814,7 +816,7 @@ const fallbackSections = (name: LocalizedText): SettingSection[] => [
 ];
 
 const pageTitle = "MacTools 插件与设置 | macOS 菜单栏工具";
-const pageDescription = "在仿 macOS 设置窗口中浏览 40 个 MacTools 插件，搜索分类，并交互预览窗口切换、风扇、系统状态、启动台、电池等插件设置。";
+const pageDescription = `在仿 macOS 设置窗口中浏览 ${plugins.length} 个 MacTools 插件，搜索分类，并交互预览窗口切换、风扇、系统状态、启动台、电池等插件设置。`;
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
@@ -861,7 +863,12 @@ const structuredData = {
       </p>
     </section>
 
-    <section class="plugins-workspace" aria-label="MacTools 插件设置交互预览">
+    <section
+      class="plugins-workspace"
+      aria-label="MacTools 插件设置交互预览"
+      data-aria-label-zh="MacTools 插件设置交互预览"
+      data-aria-label-en="MacTools plugin settings interactive preview"
+    >
       <div class="settings-window" data-settings-window>
         <div class="settings-titlebar" aria-hidden="true">
           <div class="traffic-lights">
@@ -872,7 +879,12 @@ const structuredData = {
         </div>
 
         <div class="settings-window-body">
-          <aside class="settings-sidebar" aria-label="插件设置页面">
+          <aside
+            class="settings-sidebar"
+            aria-label="插件设置页面"
+            data-aria-label-zh="插件设置页面"
+            data-aria-label-en="Plugin settings pages"
+          >
             <div class="settings-sidebar-scroll">
               <p class="settings-sidebar-label">
                 <span data-i18n-zh>插件</span>
@@ -935,7 +947,12 @@ const structuredData = {
                 />
               </label>
 
-              <div class="market-categories" aria-label="插件分类">
+              <div
+                class="market-categories"
+                aria-label="插件分类"
+                data-aria-label-zh="插件分类"
+                data-aria-label-en="Plugin categories"
+              >
                 <button class="is-selected" type="button" data-market-filter="all" aria-pressed="true">
                   <img src={symbol(categoryIcons.all)} alt="" />
                   <span data-i18n-zh>全部</span>
@@ -981,7 +998,12 @@ const structuredData = {
                       data-search={searchValue}
                       data-installed={String(isInitiallyInstalled)}
                     >
-                      <span class="market-plugin-status" aria-label={isInitiallyInstalled ? "已安装" : "未安装"}></span>
+                      <span
+                        class="market-plugin-status"
+                        aria-label={isInitiallyInstalled ? "已安装" : "未安装"}
+                        data-aria-label-zh={isInitiallyInstalled ? "已安装" : "未安装"}
+                        data-aria-label-en={isInitiallyInstalled ? "Installed" : "Not installed"}
+                      ></span>
                       <div class="market-plugin-copy">
                         <h3>
                           <span data-i18n-zh>{text.zh.displayName}</span>
@@ -1114,7 +1136,12 @@ const structuredData = {
                                   </div>
                                 ) : null}
                                 {row.control === "select" ? (
-                                  <select aria-label={row.title.zh} value={String(row.value ?? "")}>
+                                  <select
+                                    aria-label={row.title.zh}
+                                    data-aria-label-zh={row.title.zh}
+                                    data-aria-label-en={row.title.en}
+                                    value={String(row.value ?? "")}
+                                  >
                                     {row.options?.map((item) => (
                                       <option
                                         value={item.value}
@@ -1136,6 +1163,9 @@ const structuredData = {
                                       step={row.step}
                                       value={row.value}
                                       data-range-control
+                                      aria-label={row.title.zh}
+                                      data-aria-label-zh={row.title.zh}
+                                      data-aria-label-en={row.title.en}
                                     />
                                     <output>{row.value}{row.unit}</output>
                                   </div>
@@ -1154,7 +1184,14 @@ const structuredData = {
                                   </span>
                                 ) : null}
                                 {row.control === "text" ? (
-                                  <input class="settings-text-input" type="text" value={String(row.value ?? "")} aria-label={row.title.zh} />
+                                  <input
+                                    class="settings-text-input"
+                                    type="text"
+                                    value={String(row.value ?? "")}
+                                    aria-label={row.title.zh}
+                                    data-aria-label-zh={row.title.zh}
+                                    data-aria-label-en={row.title.en}
+                                  />
                                 ) : null}
                               </div>
                             </div>

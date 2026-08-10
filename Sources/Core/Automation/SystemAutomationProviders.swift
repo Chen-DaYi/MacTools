@@ -230,6 +230,7 @@ private actor SystemCalendarAutomationEventQuery: CalendarAutomationEventQueryin
         currentDate: Date,
         configurations: [CalendarAutomationTrigger]
     ) async -> [CalendarAutomationScheduledEvent] {
+        guard !Task.isCancelled else { return [] }
         guard let endDate = Calendar.current.date(byAdding: .day, value: 31, to: currentDate) else {
             return []
         }
@@ -243,9 +244,12 @@ private actor SystemCalendarAutomationEventQuery: CalendarAutomationEventQueryin
             calendars: nil
         )
         let events = eventStore.events(matching: predicate)
+        guard !Task.isCancelled else { return [] }
         var scheduled: [CalendarAutomationScheduledEvent] = []
         for configuration in configurations {
+            guard !Task.isCancelled else { return [] }
             for event in events where matches(event, configuration: configuration) {
+                guard !Task.isCancelled else { return [] }
                 guard let eventDate = configuration.phase == .starts ? event.startDate : event.endDate else {
                     continue
                 }
@@ -560,6 +564,10 @@ final class SystemPowerAutomationTriggerProvider: AutomationTriggerProviding {
         self.notificationSourceFactory = notificationSourceFactory
     }
 
+    isolated deinit {
+        stop()
+    }
+
     func start(handler: @escaping @MainActor (AutomationTriggerEvent) -> Void) {
         self.handler = handler
         previous = Self.readPowerSnapshot()
@@ -688,6 +696,51 @@ final class SystemDisplayAutomationTriggerProvider: AutomationTriggerProviding {
     }
 }
 
+protocol AutomationNetworkPathMonitoring: AnyObject {
+    var updateHandler: (@Sendable (
+        AutomationNetworkStatus,
+        AutomationNetworkInterface
+    ) -> Void)? { get set }
+
+    func start(queue: DispatchQueue)
+    func cancel()
+}
+
+private final class SystemAutomationNetworkPathMonitor: AutomationNetworkPathMonitoring,
+    @unchecked Sendable {
+    private let monitor: NWPathMonitor
+    private let lock = NSLock()
+    private var storedUpdateHandler: (@Sendable (
+        AutomationNetworkStatus,
+        AutomationNetworkInterface
+    ) -> Void)?
+
+    var updateHandler: (@Sendable (
+        AutomationNetworkStatus,
+        AutomationNetworkInterface
+    ) -> Void)? {
+        get { lock.withLock { storedUpdateHandler } }
+        set { lock.withLock { storedUpdateHandler = newValue } }
+    }
+
+    init(monitor: NWPathMonitor = NWPathMonitor()) {
+        self.monitor = monitor
+    }
+
+    func start(queue: DispatchQueue) {
+        monitor.pathUpdateHandler = { [weak self] path in
+            let state = SystemNetworkAutomationTriggerProvider.state(for: path)
+            self?.updateHandler?(state.0, state.1)
+        }
+        monitor.start(queue: queue)
+    }
+
+    func cancel() {
+        monitor.pathUpdateHandler = nil
+        monitor.cancel()
+    }
+}
+
 @MainActor
 final class SystemNetworkAutomationTriggerProvider: AutomationTriggerProviding {
     let kind: AutomationTriggerKind = .network
@@ -695,19 +748,23 @@ final class SystemNetworkAutomationTriggerProvider: AutomationTriggerProviding {
     private(set) var currentStatus: AutomationNetworkStatus = .unavailable
     private(set) var currentInterface: AutomationNetworkInterface = .any
 
-    private let monitor: NWPathMonitor
+    private let monitorFactory: () -> any AutomationNetworkPathMonitoring
     private let queue: DispatchQueue
     private let now: () -> Date
     private var handler: (@MainActor (AutomationTriggerEvent) -> Void)?
+    private var monitor: (any AutomationNetworkPathMonitoring)?
     private var hasReceivedInitialPath = false
     private var isRunning = false
+    private var generation: UInt64 = 0
 
     init(
-        monitor: NWPathMonitor = NWPathMonitor(),
+        monitorFactory: @escaping () -> any AutomationNetworkPathMonitoring = {
+            SystemAutomationNetworkPathMonitor()
+        },
         queue: DispatchQueue = DispatchQueue(label: "com.mactools.automation.network"),
         now: @escaping () -> Date = Date.init
     ) {
-        self.monitor = monitor
+        self.monitorFactory = monitorFactory
         self.queue = queue
         self.now = now
     }
@@ -716,19 +773,36 @@ final class SystemNetworkAutomationTriggerProvider: AutomationTriggerProviding {
         self.handler = handler
         guard !isRunning else { return }
         isRunning = true
-        monitor.pathUpdateHandler = { [weak self] path in
-            let state = Self.state(for: path)
-            Task { @MainActor in self?.pathChanged(status: state.0, interface: state.1) }
+        generation &+= 1
+        let currentGeneration = generation
+        hasReceivedInitialPath = false
+        currentStatus = .unavailable
+        currentInterface = .any
+        let monitor = monitorFactory()
+        self.monitor = monitor
+        monitor.updateHandler = { [weak self] status, interface in
+            Task { @MainActor in
+                self?.pathChanged(
+                    status: status,
+                    interface: interface,
+                    generation: currentGeneration
+                )
+            }
         }
         monitor.start(queue: queue)
     }
 
     func stop() {
         guard isRunning else { return }
-        monitor.cancel()
-        monitor.pathUpdateHandler = nil
         isRunning = false
+        generation &+= 1
         handler = nil
+        monitor?.updateHandler = nil
+        monitor?.cancel()
+        monitor = nil
+        hasReceivedInitialPath = false
+        currentStatus = .unavailable
+        currentInterface = .any
     }
 
     nonisolated static func state(for path: NWPath) -> (AutomationNetworkStatus, AutomationNetworkInterface) {
@@ -748,7 +822,12 @@ final class SystemNetworkAutomationTriggerProvider: AutomationTriggerProviding {
         return (status, interface)
     }
 
-    private func pathChanged(status: AutomationNetworkStatus, interface: AutomationNetworkInterface) {
+    private func pathChanged(
+        status: AutomationNetworkStatus,
+        interface: AutomationNetworkInterface,
+        generation: UInt64
+    ) {
+        guard isRunning, self.generation == generation else { return }
         let events = SystemAutomationTransitions.networkEvents(
             previousStatus: currentStatus,
             previousInterface: currentInterface,

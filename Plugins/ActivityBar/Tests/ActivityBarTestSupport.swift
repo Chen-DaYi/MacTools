@@ -4,8 +4,15 @@ import MacToolsPluginKit
 
 @MainActor
 final class ActivityBarMemoryStorage: PluginStorage {
+    enum WriteBehavior {
+        case accept
+        case ignore
+        case corrupt
+    }
+
     private var values: [String: Any] = [:]
     private var setCounts: [String: Int] = [:]
+    private var writeBehaviors: [String: [WriteBehavior]] = [:]
 
     func object(forKey key: String) -> Any? {
         values[key]
@@ -33,7 +40,21 @@ final class ActivityBarMemoryStorage: PluginStorage {
 
     func set(_ value: Any?, forKey key: String) {
         setCounts[key, default: 0] += 1
-        values[key] = value
+        let behavior = writeBehaviors[key]?.isEmpty == false
+            ? writeBehaviors[key]!.removeFirst()
+            : .accept
+        switch behavior {
+        case .accept:
+            values[key] = value
+        case .ignore:
+            break
+        case .corrupt:
+            values[key] = "corrupt"
+        }
+    }
+
+    func enqueueWriteBehaviors(_ behaviors: [WriteBehavior], forKey key: String) {
+        writeBehaviors[key, default: []].append(contentsOf: behaviors)
     }
 
     func setCallCount(forKey key: String) -> Int {

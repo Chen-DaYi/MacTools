@@ -255,6 +255,64 @@ class CopyPluginManifestTests(unittest.TestCase):
                 (install / "example-debug-plugin.mactoolsplugin").is_dir()
             )
 
+    def test_full_debug_sync_removes_stale_output_and_regenerates_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            source = root / "Source"
+            products = root / "Products"
+            output = root / "Output"
+            for name, plugin_id in (("First", "first"), ("Second", "second")):
+                plugin_root = source / name
+                bundle = products / f"{name}.bundle"
+                plugin_root.mkdir(parents=True)
+                bundle.mkdir(parents=True)
+                (bundle / "payload").write_text(name, encoding="utf-8")
+                (plugin_root / "plugin.json").write_text(
+                    json.dumps(
+                        {
+                            "id": plugin_id,
+                            "displayName": name,
+                            "version": "1.0.0",
+                            "minHostVersion": "1.0.0",
+                            "pluginKitVersion": 3,
+                            "bundleRelativePath": f"{name}.bundle",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            command = [
+                str(SYNC_SCRIPT),
+                "--source-dir", str(source),
+                "--products-dir", str(products),
+                "--output-dir", str(output),
+                "--skip-install",
+            ]
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            second_package = output / "Packages/second.mactoolsplugin"
+            second_state = output / ".sync-state/second.sha256"
+            self.assertTrue(second_package.is_dir())
+            self.assertTrue(second_state.is_file())
+
+            second_source = source / "Second"
+            for path in sorted(second_source.rglob("*"), reverse=True):
+                path.unlink() if path.is_file() else path.rmdir()
+            second_source.rmdir()
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            catalog = json.loads(
+                (output / "catalog.dev.json").read_text(encoding="utf-8")
+            )
+            self.assertIn("Removed 1 stale debug output package", result.stdout)
+            self.assertFalse(second_package.exists())
+            self.assertFalse(second_state.exists())
+            self.assertEqual([entry["id"] for entry in catalog["plugins"]], ["first"])
+
     def test_partial_debug_sync_preserves_unrelated_installed_package(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)

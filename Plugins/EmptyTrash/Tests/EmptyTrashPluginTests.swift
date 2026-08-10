@@ -81,6 +81,29 @@ final class EmptyTrashPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "废纸篓为空")
     }
 
+    func testCanonicalActionFailsWhenTrashCannotBeCounted() async throws {
+        struct CountFailure: Error {}
+        let emptyProbe = TrashEmptyProbe()
+        let plugin = EmptyTrashPlugin(
+            countItems: { throw CountFailure() },
+            emptyItems: { await emptyProbe.empty() },
+            countRefreshDelay: .zero
+        )
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected count failure, got \(result)")
+        }
+        let emptyCount = await emptyProbe.emptyCount()
+        XCTAssertEqual(emptyCount, 0)
+    }
+
     private func waitForRequestCount(
         _ expectedRequestCount: Int,
         counter: TrashCountProbe,

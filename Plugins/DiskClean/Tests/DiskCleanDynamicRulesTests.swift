@@ -1,3 +1,4 @@
+import Darwin
 import XCTest
 @testable import MacTools
 @testable import DiskCleanPlugin
@@ -249,6 +250,185 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
     }
 
+    func testLocalSubprocessRunnerKillsTermIgnoringDescendantHoldingOutputPipe() async throws {
+        let started = Date()
+        do {
+            _ = try await LocalDiskCleanSubprocessRunner().run(
+                executablePath: "/bin/sh",
+                arguments: ["-c", #"(trap '' TERM; sleep 30) & exit 0"#],
+                timeout: .milliseconds(300)
+            )
+            XCTFail("descendant-held pipe should reach the bounded timeout")
+        } catch let error as DiskCleanSubprocessError {
+            guard case .timedOut = error else {
+                return XCTFail("unexpected error type: \(error)")
+            }
+        }
+
+        XCTAssertLessThan(
+            Date().timeIntervalSince(started),
+            3,
+            "SIGKILL escalation must close inherited pipe writers promptly"
+        )
+    }
+
+    func testLocalSubprocessRunnerCancelsAfterOutputDrainAndTerminatesGroup() async throws {
+        let script = root.appendingPathComponent("close-output-and-wait.sh")
+        let pidFile = root.appendingPathComponent("processes.txt")
+        let source = """
+        trap '' TERM
+        (
+          trap '' TERM
+          exec 1>&-
+          sleep 30
+        ) &
+        child=$!
+        printf '%s %s\n' "$$" "$child" > "$1"
+        exec 1>&-
+        wait "$child"
+        """
+        try Data(source.utf8).write(to: script)
+        let drain = DiskCleanOutputDrainRecorder()
+        let runner = LocalDiskCleanSubprocessRunner {
+            drain.record()
+        }
+        let task = Task {
+            try await runner.run(
+                executablePath: "/bin/sh",
+                arguments: [script.path, pidFile.path],
+                timeout: .seconds(2)
+            )
+        }
+        defer { task.cancel() }
+
+        for _ in 0..<200 where !drain.didDrain {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(drain.didDrain, "subprocess stdout should reach EOF before cancellation")
+        let pidText = try String(contentsOf: pidFile, encoding: .utf8)
+        let processIDs = pidText.split(separator: " ").compactMap {
+            pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        XCTAssertEqual(processIDs.count, 2)
+        let started = Date()
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("cancelled subprocess should throw")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1.5)
+        for processID in processIDs {
+            for _ in 0..<200 where kill(processID, 0) == 0 {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(kill(processID, 0), -1, "process \(processID) should be terminated")
+        }
+    }
+
+    func testSubprocessLifecycleNaturalCompletionWinsLateTimeout() {
+        let lifecycle = DiskCleanSubprocessLifecycle()
+
+        lifecycle.recordLeaderExited()
+        lifecycle.recordDrainFinished()
+
+        XCTAssertEqual(lifecycle.outcome, .completed)
+        XCTAssertFalse(lifecycle.claimTimeout())
+        XCTAssertFalse(lifecycle.claimCancellation())
+        XCTAssertEqual(lifecycle.outcome, .completed)
+    }
+
+    func testSubprocessLifecycleTimeoutWinsWhileDescendantStillHoldsPipe() {
+        let lifecycle = DiskCleanSubprocessLifecycle()
+
+        lifecycle.recordLeaderExited()
+
+        XCTAssertTrue(lifecycle.claimTimeout())
+        XCTAssertFalse(lifecycle.claimTimeout())
+        XCTAssertFalse(lifecycle.claimCancellation())
+        lifecycle.recordDrainFinished()
+        XCTAssertEqual(lifecycle.outcome, .timedOut)
+    }
+
+    func testProcessGroupEscalationFinishesBeforeOwnershipRelease() async {
+        let events = DiskCleanProcessEventRecorder()
+        let lifecycle = DiskCleanSubprocessLifecycle()
+        lifecycle.recordLeaderExited()
+        lifecycle.recordDrainFinished()
+        let processGroup = DiskCleanProcessGroupBox(
+            processID: 42,
+            lifecycle: lifecycle,
+            signalGroup: { _, signal in
+                events.append(signal == SIGTERM ? .term : .kill)
+            },
+            waitForGrace: {
+                events.append(.grace)
+            }
+        )
+
+        await processGroup.finishAndTerminateRemainingDescendants()
+        events.append(.reap)
+        processGroup.releaseOwnership()
+        let eventsAtRelease = events.snapshot
+        for _ in 0 ..< 10 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(eventsAtRelease, [.term, .grace, .kill, .reap])
+        XCTAssertEqual(events.snapshot, eventsAtRelease)
+    }
+
+    func testFailedExitObservationRevokesAllProcessGroupSignals() async {
+        let events = DiskCleanProcessEventRecorder()
+        let lifecycle = DiskCleanSubprocessLifecycle()
+        let processGroup = DiskCleanProcessGroupBox(
+            processID: 42,
+            lifecycle: lifecycle,
+            signalGroup: { _, signal in
+                events.append(signal == SIGTERM ? .term : .kill)
+            },
+            waitForGrace: {
+                events.append(.grace)
+            }
+        )
+
+        processGroup.revokeGroupSignalOwnership()
+        processGroup.requestCancellation()
+        await processGroup.finishAndTerminateRemainingDescendants()
+        events.append(.reap)
+        processGroup.releaseOwnership()
+
+        XCTAssertEqual(events.snapshot, [.grace, .reap])
+    }
+
+    func testRunnerFailsWhenLeaderExitCannotBeSafelyObserved() async {
+        let runner = LocalDiskCleanSubprocessRunner(
+            waitForLeaderExitWithoutReaping: { _ in false }
+        )
+
+        do {
+            _ = try await runner.run(
+                executablePath: "/usr/bin/true",
+                arguments: [],
+                timeout: .seconds(1)
+            )
+            XCTFail("unsafe leader-exit observation should fail")
+        } catch let error as DiskCleanSubprocessError {
+            guard case let .launchFailed(path, message) = error else {
+                return XCTFail("expected launchFailed, got \(error)")
+            }
+            XCTAssertEqual(path, "/usr/bin/true")
+            XCTAssertEqual(message, "Unable to observe subprocess exit safely.")
+        } catch {
+            XCTFail("expected DiskCleanSubprocessError, got \(error)")
+        }
+    }
+
     // MARK: - Helpers
 
     private struct FakeSubprocessRunner: DiskCleanSubprocessRunning {
@@ -317,5 +497,38 @@ final class DiskCleanDynamicRulesTests: XCTestCase {
 
     private func names(of items: [DiskCleanFileItem]) -> [String] {
         items.map { ($0.path as NSString).lastPathComponent }
+    }
+}
+
+private final class DiskCleanProcessEventRecorder: @unchecked Sendable {
+    enum Event: Equatable, Sendable {
+        case term
+        case grace
+        case kill
+        case reap
+    }
+
+    private let lock = NSLock()
+    private var events: [Event] = []
+
+    var snapshot: [Event] {
+        lock.withLock { events }
+    }
+
+    func append(_ event: Event) {
+        lock.withLock { events.append(event) }
+    }
+}
+
+private final class DiskCleanOutputDrainRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var drained = false
+
+    var didDrain: Bool {
+        lock.withLock { drained }
+    }
+
+    func record() {
+        lock.withLock { drained = true }
     }
 }

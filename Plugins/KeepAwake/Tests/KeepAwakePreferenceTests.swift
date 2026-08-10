@@ -179,6 +179,29 @@ final class KeepAwakePreferenceTests: XCTestCase {
         )
     }
 
+    func testCanonicalStopFailsWhenAutomaticLockCleanupFails() async throws {
+        let factory = KeepAwakeSessionFactory()
+        let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())
+        plugin.setBehavior(.keepScreenBasedToolsWorking)
+        plugin.handleAction(.setSwitch(true))
+        factory.userActivityMaintainer.stopError = MockUserActivityError.releaseFailed
+        let stop = try XCTUnwrap(
+            plugin.actionCatalogEntries.first { $0.title == "停用阻止休眠" }?.reference
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: stop,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected cleanup failure, got \(result)")
+        }
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
     func testDurationActionsStartBoundedKeepAwakeSessions() async throws {
         let factory = KeepAwakeSessionFactory()
         let plugin = factory.makePlugin(storage: KeepAwakeMemoryStorage())

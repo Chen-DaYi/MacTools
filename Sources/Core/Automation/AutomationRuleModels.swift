@@ -212,7 +212,12 @@ struct AutomationRule: Codable, Equatable, Sendable, Identifiable {
 
 enum AutomationRulePortabilityAnalysis {
     static func isPortable(_ rule: AutomationRule) -> Bool {
-        !containsDeviceLocalDisplayReference(rule)
+        !containsDeviceLocalReference(rule)
+    }
+
+    static func containsDeviceLocalReference(_ rule: AutomationRule) -> Bool {
+        containsDeviceLocalDisplayReference(rule)
+            || containsDeviceLocalCalendarReference(rule)
     }
 
     static func containsDeviceLocalDisplayReference(_ rule: AutomationRule) -> Bool {
@@ -224,6 +229,11 @@ enum AutomationRulePortabilityAnalysis {
             guard case let .connectedDisplay(value) = condition else { return false }
             return hasValue(value.displayIdentifier)
         }
+    }
+
+    static func containsDeviceLocalCalendarReference(_ rule: AutomationRule) -> Bool {
+        guard case let .calendar(trigger) = rule.trigger else { return false }
+        return hasValue(trigger.calendarIdentifier)
     }
 
     private static func hasValue(_ value: String?) -> Bool {

@@ -69,13 +69,38 @@ final class ActivityBarPluginTests: XCTestCase {
         let harness = makeHarness()
         let reference = try XCTUnwrap(harness.plugin.actionCatalogEntries.first?.reference)
 
-        let result = try await harness.plugin.beginAction(
+        let handle = try harness.plugin.beginAction(
             ActionInvocation(reference: reference, source: .test, mode: .background)
-        ).result()
+        )
+
+        XCTAssertFalse(harness.controller.isTrackingEnabled)
+        XCTAssertEqual(harness.inputMonitor.startCallCount, 0)
+
+        let result = await handle.result()
 
         XCTAssertEqual(result, .succeeded())
         XCTAssertTrue(harness.controller.isTrackingEnabled)
         XCTAssertEqual(harness.inputMonitor.startCallCount, 1)
+    }
+
+    func testCanonicalTrackingActionFailsClosedWhenPersistenceIsRejected() async throws {
+        let harness = makeHarness()
+        let reference = try XCTUnwrap(harness.plugin.actionCatalogEntries.first?.reference)
+        harness.storage.enqueueWriteBehaviors(
+            [.ignore],
+            forKey: "activity-bar.tracking.enabled"
+        )
+
+        let result = try await harness.plugin.beginAction(
+            ActionInvocation(reference: reference, source: .test, mode: .background)
+        ).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected rejected persistence to fail the action")
+        }
+        XCTAssertFalse(harness.controller.isTrackingEnabled)
+        XCTAssertEqual(harness.inputMonitor.startCallCount, 0)
+        XCTAssertNil(harness.storage.object(forKey: "activity-bar.tracking.enabled"))
     }
 
     func testCanonicalResetActionRequiresConfirmationAndClearsToday() async throws {
@@ -97,6 +122,91 @@ final class ActivityBarPluginTests: XCTestCase {
 
         XCTAssertEqual(result, .succeeded())
         XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 0)
+    }
+
+    func testCanonicalResetRollsBackInputStatsWhenCodingPersistenceFails() async throws {
+        let harness = makeHarness()
+        harness.inputMonitor.emit(.keystroke(app: "Terminal"))
+        harness.controller.inputStats.flushPendingChanges()
+        harness.controller.codingStats.handleEvent(
+            ActivityBarHookEvent(
+                sessionID: "session-1",
+                cwd: "/tmp/MacTools",
+                event: .userPromptSubmit,
+                status: .processing,
+                userPrompt: "keep this",
+                tool: nil,
+                interactive: true
+            )
+        )
+        harness.storage.enqueueWriteBehaviors(
+            [.ignore],
+            forKey: "activity-bar.coding.days.v1"
+        )
+        let entry = try XCTUnwrap(
+            harness.plugin.actionCatalogEntries.first { $0.reference.key.actionID == "reset-today" }
+        )
+
+        let result = try await harness.plugin.beginAction(
+            ActionInvocation(reference: entry.reference, source: .test, mode: .background)
+        ).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected the cross-store reset to fail")
+        }
+        XCTAssertEqual(harness.controller.todayInputStats.keystrokes, 1)
+        XCTAssertEqual(harness.controller.todayCodingStats.wordCount, 2)
+
+        let inputReloaded = ActivityBarStatsStore(storage: harness.storage)
+        let codingReloaded = ActivityBarCodingSessionStore(storage: harness.storage)
+        XCTAssertEqual(inputReloaded.today.keystrokes, 1)
+        XCTAssertEqual(codingReloaded.today.wordCount, 2)
+    }
+
+    func testCanonicalResetFailsClosedOnUnreadableInputStats() async throws {
+        let storage = ActivityBarMemoryStorage()
+        storage.set("invalid", forKey: "activity-bar.input.days.v1")
+        let harness = makeHarness(storage: storage)
+        let entry = try XCTUnwrap(
+            harness.plugin.actionCatalogEntries.first { $0.reference.key.actionID == "reset-today" }
+        )
+
+        let result = try await harness.plugin.beginAction(
+            ActionInvocation(reference: entry.reference, source: .test, mode: .background)
+        ).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected unreadable persisted input stats to fail the reset")
+        }
+        XCTAssertEqual(storage.object(forKey: "activity-bar.input.days.v1") as? String, "invalid")
+    }
+
+    func testCanonicalResetReconcilesInputStateWhenCrossStoreRollbackFails() async throws {
+        let harness = makeHarness()
+        harness.inputMonitor.emit(.keystroke(app: "Terminal"))
+        harness.controller.inputStats.flushPendingChanges()
+        harness.storage.enqueueWriteBehaviors(
+            [.accept, .corrupt],
+            forKey: "activity-bar.input.days.v1"
+        )
+        harness.storage.enqueueWriteBehaviors(
+            [.ignore],
+            forKey: "activity-bar.coding.days.v1"
+        )
+        let entry = try XCTUnwrap(
+            harness.plugin.actionCatalogEntries.first { $0.reference.key.actionID == "reset-today" }
+        )
+
+        let result = try await harness.plugin.beginAction(
+            ActionInvocation(reference: entry.reference, source: .test, mode: .background)
+        ).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected failed rollback to fail the reset")
+        }
+        XCTAssertEqual(harness.storage.object(forKey: "activity-bar.input.days.v1") as? String, "corrupt")
+        XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 0)
+        XCTAssertNotNil(harness.controller.inputStats.loadError)
     }
 
     func testActivateStartsInstalledHookSocketWithoutInputTracking() {

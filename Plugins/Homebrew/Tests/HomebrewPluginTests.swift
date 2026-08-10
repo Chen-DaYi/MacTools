@@ -23,6 +23,11 @@ final class HomebrewPluginTests: XCTestCase {
         var stubbedOutputs: [String: String] = [:]
         var runCalls: [[String]] = []
         var isCancelled = false
+        var cancelCount = 0
+        var suspendNextRun = false
+        var suspendCancelCompletion = false
+        private var suspendedRunContinuation: CheckedContinuation<Int32, Never>?
+        private var suspendedCancelContinuation: CheckedContinuation<Void, Never>?
         
         func run(
             executable: String,
@@ -31,6 +36,12 @@ final class HomebrewPluginTests: XCTestCase {
             onError: @escaping @MainActor (String) -> Void
         ) async throws -> Int32 {
             runCalls.append(arguments)
+            if suspendNextRun {
+                suspendNextRun = false
+                return await withCheckedContinuation { continuation in
+                    suspendedRunContinuation = continuation
+                }
+            }
             
             // Determine stubbed output based on arguments
             var matchKey = ""
@@ -59,6 +70,22 @@ final class HomebrewPluginTests: XCTestCase {
         
         func cancel() async {
             isCancelled = true
+            cancelCount += 1
+            let continuation = suspendedRunContinuation
+            suspendedRunContinuation = nil
+            continuation?.resume(returning: 143)
+            if suspendCancelCompletion {
+                suspendCancelCompletion = false
+                await withCheckedContinuation { continuation in
+                    suspendedCancelContinuation = continuation
+                }
+            }
+        }
+
+        func releaseCancelCompletion() {
+            let continuation = suspendedCancelContinuation
+            suspendedCancelContinuation = nil
+            continuation?.resume()
         }
     }
     
@@ -100,6 +127,225 @@ final class HomebrewPluginTests: XCTestCase {
         XCTAssertEqual(result, .succeeded())
         XCTAssertEqual(runner.runCalls, [["doctor"]])
         XCTAssertFalse(controller.isBusy)
+    }
+
+    func testUpdatingDeactivationCancelsAnActiveOperation() async {
+        let runner = FakeHomebrewCommandRunner()
+        let controller = HomebrewController(runner: runner)
+        controller.isBusy = true
+        let plugin = HomebrewPlugin(
+            controller: controller,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        plugin.deactivate(reason: .updating)
+        for _ in 0 ..< 20 where runner.cancelCount == 0 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(runner.cancelCount, 1)
+        XCTAssertFalse(controller.isBusy)
+    }
+
+    func testUpdatingDeactivationStopsTheOwningScanSequence() async {
+        let runner = FakeHomebrewCommandRunner()
+        runner.suspendNextRun = true
+        let controller = HomebrewController(runner: runner)
+        controller.isBrewAvailable = true
+        controller.brewPath = "/opt/homebrew/bin/brew"
+        let plugin = HomebrewPlugin(
+            controller: controller,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        controller.scanAll()
+        for _ in 0 ..< 100 where runner.runCalls.isEmpty {
+            await Task.yield()
+        }
+        XCTAssertEqual(runner.runCalls, [["tap"]])
+
+        plugin.deactivate(reason: .updating)
+        for _ in 0 ..< 100 where controller.isBusy || runner.cancelCount == 0 {
+            await Task.yield()
+        }
+        for _ in 0 ..< 20 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(runner.cancelCount, 1)
+        XCTAssertEqual(runner.runCalls, [["tap"]])
+        XCTAssertFalse(controller.isBusy)
+    }
+
+    func testStaleCancellationCleanupDoesNotClearReplacementScan() async {
+        let runner = FakeHomebrewCommandRunner()
+        runner.suspendNextRun = true
+        runner.suspendCancelCompletion = true
+        let controller = HomebrewController(runner: runner)
+        controller.isBrewAvailable = true
+        controller.brewPath = "/opt/homebrew/bin/brew"
+
+        controller.scanAll()
+        for _ in 0 ..< 100 where runner.runCalls.count < 1 {
+            await Task.yield()
+        }
+        controller.cancelCurrentOperation()
+        for _ in 0 ..< 100 where controller.isBusy {
+            await Task.yield()
+        }
+
+        runner.suspendNextRun = true
+        controller.scanAll()
+        for _ in 0 ..< 100 where runner.runCalls.count < 2 {
+            await Task.yield()
+        }
+        XCTAssertTrue(controller.isBusy)
+        let replacementName = controller.currentOperationName
+
+        runner.releaseCancelCompletion()
+        for _ in 0 ..< 20 {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(controller.isBusy)
+        XCTAssertEqual(controller.currentOperationName, replacementName)
+        controller.cancelCurrentOperation()
+        for _ in 0 ..< 100 where controller.isBusy {
+            await Task.yield()
+        }
+        XCTAssertEqual(runner.cancelCount, 2)
+    }
+
+    func testCommandRunnerCancellationKillsDescendantProcessGroup() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HomebrewCommandRunnerTests-\(UUID().uuidString)")
+        let bin = root.appendingPathComponent("bin")
+        let brew = bin.appendingPathComponent("brew")
+        let started = root.appendingPathComponent("started")
+        let survived = root.appendingPathComponent("survived")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try """
+        #!/bin/sh
+        # HOMEBREW cancellation fixture
+        trap '' TERM
+        (
+          trap '' TERM
+          sleep 1
+          echo survived > "$1"
+        ) &
+        echo started > "$2"
+        wait
+        """.write(to: brew, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: brew.path
+        )
+        let runner = HomebrewCommandRunner()
+        let runTask = Task {
+            try await runner.run(
+                executable: brew.path,
+                arguments: [survived.path, started.path],
+                onOutput: { _ in },
+                onError: { _ in }
+            )
+        }
+        let deadline = ContinuousClock().now.advanced(by: .seconds(2))
+        while !FileManager.default.fileExists(atPath: started.path),
+              ContinuousClock().now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: started.path))
+
+        await runner.cancel()
+        let status = try await runTask.value
+        try await Task.sleep(for: .milliseconds(1_100))
+
+        XCTAssertNotEqual(status, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: survived.path))
+    }
+
+    func testCommandRunnerWaitsForDescendantBeforeReturningSuccess() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HomebrewCommandRunnerTests-\(UUID().uuidString)")
+        let bin = root.appendingPathComponent("bin")
+        let brew = bin.appendingPathComponent("brew")
+        let completed = root.appendingPathComponent("completed")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try """
+        #!/bin/sh
+        # HOMEBREW descendant completion fixture
+        (
+          trap '' HUP TERM
+          sleep 0.6
+          echo completed > "$1"
+        ) </dev/null >/dev/null 2>&1 &
+        exit 0
+        """.write(to: brew, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: brew.path
+        )
+        let runner = HomebrewCommandRunner()
+
+        let status = try await runner.run(
+            executable: brew.path,
+            arguments: [completed.path],
+            onOutput: { _ in },
+            onError: { _ in }
+        )
+
+        XCTAssertEqual(status, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: completed.path))
+    }
+
+    func testCommandRunnerCancellationAfterLeaderExitReturnsNonzero() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HomebrewCommandRunnerTests-\(UUID().uuidString)")
+        let bin = root.appendingPathComponent("bin")
+        let brew = bin.appendingPathComponent("brew")
+        let started = root.appendingPathComponent("started")
+        let completed = root.appendingPathComponent("completed")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try """
+        #!/bin/sh
+        # HOMEBREW post-leader cancellation fixture
+        (
+          trap '' HUP TERM
+          echo started > "$1"
+          sleep 1
+          echo completed > "$2"
+        ) </dev/null >/dev/null 2>&1 &
+        exit 0
+        """.write(to: brew, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: brew.path
+        )
+        let runner = HomebrewCommandRunner()
+        let runTask = Task {
+            try await runner.run(
+                executable: brew.path,
+                arguments: [started.path, completed.path],
+                onOutput: { _ in },
+                onError: { _ in }
+            )
+        }
+        let deadline = ContinuousClock().now.advanced(by: .seconds(2))
+        while !FileManager.default.fileExists(atPath: started.path),
+              ContinuousClock().now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: started.path))
+
+        await runner.cancel()
+        let status = try await runTask.value
+        try await Task.sleep(for: .milliseconds(1_100))
+
+        XCTAssertNotEqual(status, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: completed.path))
     }
     
     func testPanelUsesManageButton() {

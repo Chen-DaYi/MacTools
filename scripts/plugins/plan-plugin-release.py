@@ -226,6 +226,32 @@ def plan_release(args):
             "Use --mode all so the catalog cannot mix incompatible plugin packages."
         )
 
+    if args.mode == "selected" and set(selected_inputs) != set(plugins):
+        shared_change_samples = []
+        unverifiable_plugins = []
+        for plugin_id in sorted(set(plugins) - set(selected_inputs)):
+            previous_entry = previous_entries.get(plugin_id)
+            if previous_entry is None:
+                continue
+            tag = plugin_release_tag(previous_entry)
+            if not tag or not git_ref_exists(tag):
+                unverifiable_plugins.append(plugin_id)
+                continue
+            shared_change_samples.extend(changed_paths(tag, shared_paths))
+        shared_change_samples = sorted(set(shared_change_samples))
+        if shared_change_samples:
+            errors.append(
+                "Selected mode cannot publish only part of the catalog after shared "
+                "PluginKit sources changed. Use --mode all so every package is rebuilt. "
+                "Changed paths: " + ", ".join(shared_change_samples[:5])
+            )
+        elif unverifiable_plugins:
+            errors.append(
+                "Selected mode cannot verify the shared PluginKit baseline for: "
+                + ", ".join(unverifiable_plugins)
+                + ". Use --mode all so every package is rebuilt."
+            )
+
     if args.mode == "all":
         full_release = True
         for plugin_id, plugin in sorted(plugins.items()):

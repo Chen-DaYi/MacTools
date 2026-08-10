@@ -39,15 +39,20 @@ final class DisplaySleepPlugin:
     )
     private let localization: PluginLocalization
     private let presentationPreparation: @MainActor @Sendable () -> Void
+    private let displaySleepRequest: @MainActor @Sendable () async -> Bool
 
     init(
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         presentationPreparation: @escaping @MainActor @Sendable () -> Void = {
             PluginPresentationSafety.prepareForWindowOrdering()
+        },
+        displaySleepRequest: @escaping @MainActor @Sendable () async -> Bool = {
+            await DisplaySleepPlugin.requestDisplaySleep()
         }
     ) {
         self.localization = localization
         self.presentationPreparation = presentationPreparation
+        self.displaySleepRequest = displaySleepRequest
         self.metadata = PluginMetadata(
             id: "display-sleep",
             title: localization.string("metadata.title", defaultValue: "显示器休眠"),
@@ -127,8 +132,15 @@ final class DisplaySleepPlugin:
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
-        sleepDisplays()
-        return ActionExecutionHandle { .succeeded() }
+        ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return await self.sleepDisplays()
+                ? .succeeded()
+                : .failed(message: self.localization.string(
+                    "error.sleepFailed",
+                    defaultValue: "无法让显示器进入休眠。"
+                ))
+        }
     }
 
     func handleCommand(id: String) {
@@ -144,20 +156,34 @@ final class DisplaySleepPlugin:
             return
         }
 
-        sleepDisplays()
+        Task { @MainActor [weak self] in
+            _ = await self?.sleepDisplays()
+        }
     }
 
-    private func sleepDisplays() {
+    private func sleepDisplays() async -> Bool {
         presentationPreparation()
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
-        task.arguments = ["displaysleepnow"]
-
-        do {
-            try task.run()
+        let succeeded = await displaySleepRequest()
+        if succeeded {
             logger.info("Requested display sleep via pmset")
-        } catch {
-            logger.error("Failed to invoke pmset displaysleepnow: \(error.localizedDescription)")
+        } else {
+            logger.error("pmset displaysleepnow failed")
         }
+        return succeeded
+    }
+
+    nonisolated private static func requestDisplaySleep() async -> Bool {
+        await Task.detached(priority: .userInitiated) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+            task.arguments = ["displaysleepnow"]
+            do {
+                try task.run()
+                task.waitUntilExit()
+                return task.terminationReason == .exit && task.terminationStatus == 0
+            } catch {
+                return false
+            }
+        }.value
     }
 }

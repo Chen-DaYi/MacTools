@@ -311,8 +311,14 @@ final class MenuBarHiddenPlugin: MacToolsPlugin,
               case let .boolean(enabled)? = invocation.reference.parameters["enabled"] else {
             return ActionExecutionHandle { .failed(message: PluginKitLocalization.actionInvalidParameters) }
         }
-        controller.isEnabled = enabled
-        return ActionExecutionHandle { .succeeded() }
+        return ActionExecutionHandle { [weak self] in
+            guard let self else {
+                return .failed(message: PluginKitLocalization.actionUnavailable)
+            }
+            return self.controller.setEnabled(enabled) == .committed
+                ? .succeeded()
+                : .failed(message: PluginKitLocalization.actionFailed)
+        }
     }
 
     // MARK: - Component panel

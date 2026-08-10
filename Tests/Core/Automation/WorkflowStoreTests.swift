@@ -169,6 +169,29 @@ final class WorkflowStoreTests: XCTestCase {
         XCTAssertEqual(recovered.history().count, WorkflowStore.maximumHistoryCount)
     }
 
+    func testHistoryEvictsOldestRunsToStayWithinThePayloadByteLimit() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let workflowID = UUID()
+
+        for index in 0 ..< 3 {
+            let recorded = await store.record(WorkflowRun(
+                workflowID: workflowID,
+                workflowName: "Large \(index)",
+                source: .manual,
+                finishedAt: .now,
+                status: .failed,
+                summary: String(repeating: Character(String(index)), count: 800_000)
+            ))
+            XCTAssertTrue(recorded)
+        }
+
+        let persisted = try XCTUnwrap(defaults.data(forKey: "automation.history.v1"))
+        XCTAssertLessThanOrEqual(persisted.count, WorkflowStore.maximumPayloadByteCount)
+        XCTAssertEqual(store.history().map(\.workflowName), ["Large 2", "Large 1"])
+        XCTAssertNil(store.historyLoadError)
+    }
+
     func testCoalescedHistoryDefersIntermediateWriteAndImmediateRecordFlushesLatest() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)

@@ -110,6 +110,10 @@ enum WorkflowExecutionAnalysis {
                 && actionDefinition.capabilities.contains(.background)
             allowsExternalInvocation = allowsExternalInvocation
                 && actionDefinition.externalInvocationPolicy != .unavailable
+                && !ActionRegistry.containsSensitiveParameters(
+                    step.reference,
+                    for: actionDefinition
+                )
         }
 
         return WorkflowExecutionAnalysisResult(

@@ -261,6 +261,22 @@
           }
         }
       }
+    },
+    "error.sleepFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر إدخال الشاشات في وضع السكون." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Displays konnten nicht in den Ruhezustand versetzt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The displays could not be put to sleep." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudieron poner las pantallas en reposo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible de mettre les écrans en veille." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ディスプレイをスリープ状態にできませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "디스플레이를 잠자기 상태로 전환할 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível colocar os ecrãs em pausa." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось перевести дисплеи в режим сна." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法让显示器进入休眠。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法讓顯示器進入睡眠。" } }
+      }
     }
   },
   "version": "1.0"

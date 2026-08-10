@@ -78,7 +78,6 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
     }
 
     public func deactivate(reason: PluginDeactivationReason) {
-        guard reason.requiresStateCleanup else { return }
         controller.cancelCurrentOperation()
     }
 

@@ -2,52 +2,27 @@ import Foundation
 
 @MainActor
 final class AutomationRuleStore {
-    private struct Envelope: Codable {
-        let formatVersion: Int
-        let rules: [AutomationRule]
-    }
-
-    private enum DefaultsKey {
-        static let rules = "automation.rules.v1"
-    }
-
     static let maximumRuleCount = 256
     static let maximumPayloadByteCount = 1_024 * 1_024
 
-    private let userDefaults: UserDefaults
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
+    let definitionStore: AutomationDefinitionStore
     private(set) var loadError: String?
 
     init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+        self.definitionStore = AutomationDefinitionStore(userDefaults: userDefaults)
+    }
+
+    init(definitionStore: AutomationDefinitionStore) {
+        self.definitionStore = definitionStore
     }
 
     func rules(workflowID: UUID? = nil) -> [AutomationRule] {
-        guard let data = userDefaults.data(forKey: DefaultsKey.rules) else {
-            loadError = nil
-            return []
+        let result = definitionStore.load()
+        loadError = result.ruleError
+        if let workflowID {
+            return result.snapshot.rules.filter { $0.workflowID == workflowID }
         }
-        guard data.count <= Self.maximumPayloadByteCount else {
-            loadError = "rule-payload-too-large"
-            return []
-        }
-        do {
-            let envelope = try decoder.decode(Envelope.self, from: data)
-            guard envelope.formatVersion == AutomationRule.currentFormatVersion,
-                  validate(envelope.rules) == nil else {
-                loadError = "invalid-rule-format"
-                return []
-            }
-            loadError = nil
-            if let workflowID {
-                return envelope.rules.filter { $0.workflowID == workflowID }
-            }
-            return envelope.rules
-        } catch {
-            loadError = "invalid-rule-payload"
-            return []
-        }
+        return result.snapshot.rules
     }
 
     func rule(id: UUID) -> AutomationRule? {
@@ -71,7 +46,7 @@ final class AutomationRuleStore {
     }
 
     func upsert(_ rule: AutomationRule) -> Result<AutomationRule, AutomationRuleStoreError> {
-        if let failure = validate(rule) {
+        if let failure = Self.validationFailure(rule) {
             return .failure(.invalidRule(failure))
         }
         var stored = rules()
@@ -123,32 +98,21 @@ final class AutomationRuleStore {
 
     @discardableResult
     func replace(_ rules: [AutomationRule]) -> Bool {
-        guard validate(rules) == nil else {
+        guard Self.validationFailure(rules) == nil else {
             return false
         }
-        do {
-            let data = try encoder.encode(
-                Envelope(formatVersion: AutomationRule.currentFormatVersion, rules: rules)
-            )
-            guard data.count <= Self.maximumPayloadByteCount else {
-                return false
-            }
-            userDefaults.set(data, forKey: DefaultsKey.rules)
-            return userDefaults.data(forKey: DefaultsKey.rules) == data
-        } catch {
-            return false
-        }
+        return definitionStore.replaceRules(rules)
     }
 
-    private func validate(_ rules: [AutomationRule]) -> String? {
+    static func validationFailure(_ rules: [AutomationRule]) -> String? {
         guard rules.count <= Self.maximumRuleCount,
               Set(rules.map(\.id)).count == rules.count else {
             return "rule-count-or-id"
         }
-        return rules.lazy.compactMap(validate).first
+        return rules.lazy.compactMap(validationFailure).first
     }
 
-    private func validate(_ rule: AutomationRule) -> String? {
+    private static func validationFailure(_ rule: AutomationRule) -> String? {
         let name = rule.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard rule.formatVersion == AutomationRule.currentFormatVersion,
               !name.isEmpty,
@@ -162,7 +126,7 @@ final class AutomationRuleStore {
         return nil
     }
 
-    private func validate(_ trigger: AutomationTrigger) -> Bool {
+    private static func validate(_ trigger: AutomationTrigger) -> Bool {
         switch trigger {
         case let .schedule(value):
             validTime(hour: value.hour, minute: value.minute)
@@ -183,7 +147,7 @@ final class AutomationRuleStore {
         }
     }
 
-    private func validate(_ condition: AutomationCondition) -> Bool {
+    private static func validate(_ condition: AutomationCondition) -> Bool {
         switch condition {
         case let .frontmostApplication(value):
             !value.bundleIdentifier.isEmpty && value.bundleIdentifier.utf8.count <= 512
@@ -203,17 +167,17 @@ final class AutomationRuleStore {
         }
     }
 
-    private func validTime(hour: Int, minute: Int) -> Bool {
+    private static func validTime(hour: Int, minute: Int) -> Bool {
         (0 ... 23).contains(hour) && (0 ... 59).contains(minute)
     }
 
-    private func validWeekdays(_ weekdays: [Int]) -> Bool {
+    private static func validWeekdays(_ weekdays: [Int]) -> Bool {
         !weekdays.isEmpty
             && weekdays.count == Set(weekdays).count
             && weekdays.allSatisfy { (1 ... 7).contains($0) }
     }
 
-    private func validBatteryLevel(_ level: Int?) -> Bool {
+    private static func validBatteryLevel(_ level: Int?) -> Bool {
         level.map { (0 ... 100).contains($0) } ?? true
     }
 

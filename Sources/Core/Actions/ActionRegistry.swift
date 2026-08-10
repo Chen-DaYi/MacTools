@@ -230,6 +230,18 @@ final class ActionRegistry: ObservableObject {
         } ? .portable : .knownNonPortable
     }
 
+    static func containsSensitiveParameters(
+        _ reference: ActionReference,
+        for definition: ActionDefinition
+    ) -> Bool {
+        let schemaByID = Dictionary(
+            uniqueKeysWithValues: definition.parameters.map { ($0.id, $0) }
+        )
+        return reference.parameters.entries.contains { entry in
+            schemaByID[entry.name]?.privacy == .sensitive
+        }
+    }
+
     func migrate(_ reference: ActionReference) -> Result<ActionReference, ActionRegistryError> {
         guard let definition = definitions[reference.key],
               let provider = providers[reference.key.providerID] else {

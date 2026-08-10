@@ -201,8 +201,13 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
     @discardableResult
     private func setEnabled(_ enabled: Bool) -> Bool {
         guard isSupported else { return false }
-        client.setEnabled(enabled)
-        isTrueColorEnabled = client.isEnabled ?? enabled
+        guard client.setEnabled(enabled), client.isEnabled == enabled else {
+            isTrueColorEnabled = client.isEnabled ?? isTrueColorEnabled
+            onStateChange?()
+            logger.error("True Tone did not reach requested state")
+            return false
+        }
+        isTrueColorEnabled = enabled
         onStateChange?()
         logger.info("True Tone set to \(enabled ? "enabled" : "disabled")")
         return true
@@ -215,7 +220,8 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
 protocol TrueToneClient {
     var isSupported: Bool { get }
     var isEnabled: Bool? { get }
-    func setEnabled(_ enabled: Bool)
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> Bool
 }
 
 // MARK: - CoreBrightness Implementation
@@ -241,6 +247,7 @@ final class CoreBrightnessTrueToneClient: TrueToneClient {
 
     var isSupported: Bool {
         guard let obj = adaptationClient,
+              obj.responds(to: supportedSel),
               let imp = class_getMethodImplementation(type(of: obj), supportedSel) else {
             return false
         }
@@ -249,17 +256,21 @@ final class CoreBrightnessTrueToneClient: TrueToneClient {
 
     var isEnabled: Bool? {
         guard let obj = adaptationClient,
+              obj.responds(to: getEnabledSel),
               let imp = class_getMethodImplementation(type(of: obj), getEnabledSel) else {
             return nil
         }
         return unsafeBitCast(imp, to: BoolIMP.self)(obj, getEnabledSel)
     }
 
-    func setEnabled(_ enabled: Bool) {
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> Bool {
         guard let obj = adaptationClient,
+              obj.responds(to: setEnabledSel),
               let imp = class_getMethodImplementation(type(of: obj), setEnabledSel) else {
-            return
+            return false
         }
         unsafeBitCast(imp, to: SetBoolIMP.self)(obj, setEnabledSel, enabled)
+        return isEnabled == enabled
     }
 }

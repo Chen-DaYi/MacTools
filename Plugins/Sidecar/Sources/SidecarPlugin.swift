@@ -103,7 +103,9 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     private var operationFeedbackTask: Task<Void, Never>?
     private var deviceRefreshTask: Task<Void, Never>?
     private var followUpRefreshTask: Task<Void, Never>?
+    private var operationRecoveryTask: Task<Void, Never>?
     private var switchRequest: SidecarSwitchRequest?
+    private var switchContinuationCancelled = false
     private var actionCompletion: ((ActionExecutionResult) -> Void)?
     private var disconnectAllRemainingCount = 0
     private var disconnectAllErrorMessage: String?
@@ -111,6 +113,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     private var isPrimaryPanelVisible = false
     private let operationTimeoutNanoseconds: UInt64
     private let operationFeedbackNanoseconds: UInt64
+    private let operationRecoveryNanoseconds: UInt64
     private let terminalFeedbackExpiration: TimeInterval
     private let initialDeviceRefreshDelayNanoseconds: UInt64
     private let deviceRefreshIntervalNanoseconds: UInt64
@@ -122,6 +125,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         preferences: SidecarPreferencesStore? = nil,
         operationTimeoutNanoseconds: UInt64 = 15_000_000_000,
         operationFeedbackNanoseconds: UInt64 = 4_000_000_000,
+        operationRecoveryNanoseconds: UInt64 = 5_000_000_000,
         terminalFeedbackExpiration: TimeInterval = 30,
         initialDeviceRefreshDelayNanoseconds: UInt64 = 750_000_000,
         deviceRefreshIntervalNanoseconds: UInt64 = 5_000_000_000,
@@ -136,6 +140,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         )
         self.operationTimeoutNanoseconds = operationTimeoutNanoseconds
         self.operationFeedbackNanoseconds = operationFeedbackNanoseconds
+        self.operationRecoveryNanoseconds = operationRecoveryNanoseconds
         self.terminalFeedbackExpiration = max(0, terminalFeedbackExpiration)
         self.initialDeviceRefreshDelayNanoseconds = initialDeviceRefreshDelayNanoseconds
         self.deviceRefreshIntervalNanoseconds = deviceRefreshIntervalNanoseconds
@@ -164,6 +169,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         operationFeedbackTask?.cancel()
         deviceRefreshTask?.cancel()
         followUpRefreshTask?.cancel()
+        operationRecoveryTask?.cancel()
     }
 
     var primaryPanelState: PluginPanelState {
@@ -260,7 +266,13 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 ),
                 keywords: [metadata.title, "Sidecar"],
                 systemImage: "rectangle.badge.plus",
-                externalInvocationPolicy: .allowed,
+                confirmation: externalConfirmation(
+                    title: localization.string(
+                        "settings.connectFirstAvailable.title",
+                        defaultValue: "连接第一个可用显示器"
+                    )
+                ),
+                externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             ),
@@ -276,7 +288,13 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 ),
                 keywords: [metadata.title, "Sidecar"],
                 systemImage: "rectangle.badge.minus",
-                externalInvocationPolicy: .allowed,
+                confirmation: externalConfirmation(
+                    title: localization.string(
+                        "settings.disconnectAll.title",
+                        defaultValue: "断开所有已连接设备"
+                    )
+                ),
+                externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             ),
@@ -295,7 +313,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 ),
                 keywords: [metadata.title, preference.name, "Sidecar"],
                 systemImage: deviceActionIcon(for: preference.shortcutAction),
-                externalInvocationPolicy: .allowed,
+                confirmation: externalConfirmation(title: deviceActionTitle(for: preference)),
+                externalInvocationPolicy: .confirmAlways,
                 capabilities: [.background, .foregroundInteractive, .changesDisplayConfiguration],
                 executionTimeoutSeconds: 20
             )
@@ -426,10 +445,15 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     func activate(context: PluginRuntimeContext) {
         isActive = true
         refreshDevices(notify: false)
+        if operationToken != nil {
+            scheduleFollowUpRefresh()
+            scheduleOperationRecovery(for: operationToken)
+        }
         scheduleDeviceRefreshIfNeeded()
     }
 
     func deactivate(reason _: PluginDeactivationReason) {
+        let hasUnresolvedOperation = operationToken != nil
         isActive = false
         isPrimaryPanelVisible = false
         cancelDeviceRefresh()
@@ -439,11 +463,19 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         timeoutTask = nil
         operationFeedbackTask?.cancel()
         operationFeedbackTask = nil
-        operation = nil
-        operationDeviceID = nil
-        operationToken = nil
-        terminalFeedbackDate = nil
-        switchRequest = nil
+        if hasUnresolvedOperation {
+            scheduleOperationRecovery(for: operationToken)
+        }
+        if !hasUnresolvedOperation {
+            operation = nil
+            operationDeviceID = nil
+            operationToken = nil
+            terminalFeedbackDate = nil
+            switchRequest = nil
+            switchContinuationCancelled = false
+        } else if switchRequest != nil {
+            switchContinuationCancelled = true
+        }
         completeCanonicalAction(.cancelled)
     }
 
@@ -604,6 +636,11 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         switch operation {
         case let .failed(_, _, message):
             return message
+        case .timedOut where operationToken != nil:
+            return localization.string(
+                "panel.error.reconciling",
+                defaultValue: "操作超时，正在确认 Sidecar 状态…"
+            )
         case .timedOut:
             return localization.string("panel.error.timeout", defaultValue: "操作超时，请检查目标设备、线缆和网络后重试")
         case .pending, .succeeded:
@@ -612,8 +649,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     private var isOperationPending: Bool {
-        if case .pending = operation { return true }
-        return false
+        operationToken != nil
     }
 
     private func refreshDevices(notify: Bool) {
@@ -668,29 +704,52 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     private func clearCompletedOperationIfSnapshotConfirmsIt() {
-        guard let operation, let operationDeviceID else { return }
-        guard let device = devices.first(where: { $0.id == operationDeviceID }) else { return }
+        guard let operation else { return }
 
         let isConfirmed: Bool
         switch operation {
         case let .succeeded(action, _):
-            switch action {
-            case .connect, .wiredConnect:
-                isConfirmed = device.connectionState == .connected
-            case .disconnect:
-                isConfirmed = device.connectionState == .disconnected
-            }
-        case .pending, .failed, .timedOut:
+            isConfirmed = snapshotConfirms(action: action, deviceID: operationDeviceID)
+        case let .timedOut(action, _):
+            isConfirmed = snapshotConfirms(action: action, deviceID: operationDeviceID)
+        case .pending, .failed:
             isConfirmed = false
         }
 
         guard isConfirmed else { return }
+        completeCanonicalAction(.succeeded())
         self.operation = nil
         self.operationDeviceID = nil
+        operationToken = nil
         terminalFeedbackDate = nil
         switchRequest = nil
+        switchContinuationCancelled = false
+        disconnectAllRemainingCount = 0
+        disconnectAllErrorMessage = nil
+        timeoutTask?.cancel()
+        timeoutTask = nil
         operationFeedbackTask?.cancel()
         operationFeedbackTask = nil
+        onStateChange?()
+    }
+
+    private func snapshotConfirms(
+        action: SidecarOperationKind,
+        deviceID: String?
+    ) -> Bool {
+        guard let deviceID else {
+            return action == .disconnect
+                && !devices.contains(where: { $0.connectionState == .connected })
+        }
+        guard let device = devices.first(where: { $0.id == deviceID }) else {
+            return false
+        }
+        return switch action {
+        case .connect, .wiredConnect:
+            device.connectionState == .connected
+        case .disconnect:
+            device.connectionState == .disconnected
+        }
     }
 
     private func buildDetail() -> PluginPanelDetail {
@@ -1021,6 +1080,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         disconnectAllRemainingCount = connectedDevices.count
         disconnectAllErrorMessage = nil
         timeoutTask?.cancel()
+        operationRecoveryTask?.cancel()
+        operationRecoveryTask = nil
         timeoutTask = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(nanoseconds: self?.operationTimeoutNanoseconds ?? 0)
@@ -1028,19 +1089,23 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
                 return
             }
             guard self?.operationToken == token else { return }
-            self?.operationToken = nil
             self?.timeoutTask = nil
             self?.operation = .timedOut(
                 .disconnect,
                 deviceName: self?.localization.string("shortcut.disconnectAll.target", defaultValue: "所有已连接的 Sidecar 显示器") ?? ""
             )
             self?.markTerminalFeedback()
+            self?.refreshDevices(notify: false)
+            if self?.operationToken == token {
+                self?.completeCanonicalAction(.failed(message: self?.localization.string(
+                    "panel.error.timeout",
+                    defaultValue: "操作超时，请检查目标显示器、线缆和网络后重试"
+                ) ?? PluginKitLocalization.actionUnavailable))
+            }
+            self?.scheduleFollowUpRefresh()
+            self?.scheduleOperationRecovery(for: token)
             self?.scheduleOperationFeedbackDismissal()
             self?.onStateChange?()
-            self?.completeCanonicalAction(.failed(message: self?.localization.string(
-                "panel.error.timeout",
-                defaultValue: "操作超时，请检查目标显示器、线缆和网络后重试"
-            ) ?? PluginKitLocalization.actionUnavailable))
         }
         onStateChange?()
 
@@ -1112,6 +1177,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             target: target,
             targetAction: targetAction
         )
+        switchContinuationCancelled = false
         startSwitchDisconnect(from: source)
     }
 
@@ -1131,6 +1197,24 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         timeoutTask?.cancel()
         timeoutTask = nil
         operationToken = nil
+
+        guard !switchContinuationCancelled else {
+            self.switchRequest = nil
+            switchContinuationCancelled = false
+            switch result {
+            case .success:
+                operation = .succeeded(.disconnect, deviceName: switchRequest.source.name)
+            case let .failure(error):
+                operation = .failed(
+                    .disconnect,
+                    deviceName: switchRequest.source.name,
+                    message: localizedErrorMessage(for: error)
+                )
+            }
+            refreshDevices(notify: false)
+            onStateChange?()
+            return
+        }
 
         switch result {
         case .success:
@@ -1180,21 +1264,21 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         }
         guard disconnectAllRemainingCount == 0 else { return }
 
-        timeoutTask?.cancel()
-        timeoutTask = nil
-        operationToken = nil
         let target = localization.string("shortcut.disconnectAll.target", defaultValue: "所有已连接的 Sidecar 显示器")
         if let disconnectAllErrorMessage {
+            timeoutTask?.cancel()
+            timeoutTask = nil
+            operationToken = nil
             operation = .failed(.disconnect, deviceName: target, message: disconnectAllErrorMessage)
             self.disconnectAllErrorMessage = nil
             completeCanonicalAction(.failed(message: disconnectAllErrorMessage))
         } else {
             operation = .succeeded(.disconnect, deviceName: target)
-            completeCanonicalAction(.succeeded())
         }
         markTerminalFeedback()
         refreshDevices(notify: false)
         scheduleFollowUpRefresh()
+        scheduleOperationRecovery(for: token)
         scheduleOperationFeedbackDismissal()
         onStateChange?()
     }
@@ -1227,6 +1311,8 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         terminalFeedbackDate = nil
         timeoutTask?.cancel()
         operationFeedbackTask?.cancel()
+        operationRecoveryTask?.cancel()
+        operationRecoveryTask = nil
         operationFeedbackTask = nil
         let timeoutNanoseconds = operationTimeoutNanoseconds
         timeoutTask = Task { @MainActor [weak self] in
@@ -1248,15 +1334,16 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         device: SidecarDevice
     ) {
         guard operationToken == token else { return }
-        timeoutTask?.cancel()
-        timeoutTask = nil
-        operationToken = nil
+        operationRecoveryTask?.cancel()
+        operationRecoveryTask = nil
         switch result {
         case .success:
             operation = .succeeded(action, deviceName: device.name)
-            completeCanonicalAction(.succeeded())
             logger.info("Sidecar operation completed action=\(String(describing: action), privacy: .public) device=\(device.name, privacy: .public)")
         case let .failure(error):
+            timeoutTask?.cancel()
+            timeoutTask = nil
+            operationToken = nil
             let underlyingMessage = localizedErrorMessage(for: error)
             let message: String
             if let switchRequest {
@@ -1277,6 +1364,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
         markTerminalFeedback()
         refreshDevices(notify: false)
         scheduleFollowUpRefresh()
+        scheduleOperationRecovery(for: token)
         if operation != nil {
             scheduleOperationFeedbackDismissal()
         }
@@ -1285,21 +1373,25 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
 
     private func finishTimeout(for token: UUID, action: SidecarOperationKind, device: SidecarDevice) {
         guard operationToken == token else { return }
-        operationToken = nil
         timeoutTask = nil
         operation = .timedOut(action, deviceName: device.name)
-        completeCanonicalAction(.failed(message: localization.string(
-            "panel.error.timeout",
-            defaultValue: "操作超时，请检查目标显示器、线缆和网络后重试"
-        )))
         markTerminalFeedback()
+        refreshDevices(notify: false)
+        if operationToken == token {
+            completeCanonicalAction(.failed(message: localization.string(
+                "panel.error.timeout",
+                defaultValue: "操作超时，请检查目标显示器、线缆和网络后重试"
+            )))
+        }
+        scheduleFollowUpRefresh()
+        scheduleOperationRecovery(for: token)
         logger.error("Sidecar operation timed out action=\(String(describing: action), privacy: .public) device=\(device.name, privacy: .public)")
         scheduleOperationFeedbackDismissal()
         onStateChange?()
     }
 
     private func scheduleOperationFeedbackDismissal() {
-        guard case .succeeded = operation else { return }
+        guard operationToken == nil, case .succeeded = operation else { return }
         operationFeedbackTask?.cancel()
         let feedbackNanoseconds = operationFeedbackNanoseconds
         operationFeedbackTask = Task { @MainActor [weak self] in
@@ -1331,7 +1423,7 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     private func clearTerminalFeedback() {
-        guard let operation, !operation.isPending else { return }
+        guard operationToken == nil, let operation, !operation.isPending else { return }
         operationFeedbackTask?.cancel()
         operationFeedbackTask = nil
         self.operation = nil
@@ -1496,17 +1588,60 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
     }
 
     private func scheduleFollowUpRefresh() {
-        guard isActive else { return }
+        guard isActive, operationToken != nil else { return }
         followUpRefreshTask?.cancel()
         followUpRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: 750_000_000)
+                } catch {
+                    return
+                }
+                guard let self, self.isActive else { return }
+                self.refreshDevices(notify: true)
+                guard self.operationToken != nil else {
+                    self.followUpRefreshTask = nil
+                    return
+                }
+            }
+        }
+    }
+
+    private func scheduleOperationRecovery(for token: UUID?) {
+        guard let token else { return }
+        operationRecoveryTask?.cancel()
+        let recoveryNanoseconds = operationRecoveryNanoseconds
+        operationRecoveryTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 750_000_000)
+                try await Task.sleep(nanoseconds: recoveryNanoseconds)
             } catch {
                 return
             }
-            guard let self, self.isActive else { return }
-            self.refreshDevices(notify: true)
-            self.followUpRefreshTask = nil
+            guard let self, operationToken == token else { return }
+            refreshDevices(notify: false)
+            guard operationToken == token else { return }
+            switch operation {
+            case let .pending(action, deviceName),
+                 let .succeeded(action, deviceName):
+                let message = localization.string(
+                    "panel.error.unconfirmed",
+                    defaultValue: "Sidecar 请求已提交，但未能确认显示器状态"
+                )
+                operation = .failed(action, deviceName: deviceName, message: message)
+                markTerminalFeedback()
+                completeCanonicalAction(.failed(message: message))
+            case .failed, .timedOut, .none:
+                break
+            }
+            operationToken = nil
+            operationDeviceID = nil
+            switchRequest = nil
+            switchContinuationCancelled = true
+            followUpRefreshTask?.cancel()
+            followUpRefreshTask = nil
+            operationRecoveryTask = nil
+            scheduleOperationFeedbackDismissal()
+            onStateChange?()
         }
     }
 
@@ -1570,6 +1705,20 @@ final class SidecarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfac
             localization.string("panel.action.disconnect", defaultValue: "断开连接")
         }
         return "\(preference.name) · \(actionTitle)"
+    }
+
+    private func externalConfirmation(title: String) -> ActionConfirmation {
+        ActionConfirmation(
+            title: title,
+            message: localization.string(
+                "action.externalConfirmation.message",
+                defaultValue: "此运行链接将更改 Sidecar 显示器连接。"
+            ),
+            confirmButtonTitle: localization.string(
+                "action.externalConfirmation.confirm",
+                defaultValue: "继续"
+            )
+        )
     }
 
     private func deviceActionIcon(for action: SidecarShortcutAction) -> String {

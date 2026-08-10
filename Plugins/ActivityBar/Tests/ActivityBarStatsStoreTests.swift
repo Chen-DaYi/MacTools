@@ -138,4 +138,34 @@ final class ActivityBarStatsStoreTests: XCTestCase {
 
         XCTAssertEqual(storage.setCallCount(forKey: inputDaysStorageKey), 1)
     }
+
+    func testUnreadableInputStatsRejectEventsAndFlushWithoutReplacingRawValue() {
+        let unreadableValues: [Any] = [
+            "wrong-type",
+            Data("malformed".utf8),
+        ]
+
+        for unreadableValue in unreadableValues {
+            let storage = ActivityBarMemoryStorage()
+            storage.set(unreadableValue, forKey: inputDaysStorageKey)
+            let originalRawValue = storage.object(forKey: inputDaysStorageKey)
+            let originalWriteCount = storage.setCallCount(forKey: inputDaysStorageKey)
+            let store = ActivityBarStatsStore(
+                storage: storage,
+                calendar: activityBarTestCalendar(),
+                dateProvider: { activityBarTestDate() }
+            )
+
+            store.incrementKeystroke(app: "Terminal")
+            store.flushPendingChanges()
+
+            XCTAssertNotNil(store.loadError)
+            XCTAssertEqual(store.today.totalInputs, 0)
+            XCTAssertEqual(storage.setCallCount(forKey: inputDaysStorageKey), originalWriteCount)
+            XCTAssertTrue(activityBarStorageValuesMatch(
+                storage.object(forKey: inputDaysStorageKey),
+                originalRawValue
+            ))
+        }
+    }
 }

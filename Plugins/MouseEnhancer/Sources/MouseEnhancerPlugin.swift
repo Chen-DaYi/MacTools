@@ -32,7 +32,7 @@ enum MouseEnhancerInputMonitoringAuthorizationStatus {
 }
 
 enum MouseEnhancerHostCompatibility {
-    static let featureExtractionHostVersion = "1.1.6"
+    static let featureExtractionHostVersion = "1.2.0"
 
     static func ownsLegacyMiddleClick(hostVersion: String?) -> Bool {
         guard let hostVersion else { return false }

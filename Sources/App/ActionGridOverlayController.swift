@@ -3,6 +3,44 @@ import MacToolsPluginKit
 import OSLog
 import SwiftUI
 
+enum ActionSurfaceExecutionSupport {
+    static func preferredMode(for definition: ActionDefinition) -> ActionExecutionMode? {
+        if definition.capabilities.contains(.foregroundInteractive) {
+            return .foreground
+        }
+        if definition.capabilities.contains(.background) {
+            return .background
+        }
+        return nil
+    }
+
+    static func feedback(for outcome: ActionExecutionOutcome) -> String? {
+        switch outcome {
+        case .completed(.succeeded): nil
+        case let .completed(.failed(message)): message
+        case .completed(.cancelled): FeatureL10n.string("操作已取消。")
+        case let .rejected(rejection): message(for: rejection)
+        }
+    }
+
+    static func message(for rejection: ActionExecutionRejection) -> String {
+        switch rejection {
+        case .unknownAction: FeatureL10n.string("找不到对应操作。")
+        case let .invalidParameters(reason): FeatureL10n.format("操作参数无效：%@", reason)
+        case let .unavailable(reason): reason ?? FeatureL10n.string("操作不可用。")
+        case .backgroundExecutionUnsupported: FeatureL10n.string("操作不能在后台运行。")
+        case .foregroundExecutionUnsupported: FeatureL10n.string("操作不能以交互方式运行。")
+        case .externalInvocationUnavailable: FeatureL10n.string("此操作不允许从外部调用。")
+        case .confirmationUnavailable: FeatureL10n.string("无法显示操作确认。")
+        case .confirmationDenied: FeatureL10n.string("操作已取消。")
+        case .confirmationTimedOut: FeatureL10n.string("确认已超时。")
+        case .providerChanged: FeatureL10n.string("操作提供方已发生变化，请重试。")
+        case let .providerFailure(message): message
+        case .executionTimedOut: FeatureL10n.string("操作超时。")
+        }
+    }
+}
+
 struct ResolvedActionGridEntry: Identifiable, Equatable {
     let id: String
     let reference: ActionReference
@@ -404,6 +442,8 @@ final class ActionGridOverlayModel: ObservableObject {
     private let executor: (ActionReference) async -> ActionExecutionOutcome
     private var sourceEntries: [ActionGridPresentationEntry] = []
     private var navigationStack: [NavigationLevel] = []
+    private var executionTask: Task<Void, Never>?
+    private var executionGeneration: UInt = 0
     var onSuccessfulExecution: (() -> Void)?
     var onLayoutChange: ((Int, Bool, Bool) -> Void)?
 
@@ -423,6 +463,7 @@ final class ActionGridOverlayModel: ObservableObject {
     var navigationTitle: String? { folderPath.last }
 
     func update(_ entries: [ActionGridPresentationEntry]) {
+        invalidateExecution()
         navigationStack = []
         folderPath = []
         sourceEntries = entries
@@ -495,9 +536,12 @@ final class ActionGridOverlayModel: ObservableObject {
         isExecuting = true
         executingEntryID = entry.id
         setFeedback(nil)
-        Task { @MainActor [weak self] in
+        let generation = executionGeneration
+        executionTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let outcome = await executor(entry.reference)
+            guard generation == executionGeneration else { return }
+            executionTask = nil
             isExecuting = false
             executingEntryID = nil
             switch outcome {
@@ -508,9 +552,17 @@ final class ActionGridOverlayModel: ObservableObject {
             case .completed(.cancelled):
                 setFeedback(FeatureL10n.string("操作已取消。"))
             case let .rejected(rejection):
-                setFeedback(Self.message(for: rejection))
+                setFeedback(ActionSurfaceExecutionSupport.message(for: rejection))
             }
         }
+    }
+
+    func invalidateExecution() {
+        executionGeneration &+= 1
+        executionTask?.cancel()
+        executionTask = nil
+        isExecuting = false
+        executingEntryID = nil
     }
 
     private func preferredInitialSelection() -> Int {
@@ -539,23 +591,6 @@ final class ActionGridOverlayModel: ObservableObject {
 
     private func notifyLayoutChange() {
         onLayoutChange?(slotCount, !isAtRoot, feedback != nil)
-    }
-
-    private static func message(for rejection: ActionExecutionRejection) -> String {
-        switch rejection {
-        case .unknownAction: FeatureL10n.string("找不到对应操作。")
-        case let .invalidParameters(reason): FeatureL10n.format("操作参数无效：%@", reason)
-        case let .unavailable(reason): reason ?? FeatureL10n.string("操作不可用。")
-        case .backgroundExecutionUnsupported: FeatureL10n.string("操作不能在后台运行。")
-        case .foregroundExecutionUnsupported: FeatureL10n.string("操作不能以交互方式运行。")
-        case .externalInvocationUnavailable: FeatureL10n.string("此操作不允许从外部调用。")
-        case .confirmationUnavailable: FeatureL10n.string("无法显示操作确认。")
-        case .confirmationDenied: FeatureL10n.string("操作已取消。")
-        case .confirmationTimedOut: FeatureL10n.string("确认已超时。")
-        case .providerChanged: FeatureL10n.string("操作提供方已发生变化，请重试。")
-        case let .providerFailure(message): message
-        case .executionTimedOut: FeatureL10n.string("操作超时。")
-        }
     }
 
     func entry(at slot: Int) -> ResolvedActionGridEntry? {
@@ -659,8 +694,15 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
                 guard let pluginHost else {
                     return .rejected(.unavailable(FeatureL10n.string("操作提供方当前不可用。")))
                 }
+                guard case let .success(action) = pluginHost.actionRegistry.registeredAction(
+                    for: reference
+                ), let mode = ActionSurfaceExecutionSupport.preferredMode(
+                    for: action.definition
+                ) else {
+                    return .rejected(.unknownAction(reference.key))
+                }
                 return await pluginHost.actionExecutor.execute(
-                    ActionInvocation(reference: reference, source: .actionGrid, mode: .foreground)
+                    ActionInvocation(reference: reference, source: .actionGrid, mode: mode)
                 )
             }
         )
@@ -830,9 +872,14 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
 
     private static func hasValidSlots(_ entries: [ActionGridPresentationEntry]) -> Bool {
         let resolvedSlots = entries.enumerated().map { offset, entry in entry.slotIndex ?? offset }
-        return resolvedSlots.allSatisfy {
+        guard resolvedSlots.allSatisfy({
             (0 ..< ActionGridPresentationLimits.maximumEntriesPerGrid).contains($0)
-        } && Set(resolvedSlots).count == resolvedSlots.count
+        }), Set(resolvedSlots).count == resolvedSlots.count else {
+            return false
+        }
+        return entries.allSatisfy { entry in
+            entry.children.map(Self.hasValidSlots) ?? true
+        }
     }
 
     private func statefulProviderIDs(
@@ -858,6 +905,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     }
 
     func close(restoringFocus: Bool = true) {
+        model.invalidateExecution()
         guard let panel else { return }
         presentationGeneration &+= 1
         tokens.removeAll()

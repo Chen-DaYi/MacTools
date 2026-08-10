@@ -297,18 +297,23 @@ enum AppDeepLinkParser {
 
 @MainActor
 final class AppURLRouter {
+    private struct PendingRoute {
+        let route: AppURLRoute
+        let actionAncestry: Set<ActionRunLinkRequest>
+    }
+
     private let acceptedURLSchemes: Set<String>
     private let maximumPendingRoutes: Int
     private let rightClickHandler: (URL) -> Void
     private let logger: Logger
 
-    private var pendingRoutes: [AppURLRoute] = []
+    private var pendingRoutes: [PendingRoute] = []
     private var presentationHandler: ((AppPresentationRequest) -> Void)?
     private var isPluginConfigurationAvailable: ((String) -> Bool)?
     private var actionHandler: ((ActionRunLinkRequest) async -> Void)?
     private var drainTask: Task<Void, Never>?
     private var isDraining = false
-    private var activeActionRequest: ActionRunLinkRequest?
+    private var activeActionAncestry: Set<ActionRunLinkRequest> = []
 
     init(
         acceptedURLSchemes: Set<String> = RightClickURLRouter.bundleURLSchemes(),
@@ -358,7 +363,7 @@ final class AppURLRouter {
             switch route {
             case let .navigation(deepLink) where pendingRoutes.isEmpty && !isDraining:
                 return deliver(deepLink)
-            case let .run(request) where activeActionRequest == request:
+            case let .run(request) where activeActionAncestry.contains(request):
                 return reject(.recursiveActionInvocation, url: url)
             default:
                 guard enqueue(route) else {
@@ -386,7 +391,7 @@ final class AppURLRouter {
 
         var synchronousResults: [AppURLHandlingResult] = []
         while let first = pendingRoutes.first {
-            guard case let .navigation(deepLink) = first else {
+            guard case let .navigation(deepLink) = first.route else {
                 break
             }
             pendingRoutes.removeFirst()
@@ -406,7 +411,10 @@ final class AppURLRouter {
         guard pendingRoutes.count < maximumPendingRoutes else {
             return false
         }
-        pendingRoutes.append(route)
+        pendingRoutes.append(PendingRoute(
+            route: route,
+            actionAncestry: activeActionAncestry
+        ))
         return true
     }
 
@@ -431,14 +439,15 @@ final class AppURLRouter {
         drainTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !pendingRoutes.isEmpty {
-                let route = pendingRoutes.removeFirst()
+                let pendingRoute = pendingRoutes.removeFirst()
+                let route = pendingRoute.route
                 switch route {
                 case let .navigation(deepLink):
                     _ = deliver(deepLink)
                 case let .run(request):
-                    activeActionRequest = request
+                    activeActionAncestry = pendingRoute.actionAncestry.union([request])
                     await actionHandler?(request)
-                    activeActionRequest = nil
+                    activeActionAncestry = []
                 }
             }
             isDraining = false

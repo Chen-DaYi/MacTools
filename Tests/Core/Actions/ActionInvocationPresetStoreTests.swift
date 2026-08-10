@@ -131,6 +131,62 @@ final class ActionInvocationPresetStoreTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: key), oversized)
     }
 
+    func testOrdinaryMutationRejectsUnreadablePayloadAndRecoveryReplacesIt() throws {
+        let (defaults, suite) = try makeUserDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "actions.run-link-presets.v1"
+        let registry = ActionRegistry()
+        let provider = ActionRegistryTestProvider()
+        let definition = parameterizedDefinition()
+        let reference = try publicReference(for: definition)
+        registry.synchronize([
+            provider.registration(
+                definitions: [definition],
+                catalogEntries: [ActionCatalogEntry(reference: reference, title: "目标操作")]
+            ),
+        ])
+        let store = ActionInvocationPresetStore(userDefaults: defaults)
+        let futurePayload = Data(#"{"formatVersion":2,"presets":[]}"#.utf8)
+        let replacement = ActionInvocationPreset(reference: reference)
+        defaults.set(futurePayload, forKey: key)
+
+        XCTAssertEqual(
+            store.create(reference: reference, registry: registry),
+            .failure(.persistenceFailed)
+        )
+        XCTAssertFalse(store.replaceAll([replacement]))
+        XCTAssertEqual(defaults.data(forKey: key), futurePayload)
+
+        XCTAssertTrue(store.replaceAllForRecovery([replacement]))
+        XCTAssertEqual(store.presets(), [replacement])
+        XCTAssertNil(store.loadError)
+    }
+
+    func testRejectedRecoveryWriteRestoresWrongTypedPresetValue() {
+        let defaults = ScriptedActionInvocationPresetDefaults()
+        let key = "actions.run-link-presets.v1"
+        defaults.set("recovery-sentinel", forKey: key)
+        let store = ActionInvocationPresetStore(defaults: defaults)
+        let replacement = ActionInvocationPreset(
+            reference: ActionReference(
+                key: ActionKey(providerID: "test-provider", actionID: "toggle")
+            )
+        )
+
+        XCTAssertFalse(store.replaceAll([replacement]))
+        XCTAssertEqual(defaults.object(forKey: key) as? String, "recovery-sentinel")
+        XCTAssertNotNil(store.loadError)
+
+        defaults.payloadWriteBehaviors = [.corrupt, .accept]
+        XCTAssertFalse(store.replaceAllForRecovery([replacement]))
+        XCTAssertEqual(defaults.object(forKey: key) as? String, "recovery-sentinel")
+        XCTAssertNotNil(store.loadError)
+
+        XCTAssertTrue(store.replaceAllForRecovery([replacement]))
+        XCTAssertEqual(store.presets(), [replacement])
+        XCTAssertNil(store.loadError)
+    }
+
     func testStoreEnforcesPresetCountAndPayloadBounds() throws {
         let (defaults, suite) = try makeUserDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -212,5 +268,36 @@ final class ActionInvocationPresetStoreTests: XCTestCase {
 
     private func deterministicUUID(_ value: Int) -> UUID {
         UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", value))!
+    }
+}
+
+@MainActor
+private final class ScriptedActionInvocationPresetDefaults: ActionInvocationPresetPersisting {
+    enum PayloadWriteBehavior {
+        case accept
+        case corrupt
+    }
+
+    var payloadWriteBehaviors: [PayloadWriteBehavior] = []
+    private var values: [String: Any] = [:]
+
+    func object(forKey defaultName: String) -> Any? { values[defaultName] }
+    func data(forKey defaultName: String) -> Data? { values[defaultName] as? Data }
+
+    func set(_ value: Any?, forKey defaultName: String) {
+        if defaultName == "actions.run-link-presets.v1", !payloadWriteBehaviors.isEmpty {
+            switch payloadWriteBehaviors.removeFirst() {
+            case .accept:
+                values[defaultName] = value
+            case .corrupt:
+                values[defaultName] = Data("corrupt".utf8)
+            }
+            return
+        }
+        values[defaultName] = value
+    }
+
+    func removeObject(forKey defaultName: String) {
+        values.removeValue(forKey: defaultName)
     }
 }

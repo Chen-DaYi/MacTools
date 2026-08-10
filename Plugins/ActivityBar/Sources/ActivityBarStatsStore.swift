@@ -1,6 +1,37 @@
 import Foundation
 import MacToolsPluginKit
 
+enum ActivityBarPersistenceMutationResult: Equatable {
+    case committed
+    case rejected(rollbackSucceeded: Bool)
+    case recoveryRequired
+}
+
+func activityBarStorageValuesMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
+    switch (lhs, rhs) {
+    case (nil, nil):
+        return true
+    case let (lhs as NSObject, rhs as NSObject):
+        return lhs.isEqual(rhs)
+    default:
+        return false
+    }
+}
+
+@MainActor
+func restoreActivityBarStorageValue(
+    _ value: Any?,
+    forKey key: String,
+    storage: PluginStorage
+) -> Bool {
+    if let value {
+        storage.set(value, forKey: key)
+    } else {
+        storage.removeObject(forKey: key)
+    }
+    return activityBarStorageValuesMatch(storage.object(forKey: key), value)
+}
+
 @MainActor
 final class ActivityBarStatsStore: ObservableObject {
     private enum StorageKey {
@@ -10,6 +41,7 @@ final class ActivityBarStatsStore: ObservableObject {
     // Direct observers receive every input mutation and bypass controller-level
     // UI throttling; keep hot-path UI subscriptions on ActivityBarController.
     @Published private(set) var days: [String: ActivityBarDailyStats]
+    private(set) var loadError: String?
 
     private let storage: PluginStorage
     private let calendar: Calendar
@@ -35,7 +67,9 @@ final class ActivityBarStatsStore: ObservableObject {
         self.calendar = calendar
         self.dateProvider = dateProvider
         self.persistenceDelay = persistenceDelay
-        self.days = Self.prunedDays(Self.loadDays(storage: storage, decoder: decoder))
+        let loaded = Self.loadDays(storage: storage, decoder: decoder)
+        self.days = Self.prunedDays(loaded.days)
+        self.loadError = loaded.error
     }
 
     deinit {
@@ -110,10 +144,78 @@ final class ActivityBarStatsStore: ObservableObject {
         }
     }
 
-    func resetToday() {
-        days[dateKey(for: dateProvider())] = ActivityBarDailyStats(date: dateKey(for: dateProvider()))
-        hasPendingChanges = true
-        persistPendingChanges(force: true)
+    struct PreparedTodayReset {
+        fileprivate let previousDays: [String: ActivityBarDailyStats]
+        fileprivate let previousRawValue: Any?
+        fileprivate let previousHadPendingChanges: Bool
+        fileprivate let candidateDays: [String: ActivityBarDailyStats]
+        fileprivate let candidateData: Data
+    }
+
+    func prepareTodayReset() -> PreparedTodayReset? {
+        guard loadError == nil else { return nil }
+        var candidateDays = days
+        let key = dateKey(for: dateProvider())
+        candidateDays[key] = ActivityBarDailyStats(date: key)
+        candidateDays = Self.prunedDays(candidateDays)
+        guard let candidateData = try? encoder.encode(candidateDays) else { return nil }
+        return PreparedTodayReset(
+            previousDays: days,
+            previousRawValue: storage.object(forKey: StorageKey.days),
+            previousHadPendingChanges: hasPendingChanges,
+            candidateDays: candidateDays,
+            candidateData: candidateData
+        )
+    }
+
+    @discardableResult
+    func commitTodayReset(_ prepared: PreparedTodayReset) -> ActivityBarPersistenceMutationResult {
+        storage.set(prepared.candidateData, forKey: StorageKey.days)
+        guard activityBarStorageValuesMatch(storage.object(forKey: StorageKey.days), prepared.candidateData) else {
+            let rollbackSucceeded = restoreActivityBarStorageValue(
+                prepared.previousRawValue,
+                forKey: StorageKey.days,
+                storage: storage
+            )
+            if !rollbackSucceeded {
+                reloadFromStorage()
+            }
+            return .rejected(rollbackSucceeded: rollbackSucceeded)
+        }
+
+        persistenceTask?.cancel()
+        persistenceTask = nil
+        days = prepared.candidateDays
+        hasPendingChanges = false
+        loadError = nil
+        return .committed
+    }
+
+    @discardableResult
+    func rollbackTodayReset(_ prepared: PreparedTodayReset) -> Bool {
+        let succeeded = restoreActivityBarStorageValue(
+            prepared.previousRawValue,
+            forKey: StorageKey.days,
+            storage: storage
+        )
+        guard succeeded else {
+            reloadFromStorage()
+            return false
+        }
+
+        days = prepared.previousDays
+        hasPendingChanges = prepared.previousHadPendingChanges
+        loadError = nil
+        if hasPendingChanges {
+            schedulePersistence()
+        }
+        return true
+    }
+
+    @discardableResult
+    func resetToday() -> ActivityBarPersistenceMutationResult {
+        guard let prepared = prepareTodayReset() else { return .recoveryRequired }
+        return commitTodayReset(prepared)
     }
 
     func flushPendingChanges() {
@@ -124,6 +226,7 @@ final class ActivityBarStatsStore: ObservableObject {
         app rawApp: String,
         update: (inout ActivityBarDailyStats, inout ActivityBarAppStats) -> Void
     ) {
+        guard loadError == nil else { return }
         let app = sanitizedAppName(rawApp)
         let key = dateKey(for: dateProvider())
         var day = days[key] ?? ActivityBarDailyStats(date: key)
@@ -178,6 +281,7 @@ final class ActivityBarStatsStore: ObservableObject {
         persistenceTask?.cancel()
         persistenceTask = nil
 
+        guard loadError == nil else { return }
         guard force || hasPendingChanges else {
             return
         }
@@ -193,16 +297,33 @@ final class ActivityBarStatsStore: ObservableObject {
         }
     }
 
-    private static func loadDays(storage: PluginStorage, decoder: JSONDecoder) -> [String: ActivityBarDailyStats] {
-        guard let data = storage.data(forKey: StorageKey.days) else {
-            return [:]
+    private func reloadFromStorage() {
+        let loaded = Self.loadDays(storage: storage, decoder: decoder)
+        days = Self.prunedDays(loaded.days)
+        loadError = loaded.error
+        hasPendingChanges = false
+        persistenceTask?.cancel()
+        persistenceTask = nil
+    }
+
+    private static func loadDays(
+        storage: PluginStorage,
+        decoder: JSONDecoder
+    ) -> (days: [String: ActivityBarDailyStats], error: String?) {
+        guard let rawValue = storage.object(forKey: StorageKey.days) else {
+            return ([:], nil)
+        }
+        guard let data = rawValue as? Data else {
+            let message = "Stored input statistics have an invalid format."
+            ActivityBarLog.input.error("\(message, privacy: .public)")
+            return ([:], message)
         }
 
         do {
-            return try decoder.decode([String: ActivityBarDailyStats].self, from: data)
+            return (try decoder.decode([String: ActivityBarDailyStats].self, from: data), nil)
         } catch {
             ActivityBarLog.input.error("Failed to load input stats: \(error.localizedDescription, privacy: .public)")
-            return [:]
+            return ([:], error.localizedDescription)
         }
     }
 

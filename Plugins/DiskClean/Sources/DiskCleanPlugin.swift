@@ -504,6 +504,13 @@ final class DiskCleanPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigura
 
         if snapshot.phase == .completed,
            let result = snapshot.executionResult {
+            if result.wasCancelled {
+                return localization.format(
+                    "panel.subtitle.cancelled",
+                    defaultValue: "已停止 · 已处理 %d 项",
+                    result.itemResults.count
+                )
+            }
             // Trash mode never says "reclaimed": objects still sit in Trash, so space is not truly freed (design §7.7).
             let defaultValue = result.mode == .trash ? "已移到废纸篓约 %@" : "已清理约 %@"
             return localization.format(

@@ -46,4 +46,21 @@ final class LockScreenPluginTests: XCTestCase {
         XCTAssertEqual(confirmation.title, "Lock the Screen?")
         XCTAssertEqual(confirmation.confirmButtonTitle, "Lock")
     }
+
+    func testCanonicalActionReportsImmediateLockFailure() async throws {
+        let plugin = LockScreenPlugin(lockRequest: { false })
+        let reference = ActionReference(
+            key: ActionKey(providerID: "lock-screen", actionID: "execute")
+        )
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected lock failure, got \(result)")
+        }
+    }
 }

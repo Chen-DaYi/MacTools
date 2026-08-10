@@ -296,6 +296,12 @@ final class SidecarPreferencesStore: ObservableObject {
     }
 
     private func beginPortableRestoreTransaction() -> Bool {
+        guard Self.hasExpectedData(forKey: StorageKey.devices, storage: storage),
+              Self.hasExpectedData(forKey: StorageKey.disconnectAllShortcut, storage: storage),
+              Self.hasExpectedData(forKey: StorageKey.connectFirstAvailableShortcut, storage: storage)
+        else {
+            return false
+        }
         let transaction = PortableRestoreTransaction(
             devices: storage.data(forKey: StorageKey.devices),
             disconnectAllShortcut: storage.data(forKey: StorageKey.disconnectAllShortcut),
@@ -319,9 +325,10 @@ final class SidecarPreferencesStore: ObservableObject {
         encoder: JSONEncoder,
         decoder: JSONDecoder
     ) -> Bool {
-        guard let transactionData = storage.data(forKey: StorageKey.portableRestoreTransaction) else {
+        guard let rawTransaction = storage.object(forKey: StorageKey.portableRestoreTransaction) else {
             return true
         }
+        guard let transactionData = rawTransaction as? Data else { return false }
         guard let transaction = try? decoder.decode(
             PortableRestoreTransaction.self,
             from: transactionData
@@ -329,7 +336,7 @@ final class SidecarPreferencesStore: ObservableObject {
             return false
         }
         storage.removeObject(forKey: StorageKey.portableRestoreTransaction)
-        return storage.data(forKey: StorageKey.portableRestoreTransaction) == nil
+        return storage.object(forKey: StorageKey.portableRestoreTransaction) == nil
     }
 
     @discardableResult
@@ -339,7 +346,7 @@ final class SidecarPreferencesStore: ObservableObject {
 
     private func finishPortableRestoreTransaction() -> Bool {
         storage.removeObject(forKey: StorageKey.portableRestoreTransaction)
-        return storage.data(forKey: StorageKey.portableRestoreTransaction) == nil
+        return storage.object(forKey: StorageKey.portableRestoreTransaction) == nil
     }
 
     private func writePortableValues(
@@ -384,6 +391,11 @@ final class SidecarPreferencesStore: ObservableObject {
         } else {
             storage.removeObject(forKey: key)
         }
+    }
+
+    private static func hasExpectedData(forKey key: String, storage: PluginStorage) -> Bool {
+        guard let rawValue = storage.object(forKey: key) else { return true }
+        return rawValue is Data
     }
 
     private func update(deviceID: String, _ change: (inout SidecarDevicePreference) -> Void) {

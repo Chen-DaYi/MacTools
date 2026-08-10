@@ -71,12 +71,31 @@ final class DisplayTrueColorPluginTests: XCTestCase {
 
         XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
     }
+
+    func testCanonicalActionFailsWhenSetterDoesNotChangeTrueTone() async throws {
+        let client = MockTrueToneClient(isSupported: true, isEnabled: false)
+        client.acceptsWrites = false
+        let plugin = DisplayTrueColorPlugin(client: client)
+        let reference = try XCTUnwrap(plugin.actionCatalogEntries.first?.reference)
+
+        let result = try await plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .test,
+            mode: .background
+        )).result()
+
+        guard case .failed = result else {
+            return XCTFail("Expected True Tone write failure, got \(result)")
+        }
+        XCTAssertFalse(plugin.primaryPanelState.isOn)
+    }
 }
 
 @MainActor
 private final class MockTrueToneClient: TrueToneClient {
     private let supported: Bool
     var stubbedEnabled: Bool?
+    var acceptsWrites = true
     private(set) var lastSetEnabled: Bool?
 
     init(isSupported: Bool, isEnabled: Bool?) {
@@ -87,8 +106,11 @@ private final class MockTrueToneClient: TrueToneClient {
     var isSupported: Bool { supported }
     var isEnabled: Bool? { stubbedEnabled }
 
-    func setEnabled(_ enabled: Bool) {
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> Bool {
+        guard acceptsWrites else { return false }
         stubbedEnabled = enabled
         lastSetEnabled = enabled
+        return true
     }
 }

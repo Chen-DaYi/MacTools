@@ -29,7 +29,6 @@ struct SavedScriptsSettingsView: View {
         .sheet(item: $editorRequest) { request in
             SavedScriptEditorSheet(
                 plugin: plugin,
-                store: store,
                 request: request,
                 onDismiss: { editorRequest = nil }
             )
@@ -48,10 +47,7 @@ struct SavedScriptsSettingsView: View {
                     "common.delete",
                     defaultValue: "删除"
                 ))) {
-                    plugin.cancelExecution(scriptID: request.script.id)
-                    if store.remove(id: request.script.id) {
-                        executionStore.removeRecord(for: request.script.id)
-                    }
+                    _ = plugin.deleteScript(id: request.script.id)
                 },
                 secondaryButton: .cancel(Text(plugin.localized(
                     "common.cancel",
@@ -421,7 +417,6 @@ private struct SavedScriptEditorSheet: View {
     }
 
     let plugin: SavedScriptsPlugin
-    @ObservedObject var store: SavedScriptsStore
     let request: SavedScriptEditorRequest
     let onDismiss: () -> Void
 
@@ -431,12 +426,10 @@ private struct SavedScriptEditorSheet: View {
 
     init(
         plugin: SavedScriptsPlugin,
-        store: SavedScriptsStore,
         request: SavedScriptEditorRequest,
         onDismiss: @escaping () -> Void
     ) {
         self.plugin = plugin
-        self.store = store
         self.request = request
         self.onDismiss = onDismiss
         _draft = State(initialValue: request.script)
@@ -624,7 +617,7 @@ private struct SavedScriptEditorSheet: View {
     }
 
     private func save(runAfterSave: Bool) {
-        switch store.save(draft) {
+        switch plugin.saveScript(draft) {
         case let .success(script):
             onDismiss()
             if runAfterSave {

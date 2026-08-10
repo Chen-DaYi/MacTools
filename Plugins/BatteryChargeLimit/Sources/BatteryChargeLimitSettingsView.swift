@@ -13,6 +13,7 @@ struct BatteryChargeLimitSettingsView: View {
     var capabilities: BatterySMCCapabilities
     var snapshot: BatterySnapshot
     let localization: PluginLocalization
+    let onSetLimit: (Int) -> Void
 
     @State private var sliderValue: Double
 
@@ -20,12 +21,14 @@ struct BatteryChargeLimitSettingsView: View {
         store: BatteryChargeLimitStore,
         capabilities: BatterySMCCapabilities,
         snapshot: BatterySnapshot,
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        onSetLimit: @escaping (Int) -> Void = { _ in }
     ) {
         self.store = store
         self.capabilities = capabilities
         self.snapshot = snapshot
         self.localization = localization
+        self.onSetLimit = onSetLimit
         _sliderValue = State(initialValue: Double(store.limitPercent))
     }
 
@@ -63,7 +66,7 @@ struct BatteryChargeLimitSettingsView: View {
                     step: Double(BatteryChargeLimits.percentStep),
                     onEditingChanged: { editing in
                         if !editing {
-                            store.setLimitPercent(Int(sliderValue))
+                            onSetLimit(Int(sliderValue))
                         }
                     }
                 )

@@ -7,6 +7,7 @@ enum ActionShortcutAssignmentError: Error, Equatable {
     case invalidBinding(ShortcutValidationError)
     case conflict(ownerDescription: String)
     case persistenceFailed
+    case persistenceRollbackFailed
     case recoveryRequired
 
     var localizedDescription: String {
@@ -21,6 +22,8 @@ enum ActionShortcutAssignmentError: Error, Equatable {
             ).localizedDescription
         case .persistenceFailed:
             return FeatureL10n.string("无法保存快捷键。")
+        case .persistenceRollbackFailed:
+            return FeatureL10n.string("无法保存快捷键，且恢复先前快捷键失败。")
         case .recoveryRequired:
             return FeatureL10n.string("快捷键数据无法读取；请先导入备份恢复。")
         }
@@ -196,72 +199,132 @@ final class ShortcutAssignmentService {
             )
         }
 
-        guard store.replaceAll(records) else {
+        switch store.replaceAll(records) {
+        case .committed:
+            synchronize(
+                reservedRegistrations: reservedRegistrations,
+                reservedOwnerDescriptions: reservedOwnerDescriptions
+            )
+            return .success
+        case .rejected(rollbackSucceeded: true):
             return .failure(.persistenceFailed)
+        case .rejected(rollbackSucceeded: false):
+            synchronize(
+                reservedRegistrations: reservedRegistrations,
+                reservedOwnerDescriptions: reservedOwnerDescriptions
+            )
+            return .failure(.persistenceRollbackFailed)
         }
-        synchronize(
-            reservedRegistrations: reservedRegistrations,
-            reservedOwnerDescriptions: reservedOwnerDescriptions
-        )
-        return .success
     }
 
     @discardableResult
-    func clear(_ reference: ActionReference, assignmentID: UUID? = nil) -> Bool {
+    func clear(
+        _ reference: ActionReference,
+        assignmentID: UUID? = nil
+    ) -> ActionShortcutMutationResult {
         var records = store.assignments()
-        guard store.loadError == nil else { return false }
+        guard store.loadError == nil else { return .failure(.recoveryRequired) }
         let originalCount = records.count
         records.removeAll { record in
             guard record.reference == reference else { return false }
             return assignmentID == nil || record.id == assignmentID
         }
         guard records.count != originalCount else {
-            return false
+            return .success
         }
-        guard store.replaceAll(records) else {
-            return false
+        switch store.replaceAll(records) {
+        case .committed:
+            synchronize(
+                reservedRegistrations: reservedRegistrations,
+                reservedOwnerDescriptions: reservedOwnerDescriptions
+            )
+            return .success
+        case .rejected(rollbackSucceeded: true):
+            return .failure(.persistenceFailed)
+        case .rejected(rollbackSucceeded: false):
+            synchronize(
+                reservedRegistrations: reservedRegistrations,
+                reservedOwnerDescriptions: reservedOwnerDescriptions
+            )
+            return .failure(.persistenceRollbackFailed)
         }
-        synchronize(
-            reservedRegistrations: reservedRegistrations,
-            reservedOwnerDescriptions: reservedOwnerDescriptions
-        )
-        return true
     }
 
     @discardableResult
     func replaceAllForImport(
-        _ records: [ActionShortcutAssignmentRecord]
+        _ records: [ActionShortcutAssignmentRecord],
+        reservedRegistrations importedReservedRegistrations: [GlobalShortcutManager.Registration]? = nil,
+        reservedOwnerDescriptions importedOwnerDescriptions: [String: String]? = nil
     ) -> ActionShortcutMutationResult {
         let records = migratedAssignments(records)
+        let reservations = importedReservedRegistrations ?? reservedRegistrations
+        let ownerDescriptions = importedOwnerDescriptions ?? reservedOwnerDescriptions
+        if let error = importValidationError(
+            records,
+            reservedRegistrations: reservations,
+            reservedOwnerDescriptions: ownerDescriptions
+        ) {
+            return .failure(error)
+        }
+        switch store.replaceAllForRecovery(records) {
+        case .committed:
+            synchronize(
+                reservedRegistrations: reservations,
+                reservedOwnerDescriptions: ownerDescriptions
+            )
+            return .success
+        case .rejected(rollbackSucceeded: true):
+            return .failure(.persistenceFailed)
+        case .rejected(rollbackSucceeded: false):
+            synchronize(
+                reservedRegistrations: reservedRegistrations,
+                reservedOwnerDescriptions: reservedOwnerDescriptions
+            )
+            return .failure(.persistenceRollbackFailed)
+        }
+    }
+
+    func validateImport(
+        _ records: [ActionShortcutAssignmentRecord],
+        reservedRegistrations: [GlobalShortcutManager.Registration],
+        reservedOwnerDescriptions: [String: String]
+    ) -> ActionShortcutMutationResult {
+        let records = migratedAssignments(records)
+        if let error = importValidationError(
+            records,
+            reservedRegistrations: reservedRegistrations,
+            reservedOwnerDescriptions: reservedOwnerDescriptions
+        ) {
+            return .failure(error)
+        }
+        return .success
+    }
+
+    private func importValidationError(
+        _ records: [ActionShortcutAssignmentRecord],
+        reservedRegistrations: [GlobalShortcutManager.Registration],
+        reservedOwnerDescriptions: [String: String]
+    ) -> ActionShortcutAssignmentError? {
         var seenBindings: [ShortcutBinding: ActionShortcutAssignmentRecord] = [:]
         for record in records {
             guard record.binding.isValid,
                   MacToolsReservedShortcutBindings.validationError(for: record.binding) == nil else {
-                return .failure(.invalidBinding(.missingModifier))
+                return .invalidBinding(.missingModifier)
             }
             if let reserved = reservedRegistrations.first(where: {
                 $0.binding == record.binding
             }) {
-                return .failure(
-                    .conflict(
+                return .conflict(
                         ownerDescription: reservedOwnerDescriptions[reserved.shortcutID]
                             ?? reserved.shortcutID
-                    )
                 )
             }
             if let conflict = seenBindings[record.binding] {
-                return .failure(.conflict(ownerDescription: title(for: conflict.reference)))
+                return .conflict(ownerDescription: title(for: conflict.reference))
             }
             seenBindings[record.binding] = record
         }
-        guard store.replaceAllForRecovery(records) else {
-            return .failure(.persistenceFailed)
-        }
-        synchronize(
-            reservedRegistrations: reservedRegistrations,
-            reservedOwnerDescriptions: reservedOwnerDescriptions
-        )
-        return .success
+        return nil
     }
 
     func synchronize(
@@ -357,7 +420,14 @@ final class ShortcutAssignmentService {
         guard migrated != stored else {
             return stored
         }
-        return store.replaceAll(migrated) ? migrated : stored
+        switch store.replaceAll(migrated) {
+        case .committed:
+            return migrated
+        case .rejected(rollbackSucceeded: true):
+            return stored
+        case .rejected(rollbackSucceeded: false):
+            return store.assignments()
+        }
     }
 
     private func migratedAssignments(

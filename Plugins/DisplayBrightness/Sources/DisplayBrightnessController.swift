@@ -39,9 +39,22 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         var currentBrightness: Double
         var lastCommittedBrightness: Double
         var pendingBrightness: Double?
+        var pendingWriteID: UInt64?
         var writeInFlight = false
+        var inFlightWriteID: UInt64?
         var scheduledFlush: DispatchWorkItem?
         var pendingReadbackAfterWrite = false
+        var lastWriteError: String?
+    }
+
+    private enum RetiredWriteResolution {
+        case actualOutcome
+        case invalidated
+    }
+
+    private struct RetiredInFlightWrite {
+        let backend: any DisplayBrightnessBackend
+        var resolution: RetiredWriteResolution
     }
 
     var onStateChange: (() -> Void)?
@@ -52,19 +65,29 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
     private let logger = DisplayBrightnessLog.controller
     private let shortWriteDelay: TimeInterval
     private let minimumWriteInterval: TimeInterval
+    private let writeTimeout: Duration
     private let writeGate = BrightnessWriteGate()
 
     private var managedDisplays: [CGDirectDisplayID: ManagedDisplay] = [:]
     private var displayOrder: [CGDirectDisplayID] = []
     private var lastErrorMessage: String?
+    private var nextWriteID: UInt64 = 0
+    private var writeWaiters: [UInt64: CheckedContinuation<DisplayBrightnessWriteResult, Never>] = [:]
+    private var writeTimeoutTasks: [UInt64: Task<Void, Never>] = [:]
+    private var waiterDisplayIDs: [UInt64: CGDirectDisplayID] = [:]
+    private var retiredInFlightWrites: [UInt64: RetiredInFlightWrite] = [:]
+    private var invalidatedInFlightWriteIDs: Set<UInt64> = []
     private var terminateObserver: NSObjectProtocol?
+
+    var pendingWriteTimeoutCount: Int { writeTimeoutTasks.count }
 
     init(
         displayProvider: DisplayProviding = SystemDisplayService(),
         backendBuilder: DisplayBrightnessBackendBuilding? = nil,
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         shortWriteDelay: TimeInterval = 0.08,
-        minimumWriteInterval: TimeInterval = 0.08
+        minimumWriteInterval: TimeInterval = 0.08,
+        writeTimeout: Duration = .seconds(10)
     ) {
         self.displayProvider = displayProvider
         self.localization = localization
@@ -73,6 +96,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         )
         self.shortWriteDelay = shortWriteDelay
         self.minimumWriteInterval = minimumWriteInterval
+        self.writeTimeout = writeTimeout
 
         terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
@@ -112,9 +136,12 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                 currentBrightness: previous?.pendingBrightness ?? brightness,
                 lastCommittedBrightness: brightness,
                 pendingBrightness: previous?.pendingBrightness,
+                pendingWriteID: previous?.pendingWriteID,
                 writeInFlight: previous?.writeInFlight ?? false,
+                inFlightWriteID: previous?.inFlightWriteID,
                 scheduledFlush: previous?.scheduledFlush,
-                pendingReadbackAfterWrite: previous?.pendingReadbackAfterWrite ?? false
+                pendingReadbackAfterWrite: previous?.pendingReadbackAfterWrite ?? false,
+                lastWriteError: previous?.lastWriteError
             )
             nextDisplayOrder.append(display.id)
         }
@@ -151,24 +178,109 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         for displayID: CGDirectDisplayID,
         phase: PluginPanelAction.SliderPhase
     ) {
+        enqueueBrightness(
+            value,
+            for: displayID,
+            phase: phase,
+            writeID: makeWriteID()
+        )
+    }
+
+    func setBrightnessAndWait(
+        _ value: Double,
+        for displayID: CGDirectDisplayID
+    ) async -> DisplayBrightnessWriteResult {
+        let writeID = makeWriteID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                writeWaiters[writeID] = continuation
+                waiterDisplayIDs[writeID] = displayID
+                let timeout = writeTimeout
+                writeTimeoutTasks[writeID] = Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: timeout)
+                    } catch {
+                        return
+                    }
+                    self?.timeOutWrite(writeID)
+                }
+                enqueueBrightness(
+                    value,
+                    for: displayID,
+                    phase: .ended,
+                    writeID: writeID
+                )
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.failWriteUnlessInFlight(
+                    writeID,
+                    message: PluginKitLocalization.actionUnavailable,
+                    invalidateAfterDispatch: true
+                )
+            }
+        }
+    }
+
+    func cancelOutstandingWrites() {
+        for (_, managedDisplay) in Array(managedDisplays) {
+            managedDisplay.scheduledFlush?.cancel()
+            if let writeID = managedDisplay.pendingWriteID {
+                resolveWrite(
+                    writeID,
+                    with: .failed(message: PluginKitLocalization.actionUnavailable)
+                )
+            }
+            if let writeID = managedDisplay.inFlightWriteID {
+                retireInFlightWrite(
+                    writeID,
+                    backend: managedDisplay.backend,
+                    resolution: .actualOutcome
+                )
+            } else {
+                managedDisplay.backend.cleanup()
+            }
+        }
+        managedDisplays.removeAll()
+        displayOrder.removeAll()
+        lastErrorMessage = nil
+        onStateChange?()
+    }
+
+    private func enqueueBrightness(
+        _ value: Double,
+        for displayID: CGDirectDisplayID,
+        phase: PluginPanelAction.SliderPhase,
+        writeID: UInt64
+    ) {
         if managedDisplays[displayID] == nil {
             refresh()
         }
 
         guard var managedDisplay = managedDisplays[displayID] else {
-            lastErrorMessage = DisplayBrightnessControllerError.displayUnavailable(
+            let message = DisplayBrightnessControllerError.displayUnavailable(
                 displayID: displayID
             ).localizedDescription(localization: localization)
+            lastErrorMessage = message
+            resolveWrite(writeID, with: .failed(message: message))
             onStateChange?()
             return
         }
 
+        if let supersededWriteID = managedDisplay.pendingWriteID {
+            resolveWrite(
+                supersededWriteID,
+                with: .failed(message: PluginKitLocalization.actionUnavailable)
+            )
+        }
         let clampedValue = Self.clamp(value)
         managedDisplay.currentBrightness = clampedValue
         managedDisplay.pendingBrightness = clampedValue
+        managedDisplay.pendingWriteID = writeID
         managedDisplay.scheduledFlush?.cancel()
         managedDisplay.scheduledFlush = nil
         managedDisplay.pendingReadbackAfterWrite = phase == .ended
+        managedDisplay.lastWriteError = nil
         lastErrorMessage = nil
         managedDisplays[displayID] = managedDisplay
 
@@ -222,12 +334,16 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
             return
         }
 
-        guard !managedDisplay.writeInFlight, let targetValue = managedDisplay.pendingBrightness else {
+        guard !managedDisplay.writeInFlight,
+              let targetValue = managedDisplay.pendingBrightness,
+              let writeID = managedDisplay.pendingWriteID else {
             return
         }
 
         managedDisplay.writeInFlight = true
+        managedDisplay.inFlightWriteID = writeID
         managedDisplay.pendingBrightness = nil
+        managedDisplay.pendingWriteID = nil
         managedDisplay.scheduledFlush = nil
         let needsReadback = managedDisplay.pendingReadbackAfterWrite
         managedDisplay.pendingReadbackAfterWrite = false
@@ -241,6 +357,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                 controllerRef: controllerRef,
                 backend: backend,
                 displayID: displayID,
+                writeID: writeID,
                 targetValue: targetValue,
                 needsReadback: needsReadback,
                 displayName: displayName,
@@ -252,16 +369,56 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
 
     private func finishWrite(
         for displayID: CGDirectDisplayID,
+        writeID: UInt64,
         targetValue: Double,
         readbackValue: Double?,
         displayName: String,
         result: Result<Void, Error>
     ) {
-        guard var managedDisplay = managedDisplays[displayID] else {
+        if let retired = retiredInFlightWrites.removeValue(forKey: writeID) {
+            retired.backend.cleanup()
+            switch retired.resolution {
+            case .actualOutcome:
+                resolveWrite(writeID, with: writeResult(from: result))
+            case .invalidated:
+                resolveWrite(
+                    writeID,
+                    with: .failed(message: PluginKitLocalization.actionUnavailable)
+                )
+            }
+            onStateChange?()
+            return
+        }
+
+        guard var managedDisplay = managedDisplays[displayID],
+              managedDisplay.inFlightWriteID == writeID else {
+            resolveWrite(
+                writeID,
+                with: .failed(message: DisplayBrightnessControllerError.displayUnavailable(
+                    displayID: displayID
+                ).localizedDescription(localization: localization))
+            )
             return
         }
 
         managedDisplay.writeInFlight = false
+        managedDisplay.inFlightWriteID = nil
+
+        if invalidatedInFlightWriteIDs.remove(writeID) != nil {
+            if managedDisplay.pendingBrightness == nil {
+                managedDisplay.currentBrightness = managedDisplay.lastCommittedBrightness
+            }
+            managedDisplays[displayID] = managedDisplay
+            resolveWrite(
+                writeID,
+                with: .failed(message: PluginKitLocalization.actionUnavailable)
+            )
+            onStateChange?()
+            if managedDisplay.pendingBrightness != nil {
+                scheduleWrite(for: displayID, delay: 0)
+            }
+            return
+        }
 
         switch result {
         case .success:
@@ -271,6 +428,8 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                 managedDisplay.currentBrightness = committedBrightness
             }
             lastErrorMessage = nil
+            managedDisplay.lastWriteError = nil
+            resolveWrite(writeID, with: .succeeded)
         case .failure(let error):
             let localizedDescription = localizedDescription(for: error)
             logger.error(
@@ -281,13 +440,23 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                 logger.info(
                     "retrying brightness write for \(displayName, privacy: .public) with \(String(describing: fallbackBackend.kind), privacy: .public) fallback"
                 )
-                let retryBrightness = managedDisplay.pendingBrightness ?? targetValue
                 managedDisplay.backend.cleanup()
                 managedDisplay.backend = fallbackBackend
-                managedDisplay.pendingBrightness = retryBrightness
-                managedDisplay.pendingReadbackAfterWrite = true
-                managedDisplay.currentBrightness = retryBrightness
-                lastErrorMessage = nil
+                if managedDisplay.pendingWriteID == nil {
+                    managedDisplay.pendingBrightness = targetValue
+                    managedDisplay.pendingWriteID = writeID
+                    managedDisplay.pendingReadbackAfterWrite = true
+                    managedDisplay.currentBrightness = targetValue
+                    lastErrorMessage = nil
+                    managedDisplay.lastWriteError = nil
+                } else {
+                    let message = localization.format(
+                        "error.adjustFailedFormat",
+                        defaultValue: "调节失败：%@",
+                        localizedDescription
+                    )
+                    resolveWrite(writeID, with: .failed(message: message))
+                }
             } else {
                 if managedDisplay.pendingBrightness == nil {
                     managedDisplay.currentBrightness = managedDisplay.lastCommittedBrightness
@@ -297,6 +466,11 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
                     "error.adjustFailedFormat",
                     defaultValue: "调节失败：%@",
                     localizedDescription
+                )
+                managedDisplay.lastWriteError = lastErrorMessage
+                resolveWrite(
+                    writeID,
+                    with: .failed(message: lastErrorMessage ?? localizedDescription)
                 )
             }
         }
@@ -338,7 +512,16 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
     private func cleanupDisconnectedDisplays(keeping displayIDs: Set<CGDirectDisplayID>) {
         for (displayID, managedDisplay) in managedDisplays where !displayIDs.contains(displayID) {
             managedDisplay.scheduledFlush?.cancel()
-            managedDisplay.backend.cleanup()
+            failOutstandingWrites(for: displayID, managedDisplay: managedDisplay)
+            if let writeID = managedDisplay.inFlightWriteID {
+                retireInFlightWrite(
+                    writeID,
+                    backend: managedDisplay.backend,
+                    resolution: .actualOutcome
+                )
+            } else {
+                managedDisplay.backend.cleanup()
+            }
         }
     }
 
@@ -346,6 +529,122 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         for (_, managedDisplay) in managedDisplays {
             managedDisplay.scheduledFlush?.cancel()
             managedDisplay.backend.cleanup()
+        }
+        for (_, retiredWrite) in retiredInFlightWrites {
+            retiredWrite.backend.cleanup()
+        }
+        retiredInFlightWrites.removeAll()
+        invalidatedInFlightWriteIDs.removeAll()
+        for writeID in Array(writeWaiters.keys) {
+            resolveWrite(
+                writeID,
+                with: .failed(message: PluginKitLocalization.actionUnavailable)
+            )
+        }
+    }
+
+    private func makeWriteID() -> UInt64 {
+        nextWriteID &+= 1
+        return nextWriteID
+    }
+
+    private func resolveWrite(
+        _ writeID: UInt64,
+        with result: DisplayBrightnessWriteResult
+    ) {
+        writeTimeoutTasks.removeValue(forKey: writeID)?.cancel()
+        waiterDisplayIDs.removeValue(forKey: writeID)
+        writeWaiters.removeValue(forKey: writeID)?.resume(returning: result)
+    }
+
+    private func timeOutWrite(_ writeID: UInt64) {
+        failWriteUnlessInFlight(
+            writeID,
+            message: localization.string(
+                "error.adjustTimedOut",
+                defaultValue: "亮度调节超时。"
+            ),
+            invalidateAfterDispatch: false
+        )
+    }
+
+    private func failWriteUnlessInFlight(
+        _ writeID: UInt64,
+        message: String,
+        invalidateAfterDispatch: Bool
+    ) {
+        if retiredInFlightWrites[writeID] != nil {
+            if invalidateAfterDispatch {
+                retiredInFlightWrites[writeID]?.resolution = .invalidated
+            }
+            writeTimeoutTasks.removeValue(forKey: writeID)?.cancel()
+            return
+        }
+        guard let displayID = waiterDisplayIDs[writeID],
+              var managedDisplay = managedDisplays[displayID] else {
+            resolveWrite(writeID, with: .failed(message: message))
+            return
+        }
+
+        if managedDisplay.inFlightWriteID == writeID {
+            if invalidateAfterDispatch {
+                invalidatedInFlightWriteIDs.insert(writeID)
+            }
+            writeTimeoutTasks.removeValue(forKey: writeID)?.cancel()
+            logger.info(
+                "write for \(managedDisplay.display.name, privacy: .public) exceeded its waiter deadline after dispatch; awaiting the backend outcome"
+            )
+            return
+        }
+
+        if managedDisplay.pendingWriteID == writeID {
+            managedDisplay.scheduledFlush?.cancel()
+            managedDisplay.scheduledFlush = nil
+            managedDisplay.pendingBrightness = nil
+            managedDisplay.pendingWriteID = nil
+            managedDisplay.currentBrightness = managedDisplay.lastCommittedBrightness
+            managedDisplays[displayID] = managedDisplay
+            onStateChange?()
+        }
+        resolveWrite(writeID, with: .failed(message: message))
+    }
+
+    private func failOutstandingWrites(
+        for displayID: CGDirectDisplayID,
+        managedDisplay: ManagedDisplay
+    ) {
+        let message = DisplayBrightnessControllerError.displayUnavailable(
+            displayID: displayID
+        ).localizedDescription(localization: localization)
+        if let writeID = managedDisplay.pendingWriteID {
+            resolveWrite(writeID, with: .failed(message: message))
+        }
+    }
+
+    private func retireInFlightWrite(
+        _ writeID: UInt64,
+        backend: any DisplayBrightnessBackend,
+        resolution: RetiredWriteResolution
+    ) {
+        writeTimeoutTasks.removeValue(forKey: writeID)?.cancel()
+        invalidatedInFlightWriteIDs.remove(writeID)
+        retiredInFlightWrites[writeID] = RetiredInFlightWrite(
+            backend: backend,
+            resolution: resolution
+        )
+    }
+
+    private func writeResult(from result: Result<Void, Error>) -> DisplayBrightnessWriteResult {
+        switch result {
+        case .success:
+            return .succeeded
+        case .failure(let error):
+            let description = localizedDescription(for: error)
+            return .failed(message: localization.format(
+                "error.adjustFailedFormat",
+                defaultValue: "调节失败：%@",
+                description
+            ))
         }
     }
 
@@ -368,6 +667,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         controllerRef: WeakBrightnessControllerRef,
         backend: any DisplayBrightnessBackend,
         displayID: CGDirectDisplayID,
+        writeID: UInt64,
         targetValue: Double,
         needsReadback: Bool,
         displayName: String,
@@ -392,6 +692,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
             Task { @MainActor in
                 controllerRef.value?.finishWrite(
                     for: displayID,
+                    writeID: writeID,
                     targetValue: targetValue,
                     readbackValue: readbackValue,
                     displayName: displayName,

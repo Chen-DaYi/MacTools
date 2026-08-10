@@ -265,7 +265,7 @@ final class DisplayBrightnessPlugin:
                 ],
                 systemImage: direction.systemImage,
                 externalInvocationPolicy: .allowed,
-                capabilities: [.background, .foregroundInteractive]
+                capabilities: [.background, .foregroundInteractive, .cancellable]
             )
         }
         return brightnessActions + [
@@ -392,9 +392,27 @@ final class DisplayBrightnessPlugin:
             direction: direction,
             targetDisplayIDs: targetDisplayIDs
         )
-        applyShortcutAction(action, step: 1, phase: .changed)
-        commitShortcutAction(action)
-        return ActionExecutionHandle { .succeeded() }
+        let targets = displays(for: action.targetDisplayIDs).map { display in
+            (
+                display.id,
+                min(1, max(0, display.brightness + action.direction.multiplier / 100))
+            )
+        }
+        let controller = controller
+        return ActionExecutionHandle {
+            var failures: [String] = []
+            for (displayID, target) in targets {
+                switch await controller.setBrightnessAndWait(target, for: displayID) {
+                case .succeeded:
+                    continue
+                case let .failed(message):
+                    failures.append(message)
+                }
+            }
+            return failures.isEmpty
+                ? .succeeded()
+                : .failed(message: failures.joined(separator: "；"))
+        }
     }
 
     var settingsSearchEntries: [PluginSettingsSearchEntry] {
@@ -488,6 +506,7 @@ final class DisplayBrightnessPlugin:
         displayDisableActionTask?.cancel()
         displayTopologyTask?.cancel()
         stopAllShortcutActions()
+        controller.cancelOutstandingWrites()
         guard reason.requiresStateCleanup else { return }
         displayDisableCoordinator.restoreBuiltInDisplay()
     }

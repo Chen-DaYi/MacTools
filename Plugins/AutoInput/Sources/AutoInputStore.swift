@@ -1,6 +1,11 @@
 import Foundation
 import MacToolsPluginKit
 
+enum AutoInputStoreMutationResult: Equatable {
+    case committed
+    case rejected(rollbackSucceeded: Bool)
+}
+
 @MainActor
 final class AutoInputStore: ObservableObject {
     private enum Keys {
@@ -13,6 +18,7 @@ final class AutoInputStore: ObservableObject {
     @Published private(set) var isEnabled: Bool
     @Published private(set) var remembersLastInputSource: Bool
     @Published private(set) var rules: [AutoInputRule]
+    @Published private(set) var persistenceFailure: AutoInputStoreMutationResult?
 
     private(set) var memories: [String: String]
 
@@ -33,61 +39,122 @@ final class AutoInputStore: ObservableObject {
         self.memories = decodedMemories.filter { !$0.key.isEmpty && !$0.value.isEmpty }
     }
 
-    func setEnabled(_ value: Bool) {
-        guard isEnabled != value else { return }
-        isEnabled = value
-        storage.set(value, forKey: Keys.isEnabled)
+    @discardableResult
+    func setEnabled(_ value: Bool) -> AutoInputStoreMutationResult {
+        guard isEnabled != value else { return record(.committed) }
+        let result = persist(value, forKey: Keys.isEnabled)
+        if result == .committed { isEnabled = value }
+        return record(result)
     }
 
-    func setRemembersLastInputSource(_ value: Bool) {
-        guard remembersLastInputSource != value else { return }
-        remembersLastInputSource = value
-        storage.set(value, forKey: Keys.remembersLastInputSource)
+    @discardableResult
+    func setRemembersLastInputSource(_ value: Bool) -> AutoInputStoreMutationResult {
+        guard remembersLastInputSource != value else { return record(.committed) }
+        let result = persist(value, forKey: Keys.remembersLastInputSource)
+        if result == .committed { remembersLastInputSource = value }
+        return record(result)
     }
 
-    func upsertRule(_ rule: AutoInputRule) {
-        if let index = rules.firstIndex(where: { $0.bundleIdentifier == rule.bundleIdentifier }) {
-            rules[index] = rule
+    @discardableResult
+    func upsertRule(_ rule: AutoInputRule) -> AutoInputStoreMutationResult {
+        var candidate = rules
+        if let index = candidate.firstIndex(where: { $0.bundleIdentifier == rule.bundleIdentifier }) {
+            candidate[index] = rule
         } else {
-            rules.append(rule)
+            candidate.append(rule)
         }
-        rules.sort { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
-        persistRules()
+        candidate.sort { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        let result = persist(candidate, forKey: Keys.rules)
+        if result == .committed { rules = candidate }
+        return record(result)
     }
 
-    func updateRule(bundleIdentifier: String, inputSourceID: String) {
-        guard let index = rules.firstIndex(where: { $0.bundleIdentifier == bundleIdentifier }) else { return }
-        rules[index].inputSourceID = inputSourceID
-        persistRules()
+    @discardableResult
+    func updateRule(bundleIdentifier: String, inputSourceID: String) -> AutoInputStoreMutationResult {
+        guard let index = rules.firstIndex(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+            return record(.committed)
+        }
+        var candidate = rules
+        candidate[index].inputSourceID = inputSourceID
+        let result = persist(candidate, forKey: Keys.rules)
+        if result == .committed { rules = candidate }
+        return record(result)
     }
 
-    func removeRule(bundleIdentifier: String) {
-        rules.removeAll { $0.bundleIdentifier == bundleIdentifier }
-        persistRules()
+    @discardableResult
+    func removeRule(bundleIdentifier: String) -> AutoInputStoreMutationResult {
+        let candidate = rules.filter { $0.bundleIdentifier != bundleIdentifier }
+        guard candidate != rules else { return record(.committed) }
+        let result = persist(candidate, forKey: Keys.rules)
+        if result == .committed { rules = candidate }
+        return record(result)
     }
 
     func rule(for bundleIdentifier: String) -> AutoInputRule? {
         rules.first { $0.bundleIdentifier == bundleIdentifier }
     }
 
-    func remember(inputSourceID: String, for bundleIdentifier: String) {
-        guard memories[bundleIdentifier] != inputSourceID else { return }
-        memories[bundleIdentifier] = inputSourceID
-        persistMemories()
+    @discardableResult
+    func remember(inputSourceID: String, for bundleIdentifier: String) -> AutoInputStoreMutationResult {
+        guard memories[bundleIdentifier] != inputSourceID else { return record(.committed) }
+        var candidate = memories
+        candidate[bundleIdentifier] = inputSourceID
+        let result = persist(candidate, forKey: Keys.memories)
+        if result == .committed { memories = candidate }
+        return record(result)
     }
 
     func rememberedInputSourceID(for bundleIdentifier: String) -> String? {
         memories[bundleIdentifier]
     }
 
-    private func persistRules() {
-        guard let data = try? encoder.encode(rules) else { return }
-        storage.set(data, forKey: Keys.rules)
+    private func persist(_ value: Bool, forKey key: String) -> AutoInputStoreMutationResult {
+        let previous = storage.object(forKey: key)
+        storage.set(value, forKey: key)
+        guard let persisted = storage.object(forKey: key) as? Bool, persisted == value else {
+            restore(previous, forKey: key)
+            return .rejected(rollbackSucceeded: rawValue(storage.object(forKey: key), equals: previous))
+        }
+        return .committed
     }
 
-    private func persistMemories() {
-        guard let data = try? encoder.encode(memories) else { return }
-        storage.set(data, forKey: Keys.memories)
+    private func persist<Value: Encodable>(
+        _ value: Value,
+        forKey key: String
+    ) -> AutoInputStoreMutationResult {
+        guard let data = try? encoder.encode(value) else {
+            return .rejected(rollbackSucceeded: true)
+        }
+        let previous = storage.object(forKey: key)
+        storage.set(data, forKey: key)
+        guard storage.data(forKey: key) == data else {
+            restore(previous, forKey: key)
+            return .rejected(
+                rollbackSucceeded: rawValue(storage.object(forKey: key), equals: previous)
+            )
+        }
+        return .committed
+    }
+
+    private func restore(_ value: Any?, forKey key: String) {
+        if let value {
+            storage.set(value, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
+    }
+
+    private func rawValue(_ lhs: Any?, equals rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil): true
+        case let (lhs as NSObject, rhs as NSObject): lhs.isEqual(rhs)
+        default: false
+        }
+    }
+
+    private func record(_ result: AutoInputStoreMutationResult) -> AutoInputStoreMutationResult {
+        persistenceFailure = result == .committed ? nil : result
+        return result
     }
 
     private static func decode<Value: Decodable>(_ type: Value.Type, from data: Data?) -> Value? {

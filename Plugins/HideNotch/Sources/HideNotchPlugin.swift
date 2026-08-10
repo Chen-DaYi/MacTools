@@ -178,8 +178,11 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
             return
         }
 
-        controller.setEnabled(isEnabled)
-        onStateChange?()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = await controller.setEnabledAndWait(isEnabled)
+            onStateChange?()
+        }
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
@@ -201,9 +204,17 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPro
                 .failed(message: availability.reason ?? PluginKitLocalization.actionUnavailable)
             }
         }
-        controller.setEnabled(enabled)
-        onStateChange?()
-        return ActionExecutionHandle { .succeeded() }
+        let controller = controller
+        return ActionExecutionHandle { [weak self] in
+            let result = await controller.setEnabledAndWait(enabled)
+            self?.onStateChange?()
+            switch result {
+            case .succeeded:
+                return .succeeded()
+            case let .failed(message):
+                return .failed(message: message)
+            }
+        }
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {

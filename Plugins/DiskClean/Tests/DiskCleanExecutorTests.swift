@@ -187,6 +187,33 @@ final class DiskCleanExecutorTests: XCTestCase {
         )
     }
 
+    func testCancellationReturnsCompletedItemResultsWithoutStartingTheNextRemoval() async throws {
+        let paths = [
+            "\(home)/Library/Caches/A",
+            "\(home)/Library/Caches/B",
+        ]
+        let plan = try makePlan(paths: paths, bytes: 42)
+        let firstRemovalStarted = expectation(description: "first removal started")
+        let allowFirstRemovalToReturn = DispatchSemaphore(value: 0)
+        let primitive = FakeDiskCleanRemovalPrimitive { path in
+            guard path == paths[0] else { return }
+            firstRemovalStarted.fulfill()
+            allowFirstRemovalToReturn.wait()
+        }
+        let executor = makeExecutor(primitive: primitive)
+        let execution = Task { try await executor.execute(plan: plan) }
+
+        await fulfillment(of: [firstRemovalStarted], timeout: 1)
+        execution.cancel()
+        allowFirstRemovalToReturn.signal()
+        let result = try await execution.value
+
+        XCTAssertTrue(result.wasCancelled)
+        XCTAssertEqual(result.itemResults.map(\.path), [paths[0]])
+        XCTAssertEqual(result.removedCount, 1)
+        XCTAssertEqual(primitive.removedPaths, [paths[0]])
+    }
+
     // MARK: - Audit
 
     func testWritesOneAuditRecordPerItemWithTerminalStatus() async throws {

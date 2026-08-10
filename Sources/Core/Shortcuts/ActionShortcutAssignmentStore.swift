@@ -1,6 +1,28 @@
 import Foundation
 import MacToolsPluginKit
 
+@MainActor
+protocol ActionShortcutAssignmentPersisting: AnyObject {
+    func object(forKey defaultName: String) -> Any?
+    func data(forKey defaultName: String) -> Data?
+    func bool(forKey defaultName: String) -> Bool
+    func set(_ value: Any?, forKey defaultName: String)
+    func removeObject(forKey defaultName: String)
+}
+
+extension UserDefaults: ActionShortcutAssignmentPersisting {}
+
+enum ActionShortcutStoreWriteResult: Equatable {
+    case committed
+    case rejected(rollbackSucceeded: Bool)
+}
+
+enum ActionShortcutLegacyMigrationResult: Equatable {
+    case migrated
+    case alreadyMigrated
+    case rejected(rollbackSucceeded: Bool)
+}
+
 struct ActionShortcutAssignmentRecord: Codable, Equatable, Hashable, Sendable, Identifiable {
     let id: UUID
     let reference: ActionReference
@@ -33,19 +55,26 @@ final class ActionShortcutAssignmentStore {
     static let maximumAssignmentCount = 512
     private static let currentVersion = 1
 
-    private let userDefaults: UserDefaults
+    private let defaults: any ActionShortcutAssignmentPersisting
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
     private(set) var loadError: String?
-
     init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+        self.defaults = userDefaults
+    }
+
+    init(defaults: any ActionShortcutAssignmentPersisting) {
+        self.defaults = defaults
     }
 
     func assignments() -> [ActionShortcutAssignmentRecord] {
-        guard let data = userDefaults.data(forKey: DefaultsKey.payload) else {
+        guard let storedValue = defaults.object(forKey: DefaultsKey.payload) else {
             loadError = nil
+            return []
+        }
+        guard let data = storedValue as? Data else {
+            loadError = FeatureL10n.string("快捷键数据无法读取。")
             return []
         }
         do {
@@ -65,32 +94,40 @@ final class ActionShortcutAssignmentStore {
     }
 
     @discardableResult
-    func replaceAll(_ assignments: [ActionShortcutAssignmentRecord]) -> Bool {
+    func replaceAll(_ assignments: [ActionShortcutAssignmentRecord]) -> ActionShortcutStoreWriteResult {
         _ = self.assignments()
-        guard loadError == nil else { return false }
+        guard loadError == nil else { return .rejected(rollbackSucceeded: true) }
         return replaceAll(assignments, allowsRecovery: false)
     }
 
     @discardableResult
-    func replaceAllForRecovery(_ assignments: [ActionShortcutAssignmentRecord]) -> Bool {
+    func replaceAllForRecovery(
+        _ assignments: [ActionShortcutAssignmentRecord]
+    ) -> ActionShortcutStoreWriteResult {
         replaceAll(assignments, allowsRecovery: true)
     }
 
     private func replaceAll(
         _ assignments: [ActionShortcutAssignmentRecord],
         allowsRecovery: Bool
-    ) -> Bool {
-        guard allowsRecovery || loadError == nil else { return false }
+    ) -> ActionShortcutStoreWriteResult {
+        guard allowsRecovery || loadError == nil else {
+            return .rejected(rollbackSucceeded: true)
+        }
         guard assignments.count <= Self.maximumAssignmentCount,
               Set(assignments.map(\.id)).count == assignments.count,
-              let data = try? encoder.encode(
-                  Payload(version: Self.currentVersion, assignments: assignments)
-              ) else {
-            return false
+              let data = encodedPayload(assignments) else {
+            return .rejected(rollbackSucceeded: true)
         }
-        userDefaults.set(data, forKey: DefaultsKey.payload)
+        let previousValue = defaults.object(forKey: DefaultsKey.payload)
+        defaults.set(data, forKey: DefaultsKey.payload)
+        guard defaults.data(forKey: DefaultsKey.payload) == data else {
+            return .rejected(
+                rollbackSucceeded: restore(previousValue, forKey: DefaultsKey.payload)
+            )
+        }
         loadError = nil
-        return true
+        return .committed
     }
 
     func assignment(for reference: ActionReference) -> ActionShortcutAssignmentRecord? {
@@ -101,13 +138,13 @@ final class ActionShortcutAssignmentStore {
     func migrateLegacyAppAssignments(
         _ candidates: [(reference: ActionReference, binding: ShortcutBinding)],
         didPersist: () -> Void
-    ) -> Bool {
-        guard !userDefaults.bool(forKey: DefaultsKey.legacyAppMigration) else {
-            return false
+    ) -> ActionShortcutLegacyMigrationResult {
+        guard !defaults.bool(forKey: DefaultsKey.legacyAppMigration) else {
+            return .alreadyMigrated
         }
 
         var records = assignments()
-        guard loadError == nil else { return false }
+        guard loadError == nil else { return .rejected(rollbackSucceeded: true) }
         for candidate in candidates where !records.contains(where: {
             $0.reference == candidate.reference
         }) {
@@ -118,12 +155,11 @@ final class ActionShortcutAssignmentStore {
                 )
             )
         }
-        guard replaceAll(records) else {
-            return false
-        }
-        didPersist()
-        userDefaults.set(true, forKey: DefaultsKey.legacyAppMigration)
-        return true
+        return migrate(
+            records: records,
+            markerKey: DefaultsKey.legacyAppMigration,
+            didPersist: didPersist
+        )
     }
 
     @discardableResult
@@ -131,14 +167,14 @@ final class ActionShortcutAssignmentStore {
         pluginID: String,
         assignments: [LegacyActionShortcutAssignment],
         didPersist: () -> Void
-    ) -> Bool {
+    ) -> ActionShortcutLegacyMigrationResult {
         let migrationKey = DefaultsKey.legacyPluginMigrationPrefix + pluginID
-        guard !userDefaults.bool(forKey: migrationKey) else {
-            return false
+        guard !defaults.bool(forKey: migrationKey) else {
+            return .alreadyMigrated
         }
 
         var records = self.assignments()
-        guard loadError == nil else { return false }
+        guard loadError == nil else { return .rejected(rollbackSucceeded: true) }
         for assignment in assignments where !records.contains(where: {
             $0.reference == assignment.reference
         }) {
@@ -149,11 +185,67 @@ final class ActionShortcutAssignmentStore {
                 )
             )
         }
-        guard replaceAll(records) else {
-            return false
+        return migrate(records: records, markerKey: migrationKey, didPersist: didPersist)
+    }
+
+    private func migrate(
+        records: [ActionShortcutAssignmentRecord],
+        markerKey: String,
+        didPersist: () -> Void
+    ) -> ActionShortcutLegacyMigrationResult {
+        guard records.count <= Self.maximumAssignmentCount,
+              Set(records.map(\.id)).count == records.count,
+              let candidateData = encodedPayload(records) else {
+            return .rejected(rollbackSucceeded: true)
         }
+        let previousValue = defaults.object(forKey: DefaultsKey.payload)
+        let previousMarker = defaults.object(forKey: markerKey)
+
+        defaults.set(candidateData, forKey: DefaultsKey.payload)
+        guard defaults.data(forKey: DefaultsKey.payload) == candidateData else {
+            let payloadRestored = restore(previousValue, forKey: DefaultsKey.payload)
+            let markerRestored = restore(previousMarker, forKey: markerKey)
+            return .rejected(rollbackSucceeded: payloadRestored && markerRestored)
+        }
+
+        defaults.set(true, forKey: markerKey)
+        guard defaults.bool(forKey: markerKey),
+              defaults.data(forKey: DefaultsKey.payload) == candidateData else {
+            let payloadRestored = restore(previousValue, forKey: DefaultsKey.payload)
+            let markerRestored = restore(previousMarker, forKey: markerKey)
+            return .rejected(rollbackSucceeded: payloadRestored && markerRestored)
+        }
+
+        loadError = nil
         didPersist()
-        userDefaults.set(true, forKey: migrationKey)
-        return true
+        return .migrated
+    }
+
+    private func encodedPayload(
+        _ assignments: [ActionShortcutAssignmentRecord]
+    ) -> Data? {
+        try? encoder.encode(
+            Payload(version: Self.currentVersion, assignments: assignments)
+        )
+    }
+
+    private func restore(_ value: Any?, forKey key: String) -> Bool {
+        if let value {
+            defaults.set(value, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+        return valuesMatch(defaults.object(forKey: key), value)
+    }
+
+    private func valuesMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            true
+        case let (lhs as NSObject, rhs as NSObject):
+            lhs.isEqual(rhs)
+        default:
+            false
+        }
     }
 }

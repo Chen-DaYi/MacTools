@@ -209,6 +209,64 @@ final class AutomationControllerTests: XCTestCase {
         XCTAssertTrue(registration.availability(parent.actionReference).isAvailable)
     }
 
+    func testNestedSensitiveParameterDisablesWorkflowRunLinksWithoutDisablingLocalRuns() throws {
+        let suite = "AutomationControllerTests.sensitive.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let provider = AutomationControllerTestProvider()
+        let key = ActionKey(providerID: "automation-sensitive", actionID: "authenticate")
+        let reference = ActionReference(
+            key: key,
+            parameters: try ActionParameterSet(["token": .string("secret")])
+        )
+        let sensitiveRegistration = ActionProviderRegistration(
+            providerID: key.providerID,
+            identity: ObjectIdentifier(provider),
+            definitions: [ActionDefinition(
+                key: key,
+                title: "Authenticate",
+                description: "",
+                systemImage: "key",
+                parameters: [ActionParameterDefinition(
+                    id: "token",
+                    title: "Token",
+                    kind: .string,
+                    privacy: .sensitive
+                )],
+                capabilities: [.background, .foregroundInteractive]
+            )],
+            catalogEntries: [],
+            availability: { _ in .available },
+            begin: { _ in .success(ActionExecutionHandle(operation: { .succeeded() })) }
+        )
+        registry.synchronize([sensitiveRegistration])
+        let store = WorkflowStore(userDefaults: defaults)
+        let controller = AutomationController(
+            store: store,
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let child = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: child.id, reference: reference)
+        let parent = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: parent.id, reference: child.actionReference)
+
+        let registration = controller.actionRegistration()
+
+        XCTAssertEqual(
+            registration.definitions.first { $0.key == child.actionKey }?
+                .externalInvocationPolicy,
+            .unavailable
+        )
+        XCTAssertEqual(
+            registration.definitions.first { $0.key == parent.actionKey }?
+                .externalInvocationPolicy,
+            .unavailable
+        )
+        XCTAssertTrue(registration.availability(parent.actionReference).isAvailable)
+    }
+
     func testAutomaticRuleAvailabilityExplainsEveryIneligibleWorkflow() throws {
         let suite = "AutomationControllerTests.eligibility.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -338,6 +396,75 @@ final class AutomationControllerTests: XCTestCase {
         XCTAssertEqual(reloadedRules.map(\.id), [retainedRule.id])
     }
 
+    func testRejectedCombinedDefinitionWritePreservesWorkflowAndRulesOnDelete() throws {
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var rejectsWrites = false
+        let definitionStore = AutomationDefinitionStore(
+            userDefaults: defaults,
+            setCombinedValue: { value in
+                guard !rejectsWrites else { return }
+                if let value {
+                    defaults.set(value, forKey: "automation.definitions.v1")
+                } else {
+                    defaults.removeObject(forKey: "automation.definitions.v1")
+                }
+            }
+        )
+        let workflowStore = WorkflowStore(definitionStore: definitionStore)
+        let ruleStore = AutomationRuleStore(definitionStore: definitionStore)
+        let registry = ActionRegistry()
+        let controller = AutomationController(
+            store: workflowStore,
+            ruleStore: ruleStore,
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let workflow = try XCTUnwrap(controller.createWorkflow())
+        let rule = try XCTUnwrap(controller.createRule(workflowID: workflow.id))
+        rejectsWrites = true
+
+        XCTAssertFalse(controller.deleteWorkflow(id: workflow.id))
+        XCTAssertEqual(WorkflowStore(userDefaults: defaults).workflows().map(\.id), [workflow.id])
+        XCTAssertEqual(AutomationRuleStore(userDefaults: defaults).rules().map(\.id), [rule.id])
+    }
+
+    func testRejectedCombinedDefinitionWritePreservesBothCollectionsOnRestore() throws {
+        let suite = "AutomationControllerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var rejectsWrites = false
+        let definitionStore = AutomationDefinitionStore(
+            userDefaults: defaults,
+            setCombinedValue: { value in
+                guard !rejectsWrites else { return }
+                if let value {
+                    defaults.set(value, forKey: "automation.definitions.v1")
+                } else {
+                    defaults.removeObject(forKey: "automation.definitions.v1")
+                }
+            }
+        )
+        let workflowStore = WorkflowStore(definitionStore: definitionStore)
+        let ruleStore = AutomationRuleStore(definitionStore: definitionStore)
+        let registry = ActionRegistry()
+        let controller = AutomationController(
+            store: workflowStore,
+            ruleStore: ruleStore,
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let workflow = try XCTUnwrap(controller.createWorkflow())
+        let rule = try XCTUnwrap(controller.createRule(workflowID: workflow.id))
+        let replacement = WorkflowDefinition(name: "Replacement")
+        rejectsWrites = true
+
+        XCTAssertFalse(controller.restorePreferences(workflows: [replacement], rules: []))
+        XCTAssertEqual(WorkflowStore(userDefaults: defaults).workflows().map(\.id), [workflow.id])
+        XCTAssertEqual(AutomationRuleStore(userDefaults: defaults).rules().map(\.id), [rule.id])
+    }
+
     func testMoveWorkflowUpdatesPublishedOrderAndPersists() throws {
         let suite = "AutomationControllerTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -422,6 +549,31 @@ final class AutomationControllerTests: XCTestCase {
             .cancelled
         )
     }
+
+    func testDeletingWorkflowImmediatelyAfterStartPreventsItsFirstAction() async throws {
+        let suite = "AutomationControllerTests.immediate-delete.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let registry = ActionRegistry()
+        let provider = CancellableAutomationControllerTestProvider()
+        registry.synchronize([provider.registration])
+        let controller = AutomationController(
+            store: WorkflowStore(userDefaults: defaults),
+            registry: registry,
+            executor: ActionExecutor(registry: registry)
+        )
+        let workflow = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(workflowID: workflow.id, reference: provider.reference)
+        let runID = try XCTUnwrap(controller.startWorkflow(id: workflow.id))
+
+        XCTAssertTrue(controller.deleteWorkflow(id: workflow.id))
+        for _ in 0 ..< 20 { await Task.yield() }
+
+        XCTAssertTrue(controller.activeRunIDs(for: workflow.id).isEmpty)
+        XCTAssertFalse(controller.activeRunIDs.contains(runID))
+        XCTAssertEqual(provider.beginCount, 0)
+        XCTAssertEqual(provider.cancelCount, 0)
+    }
 }
 
 @MainActor
@@ -474,6 +626,7 @@ private final class CancellableAutomationControllerTestProvider {
         key: ActionKey(providerID: "automation-controller-tests", actionID: "wait")
     )
     private(set) var cancelCount = 0
+    private(set) var beginCount = 0
 
     var registration: ActionProviderRegistration {
         let definition = ActionDefinition(
@@ -490,7 +643,8 @@ private final class CancellableAutomationControllerTestProvider {
             catalogEntries: [ActionCatalogEntry(reference: reference, title: "等待")],
             availability: { _ in .available },
             begin: { [weak self] _ in
-                .success(
+                self?.beginCount += 1
+                return .success(
                     ActionExecutionHandle(
                         operation: {
                             do {

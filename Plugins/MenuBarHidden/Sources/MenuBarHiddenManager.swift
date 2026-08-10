@@ -160,23 +160,42 @@ final class MenuBarHiddenManager: ObservableObject {
 
     var isEnabled: Bool {
         get { store.isEnabled }
-        set {
-            guard store.isEnabled != newValue else { return }
-            hiddenRestoreTask?.cancel()
-            hiddenRestoreTask = nil
-            layoutRestoreTask?.cancel()
-            layoutRestoreTask = nil
-            shouldRestoreHiddenAfterDrag = false
-            store.isEnabled = newValue
-            if newValue {
-                installAndExpand()
-            } else {
-                if !divider.isInstalled { divider.install() }
-                divider.showSection(isDragging: false)
+        set { _ = setEnabled(newValue) }
+    }
+
+    @discardableResult
+    func setEnabled(_ enabled: Bool) -> MenuBarHiddenPersistenceMutationResult {
+        let previous = store.isEnabled
+        let result = store.setEnabled(enabled)
+        switch result {
+        case .committed:
+            guard previous != enabled else { return .committed }
+            applyEnabledState(enabled)
+        case .rejected(rollbackSucceeded: false):
+            let durableState = store.isEnabled
+            if durableState != previous {
+                applyEnabledState(durableState)
             }
-            rebuildSnapshot()
-            scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(500))
+        case .rejected(rollbackSucceeded: true), .recoveryRequired:
+            break
         }
+        return result
+    }
+
+    private func applyEnabledState(_ enabled: Bool) {
+        hiddenRestoreTask?.cancel()
+        hiddenRestoreTask = nil
+        layoutRestoreTask?.cancel()
+        layoutRestoreTask = nil
+        shouldRestoreHiddenAfterDrag = false
+        if enabled {
+            installAndExpand()
+        } else {
+            if !divider.isInstalled { divider.install() }
+            divider.showSection(isDragging: false)
+        }
+        rebuildSnapshot()
+        scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(500))
     }
 
     var isAlwaysHiddenEnabled: Bool {

@@ -78,6 +78,7 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
     private var lastErrorMessage: String?
     private let controller: DisplayResolutionControlling
     private let systemSettingsLauncher: DisplaySystemSettingsLauncher
+    private let displayIdentifier: (DisplayInfo) -> String?
     private let localization: PluginLocalization
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayResolutionPlugin")
     private var snapshot = DisplayResolutionSnapshot(displays: [])
@@ -85,11 +86,15 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
     init(
         controller: DisplayResolutionControlling = DisplayResolutionController(),
         systemSettingsLauncher: DisplaySystemSettingsLauncher = WorkspaceDisplaySystemSettingsLauncher(),
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        displayIdentifier: @escaping (DisplayInfo) -> String? = {
+            DisplayResolutionPlugin.stableDisplayIdentifier($0)
+        }
     ) {
         self.localization = localization
         self.controller = controller
         self.systemSettingsLauncher = systemSettingsLauncher
+        self.displayIdentifier = displayIdentifier
         self.metadata = PluginMetadata(
             id: "display-resolution",
             title: localization.string("metadata.title", defaultValue: "显示器分辨率"),
@@ -207,9 +212,15 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
 
     var actionCatalogEntries: [ActionCatalogEntry] {
         snapshot.displays.flatMap { panelDisplay in
-            panelDisplay.modes.map { mode in
-                ActionCatalogEntry(
-                    reference: resolutionActionReference(display: panelDisplay.display, mode: mode),
+            panelDisplay.modes.compactMap { mode in
+                guard let reference = resolutionActionReference(
+                    display: panelDisplay.display,
+                    mode: mode
+                ) else {
+                    return nil
+                }
+                return ActionCatalogEntry(
+                    reference: reference,
                     title: "\(panelDisplay.display.name) · \(Self.optionTitle(for: mode, localization: localization))",
                     subtitle: metadata.title
                 )
@@ -496,11 +507,12 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
     private func resolutionActionReference(
         display: DisplayInfo,
         mode: DisplayResolutionInfo
-    ) -> ActionReference {
-        ActionReference(
+    ) -> ActionReference? {
+        guard let identifier = displayIdentifier(display) else { return nil }
+        return ActionReference(
             key: ActionKey(providerID: metadata.id, actionID: ActionID.setResolution),
             parameters: try! ActionParameterSet([
-                ActionParameterID.display: .string(Self.stableDisplayIdentifier(display)),
+                ActionParameterID.display: .string(identifier),
                 ActionParameterID.width: .integer(Int64(mode.width)),
                 ActionParameterID.height: .integer(Int64(mode.height)),
                 ActionParameterID.pixelWidth: .integer(Int64(mode.pixelWidth)),
@@ -521,7 +533,7 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
               case let .integer(pixelHeight)? = reference.parameters[ActionParameterID.pixelHeight],
               case let .double(refreshRate)? = reference.parameters[ActionParameterID.refreshRate],
               let display = snapshot.displays.first(where: {
-                  Self.stableDisplayIdentifier($0.display) == displayIdentifier
+                  self.displayIdentifier($0.display) == displayIdentifier
               }),
               let mode = display.allModes.first(where: {
                   $0.width == Int(width)
@@ -536,16 +548,20 @@ final class DisplayResolutionPlugin: MacToolsPlugin, PluginPrimaryPanel, Display
         return (display.display.id, mode)
     }
 
-    private nonisolated static func stableDisplayIdentifier(_ display: DisplayInfo) -> String {
+    nonisolated static func stableDisplayIdentifier(_ display: DisplayInfo) -> String? {
         if display.isBuiltin {
             return "builtin"
         }
         if let vendor = display.vendorNumber,
            let model = display.modelNumber,
-           let serial = display.serialNumber {
+           let serial = display.serialNumber,
+           serial > 0 {
             return "display-\(vendor)-\(model)-\(serial)"
         }
-        return "display-\(display.vendorNumber ?? 0)-\(display.modelNumber ?? 0)-\(display.name)"
+        guard let uuid = CGDisplayCreateUUIDFromDisplayID(display.id)?.takeRetainedValue() else {
+            return nil
+        }
+        return "display-uuid-\((CFUUIDCreateString(nil, uuid) as String).uppercased())"
     }
 }
 

@@ -285,7 +285,10 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
                 store: self.store,
                 capabilities: self.capabilities,
                 snapshot: self.batterySnapshot,
-                localization: self.localization
+                localization: self.localization,
+                onSetLimit: { [weak self] value in
+                    self?.handleLimitChange(value)
+                }
             )
         }
     }
@@ -344,18 +347,18 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
             guard case let .boolean(enabled)? = invocation.reference.parameters[ActionParameterID.enabled] else {
                 return .failed(message: PluginKitLocalization.actionInvalidParameters)
             }
-            if store.isEnabled != enabled {
-                handleEnableToggle(enabled)
+            if enabled, store.isEnabled {
+                succeeded = applyCurrentMode(reason: "canonical-set-enabled-reassert") == nil
+            } else {
+                succeeded = handleEnableToggle(enabled)
             }
-            succeeded = store.isEnabled == enabled && lastErrorMessage == nil
         case ActionID.setLimit:
             guard case let .integer(limit)? = invocation.reference.parameters[ActionParameterID.limit],
                   limit >= BatteryChargeLimits.minimumPercent,
                   limit <= BatteryChargeLimits.maximumPercent else {
                 return .failed(message: PluginKitLocalization.actionInvalidParameters)
             }
-            handleLimitChange(Int(limit))
-            succeeded = store.limitPercent == Int(limit) && lastErrorMessage == nil
+            succeeded = handleLimitChange(Int(limit))
         case ActionID.hold:
             succeeded = setModeFromAction(.holdAtLimit)
         case ActionID.resume:
@@ -372,8 +375,8 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
 
     // MARK: - User Actions
 
-    private func handleEnableToggle(_ value: Bool) {
-        store.setEnabled(value)
+    @discardableResult
+    private func handleEnableToggle(_ value: Bool) -> Bool {
         if value {
             // Probe capabilities lazily — the helper install prompt happens
             // on first call. Surface a clear error if the hardware can't be
@@ -381,34 +384,22 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
             capabilities = writer.probeCapabilities()
             if !capabilities.canInhibit && writer.isHelperAvailable {
                 lastErrorMessage = localizedDescription(for: .noSupportedSMCKey)
-                store.setEnabled(false)
                 onStateChange?()
-                return
+                return false
             }
-            // Enabling always starts in holdAtLimit — the core behavior is
-            // "don't auto-charge; user must explicitly resume."
-            store.setMode(.holdAtLimit)
-            startActiveMonitoring()
-            applyCurrentMode(reason: "user-enable")
-        } else {
-            store.setMode(.holdAtLimit)
-            _ = restoreUnrestrictedCharging(reason: "user-disable", requireInstalledHelper: false)
-            stopActiveMonitoring()
-            lastErrorMessage = nil
         }
-        onStateChange?()
+        var candidate = store.state
+        candidate.isEnabled = value
+        candidate.mode = .holdAtLimit
+        return transition(to: candidate, reason: value ? "user-enable" : "user-disable")
     }
 
-    private func handleLimitChange(_ percent: Int) {
-        store.setLimitPercent(percent)
-        // Changing the limit always returns to holdAtLimit. This matches the
-        // user's design: the act of setting a limit means "stop charging at
-        // this level; don't auto-resume."
-        if store.isEnabled {
-            store.setMode(.holdAtLimit)
-            applyCurrentMode(reason: "limit-change")
-        }
-        onStateChange?()
+    @discardableResult
+    private func handleLimitChange(_ percent: Int) -> Bool {
+        var candidate = store.state
+        candidate.limitPercent = percent
+        if candidate.isEnabled { candidate.mode = .holdAtLimit }
+        return transition(to: candidate, reason: "limit-change")
     }
 
     private func handleInvokeAction(_ controlID: String) {
@@ -434,36 +425,29 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
 
     private func handleChargeActionTap() {
         guard store.isEnabled else { return }
+        let targetMode: BatteryChargeMode
         switch store.mode {
         case .holdAtLimit:
             // User explicitly asks to start charging. Move to .charging; the
             // monitoring loop will revert to .holdAtLimit when the battery
             // reaches the limit.
-            store.setMode(.charging)
-            applyCurrentMode(reason: "user-resume")
+            targetMode = .charging
         case .charging:
             // User asks to stop charging — return to .holdAtLimit.
-            store.setMode(.holdAtLimit)
-            applyCurrentMode(reason: "user-stop-charging")
+            targetMode = .holdAtLimit
         case .discharging:
             // Treat as "stop discharging and hold at current level."
-            store.setMode(.holdAtLimit)
-            applyCurrentMode(reason: "user-stop-discharge-via-charge")
+            targetMode = .holdAtLimit
         }
-        onStateChange?()
+        _ = setModeFromAction(targetMode)
     }
 
     private func handleDischargeActionTap() {
         guard store.isEnabled, capabilities.canForceDischarge else { return }
-        switch store.mode {
-        case .discharging:
-            store.setMode(.holdAtLimit)
-            applyCurrentMode(reason: "user-stop-discharge")
-        default:
-            store.setMode(.discharging)
-            applyCurrentMode(reason: "user-start-discharge")
-        }
-        onStateChange?()
+        let targetMode: BatteryChargeMode = store.mode == .discharging
+            ? .holdAtLimit
+            : .discharging
+        _ = setModeFromAction(targetMode)
     }
 
     private var actionConfirmation: ActionConfirmation {
@@ -511,51 +495,125 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
     @discardableResult
     private func setModeFromAction(_ mode: BatteryChargeMode) -> Bool {
         guard store.isEnabled else { return false }
-        store.setMode(mode)
-        applyCurrentMode(reason: "canonical-action")
-        return store.mode == mode && lastErrorMessage == nil
+        var candidate = store.state
+        candidate.mode = mode
+        return transition(to: candidate, reason: "canonical-action")
+    }
+
+    private func actionFailureMessage(
+        targetError: BatteryChargeWriteError,
+        rollbackError: BatteryChargeWriteError?
+    ) -> String {
+        let targetMessage = localizedDescription(for: targetError)
+        guard let rollbackError else { return targetMessage }
+        return localization.format(
+            "error.action.rollbackFailed",
+            defaultValue: "%@；恢复先前状态失败：%@",
+            targetMessage,
+            localizedDescription(for: rollbackError)
+        )
     }
 
     // MARK: - State Application
 
-    private func applyCurrentMode(reason: String) {
-        guard store.isEnabled else {
-            _ = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: false)
-            return
+    @discardableResult
+    private func applyCurrentMode(reason: String) -> BatteryChargeWriteError? {
+        apply(store.state, reason: reason)
+    }
+
+    @discardableResult
+    private func apply(
+        _ state: BatteryChargeLimitState,
+        reason: String
+    ) -> BatteryChargeWriteError? {
+        guard state.isEnabled else {
+            return restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: false)
         }
 
-        switch store.mode {
+        let error: BatteryChargeWriteError?
+        switch state.mode {
         case .holdAtLimit:
-            _ = setForceDischarge(false)
-            if let err = inhibitCharging(limitPercent: store.limitPercent) {
-                lastErrorMessage = localizedDescription(for: err)
-                BatteryChargeLimitLog.plugin.error("inhibit failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
-            } else {
-                lastErrorMessage = nil
-            }
+            let dischargeError = setForceDischarge(false)
+            let inhibitError = inhibitCharging(limitPercent: state.limitPercent)
+            error = dischargeError ?? inhibitError
 
         case .charging:
-            if let err = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: false) {
-                lastErrorMessage = localizedDescription(for: err)
-                BatteryChargeLimitLog.plugin.error("resume failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
-            } else {
-                lastErrorMessage = nil
-            }
+            error = restoreUnrestrictedCharging(reason: reason, requireInstalledHelper: false)
 
         case .discharging:
             // Force-discharge implies the inhibit keys must also be set so
             // the adapter doesn't fight us by charging back up.
-            if let err = inhibitCharging(limitPercent: store.limitPercent) {
-                BatteryChargeLimitLog.plugin.error("inhibit-for-discharge failed: \(self.localizedDescription(for: err), privacy: .public)")
-            }
-            if let err = setForceDischarge(true) {
-                lastErrorMessage = localizedDescription(for: err)
-                BatteryChargeLimitLog.plugin.error("force-discharge failed (\(reason, privacy: .public)): \(self.localizedDescription(for: err), privacy: .public)")
-            } else {
-                lastErrorMessage = nil
-            }
+            let inhibitError = inhibitCharging(limitPercent: state.limitPercent)
+            let dischargeError = setForceDischarge(true)
+            error = inhibitError ?? dischargeError
+        }
+        if let error {
+            lastErrorMessage = localizedDescription(for: error)
+            BatteryChargeLimitLog.plugin.error("Mode apply failed (\(reason, privacy: .public)): \(self.localizedDescription(for: error), privacy: .public)")
+        } else {
+            lastErrorMessage = nil
         }
         onStateChange?()
+        return error
+    }
+
+    private func transition(
+        to candidate: BatteryChargeLimitState,
+        reason: String
+    ) -> Bool {
+        let previous = store.state
+        let requiresHardwareApplication = candidate.isEnabled || previous.isEnabled
+        if requiresHardwareApplication, let targetError = apply(candidate, reason: reason) {
+            let rollbackError = apply(previous, reason: "\(reason)-hardware-rollback")
+            lastErrorMessage = actionFailureMessage(
+                targetError: targetError,
+                rollbackError: rollbackError
+            )
+            onStateChange?()
+            return false
+        }
+
+        let persistenceResult = store.commit(candidate)
+        guard persistenceResult == .committed else {
+            let hardwareRollbackError = requiresHardwareApplication
+                ? apply(previous, reason: "\(reason)-persistence-rollback")
+                : nil
+            let storageRollbackSucceeded: Bool
+            if case let .rejected(rollbackSucceeded) = persistenceResult {
+                storageRollbackSucceeded = rollbackSucceeded
+            } else {
+                storageRollbackSucceeded = true
+            }
+            var message = localization.string(
+                "error.persistence.failed",
+                defaultValue: "无法保存电池充电设置。"
+            )
+            if !storageRollbackSucceeded {
+                message += " " + localization.string(
+                    "error.persistence.rollbackFailed",
+                    defaultValue: "恢复先前设置失败。"
+                )
+            }
+            if let hardwareRollbackError {
+                message += " " + localization.format(
+                    "error.persistence.hardwareRollbackFailed",
+                    defaultValue: "恢复先前硬件状态失败：%@",
+                    localizedDescription(for: hardwareRollbackError)
+                )
+            }
+            lastErrorMessage = message
+            onStateChange?()
+            return false
+        }
+
+        if candidate.isEnabled {
+            startActiveMonitoring()
+        } else {
+            stopActiveMonitoring()
+        }
+        lastErrorMessage = nil
+        onStateChange?()
+        return true
     }
 
     /// Automatic mode transitions driven by battery level changes.
@@ -566,12 +624,14 @@ final class BatteryChargeLimitPlugin: MacToolsPlugin, PluginPrimaryPanel, Plugin
 
         switch store.mode {
         case .charging where level >= store.limitPercent:
-            store.setMode(.holdAtLimit)
-            applyCurrentMode(reason: "auto-reached-limit")
+            var candidate = store.state
+            candidate.mode = .holdAtLimit
+            _ = transition(to: candidate, reason: "auto-reached-limit")
 
         case .discharging where level <= store.limitPercent:
-            store.setMode(.holdAtLimit)
-            applyCurrentMode(reason: "auto-discharged-to-limit")
+            var candidate = store.state
+            candidate.mode = .holdAtLimit
+            _ = transition(to: candidate, reason: "auto-discharged-to-limit")
 
         case .holdAtLimit:
             // Re-assert the inhibit periodically — firmware can reset SMC

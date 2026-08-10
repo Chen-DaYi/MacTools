@@ -1,6 +1,54 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "error.action.persistenceFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر حفظ إعداد المروحة المسبق." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Lüftervoreinstellung konnte nicht gespeichert werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The fan preset could not be saved." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudo guardar el preajuste del ventilador." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible d’enregistrer le préréglage du ventilateur." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ファンプリセットを保存できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "팬 프리셋을 저장하지 못했습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível guardar a predefinição da ventoinha." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось сохранить предустановку вентилятора." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法保存风扇预设。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法儲存風扇預設。" } }
+      }
+    },
+    "error.action.persistenceRollbackFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذر حفظ إعداد المروحة المسبق أو استعادة استراتيجية المروحة السابقة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Lüftervoreinstellung konnte nicht gespeichert und die vorherige Lüfterstrategie nicht wiederhergestellt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The fan preset could not be saved, and the previous fan strategy could not be restored." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se pudo guardar el preajuste ni restaurar la estrategia anterior del ventilador." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Impossible d’enregistrer le préréglage et de restaurer la stratégie précédente du ventilateur." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ファンプリセットを保存できず、以前のファン制御も復元できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "팬 프리셋을 저장하지 못했고 이전 팬 전략도 복원하지 못했습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Não foi possível guardar a predefinição nem restaurar a estratégia anterior da ventoinha." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Не удалось сохранить предустановку и восстановить прежнюю стратегию вентилятора." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法保存风扇预设，且恢复先前风扇策略失败。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法儲存風扇預設，且無法還原先前的風扇策略。" } }
+      }
+    },
+    "error.action.rollbackFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "%@؛ تعذرت استعادة استراتيجية المروحة السابقة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@; die vorherige Lüfterstrategie konnte nicht wiederhergestellt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@; the previous fan strategy could not be restored." } },
+        "es": { "stringUnit": { "state": "translated", "value": "%@; no se pudo restaurar la estrategia anterior del ventilador." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "%@ ; impossible de restaurer la stratégie précédente du ventilateur." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@。以前のファン制御を復元できませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@. 이전 팬 전략을 복원하지 못했습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "%@; não foi possível restaurar a estratégia anterior da ventoinha." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "%@; не удалось восстановить прежнюю стратегию вентилятора." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@；恢复先前风扇策略失败。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@；無法還原先前的風扇策略。" } }
+      }
+    },
     "metadata.description": {
       "extractionState": "manual",
       "localizations": {

@@ -45,6 +45,22 @@ final class DiskCleanStagingReconcilerTests: XCTestCase {
         XCTAssertTrue(journal.incompleteEntries().isEmpty, "successful restore clears the journal")
     }
 
+    func testIrreversibleStagedObjectIsNeverRolledBack() throws {
+        let stagedName = DiskCleanRemovalPrimitive.stagedNamePrefix + "partial"
+        try temporary.makeFile("\(stagedName)/survivor.bin", bytes: 10)
+        let pending = entry(stagedName: stagedName, originalName: "Cache")
+        try journal.begin(pending)
+        try journal.markIrreversible(entryID: pending.id)
+        journal = DiskCleanStagingJournal(directory: storage.url)
+
+        let outcomes = DiskCleanStagingReconciler().reconcile(journal: journal, auditLog: auditLog)
+
+        XCTAssertEqual(outcomes, [.retainedIrreversible(stagedName: stagedName)])
+        assertMissing(temporary.resolve("Cache").path)
+        assertExists(temporary.resolve("\(stagedName)/survivor.bin").path)
+        XCTAssertEqual(journal.incompleteEntries(), [pending])
+    }
+
     /// Crash before rename → no staged object; clear the entry with no permanent backlog.
     func testEntryWithoutStagedObjectIsClosedOut() throws {
         try journal.begin(entry(stagedName: DiskCleanRemovalPrimitive.stagedNamePrefix + "never", originalName: "Cache"))

@@ -2,6 +2,33 @@ import AppKit
 import Darwin
 
 @MainActor
+private func terminateRunningCopies(of executableURL: URL) -> Int {
+    let targetURL = executableURL.standardizedFileURL
+    let currentProcessID = ProcessInfo.processInfo.processIdentifier
+    let applications = NSWorkspace.shared.runningApplications.filter { application in
+        application.processIdentifier != currentProcessID
+            && application.executableURL?.standardizedFileURL == targetURL
+            && !application.isTerminated
+    }
+
+    applications.forEach { _ = $0.terminate() }
+    let gracefulDeadline = Date().addingTimeInterval(5)
+    while applications.contains(where: { !$0.isTerminated }), Date() < gracefulDeadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    }
+
+    let survivors = applications.filter { !$0.isTerminated }
+    survivors.forEach { _ = $0.forceTerminate() }
+    let forcedDeadline = Date().addingTimeInterval(2)
+    while survivors.contains(where: { !$0.isTerminated }), Date() < forcedDeadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    }
+    let remaining = survivors.filter { !$0.isTerminated }.count
+    print("matched=\(applications.count) forced=\(survivors.count) remaining=\(remaining)")
+    return remaining
+}
+
+@MainActor
 @discardableResult
 private func restoreApplicationVisibility(from stateURL: URL) -> Int {
     guard let payload = try? String(contentsOf: stateURL, encoding: .utf8) else {
@@ -31,6 +58,15 @@ private final class PrivacyHelperDelegate: NSObject, NSApplicationDelegate, NSWi
     private var terminationSignalSources: [DispatchSourceSignal] = []
     private var window: NSWindow?
     private let isolatesRecording = ProcessInfo.processInfo.arguments.contains("--recording-privacy")
+    private let protectedBundleIdentifier: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "--protected-bundle-id"),
+              arguments.indices.contains(index + 1),
+              !arguments[index + 1].isEmpty else {
+            return nil
+        }
+        return arguments[index + 1]
+    }()
     private let visibilityStateURL: URL? = {
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: "--visibility-state"),
@@ -52,6 +88,11 @@ private final class PrivacyHelperDelegate: NSObject, NSApplicationDelegate, NSWi
         backdropWindows.forEach { $0.orderFront(nil) }
 
         if isolatesRecording {
+            guard protectedBundleIdentifier != nil else {
+                fputs("error: --protected-bundle-id is required for recording privacy\n", stderr)
+                NSApp.terminate(nil)
+                return
+            }
             installTerminationSignalHandlers()
             NSWorkspace.shared.runningApplications.forEach(hideIfUnrelated)
             let notifications = NSWorkspace.shared.notificationCenter
@@ -182,7 +223,7 @@ private final class PrivacyHelperDelegate: NSObject, NSApplicationDelegate, NSWi
     private func hideIfUnrelated(_ application: NSRunningApplication) {
         let identifier = application.bundleIdentifier ?? ""
         guard application.processIdentifier != ProcessInfo.processInfo.processIdentifier,
-              identifier != "com.jennymedia.mactools.dev",
+              identifier != protectedBundleIdentifier,
               !identifier.hasPrefix("com.jennymedia.mactools.e2e-helper."),
               application.activationPolicy == .regular,
               !application.isHidden,
@@ -236,6 +277,14 @@ private struct PrivacyHelperMain {
     @MainActor
     static func main() {
         let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "--terminate-running-copies"),
+           arguments.indices.contains(index + 1) {
+            let executableURL = URL(fileURLWithPath: arguments[index + 1])
+            if terminateRunningCopies(of: executableURL) != 0 {
+                Darwin.exit(1)
+            }
+            return
+        }
         if let index = arguments.firstIndex(of: "--restore-visibility"),
            arguments.indices.contains(index + 1) {
             let stateURL = URL(fileURLWithPath: arguments[index + 1])

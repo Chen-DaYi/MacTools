@@ -181,13 +181,17 @@ final class AutomationRuntime {
             mode: .background
         ) {
         case let .success(execution):
+            let actionHandle = execution.actionHandle
             activeRuleIDs.insert(rule.id)
-            activeHandles[rule.id] = execution.actionHandle
+            activeHandles[rule.id] = actionHandle
             Task { @MainActor [weak self] in
-                _ = await execution.actionHandle.result()
-                self?.activeRuleIDs.remove(rule.id)
-                self?.activeHandles.removeValue(forKey: rule.id)
-                self?.onChange?()
+                _ = await actionHandle.result()
+                guard let self, self.activeHandles[rule.id] === actionHandle else {
+                    return
+                }
+                self.activeRuleIDs.remove(rule.id)
+                self.activeHandles.removeValue(forKey: rule.id)
+                self.onChange?()
             }
             onChange?()
         case let .failure(error):

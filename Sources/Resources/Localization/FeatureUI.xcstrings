@@ -10937,6 +10937,77 @@
         }
       }
     },
+    "无法保存快捷键，且恢复先前快捷键失败。": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تعذر حفظ الاختصار واستعادة الاختصار السابق."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastenkürzel konnte nicht gesichert und das vorherige Tastenkürzel nicht wiederhergestellt werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to save the shortcut or restore the previous shortcut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo guardar el atajo ni restaurar el atajo anterior."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d’enregistrer le raccourci ni de restaurer le précédent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ショートカットを保存できず、以前のショートカットも復元できませんでした。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "단축키를 저장하지 못했고 이전 단축키도 복원하지 못했습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível salvar o atalho nem restaurar o atalho anterior."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить сочетание клавиш и восстановить предыдущее."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存快捷键，且恢复先前快捷键失败。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法儲存快速鍵，且無法還原先前的快速鍵。"
+          }
+        }
+      }
+    },
     "无法保存自动规则。": {
       "extractionState": "manual",
       "localizations": {

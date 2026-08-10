@@ -96,10 +96,17 @@ final class FanControlPresetStore: ObservableObject {
         }
     }
 
-    private func saveCustomPresets() {
-        if let data = try? JSONEncoder().encode(customPresets) {
-            storage.set(data, forKey: Key.customPresets)
+    @discardableResult
+    private func saveCustomPresets(_ presets: [FanPreset]? = nil) -> Bool {
+        let value = presets ?? customPresets
+        guard let data = try? JSONEncoder().encode(value) else { return false }
+        let previousRawValue = storage.object(forKey: Key.customPresets)
+        storage.set(data, forKey: Key.customPresets)
+        guard storage.data(forKey: Key.customPresets) == data else {
+            restore(previousRawValue, forKey: Key.customPresets)
+            return false
         }
+        return true
     }
 
     private func saveActivePresetID() {
@@ -160,6 +167,10 @@ final class FanControlPresetStore: ObservableObject {
     }
 
     private func beginPortableRestoreTransaction() -> Bool {
+        guard hasExpectedData(forKey: Key.customPresets),
+              hasExpectedString(forKey: Key.activePresetID) else {
+            return false
+        }
         let transaction = PortableRestoreTransaction(
             customPresets: storage.data(forKey: Key.customPresets),
             activePresetID: storage.string(forKey: Key.activePresetID)
@@ -170,9 +181,10 @@ final class FanControlPresetStore: ObservableObject {
     }
 
     private func recoverInterruptedPortableRestore() -> Bool {
-        guard let transactionData = storage.data(forKey: Key.portableRestoreTransaction) else {
+        guard let rawTransaction = storage.object(forKey: Key.portableRestoreTransaction) else {
             return true
         }
+        guard let transactionData = rawTransaction as? Data else { return false }
         guard let transaction = try? JSONDecoder().decode(
             PortableRestoreTransaction.self,
             from: transactionData
@@ -186,7 +198,7 @@ final class FanControlPresetStore: ObservableObject {
             return false
         }
         storage.removeObject(forKey: Key.portableRestoreTransaction)
-        return storage.data(forKey: Key.portableRestoreTransaction) == nil
+        return storage.object(forKey: Key.portableRestoreTransaction) == nil
     }
 
     @discardableResult
@@ -196,7 +208,7 @@ final class FanControlPresetStore: ObservableObject {
 
     private func finishPortableRestoreTransaction() -> Bool {
         storage.removeObject(forKey: Key.portableRestoreTransaction)
-        return storage.data(forKey: Key.portableRestoreTransaction) == nil
+        return storage.object(forKey: Key.portableRestoreTransaction) == nil
     }
 
     private func writePortableValues(customPresets: Data?, activePresetID: String?) -> Bool {
@@ -212,6 +224,20 @@ final class FanControlPresetStore: ObservableObject {
         } else {
             storage.removeObject(forKey: key)
         }
+    }
+
+    private func hasExpectedData(forKey key: String) -> Bool {
+        guard let rawValue = storage.object(forKey: key) else { return true }
+        return rawValue is Data
+    }
+
+    private func hasExpectedString(forKey key: String) -> Bool {
+        guard let rawValue = storage.object(forKey: key) else { return true }
+        return rawValue is String
+    }
+
+    private func restore(_ value: Any?, forKey key: String) {
+        setOptional(value, forKey: key)
     }
 
     private static func isValidPortablePayload(_ payload: PortablePreferences) -> Bool {
@@ -239,10 +265,18 @@ final class FanControlPresetStore: ObservableObject {
 
     // MARK: - CRUD
 
-    func setActivePreset(id: String) {
-        guard allPresets.contains(where: { $0.id == id }) else { return }
+    @discardableResult
+    func setActivePreset(id: String) -> Bool {
+        guard allPresets.contains(where: { $0.id == id }) else { return false }
+        let previousID = activePresetID
         activePresetID = id
         saveActivePresetID()
+        guard storage.string(forKey: Key.activePresetID) == id else {
+            activePresetID = previousID
+            saveActivePresetID()
+            return false
+        }
+        return true
     }
 
     func addCustomPreset() -> FanPreset? {
@@ -254,35 +288,72 @@ final class FanControlPresetStore: ObservableObject {
             strategy: .fixed(rpm: FanRPMLimits.absoluteMin),
             isBuiltIn: false
         )
-        customPresets.append(preset)
-        saveCustomPresets()
+        let candidate = customPresets + [preset]
+        guard saveCustomPresets(candidate) else { return nil }
+        customPresets = candidate
         onCatalogChange?()
         return preset
     }
 
-    func updateCustomPresetRPM(id: String, rpm: Int) {
-        guard let idx = customPresets.firstIndex(where: { $0.id == id }) else { return }
+    @discardableResult
+    func updateCustomPresetRPM(id: String, rpm: Int) -> Bool {
+        guard let idx = customPresets.firstIndex(where: { $0.id == id }) else { return false }
+        let previous = customPresets[idx]
         let clamped = max(FanRPMLimits.absoluteMin, min(FanRPMLimits.absoluteMax, rpm))
         customPresets[idx].strategy = .fixed(rpm: clamped)
-        saveCustomPresets()
-    }
-
-    func renameCustomPreset(id: String, newName: String) {
-        guard let idx = customPresets.firstIndex(where: { $0.id == id }) else { return }
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        customPresets[idx].name = String(trimmed.prefix(Self.maximumPresetNameLength))
-        saveCustomPresets()
-        onCatalogChange?()
-    }
-
-    func deleteCustomPreset(id: String) {
-        customPresets.removeAll(where: { $0.id == id })
-        if activePresetID == id {
-            activePresetID = FanPresetBuiltInID.auto
-            saveActivePresetID()
+        guard saveCustomPresets() else {
+            customPresets[idx] = previous
+            _ = saveCustomPresets()
+            return false
         }
-        saveCustomPresets()
+        return true
+    }
+
+    @discardableResult
+    func renameCustomPreset(id: String, newName: String) -> Bool {
+        guard let idx = customPresets.firstIndex(where: { $0.id == id }) else { return false }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        var candidate = customPresets
+        candidate[idx].name = String(trimmed.prefix(Self.maximumPresetNameLength))
+        guard saveCustomPresets(candidate) else { return false }
+        customPresets = candidate
         onCatalogChange?()
+        return true
+    }
+
+    @discardableResult
+    func deleteCustomPreset(id: String) -> Bool {
+        var candidatePresets = customPresets
+        candidatePresets.removeAll(where: { $0.id == id })
+        guard candidatePresets.count != customPresets.count,
+              let candidateData = try? JSONEncoder().encode(candidatePresets) else {
+            return false
+        }
+        let previousPresetValue = storage.object(forKey: Key.customPresets)
+        let previousActivePresetValue = storage.object(forKey: Key.activePresetID)
+        let candidateActivePresetID = activePresetID == id
+            ? FanPresetBuiltInID.auto
+            : activePresetID
+        let changesActivePreset = candidateActivePresetID != activePresetID
+
+        storage.set(candidateData, forKey: Key.customPresets)
+        if changesActivePreset {
+            storage.set(candidateActivePresetID, forKey: Key.activePresetID)
+        }
+        guard storage.data(forKey: Key.customPresets) == candidateData,
+              !changesActivePreset
+                || storage.string(forKey: Key.activePresetID) == candidateActivePresetID else {
+            restore(previousPresetValue, forKey: Key.customPresets)
+            if changesActivePreset {
+                restore(previousActivePresetValue, forKey: Key.activePresetID)
+            }
+            return false
+        }
+
+        customPresets = candidatePresets
+        activePresetID = candidateActivePresetID
+        onCatalogChange?()
+        return true
     }
 }

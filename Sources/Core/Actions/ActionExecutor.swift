@@ -266,9 +266,14 @@ final class ActionExecutor {
             break
         }
 
-        if invocation.source == .runLink,
-           definition.externalInvocationPolicy == .unavailable {
-            return .externalInvocationUnavailable
+        if invocation.source == .runLink {
+            guard definition.externalInvocationPolicy != .unavailable,
+                  !ActionRegistry.containsSensitiveParameters(
+                      invocation.reference,
+                      for: definition
+                  ) else {
+                return .externalInvocationUnavailable
+            }
         }
         return nil
     }
