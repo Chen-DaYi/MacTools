@@ -367,7 +367,11 @@ final class AutomationController: ObservableObject {
                 store: store,
                 definition: definitionLookup
             )
-            var capabilities: ActionExecutionCapabilities = [.foregroundInteractive, .cancellable]
+            var capabilities: ActionExecutionCapabilities = [
+                .foregroundInteractive,
+                .cancellable,
+                .reportsProgress,
+            ]
             if analysis.supportsBackground {
                 capabilities.insert(.background)
             }

@@ -351,6 +351,110 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertFalse(provider.didCancel)
     }
 
+    func testContinuingExecutionReturnsAfterStartAndOutlivesCallerTask() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            capabilities: [
+                .background,
+                .foregroundInteractive,
+                .cancellable,
+                .reportsProgress,
+            ],
+            timeout: nil
+        )
+        var continuation: CheckedContinuation<ActionExecutionResult, Never>?
+        provider.operation = {
+            await withCheckedContinuation { continuation = $0 }
+        }
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(registry: registry)
+        let invocation = ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .actionGrid,
+            mode: .foreground
+        )
+
+        let caller = Task { @MainActor in
+            await executor.startContinuing(
+                invocation,
+                expectedDefinition: definition
+            )
+        }
+        let outcome = await caller.value
+        caller.cancel()
+        for _ in 0 ..< 100 where continuation == nil {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(outcome, .started)
+        XCTAssertEqual(executor.continuingExecutionCountForTests, 1)
+        XCTAssertFalse(provider.didCancel)
+
+        continuation?.resume(returning: .succeeded())
+        for _ in 0 ..< 100 where executor.continuingExecutionCountForTests != 0 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(executor.continuingExecutionCountForTests, 0)
+        XCTAssertFalse(provider.didCancel)
+    }
+
+    func testContinuingExecutionCompletesConfirmationBeforeStarting() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            risk: .confirmationRequired,
+            confirmation: ActionConfirmation(
+                title: "Confirm",
+                message: "Run the workflow?",
+                confirmButtonTitle: "Run"
+            ),
+            capabilities: [.foregroundInteractive, .cancellable, .reportsProgress]
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+
+        let outcome = await ActionExecutor(registry: registry).startContinuing(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .actionGrid,
+                mode: .foreground
+            ),
+            expectedDefinition: definition
+        )
+
+        XCTAssertEqual(outcome, .rejected(.confirmationDenied))
+        XCTAssertEqual(provider.beginCount, 0)
+    }
+
+    func testContinuingExecutionRejectsAChangedExpectedDefinitionBeforeBegin() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            capabilities: [.foregroundInteractive, .cancellable, .reportsProgress]
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+        let changedDefinition = ActionDefinition(
+            key: definition.key,
+            title: "Changed",
+            description: definition.description,
+            systemImage: definition.systemImage,
+            capabilities: definition.capabilities
+        )
+
+        let outcome = await ActionExecutor(registry: registry).startContinuing(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .unifiedSearch,
+                mode: .foreground
+            ),
+            expectedDefinition: changedDefinition
+        )
+
+        XCTAssertEqual(outcome, .rejected(.providerChanged))
+        XCTAssertEqual(provider.beginCount, 0)
+    }
+
     func testExecutionHandleLatchesCancellationBeforeStartingAndOnlyCancelsOnce() async {
         var startCount = 0
         var cancelCount = 0

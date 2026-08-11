@@ -1047,12 +1047,35 @@ struct UnifiedSearchPaletteView: View {
                             )
                         )
                     }
+                let invocation = ActionInvocation(
+                    reference: reference,
+                    source: .unifiedSearch,
+                    mode: mode
+                )
+                if ActionSurfaceExecutionSupport.continuesAfterSurfaceDismissal(
+                    for: action.definition
+                ) {
+                    let startOutcome = await pluginHost.actionExecutor.startContinuing(
+                        invocation,
+                        expectedDefinition: action.definition,
+                        confirmationService: confirmationService
+                    )
+                    guard generation == executionGeneration else { return }
+                    executionTask = nil
+                    switch startOutcome {
+                    case .started:
+                        actions.dismissAfterSuccessfulExecution()
+                    case .cancelled:
+                        executionFeedback = FeatureL10n.string("操作已取消。")
+                        model.refresh()
+                    case let .rejected(rejection):
+                        executionFeedback = ActionSurfaceExecutionSupport.message(for: rejection)
+                        model.refresh()
+                    }
+                    return
+                }
                 let outcome = await pluginHost.actionExecutor.execute(
-                    ActionInvocation(
-                        reference: reference,
-                        source: .unifiedSearch,
-                        mode: mode
-                    ),
+                    invocation,
                     confirmationService: confirmationService
                 )
                 guard generation == executionGeneration else { return }

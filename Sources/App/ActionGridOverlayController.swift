@@ -14,6 +14,10 @@ enum ActionSurfaceExecutionSupport {
         return nil
     }
 
+    static func continuesAfterSurfaceDismissal(for definition: ActionDefinition) -> Bool {
+        definition.capabilities.contains(.reportsProgress)
+    }
+
     static func feedback(for outcome: ActionExecutionOutcome) -> String? {
         switch outcome {
         case .completed(.succeeded): nil
@@ -39,6 +43,11 @@ enum ActionSurfaceExecutionSupport {
         case .executionTimedOut: FeatureL10n.string("操作超时。")
         }
     }
+}
+
+enum ActionGridExecutionOutcome: Equatable {
+    case terminal(ActionExecutionOutcome)
+    case handedOff
 }
 
 struct ResolvedActionGridEntry: Identifiable, Equatable {
@@ -439,7 +448,7 @@ final class ActionGridOverlayModel: ObservableObject {
     @Published private(set) var folderPath: [String] = []
 
     private let resolver: (ActionGridPresentationEntry) -> ResolvedActionGridEntry
-    private let executor: (ActionReference) async -> ActionExecutionOutcome
+    private let executor: (ActionReference) async -> ActionGridExecutionOutcome
     private var sourceEntries: [ActionGridPresentationEntry] = []
     private var navigationStack: [NavigationLevel] = []
     private var executionTask: Task<Void, Never>?
@@ -449,7 +458,7 @@ final class ActionGridOverlayModel: ObservableObject {
 
     init(
         resolver: @escaping (ActionGridPresentationEntry) -> ResolvedActionGridEntry,
-        executor: @escaping (ActionReference) async -> ActionExecutionOutcome
+        executor: @escaping (ActionReference) async -> ActionGridExecutionOutcome
     ) {
         self.resolver = resolver
         self.executor = executor
@@ -545,13 +554,13 @@ final class ActionGridOverlayModel: ObservableObject {
             isExecuting = false
             executingEntryID = nil
             switch outcome {
-            case .completed(.succeeded):
+            case .handedOff, .terminal(.completed(.succeeded)):
                 onSuccessfulExecution?()
-            case let .completed(.failed(message)):
+            case let .terminal(.completed(.failed(message))):
                 setFeedback(message)
-            case .completed(.cancelled):
+            case .terminal(.completed(.cancelled)):
                 setFeedback(FeatureL10n.string("操作已取消。"))
-            case let .rejected(rejection):
+            case let .terminal(.rejected(rejection)):
                 setFeedback(ActionSurfaceExecutionSupport.message(for: rejection))
             }
         }
@@ -729,18 +738,38 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
             },
             executor: { [weak pluginHost] reference in
                 guard let pluginHost else {
-                    return .rejected(.unavailable(FeatureL10n.string("操作提供方当前不可用。")))
+                    return .terminal(.rejected(
+                        .unavailable(FeatureL10n.string("操作提供方当前不可用。"))
+                    ))
                 }
                 guard case let .success(action) = pluginHost.actionRegistry.registeredAction(
                     for: reference
                 ), let mode = ActionSurfaceExecutionSupport.preferredMode(
                     for: action.definition
                 ) else {
-                    return .rejected(.unknownAction(reference.key))
+                    return .terminal(.rejected(.unknownAction(reference.key)))
                 }
-                return await pluginHost.actionExecutor.execute(
-                    ActionInvocation(reference: reference, source: .actionGrid, mode: mode)
+                let invocation = ActionInvocation(
+                    reference: reference,
+                    source: .actionGrid,
+                    mode: mode
                 )
+                if ActionSurfaceExecutionSupport.continuesAfterSurfaceDismissal(
+                    for: action.definition
+                ) {
+                    switch await pluginHost.actionExecutor.startContinuing(
+                        invocation,
+                        expectedDefinition: action.definition
+                    ) {
+                    case .started:
+                        return .handedOff
+                    case .cancelled:
+                        return .terminal(.completed(.cancelled))
+                    case let .rejected(rejection):
+                        return .terminal(.rejected(rejection))
+                    }
+                }
+                return .terminal(await pluginHost.actionExecutor.execute(invocation))
             }
         )
         super.init()

@@ -19,6 +19,8 @@ Portable imports distinguish unavailable providers from configuration-defined ac
 
 Workflows can be created, renamed, duplicated, enabled or disabled, reordered, run, tested, stopped, and deleted. Automatic rules are managed separately; deleting a workflow first cancels its active runs and explicitly removes its attached rules so neither an unreachable run nor enabled orphan trigger remains hidden. Manual Run and Test ignore rule-specific conditions. Enabled workflows publish stable `automation/workflow.<uuid>` actions, so Unified Search, global shortcuts, Run Links, and Action Grid need no workflow-specific dispatch path.
 
+Workflow actions publish durable progress through Automation. Action Grid and Unified Search complete validation, availability checks, provider-generation revalidation, and any confirmation before handing the run to Automation and closing; the menu-bar running indicator, Automation run history, and Stop control then own its lifecycle. Ordinary actions still keep the invoking surface open until they return a terminal result, and nested workflow steps always await their child action so ordering, failure policy, recursion limits, and cancellation remain deterministic.
+
 Automatic rules use one trigger and zero or more conditions:
 
 ```text

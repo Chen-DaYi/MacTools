@@ -251,6 +251,8 @@ public struct ActionExecutionCapabilities: OptionSet, Hashable, Codable, Sendabl
     public static let background = ActionExecutionCapabilities(rawValue: 1 << 0)
     public static let foregroundInteractive = ActionExecutionCapabilities(rawValue: 1 << 1)
     public static let cancellable = ActionExecutionCapabilities(rawValue: 1 << 2)
+    /// The action publishes durable progress and cancellation state outside the
+    /// surface that invoked it, so transient surfaces may close after it starts.
     public static let reportsProgress = ActionExecutionCapabilities(rawValue: 1 << 3)
     /// The action can change the connected-display topology or active display mode.
     /// The host uses this to detach AppKit's remote text-completion UI before the

@@ -107,6 +107,9 @@ final class AutomationControllerTests: XCTestCase {
         XCTAssertTrue(
             enabledRegistration.definitions.first?.capabilities.contains(.cancellable) == true
         )
+        XCTAssertTrue(
+            enabledRegistration.definitions.first?.capabilities.contains(.reportsProgress) == true
+        )
 
         controller.setWorkflowEnabled(false, id: workflow.id)
         XCTAssertTrue(controller.actionRegistration().definitions.isEmpty)

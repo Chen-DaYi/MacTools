@@ -36,9 +36,22 @@ final class ActionGridOverlayControllerTests: XCTestCase {
             systemImage: "bolt",
             capabilities: [.background, .foregroundInteractive]
         )
+        let durableProgress = ActionDefinition(
+            key: ActionKey(providerID: "test", actionID: "durable-progress"),
+            title: "Durable Progress",
+            description: "",
+            systemImage: "clock",
+            capabilities: [.foregroundInteractive, .reportsProgress]
+        )
 
         XCTAssertEqual(ActionSurfaceExecutionSupport.preferredMode(for: backgroundOnly), .background)
         XCTAssertEqual(ActionSurfaceExecutionSupport.preferredMode(for: foreground), .foreground)
+        XCTAssertFalse(ActionSurfaceExecutionSupport.continuesAfterSurfaceDismissal(
+            for: foreground
+        ))
+        XCTAssertTrue(ActionSurfaceExecutionSupport.continuesAfterSurfaceDismissal(
+            for: durableProgress
+        ))
         XCTAssertEqual(
             ActionSurfaceExecutionSupport.feedback(for: .completed(.failed(message: "failed"))),
             "failed"
@@ -284,7 +297,7 @@ final class ActionGridOverlayControllerTests: XCTestCase {
                     children: entry.children
                 )
             },
-            executor: { _ in .completed(.succeeded()) }
+            executor: { _ in .terminal(.completed(.succeeded())) }
         )
         let children = [
             ActionGridPresentationEntry(id: "child-top", reference: reference, slotIndex: 0),
@@ -512,7 +525,7 @@ final class ActionGridOverlayControllerTests: XCTestCase {
                         )
                     }
                 },
-                executor: { _ in .completed(.succeeded()) }
+                executor: { _ in .terminal(.completed(.succeeded())) }
             )
             model.update([
                 ActionGridPresentationEntry(id: "one", reference: reference, slotIndex: 0),
@@ -953,7 +966,7 @@ final class ActionGridOverlayControllerTests: XCTestCase {
                     availability: .available
                 )
             },
-            executor: { _ in .completed(.succeeded()) }
+            executor: { _ in .terminal(.completed(.succeeded())) }
         )
         model.update([ActionGridPresentationEntry(id: "entry", reference: reference)])
         XCTAssertEqual(model.entries.first?.title, "English")
@@ -981,7 +994,7 @@ final class ActionGridOverlayControllerTests: XCTestCase {
             },
             executor: { _ in
                 executionCount += 1
-                return .completed(.succeeded())
+                return .terminal(.completed(.succeeded()))
             }
         )
         model.onSuccessfulExecution = { dismissed = true }
@@ -1003,9 +1016,38 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertTrue(dismissed)
     }
 
+    func testHandedOffExecutionRequestsDismissalWithoutWaitingForTerminalResult() async {
+        let reference = ActionReference(key: ActionKey(providerID: "automation", actionID: "run"))
+        var dismissed = false
+        let model = ActionGridOverlayModel(
+            resolver: { entry in
+                ResolvedActionGridEntry(
+                    id: entry.id,
+                    reference: entry.reference,
+                    title: "Long Workflow",
+                    ownerTitle: "Automation",
+                    systemImage: "clock",
+                    availability: .available
+                )
+            },
+            executor: { _ in .handedOff }
+        )
+        model.onSuccessfulExecution = { dismissed = true }
+        model.update([ActionGridPresentationEntry(id: "workflow", reference: reference)])
+
+        model.activateSelected()
+        for _ in 0 ..< 20 where model.isExecuting {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(dismissed)
+        XCTAssertFalse(model.isExecuting)
+        XCTAssertNil(model.executingEntryID)
+    }
+
     func testModelPublishesExecutingCellAndReservesFeedbackLayout() async {
         let reference = ActionReference(key: ActionKey(providerID: "provider", actionID: "run"))
-        var continuation: CheckedContinuation<ActionExecutionOutcome, Never>?
+        var continuation: CheckedContinuation<ActionGridExecutionOutcome, Never>?
         var layoutStates: [(slotCount: Int, navigation: Bool, feedback: Bool)] = []
         let model = ActionGridOverlayModel(
             resolver: { entry in
@@ -1030,7 +1072,9 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertTrue(model.isExecuting)
         XCTAssertEqual(model.executingEntryID, "run")
 
-        continuation?.resume(returning: .completed(.failed(message: "The test action failed.")))
+        continuation?.resume(returning: .terminal(.completed(
+            .failed(message: "The test action failed.")
+        )))
         for _ in 0 ..< 20 where model.isExecuting {
             await Task.yield()
         }
@@ -1045,7 +1089,7 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         let reference = ActionReference(
             key: ActionKey(providerID: "provider", actionID: "run")
         )
-        var continuation: CheckedContinuation<ActionExecutionOutcome, Never>?
+        var continuation: CheckedContinuation<ActionGridExecutionOutcome, Never>?
         var successfulExecutionCount = 0
         let model = ActionGridOverlayModel(
             resolver: { entry in
@@ -1070,7 +1114,9 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         }
 
         model.update([ActionGridPresentationEntry(id: "new", reference: reference)])
-        continuation?.resume(returning: .completed(.failed(message: "stale failure")))
+        continuation?.resume(returning: .terminal(.completed(
+            .failed(message: "stale failure")
+        )))
         await Task.yield()
 
         XCTAssertEqual(model.entries.map(\.id), ["new"])
@@ -1114,7 +1160,7 @@ final class ActionGridOverlayControllerTests: XCTestCase {
             },
             executor: {
                 executed.append($0)
-                return .completed(.succeeded())
+                return .terminal(.completed(.succeeded()))
             }
         )
         model.update([folder])
@@ -1148,7 +1194,7 @@ final class ActionGridOverlayControllerTests: XCTestCase {
                     children: entry.children
                 )
             },
-            executor: { _ in .completed(.succeeded()) }
+            executor: { _ in .terminal(.completed(.succeeded())) }
         )
         model.update([folder])
 

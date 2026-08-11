@@ -77,6 +77,12 @@ enum ActionExecutionOutcome: Equatable {
     case rejected(ActionExecutionRejection)
 }
 
+enum ContinuingActionStartOutcome: Equatable {
+    case started
+    case cancelled
+    case rejected(ActionExecutionRejection)
+}
+
 @MainActor
 final class ActionExecutor {
     @MainActor
@@ -130,10 +136,22 @@ final class ActionExecutor {
         case cancelled
     }
 
+    private struct PreparedExecution {
+        let definition: ActionDefinition
+        let handle: ActionExecutionHandle
+    }
+
+    private enum PreparationOutcome {
+        case prepared(PreparedExecution)
+        case completed(ActionExecutionResult)
+        case rejected(ActionExecutionRejection)
+    }
+
     private let registry: ActionRegistry
     private let confirmationService: any ActionConfirmationRequesting
     private let confirmationTimeout: Duration
     private let presentationPreparation: @MainActor @Sendable () -> Void
+    private var continuingExecutionTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         registry: ActionRegistry,
@@ -153,6 +171,70 @@ final class ActionExecutor {
         _ invocation: ActionInvocation,
         confirmationService overrideConfirmationService: (any ActionConfirmationRequesting)? = nil
     ) async -> ActionExecutionOutcome {
+        switch await prepare(
+            invocation,
+            confirmationService: overrideConfirmationService,
+            expectedDefinition: nil
+        ) {
+        case let .prepared(execution):
+            return await executionOutcome(for: execution)
+        case let .completed(result):
+            return .completed(result)
+        case let .rejected(rejection):
+            return .rejected(rejection)
+        }
+    }
+
+    /// Starts an action whose provider owns durable progress and cancellation UI.
+    /// Validation and confirmation finish before this returns `.started`; the
+    /// provider result then outlives cancellation of the invoking surface task.
+    func startContinuing(
+        _ invocation: ActionInvocation,
+        expectedDefinition: ActionDefinition,
+        confirmationService overrideConfirmationService: (any ActionConfirmationRequesting)? = nil
+    ) async -> ContinuingActionStartOutcome {
+        guard expectedDefinition.capabilities.contains(.reportsProgress) else {
+            return .rejected(.providerChanged)
+        }
+        switch await prepare(
+            invocation,
+            confirmationService: overrideConfirmationService,
+            expectedDefinition: expectedDefinition
+        ) {
+        case let .prepared(execution):
+            guard execution.definition.capabilities.contains(.reportsProgress) else {
+                execution.handle.cancel()
+                return .rejected(.providerChanged)
+            }
+            let executionID = UUID()
+            let task = Task { @MainActor [weak self] in
+                guard let self else {
+                    execution.handle.cancel()
+                    return
+                }
+                _ = await executionOutcome(for: execution)
+                continuingExecutionTasks[executionID] = nil
+            }
+            continuingExecutionTasks[executionID] = task
+            return .started
+        case .completed(.cancelled):
+            return .cancelled
+        case .completed:
+            return .cancelled
+        case let .rejected(rejection):
+            return .rejected(rejection)
+        }
+    }
+
+    var continuingExecutionCountForTests: Int {
+        continuingExecutionTasks.count
+    }
+
+    private func prepare(
+        _ invocation: ActionInvocation,
+        confirmationService overrideConfirmationService: (any ActionConfirmationRequesting)?,
+        expectedDefinition: ActionDefinition?
+    ) async -> PreparationOutcome {
         guard !Task.isCancelled else {
             return .completed(.cancelled)
         }
@@ -162,6 +244,9 @@ final class ActionExecutor {
             initial = action
         case let .failure(error):
             return .rejected(Self.rejection(for: error))
+        }
+        if let expectedDefinition, initial.definition != expectedDefinition {
+            return .rejected(.providerChanged)
         }
 
         if let rejection = policyRejection(for: initial.definition, invocation: invocation) {
@@ -233,22 +318,28 @@ final class ActionExecutor {
             return .rejected(Self.rejection(for: error))
         }
 
-        let isCancellable = revalidated.definition.capabilities.contains(.cancellable)
+        return .prepared(PreparedExecution(definition: revalidated.definition, handle: handle))
+    }
+
+    private func executionOutcome(
+        for execution: PreparedExecution
+    ) async -> ActionExecutionOutcome {
+        let isCancellable = execution.definition.capabilities.contains(.cancellable)
         let timeout = isCancellable
-            ? revalidated.definition.executionTimeoutSeconds.map(Duration.seconds)
+            ? execution.definition.executionTimeoutSeconds.map(Duration.seconds)
             : nil
         switch await executionResult(
-            handle: handle,
+            handle: execution.handle,
             timeout: timeout,
             isCancellable: isCancellable
         ) {
         case let .result(result):
             return .completed(result)
         case .timedOut:
-            handle.cancel()
+            execution.handle.cancel()
             return .rejected(.executionTimedOut)
         case .cancelled:
-            handle.cancel()
+            execution.handle.cancel()
             return .completed(.cancelled)
         }
     }
