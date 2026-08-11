@@ -80,6 +80,30 @@ app_executable() {
     print -r -- "$APP_PATH/Contents/MacOS/$executable_name"
 }
 
+app_version() {
+    plist_value "$APP_PATH/Contents/Info.plist" CFBundleShortVersionString
+}
+
+app_build() {
+    plist_value "$APP_PATH/Contents/Info.plist" CFBundleVersion
+}
+
+sha256_file() {
+    shasum -a 256 "$1" | awk '{print $1}'
+}
+
+source_commit() {
+    git -C "$REPO_ROOT" rev-parse --verify HEAD
+}
+
+source_dirty() {
+    if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=normal)" ]]; then
+        print -r -- true
+    else
+        print -r -- false
+    fi
+}
+
 extension_bundle_identifier() {
     local extension_plist="$APP_PATH/Contents/PlugIns/RightClickFinderSync.appex/Contents/Info.plist"
     [[ -f "$extension_plist" ]] || return 0
@@ -674,6 +698,27 @@ write_session_metadata() {
     plutil -insert hadExtensionPreferences -bool "$had_extension_preferences" "$metadata"
     plutil -insert preparedAt -date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$metadata"
     plutil -insert preparedAtEpoch -integer "$(date '+%s')" "$metadata"
+    write_session_provenance "$metadata"
+}
+
+write_session_provenance() {
+    local metadata="$1"
+    local executable
+    executable="$(app_executable)"
+    [[ -f "$executable" ]] || {
+        print -u2 -r -- "error: app executable is missing at $executable"
+        return 1
+    }
+
+    local key
+    for key in sourceCommit sourceDirty appVersion appBuild appExecutableSHA256; do
+        plutil -remove "$key" "$metadata" >/dev/null 2>&1 || true
+    done
+    plutil -insert sourceCommit -string "$(source_commit)" "$metadata"
+    plutil -insert sourceDirty -bool "$(source_dirty)" "$metadata"
+    plutil -insert appVersion -string "$(app_version)" "$metadata"
+    plutil -insert appBuild -string "$(app_build)" "$metadata"
+    plutil -insert appExecutableSHA256 -string "$(sha256_file "$executable")" "$metadata"
 }
 
 write_pending_checkpoints() {
@@ -883,6 +928,10 @@ rebuild_session() {
         /bin/mv "$backup_app" "$APP_PATH"
         return 1
     }
+    invalidate_session_recordings "$session_dir"
+    write_session_provenance "$session_dir/session.plist"
+    plutil -replace preparedAt -date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$session_dir/session.plist"
+    plutil -replace preparedAtEpoch -integer "$(date '+%s')" "$session_dir/session.plist"
     preflight "$session_dir/preflight.json"
     /usr/bin/open -n -a "$APP_PATH" "mactools-dev://app/settings/plugins/marketplace"
     print -r -- "Rebuilt stable app with an unchanged designated requirement."
@@ -1042,6 +1091,43 @@ validate_session_identity() {
     }
     [[ "$recorded_extension" == "$actual_extension" ]] || {
         print -u2 -r -- "error: session extension bundle identifier does not match the installed app"
+        return 1
+    }
+
+    local recorded_version actual_version recorded_build actual_build
+    recorded_version="$(session_value "$session_dir" appVersion)"
+    actual_version="$(app_version)"
+    recorded_build="$(session_value "$session_dir" appBuild)"
+    actual_build="$(app_build)"
+    [[ -n "$actual_version" && "$recorded_version" == "$actual_version" ]] || {
+        print -u2 -r -- "error: session app version does not match the installed app"
+        return 1
+    }
+    [[ -n "$actual_build" && "$recorded_build" == "$actual_build" ]] || {
+        print -u2 -r -- "error: session app build does not match the installed app"
+        return 1
+    }
+
+    local recorded_commit recorded_dirty executable recorded_executable_hash actual_executable_hash
+    recorded_commit="$(session_value "$session_dir" sourceCommit)"
+    recorded_dirty="$(session_value "$session_dir" sourceDirty)"
+    executable="$(app_executable)"
+    recorded_executable_hash="$(session_value "$session_dir" appExecutableSHA256)"
+    [[ -n "$recorded_commit" ]] || {
+        print -u2 -r -- "error: session source commit is missing"
+        return 1
+    }
+    [[ "$recorded_dirty" == true || "$recorded_dirty" == false ]] || {
+        print -u2 -r -- "error: session source dirty state is invalid"
+        return 1
+    }
+    [[ -f "$executable" ]] || {
+        print -u2 -r -- "error: installed app executable is missing"
+        return 1
+    }
+    actual_executable_hash="$(sha256_file "$executable")"
+    [[ -n "$recorded_executable_hash" && "$recorded_executable_hash" == "$actual_executable_hash" ]] || {
+        print -u2 -r -- "error: session app executable hash does not match the installed app"
         return 1
     }
 
@@ -1594,6 +1680,7 @@ verify_code_session() {
 
 collect_session() {
     local session_dir="$1"
+    validate_session_identity "$session_dir" || return 1
     preflight "$session_dir/preflight.json" >/dev/null || true
     audit_session "$session_dir" >/dev/null
     codesign -dv --verbose=4 "$APP_PATH" >"$session_dir/signature.txt" 2>&1
@@ -1627,6 +1714,7 @@ import hashlib
 import json
 import glob
 import os
+import plistlib
 import sys
 from datetime import datetime, timezone
 
@@ -1645,6 +1733,15 @@ def load(name):
 fixture = load("fixture.audit.json")
 preflight = load("preflight.json")
 checkpoints = load("ui-checkpoints.json")
+with open(os.path.join(session, "session.plist"), "rb") as handle:
+    metadata = plistlib.load(handle)
+provenance = {
+    "sourceCommit": metadata["sourceCommit"],
+    "sourceDirty": metadata["sourceDirty"],
+    "appVersion": metadata["appVersion"],
+    "appBuild": metadata["appBuild"],
+    "appExecutableSHA256": metadata["appExecutableSHA256"],
+}
 recordings = {}
 for path in sorted(glob.glob(os.path.join(session, "screencast*.mov")) + glob.glob(os.path.join(session, "screencast*.mp4"))):
     name = os.path.basename(path)
@@ -1714,6 +1811,7 @@ payload = {
     "uiCheckpoints": checkpoints,
     "scenarioManifestVersion": scenario_manifest["formatVersion"],
     "scenarioCoverage": scenario_coverage,
+    "provenance": provenance,
     "recordings": recordings,
     "screenshots": screenshots,
     "codeVerificationLogs": code_verification_logs,
@@ -1765,9 +1863,14 @@ session_identity_self_test() {
     local extension_plist="$APP_PATH/Contents/PlugIns/RightClickFinderSync.appex/Contents/Info.plist"
     trap '/bin/rm -rf -- "$test_root"' EXIT
     mkdir -p "$session_dir" "${app_plist:h}" "${extension_plist:h}"
+    mkdir -p "$APP_PATH/Contents/MacOS"
     plutil -create xml1 "$app_plist"
     plutil -insert CFBundleIdentifier -string "com.example.mactools-test" "$app_plist"
     plutil -insert CFBundleExecutable -string "MacToolsTest" "$app_plist"
+    plutil -insert CFBundleShortVersionString -string "1.2.0" "$app_plist"
+    plutil -insert CFBundleVersion -string "1" "$app_plist"
+    print -r -- "test executable" >"$APP_PATH/Contents/MacOS/MacToolsTest"
+    chmod +x "$APP_PATH/Contents/MacOS/MacToolsTest"
     plutil -create xml1 "$extension_plist"
     plutil -insert CFBundleIdentifier -string "com.example.mactools-test.finder" "$extension_plist"
     write_session_metadata \

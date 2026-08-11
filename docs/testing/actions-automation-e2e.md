@@ -95,7 +95,7 @@ scripts/e2e/mactools-e2e.sh checkpoint "$E2E_SESSION" marketplace-visible pass
 
 ### Baseline cross-surface path
 
-1. Open `mactools-dev://app/settings/plugins/marketplace`; assert the current catalog contains 45 plugins and installed local plugins are verified.
+1. Open `mactools-dev://app/settings/plugins/marketplace`; assert the current local catalog contains every plugin ID declared by `Plugins/*/plugin.json` and installed local plugins are verified.
 2. Open Actions & Shortcuts; assert its search field and all four fixture assignments are visible.
 3. Open Automation; assert all seven workflows, their expected step counts, and all three rules are visible.
 4. Run `E2E Safe Workflow`; assert its three steps and overall run succeed and the app remains responsive.

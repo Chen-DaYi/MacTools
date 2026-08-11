@@ -865,6 +865,27 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertFalse(controller.isShown)
     }
 
+    func testSuccessfulExecutionRestoresFocusOnlyWhileGridOwnsActiveFocus() {
+        XCTAssertTrue(
+            ActionGridSuccessfulExecutionFocusPolicy.shouldRestorePreviousApplication(
+                panelIsKey: true,
+                applicationIsActive: true
+            )
+        )
+        XCTAssertFalse(
+            ActionGridSuccessfulExecutionFocusPolicy.shouldRestorePreviousApplication(
+                panelIsKey: false,
+                applicationIsActive: true
+            )
+        )
+        XCTAssertFalse(
+            ActionGridSuccessfulExecutionFocusPolicy.shouldRestorePreviousApplication(
+                panelIsKey: true,
+                applicationIsActive: false
+            )
+        )
+    }
+
     func testAccessibilityPolicyHonorsReducedMotionAndTransparency() {
         let standard = ActionGridOverlayAccessibilityPolicy(
             reduceMotion: false,

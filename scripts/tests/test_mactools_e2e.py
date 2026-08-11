@@ -59,11 +59,17 @@ class MacToolsE2ETests(unittest.TestCase):
         )
         info_plist.parent.mkdir(parents=True)
         extension_plist.parent.mkdir(parents=True)
+        executable = app / "Contents/MacOS/MacToolsTest"
+        executable.parent.mkdir(parents=True)
+        executable.write_bytes(b"test executable")
+        executable.chmod(0o755)
         with info_plist.open("wb") as handle:
             plistlib.dump(
                 {
                     "CFBundleIdentifier": "com.example.mactools-test",
                     "CFBundleExecutable": "MacToolsTest",
+                    "CFBundleShortVersionString": "1.2.0",
+                    "CFBundleVersion": "1",
                 },
                 handle,
             )
@@ -83,6 +89,13 @@ class MacToolsE2ETests(unittest.TestCase):
                     "extensionBundleIdentifier": "com.example.mactools-test.finder",
                     "hadPreferences": False,
                     "hadExtensionPreferences": False,
+                    "sourceCommit": "a" * 40,
+                    "sourceDirty": False,
+                    "appVersion": "1.2.0",
+                    "appBuild": "1",
+                    "appExecutableSHA256": hashlib.sha256(
+                        executable.read_bytes()
+                    ).hexdigest(),
                 },
                 handle,
             )
@@ -90,6 +103,30 @@ class MacToolsE2ETests(unittest.TestCase):
         environment["MACTOOLS_E2E_APP_PATH"] = str(app)
         environment["MACTOOLS_E2E_ARTIFACT_ROOT"] = str(artifact_root)
         return session, environment
+
+    def test_collection_rejects_an_app_replaced_after_preparation(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            session, environment = self.make_valid_session(
+                pathlib.Path(temporary_directory)
+            )
+            executable = (
+                pathlib.Path(temporary_directory)
+                / "MacTools Test.app/Contents/MacOS/MacToolsTest"
+            )
+            executable.write_bytes(b"replaced executable")
+
+            result = subprocess.run(
+                [str(E2E_SCRIPT), "collect", str(session)],
+                cwd=REPO_ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("app executable hash", result.stderr)
+            self.assertFalse((session / "report.json").exists())
 
     def test_fixture_seed_is_valid_and_idempotent(self):
         first = json.loads(self.run_fixture("seed").stdout)
@@ -889,6 +926,10 @@ print(json.dumps({
         self.assertNotIn("category == 'ZshConfigPlugin'", harness)
         self.assertIn('matching_pids >"$session_dir/processes.txt"', harness)
         self.assertNotIn("pgrep -fal 'MacTools Dev'", harness)
+        self.assertIn("sourceCommit", harness)
+        self.assertIn("sourceDirty", harness)
+        self.assertIn("appExecutableSHA256", harness)
+        self.assertIn('"provenance": provenance', harness)
 
     def test_session_epoch_survives_plist_date_round_trip(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

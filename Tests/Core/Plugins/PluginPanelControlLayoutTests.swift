@@ -59,9 +59,13 @@ final class PluginPanelControlLayoutTests: XCTestCase {
             displayText: "",
             onRecord: { _ in .accepted }
         )
+        let children = Array(Mirror(reflecting: recorder).children)
+        let logicalLabels = children.compactMap(\.label).map { label in
+            String(label.drop(while: { $0 == "_" }))
+        }
 
         XCTAssertEqual(
-            Mirror(reflecting: recorder).children.compactMap(\.label),
+            logicalLabels,
             [
                 "title",
                 "displayText",
@@ -70,8 +74,8 @@ final class PluginPanelControlLayoutTests: XCTestCase {
                 "onRecord",
                 "onBeginRecording",
                 "onEndRecording",
-                "__isPresented",
-                "__isHovered",
+                "isPresented",
+                "isHovered",
             ]
         )
     }

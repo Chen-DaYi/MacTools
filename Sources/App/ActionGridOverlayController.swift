@@ -628,6 +628,16 @@ private final class ActionGridDismissTokens {
 }
 
 @MainActor
+enum ActionGridSuccessfulExecutionFocusPolicy {
+    static func shouldRestorePreviousApplication(
+        panelIsKey: Bool,
+        applicationIsActive: Bool
+    ) -> Bool {
+        panelIsKey && applicationIsActive
+    }
+}
+
+@MainActor
 final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     static let panelIdentifier = NSUserInterfaceItemIdentifier("mactools.action-grid.overlay")
     private let pluginHost: PluginHost
@@ -707,7 +717,9 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
             }
         )
         super.init()
-        model.onSuccessfulExecution = { [weak self] in self?.close() }
+        model.onSuccessfulExecution = { [weak self] in
+            self?.closeAfterSuccessfulExecution()
+        }
         model.onLayoutChange = { [weak self] slotCount, includesNavigationHeader, includesFeedback in
             self?.resizePanel(
                 for: slotCount,
@@ -920,6 +932,15 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         previousApplication = nil
         presentationPointer = nil
         presentationVisibleFrame = nil
+    }
+
+    private func closeAfterSuccessfulExecution() {
+        let shouldRestoreFocus = ActionGridSuccessfulExecutionFocusPolicy
+            .shouldRestorePreviousApplication(
+                panelIsKey: panel?.isKeyWindow == true,
+                applicationIsActive: NSApp.isActive
+            )
+        close(restoringFocus: shouldRestoreFocus)
     }
 
     private func resizePanel(

@@ -34,6 +34,7 @@ These plugins should not publish a canonical action merely to appear in action p
 
 - `Calendar`, `DeviceBattery`, and `SystemStatus` primarily present information without a stable repeatable mutation. Calendar's selected-date context belongs in its view, while app launching is already covered by App Hotkeys.
 - `MouseEnhancer` and `ZshConfig` are configuration editors; runnable shell tasks belong in Saved Scripts.
+- `MiddleClick` is the legacy single-purpose trackpad input surface. Trackpad Gestures owns the extensible gesture-to-action model, so Middle Click should not publish a second runnable action for the same synthesized event.
 - `RightClick` extends Finder context menus rather than representing one repeatable operation.
 - `TrackpadGestures` is an input surface that consumes canonical actions; it is not itself an action provider.
 
