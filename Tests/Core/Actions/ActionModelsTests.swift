@@ -79,4 +79,26 @@ final class ActionModelsTests: XCTestCase {
             XCTAssertEqual(error as? ActionParameterSetError, .nonFiniteNumber("value"))
         }
     }
+
+    func testAppIntentExposureSurfaceAndExecutionSourceRoundTrip() throws {
+        let surfaceData = try JSONEncoder().encode(ActionExposureSurface.appIntents)
+        XCTAssertEqual(
+            try JSONDecoder().decode(ActionExposureSurface.self, from: surfaceData),
+            .appIntents
+        )
+
+        let invocation = ActionInvocation(
+            reference: ActionReference(
+                key: ActionKey(providerID: "test-provider", actionID: "run")
+            ),
+            source: .appIntent,
+            mode: .background
+        )
+        let invocationData = try JSONEncoder().encode(invocation)
+
+        XCTAssertEqual(
+            try JSONDecoder().decode(ActionInvocation.self, from: invocationData),
+            invocation
+        )
+    }
 }

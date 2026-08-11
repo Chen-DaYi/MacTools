@@ -284,11 +284,60 @@ final class ActionRegistryTests: XCTestCase {
         XCTAssertEqual(registry.catalogRevision, catalogRevision + 1)
         XCTAssertEqual(registry.availabilityRevision, availabilityRevision + 1)
     }
+
+    func testExposurePolicyDefaultsToAutomaticAndUnknownActionsFailClosed() {
+        let registry = ActionRegistry()
+        let provider = ActionRegistryTestProvider()
+        let definition = makeActionDefinition()
+        let reference = ActionReference(key: definition.key)
+
+        registry.synchronize([
+            provider.registration(definitions: [definition], catalogEntries: []),
+        ])
+
+        XCTAssertEqual(
+            registry.exposurePolicy(for: reference, on: .appIntents),
+            .automatic
+        )
+        XCTAssertEqual(
+            registry.exposurePolicy(
+                for: ActionReference(
+                    key: ActionKey(providerID: "missing", actionID: "run")
+                ),
+                on: .appIntents
+            ),
+            .excluded
+        )
+    }
+
+    func testExposurePolicyUsesCurrentProviderDecision() {
+        let registry = ActionRegistry()
+        let provider = ActionRegistryTestProvider()
+        let definition = makeActionDefinition()
+        let reference = ActionReference(key: definition.key)
+        provider.exposurePolicy = .excluded
+
+        registry.synchronize([
+            provider.registration(definitions: [definition], catalogEntries: []),
+        ])
+
+        XCTAssertEqual(
+            registry.exposurePolicy(for: reference, on: .appIntents),
+            .excluded
+        )
+
+        provider.exposurePolicy = .automatic
+        XCTAssertEqual(
+            registry.exposurePolicy(for: reference, on: .appIntents),
+            .automatic
+        )
+    }
 }
 
 @MainActor
 final class ActionRegistryTestProvider {
     var availability: ActionAvailability = .available
+    var exposurePolicy: ActionExposurePolicy = .automatic
     var beginResult: ActionExecutionResult = .succeeded()
 
     func registration(
@@ -305,6 +354,9 @@ final class ActionRegistryTestProvider {
             catalogEntries: catalogEntries,
             availability: { [weak self] _ in
                 self?.availability ?? .unavailable("missing")
+            },
+            exposurePolicy: { [weak self] _, _ in
+                self?.exposurePolicy ?? .excluded
             },
             migrate: migrate,
             begin: { [weak self] _ in

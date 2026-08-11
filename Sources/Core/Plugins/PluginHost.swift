@@ -1493,6 +1493,13 @@ final class PluginHost: ObservableObject {
         actionRegistry.availability(for: reference)
     }
 
+    func actionExposurePolicy(
+        for reference: ActionReference,
+        on surface: ActionExposureSurface
+    ) -> ActionExposurePolicy {
+        actionRegistry.exposurePolicy(for: reference, on: surface)
+    }
+
     func actionPermissionTitles(for reference: ActionReference) -> [String] {
         guard let plugin = corePlugin(for: reference.key.providerID),
               let provider = plugin as? any PluginActionPermissionProviding,
@@ -3615,6 +3622,19 @@ final class PluginHost: ObservableObject {
                     operation: "read action availability",
                     provider.actionAvailability(for: reference)
                 ) ?? .unavailable(FeatureL10n.string("插件不可用。"))
+            },
+            exposurePolicy: { [weak self, weak plugin] reference, surface in
+                guard let self, let plugin else {
+                    return .excluded
+                }
+                guard let provider = plugin as? any PluginActionExposureProviding else {
+                    return .automatic
+                }
+                return self.guardedValue(
+                    for: plugin,
+                    operation: "read action exposure policy",
+                    provider.exposurePolicy(for: reference, on: surface)
+                ) ?? .excluded
             },
             migrate: { [weak self, weak plugin] reference, schemaVersion in
                 guard let self,

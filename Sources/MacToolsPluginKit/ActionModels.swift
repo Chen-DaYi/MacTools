@@ -407,6 +407,28 @@ public struct ActionAvailability: Hashable, Codable, Sendable {
     }
 }
 
+/// A host-owned system surface that can discover and invoke canonical actions.
+///
+/// This is string-backed so adding another integration does not require making
+/// an existing plugin's switch over surfaces exhaustive.
+public struct ActionExposureSurface: RawRepresentable, Hashable, Codable, Sendable {
+    public let rawValue: String
+
+    public static let appIntents = ActionExposureSurface(rawValue: "app-intents")
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+}
+
+/// A provider veto layered underneath the host surface's own safety policy.
+/// `.automatic` never bypasses host checks for risk, availability, permissions,
+/// parameters, or foreground interaction.
+public enum ActionExposurePolicy: String, Hashable, Codable, Sendable {
+    case automatic
+    case excluded
+}
+
 public enum ActionExecutionSource: String, Hashable, Codable, Sendable {
     case unifiedSearch
     case globalShortcut
@@ -414,6 +436,7 @@ public enum ActionExecutionSource: String, Hashable, Codable, Sendable {
     case workflow
     case actionGrid
     case trackpadGesture
+    case appIntent
     case manual
     case test
 }
@@ -497,6 +520,17 @@ public protocol PluginActionProviding: AnyObject {
         toSchemaVersion schemaVersion: Int
     ) -> ActionReference?
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle
+}
+
+/// Optional provider-owned veto for system surfaces that discover canonical actions.
+/// Providers that do not implement this contract use `.automatic`; the host surface
+/// remains responsible for applying its own conservative eligibility policy.
+@MainActor
+public protocol PluginActionExposureProviding: AnyObject {
+    func exposurePolicy(
+        for reference: ActionReference,
+        on surface: ActionExposureSurface
+    ) -> ActionExposurePolicy
 }
 
 /// Optional action-to-permission mapping used by discovery surfaces. Providers

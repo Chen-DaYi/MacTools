@@ -40,6 +40,7 @@ struct ActionProviderRegistration {
     let definitions: [ActionDefinition]
     let catalogEntries: [ActionCatalogEntry]
     let availability: (ActionReference) -> ActionAvailability
+    let exposurePolicy: (ActionReference, ActionExposureSurface) -> ActionExposurePolicy
     let migrate: (ActionReference, Int) -> ActionReference?
     let begin: (ActionInvocation) -> Result<ActionExecutionHandle, ActionRegistryError>
 
@@ -49,6 +50,10 @@ struct ActionProviderRegistration {
         definitions: [ActionDefinition],
         catalogEntries: [ActionCatalogEntry],
         availability: @escaping (ActionReference) -> ActionAvailability,
+        exposurePolicy: @escaping (
+            ActionReference,
+            ActionExposureSurface
+        ) -> ActionExposurePolicy = { _, _ in .automatic },
         migrate: @escaping (ActionReference, Int) -> ActionReference? = { reference, version in
             reference.schemaVersion == version ? reference : nil
         },
@@ -59,6 +64,7 @@ struct ActionProviderRegistration {
         self.definitions = definitions
         self.catalogEntries = catalogEntries
         self.availability = availability
+        self.exposurePolicy = exposurePolicy
         self.migrate = migrate
         self.begin = begin
     }
@@ -168,6 +174,7 @@ final class ActionRegistry: ObservableObject {
                     definitions: acceptedDefinitions,
                     catalogEntries: acceptedCatalog,
                     availability: registration.availability,
+                    exposurePolicy: registration.exposurePolicy,
                     migrate: registration.migrate,
                     begin: registration.begin
                 ),
@@ -282,6 +289,17 @@ final class ActionRegistry: ObservableObject {
             return .unavailable(FeatureL10n.string("操作不可用。"))
         }
         return provider.registration.availability(reference)
+    }
+
+    func exposurePolicy(
+        for reference: ActionReference,
+        on surface: ActionExposureSurface
+    ) -> ActionExposurePolicy {
+        guard case .success = registeredAction(for: reference),
+              let provider = providers[reference.key.providerID] else {
+            return .excluded
+        }
+        return provider.registration.exposurePolicy(reference, surface)
     }
 
     func begin(

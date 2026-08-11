@@ -24,6 +24,23 @@ final class PluginHostActionRegistryTests: XCTestCase {
         ])
     }
 
+    func testHostRoutesOptionalPluginActionExposurePolicy() {
+        let plugin = NativeActionTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        let reference = ActionReference(key: plugin.definition.key)
+
+        XCTAssertEqual(
+            host.actionExposurePolicy(for: reference, on: .appIntents),
+            .automatic
+        )
+
+        plugin.appIntentExposurePolicy = .excluded
+        XCTAssertEqual(
+            host.actionExposurePolicy(for: reference, on: .appIntents),
+            .excluded
+        )
+    }
+
     func testSavedScriptWithoutLocalConfirmationStillPublishesWhenRunLinksAreEnabled() throws {
         let suiteName = "PluginHostActionRegistryTests.saved-scripts.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -840,6 +857,7 @@ private final class InputGestureConflictTestPlugin: MacToolsPlugin,
 private final class NativeActionTestPlugin:
     MacToolsPlugin,
     PluginActionProviding,
+    PluginActionExposureProviding,
     PluginActionPermissionProviding,
     ActionSurfaceAssignmentSummarizing
 {
@@ -855,6 +873,7 @@ private final class NativeActionTestPlugin:
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var availability: ActionAvailability = .available
+    var appIntentExposurePolicy: ActionExposurePolicy = .automatic
     var beginCount = 0
     var summarizedReference: ActionReference?
     var permissionTitles = ["测试权限"]
@@ -889,6 +908,13 @@ private final class NativeActionTestPlugin:
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
         availability
+    }
+
+    func exposurePolicy(
+        for reference: ActionReference,
+        on surface: ActionExposureSurface
+    ) -> ActionExposurePolicy {
+        surface == .appIntents ? appIntentExposurePolicy : .automatic
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
