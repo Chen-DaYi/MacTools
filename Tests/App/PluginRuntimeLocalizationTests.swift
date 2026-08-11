@@ -91,6 +91,40 @@ final class PluginRuntimeLocalizationTests: XCTestCase {
         )
     }
 
+    func testWorkflowStepTimingCopyExplainsSequentialWaits() {
+        let expectations: [(language: String, label: String, explanation: String)] = [
+            (
+                "en",
+                "Wait before step",
+                "A step waits before it runs. The wait starts after the previous step finishes; the first starts when the workflow begins."
+            ),
+            (
+                "de",
+                "Vor Schritt warten",
+                "Ein Schritt wartet vor der Ausführung. Die Wartezeit beginnt nach Abschluss des vorherigen Schritts; beim ersten Schritt beginnt sie mit dem Workflow."
+            ),
+            (
+                "zh-Hans",
+                "步骤前等待",
+                "步骤会在运行前等待。等待时间从上一步完成后开始；第一步从工作流开始时计算。"
+            ),
+            (
+                "zh-Hant",
+                "步驟前等待",
+                "步驟會在執行前等待。等待時間從上一步完成後開始；第一步從工作流程開始時計算。"
+            ),
+        ]
+
+        for expectation in expectations {
+            setRuntimePreference(expectation.language)
+            XCTAssertEqual(FeatureL10n.string("步骤前等待"), expectation.label)
+            XCTAssertEqual(
+                FeatureL10n.string("步骤会在运行前等待。等待时间从上一步完成后开始；第一步从工作流开始时计算。"),
+                expectation.explanation
+            )
+        }
+    }
+
     private func makeLocalizedTestBundle() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

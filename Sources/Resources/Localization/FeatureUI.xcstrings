@@ -7946,6 +7946,148 @@
         }
       }
     },
+    "步骤前等待": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "الانتظار قبل الخطوة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vor Schritt warten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wait before step"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esperar antes del paso"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attendre avant l’étape"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ステップ前に待機"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "단계 전에 대기"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aguardar antes da etapa"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждать перед шагом"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "步骤前等待"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "步驟前等待"
+          }
+        }
+      }
+    },
+    "步骤会在运行前等待。等待时间从上一步完成后开始；第一步从工作流开始时计算。": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تنتظر الخطوة قبل تشغيلها. يبدأ الانتظار بعد انتهاء الخطوة السابقة؛ ويبدأ انتظار الخطوة الأولى عند بدء سير العمل."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Schritt wartet vor der Ausführung. Die Wartezeit beginnt nach Abschluss des vorherigen Schritts; beim ersten Schritt beginnt sie mit dem Workflow."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A step waits before it runs. The wait starts after the previous step finishes; the first starts when the workflow begins."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cada paso espera antes de ejecutarse. La espera comienza cuando termina el paso anterior; la primera comienza al iniciar el flujo de trabajo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une étape attend avant de s’exécuter. L’attente commence à la fin de l’étape précédente ; la première commence au démarrage du processus."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ステップは実行前に待機します。待機時間は前のステップの完了後に開始し、最初のステップではワークフローの開始時に開始します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "단계는 실행 전에 대기합니다. 대기 시간은 이전 단계가 완료된 후 시작되며, 첫 단계는 워크플로가 시작될 때 시작됩니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uma etapa aguarda antes de ser executada. A espera começa após o término da etapa anterior; a primeira começa quando o fluxo de trabalho é iniciado."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шаг ожидает перед запуском. Ожидание начинается после завершения предыдущего шага; для первого шага — при запуске рабочего процесса."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "步骤会在运行前等待。等待时间从上一步完成后开始；第一步从工作流开始时计算。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "步驟會在執行前等待。等待時間從上一步完成後開始；第一步從工作流程開始時計算。"
+          }
+        }
+      }
+    },
     "开始": {
       "extractionState": "manual",
       "localizations": {

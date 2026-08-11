@@ -51,6 +51,30 @@ final class WorkflowRunnerTests: XCTestCase {
         )
     }
 
+    func testEachDelayRunsImmediatelyBeforeItsStep() async throws {
+        let harness = try makeHarness(actionIDs: ["first", "second"])
+        var events: [String] = []
+        harness.sleeper.onSleep = { events.append("wait \($0)") }
+        harness.provider.onBegin["first"] = { events.append("run first") }
+        harness.provider.onBegin["second"] = { events.append("run second") }
+        let workflow = try saveWorkflow(
+            in: harness.store,
+            steps: [
+                WorkflowStep(reference: harness.reference("first"), delaySeconds: 1),
+                WorkflowStep(reference: harness.reference("second"), delaySeconds: 2),
+            ]
+        )
+
+        let execution = try harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .manual,
+            mode: .foreground
+        ).get()
+        _ = await execution.actionHandle.result()
+
+        XCTAssertEqual(events, ["wait 1.0", "run first", "wait 2.0", "run second"])
+    }
+
     func testExecutedSensitiveParametersAreRedactedFromPersistedHistory() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)
@@ -799,10 +823,12 @@ private final class WorkflowRunnerTerminalCheckpoint {
 private final class WorkflowRunnerTestSleeper: WorkflowSleeping {
     private(set) var requestedSeconds: [Double] = []
     var shouldBlock = false
+    var onSleep: ((Double) -> Void)?
     private var didStart = false
 
     func sleep(seconds: Double) async throws {
         requestedSeconds.append(seconds)
+        onSleep?(seconds)
         didStart = true
         if shouldBlock {
             try await Task.sleep(for: .seconds(60))

@@ -386,6 +386,10 @@ private struct WorkflowDetailView: View {
                 actionPicker
             }
 
+            Text(FeatureL10n.string("步骤会在运行前等待。等待时间从上一步完成后开始；第一步从工作流开始时计算。"))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+
             if workflow.steps.isEmpty {
                 ContentUnavailableView(
                     FeatureL10n.string("尚未添加步骤"),
@@ -1382,7 +1386,7 @@ private struct WorkflowStepEditor: View {
         .frame(minWidth: 150, idealWidth: 190, maxWidth: 240)
 
         HStack(spacing: 6) {
-            Text(FeatureL10n.string("延迟"))
+            Text(FeatureL10n.string("步骤前等待"))
             TextField(
                 FeatureL10n.string("秒"),
                 value: Binding(
