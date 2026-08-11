@@ -14,6 +14,7 @@ SCENARIO_MANIFEST="$SCRIPT_DIR/scenarios.json"
 HARNESS_PATH="$SCRIPT_DIR/mactools-e2e.sh"
 APP_PATH="${MACTOOLS_E2E_APP_PATH:-$HOME/Applications/MacTools Dev.app}"
 PLUGIN_INSTALL_DIR="${MACTOOLS_E2E_PLUGIN_DIR:-$HOME/Library/Application Support/MacTools Dev/Plugins/Installed}"
+PLUGIN_CATALOG_PATH="${MACTOOLS_E2E_PLUGIN_CATALOG_PATH:-$REPO_ROOT/build/LocalPlugins/catalog.dev.json}"
 ARTIFACT_ROOT="${MACTOOLS_E2E_ARTIFACT_ROOT:-$REPO_ROOT/build/E2EArtifacts}"
 BUILT_APP_PATH="$REPO_ROOT/build/DerivedData/Build/Products/Debug/${APP_PATH:t}"
 PYTHON3="${PYTHON3:-/usr/bin/python3}"
@@ -90,6 +91,76 @@ app_build() {
 
 sha256_file() {
     shasum -a 256 "$1" | awk '{print $1}'
+}
+
+sha256_tree() {
+    local root="$1"
+    [[ -d "$root" ]] || {
+        print -u2 -r -- "error: provenance directory is missing at $root"
+        return 1
+    }
+    "$PYTHON3" - "$root" <<'PY'
+import hashlib
+import os
+import sys
+
+root = os.path.realpath(sys.argv[1])
+digest = hashlib.sha256()
+for directory, names, files in os.walk(root, followlinks=False):
+    names.sort()
+    files.sort()
+    for name in names + files:
+        path = os.path.join(directory, name)
+        relative = os.path.relpath(path, root).replace(os.sep, "/")
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        if os.path.islink(path):
+            digest.update(b"L\0")
+            digest.update(os.readlink(path).encode("utf-8"))
+        elif os.path.isdir(path):
+            digest.update(b"D\0")
+        else:
+            digest.update(b"F\0")
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        digest.update(b"\0")
+print(digest.hexdigest())
+PY
+}
+
+source_tree_sha256() {
+    "$PYTHON3" - "$REPO_ROOT" <<'PY'
+import hashlib
+import os
+import subprocess
+import sys
+
+root = os.path.realpath(sys.argv[1])
+paths = subprocess.check_output(
+    ["git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard"]
+).split(b"\0")
+digest = hashlib.sha256()
+for raw in sorted(path for path in paths if path):
+    relative = raw.decode("utf-8", "surrogateescape")
+    path = os.path.join(root, relative)
+    digest.update(raw)
+    digest.update(b"\0")
+    if os.path.islink(path):
+        digest.update(b"L\0")
+        digest.update(os.readlink(path).encode("utf-8", "surrogateescape"))
+    else:
+        digest.update(b"F\0")
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    digest.update(b"\0")
+print(digest.hexdigest())
+PY
+}
+
+app_code_directory_hash() {
+    codesign -dv --verbose=4 "$APP_PATH" 2>&1 | awk -F= '/^CDHash=/{print $2; exit}'
 }
 
 source_commit() {
@@ -698,11 +769,12 @@ write_session_metadata() {
     plutil -insert hadExtensionPreferences -bool "$had_extension_preferences" "$metadata"
     plutil -insert preparedAt -date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$metadata"
     plutil -insert preparedAtEpoch -integer "$(date '+%s')" "$metadata"
-    write_session_provenance "$metadata"
+    write_session_provenance "$metadata" false
 }
 
 write_session_provenance() {
     local metadata="$1"
+    local source_build_bound="${2:-false}"
     local executable
     executable="$(app_executable)"
     [[ -f "$executable" ]] || {
@@ -711,14 +783,28 @@ write_session_provenance() {
     }
 
     local key
-    for key in sourceCommit sourceDirty appVersion appBuild appExecutableSHA256; do
+    [[ -d "$PLUGIN_INSTALL_DIR" ]] || {
+        print -u2 -r -- "error: installed plugin directory is missing at $PLUGIN_INSTALL_DIR"
+        return 1
+    }
+    [[ -f "$PLUGIN_CATALOG_PATH" ]] || {
+        print -u2 -r -- "error: local plugin catalog is missing at $PLUGIN_CATALOG_PATH"
+        return 1
+    }
+
+    for key in sourceCommit sourceDirty sourceTreeSHA256 sourceBuildBound appVersion appBuild appExecutableSHA256 appCodeDirectoryHash pluginPackageTreeSHA256 pluginCatalogSHA256; do
         plutil -remove "$key" "$metadata" >/dev/null 2>&1 || true
     done
     plutil -insert sourceCommit -string "$(source_commit)" "$metadata"
     plutil -insert sourceDirty -bool "$(source_dirty)" "$metadata"
+    plutil -insert sourceTreeSHA256 -string "$(source_tree_sha256)" "$metadata"
+    plutil -insert sourceBuildBound -bool "$source_build_bound" "$metadata"
     plutil -insert appVersion -string "$(app_version)" "$metadata"
     plutil -insert appBuild -string "$(app_build)" "$metadata"
     plutil -insert appExecutableSHA256 -string "$(sha256_file "$executable")" "$metadata"
+    plutil -insert appCodeDirectoryHash -string "$(app_code_directory_hash)" "$metadata"
+    plutil -insert pluginPackageTreeSHA256 -string "$(sha256_tree "$PLUGIN_INSTALL_DIR")" "$metadata"
+    plutil -insert pluginCatalogSHA256 -string "$(sha256_file "$PLUGIN_CATALOG_PATH")" "$metadata"
 }
 
 write_pending_checkpoints() {
@@ -868,10 +954,15 @@ PY
 rebuild_session() {
     local session_dir="$1"
     local mode="${2:-}"
-    validate_session_identity "$session_dir" || return 1
+    validate_session_identity "$session_dir" true || return 1
 
     local expected_bundle_id
     expected_bundle_id="$(session_value "$session_dir" bundleIdentifier)"
+
+    local build_source_commit build_source_dirty build_source_tree
+    build_source_commit="$(source_commit)"
+    build_source_dirty="$(source_dirty)"
+    build_source_tree="$(source_tree_sha256)"
 
     print -r -- "env DEVELOPER_DIR='$E2E_DEVELOPER_DIR' make -C '$REPO_ROOT' sync-debug-plugins"
     print -r -- "Replace '$APP_PATH' from '$BUILT_APP_PATH'"
@@ -880,6 +971,12 @@ rebuild_session() {
     fi
 
     env DEVELOPER_DIR="$E2E_DEVELOPER_DIR" make -C "$REPO_ROOT" sync-debug-plugins
+    [[ "$build_source_commit" == "$(source_commit)"
+        && "$build_source_dirty" == "$(source_dirty)"
+        && "$build_source_tree" == "$(source_tree_sha256)" ]] || {
+        print -u2 -r -- "error: source changed while E2E artifacts were being built"
+        return 1
+    }
     [[ -d "$BUILT_APP_PATH" ]] || {
         print -u2 -r -- "error: rebuilt app not found at $BUILT_APP_PATH"
         return 1
@@ -929,7 +1026,7 @@ rebuild_session() {
         return 1
     }
     invalidate_session_recordings "$session_dir"
-    write_session_provenance "$session_dir/session.plist"
+    write_session_provenance "$session_dir/session.plist" true
     plutil -replace preparedAt -date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$session_dir/session.plist"
     plutil -replace preparedAtEpoch -integer "$(date '+%s')" "$session_dir/session.plist"
     preflight "$session_dir/preflight.json"
@@ -1059,6 +1156,7 @@ session_value() {
 
 validate_session_identity() {
     local session_dir="$1"
+    local allow_unbound="${2:-false}"
     local metadata="$session_dir/session.plist"
     [[ -f "$metadata" ]] || {
         print -u2 -r -- "error: invalid E2E session directory $session_dir"
@@ -1108,9 +1206,12 @@ validate_session_identity() {
         return 1
     }
 
-    local recorded_commit recorded_dirty executable recorded_executable_hash actual_executable_hash
+    local recorded_commit recorded_dirty recorded_source_tree actual_source_tree source_build_bound
+    local executable recorded_executable_hash actual_executable_hash
     recorded_commit="$(session_value "$session_dir" sourceCommit)"
     recorded_dirty="$(session_value "$session_dir" sourceDirty)"
+    recorded_source_tree="$(session_value "$session_dir" sourceTreeSHA256)"
+    source_build_bound="$(session_value "$session_dir" sourceBuildBound)"
     executable="$(app_executable)"
     recorded_executable_hash="$(session_value "$session_dir" appExecutableSHA256)"
     [[ -n "$recorded_commit" ]] || {
@@ -1121,6 +1222,21 @@ validate_session_identity() {
         print -u2 -r -- "error: session source dirty state is invalid"
         return 1
     }
+    [[ "$allow_unbound" == true
+        || ( "$recorded_commit" == "$(source_commit)" && "$recorded_dirty" == "$(source_dirty)" ) ]] || {
+        print -u2 -r -- "error: session source revision does not match the current checkout"
+        return 1
+    }
+    [[ "$source_build_bound" == true || "$allow_unbound" == true ]] || {
+        print -u2 -r -- "error: session artifacts are not bound to the recorded source; run '$HARNESS_PATH rebuild "$session_dir"'"
+        return 1
+    }
+    actual_source_tree="$(source_tree_sha256)"
+    [[ "$allow_unbound" == true
+        || ( -n "$recorded_source_tree" && "$recorded_source_tree" == "$actual_source_tree" ) ]] || {
+        print -u2 -r -- "error: session source tree hash does not match the current checkout"
+        return 1
+    }
     [[ -f "$executable" ]] || {
         print -u2 -r -- "error: installed app executable is missing"
         return 1
@@ -1128,6 +1244,35 @@ validate_session_identity() {
     actual_executable_hash="$(sha256_file "$executable")"
     [[ -n "$recorded_executable_hash" && "$recorded_executable_hash" == "$actual_executable_hash" ]] || {
         print -u2 -r -- "error: session app executable hash does not match the installed app"
+        return 1
+    }
+    codesign --verify --deep --strict "$APP_PATH" >/dev/null 2>&1 || {
+        print -u2 -r -- "error: installed app signature is invalid"
+        return 1
+    }
+
+    local recorded_cdhash actual_cdhash recorded_plugin_hash actual_plugin_hash
+    local recorded_catalog_hash actual_catalog_hash
+    recorded_cdhash="$(session_value "$session_dir" appCodeDirectoryHash)"
+    actual_cdhash="$(app_code_directory_hash)"
+    [[ -n "$recorded_cdhash" && "$recorded_cdhash" == "$actual_cdhash" ]] || {
+        print -u2 -r -- "error: session app CodeDirectory hash does not match the installed app"
+        return 1
+    }
+    recorded_plugin_hash="$(session_value "$session_dir" pluginPackageTreeSHA256)"
+    actual_plugin_hash="$(sha256_tree "$PLUGIN_INSTALL_DIR")"
+    [[ -n "$recorded_plugin_hash" && "$recorded_plugin_hash" == "$actual_plugin_hash" ]] || {
+        print -u2 -r -- "error: session plugin package tree hash does not match installed plugins"
+        return 1
+    }
+    [[ -f "$PLUGIN_CATALOG_PATH" ]] || {
+        print -u2 -r -- "error: local plugin catalog is missing at $PLUGIN_CATALOG_PATH"
+        return 1
+    }
+    recorded_catalog_hash="$(session_value "$session_dir" pluginCatalogSHA256)"
+    actual_catalog_hash="$(sha256_file "$PLUGIN_CATALOG_PATH")"
+    [[ -n "$recorded_catalog_hash" && "$recorded_catalog_hash" == "$actual_catalog_hash" ]] || {
+        print -u2 -r -- "error: session plugin catalog hash does not match the local catalog"
         return 1
     }
 
@@ -1738,9 +1883,14 @@ with open(os.path.join(session, "session.plist"), "rb") as handle:
 provenance = {
     "sourceCommit": metadata["sourceCommit"],
     "sourceDirty": metadata["sourceDirty"],
+    "sourceTreeSHA256": metadata["sourceTreeSHA256"],
+    "sourceBuildBound": metadata["sourceBuildBound"],
     "appVersion": metadata["appVersion"],
     "appBuild": metadata["appBuild"],
     "appExecutableSHA256": metadata["appExecutableSHA256"],
+    "appCodeDirectoryHash": metadata["appCodeDirectoryHash"],
+    "pluginPackageTreeSHA256": metadata["pluginPackageTreeSHA256"],
+    "pluginCatalogSHA256": metadata["pluginCatalogSHA256"],
 }
 recordings = {}
 for path in sorted(glob.glob(os.path.join(session, "screencast*.mov")) + glob.glob(os.path.join(session, "screencast*.mp4"))):

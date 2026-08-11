@@ -11,7 +11,7 @@ This inventory records the current migration boundary. It prevents a plugin from
 The following plugin source directories publish canonical actions:
 
 - Core action surfaces: `ActionGrid`, `SavedScripts`.
-- App and input control: `AppHotkey`, `AppVolume`, `AutoInput`, `WindowSwitcher`.
+- App and input control: `AppHotkey`, `AppVolume`, `AutoInput`, `MiddleClick`, `WindowSwitcher`.
 - Display and workspace control: `Appearance`, `DisplayBrightness`, `DisplayResolution`, `DisplaySleep`, `DisplayTrueColor`, `HideNotch`, `NightShift`, `Sidecar`, `StageManager`.
 - Menu bar and Dock control: `AutoHideDock`, `AutoHideMenuBar`, `MenuBarHidden`.
 - System and device control: `BatteryChargeLimit`, `FanControl`, `KeepAwake`, `LockScreen`, `MicrophoneMute`, `SystemMute`.
@@ -34,10 +34,11 @@ These plugins should not publish a canonical action merely to appear in action p
 
 - `Calendar`, `DeviceBattery`, and `SystemStatus` primarily present information without a stable repeatable mutation. Calendar's selected-date context belongs in its view, while app launching is already covered by App Hotkeys.
 - `MouseEnhancer` and `ZshConfig` are configuration editors; runnable shell tasks belong in Saved Scripts.
-- `MiddleClick` is the legacy single-purpose trackpad input surface. Trackpad Gestures owns the extensible gesture-to-action model, so Middle Click should not publish a second runnable action for the same synthesized event.
 - `RightClick` extends Finder context menus rather than representing one repeatable operation.
 - `TrackpadGestures` is an input surface that consumes canonical actions; it is not itself an action provider.
 
 Specialized shortcuts may remain when their input lifecycle cannot be represented by one invocation. Window Switcher keeps its press, release, and repeat shortcut behavior in addition to a canonical action that opens the interactive chooser. Physical Clean Mode keeps its emergency exit binding separate from the canonical enter action.
+
+Middle Click publishes one stateful enable/disable action. It deliberately does not publish a “click now” command or expose finger-count parameters: those are input configuration, not repeatable operations. Trackpad Gestures remains the advanced mapper. When both plugins target the same finger-tap gesture, the shared gesture-claim contract pauses Middle Click and explains the conflict rather than allowing both listeners to fire.
 
 This inventory covers every current plugin directory. New plugins should either implement `PluginActionProviding` for stable repeatable operations or add an explicit rationale here. Prefer stable readable action IDs, concrete catalog entries, live availability checks, bounded execution, and the narrowest external invocation policy that preserves the plugin's existing safety boundary.

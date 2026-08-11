@@ -238,11 +238,22 @@ final class SavedScriptRunnerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let dead = parent.appendingPathComponent("run-999999-dead", isDirectory: true)
         let live = parent.appendingPathComponent("run-\(getpid())-live", isDirectory: true)
+        let reusedPID = parent.appendingPathComponent("run-\(getpid())-expired", isDirectory: true)
         let legacySource = parent.appendingPathComponent("\(UUID().uuidString).sh")
         let unrelatedFile = parent.appendingPathComponent("notes.txt")
         try FileManager.default.createDirectory(at: dead, withIntermediateDirectories: false)
         try FileManager.default.createDirectory(at: live, withIntermediateDirectories: false)
+        try FileManager.default.createDirectory(at: reusedPID, withIntermediateDirectories: false)
         try Data("secret".utf8).write(to: dead.appendingPathComponent("source.sh"))
+        try Data("expired secret".utf8).write(to: reusedPID.appendingPathComponent("source.sh"))
+        try FileManager.default.setAttributes(
+            [
+                .modificationDate: Date(
+                    timeIntervalSinceNow: -(ProcessSavedScriptRunner.maximumRunDirectoryLifetime + 60)
+                ),
+            ],
+            ofItemAtPath: reusedPID.path
+        )
         try Data("legacy secret".utf8).write(to: legacySource)
         try Data("keep me".utf8).write(to: unrelatedFile)
 
@@ -250,6 +261,7 @@ final class SavedScriptRunnerTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: dead.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: live.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: reusedPID.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacySource.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelatedFile.path))
     }

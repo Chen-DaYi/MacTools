@@ -78,6 +78,72 @@ class MacToolsE2ETests(unittest.TestCase):
                 {"CFBundleIdentifier": "com.example.mactools-test.finder"},
                 handle,
             )
+        subprocess.run(
+            ["codesign", "--force", "--deep", "--sign", "-", str(app)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        signature = subprocess.run(
+            ["codesign", "-dv", "--verbose=4", str(app)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stderr
+        cdhash = next(
+            line.split("=", 1)[1]
+            for line in signature.splitlines()
+            if line.startswith("CDHash=")
+        )
+        plugin_install_dir = root / "plugins"
+        plugin_package = plugin_install_dir / "fixture.mactoolsplugin"
+        plugin_package.mkdir(parents=True)
+        (plugin_package / "plugin.json").write_text("{}\n", encoding="utf-8")
+        plugin_catalog = root / "catalog.dev.json"
+        plugin_catalog.write_text('{"plugins":[]}\n', encoding="utf-8")
+
+        def tree_hash(directory: pathlib.Path):
+            digest = hashlib.sha256()
+            for path in sorted(directory.rglob("*")):
+                relative = path.relative_to(directory).as_posix()
+                digest.update(relative.encode())
+                digest.update(b"\0")
+                if path.is_symlink():
+                    digest.update(b"L\0")
+                    digest.update(os.readlink(path).encode())
+                elif path.is_dir():
+                    digest.update(b"D\0")
+                else:
+                    digest.update(b"F\0")
+                    digest.update(path.read_bytes())
+                digest.update(b"\0")
+            return digest.hexdigest()
+
+        source_paths = subprocess.check_output(
+            [
+                "git", "-C", str(REPO_ROOT), "ls-files", "-z",
+                "--cached", "--others", "--exclude-standard",
+            ]
+        ).split(b"\0")
+        source_digest = hashlib.sha256()
+        for raw in sorted(path for path in source_paths if path):
+            path = REPO_ROOT / raw.decode("utf-8", "surrogateescape")
+            source_digest.update(raw)
+            source_digest.update(b"\0")
+            if path.is_symlink():
+                source_digest.update(b"L\0")
+                source_digest.update(os.readlink(path).encode("utf-8", "surrogateescape"))
+            else:
+                source_digest.update(b"F\0")
+                source_digest.update(path.read_bytes())
+            source_digest.update(b"\0")
+        source_commit = subprocess.check_output(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"], text=True
+        ).strip()
+        source_dirty = bool(subprocess.check_output(
+            ["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--untracked-files=normal"],
+            text=True,
+        ).strip())
         artifact_root = root / "artifacts"
         session = artifact_root / "session-valid"
         session.mkdir(parents=True)
@@ -89,12 +155,19 @@ class MacToolsE2ETests(unittest.TestCase):
                     "extensionBundleIdentifier": "com.example.mactools-test.finder",
                     "hadPreferences": False,
                     "hadExtensionPreferences": False,
-                    "sourceCommit": "a" * 40,
-                    "sourceDirty": False,
+                    "sourceCommit": source_commit,
+                    "sourceDirty": source_dirty,
+                    "sourceTreeSHA256": source_digest.hexdigest(),
+                    "sourceBuildBound": True,
                     "appVersion": "1.2.0",
                     "appBuild": "1",
                     "appExecutableSHA256": hashlib.sha256(
                         executable.read_bytes()
+                    ).hexdigest(),
+                    "appCodeDirectoryHash": cdhash,
+                    "pluginPackageTreeSHA256": tree_hash(plugin_install_dir),
+                    "pluginCatalogSHA256": hashlib.sha256(
+                        plugin_catalog.read_bytes()
                     ).hexdigest(),
                 },
                 handle,
@@ -102,6 +175,8 @@ class MacToolsE2ETests(unittest.TestCase):
         environment = os.environ.copy()
         environment["MACTOOLS_E2E_APP_PATH"] = str(app)
         environment["MACTOOLS_E2E_ARTIFACT_ROOT"] = str(artifact_root)
+        environment["MACTOOLS_E2E_PLUGIN_DIR"] = str(plugin_install_dir)
+        environment["MACTOOLS_E2E_PLUGIN_CATALOG_PATH"] = str(plugin_catalog)
         return session, environment
 
     def test_collection_rejects_an_app_replaced_after_preparation(self):
@@ -126,6 +201,44 @@ class MacToolsE2ETests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("app executable hash", result.stderr)
+            self.assertFalse((session / "report.json").exists())
+
+    def test_collection_rejects_plugins_replaced_after_preparation(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            session, environment = self.make_valid_session(pathlib.Path(temporary_directory))
+            plugin = pathlib.Path(environment["MACTOOLS_E2E_PLUGIN_DIR"]) / "fixture.mactoolsplugin/plugin.json"
+            plugin.write_text('{"changed":true}\n', encoding="utf-8")
+
+            result = subprocess.run(
+                [str(E2E_SCRIPT), "collect", str(session)],
+                cwd=REPO_ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("plugin package tree hash", result.stderr)
+            self.assertFalse((session / "report.json").exists())
+
+    def test_collection_rejects_catalog_replaced_after_preparation(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            session, environment = self.make_valid_session(pathlib.Path(temporary_directory))
+            catalog = pathlib.Path(environment["MACTOOLS_E2E_PLUGIN_CATALOG_PATH"])
+            catalog.write_text('{"plugins":[{"changed":true}]}\n', encoding="utf-8")
+
+            result = subprocess.run(
+                [str(E2E_SCRIPT), "collect", str(session)],
+                cwd=REPO_ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("plugin catalog hash", result.stderr)
             self.assertFalse((session / "report.json").exists())
 
     def test_fixture_seed_is_valid_and_idempotent(self):
@@ -928,7 +1041,12 @@ print(json.dumps({
         self.assertNotIn("pgrep -fal 'MacTools Dev'", harness)
         self.assertIn("sourceCommit", harness)
         self.assertIn("sourceDirty", harness)
+        self.assertIn("sourceTreeSHA256", harness)
+        self.assertIn("sourceBuildBound", harness)
         self.assertIn("appExecutableSHA256", harness)
+        self.assertIn("appCodeDirectoryHash", harness)
+        self.assertIn("pluginPackageTreeSHA256", harness)
+        self.assertIn("pluginCatalogSHA256", harness)
         self.assertIn('"provenance": provenance', harness)
 
     def test_session_epoch_survives_plist_date_round_trip(self):

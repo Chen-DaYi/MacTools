@@ -25,7 +25,13 @@ private struct MiddleClickPluginProvider: PluginProvider {
 
 /// Converts a trackpad tap with the configured finger count into a middle-button click.
 @MainActor
-final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing {
+final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing,
+    PluginActionProviding, PluginActionPermissionProviding,
+    PluginInputGestureClaimProviding, PluginInputGestureConflictConsuming
+{
+    private enum ActionID {
+        static let toggle = "toggle"
+    }
     private enum PermissionID {
         static let accessibility = "accessibility"
     }
@@ -56,6 +62,7 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
     private var isAccessibilityGranted: Bool
     private var session: (any MiddleClickSessionManaging)?
     private var hasAccessibilityError = false
+    private var externalGestureConflicts: [PluginInputGestureConflict] = []
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "middle-click"),
@@ -121,6 +128,87 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
 
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
+    var activeInputGestureClaims: [PluginInputGestureClaim] {
+        guard store.isEnabled else { return [] }
+        return [inputGestureClaim(for: store.requiredFingerCount)]
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle),
+                title: metadata.title,
+                description: metadata.defaultDescription,
+                keywords: [metadata.title, metadata.defaultDescription],
+                systemImage: metadata.iconName,
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.background, .foregroundInteractive]
+            ),
+        ]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [
+            ActionCatalogEntry(
+                reference: toggleActionReference,
+                title: store.isEnabled
+                    ? localization.string(
+                        "action.disable.title",
+                        defaultValue: "关闭模拟鼠标中键"
+                    )
+                    : localization.string(
+                        "action.enable.title",
+                        defaultValue: "开启模拟鼠标中键"
+                    ),
+                subtitle: activeConflictMessage ?? metadata.defaultDescription,
+                presentationState: store.isEnabled && activeConflictMessage == nil
+                    ? .active
+                    : .inactive
+            ),
+        ]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        guard reference.key == toggleActionReference.key else {
+            return .unavailable(PluginKitLocalization.actionUnavailable)
+        }
+        // Turning an enabled listener off must remain possible even if permission was
+        // revoked or an advanced Trackpad Gestures mapping has since claimed the tap.
+        guard !store.isEnabled else { return .available }
+        guard isAccessibilityGranted else {
+            return .unavailable(accessibilityRequiredMessage)
+        }
+        if let activeConflictMessage {
+            return .unavailable(activeConflictMessage)
+        }
+        return .available
+    }
+
+    func permissionRequirementIDs(for actionKey: ActionKey) -> [String] {
+        guard actionKey == toggleActionReference.key, !store.isEnabled else { return [] }
+        return [PermissionID.accessibility]
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        guard invocation.reference.key == toggleActionReference.key else {
+            return ActionExecutionHandle {
+                .failed(message: PluginKitLocalization.actionInvalidParameters)
+            }
+        }
+        return ActionExecutionHandle { [weak self] in
+            guard let self else { return .cancelled }
+            return self.setEnabled(!self.store.isEnabled, promptForPermission: false)
+        }
+    }
+
+    func inputGestureConflictsDidChange(_ conflicts: [PluginInputGestureConflict]) {
+        let previousMessage = activeConflictMessage
+        externalGestureConflicts = conflicts
+        let currentMessage = activeConflictMessage
+        guard previousMessage != currentMessage else { return }
+        applyCurrentConfiguration()
+    }
+
     var settingsPage: PluginSettingsPage? {
         let localizedTitle = localization.string(
             "metadata.title",
@@ -142,7 +230,7 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
                         title: localizedTitle,
                         description: localizedDescription,
                         systemImage: "power",
-                        error: hasAccessibilityError ? accessibilityRequiredMessage : nil,
+                        error: configurationErrorMessage,
                         control: .toggle(isOn: store.isEnabled)
                     ),
                     PluginSettingsRow(
@@ -212,7 +300,7 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
         switch action {
         case let .setBoolean(controlID, value):
             guard controlID == SettingsID.enabled else { return }
-            setEnabled(value)
+            _ = setEnabled(value, promptForPermission: true)
 
         case let .setSelection(controlID, optionID):
             guard controlID == SettingsID.fingerCount,
@@ -251,18 +339,26 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
         }
     }
 
-    private func setEnabled(_ isEnabled: Bool) {
+    private func setEnabled(
+        _ isEnabled: Bool,
+        promptForPermission: Bool
+    ) -> ActionExecutionResult {
         hasAccessibilityError = false
 
         guard isEnabled else {
             store.setEnabled(false)
             stopSession()
             onStateChange?()
-            return
+            return .succeeded()
+        }
+
+        if let activeConflictMessage {
+            onStateChange?()
+            return .failed(message: activeConflictMessage)
         }
 
         isAccessibilityGranted = accessibilityTrusted()
-        if !isAccessibilityGranted {
+        if !isAccessibilityGranted, promptForPermission {
             isAccessibilityGranted = requestAccessibilityTrust(true)
         }
 
@@ -270,12 +366,13 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
             hasAccessibilityError = true
             requestPermissionGuidance?(PermissionID.accessibility)
             onStateChange?()
-            return
+            return .failed(message: accessibilityRequiredMessage)
         }
 
         store.setEnabled(true)
         startSession()
         onStateChange?()
+        return .succeeded()
     }
 
     private func applyCurrentConfiguration() {
@@ -287,6 +384,10 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
         guard isAccessibilityGranted else {
             stopSession()
             hasAccessibilityError = true
+            return
+        }
+        guard activeConflictMessage == nil else {
+            stopSession()
             return
         }
 
@@ -320,5 +421,37 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
             "error.accessibilityRequired",
             defaultValue: "模拟鼠标中键需要辅助功能权限，请先前往设置完成授权。"
         )
+    }
+
+    private var configurationErrorMessage: String? {
+        if hasAccessibilityError { return accessibilityRequiredMessage }
+        return store.isEnabled ? activeConflictMessage : nil
+    }
+
+    private var activeConflictMessage: String? {
+        let claimID = inputGestureClaim(for: store.requiredFingerCount).id
+        guard let conflict = externalGestureConflicts.first(where: { $0.claim.id == claimID }) else {
+            return nil
+        }
+        return localization.format(
+            "error.gestureConflict.format",
+            defaultValue: "该轻点手势正由“%@”使用。请先停用对应映射。",
+            conflict.ownerPluginTitle
+        )
+    }
+
+    private func inputGestureClaim(for fingerCount: Int) -> PluginInputGestureClaim {
+        PluginInputGestureClaim(
+            id: "trackpad.tap.\(fingerCount)",
+            title: localization.format(
+                "settings.fingerCount.optionFormat",
+                defaultValue: "%d指",
+                fingerCount
+            )
+        )
+    }
+
+    private var toggleActionReference: ActionReference {
+        ActionReference(key: ActionKey(providerID: metadata.id, actionID: ActionID.toggle))
     }
 }

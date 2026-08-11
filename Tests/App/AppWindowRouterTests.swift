@@ -415,6 +415,30 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertEqual(restorationCount, 1)
     }
 
+    func testSuccessfulStandalonePaletteActionRestoresOnlyWhilePaletteOwnsFocus() {
+        XCTAssertTrue(
+            StandaloneCommandPaletteSuccessfulExecutionFocusPolicy
+                .shouldRestorePreviousApplication(
+                    paletteIsKey: true,
+                    applicationIsActive: true
+                )
+        )
+        XCTAssertFalse(
+            StandaloneCommandPaletteSuccessfulExecutionFocusPolicy
+                .shouldRestorePreviousApplication(
+                    paletteIsKey: false,
+                    applicationIsActive: true
+                )
+        )
+        XCTAssertFalse(
+            StandaloneCommandPaletteSuccessfulExecutionFocusPolicy
+                .shouldRestorePreviousApplication(
+                    paletteIsKey: true,
+                    applicationIsActive: false
+                )
+        )
+    }
+
     func testOpeningSettingsFromStandalonePaletteDoesNotRestoreThePreviousApplication() throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

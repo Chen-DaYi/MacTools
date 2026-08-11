@@ -309,6 +309,7 @@ struct UnifiedSearchPresentationView: View {
                     showsCustomShadow: true,
                     actions: UnifiedSearchPaletteActions(
                         dismiss: navigationCoordinator.dismissUnifiedSearch,
+                        dismissAfterSuccessfulExecution: navigationCoordinator.dismissUnifiedSearch,
                         navigate: navigationCoordinator.navigateFromSearch,
                         consumeQuickSelection: navigationCoordinator.consumeUnifiedSearchQuickSelectionRequest
                     )
@@ -321,6 +322,7 @@ struct UnifiedSearchPresentationView: View {
 
 struct UnifiedSearchPaletteActions {
     let dismiss: () -> Void
+    let dismissAfterSuccessfulExecution: () -> Void
     let navigate: (SettingsNavigationDestination, SettingsSearchRevealTarget?) -> Bool
     let consumeQuickSelection: (UnifiedSearchQuickSelectionRequest) -> Bool
 }
@@ -1056,7 +1058,7 @@ struct UnifiedSearchPaletteView: View {
                 guard generation == executionGeneration else { return }
                 executionTask = nil
                 if case .completed(.succeeded) = outcome {
-                    actions.dismiss()
+                    actions.dismissAfterSuccessfulExecution()
                 } else {
                     executionFeedback = ActionSurfaceExecutionSupport.feedback(for: outcome)
                     model.refresh()
@@ -1067,7 +1069,7 @@ struct UnifiedSearchPaletteView: View {
                 pluginID: pluginID,
                 expectedDefinition: expectedDefinition
             ) {
-                actions.dismiss()
+                actions.dismissAfterSuccessfulExecution()
             } else {
                 model.refresh()
             }
@@ -1077,7 +1079,7 @@ struct UnifiedSearchPaletteView: View {
                 context: commandContext
             ) {
             case .performed(.dismissPalette):
-                actions.dismiss()
+                actions.dismissAfterSuccessfulExecution()
             case .performed(.refreshIndex), .unavailable, .failed:
                 model.refresh()
             }

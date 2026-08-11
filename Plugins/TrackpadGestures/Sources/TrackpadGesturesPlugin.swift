@@ -40,7 +40,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     AccessibilityPermissionRefreshing, PluginSettingsPresenting,
     PluginFeatureExtractionReadinessProviding, TrackpadActionHostContextConsuming,
     PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
-    PluginPortablePreferencesActionReferencesProviding {
+    PluginPortablePreferencesActionReferencesProviding, PluginInputGestureClaimProviding {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -62,6 +62,18 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     }
 
     let store: TrackpadGestureStore
+
+    var activeInputGestureClaims: [PluginInputGestureClaim] {
+        store.mappings.compactMap { mapping in
+            guard mapping.isEnabled, let count = mapping.gesture.fingerTapCount else {
+                return nil
+            }
+            return PluginInputGestureClaim(
+                id: "trackpad.tap.\(count)",
+                title: mapping.gesture.title(localization: localization)
+            )
+        }
+    }
 
     private let localization: PluginLocalization
     private let session: any MultitouchDeviceSessionManaging

@@ -1103,6 +1103,27 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(plugin.permissionRequirements.map(\.id), ["accessibility", "input-monitoring"])
     }
 
+    func testEnabledFingerTapMappingsPublishSharedGestureClaims() {
+        let fixture = makePlugin()
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .threeFingerTap,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .fourFingerTap,
+            action: .keyboardShortcut(ShortcutBinding(keyCode: 0, modifiers: [.command]))
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .fiveFingerLongTouch,
+            action: .middleClick
+        )))
+
+        XCTAssertEqual(
+            Set(fixture.plugin.activeInputGestureClaims.map(\.id)),
+            ["trackpad.tap.3", "trackpad.tap.4"]
+        )
+    }
+
     func testEnabledMappingExecutesEveryRepeatedRecognizedAction() {
         let fixture = makePlugin()
         let shortcut = ShortcutBinding(keyCode: 0, modifiers: [.command, .shift])

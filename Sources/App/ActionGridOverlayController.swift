@@ -637,6 +637,33 @@ enum ActionGridSuccessfulExecutionFocusPolicy {
     }
 }
 
+struct ActionGridResizeContext: Equatable {
+    let pointer: CGPoint
+    let screenIndex: Int
+}
+
+enum ActionGridResizeScreenSelection {
+    static func context(
+        presentationPointer: CGPoint,
+        panelFrame: CGRect,
+        screenFrames: [CGRect]
+    ) -> ActionGridResizeContext? {
+        guard !screenFrames.isEmpty else { return nil }
+        if let index = screenFrames.firstIndex(where: { $0.contains(presentationPointer) }) {
+            return ActionGridResizeContext(pointer: presentationPointer, screenIndex: index)
+        }
+
+        let relocatedPanelCenter = CGPoint(x: panelFrame.midX, y: panelFrame.midY)
+        guard let index = ActionGridScreenSelection.screenIndex(
+            containing: relocatedPanelCenter,
+            screenFrames: screenFrames
+        ) else {
+            return nil
+        }
+        return ActionGridResizeContext(pointer: relocatedPanelCenter, screenIndex: index)
+    }
+}
+
 @MainActor
 final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     static let panelIdentifier = NSUserInterfaceItemIdentifier("mactools.action-grid.overlay")
@@ -948,9 +975,20 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         includesNavigationHeader: Bool,
         includesFeedback: Bool
     ) {
-        guard let panel, let presentationPointer, let presentationVisibleFrame else { return }
+        guard let panel, let presentationPointer else { return }
+        let screens = NSScreen.screens
+        guard let context = ActionGridResizeScreenSelection.context(
+            presentationPointer: presentationPointer,
+            panelFrame: panel.frame,
+            screenFrames: screens.map(\.frame)
+        ), screens.indices.contains(context.screenIndex) else {
+            return
+        }
+        let presentationVisibleFrame = screens[context.screenIndex].visibleFrame
+        self.presentationPointer = context.pointer
+        self.presentationVisibleFrame = presentationVisibleFrame
         let frame = ActionGridOverlayGeometry.targetFrame(
-            pointer: presentationPointer,
+            pointer: context.pointer,
             visibleFrame: presentationVisibleFrame,
             itemCount: slotCount,
             includesNavigationHeader: includesNavigationHeader,
@@ -988,7 +1026,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
 
     func dismissIfPointerIsOutside(_ point: CGPoint) {
         guard let frame = panel?.frame, !frame.contains(point) else { return }
-        close()
+        close(restoringFocus: false)
     }
 
     private func installDismissHandlers(panel: NSPanel) {
@@ -1004,13 +1042,13 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
             guard let self, let panel else { return event }
             if event.window === panel,
                !ActionGridPointerActivationPolicy.acceptsPointerEvent(
-                   eventUptime: ProcessInfo.processInfo.systemUptime,
+                   eventUptime: event.timestamp,
                    presentationUptime: self.presentationUptime,
                    source: self.presentationSource
                ) {
                 return nil
             }
-            if event.window !== panel { self.close() }
+            if event.window !== panel { self.close(restoringFocus: false) }
             return event
         }
         tokens.globalMouse = NSEvent.addGlobalMonitorForEvents(matching: mouseMask) { [weak self] _ in

@@ -66,6 +66,9 @@ jobs:
             test \
             -quiet
 
+      - name: Verify PluginKit v4 binary compatibility
+        run: ./scripts/plugins/verify-plugin-kit-v4-binary-compatibility.sh
+
       - name: Package Debug app artifact
         if: github.event_name == 'workflow_dispatch'
         run: |

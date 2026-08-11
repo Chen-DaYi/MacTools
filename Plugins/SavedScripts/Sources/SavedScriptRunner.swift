@@ -24,6 +24,9 @@ struct ProcessSavedScriptRunner: SavedScriptRunning {
     static let runDirectoryPrefix = "run-"
     /// Allows bounded pipe draining and process-group cleanup after the script's own deadline.
     static let actionExecutionTimeoutGraceSeconds: TimeInterval = 1
+    /// Script timeouts are capped at five minutes. Keeping abandoned source for at most
+    /// fifteen minutes leaves generous teardown headroom while also handling PID reuse.
+    static let maximumRunDirectoryLifetime: TimeInterval = 15 * 60
 
     private let temporaryDirectory: URL
 
@@ -111,7 +114,11 @@ struct ProcessSavedScriptRunner: SavedScriptRunning {
         let parent = temporaryDirectory.appendingPathComponent("SavedScripts", isDirectory: true)
         guard let children = try? FileManager.default.contentsOfDirectory(
             at: parent,
-            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            includingPropertiesForKeys: [
+                .isDirectoryKey,
+                .isSymbolicLinkKey,
+                .contentModificationDateKey,
+            ],
             options: [.skipsHiddenFiles]
         ) else {
             return
@@ -119,14 +126,22 @@ struct ProcessSavedScriptRunner: SavedScriptRunning {
 
         for child in children {
             guard let values = try? child.resourceValues(
-                forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+                forKeys: [
+                    .isDirectoryKey,
+                    .isSymbolicLinkKey,
+                    .contentModificationDateKey,
+                ]
             ), values.isSymbolicLink != true else {
                 continue
             }
             if values.isDirectory == true,
-               let ownerPID = ownerPID(from: child.lastPathComponent),
-               !processIsAlive(ownerPID) {
-                try? FileManager.default.removeItem(at: child)
+               let ownerPID = ownerPID(from: child.lastPathComponent) {
+                let isExpired = values.contentModificationDate.map {
+                    Date().timeIntervalSince($0) > maximumRunDirectoryLifetime
+                } ?? false
+                if isExpired || !processIsAlive(ownerPID) {
+                    try? FileManager.default.removeItem(at: child)
+                }
             } else if values.isDirectory != true, isLegacySourceFile(child) {
                 // Remove plaintext files written by runner versions before per-run directories.
                 try? FileManager.default.removeItem(at: child)

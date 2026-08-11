@@ -7,6 +7,23 @@ import XCTest
 
 @MainActor
 final class PluginHostActionRegistryTests: XCTestCase {
+    func testHostDistributesInputGestureClaimsOnlyToOtherPlugins() {
+        let owner = InputGestureClaimTestPlugin(id: "gesture-owner", claims: [
+            PluginInputGestureClaim(id: "trackpad.tap.3", title: "Three-Finger Tap"),
+        ])
+        let consumer = InputGestureConflictTestPlugin()
+
+        _ = makePluginHostForTests(plugins: [owner, consumer])
+
+        XCTAssertEqual(consumer.conflicts, [
+            PluginInputGestureConflict(
+                claim: PluginInputGestureClaim(id: "trackpad.tap.3", title: "Three-Finger Tap"),
+                ownerPluginID: "gesture-owner",
+                ownerPluginTitle: "gesture-owner"
+            ),
+        ])
+    }
+
     func testSavedScriptWithoutLocalConfirmationStillPublishesWhenRunLinksAreEnabled() throws {
         let suiteName = "PluginHostActionRegistryTests.saved-scripts.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -773,6 +790,49 @@ final class PluginHostActionRegistryTests: XCTestCase {
         return manager.debugRegistrationsForTests.filter {
             $0.binding == binding
         }
+    }
+}
+
+@MainActor
+private final class InputGestureClaimTestPlugin: MacToolsPlugin, PluginInputGestureClaimProviding {
+    let metadata: PluginMetadata
+    let activeInputGestureClaims: [PluginInputGestureClaim]
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    init(id: String, claims: [PluginInputGestureClaim]) {
+        metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "hand.tap",
+            iconTint: .blue,
+            order: 0,
+            defaultDescription: id
+        )
+        activeInputGestureClaims = claims
+    }
+}
+
+@MainActor
+private final class InputGestureConflictTestPlugin: MacToolsPlugin,
+    PluginInputGestureConflictConsuming
+{
+    let metadata = PluginMetadata(
+        id: "gesture-consumer",
+        title: "Gesture Consumer",
+        iconName: "hand.tap",
+        iconTint: .blue,
+        order: 1,
+        defaultDescription: "Gesture Consumer"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var conflicts: [PluginInputGestureConflict] = []
+
+    func inputGestureConflictsDidChange(_ conflicts: [PluginInputGestureConflict]) {
+        self.conflicts = conflicts
     }
 }
 

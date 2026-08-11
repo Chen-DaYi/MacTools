@@ -1216,6 +1216,30 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(preview.unavailablePluginIDs, ["legacy-surface-only"])
     }
 
+    func testPreviewIgnoresTamperedPortablePreferenceActionIndex() throws {
+        let surface = BackupActionSurfacePlugin()
+        let payloadReference = ActionReference(
+            key: ActionKey(providerID: "payload-provider", actionID: "run")
+        )
+        let forgedReference = ActionReference(
+            key: ActionKey(providerID: "forged-index-provider", actionID: "run")
+        )
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:],
+            pluginPreferences: [
+                surface.metadata.id: try JSONEncoder().encode([payloadReference]),
+            ],
+            pluginPreferenceActionReferences: [surface.metadata.id: [forgedReference]]
+        )
+        let host = makeHost(plugins: [surface], defaults: makeDefaults())
+
+        let preview = try host.preferencesImportPreview(for: backup)
+
+        XCTAssertEqual(preview.unavailablePluginIDs, ["payload-provider"])
+    }
+
     func testPreviewAndInstallIncludeRunLinkAndWorkflowOnlyPluginDependencies() async throws {
         let temporaryRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("PreferencesBackupActionDependencyTests-\(UUID().uuidString)", isDirectory: true)

@@ -886,6 +886,32 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         )
     }
 
+    func testResizeScreenSelectionUsesRelocatedPanelAfterPresentationDisplayDisconnects() {
+        let remainingScreen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let context = ActionGridResizeScreenSelection.context(
+            presentationPointer: CGPoint(x: 2200, y: 500),
+            panelFrame: CGRect(x: 500, y: 300, width: 600, height: 500),
+            screenFrames: [remainingScreen]
+        )
+
+        XCTAssertEqual(context?.screenIndex, 0)
+        XCTAssertEqual(context?.pointer, CGPoint(x: 800, y: 550))
+    }
+
+    func testResizeScreenSelectionKeepsPresentationPointerWhileItsDisplayExists() {
+        let context = ActionGridResizeScreenSelection.context(
+            presentationPointer: CGPoint(x: 2200, y: 500),
+            panelFrame: CGRect(x: 500, y: 300, width: 600, height: 500),
+            screenFrames: [
+                CGRect(x: 0, y: 0, width: 1512, height: 982),
+                CGRect(x: 1512, y: 0, width: 1280, height: 900),
+            ]
+        )
+
+        XCTAssertEqual(context?.screenIndex, 1)
+        XCTAssertEqual(context?.pointer, CGPoint(x: 2200, y: 500))
+    }
+
     func testAccessibilityPolicyHonorsReducedMotionAndTransparency() {
         let standard = ActionGridOverlayAccessibilityPolicy(
             reduceMotion: false,

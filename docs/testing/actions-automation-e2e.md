@@ -35,6 +35,8 @@ make e2e-preflight
 
 Preflight verifies the stable app path, deep signature, Apple Development authority, Team ID, installed Debug plugins, process count, recorder dependencies (including `ffmpeg` and `ffprobe`), and whether the process hosting the harness can post synthetic shortcuts. It also rejects a leftover Derived Data test host, because a second app with the development bundle identity can steal Run Links from the stable app. When the stable app owns the Trackpad Gestures listener lease, preflight reports permission state as `granted`: that listener starts only after the app observes both Accessibility and Input Monitoring access. Otherwise it reports `unverified`, never a guessed denial or a hard-coded pending state.
 
+Evidence collection is bound to the exact local product assembled by the harness. Rebuild snapshots the source commit, dirty state, and deterministic tracked/untracked source-tree hash before building, verifies that source did not change during the build, then records the installed app executable and CodeDirectory hashes, the complete installed plugin-package tree hash, and the local catalog hash. Recording and collection revalidate every value. A changed checkout, rebuilt or re-signed app, replaced plugin package, edited catalog, or session that has not completed this source-bound rebuild is rejected rather than being attributed to the wrong code.
+
 ## Prepare or upgrade a session
 
 Create a new session once:
@@ -51,6 +53,14 @@ make e2e-audit E2E_SESSION="$E2E_SESSION"
 ```
 
 `fixture.audit.json` must report `"valid": true` before UI automation begins.
+
+Before recording, rebuild the session so its installed app and plugin packages are bound to the current source snapshot:
+
+```bash
+./scripts/e2e/mactools-e2e.sh rebuild "$E2E_SESSION"
+```
+
+Any source edit after this command intentionally invalidates the session. Finish the change, rebuild again, and only then record or collect evidence.
 
 If the session was prepared with an older fixture, upgrade it in place:
 

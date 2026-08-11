@@ -167,6 +167,94 @@ final class MiddleClickPluginTests: XCTestCase {
         XCTAssertFalse(plugin.store.isEnabled)
     }
 
+    func testCanonicalActionTogglesStateAndPublishesPresentation() async throws {
+        let storage = MiddleClickMemoryStorage()
+        let session = MockMiddleClickSession()
+        let plugin = makePlugin(storage: storage, session: session)
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first)
+        let reference = ActionReference(key: definition.key)
+
+        XCTAssertEqual(definition.key.actionID, "toggle")
+        XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "开启模拟鼠标中键")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+
+        let enable = try plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .actionGrid,
+            mode: .foreground
+        ))
+        let enableResult = await enable.result()
+        XCTAssertEqual(enableResult, .succeeded())
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.title, "关闭模拟鼠标中键")
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
+
+        let disable = try plugin.beginAction(ActionInvocation(
+            reference: reference,
+            source: .unifiedSearch,
+            mode: .foreground
+        ))
+        let disableResult = await disable.result()
+        XCTAssertEqual(disableResult, .succeeded())
+        XCTAssertFalse(plugin.store.isEnabled)
+        XCTAssertEqual(session.activateCallCount, 1)
+        XCTAssertEqual(session.deactivateCallCount, 1)
+    }
+
+    func testCanonicalActionRequiresAccessibilityBeforeEnabling() throws {
+        let plugin = makePlugin(
+            accessibilityTrusted: false,
+            requestAccessibilityTrust: false
+        )
+        let reference = ActionReference(key: try XCTUnwrap(plugin.actionDefinitions.first).key)
+
+        XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
+        XCTAssertEqual(
+            plugin.permissionRequirementIDs(for: reference.key),
+            ["accessibility"]
+        )
+    }
+
+    func testCanonicalActionCanDisableAfterAccessibilityIsRevoked() throws {
+        let storage = MiddleClickMemoryStorage()
+        storage.values["middle-click.enabled"] = true
+        let plugin = makePlugin(
+            storage: storage,
+            accessibilityTrusted: false,
+            requestAccessibilityTrust: false
+        )
+        let reference = ActionReference(key: try XCTUnwrap(plugin.actionDefinitions.first).key)
+
+        XCTAssertTrue(plugin.actionAvailability(for: reference).isAvailable)
+        XCTAssertEqual(plugin.permissionRequirementIDs(for: reference.key), [])
+    }
+
+    func testTrackpadGestureClaimPausesAndRestoresEnabledSession() {
+        let storage = MiddleClickMemoryStorage()
+        let session = MockMiddleClickSession()
+        let plugin = makePlugin(storage: storage, session: session)
+        plugin.handleSettingsAction(.setBoolean(controlID: "enabled", value: true))
+
+        plugin.inputGestureConflictsDidChange([
+            PluginInputGestureConflict(
+                claim: PluginInputGestureClaim(id: "trackpad.tap.3", title: "Three-Finger Tap"),
+                ownerPluginID: "trackpad-gestures",
+                ownerPluginTitle: "Trackpad Gestures"
+            ),
+        ])
+
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertEqual(session.deactivateCallCount, 1)
+        XCTAssertNotNil(settingsRows(for: plugin).first?.error)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .inactive)
+
+        plugin.inputGestureConflictsDidChange([])
+
+        XCTAssertEqual(session.activateCallCount, 2)
+        XCTAssertNil(settingsRows(for: plugin).first?.error)
+    }
+
     func testDeniedPermissionKeepsFeatureOffAndRequestsGuidance() {
         let storage = MiddleClickMemoryStorage()
         let session = MockMiddleClickSession()

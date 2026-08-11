@@ -199,6 +199,7 @@ Install and update are staged before moving into `Installed`. Per-plugin runtime
 - The manifest ID, versions, and bundle relative path are validated before loading code.
 - Host version and plugin kit version are checked before loading code.
 - Installed packages built for an older PluginKit are kept on disk but marked incompatible and are never passed to the native bundle loader.
+- Public value types within one PluginKit version must preserve their stored binary layout. CI compiles the frozen v4 `PluginShortcutRecorder` client declaration and links that client against the current framework so source-only tests cannot hide an incompatible in-place layout change.
 - The plugin bundle signature is validated before loading code.
 - When the host has a Team ID, the plugin bundle must have the same Team ID.
 - Untrusted third-party native plugins should use a future isolated process or XPC model instead of in-process bundle loading.

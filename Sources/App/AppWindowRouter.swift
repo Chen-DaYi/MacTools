@@ -310,6 +310,15 @@ final class StandaloneCommandPaletteFocusRestoration {
     }
 }
 
+enum StandaloneCommandPaletteSuccessfulExecutionFocusPolicy {
+    static func shouldRestorePreviousApplication(
+        paletteIsKey: Bool,
+        applicationIsActive: Bool
+    ) -> Bool {
+        paletteIsKey && applicationIsActive
+    }
+}
+
 @MainActor
 final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let pluginHost: PluginHost
@@ -563,6 +572,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             dismiss: { [weak self] in
                 self?.dismissCommandPalette()
             },
+            dismissAfterSuccessfulExecution: { [weak self] in
+                self?.dismissCommandPaletteAfterSuccessfulExecution()
+            },
             navigate: { [weak self] destination, target in
                 self?.navigateFromStandaloneSearch(to: destination, target: target) ?? false
             },
@@ -597,6 +609,15 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             self?.dismissCommandPalette()
         }
         return panel
+    }
+
+    private func dismissCommandPaletteAfterSuccessfulExecution() {
+        let shouldRestoreFocus = StandaloneCommandPaletteSuccessfulExecutionFocusPolicy
+            .shouldRestorePreviousApplication(
+                paletteIsKey: commandPalettePanel?.isKeyWindow == true,
+                applicationIsActive: NSApp.isActive
+            )
+        dismissCommandPalette(restoringFocus: shouldRestoreFocus)
     }
 
     @discardableResult

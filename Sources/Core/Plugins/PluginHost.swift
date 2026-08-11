@@ -2481,20 +2481,19 @@ final class PluginHost: ObservableObject {
         var references: [ActionReference] = []
         for pluginID in selection.pluginPreferenceIDs.sorted() {
             guard let data = backup.pluginPreferences[pluginID] else { continue }
-            if let indexed = backup.pluginPreferenceActionReferences[pluginID] {
-                references.append(contentsOf: indexed)
-                continue
-            }
             guard let plugin = corePlugin(for: pluginID),
                   let provider = plugin
                     as? any PluginPortablePreferencesActionReferencesProviding,
                   let decoded = guardedOptionalValue(
                     for: plugin,
-                    operation: "read legacy portable preference actions",
+                    operation: "validate portable preference action index",
                     provider.actionReferences(inPortablePreferences: data)
                   ) else {
                 continue
             }
+            // The serialized index is only a compatibility/cache field. Derive preview
+            // dependencies from the selected payload itself so a crafted backup cannot
+            // make the installer trust unrelated provider IDs.
             references.append(contentsOf: decoded)
         }
         return uniqueActionReferences(references)
@@ -2671,6 +2670,8 @@ final class PluginHost: ObservableObject {
         if dirtyPluginIDs == nil {
             cancelScheduledPluginStateRebuild()
         }
+
+        synchronizeInputGestureClaims()
 
         let defaultDescriptors = defaultPluginDescriptors()
         pluginDisplayPreferencesStore.migrateLegacyHiddenPluginIDs(
@@ -3130,6 +3131,36 @@ final class PluginHost: ObservableObject {
 
         if isolatedPluginFailures.count > isolatedPluginCountAtStart {
             rebuildDerivedState()
+        }
+    }
+
+    private func synchronizeInputGestureClaims() {
+        let claims = activePlugins.flatMap { plugin -> [PluginInputGestureConflict] in
+            guard let provider = plugin as? any PluginInputGestureClaimProviding else {
+                return []
+            }
+            let provided = guardedValue(
+                for: plugin,
+                operation: "read input gesture claims",
+                provider.activeInputGestureClaims
+            ) ?? []
+            return provided.map {
+                PluginInputGestureConflict(
+                    claim: $0,
+                    ownerPluginID: plugin.metadata.id,
+                    ownerPluginTitle: plugin.metadata.title
+                )
+            }
+        }
+
+        for plugin in activePlugins {
+            guard let consumer = plugin as? any PluginInputGestureConflictConsuming else {
+                continue
+            }
+            let externalClaims = claims.filter { $0.ownerPluginID != plugin.metadata.id }
+            guardPluginCall(plugin, operation: "update input gesture conflicts") {
+                consumer.inputGestureConflictsDidChange(externalClaims)
+            }
         }
     }
 

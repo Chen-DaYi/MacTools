@@ -1,5 +1,20 @@
 import XCTest
 import MacToolsPluginKit
+import SwiftUI
+
+/// Frozen source-level replica of the PluginKit v4 public value layout used by
+/// previously released plugin binaries. Keep this independent of the production type.
+private struct PluginShortcutRecorderV4Layout {
+    let title: String
+    let displayText: String
+    let placeholder: String
+    let minWidth: CGFloat
+    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
+    let onBeginRecording: (() -> Void)?
+    let onEndRecording: (() -> Void)?
+    @State private var isPresented = false
+    @State private var isHovered = false
+}
 
 final class PluginPanelControlLayoutTests: XCTestCase {
     func testControlKindTagsMatchDynamicPluginABI() {
@@ -77,6 +92,18 @@ final class PluginPanelControlLayoutTests: XCTestCase {
                 "isPresented",
                 "isHovered",
             ]
+        )
+        XCTAssertEqual(
+            MemoryLayout<PluginShortcutRecorder>.size,
+            MemoryLayout<PluginShortcutRecorderV4Layout>.size
+        )
+        XCTAssertEqual(
+            MemoryLayout<PluginShortcutRecorder>.stride,
+            MemoryLayout<PluginShortcutRecorderV4Layout>.stride
+        )
+        XCTAssertEqual(
+            MemoryLayout<PluginShortcutRecorder>.alignment,
+            MemoryLayout<PluginShortcutRecorderV4Layout>.alignment
         )
     }
 

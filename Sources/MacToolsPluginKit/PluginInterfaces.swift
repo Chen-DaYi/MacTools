@@ -233,3 +233,46 @@ public protocol PluginActionReferenceBackupProviding: AnyObject {
         for reference: ActionReference
     ) -> PluginActionReferenceBackupDisposition
 }
+
+/// A stable identity for a system-wide input gesture currently owned by a plugin.
+/// The host uses claims to prevent two independently packaged input plugins from
+/// responding to the same physical gesture.
+public struct PluginInputGestureClaim: Hashable, Sendable {
+    public let id: String
+    public let title: String
+
+    public init(id: String, title: String) {
+        self.id = id
+        self.title = title
+    }
+}
+
+/// Describes another plugin that currently owns a claimed input gesture.
+public struct PluginInputGestureConflict: Hashable, Sendable {
+    public let claim: PluginInputGestureClaim
+    public let ownerPluginID: String
+    public let ownerPluginTitle: String
+
+    public init(
+        claim: PluginInputGestureClaim,
+        ownerPluginID: String,
+        ownerPluginTitle: String
+    ) {
+        self.claim = claim
+        self.ownerPluginID = ownerPluginID
+        self.ownerPluginTitle = ownerPluginTitle
+    }
+}
+
+/// Optional companion contract for plugins that listen to system-wide gestures.
+@MainActor
+public protocol PluginInputGestureClaimProviding: AnyObject {
+    var activeInputGestureClaims: [PluginInputGestureClaim] { get }
+}
+
+/// Optional host callback for a plugin that must pause or reject a configuration
+/// when another plugin owns the same physical gesture.
+@MainActor
+public protocol PluginInputGestureConflictConsuming: AnyObject {
+    func inputGestureConflictsDidChange(_ conflicts: [PluginInputGestureConflict])
+}
