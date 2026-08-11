@@ -763,6 +763,14 @@ private struct PreferencesBackupSettingsRow: View {
     }
 
     private func savePreferences(selection: PreferencesBackupSelection) {
+        let data: Data
+        do {
+            data = try pluginHost.makePreferencesBackup(selection: selection).encodedJSON()
+        } catch {
+            alertMessage = preferencesBackupErrorMessage(error)
+            return
+        }
+
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
@@ -775,9 +783,7 @@ private struct PreferencesBackupSettingsRow: View {
         }
 
         do {
-            try pluginHost.makePreferencesBackup(selection: selection)
-                .encodedJSON()
-                .write(to: url, options: .atomic)
+            try data.write(to: url, options: .atomic)
             alertMessage = AppL10n.preferencesBackup("preferencesBackup.exported", defaultValue: "偏好设置已导出。")
         } catch {
             alertMessage = preferencesBackupErrorMessage(error)

@@ -165,6 +165,8 @@ final class SavedScriptsPluginTests: XCTestCase {
             name: "Backup",
             kind: .zsh,
             source: "echo backup",
+            confirmOutsideManager: false,
+            allowExternalInvocation: true,
             includeSourceInBackup: true
         )).get()
 
@@ -179,6 +181,8 @@ final class SavedScriptsPluginTests: XCTestCase {
         restored.restorePortablePreferences(from: data)
 
         XCTAssertEqual(restored.store.scripts.map(\.name), ["Backup"])
+        XCTAssertEqual(restored.actionDefinitions.first?.risk, .confirmationRequired)
+        XCTAssertEqual(restored.actionDefinitions.first?.externalInvocationPolicy, .unavailable)
     }
 
     func testActionReferenceBackupDispositionFollowsSourceOptIn() throws {

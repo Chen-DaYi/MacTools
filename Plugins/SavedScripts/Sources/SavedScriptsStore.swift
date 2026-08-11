@@ -119,7 +119,9 @@ final class SavedScriptsStore: ObservableObject {
         guard data.count <= Self.maximumPayloadByteCount,
               let envelope = try? decoder.decode(Envelope.self, from: data),
               envelope.formatVersion == Self.currentFormatVersion,
-              let restored = try? validated(envelope.scripts) else {
+              let restored = try? validated(
+                  envelope.scripts.map { $0.hardenedAfterPortableRestore() }
+              ) else {
             return false
         }
 

@@ -395,6 +395,47 @@ final class AppWindowRouterTests: XCTestCase {
         router.dismissCommandPalette()
     }
 
+    func testDismissingStandalonePaletteRestoresThePreviousApplication() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var restorationCount = 0
+        let focusRestoration = StandaloneCommandPaletteFocusRestoration(
+            captureRestoration: { { restorationCount += 1 } },
+            canRestore: { true }
+        )
+        let router = makeRouter(
+            defaults: defaults,
+            commandPaletteFocusRestoration: focusRestoration
+        )
+
+        router.toggleCommandPalette()
+        router.dismissCommandPalette()
+
+        XCTAssertEqual(restorationCount, 1)
+    }
+
+    func testOpeningSettingsFromStandalonePaletteDoesNotRestoreThePreviousApplication() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var restorationCount = 0
+        let focusRestoration = StandaloneCommandPaletteFocusRestoration(
+            captureRestoration: { { restorationCount += 1 } },
+            canRestore: { true }
+        )
+        let router = makeRouter(
+            defaults: defaults,
+            commandPaletteFocusRestoration: focusRestoration
+        )
+
+        router.toggleCommandPalette()
+        router.presentSettings(.general)
+
+        XCTAssertEqual(restorationCount, 0)
+        router.settingsWindow?.close()
+    }
+
     func testStandalonePaletteUsesRightToLeftLayoutForArabicLocale() {
         XCTAssertEqual(
             StandaloneCommandPaletteRootView.layoutDirection(for: Locale(identifier: "ar")),
@@ -519,6 +560,7 @@ final class AppWindowRouterTests: XCTestCase {
     private func makeRouter(
         defaults: UserDefaults,
         appUpdater: AppUpdater? = nil,
+        commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration? = nil,
         configureHost: (PluginHost) -> Void = { _ in }
     ) -> AppWindowRouter {
         let host = PluginHost(
@@ -535,7 +577,8 @@ final class AppWindowRouterTests: XCTestCase {
             menuBarIconSettings: MenuBarIconSettings(userDefaults: defaults),
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
             launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
-            appearanceUserDefaults: defaults
+            appearanceUserDefaults: defaults,
+            commandPaletteFocusRestoration: commandPaletteFocusRestoration ?? .init()
         )
     }
 

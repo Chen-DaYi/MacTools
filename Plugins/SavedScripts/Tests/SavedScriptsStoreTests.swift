@@ -55,6 +55,29 @@ final class SavedScriptsStoreTests: XCTestCase {
         XCTAssertEqual(restored.scripts.first?.workingDirectory, "")
     }
 
+    func testPortableRestoreRequiresRenewedTrustForExecution() throws {
+        let source = SavedScriptsStore(storage: SavedScriptsTestStorage())
+        let included = try source.save(SavedScript(
+            name: "Imported",
+            kind: .bash,
+            source: "printf imported",
+            workingDirectory: "/private/example",
+            confirmOutsideManager: false,
+            allowExternalInvocation: true,
+            includeSourceInBackup: true
+        )).get()
+        let backup = try XCTUnwrap(source.portableBackup())
+
+        let destination = SavedScriptsStore(storage: SavedScriptsTestStorage())
+        XCTAssertTrue(destination.restorePortableBackup(backup))
+
+        let restored = try XCTUnwrap(destination.script(id: included.id))
+        XCTAssertEqual(restored.source, included.source)
+        XCTAssertEqual(restored.workingDirectory, "")
+        XCTAssertTrue(restored.confirmOutsideManager)
+        XCTAssertFalse(restored.allowExternalInvocation)
+    }
+
     func testPortableRestoreReplacesScriptsAbsentFromBackup() throws {
         let source = SavedScriptsStore(storage: SavedScriptsTestStorage())
         let included = try source.save(SavedScript(

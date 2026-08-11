@@ -133,6 +133,13 @@ struct SavedScript: Codable, Equatable, Identifiable, Sendable {
         copy.workingDirectory = ""
         return copy
     }
+
+    func hardenedAfterPortableRestore() -> SavedScript {
+        var copy = portableCopy()
+        copy.confirmOutsideManager = true
+        copy.allowExternalInvocation = false
+        return copy
+    }
 }
 
 enum SavedScriptValidationError: LocalizedError, Equatable {

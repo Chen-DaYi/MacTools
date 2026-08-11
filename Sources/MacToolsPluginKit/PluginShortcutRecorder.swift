@@ -122,6 +122,9 @@ public struct PluginShortcutRecorder: View {
     public let onEndRecording: (() -> Void)?
 
     @State private var isPresented = false
+    // PluginKit v4 ABI compatibility: this stored property must remain on the public
+    // wrapper, in this order, because released plugins construct this view directly.
+    @State private var isHovered = false
 
     public init(
         title: String,
@@ -148,6 +151,7 @@ public struct PluginShortcutRecorder: View {
             placeholder: placeholder,
             minWidth: minWidth,
             isPresented: $isPresented,
+            isHovered: $isHovered,
             onRecord: onRecord,
             onBeginRecording: onBeginRecording,
             onEndRecording: onEndRecording
@@ -161,11 +165,10 @@ private struct PluginShortcutRecorderButton: View {
     let placeholder: String
     let minWidth: CGFloat
     @Binding var isPresented: Bool
+    @Binding var isHovered: Bool
     let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
     let onBeginRecording: (() -> Void)?
     let onEndRecording: (() -> Void)?
-
-    @State private var isHovered = false
 
     var body: some View {
         Button {

@@ -1740,6 +1740,46 @@ final class PreferencesBackupTests: XCTestCase {
             )
         }
     }
+
+    func testEncodeRejectsContentAboveFileSizeLimit() {
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:],
+            pluginPreferences: Dictionary(uniqueKeysWithValues: (0..<4).map { index in
+                ("plugin-\(index)", Data(repeating: UInt8(index), count: 800_000))
+            })
+        )
+
+        XCTAssertThrowsError(try backup.encodedJSON()) { error in
+            XCTAssertEqual(
+                error as? PreferencesBackupError,
+                .fileTooLarge(maximumBytes: PreferencesBackup.maximumFileSize)
+            )
+        }
+    }
+
+    func testNearLimitExportRoundTripsThroughFileImporter() async throws {
+        let payloads = Dictionary(uniqueKeysWithValues: (0..<4).map { index in
+            ("plugin-\(index)", Data(repeating: UInt8(index), count: 700_000))
+        })
+        let backup = PreferencesBackup(
+            application: validApplicationPreferences,
+            pluginDisplay: PluginDisplayPreferencesBackup(orderedPluginIDs: [], hiddenPluginIDs: []),
+            shortcutCustomizations: [:],
+            pluginPreferences: payloads
+        )
+        let data = try backup.encodedJSON()
+        let url = temporaryFileURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        try data.write(to: url)
+
+        let decoded = try await PreferencesBackup.decodeJSON(contentsOf: url)
+
+        XCTAssertEqual(decoded.pluginPreferences, payloads)
+        XCTAssertLessThanOrEqual(data.count, PreferencesBackup.maximumFileSize)
+    }
+
     private var validApplicationPreferences: PreferencesBackup.ApplicationPreferences {
         PreferencesBackup.ApplicationPreferences(
             appearancePreference: AppAppearancePreference.system.rawValue,

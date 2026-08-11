@@ -175,7 +175,11 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        return try encoder.encode(self)
+        let data = try encoder.encode(self)
+        guard data.count <= Self.maximumFileSize else {
+            throw PreferencesBackupError.fileTooLarge(maximumBytes: Self.maximumFileSize)
+        }
+        return data
     }
 
     static func decodeJSON(_ data: Data) throws -> PreferencesBackup {

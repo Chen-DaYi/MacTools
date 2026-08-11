@@ -277,6 +277,40 @@ enum SettingsWindowLayout {
 }
 
 @MainActor
+final class StandaloneCommandPaletteFocusRestoration {
+    typealias Restoration = () -> Void
+
+    private let captureRestoration: () -> Restoration?
+    private let canRestore: () -> Bool
+    private var pendingRestoration: Restoration?
+
+    init(
+        captureRestoration: @escaping () -> Restoration? = {
+            guard let application = NSWorkspace.shared.frontmostApplication,
+                  application != .current else {
+                return nil
+            }
+            return { application.activate() }
+        },
+        canRestore: @escaping () -> Bool = { NSApp.isActive }
+    ) {
+        self.captureRestoration = captureRestoration
+        self.canRestore = canRestore
+    }
+
+    func prepareForPresentation() {
+        pendingRestoration = captureRestoration()
+    }
+
+    func dismiss(wasVisible: Bool, restoringFocus: Bool) {
+        let restoration = pendingRestoration
+        pendingRestoration = nil
+        guard wasVisible, restoringFocus, canRestore() else { return }
+        restoration?()
+    }
+}
+
+@MainActor
 final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let pluginHost: PluginHost
     private let appUpdater: AppUpdater
@@ -284,6 +318,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let menuBarIconGallery: MenuBarIconGalleryLibrary
     private let launchAtLoginController: LaunchAtLoginController
     private let appearanceUserDefaults: UserDefaults
+    private let commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration
     private(set) var settingsWindow: NSWindow?
     private(set) var settingsNavigationCoordinator: SettingsNavigationCoordinator?
     private(set) var commandPalettePanel: NSPanel?
@@ -308,7 +343,8 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         menuBarIconSettings: MenuBarIconSettings,
         menuBarIconGallery: MenuBarIconGalleryLibrary,
         launchAtLoginController: LaunchAtLoginController,
-        appearanceUserDefaults: UserDefaults = .standard
+        appearanceUserDefaults: UserDefaults = .standard,
+        commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration = .init()
     ) {
         self.pluginHost = pluginHost
         self.appUpdater = appUpdater
@@ -316,6 +352,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
         self.appearanceUserDefaults = appearanceUserDefaults
+        self.commandPaletteFocusRestoration = commandPaletteFocusRestoration
         super.init()
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
@@ -332,7 +369,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             queue: .main
         ) { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
-                self?.dismissCommandPalette()
+                self?.dismissCommandPalette(restoringFocus: false)
             }
         }
         appearanceObserver = NotificationCenter.default.addObserver(
@@ -422,13 +459,19 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             ),
             display: true
         )
+        commandPaletteFocusRestoration.prepareForPresentation()
         NSApplication.shared.activate(ignoringOtherApps: true)
         PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.makeKeyAndOrderFront(nil)
     }
 
-    func dismissCommandPalette() {
+    func dismissCommandPalette(restoringFocus: Bool = true) {
+        let wasVisible = commandPalettePanel?.isVisible == true
         commandPalettePanel?.orderOut(nil)
+        commandPaletteFocusRestoration.dismiss(
+            wasVisible: wasVisible,
+            restoringFocus: restoringFocus
+        )
     }
 
     private func applyCommandPaletteAppearance() {
@@ -567,7 +610,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             return false
         }
 
-        dismissCommandPalette()
+        dismissCommandPalette(restoringFocus: false)
         presentSettings(.settings)
         return settingsNavigationCoordinator?.navigateFromSearch(
             to: destination,
@@ -576,7 +619,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     }
 
     func presentSettings(_ request: SettingsPresentationRequest) {
-        dismissCommandPalette()
+        dismissCommandPalette(restoringFocus: false)
         let window = settingsWindow ?? makeSettingsWindow()
         let wasVisible = window.isVisible
         let pendingAppUpdateVersion: String?

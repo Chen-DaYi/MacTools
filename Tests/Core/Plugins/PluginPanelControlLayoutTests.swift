@@ -53,6 +53,29 @@ final class PluginPanelControlLayoutTests: XCTestCase {
         )
     }
 
+    func testShortcutRecorderStoredPropertyLayoutMatchesPluginKitV4ABI() {
+        let recorder = PluginShortcutRecorder(
+            title: "Shortcut",
+            displayText: "",
+            onRecord: { _ in .accepted }
+        )
+
+        XCTAssertEqual(
+            Mirror(reflecting: recorder).children.compactMap(\.label),
+            [
+                "title",
+                "displayText",
+                "placeholder",
+                "minWidth",
+                "onRecord",
+                "onBeginRecording",
+                "onEndRecording",
+                "__isPresented",
+                "__isHovered",
+            ]
+        )
+    }
+
     private func tag(of kind: PluginPanelControlKind) -> UInt8 {
         withUnsafeBytes(of: kind) { bytes in
             bytes[0]
