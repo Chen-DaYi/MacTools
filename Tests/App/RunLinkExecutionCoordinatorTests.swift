@@ -40,6 +40,33 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
         XCTAssertFalse(setup.feedback.values[0].message.contains("private"))
     }
 
+    func testProgressReportingInvocationReturnsAfterDurableStart() async throws {
+        let setup = try makeSetup(capabilities: [.background, .reportsProgress])
+        var completion: CheckedContinuation<ActionExecutionResult, Never>?
+        setup.provider.operation = {
+            await withCheckedContinuation { completion = $0 }
+        }
+
+        await setup.coordinator.execute(.direct(setup.reference.key))
+
+        XCTAssertEqual(setup.provider.beginCount, 1)
+        XCTAssertEqual(
+            setup.feedback.values,
+            [
+                RunLinkExecutionFeedback(
+                    tone: .progress,
+                    title: "Action Started",
+                    message: "View run progress in Automation."
+                ),
+            ]
+        )
+        while completion == nil {
+            await Task.yield()
+        }
+        completion?.resume(returning: .succeeded())
+        await Task.yield()
+    }
+
     func testConfirmAlwaysUsesInjectedConfirmationAndHonorsDenial() async throws {
         let denied = try makeSetup(
             risk: .confirmationRequired,
@@ -132,6 +159,7 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
     private func makeSetup(
         risk: ActionRisk = .safe,
         externalPolicy: ActionExternalInvocationPolicy = .allowed,
+        capabilities: ActionExecutionCapabilities = [.foregroundInteractive],
         confirmationResult: Bool = true
     ) throws -> Setup {
         let registry = ActionRegistry()
@@ -146,7 +174,7 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
                 )
                 : nil,
             externalPolicy: externalPolicy,
-            capabilities: [.foregroundInteractive]
+            capabilities: capabilities
         )
         let reference = ActionReference(key: definition.key)
         registry.synchronize([provider.registration(definition: definition)])

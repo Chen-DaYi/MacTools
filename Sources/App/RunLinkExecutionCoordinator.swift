@@ -7,6 +7,7 @@ struct RunLinkExecutionFeedback: Equatable, Sendable {
     enum Tone: Equatable, Sendable {
         case success
         case failure
+        case progress
     }
 
     let tone: Tone
@@ -103,11 +104,9 @@ private struct RunLinkFeedbackView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: feedback.tone == .success
-                ? "checkmark.circle.fill"
-                : "exclamationmark.triangle.fill")
+            Image(systemName: feedback.tone.systemImage)
                 .font(.title2)
-                .foregroundStyle(feedback.tone == .success ? Color.green : Color.red)
+                .foregroundStyle(feedback.tone.color)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(feedback.title)
@@ -131,6 +130,24 @@ private struct RunLinkFeedbackView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(FeatureL10n.joined([feedback.title, feedback.message]))
+    }
+}
+
+private extension RunLinkExecutionFeedback.Tone {
+    var systemImage: String {
+        switch self {
+        case .success: "checkmark.circle.fill"
+        case .failure: "exclamationmark.triangle.fill"
+        case .progress: "clock.arrow.circlepath"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .success: .green
+        case .failure: .red
+        case .progress: .accentColor
+        }
     }
 }
 
@@ -266,11 +283,44 @@ final class RunLinkExecutionCoordinator {
         }
         let mode: ActionExecutionMode = action.definition.capabilities
             .contains(.foregroundInteractive) ? .foreground : .background
-        let outcome = await executor.execute(
-            ActionInvocation(reference: reference, source: .runLink, mode: mode),
-            confirmationService: confirmationService
-        )
-        feedbackPresenter.present(feedback(for: outcome))
+        let invocation = ActionInvocation(reference: reference, source: .runLink, mode: mode)
+        if action.definition.capabilities.contains(.reportsProgress) {
+            let outcome = await executor.startContinuing(
+                invocation,
+                expectedDefinition: action.definition,
+                confirmationService: confirmationService
+            )
+            feedbackPresenter.present(feedback(for: outcome))
+        } else {
+            let outcome = await executor.execute(
+                invocation,
+                confirmationService: confirmationService
+            )
+            feedbackPresenter.present(feedback(for: outcome))
+        }
+    }
+
+    private func feedback(for outcome: ContinuingActionStartOutcome) -> RunLinkExecutionFeedback {
+        switch outcome {
+        case .started:
+            RunLinkExecutionFeedback(
+                tone: .progress,
+                title: FeatureL10n.string("操作已开始"),
+                message: FeatureL10n.string("可在自动化中查看运行进度。")
+            )
+        case .cancelled:
+            RunLinkExecutionFeedback(
+                tone: .failure,
+                title: FeatureL10n.string("已取消"),
+                message: FeatureL10n.string("操作已取消。")
+            )
+        case let .rejected(rejection):
+            RunLinkExecutionFeedback(
+                tone: .failure,
+                title: FeatureL10n.string("操作未能开始。"),
+                message: message(for: rejection)
+            )
+        }
     }
 
     private func feedback(for outcome: ActionExecutionOutcome) -> RunLinkExecutionFeedback {

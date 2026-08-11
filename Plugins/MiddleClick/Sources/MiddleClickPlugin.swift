@@ -98,7 +98,9 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
     }
 
     func deactivate(reason: PluginDeactivationReason) {
-        guard reason.requiresStateCleanup else { return }
+        // Process-local callbacks must never survive removal of this plugin instance.
+        // During an update we preserve the stored enabled preference, then the replacement
+        // instance recreates its session from that preference when it activates.
         stopSession()
         onStateChange?()
     }

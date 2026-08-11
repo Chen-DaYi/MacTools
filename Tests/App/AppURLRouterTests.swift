@@ -477,4 +477,41 @@ final class AppURLRouterTests: XCTestCase {
             ]
         )
     }
+
+    func testHandedOffActionInheritsAncestryWithoutBlockingNavigation() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in }
+        )
+        let action = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/continuing")
+        )
+        let settings = try XCTUnwrap(URL(string: "mactools://app/settings/general"))
+        var requests: [AppPresentationRequest] = []
+        var recursiveResult: AppURLHandlingResult?
+        var continuingTask: Task<Void, Never>?
+        router.activate(
+            presentationHandler: { requests.append($0) },
+            isPluginConfigurationAvailable: { _ in true },
+            actionHandler: { _ in
+                continuingTask = Task { @MainActor in
+                    await Task.yield()
+                    recursiveResult = router.handle(action)
+                }
+            }
+        )
+
+        XCTAssertEqual(
+            router.handle(action),
+            .queuedAction(
+                .direct(ActionKey(providerID: "test-provider", actionID: "continuing"))
+            )
+        )
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(router.handle(settings), .handled(.settings(.general)))
+        await continuingTask?.value
+        XCTAssertEqual(requests, [.settings(.general)])
+        XCTAssertEqual(recursiveResult, .rejected(.recursiveActionInvocation))
+    }
 }

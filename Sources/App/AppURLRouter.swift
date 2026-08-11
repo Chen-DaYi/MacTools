@@ -297,6 +297,8 @@ enum AppDeepLinkParser {
 
 @MainActor
 final class AppURLRouter {
+    @TaskLocal private static var currentActionAncestry: Set<ActionRunLinkRequest> = []
+
     private struct PendingRoute {
         let route: AppURLRoute
         let actionAncestry: Set<ActionRunLinkRequest>
@@ -313,7 +315,6 @@ final class AppURLRouter {
     private var actionHandler: ((ActionRunLinkRequest) async -> Void)?
     private var drainTask: Task<Void, Never>?
     private var isDraining = false
-    private var activeActionAncestry: Set<ActionRunLinkRequest> = []
 
     init(
         acceptedURLSchemes: Set<String> = RightClickURLRouter.bundleURLSchemes(),
@@ -363,7 +364,7 @@ final class AppURLRouter {
             switch route {
             case let .navigation(deepLink) where pendingRoutes.isEmpty && !isDraining:
                 return deliver(deepLink)
-            case let .run(request) where activeActionAncestry.contains(request):
+            case let .run(request) where Self.currentActionAncestry.contains(request):
                 return reject(.recursiveActionInvocation, url: url)
             default:
                 guard enqueue(route) else {
@@ -413,7 +414,7 @@ final class AppURLRouter {
         }
         pendingRoutes.append(PendingRoute(
             route: route,
-            actionAncestry: activeActionAncestry
+            actionAncestry: Self.currentActionAncestry
         ))
         return true
     }
@@ -445,9 +446,10 @@ final class AppURLRouter {
                 case let .navigation(deepLink):
                     _ = deliver(deepLink)
                 case let .run(request):
-                    activeActionAncestry = pendingRoute.actionAncestry.union([request])
-                    await actionHandler?(request)
-                    activeActionAncestry = []
+                    let ancestry = pendingRoute.actionAncestry.union([request])
+                    await Self.$currentActionAncestry.withValue(ancestry) {
+                        await actionHandler?(request)
+                    }
                 }
             }
             isDraining = false

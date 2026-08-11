@@ -149,6 +149,23 @@ final class MiddleClickPluginTests: XCTestCase {
         XCTAssertTrue(plugin.store.isEnabled)
     }
 
+    func testUpdateDeactivationStopsSessionWithoutClearingEnabledPreference() {
+        let storage = MiddleClickMemoryStorage()
+        storage.values["middle-click.enabled"] = true
+        let session = MockMiddleClickSession()
+        let plugin = makePlugin(storage: storage, session: session)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "middle-click"))
+
+        plugin.deactivate(reason: .updating)
+
+        XCTAssertEqual(session.deactivateCallCount, 1)
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertEqual(storage.values["middle-click.enabled"] as? Bool, true)
+
+        plugin.activate(context: PluginRuntimeContext(pluginID: "middle-click"))
+        XCTAssertEqual(session.activateCallCount, 2)
+    }
+
     func testSettingsSwitchStartsAndStopsSessionWhenPermissionIsGranted() {
         let storage = MiddleClickMemoryStorage()
         let session = MockMiddleClickSession()
