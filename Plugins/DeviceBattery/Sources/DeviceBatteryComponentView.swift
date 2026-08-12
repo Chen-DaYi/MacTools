@@ -7,6 +7,7 @@ struct DeviceBatteryComponentView: View {
     @ObservedObject var store: DeviceBatteryStore
     let localization: PluginLocalization
     let openSettings: () -> Void
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         Group {
@@ -41,7 +42,11 @@ struct DeviceBatteryComponentView: View {
             Image(systemName: viewModel.snapshot.accessState.isError ? "exclamationmark.triangle" : "battery.0percent")
                 .font(.system(size: 24, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(viewModel.snapshot.accessState.isError ? Color(nsColor: .systemOrange) : Color.secondary)
+                .foregroundStyle(
+                    viewModel.snapshot.accessState.isError
+                        ? theme.status.warning
+                        : theme.text.secondary
+                )
 
             Text(emptyTitle)
                 .font(.system(size: 13, weight: .semibold))
@@ -50,7 +55,7 @@ struct DeviceBatteryComponentView: View {
 
             Text(emptySubtitle)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.text.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -247,6 +252,7 @@ private struct DeviceBatteryGaugeGrid: View {
     let items: [DeviceBatteryItem]
     let totalCount: Int
     let localization: PluginLocalization
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         Group {
@@ -264,7 +270,7 @@ private struct DeviceBatteryGaugeGrid: View {
                 if totalCount > items.count {
                     Text("+\(totalCount - items.count)")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.text.secondary)
                         .frame(width: tileSize, height: tileSize + DeviceBatteryLayout.gaugePercentHeight)
                 }
             }
@@ -297,6 +303,7 @@ private struct DeviceBatteryGaugeTile: View {
     let tileSize: CGFloat
     let lineWidth: CGFloat
     let localization: PluginLocalization
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         VStack(spacing: 2) {
@@ -320,7 +327,7 @@ private struct DeviceBatteryGaugeTile: View {
                     let badgeSize = max(14, tileSize * 0.24)
                     DeviceBatteryChargingBadge(
                         systemName: "bolt.fill",
-                        color: batteryTint(for: item),
+                        color: batteryTint(for: item, theme: theme),
                         size: badgeSize
                     )
                     .position(x: tileSize / 2, y: chargingBadgeCenterY)
@@ -329,7 +336,7 @@ private struct DeviceBatteryGaugeTile: View {
 
             Text(DeviceBatteryFormatter.percent(item.clampedLevel))
                 .font(.system(size: max(10, tileSize * 0.18), weight: .regular, design: .rounded))
-                .foregroundStyle(.primary)
+                .foregroundStyle(theme.text.primary)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -341,8 +348,8 @@ private struct DeviceBatteryGaugeTile: View {
 
     private var iconTint: Color {
         chargingSymbolName(for: item) == nil
-            ? Color.primary.opacity(0.58)
-            : batteryTint(for: item).opacity(0.84)
+            ? theme.text.secondary
+            : batteryTint(for: item, theme: theme).opacity(0.84)
     }
 
     private var chargingBadgeCenterY: CGFloat {
@@ -402,7 +409,7 @@ private struct DeviceBatteryRing: View {
                     .inset(by: ringPathInset)
                     .trim(from: 0, to: DeviceBatteryLayout.ringSpan)
                     .stroke(
-                        batteryTint(for: item).opacity(0.12),
+                        batteryTint(for: item, theme: theme).opacity(0.12),
                         style: StrokeStyle(
                             lineWidth: lineWidth * DeviceBatteryLayout.poweredRingLineWidthScale,
                             lineCap: .round,
@@ -415,10 +422,10 @@ private struct DeviceBatteryRing: View {
                         .inset(by: ringPathInset)
                         .trim(from: max(progressSpan - 0.002, 0), to: max(progressSpan - 0.0004, 0))
                         .stroke(
-                            batteryTint(for: item),
+                            batteryTint(for: item, theme: theme),
                             style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
                         )
-                        .shadow(color: batteryTint(for: item).opacity(0.32), radius: lineWidth * 0.7)
+                        .shadow(color: batteryTint(for: item, theme: theme).opacity(0.32), radius: lineWidth * 0.7)
                         .clipShape(
                             Circle()
                                 .inset(by: ringPathInset)
@@ -432,7 +439,7 @@ private struct DeviceBatteryRing: View {
                 .inset(by: ringPathInset)
                 .trim(from: 0, to: progressSpan)
                 .stroke(
-                    batteryTint(for: item),
+                    batteryTint(for: item, theme: theme),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
                 )
         }
@@ -466,8 +473,12 @@ private struct DeviceBatteryRing: View {
 }
 
 private struct DeviceBatteryDivider: View {
+    @Environment(\.pluginComponentTheme) private var theme
+
     var body: some View {
-        Divider()
+        Rectangle()
+            .fill(theme.surfaces.track)
+            .frame(height: 1)
             .padding(.leading, DeviceBatteryLayout.horizontalPadding + DeviceBatteryLayout.rowIconWidth + 10)
             .padding(.trailing, DeviceBatteryLayout.horizontalPadding)
     }
@@ -476,11 +487,12 @@ private struct DeviceBatteryDivider: View {
 private struct DeviceBatteryOverflowRow: View {
     let count: Int
     let localization: PluginLocalization
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         Text(localization.format("overflow.moreDevices", defaultValue: "还有 %d 台设备", count))
             .font(.caption2.weight(.medium))
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(theme.text.tertiary)
             .frame(maxWidth: .infinity)
             .frame(height: DeviceBatteryLayout.overflowHeight)
     }
@@ -493,19 +505,20 @@ private struct DeviceBatteryNativeRow: View {
     var compact = false
     var prominent = false
     var localization: PluginLocalization = PluginLocalization(bundle: .main)
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         HStack(spacing: compact ? 8 : 10) {
             Image(systemName: deviceSymbolName(for: item))
                 .font(.system(size: iconSize, weight: .regular))
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(Color.primary.opacity(iconOpacity))
+                .foregroundStyle(theme.text.secondary.opacity(iconOpacity / 0.64))
                 .frame(width: DeviceBatteryLayout.rowIconWidth, height: rowHeight)
 
             VStack(alignment: .leading, spacing: showsDetail ? 2 : 0) {
                 Text(item.name)
                     .font(titleFont)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(theme.text.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .minimumScaleFactor(0.72)
@@ -513,7 +526,7 @@ private struct DeviceBatteryNativeRow: View {
                 if showsDetail {
                     Text(deviceDetailText(for: item, localization: localization))
                         .font(.caption2.weight(.medium))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(theme.text.tertiary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .minimumScaleFactor(0.7)
@@ -524,7 +537,11 @@ private struct DeviceBatteryNativeRow: View {
 
             Text(DeviceBatteryFormatter.percent(item.clampedLevel))
                 .font(percentFont)
-                .foregroundStyle(item.clampedLevel ?? 100 <= 10 ? Color(nsColor: .systemRed) : .primary)
+                .foregroundStyle(
+                    item.clampedLevel ?? 100 <= 10
+                        ? theme.status.critical
+                        : theme.text.primary
+                )
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -568,16 +585,17 @@ private struct DeviceBatteryNativeRow: View {
 
 private struct DeviceBatterySystemBattery: View {
     let item: DeviceBatteryItem
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         HStack(spacing: 1) {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 1.9, style: .continuous)
-                    .stroke(Color.primary.opacity(0.30), lineWidth: 0.85)
+                    .stroke(theme.text.tertiary.opacity(0.72), lineWidth: 0.85)
                     .frame(width: 18, height: 8.2)
 
                 RoundedRectangle(cornerRadius: 1.2, style: .continuous)
-                    .fill(batteryTint(for: item))
+                    .fill(batteryTint(for: item, theme: theme))
                     .frame(width: fillWidth, height: 4.8)
                     .padding(.leading, 1.9)
                     .opacity(item.clampedLevel == nil ? 0.18 : 0.82)
@@ -586,13 +604,13 @@ private struct DeviceBatterySystemBattery: View {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 5.1, weight: .black))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(theme.surfaces.backplate)
                         .frame(width: 18, height: 8.2)
                 }
             }
 
             RoundedRectangle(cornerRadius: 0.8, style: .continuous)
-                .fill(Color.primary.opacity(0.30))
+                .fill(theme.text.tertiary.opacity(0.72))
                 .frame(width: 1.3, height: 3.6)
         }
         .accessibilityLabel(DeviceBatteryFormatter.percent(item.clampedLevel))
@@ -607,26 +625,26 @@ private struct DeviceBatterySystemBattery: View {
     }
 }
 
-private func batteryTint(for item: DeviceBatteryItem?) -> Color {
+private func batteryTint(for item: DeviceBatteryItem?, theme: PluginComponentTheme) -> Color {
     guard let item else {
-        return Color(nsColor: .systemGreen)
+        return theme.status.success
     }
 
     if item.chargeState == .charging || item.chargeState == .charged {
-        return Color(nsColor: .systemGreen)
+        return theme.status.success
     }
 
     guard let level = item.clampedLevel else {
-        return Color(nsColor: .systemBlue)
+        return theme.status.informational
     }
 
     if level <= 20 {
-        return Color(nsColor: .systemRed)
+        return theme.status.critical
     }
     if level <= 35 {
-        return Color(nsColor: .systemOrange)
+        return theme.status.warning
     }
-    return Color(nsColor: .systemGreen)
+    return theme.status.success
 }
 
 private func chargingSymbolName(for item: DeviceBatteryItem) -> String? {

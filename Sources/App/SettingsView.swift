@@ -21,6 +21,7 @@ struct SettingsView: View {
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
+    @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
     let appearanceUserDefaults: UserDefaults
     @StateObject private var uninstallConfirmationSession = PluginUninstallConfirmationSession()
     var showDashboard: () -> Void = {}
@@ -41,6 +42,7 @@ struct SettingsView: View {
                     menuBarIconSettings: menuBarIconSettings,
                     menuBarIconGallery: menuBarIconGallery,
                     launchAtLoginController: launchAtLoginController,
+                    menuBarPanelThemeStore: menuBarPanelThemeStore,
                     appearanceUserDefaults: appearanceUserDefaults
                 )
                     .tag(SettingsDestination.general)
@@ -265,6 +267,7 @@ struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
+    @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
     private let appearanceUserDefaults: UserDefaults
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage(AppLanguagePreference.userDefaultsKey) private var languagePreferenceRawValue = AppLanguagePreference.system.rawValue
@@ -278,6 +281,7 @@ struct GeneralSettingsView: View {
         menuBarIconSettings: MenuBarIconSettings,
         menuBarIconGallery: MenuBarIconGalleryLibrary,
         launchAtLoginController: LaunchAtLoginController,
+        menuBarPanelThemeStore: MenuBarPanelThemeStore = .shared,
         appearanceUserDefaults: UserDefaults
     ) {
         self.pluginHost = pluginHost
@@ -285,6 +289,7 @@ struct GeneralSettingsView: View {
         self.menuBarIconSettings = menuBarIconSettings
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
+        self.menuBarPanelThemeStore = menuBarPanelThemeStore
         self.appearanceUserDefaults = appearanceUserDefaults
         _appearancePreferenceRawValue = AppStorage(
             wrappedValue: AppAppearancePreference.system.rawValue,
@@ -316,6 +321,11 @@ struct GeneralSettingsView: View {
                             activeTarget: activeSearchTarget
                         )
                         .settingsGroupedFormRowWidth(widths.sectionLayout)
+                    MenuBarPanelThemeSettingsRow(
+                        themeStore: menuBarPanelThemeStore,
+                        appearancePreference: appearancePreferenceBinding.wrappedValue
+                    )
+                    .settingsGroupedFormRowWidth(widths.sectionLayout)
                     LanguageSettingsRow(selection: languagePreferenceBinding)
                         .generalSettingsSearchAnchor(
                             target: .language,

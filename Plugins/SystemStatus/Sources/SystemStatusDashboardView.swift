@@ -120,8 +120,8 @@ struct SystemStatusDashboardView: View {
         return SystemStatusHUDValueTile(
             eyebrow: "CPU",
             glyph: "cpu",
-            accent: SystemStatusHUDPalette.green,
-            chartColor: SystemStatusHUDPalette.green,
+            accent: theme.dataSeries.tertiary,
+            chartColor: theme.dataSeries.tertiary,
             value: value.value,
             unit: value.unit,
             chip: temperatureChip(snapshot.cpu.temperatureCelsius),
@@ -138,8 +138,8 @@ struct SystemStatusDashboardView: View {
         return SystemStatusHUDValueTile(
             eyebrow: "GPU",
             glyph: "cpu.fill",
-            accent: SystemStatusHUDPalette.gpu,
-            chartColor: SystemStatusHUDPalette.gpu,
+            accent: theme.dataSeries.secondary,
+            chartColor: theme.dataSeries.secondary,
             value: value.value,
             unit: value.unit,
             chip: temperatureChip(snapshot.gpu.temperatureCelsius),
@@ -154,8 +154,8 @@ struct SystemStatusDashboardView: View {
         return SystemStatusHUDValueTile(
             eyebrow: SystemStatusMetricKind.memory.title(localization: localization),
             glyph: "memorychip",
-            accent: SystemStatusHUDPalette.amber,
-            chartColor: SystemStatusHUDPalette.amber,
+            accent: theme.dataSeries.senary,
+            chartColor: theme.dataSeries.senary,
             value: value.value,
             unit: value.unit,
             chip: memoryChip,
@@ -177,8 +177,8 @@ struct SystemStatusDashboardView: View {
             writeText: SystemStatusFormatter.speed(snapshot.disk.writeBytesPerSecond),
             readValues: diskReadHistory(history),
             writeValues: diskWriteHistory(history),
-            readColor: SystemStatusHUDPalette.diskRead,
-            writeColor: SystemStatusHUDPalette.diskWrite
+            readColor: theme.dataSeries.primary,
+            writeColor: theme.dataSeries.quaternary
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
@@ -197,7 +197,7 @@ struct SystemStatusDashboardView: View {
         return SystemStatusHUDMetricTile(
             title: SystemStatusMetricKind.network.title(localization: localization),
             glyph: "network",
-            accent: SystemStatusHUDPalette.network,
+            accent: theme.dataSeries.quinary,
             value: rate.value,
             unit: rate.unit,
             chip: networkChip,
@@ -206,18 +206,18 @@ struct SystemStatusDashboardView: View {
                 SystemStatusHUDRateFooter(
                     firstLabel: "↓",
                     firstText: SystemStatusFormatter.speed(snapshot.network.downloadBytesPerSecond),
-                    firstColor: SystemStatusHUDPalette.networkDownload,
+                    firstColor: theme.dataSeries.primary,
                     secondLabel: "↑",
                     secondText: SystemStatusFormatter.speed(snapshot.network.uploadBytesPerSecond),
-                    secondColor: SystemStatusHUDPalette.networkUpload
+                    secondColor: theme.dataSeries.secondary
                 )
             }
         ) {
             SystemStatusHUDRateChart(
                 firstValues: networkDownloadHistory(history),
                 secondValues: networkUploadHistory(history),
-                firstColor: SystemStatusHUDPalette.networkDownload,
-                secondColor: SystemStatusHUDPalette.networkUpload
+                firstColor: theme.dataSeries.primary,
+                secondColor: theme.dataSeries.secondary
             )
         }
         .accessibilityElement(children: .combine)
@@ -458,19 +458,19 @@ struct SystemStatusDashboardView: View {
         }
 
         if snapshot.battery.state == .charging || snapshot.battery.state == .charged || snapshot.battery.state == .acPower {
-            return SystemStatusHUDPalette.green
+            return theme.status.success
         }
 
         let level = snapshot.battery.level ?? 0
         if level < 0.15 {
-            return SystemStatusHUDPalette.red
+            return theme.status.critical
         }
 
         if level < 0.35 {
-            return SystemStatusHUDPalette.gold
+            return theme.status.warning
         }
 
-        return SystemStatusHUDPalette.amber
+        return theme.status.success
     }
 
     private func temperatureChip(_ temperature: Double?) -> (text: String, color: Color)? {
@@ -1164,7 +1164,9 @@ private struct SystemStatusHUDMiniChart: View {
                 )
             }
         }
-        .fill(color.opacity(0.85))
+        // The bar itself carries the history, so keep the resolved functional
+        // color opaque. Its theme token is guaranteed to contrast with the card.
+        .fill(color)
     }
 
     private func bounds() -> (low: Double, high: Double) {
@@ -1316,26 +1318,10 @@ private struct SystemStatusHUDRateChart: View {
                         path.addLine(to: point)
                     }
                 }
-                .stroke(color, style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round))
+                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
             }
         }
     }
-}
-
-private enum SystemStatusHUDPalette {
-    static let green = Color(nsColor: .systemGreen)
-    static let gold = Color(nsColor: .systemYellow)
-    static let amber = Color(nsColor: .systemOrange)
-    static let orange = Color(nsColor: .systemOrange)
-    static let blue = Color(nsColor: .systemBlue)
-    static let red = Color(nsColor: .systemRed)
-
-    static let gpu = Color(red: 0.949, green: 0.537, blue: 0.306)
-    static let network = Color(red: 0.180, green: 0.690, blue: 0.659)
-    static let networkDownload = Color(red: 0.204, green: 0.596, blue: 0.859)
-    static let networkUpload = Color(red: 0.941, green: 0.467, blue: 0.294)
-    static let diskRead = Color(red: 0.275, green: 0.588, blue: 0.941)
-    static let diskWrite = Color(red: 0.608, green: 0.431, blue: 0.902)
 }
 
 private enum SystemStatusHUDFont {

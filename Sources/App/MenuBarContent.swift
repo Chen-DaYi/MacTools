@@ -317,11 +317,8 @@ private enum FeatureRowLayout {
 
 private enum MenuBarHoverStyle {
     static let cornerRadius: CGFloat = MenuBarPanelLayout.cornerRadius
-    static let fill = Color.primary.opacity(0.06)
     static let inset: CGFloat = 1
     static let navigationCornerRadius: CGFloat = 8
-    static let navigationFill = Color.primary.opacity(0.10)
-    static let navigationSelectedFill = Color.primary.opacity(0.13)
 }
 
 @MainActor
@@ -547,6 +544,7 @@ struct MenuBarContent: View {
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
     @StateObject private var deferredActionDispatcher = DeferredPanelActionDispatcher()
+    @Environment(\.menuBarPanelTheme) private var theme
 
     @ObservedObject var pluginHost: PluginHost
     let contentBodyHeight: CGFloat
@@ -591,6 +589,9 @@ struct MenuBarContent: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)) { _ in
             secondaryPanelController.applyCurrentAppearance()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: MenuBarPanelThemeStore.didChangeNotification)) { _ in
+            syncSecondaryPanelWindowIfVisible()
         }
         .onChange(of: isPanelVisible) { _, isVisible in
             if isVisible {
@@ -876,6 +877,7 @@ struct MenuBarContent: View {
         secondaryPanelController.show(
             panel: activeSecondaryPanel.panel,
             anchorRect: anchorRect,
+            theme: theme,
             onSelectionChange: { controlID, optionID in
                 pluginHost.setPanelSelectionValue(
                     optionID,
@@ -1224,6 +1226,7 @@ struct FeatureRowView: View {
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.menuBarPanelTheme) private var theme
     @State private var isHovered = false
     @State private var didPushDisabledCursor = false
     @State private var inlineCopyFeedback = FeatureRowInlineCopyFeedbackState()
@@ -1249,11 +1252,11 @@ struct FeatureRowView: View {
                 HStack(alignment: .center, spacing: FeatureRowLayout.rowSpacing) {
                     ZStack {
                         RoundedRectangle(cornerRadius: FeatureRowLayout.iconCornerRadius, style: .continuous)
-                            .fill(Color.primary.opacity(0.08))
+                            .fill(theme.surfaces.control)
 
                         Image(systemName: item.iconName)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
                     }
                     .frame(width: FeatureRowLayout.iconSize, height: FeatureRowLayout.iconSize)
 
@@ -1270,14 +1273,18 @@ struct FeatureRowView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(actionButtonMinimumScale)
                             .allowsTightening(true)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(
+                                item.isEnabled ? theme.text.onAccent : theme.text.disabled
+                            )
                             .padding(.horizontal, FeatureRowLayout.actionButtonHorizontalPadding)
                             .frame(
                                 width: FeatureRowLayout.actionButtonWidth,
                                 height: FeatureRowLayout.actionButtonHeight
                             )
                             .background(
-                                item.isEnabled ? Color.accentColor : Color(NSColor.secondaryLabelColor),
+                                item.isEnabled
+                                    ? theme.prominentControlFill
+                                    : theme.surfaces.control,
                                 in: Capsule()
                             )
                     }
@@ -1313,7 +1320,7 @@ struct FeatureRowView: View {
         .background(alignment: .center) {
             RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous)
                 .inset(by: MenuBarHoverStyle.inset)
-                .fill(item.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+                .fill(item.isEnabled && isHovered ? theme.surfaces.hover : Color.clear)
         }
         .contentShape(RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous))
         .onHover { hovering in
@@ -1349,11 +1356,11 @@ struct FeatureRowView: View {
         HStack(alignment: .center, spacing: FeatureRowLayout.rowSpacing) {
             ZStack {
                 RoundedRectangle(cornerRadius: FeatureRowLayout.iconCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(0.08))
+                    .fill(theme.surfaces.control)
 
                 Image(systemName: item.iconName)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
             }
             .frame(width: FeatureRowLayout.iconSize, height: FeatureRowLayout.iconSize)
 
@@ -1371,12 +1378,12 @@ struct FeatureRowView: View {
             case .disclosure:
                 Image(systemName: item.isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
                     .frame(width: FeatureRowLayout.chevronSize, height: FeatureRowLayout.chevronSize)
             case .button:
                 Image(systemName: "arrow.up.right.square")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
                     .frame(width: FeatureRowLayout.chevronSize, height: FeatureRowLayout.chevronSize)
             }
         }
@@ -1426,6 +1433,7 @@ struct FeatureRowView: View {
             HStack(spacing: 5) {
                 Text(item.title)
                     .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(item.isEnabled ? theme.text.primary : theme.text.disabled)
                     .lineLimit(1)
                     .layoutPriority(1)
 
@@ -1447,11 +1455,11 @@ struct FeatureRowView: View {
     private func primaryPanelIndicator(_ indicator: PluginPrimaryPanelIndicator) -> some View {
         Label(indicator.text, systemImage: indicator.systemImage)
             .font(.system(size: 8.5, weight: .semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
             .lineLimit(1)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(Color.primary.opacity(0.07), in: Capsule())
+            .background(theme.surfaces.control, in: Capsule())
             .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -1468,14 +1476,14 @@ struct FeatureRowView: View {
                 .lineLimit(1)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(Color.primary.opacity(0.07), in: Capsule())
+                .background(theme.surfaces.control, in: Capsule())
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(icon.accessibilityLabel)
                 .help(icon.accessibilityLabel)
             }
         }
         .font(.system(size: 8.5, weight: .semibold))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(item.isEnabled ? theme.text.secondary : theme.text.disabled)
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -1504,7 +1512,11 @@ struct FeatureRowView: View {
     private var descriptionText: some View {
         Text(item.description)
             .font(.system(size: 10.5, weight: .medium))
-            .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
+            .foregroundStyle(
+                item.isEnabled
+                    ? (item.descriptionTone == .error ? theme.status.critical : theme.text.secondary)
+                    : theme.text.disabled
+            )
             .lineLimit(1)
             .truncationMode(.tail)
             .help(item.helpText)
@@ -1666,11 +1678,12 @@ private struct IPOverviewInlineValueText: View {
     let copiedText: String
     let isCopied: Bool
     let onCopy: () -> Void
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         Text(value.text)
             .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-            .foregroundStyle(value.isEnabled ? .secondary : .tertiary)
+            .foregroundStyle(value.isEnabled ? theme.text.secondary : theme.text.disabled)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
             .allowsTightening(true)
@@ -1694,6 +1707,7 @@ private struct FeatureRowDoubleClickCopyModifier: ViewModifier {
     let accessibilityLabel: String
     let accessibilityHint: String
     let onCopy: () -> Void
+    @Environment(\.menuBarPanelTheme) private var theme
 
     func body(content: Content) -> some View {
         FeatureRowCopyFeedbackLayout {
@@ -1702,7 +1716,7 @@ private struct FeatureRowDoubleClickCopyModifier: ViewModifier {
 
             Text(copiedText)
                 .font(.system(size: FeatureRowLayout.copyFeedbackFontSize, weight: .semibold))
-                .foregroundStyle(.green)
+                .foregroundStyle(theme.status.success)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .opacity(isCopied ? 1 : 0)
@@ -1977,19 +1991,20 @@ private struct SwitchRowControl: View {
     let onChange: (Bool) -> Bool
 
     @State private var isHovered = false
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         HStack(spacing: 8) {
             if let iconName = control.actionIconSystemName {
                 Image(systemName: iconName)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(control.isEnabled ? theme.text.secondary : theme.text.disabled)
                     .frame(width: 14, height: 14)
             }
 
             Text(control.actionTitle ?? control.sectionTitle ?? "")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(control.isEnabled ? theme.text.primary : theme.text.disabled)
                 .lineLimit(1)
 
             Spacer()
@@ -2008,7 +2023,7 @@ private struct SwitchRowControl: View {
         .background(alignment: .center) {
             RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
                 .inset(by: MenuBarHoverStyle.inset)
-                .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+                .fill(control.isEnabled && isHovered ? theme.surfaces.hover : Color.clear)
         }
         .onHover { isHovered = $0 }
     }
@@ -2025,13 +2040,14 @@ private struct ActionRowControl: View {
     let onInvoke: () -> Void
 
     @State private var isHovered = false
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let sectionTitle = control.sectionTitle, !sectionTitle.isEmpty {
                 Text(sectionTitle)
                     .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(control.isEnabled ? theme.text.secondary : theme.text.disabled)
                     .lineLimit(2)
                     .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
             }
@@ -2048,7 +2064,7 @@ private struct ActionRowControl: View {
 
                     Text(control.actionTitle ?? "")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(control.isEnabled ? theme.text.primary : theme.text.disabled)
                         .lineLimit(1)
 
                     Spacer()
@@ -2060,7 +2076,7 @@ private struct ActionRowControl: View {
                 .background(alignment: .center) {
                     RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
                         .inset(by: MenuBarHoverStyle.inset)
-                        .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+                        .fill(control.isEnabled && isHovered ? theme.surfaces.hover : Color.clear)
                 }
             }
             .buttonStyle(.plain)
@@ -2071,17 +2087,21 @@ private struct ActionRowControl: View {
     }
 
     private var actionIconTint: Color {
-        switch control.actionIconSystemName {
+        guard control.isEnabled else {
+            return theme.text.disabled
+        }
+
+        return switch control.actionIconSystemName {
         case "checkmark.circle.fill":
-            .green
+            theme.status.success
         case "arrow.triangle.2.circlepath.circle.fill", "checkmark.circle":
-            .blue
+            theme.status.informational
         case "exclamationmark.circle.fill":
-            .red
+            theme.status.critical
         case "questionmark.circle":
-            .orange
+            theme.status.warning
         default:
-            .secondary
+            theme.text.secondary
         }
     }
 }
@@ -2089,13 +2109,14 @@ private struct ActionRowControl: View {
 private struct SelectListControl: View {
     let control: PluginPanelControl
     let onSelect: (String) -> Void
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if let title = control.sectionTitle {
                 Text(title)
                     .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(control.isEnabled ? theme.text.secondary : theme.text.disabled)
                     .padding(.leading, 5)
                     .padding(.bottom, 1)
             }
@@ -2122,6 +2143,7 @@ private struct SelectListRow: View {
     let action: () -> Void
 
     @State private var isHovered = false
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         Button {
@@ -2134,12 +2156,13 @@ private struct SelectListRow: View {
             HStack(spacing: 7) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(isEnabled ? theme.accent : theme.text.disabled)
                     .opacity(isSelected ? 1 : 0)
                     .frame(width: 12)
 
                 Text(title)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isEnabled ? theme.text.primary : theme.text.disabled)
 
                 Spacer()
             }
@@ -2149,7 +2172,7 @@ private struct SelectListRow: View {
             .background(alignment: .center) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .inset(by: MenuBarHoverStyle.inset)
-                    .fill(isInteractive && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+                    .fill(isInteractive && isHovered ? theme.surfaces.hover : Color.clear)
             }
         }
         .buttonStyle(.plain)
@@ -2167,13 +2190,14 @@ private struct NavigationListControl: View {
     let onSelect: (String) -> Void
     let onHoverChange: (String, Bool) -> Void
     let onRowFrameChange: (String, CGRect?) -> Void
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: MenuBarPanelLayout.navigationSectionTitleSpacing) {
             if let sectionTitle = control.sectionTitle {
                 Text(sectionTitle)
                     .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(control.isEnabled ? theme.text.secondary : theme.text.disabled)
                     .padding(.leading, FeatureRowLayout.detailControlHorizontalPadding + 5)
             }
 
@@ -2202,13 +2226,13 @@ private struct NavigationListControl: View {
     private var navigationIconTint: Color {
         switch control.actionIconSystemName {
         case "checkmark.circle.fill":
-            .green
+            theme.status.success
         case "arrow.triangle.2.circlepath.circle.fill", "checkmark.circle":
-            .blue
+            theme.status.informational
         case "exclamationmark.circle.fill":
-            .red
+            theme.status.critical
         default:
-            .secondary
+            theme.text.secondary
         }
     }
 }
@@ -2225,6 +2249,7 @@ private struct NavigationListRow: View {
     let onRowFrameChange: (CGRect?) -> Void
 
     @State private var isHovered = false
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         Button {
@@ -2238,7 +2263,7 @@ private struct NavigationListRow: View {
                 if let leadingIconSystemName {
                     Image(systemName: leadingIconSystemName)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(leadingIconTint)
+                        .foregroundStyle(isEnabled ? leadingIconTint : theme.text.disabled)
                         .frame(width: 16)
                         .accessibilityHidden(true)
                 }
@@ -2246,12 +2271,12 @@ private struct NavigationListRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(isEnabled ? theme.text.primary : theme.text.disabled)
 
                     if let subtitle {
                         Text(subtitle)
                             .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(isEnabled ? theme.text.secondary : theme.text.disabled)
                     }
                 }
 
@@ -2259,7 +2284,7 @@ private struct NavigationListRow: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isEnabled ? theme.text.secondary : theme.text.disabled)
                     .opacity(isSelected ? 1 : (isHovered ? 0.55 : 0.35))
             }
             .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
@@ -2299,11 +2324,11 @@ private struct NavigationListRow: View {
 
     private var backgroundFill: Color {
         if isSelected {
-            return MenuBarHoverStyle.navigationSelectedFill
+            return theme.surfaces.selected
         }
 
         if isHovered && isEnabled {
-            return MenuBarHoverStyle.navigationFill
+            return theme.surfaces.navigationHover
         }
 
         return .clear
@@ -2317,6 +2342,7 @@ private struct SliderControl: View {
     @State private var localValue = 0.0
     @State private var isEditing = false
     @State private var isHovered = false
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -2325,7 +2351,7 @@ private struct SliderControl: View {
                     if let title = control.sectionTitle, !title.isEmpty {
                         Text(title)
                             .font(.system(size: 12.5, weight: .semibold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(control.isEnabled ? theme.text.primary : theme.text.disabled)
                             .lineLimit(1)
                     }
 
@@ -2334,7 +2360,7 @@ private struct SliderControl: View {
                     if let valueLabel = control.valueLabel {
                         Text(valueLabel)
                             .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(control.isEnabled ? theme.text.secondary : theme.text.disabled)
                     }
                 }
             }
@@ -2362,7 +2388,7 @@ private struct SliderControl: View {
                 )
                 .labelsHidden()
                 .disabled(!control.isEnabled)
-                .tint(Color(nsColor: .controlAccentColor))
+                .tint(theme.accent)
                 .accessibilityLabel(control.sectionTitle ?? AppL10n.plugins(
                     "plugin.panel.displayBrightnessFallback",
                     defaultValue: "显示器亮度"
@@ -2375,7 +2401,7 @@ private struct SliderControl: View {
         .background(alignment: .center) {
             RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
                 .inset(by: MenuBarHoverStyle.inset)
-                .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+                .fill(control.isEnabled && isHovered ? theme.surfaces.hover : Color.clear)
         }
         .contentShape(RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous))
         .onHover { isHovered = $0 }
@@ -2394,7 +2420,7 @@ private struct SliderControl: View {
     private func brightnessGlyph(systemName: String, size: CGFloat) -> some View {
         Image(systemName: systemName)
             .font(.system(size: size, weight: .medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(control.isEnabled ? theme.text.secondary : theme.text.disabled)
             .frame(width: size + 6, alignment: .center)
             .accessibilityHidden(true)
     }
@@ -2428,6 +2454,7 @@ private struct SecondarySlidingPanel: View {
     let onDateChange: (String, Date) -> Void
     let onHoverChange: (Bool) -> Void
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -2449,7 +2476,7 @@ private struct SecondarySlidingPanel: View {
 
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(theme.text.primary)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
@@ -2475,10 +2502,7 @@ private struct SecondarySlidingPanel: View {
         .padding(MenuBarPanelLayout.outerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            ZStack {
-                PopoverMaterialBackground()
-                MenuBarPanelBackground()
-            }
+            MenuBarPanelBackground()
         }
         .clipShape(
             RoundedRectangle(
@@ -2499,24 +2523,6 @@ private struct SecondarySlidingPanel: View {
 private final class SecondaryPanelWindow: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
-}
-
-private struct PopoverMaterialBackground: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        configure(view)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        configure(nsView)
-    }
-
-    private func configure(_ view: NSVisualEffectView) {
-        view.material = .popover
-        view.blendingMode = .behindWindow
-        view.state = .active
-    }
 }
 
 @MainActor
@@ -2565,6 +2571,7 @@ private final class SecondaryPanelController: ObservableObject {
     func show(
         panel: PluginPanelSecondaryPanel,
         anchorRect: CGRect,
+        theme: MenuBarPanelThemeStyle,
         onSelectionChange: @escaping (String, String) -> Void,
         onNavigationSelectionChange: @escaping (String, String) -> Void,
         onDateChange: @escaping (String, Date) -> Void,
@@ -2594,6 +2601,10 @@ private final class SecondaryPanelController: ObservableObject {
                 onSliderChange: onSliderChange
             )
             .frame(width: MenuBarPanelLayout.secondaryPanelWidth)
+            .foregroundStyle(theme.text.primary)
+            .tint(theme.accent)
+            .environment(\.menuBarPanelTheme, theme)
+            .environment(\.pluginComponentTheme, theme.componentTheme)
         )
 
         let panelWindow = panelWindow ?? makePanel()

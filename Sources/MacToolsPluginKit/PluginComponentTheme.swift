@@ -3,8 +3,9 @@ import SwiftUI
 
 /// Semantic colors shared by component-panel plugins.
 ///
-/// The theme owns neutral UI scaffolding only. Data-series colors, brand colors,
-/// calendar event colors, and feature-specific thresholds remain plugin concerns.
+/// The theme owns neutral UI scaffolding and a categorical data palette.
+/// Brand colors, calendar event colors, and feature-specific thresholds remain
+/// plugin concerns so a theme never changes their meaning.
 public struct PluginComponentTheme: Sendable {
     public struct SurfacePalette: Sendable {
         public let panel: Color
@@ -78,6 +79,31 @@ public struct PluginComponentTheme: Sendable {
         }
     }
 
+    public struct DataSeriesPalette: Sendable {
+        public let primary: Color
+        public let secondary: Color
+        public let tertiary: Color
+        public let quaternary: Color
+        public let quinary: Color
+        public let senary: Color
+
+        public init(
+            primary: Color,
+            secondary: Color,
+            tertiary: Color,
+            quaternary: Color,
+            quinary: Color,
+            senary: Color
+        ) {
+            self.primary = primary
+            self.secondary = secondary
+            self.tertiary = tertiary
+            self.quaternary = quaternary
+            self.quinary = quinary
+            self.senary = senary
+        }
+    }
+
     public struct InteractionPalette: Sendable {
         public let selectionOpacity: Double
         public let emphasisOpacity: Double
@@ -109,17 +135,20 @@ public struct PluginComponentTheme: Sendable {
     public let surfaces: SurfacePalette
     public let text: TextPalette
     public let status: StatusPalette
+    public let dataSeries: DataSeriesPalette
     public let interaction: InteractionPalette
 
     public init(
         surfaces: SurfacePalette,
         text: TextPalette,
         status: StatusPalette,
+        dataSeries: DataSeriesPalette,
         interaction: InteractionPalette
     ) {
         self.surfaces = surfaces
         self.text = text
         self.status = status
+        self.dataSeries = dataSeries
         self.interaction = interaction
     }
 
@@ -323,6 +352,14 @@ public struct PluginComponentTheme: Sendable {
                 warning: Color(nsColor: .systemOrange),
                 critical: Color(nsColor: .systemRed),
                 informational: Color(nsColor: .systemBlue)
+            ),
+            dataSeries: DataSeriesPalette(
+                primary: Color(nsColor: .systemBlue),
+                secondary: Color(nsColor: .systemOrange),
+                tertiary: Color(nsColor: .systemGreen),
+                quaternary: Color(nsColor: .systemPurple),
+                quinary: Color(nsColor: .systemTeal),
+                senary: Color(nsColor: .systemYellow)
             ),
             interaction: InteractionPalette(
                 selectionOpacity: resolveInteractionOpacity(

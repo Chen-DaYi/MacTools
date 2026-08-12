@@ -93,18 +93,17 @@ private enum ActivityBarFunFact {
 
 struct ActivityBarComponentView: View {
     private static let claudeColor = Color(red: 0xCB / 255.0, green: 0x64 / 255.0, blue: 0x41 / 255.0)
-    private static let cursorColor = Color.primary
     private static let codexColor = Color(red: 0x10 / 255.0, green: 0xA3 / 255.0, blue: 0x7F / 255.0)
     static let visibleCodingTools: [ActivityBarCodingTool] = [.claudeCode, .cursor, .codex]
 
-    private static func codingToolColor(_ tool: ActivityBarCodingTool) -> Color {
+    private func codingToolColor(_ tool: ActivityBarCodingTool) -> Color {
         switch tool {
         case .claudeCode:
-            return claudeColor
+            return Self.claudeColor
         case .cursor:
-            return cursorColor
+            return theme.text.primary
         case .codex:
-            return codexColor
+            return Self.codexColor
         }
     }
 
@@ -245,7 +244,7 @@ struct ActivityBarComponentView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.primary.opacity(canGoBack ? 0.55 : 0.2))
+                        .foregroundStyle(canGoBack ? theme.text.secondary : theme.text.disabled)
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -254,7 +253,7 @@ struct ActivityBarComponentView: View {
 
                 Text(displayDateString)
                     .font(.body)
-                    .foregroundStyle(.primary.opacity(0.55))
+                    .foregroundStyle(theme.text.secondary)
                     .lineLimit(1)
 
                 Button {
@@ -265,7 +264,7 @@ struct ActivityBarComponentView: View {
                 } label: {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.primary.opacity(isViewingToday ? 0.2 : 0.55))
+                        .foregroundStyle(isViewingToday ? theme.text.disabled : theme.text.secondary)
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -319,7 +318,7 @@ struct ActivityBarComponentView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        theme.interaction.subtleTint(.blue),
+                        theme.interaction.subtleTint(theme.dataSeries.primary),
                         in: RoundedRectangle(
                             cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
                             style: .continuous
@@ -333,13 +332,15 @@ struct ActivityBarComponentView: View {
         .padding(.vertical, 10)
     }
 
-    private func statCell(icon: String, value: String, label: String, tint: Color = .blue) -> some View {
-        HStack(spacing: 8) {
+    private func statCell(icon: String, value: String, label: String, tint: Color? = nil) -> some View {
+        let resolvedTint = tint ?? theme.dataSeries.primary
+
+        return HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(resolvedTint)
                 .frame(width: 26, height: 26)
-                .background(tint, in: Circle())
+                .background(theme.interaction.selection(resolvedTint), in: Circle())
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(value)
@@ -429,9 +430,9 @@ struct ActivityBarComponentView: View {
         HStack(spacing: 8) {
             Image(systemName: row.systemImage)
                 .font(.system(size: row.iconSize, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(row.tint)
                 .frame(width: 26, height: 26)
-                .background(row.tint, in: Circle())
+                .background(theme.interaction.selection(row.tint), in: Circle())
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.name)
@@ -479,7 +480,7 @@ struct ActivityBarComponentView: View {
             HStack(spacing: 6) {
                 Image(systemName: aboveAvg ? "arrow.up.right" : "arrow.down.right")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(aboveAvg ? .green : .primary.opacity(0.45))
+                    .foregroundStyle(aboveAvg ? theme.status.success : theme.text.tertiary)
 
                 if pct == 0 {
                     Text(
@@ -490,7 +491,7 @@ struct ActivityBarComponentView: View {
                         )
                     )
                         .font(.caption)
-                        .foregroundStyle(.primary.opacity(0.55))
+                        .foregroundStyle(theme.text.secondary)
                 } else {
                     let comparison = aboveAvg
                         ? localization.format(
@@ -507,7 +508,7 @@ struct ActivityBarComponentView: View {
                         )
                     Text(comparison)
                         .font(.caption)
-                        .foregroundStyle(.primary.opacity(0.55))
+                        .foregroundStyle(theme.text.secondary)
                 }
             }
             .padding(.horizontal, 22)
@@ -545,7 +546,7 @@ struct ActivityBarComponentView: View {
                         : localization.string("component.topApps.enableTracking", defaultValue: "Turn on tracking to rank your apps")
                 )
                     .font(.subheadline)
-                    .foregroundStyle(.primary.opacity(0.55))
+                    .foregroundStyle(theme.text.secondary)
                     .padding(.vertical, 4)
                     .padding(.horizontal, 6)
             } else {
@@ -576,7 +577,7 @@ struct ActivityBarComponentView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.primary.opacity(0.55))
+                        .foregroundStyle(theme.text.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
 
                     Text(name)
@@ -587,7 +588,7 @@ struct ActivityBarComponentView: View {
 
                     Text(ActivityBarFormatting.duration(stats.screenTimeSeconds))
                         .font(.body.monospacedDigit())
-                        .foregroundStyle(.primary.opacity(0.55))
+                        .foregroundStyle(theme.text.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
@@ -598,7 +599,7 @@ struct ActivityBarComponentView: View {
             GeometryReader { geo in
                 let ratio = CGFloat(stats.screenTimeSeconds) / CGFloat(Swift.max(maxScreenTime, 1))
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(.blue.opacity(0.25))
+                    .fill(theme.interaction.selection(theme.dataSeries.primary))
                     .frame(width: geo.size.width * ratio, height: 3)
             }
             .frame(height: 3)
@@ -622,11 +623,11 @@ struct ActivityBarComponentView: View {
         HStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.system(size: 9))
-                .foregroundStyle(.primary.opacity(0.55))
+                .foregroundStyle(theme.text.secondary)
 
             Text(value)
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(.primary.opacity(0.55))
+                .foregroundStyle(theme.text.secondary)
                 .lineLimit(1)
         }
     }
@@ -642,7 +643,7 @@ struct ActivityBarComponentView: View {
 
                     Image(systemName: "chevron.right")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary.opacity(0.55))
+                        .foregroundStyle(theme.text.secondary)
                         .rotationEffect(.degrees(statsExpanded ? 90 : 0))
                 }
                 .contentShape(Rectangle())
@@ -661,7 +662,7 @@ struct ActivityBarComponentView: View {
                     } label: {
                         Text(mode.label(localization: localization))
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(.primary.opacity(trendMode == mode ? 1 : 0.35))
+                            .foregroundStyle(trendMode == mode ? theme.text.primary : theme.text.tertiary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -692,7 +693,7 @@ struct ActivityBarComponentView: View {
                 rangePickerBar
                 Spacer(minLength: 8)
                 ForEach(Self.visibleCodingTools, id: \.rawValue) { tool in
-                    legendDot(color: Self.codingToolColor(tool), label: Self.codingToolLegendLabel(tool))
+                    legendDot(color: codingToolColor(tool), label: Self.codingToolLegendLabel(tool))
                 }
             }
             .padding(.horizontal, 6)
@@ -719,26 +720,26 @@ struct ActivityBarComponentView: View {
                         // if/else-if produced _ConditionalContent). The annotation body is a plain
                         // View, so its `if isHovered` is fine.
                         RuleMark(x: .value("Date", d))
-                            .foregroundStyle(.gray.opacity(isHovered ? 0.3 : 0))
+                            .foregroundStyle(theme.text.tertiary.opacity(isHovered ? 0.45 : 0))
                             .lineStyle(StrokeStyle(dash: [4, 4]))
                             .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                                 if isHovered {
                                     VStack(spacing: 2) {
                                         Text(shortDate(day.date))
                                             .font(.system(size: 9))
-                                            .foregroundStyle(.primary.opacity(0.55))
+                                            .foregroundStyle(theme.text.secondary)
                                         HStack(spacing: 6) {
                                             ForEach(Self.visibleCodingTools, id: \.rawValue) { tool in
                                                 let minutes = toolStats(tool, in: day).durationSeconds / 60
                                                 Text(shortDuration(minutes * 60))
-                                                    .foregroundStyle(Self.codingToolColor(tool))
+                                                    .foregroundStyle(codingToolColor(tool))
                                             }
                                         }
                                         .font(.system(size: 10).bold().monospacedDigit())
                                     }
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 3)
-                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                                    .background(theme.surfaces.backplate, in: RoundedRectangle(cornerRadius: 4))
                                     .offset(y: 30)
                                 }
                             }
@@ -748,7 +749,7 @@ struct ActivityBarComponentView: View {
                             chartPoint(
                                 x: d,
                                 y: minutes,
-                                color: Self.codingToolColor(tool),
+                                color: codingToolColor(tool),
                                 size: hoverPointSize(isHovered: isHovered, compactMode: compactMode)
                             )
                         }
@@ -756,7 +757,7 @@ struct ActivityBarComponentView: View {
                 }
                 .chartForegroundStyleScale([
                     "Claude": Self.claudeColor,
-                    "Cursor": Self.cursorColor,
+                    "Cursor": codingToolColor(.cursor),
                     "Codex": Self.codexColor,
                 ])
                 .chartLegend(.hidden)
@@ -765,10 +766,12 @@ struct ActivityBarComponentView: View {
                     if hasData {
                         AxisMarks(position: .leading) { value in
                             AxisGridLine()
+                                .foregroundStyle(theme.surfaces.track)
                             AxisValueLabel {
                                 if let minutes = value.as(Double.self) {
                                     Text(talkAxisLabel(minutes))
                                         .font(.system(size: 9))
+                                        .foregroundStyle(theme.text.tertiary)
                                 }
                             }
                         }
@@ -780,6 +783,7 @@ struct ActivityBarComponentView: View {
                             if let label = value.as(String.self), !compactMode || shouldShowXLabel(label, in: dateLabels) {
                                 Text(label)
                                     .font(.system(size: 9))
+                                    .foregroundStyle(theme.text.tertiary)
                             }
                         }
                     }
@@ -816,9 +820,9 @@ struct ActivityBarComponentView: View {
             HStack {
                 rangePickerBar
                 Spacer(minLength: 8)
-                legendDot(color: .blue, label: localization.string("component.legend.keys", defaultValue: "Keys"))
-                legendDot(color: .orange, label: localization.string("component.legend.clicks", defaultValue: "Clicks"))
-                legendDot(color: .green, label: localization.string("component.legend.scrolls", defaultValue: "Scrolls"))
+                legendDot(color: theme.dataSeries.primary, label: localization.string("component.legend.keys", defaultValue: "Keys"))
+                legendDot(color: theme.dataSeries.secondary, label: localization.string("component.legend.clicks", defaultValue: "Clicks"))
+                legendDot(color: theme.dataSeries.tertiary, label: localization.string("component.legend.scrolls", defaultValue: "Scrolls"))
             }
             .padding(.horizontal, 6)
 
@@ -840,37 +844,37 @@ struct ActivityBarComponentView: View {
                             .interpolationMethod(.catmullRom)
 
                         RuleMark(x: .value("Date", d))
-                            .foregroundStyle(.gray.opacity(isHovered ? 0.3 : 0))
+                            .foregroundStyle(theme.text.tertiary.opacity(isHovered ? 0.45 : 0))
                             .lineStyle(StrokeStyle(dash: [4, 4]))
                             .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                                 if isHovered {
                                     VStack(spacing: 2) {
                                         Text(shortDate(day.date))
                                             .font(.system(size: 9))
-                                            .foregroundStyle(.primary.opacity(0.55))
+                                            .foregroundStyle(theme.text.secondary)
                                         HStack(spacing: 6) {
-                                            Text("\(day.keystrokes)").foregroundStyle(.blue)
-                                            Text("\(day.pointerClicks)").foregroundStyle(.orange)
-                                            Text("\(day.scrollEvents)").foregroundStyle(.green)
+                                            Text("\(day.keystrokes)").foregroundStyle(theme.dataSeries.primary)
+                                            Text("\(day.pointerClicks)").foregroundStyle(theme.dataSeries.secondary)
+                                            Text("\(day.scrollEvents)").foregroundStyle(theme.dataSeries.tertiary)
                                         }
                                         .font(.system(size: 10).bold().monospacedDigit())
                                     }
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 3)
-                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                                    .background(theme.surfaces.backplate, in: RoundedRectangle(cornerRadius: 4))
                                     .offset(y: 30)
                                 }
                             }
 
-                        chartPoint(x: d, y: Double(day.keystrokes), color: .blue, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
-                        chartPoint(x: d, y: Double(day.pointerClicks), color: .orange, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
-                        chartPoint(x: d, y: Double(day.scrollEvents), color: .green, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
+                        chartPoint(x: d, y: Double(day.keystrokes), color: theme.dataSeries.primary, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
+                        chartPoint(x: d, y: Double(day.pointerClicks), color: theme.dataSeries.secondary, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
+                        chartPoint(x: d, y: Double(day.scrollEvents), color: theme.dataSeries.tertiary, size: hoverPointSize(isHovered: isHovered, compactMode: compactMode))
                     }
                 }
                 .chartForegroundStyleScale([
-                    "Keystrokes": Color.blue,
-                    "Clicks": Color.orange,
-                    "Scrolls": Color.green,
+                    "Keystrokes": theme.dataSeries.primary,
+                    "Clicks": theme.dataSeries.secondary,
+                    "Scrolls": theme.dataSeries.tertiary,
                 ])
                 .chartLegend(.hidden)
                 .chartYScale(domain: 0...yUpperBound)
@@ -878,10 +882,12 @@ struct ActivityBarComponentView: View {
                     if hasData {
                         AxisMarks(position: .leading) { value in
                             AxisGridLine()
+                                .foregroundStyle(theme.surfaces.track)
                             AxisValueLabel {
                                 if let count = value.as(Double.self) {
                                     Text(ActivityBarFormatting.count(Int(count)))
                                         .font(.system(size: 9))
+                                        .foregroundStyle(theme.text.tertiary)
                                 }
                             }
                         }
@@ -893,6 +899,7 @@ struct ActivityBarComponentView: View {
                             if let label = value.as(String.self), !compactMode || shouldShowXLabel(label, in: dateLabels) {
                                 Text(label)
                                     .font(.system(size: 9))
+                                    .foregroundStyle(theme.text.tertiary)
                             }
                         }
                     }
@@ -930,16 +937,16 @@ struct ActivityBarComponentView: View {
                         x: .value("Date", d),
                         y: .value("Duration", day.screenTimeSeconds / 60)
                     )
-                    .foregroundStyle(isHovered ? .blue.opacity(0.7) : .blue.opacity(0.4))
+                    .foregroundStyle(theme.dataSeries.primary)
                     .cornerRadius(2)
                     .annotation(position: .top, spacing: 2) {
                         if isHovered, day.screenTimeSeconds > 0 {
                             Text(shortDuration(day.screenTimeSeconds))
                                 .font(.system(size: 9).bold().monospacedDigit())
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(theme.text.primary)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                                .background(theme.surfaces.backplate, in: RoundedRectangle(cornerRadius: 4))
                         }
                     }
                 }
@@ -947,10 +954,12 @@ struct ActivityBarComponentView: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine()
+                        .foregroundStyle(theme.surfaces.track)
                     AxisValueLabel {
                         if let minutes = value.as(Double.self) {
                             Text(talkAxisLabel(minutes))
                                 .font(.system(size: 9))
+                                .foregroundStyle(theme.text.tertiary)
                         }
                     }
                 }
@@ -958,10 +967,12 @@ struct ActivityBarComponentView: View {
             .chartXAxis {
                 AxisMarks(values: .automatic) { value in
                     AxisGridLine()
+                        .foregroundStyle(theme.surfaces.track)
                     AxisValueLabel {
                         if let label = value.as(String.self), !compactMode || shouldShowXLabel(label, in: labels) {
                             Text(label)
                                 .font(.system(size: 9))
+                                .foregroundStyle(theme.text.tertiary)
                         }
                     }
                 }
@@ -989,9 +1000,9 @@ struct ActivityBarComponentView: View {
                         .font(.caption.weight(.medium))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 4)
-                        .foregroundStyle(chartRange == range ? .white : .primary.opacity(0.55))
+                        .foregroundStyle(chartRange == range ? theme.text.primary : theme.text.secondary)
                         .background(
-                            chartRange == range ? Color.blue : Color.clear,
+                            chartRange == range ? theme.surfaces.controlHover : Color.clear,
                             in: RoundedRectangle(cornerRadius: 5, style: .continuous)
                         )
                 }
@@ -1008,7 +1019,7 @@ struct ActivityBarComponentView: View {
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.primary.opacity(0.55))
+                .foregroundStyle(theme.text.secondary)
                 .lineLimit(1)
         }
     }
@@ -1016,7 +1027,7 @@ struct ActivityBarComponentView: View {
     private func emptyChartMessage(_ text: String) -> some View {
         Text(text)
             .font(.caption)
-            .foregroundStyle(.primary.opacity(0.4))
+            .foregroundStyle(theme.text.tertiary)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
@@ -1081,7 +1092,7 @@ struct ActivityBarComponentView: View {
             } label: {
                 Text(hookActionTitle)
                     .font(.subheadline)
-                    .foregroundStyle(.primary.opacity(0.55))
+                    .foregroundStyle(theme.text.secondary)
             }
             .buttonStyle(.plain)
 
@@ -1090,7 +1101,7 @@ struct ActivityBarComponentView: View {
             } label: {
                 Text(localization.string("component.footer.permissions", defaultValue: "Permissions"))
                     .font(.subheadline)
-                    .foregroundStyle(.primary.opacity(0.55))
+                    .foregroundStyle(theme.text.secondary)
             }
             .buttonStyle(.plain)
 
@@ -1099,7 +1110,7 @@ struct ActivityBarComponentView: View {
             Button(action: dismiss) {
                 Text(localization.string("component.footer.close", defaultValue: "Close"))
                     .font(.subheadline)
-                    .foregroundStyle(.primary.opacity(0.55))
+                    .foregroundStyle(theme.text.secondary)
             }
             .buttonStyle(.plain)
         }
@@ -1108,7 +1119,9 @@ struct ActivityBarComponentView: View {
     }
 
     private var divider: some View {
-        Divider()
+        Rectangle()
+            .fill(theme.surfaces.track)
+            .frame(height: 1)
             .padding(.horizontal, 12)
     }
 
@@ -1166,7 +1179,7 @@ struct ActivityBarComponentView: View {
                 name: tool.rawValue,
                 duration: stats.durationSeconds,
                 detail: codingDetailText(for: stats),
-                tint: Self.cursorColor,
+                tint: codingToolColor(.cursor),
                 systemImage: "cube.fill",
                 iconSize: 13
             )
