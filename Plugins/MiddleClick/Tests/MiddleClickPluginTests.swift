@@ -40,6 +40,16 @@ private final class MockMiddleClickSession: MiddleClickSessionManaging {
     }
 }
 
+private final class MiddleClickLifetimeOwner {
+    let onDeinit: () -> Void
+
+    init(onDeinit: @escaping () -> Void) {
+        self.onDeinit = onDeinit
+    }
+
+    deinit { onDeinit() }
+}
+
 @MainActor
 final class MiddleClickPluginTests: XCTestCase {
     func testThreeFingerTapRecognizesAfterAllContactsRelease() {
@@ -409,6 +419,40 @@ final class MiddleClickPluginTests: XCTestCase {
 
     func testRuntimeResolvesRequiredMultitouchSymbolsDynamically() {
         XCTAssertNotNil(MiddleClickMultitouchRuntime.load())
+    }
+
+    func testDeviceCollectionRetainsCreateOwnedListForListenerLifetime() {
+        var didReleaseOwner = false
+        var owner: MiddleClickLifetimeOwner? = MiddleClickLifetimeOwner {
+            didReleaseOwner = true
+        }
+        var collection: MiddleClickMultitouchDeviceCollection? =
+            MiddleClickMultitouchDeviceCollection(devices: [], lifetimeOwner: owner)
+
+        owner = nil
+        XCTAssertFalse(didReleaseOwner)
+
+        collection = nil
+        XCTAssertNil(collection)
+        XCTAssertTrue(didReleaseOwner)
+    }
+
+    func testRemovedCallbackContextCannotReachReplacementGeneration() {
+        let oldGate = MiddleClickFrameCallbackGate()
+        let oldPointer = MiddleClickCallbackContextRegistry.shared.insert(oldGate)
+        XCTAssertTrue(MiddleClickCallbackContextRegistry.shared.gate(for: oldPointer) === oldGate)
+
+        MiddleClickCallbackContextRegistry.shared.remove(oldPointer)
+        let replacementGate = MiddleClickFrameCallbackGate()
+        let replacementPointer = MiddleClickCallbackContextRegistry.shared.insert(replacementGate)
+        defer { MiddleClickCallbackContextRegistry.shared.remove(replacementPointer) }
+
+        XCTAssertNotEqual(oldPointer, replacementPointer)
+        XCTAssertNil(MiddleClickCallbackContextRegistry.shared.gate(for: oldPointer))
+        XCTAssertTrue(
+            MiddleClickCallbackContextRegistry.shared.gate(for: replacementPointer)
+                === replacementGate
+        )
     }
 
     private func makePlugin(

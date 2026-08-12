@@ -5,6 +5,25 @@ import XCTest
 
 @MainActor
 final class AutomationControllerTests: XCTestCase {
+    func testActionPickerAccessibilityExposesUnavailableReason() {
+        XCTAssertEqual(
+            WorkflowActionPickerAccessibility(availability: .available).value,
+            FeatureL10n.string("可用")
+        )
+        XCTAssertEqual(
+            WorkflowActionPickerAccessibility(
+                availability: .unavailable("需要辅助功能权限。")
+            ).value,
+            "需要辅助功能权限。"
+        )
+        XCTAssertEqual(
+            WorkflowActionPickerAccessibility(
+                availability: ActionAvailability(isAvailable: false)
+            ).value,
+            FeatureL10n.string("不可用")
+        )
+    }
+
     func testRuleSummariesUseCompleteMessagesAcrossLocales() {
         let originalPreference = UserDefaults.standard.string(
             forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey

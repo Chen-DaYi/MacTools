@@ -4,6 +4,29 @@ import XCTest
 
 @MainActor
 final class ActionGridStoreTests: XCTestCase {
+    func testKeyboardMoveCommandsRespectGridBoundaries() {
+        let first = ActionGridEntryMoveAvailability(
+            slot: 0,
+            maximumEntryCount: ActionGridStore.maximumEntryCount
+        )
+        XCTAssertFalse(first.canMoveUp)
+        XCTAssertTrue(first.canMoveDown)
+
+        let middle = ActionGridEntryMoveAvailability(
+            slot: 4,
+            maximumEntryCount: ActionGridStore.maximumEntryCount
+        )
+        XCTAssertTrue(middle.canMoveUp)
+        XCTAssertTrue(middle.canMoveDown)
+
+        let last = ActionGridEntryMoveAvailability(
+            slot: ActionGridStore.maximumEntryCount - 1,
+            maximumEntryCount: ActionGridStore.maximumEntryCount
+        )
+        XCTAssertTrue(last.canMoveUp)
+        XCTAssertFalse(last.canMoveDown)
+    }
+
     func testDragPayloadRoundTripsOnlyNamespacedEntryIdentifiers() {
         let entryID = UUID()
 

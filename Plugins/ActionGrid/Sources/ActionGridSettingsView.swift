@@ -15,6 +15,39 @@ enum ActionGridDragPayload {
     }
 }
 
+struct ActionGridEntryMoveAvailability: Equatable {
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+
+    init(slot: Int, maximumEntryCount: Int) {
+        canMoveUp = slot > 0
+        canMoveDown = slot < maximumEntryCount - 1
+    }
+}
+
+private struct ActionGridKeyboardMoveModifier: ViewModifier {
+    let availability: ActionGridEntryMoveAvailability
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onKeyPress(phases: .down) { press in
+                guard press.modifiers == [.command, .option] else { return .ignored }
+                switch press.key {
+                case .upArrow where availability.canMoveUp:
+                    moveUp()
+                    return .handled
+                case .downArrow where availability.canMoveDown:
+                    moveDown()
+                    return .handled
+                default:
+                    return .ignored
+                }
+            }
+    }
+}
+
 struct ActionGridSettingsView: View {
     let plugin: ActionGridPlugin
     @ObservedObject var store: ActionGridStore
@@ -80,7 +113,7 @@ struct ActionGridSettingsView: View {
                     Button {
                         folderPath.removeLast()
                     } label: {
-                        Label(plugin.localized("返回"), systemImage: "chevron.left")
+                        Label(plugin.localized("返回"), systemImage: "chevron.backward")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -146,6 +179,10 @@ struct ActionGridSettingsView: View {
     }
 
     private func entryCell(_ entry: ActionGridEntry, index: Int) -> some View {
+        let moveAvailability = ActionGridEntryMoveAvailability(
+            slot: index,
+            maximumEntryCount: ActionGridStore.maximumEntryCount
+        )
         let item = entry.folder == nil ? plugin.item(for: entry.reference) : nil
         let title = entry.customTitle
             ?? item?.title
@@ -202,7 +239,25 @@ struct ActionGridSettingsView: View {
             updateDropTarget(index: index, isTargeted: isTargeted)
         }
         .animation(.easeOut(duration: 0.14), value: dropTargetSlot)
+        .modifier(ActionGridKeyboardMoveModifier(
+            availability: moveAvailability,
+            moveUp: { moveEntry(at: index, offset: -1) },
+            moveDown: { moveEntry(at: index, offset: 1) }
+        ))
         .contextMenu {
+            Button(plugin.localized("上移")) {
+                moveEntry(at: index, offset: -1)
+            }
+            .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+            .disabled(!moveAvailability.canMoveUp)
+
+            Button(plugin.localized("下移")) {
+                moveEntry(at: index, offset: 1)
+            }
+            .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+            .disabled(!moveAvailability.canMoveDown)
+
+            Divider()
             if entry.folder != nil {
                 Button(plugin.localized("重命名")) {
                     presentEditor(.folder(ActionGridFolderEditorRequest(entryID: entry.id)))

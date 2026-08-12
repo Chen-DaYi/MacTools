@@ -18,11 +18,17 @@ protocol MiddleClickSessionManaging: AnyObject {
 
 final class MiddleClickMultitouchRuntime: @unchecked Sendable {
     typealias CreateDeviceListFunction = @convention(c) () -> Unmanaged<CFMutableArray>?
-    typealias RegisterCallbackFunction = @convention(c) (MTDevice, MTFrameCallbackFunction) -> Bool
-    typealias UnregisterCallbackFunction = @convention(c) (MTDevice, MTFrameCallbackFunction) -> Bool
+    typealias RegisterCallbackFunction = @convention(c) (
+        MTDevice,
+        MTFrameCallbackWithRefconFunction,
+        UnsafeMutableRawPointer?
+    ) -> Void
+    typealias UnregisterCallbackFunction = @convention(c) (
+        MTDevice,
+        MTFrameCallbackWithRefconFunction
+    ) -> Void
     typealias StartDeviceFunction = @convention(c) (MTDevice, Int32) -> Void
     typealias StopDeviceFunction = @convention(c) (MTDevice) -> Void
-    typealias ReleaseDeviceFunction = @convention(c) (MTDevice) -> Void
 
     private static let frameworkPath =
         "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
@@ -33,7 +39,6 @@ final class MiddleClickMultitouchRuntime: @unchecked Sendable {
     private let unregisterCallbackFunction: UnregisterCallbackFunction
     private let startDeviceFunction: StartDeviceFunction
     private let stopDeviceFunction: StopDeviceFunction
-    private let releaseDeviceFunction: ReleaseDeviceFunction
 
     static func load() -> MiddleClickMultitouchRuntime? {
         guard let handle = dlopen(frameworkPath, RTLD_LAZY | RTLD_LOCAL) else { return nil }
@@ -42,14 +47,13 @@ final class MiddleClickMultitouchRuntime: @unchecked Sendable {
                 "MTDeviceCreateList", from: handle
             ),
             let registerCallback: RegisterCallbackFunction = loadSymbol(
-                "MTRegisterContactFrameCallback", from: handle
+                "MTRegisterContactFrameCallbackWithRefcon", from: handle
             ),
             let unregisterCallback: UnregisterCallbackFunction = loadSymbol(
                 "MTUnregisterContactFrameCallback", from: handle
             ),
             let startDevice: StartDeviceFunction = loadSymbol("MTDeviceStart", from: handle),
-            let stopDevice: StopDeviceFunction = loadSymbol("MTDeviceStop", from: handle),
-            let releaseDevice: ReleaseDeviceFunction = loadSymbol("MTDeviceRelease", from: handle)
+            let stopDevice: StopDeviceFunction = loadSymbol("MTDeviceStop", from: handle)
         else {
             dlclose(handle)
             return nil
@@ -60,8 +64,7 @@ final class MiddleClickMultitouchRuntime: @unchecked Sendable {
             registerCallbackFunction: registerCallback,
             unregisterCallbackFunction: unregisterCallback,
             startDeviceFunction: startDevice,
-            stopDeviceFunction: stopDevice,
-            releaseDeviceFunction: releaseDevice
+            stopDeviceFunction: stopDevice
         )
     }
 
@@ -79,8 +82,7 @@ final class MiddleClickMultitouchRuntime: @unchecked Sendable {
         registerCallbackFunction: RegisterCallbackFunction,
         unregisterCallbackFunction: UnregisterCallbackFunction,
         startDeviceFunction: StartDeviceFunction,
-        stopDeviceFunction: StopDeviceFunction,
-        releaseDeviceFunction: ReleaseDeviceFunction
+        stopDeviceFunction: StopDeviceFunction
     ) {
         self.libraryHandle = libraryHandle
         self.createDeviceListFunction = createDeviceListFunction
@@ -88,23 +90,32 @@ final class MiddleClickMultitouchRuntime: @unchecked Sendable {
         self.unregisterCallbackFunction = unregisterCallbackFunction
         self.startDeviceFunction = startDeviceFunction
         self.stopDeviceFunction = stopDeviceFunction
-        self.releaseDeviceFunction = releaseDeviceFunction
     }
 
     deinit {
         dlclose(libraryHandle)
     }
 
-    func createDeviceList() -> [MTDevice] {
-        createDeviceListFunction()?.takeUnretainedValue() as? [MTDevice] ?? []
+    func createDeviceCollection() -> MiddleClickMultitouchDeviceCollection? {
+        guard let retainedList = createDeviceListFunction()?.takeRetainedValue() else {
+            return nil
+        }
+        return MiddleClickMultitouchDeviceCollection(
+            devices: retainedList as? [MTDevice] ?? [],
+            lifetimeOwner: retainedList
+        )
     }
 
-    func register(_ device: MTDevice, callback: MTFrameCallbackFunction) {
-        _ = registerCallbackFunction(device, callback)
+    func register(
+        _ device: MTDevice,
+        callback: MTFrameCallbackWithRefconFunction,
+        refcon: UnsafeMutableRawPointer
+    ) {
+        registerCallbackFunction(device, callback, refcon)
     }
 
-    func unregister(_ device: MTDevice, callback: MTFrameCallbackFunction) {
-        _ = unregisterCallbackFunction(device, callback)
+    func unregister(_ device: MTDevice, callback: MTFrameCallbackWithRefconFunction) {
+        unregisterCallbackFunction(device, callback)
     }
 
     func start(_ device: MTDevice) {
@@ -115,8 +126,74 @@ final class MiddleClickMultitouchRuntime: @unchecked Sendable {
         stopDeviceFunction(device)
     }
 
-    func release(_ device: MTDevice) {
-        releaseDeviceFunction(device)
+}
+
+final class MiddleClickMultitouchDeviceCollection: @unchecked Sendable {
+    let devices: [MTDevice]
+    private let lifetimeOwner: AnyObject?
+
+    init(devices: [MTDevice], lifetimeOwner: AnyObject? = nil) {
+        self.devices = devices
+        self.lifetimeOwner = lifetimeOwner
+    }
+}
+
+final class MiddleClickFrameCallbackGate: @unchecked Sendable {
+    typealias Handler = @Sendable (MiddleClickContactFrame) -> Void
+
+    private let lock = NSLock()
+    private var handler: Handler?
+
+    func activate(_ handler: @escaping Handler) {
+        lock.withLock { self.handler = handler }
+    }
+
+    func invalidate() {
+        lock.withLock { handler = nil }
+    }
+
+    @discardableResult
+    func deliver(_ frame: MiddleClickContactFrame) -> Bool {
+        lock.withLock {
+            guard let handler else { return false }
+            handler(frame)
+            return true
+        }
+    }
+}
+
+final class MiddleClickCallbackContextRegistry: @unchecked Sendable {
+    static let shared = MiddleClickCallbackContextRegistry()
+
+    private let lock = NSLock()
+    private var nextToken: UInt = 1
+    private var gates: [UInt: MiddleClickFrameCallbackGate] = [:]
+
+    private init() {}
+
+    func insert(_ gate: MiddleClickFrameCallbackGate) -> UnsafeMutableRawPointer {
+        lock.withLock {
+            var token = nextToken
+            while token == 0 || gates[token] != nil {
+                token &+= 1
+            }
+            nextToken = token &+ 1
+            if nextToken == 0 {
+                nextToken = 1
+            }
+            gates[token] = gate
+            return UnsafeMutableRawPointer(bitPattern: token)!
+        }
+    }
+
+    func gate(for refcon: UnsafeMutableRawPointer?) -> MiddleClickFrameCallbackGate? {
+        guard let refcon else { return nil }
+        return lock.withLock { gates[UInt(bitPattern: refcon)] }
+    }
+
+    func remove(_ refcon: UnsafeMutableRawPointer?) {
+        guard let refcon else { return }
+        _ = lock.withLock { gates.removeValue(forKey: UInt(bitPattern: refcon)) }
     }
 }
 
@@ -178,7 +255,10 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
 
     // MARK: - Infrastructure
 
+    private var deviceCollection: MiddleClickMultitouchDeviceCollection?
     private var devices: [MTDevice] = []
+    private var touchCallbackGate: MiddleClickFrameCallbackGate?
+    private var touchCallbackContext: UnsafeMutableRawPointer?
     private var wakeObserver: NSObjectProtocol?
     private var ioNotificationPort: IONotificationPortRef?
     private var ioIterator: io_iterator_t = 0
@@ -196,7 +276,7 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     /// working" in testing. Users rarely need middle-click in the first few seconds after unlock.
     private static let wakeRestartDelay: TimeInterval = 10
 
-    // MARK: - Singleton Reference (for C callback access)
+    // MARK: - Singleton Reference
 
     nonisolated(unsafe) static weak var activeSession: MiddleClickSession?
 
@@ -210,9 +290,13 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     // current TrackpadGestures implementation. Stage values 3 and 4 are make-touch/touching;
     // hover, break-touch, and linger samples are not active fingers.
 
-    private let touchCallback: MTFrameCallbackFunction = { device, data, nFingers, timestamp, _ in
-        guard let session = MiddleClickSession.activeSession else { return }
-        guard nFingers >= 0 else { return }
+    private nonisolated static let touchCallback: MTFrameCallbackWithRefconFunction = {
+        device, data, nFingers, timestamp, _, refcon in
+        guard nFingers >= 0,
+              let callbackGate = MiddleClickCallbackContextRegistry.shared.gate(for: refcon)
+        else {
+            return
+        }
 
         let count = Int(nFingers)
         var contacts: [MiddleClickContactSnapshot] = []
@@ -235,9 +319,7 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
             timestamp: timestamp,
             contacts: contacts
         )
-        if session.tapPipeline.process(frame) {
-            MiddleClickEventPoster.postClick()
-        }
+        callbackGate.deliver(frame)
     }
 
     // MARK: - Multitouch Listeners
@@ -248,23 +330,46 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
             logger.error("MultitouchSupport is unavailable; middle click cannot start")
             return
         }
-        devices = multitouchRuntime.createDeviceList()
+        guard let collection = multitouchRuntime.createDeviceCollection() else {
+            logger.warning("no multitouch device collection available; waiting for IOKit notification or wake retry")
+            return
+        }
+        deviceCollection = collection
+        devices = collection.devices
         if devices.isEmpty {
             logger.warning("no multitouch devices detected; waiting for IOKit notification or wake retry")
         }
+        let tapPipeline = tapPipeline
+        let touchCallbackGate = MiddleClickFrameCallbackGate()
+        touchCallbackGate.activate { frame in
+            if tapPipeline.process(frame) {
+                MiddleClickEventPoster.postClick()
+            }
+        }
+        let callbackContext = MiddleClickCallbackContextRegistry.shared.insert(touchCallbackGate)
+        self.touchCallbackGate = touchCallbackGate
+        touchCallbackContext = callbackContext
         devices.forEach {
-            multitouchRuntime.register($0, callback: touchCallback)
+            multitouchRuntime.register(
+                $0,
+                callback: Self.touchCallback,
+                refcon: callbackContext
+            )
             multitouchRuntime.start($0)
         }
     }
 
     private func stopTouchListeners() {
+        touchCallbackGate?.invalidate()
+        MiddleClickCallbackContextRegistry.shared.remove(touchCallbackContext)
+        touchCallbackContext = nil
         devices.forEach {
-            multitouchRuntime?.unregister($0, callback: touchCallback)
+            multitouchRuntime?.unregister($0, callback: Self.touchCallback)
             multitouchRuntime?.stop($0)
-            multitouchRuntime?.release($0)
         }
         devices.removeAll()
+        deviceCollection = nil
+        touchCallbackGate = nil
         tapPipeline.reset()
     }
 

@@ -601,6 +601,16 @@ private struct WorkflowActionPickerGroup: Identifiable {
     var id: String { providerID }
 }
 
+struct WorkflowActionPickerAccessibility: Equatable {
+    let value: String
+
+    init(availability: ActionAvailability) {
+        value = availability.isAvailable
+            ? FeatureL10n.string("可用")
+            : (availability.reason ?? FeatureL10n.string("不可用"))
+    }
+}
+
 private struct WorkflowActionPicker: View {
     @ObservedObject var pluginHost: PluginHost
     let excluding: ActionKey
@@ -657,6 +667,9 @@ private struct WorkflowActionPicker: View {
                                     .foregroundStyle(.secondary)
 
                                 ForEach(group.items) { item in
+                                    let accessibility = WorkflowActionPickerAccessibility(
+                                        availability: item.availability
+                                    )
                                     Button {
                                         select(item.entry.reference)
                                         isPresented = false
@@ -677,6 +690,12 @@ private struct WorkflowActionPicker: View {
                                                         .foregroundStyle(.secondary)
                                                         .lineLimit(1)
                                                 }
+                                                if !item.availability.isAvailable {
+                                                    Text(item.availability.reason ?? FeatureL10n.string("不可用"))
+                                                        .font(PluginSettingsTheme.Typography.rowDescription)
+                                                        .foregroundStyle(.orange)
+                                                        .lineLimit(2)
+                                                }
                                             }
                                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -696,6 +715,7 @@ private struct WorkflowActionPicker: View {
                                     }
                                     .buttonStyle(.plain)
                                     .disabled(!item.availability.isAvailable)
+                                    .accessibilityValue(Text(accessibility.value))
                                     .accessibilityIdentifier(
                                         "mactools.automation.action-picker.\(item.entry.reference.key.id)"
                                     )

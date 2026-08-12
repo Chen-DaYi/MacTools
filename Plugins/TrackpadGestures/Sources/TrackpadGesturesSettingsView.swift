@@ -569,7 +569,7 @@ struct TrackpadGesturesSettingsView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Image(systemName: "chevron.right")
+                    Image(systemName: "chevron.forward")
                         .pluginSettingsRowIconStyle(.secondary)
                         .frame(
                             width: PluginSettingsTheme.Size.rowIcon,

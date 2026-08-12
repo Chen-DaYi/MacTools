@@ -1220,7 +1220,7 @@ private struct ActionGridOverlayView: View {
                     Button {
                         _ = model.navigateBack()
                     } label: {
-                        Label(FeatureL10n.string("返回"), systemImage: "chevron.left")
+                        Label(FeatureL10n.string("返回"), systemImage: "chevron.backward")
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.cancelAction)

@@ -113,6 +113,9 @@ final class HomebrewPluginTests: XCTestCase {
         XCTAssertEqual(plugin.actionDefinitions.map(\.externalInvocationPolicy), Array(repeating: .unavailable, count: 4))
         XCTAssertEqual(plugin.actionDefinitions.map(\.risk), [.safe, .confirmationRequired, .safe, .confirmationRequired])
         XCTAssertTrue(plugin.actionDefinitions.allSatisfy { $0.executionTimeoutSeconds == 7_200 })
+        XCTAssertTrue(plugin.actionDefinitions.allSatisfy {
+            $0.capabilities.contains(.reportsProgress)
+        })
 
         let doctor = try XCTUnwrap(plugin.actionDefinitions.first { $0.key.actionID == "doctor" })
         let handle = try plugin.beginAction(
