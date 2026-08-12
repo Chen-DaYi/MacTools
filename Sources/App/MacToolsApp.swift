@@ -26,6 +26,7 @@ struct MacToolsApp: App {
 final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private let instanceCoordinator: AppInstanceCoordinator
     private var launchDisposition: AppInstanceLaunchDisposition?
+    private var didFinishLaunching = false
     private var runtime: MacToolsAppRuntime?
     #if DEBUG
     private var showSettingsForTesting: (() -> Void)?
@@ -46,23 +47,46 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             self?.requestSettingsRecovery() ?? .notReady
         }
 
-        let disposition = instanceCoordinator.acquireOrForwardSettingsRequest()
-        launchDisposition = disposition
-
-        guard case .primary = disposition else {
-            NSApp.terminate(nil)
+        if instanceCoordinator.claimPrimaryPortIfPossible() {
+            launchDisposition = .primary(recoveryRequested: false)
             return
+        }
+
+        launchDisposition = .secondary(.timedOut)
+        Task { [weak self, instanceCoordinator] in
+            let disposition = await Task.detached {
+                instanceCoordinator.resolveSecondaryLaunch()
+            }.value
+            self?.completeSecondaryLaunch(disposition)
         }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        didFinishLaunching = true
         guard case let .primary(recoveryRequested) = launchDisposition else { return }
+        startRuntime(recoveryRequested: recoveryRequested)
+    }
 
+    private func startRuntime(recoveryRequested: Bool) {
+        guard runtime == nil else { return }
         let runtime = MacToolsAppRuntime()
         self.runtime = runtime
         runtime.start(notificationDelegate: self)
         if recoveryRequested {
             _ = requestSettingsRecovery()
+        }
+    }
+
+    private func completeSecondaryLaunch(_ disposition: AppInstanceLaunchDisposition) {
+        switch disposition {
+        case let .primary(recoveryRequested):
+            launchDisposition = disposition
+            if didFinishLaunching {
+                startRuntime(recoveryRequested: recoveryRequested)
+            }
+        case let .secondary(result):
+            AppLog.instanceCoordination.notice("Secondary instance terminating: \(String(describing: result), privacy: .public)")
+            NSApp.terminate(nil)
         }
     }
 

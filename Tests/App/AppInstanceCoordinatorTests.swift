@@ -44,11 +44,11 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         }
         defer { primary.invalidate() }
 
-        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary(recoveryRequested: false))
+        XCTAssertTrue(primary.claimPrimaryPortIfPossible())
 
         let secondary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
         XCTAssertEqual(
-            secondary.acquireOrForwardSettingsRequest(),
+            secondary.resolveSecondaryLaunch(),
             .secondary(.acknowledged)
         )
         XCTAssertEqual(receivedRequestCount, 1)
@@ -64,11 +64,11 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         }
         defer { primary.invalidate() }
 
-        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary(recoveryRequested: false))
+        XCTAssertTrue(primary.claimPrimaryPortIfPossible())
 
         let secondary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
         XCTAssertEqual(
-            secondary.acquireOrForwardSettingsRequest(),
+            secondary.resolveSecondaryLaunch(),
             .secondary(.acknowledged)
         )
         XCTAssertEqual(receivedRequestCount, 2)
@@ -78,11 +78,11 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         let bundleIdentifier = "com.example.mactools.instance-test.\(UUID().uuidString)"
         let primary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
 
-        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary(recoveryRequested: false))
+        XCTAssertTrue(primary.claimPrimaryPortIfPossible())
         primary.invalidate()
 
         let replacement = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
         defer { replacement.invalidate() }
-        XCTAssertEqual(replacement.acquireOrForwardSettingsRequest(), .primary(recoveryRequested: false))
+        XCTAssertTrue(replacement.claimPrimaryPortIfPossible())
     }
 }

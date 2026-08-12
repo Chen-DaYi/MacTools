@@ -41,7 +41,7 @@ struct AppInstanceCommand: Codable, Equatable {
     }
 }
 
-final class AppInstanceCoordinator {
+final class AppInstanceCoordinator: @unchecked Sendable {
     private static let messageID: Int32 = 1
     private static let sendTimeout: CFTimeInterval = 0.5
     private static let receiveTimeout: CFTimeInterval = 0.5
@@ -66,12 +66,16 @@ final class AppInstanceCoordinator {
         callbackBox.setHandler(handler)
     }
 
-    func acquireOrForwardSettingsRequest() -> AppInstanceLaunchDisposition {
+    func claimPrimaryPortIfPossible() -> Bool {
         if registerLocalPortIfPossible() {
             AppLog.instanceCoordination.debug("Elected primary instance")
-            return .primary(recoveryRequested: false)
+            return true
         }
 
+        return false
+    }
+
+    func resolveSecondaryLaunch() -> AppInstanceLaunchDisposition {
         let deadline = Date().addingTimeInterval(Self.forwardingTimeout)
         let command = AppInstanceCommand.showSettingsRequest()
         var lastResult: AppInstanceForwardingResult = .timedOut
@@ -161,15 +165,16 @@ final class AppInstanceCoordinator {
 
         let remainingTime = deadline.timeIntervalSinceNow
         guard remainingTime > 0 else { return .timedOut }
-        let timeout = min(Self.sendTimeout, remainingTime)
+        let sendTimeout = min(Self.sendTimeout, remainingTime / 2)
+        let receiveTimeout = min(Self.receiveTimeout, remainingTime - sendTimeout)
 
         var returnedData: Unmanaged<CFData>?
         let result = CFMessagePortSendRequest(
             remotePort,
             Self.messageID,
             data as CFData,
-            timeout,
-            min(Self.receiveTimeout, remainingTime),
+            sendTimeout,
+            receiveTimeout,
             CFRunLoopMode.defaultMode.rawValue,
             &returnedData
         )
@@ -223,9 +228,11 @@ private enum ForwardingAttempt {
 }
 
 private final class CallbackBox {
+    private static let acceptedRequestLifetime: TimeInterval = 30
+
     private let lock = NSLock()
     private var handler: (() -> AppInstanceResponse)?
-    private var acceptedRequestIdentifiers = Set<UUID>()
+    private var acceptedRequestDates = [UUID: Date]()
 
     func setHandler(_ handler: @escaping () -> AppInstanceResponse) {
         lock.lock()
@@ -250,14 +257,22 @@ private final class CallbackBox {
         lock.lock()
         defer { lock.unlock() }
 
-        if acceptedRequestIdentifiers.contains(command.requestID) {
+        let now = Date()
+        acceptedRequestDates = acceptedRequestDates.filter {
+            now.timeIntervalSince($0.value) < Self.acceptedRequestLifetime
+        }
+
+        if acceptedRequestDates[command.requestID] != nil {
+            AppLog.instanceCoordination.debug("Repeated settings recovery request accepted")
             return .accepted
         }
 
+        AppLog.instanceCoordination.debug("Received settings recovery request")
         let response = handler?() ?? .notReady
         if response == .accepted {
-            acceptedRequestIdentifiers.insert(command.requestID)
+            acceptedRequestDates[command.requestID] = now
         }
+        AppLog.instanceCoordination.debug("Settings recovery request response: \(response.rawValue, privacy: .public)")
         return response
     }
 }

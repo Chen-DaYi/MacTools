@@ -61,6 +61,7 @@ Source of truth: yes
 - 2026-08-12 — Verification: focused coordinator, delegate, and window-router tests passed; Debug and Release builds passed. Real QA used `open -n` on the Debug bundle: the secondary process terminated, one PID remained, and the existing Settings window was frontmost.
 - 2026-08-12 — Full suite: the instance-coordination change no longer terminates parallel XCTest hosts. The suite still fails in three existing `DiskCleanPluginTests` cases (`testCleanActionTitleReportsSelectionAndRemovalMode`, `testConfirmingPhaseReplacesCleanActionWithConfirmAndCancel`, and `testTrashCompletionSubtitleDoesNotClaimSpaceWasReclaimed`); direct rerun confirms they are outside this change.
 - 2026-08-12 — Review fixes: retries now reuse one request ID, per-attempt IPC timeouts are capped by the global deadline, and a process promoted after an invalid owner port presents Settings after its runtime starts. Multi-process certification and non-blocking launch coordination remain open Draft gates.
+- 2026-08-12 — Review fixes: secondary IPC forwarding now runs off the MainActor; its send and reply budgets share the remaining global deadline. Idempotence records expire after 30 seconds, and the coordinator logs command receipt, response, duplicate acknowledgement, and secondary termination. Multi-process certification remains an open Draft gate.
 
 ## Current files
 
