@@ -1168,11 +1168,20 @@ final class TrackpadGesturesPluginTests: XCTestCase {
             gesture: .fiveFingerLongTouch,
             action: .middleClick
         )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .fiveFingerDoubleTap,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .threeFingerDoubleTap,
+            action: .middleClick
+        )))
 
         XCTAssertEqual(
             Set(fixture.plugin.activeInputGestureClaims.map(\.id)),
-            ["trackpad.tap.3", "trackpad.tap.4"]
+            ["trackpad.tap.3", "trackpad.tap.4", "trackpad.tap.5"]
         )
+        XCTAssertEqual(fixture.plugin.activeInputGestureClaims.count, 3)
     }
 
     func testEnabledMappingExecutesEveryRepeatedRecognizedAction() {

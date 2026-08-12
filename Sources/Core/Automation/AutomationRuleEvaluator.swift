@@ -81,7 +81,7 @@ struct AutomationConditionEvaluation: Equatable, Sendable {
 }
 
 struct AutomationRuleEvaluator {
-    var calendar: Calendar = .current
+    var calendar: Calendar = .autoupdatingCurrent
 
     func triggerMatches(_ trigger: AutomationTrigger, event: AutomationTriggerEvent) -> Bool {
         switch (trigger, event) {

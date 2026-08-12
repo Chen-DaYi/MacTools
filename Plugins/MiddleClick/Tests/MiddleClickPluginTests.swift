@@ -306,6 +306,28 @@ final class MiddleClickPluginTests: XCTestCase {
         XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
     }
 
+    func testChangingToUnclaimedFingerCountRestartsConflictPausedSession() {
+        let storage = MiddleClickMemoryStorage()
+        let session = MockMiddleClickSession()
+        let plugin = makePlugin(storage: storage, session: session)
+        plugin.handleSettingsAction(.setBoolean(controlID: "enabled", value: true))
+        plugin.inputGestureConflictsDidChange([
+            PluginInputGestureConflict(
+                claim: PluginInputGestureClaim(id: "trackpad.tap.3", title: "Three-Finger Tap"),
+                ownerPluginID: "trackpad-gestures",
+                ownerPluginTitle: "Trackpad Gestures"
+            ),
+        ])
+
+        plugin.handleSettingsAction(.setSelection(controlID: "finger-count", optionID: "4"))
+
+        XCTAssertTrue(plugin.store.isEnabled)
+        XCTAssertEqual(session.activateCallCount, 2)
+        XCTAssertEqual(session.requiredFingerCount, 4)
+        XCTAssertNil(settingsRows(for: plugin).first?.error)
+        XCTAssertEqual(plugin.actionCatalogEntries.first?.presentationState, .active)
+    }
+
     func testDeniedPermissionKeepsFeatureOffAndRequestsGuidance() {
         let storage = MiddleClickMemoryStorage()
         let session = MockMiddleClickSession()

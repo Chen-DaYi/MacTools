@@ -119,23 +119,33 @@ final class SystemScheduleAutomationTriggerProvider: AutomationTriggerProviding 
 
     private let calendar: Calendar
     private let now: () -> Date
+    private let notificationCenter: NotificationCenter
     private var handler: (@MainActor (AutomationTriggerEvent) -> Void)?
     private var configurations: [ScheduleAutomationTrigger] = []
     private var timer: Timer?
+    private var clockObservers: [NSObjectProtocol] = []
 
-    init(calendar: Calendar = .autoupdatingCurrent, now: @escaping () -> Date = Date.init) {
+    init(
+        calendar: Calendar = .autoupdatingCurrent,
+        now: @escaping () -> Date = Date.init,
+        notificationCenter: NotificationCenter = .default
+    ) {
         self.calendar = calendar
         self.now = now
+        self.notificationCenter = notificationCenter
     }
 
     func start(handler: @escaping @MainActor (AutomationTriggerEvent) -> Void) {
         self.handler = handler
+        startClockObservers()
         reschedule()
     }
 
     func stop() {
         timer?.invalidate()
         timer = nil
+        clockObservers.forEach(notificationCenter.removeObserver)
+        clockObservers.removeAll()
         handler = nil
     }
 
@@ -191,6 +201,29 @@ final class SystemScheduleAutomationTriggerProvider: AutomationTriggerProviding 
         }
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func startClockObservers() {
+        guard clockObservers.isEmpty else { return }
+        let names: [Notification.Name] = [
+            .NSSystemClockDidChange,
+            .NSSystemTimeZoneDidChange,
+        ]
+        clockObservers = names.map { name in
+            notificationCenter.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.reschedule()
+                }
+            }
+        }
+    }
+
+    var scheduledFireDate: Date? {
+        timer?.fireDate
     }
 }
 

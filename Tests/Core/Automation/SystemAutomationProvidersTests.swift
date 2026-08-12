@@ -68,6 +68,50 @@ final class SystemAutomationProvidersTests: XCTestCase {
         XCTAssertGreaterThan(next, mondayMorning)
     }
 
+    @MainActor
+    func testScheduleReschedulesAfterSystemClockAndTimeZoneChanges() async throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let center = NotificationCenter()
+        var currentDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 8))
+        )
+        let provider = SystemScheduleAutomationTriggerProvider(
+            calendar: calendar,
+            now: { currentDate },
+            notificationCenter: center
+        )
+        provider.start { _ in }
+        provider.refresh(rules: [
+            AutomationRule(
+                workflowID: UUID(),
+                trigger: .schedule(ScheduleAutomationTrigger(
+                    hour: 9,
+                    minute: 0,
+                    weekdays: [1, 2, 3, 4, 5, 6, 7]
+                ))
+            ),
+        ])
+        let originalFireDate = try XCTUnwrap(provider.scheduledFireDate)
+        currentDate = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: currentDate))
+
+        center.post(name: .NSSystemClockDidChange, object: nil)
+        await Task.yield()
+
+        let clockAdjustedFireDate = try XCTUnwrap(provider.scheduledFireDate)
+        XCTAssertGreaterThan(clockAdjustedFireDate, originalFireDate)
+
+        currentDate = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: currentDate))
+        center.post(name: .NSSystemTimeZoneDidChange, object: nil)
+        await Task.yield()
+
+        XCTAssertGreaterThan(
+            try XCTUnwrap(provider.scheduledFireDate),
+            clockAdjustedFireDate
+        )
+        provider.stop()
+    }
+
     func testPowerTransitionsEmitSourceAndThresholdCrossingsOnlyOnce() {
         let date = Date(timeIntervalSince1970: 100)
         let events = SystemAutomationTransitions.powerEvents(

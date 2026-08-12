@@ -2,6 +2,10 @@ import XCTest
 @testable import MacTools
 
 final class AutomationRuleEvaluatorTests: XCTestCase {
+    func testDefaultEvaluatorUsesAutoupdatingCalendar() {
+        XCTAssertEqual(AutomationRuleEvaluator().calendar, .autoupdatingCurrent)
+    }
+
     func testAllSixTriggerKindsMatchOnlyTheirConfiguredEvents() throws {
         let (date, calendar) = try makeDate(hour: 9, minute: 30, weekday: 2)
         let evaluator = AutomationRuleEvaluator(calendar: calendar)

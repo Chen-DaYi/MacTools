@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGINS_ROOT = REPO_ROOT / "Plugins"
 LEGACY_V4_CATALOG = REPO_ROOT / "docs/plugins/v4/catalog.json"
 PLUGIN_RELEASE_WORKFLOW = REPO_ROOT / ".github/workflows/plugin-release.yml"
+ACTION_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/ActionModels.swift"
 NEW_API_MINIMUM_HOSTS = {
     # Canonical action registry, execution, discovery, and surface bridges.
     "ActionKey": "1.2.0",
@@ -19,7 +21,11 @@ NEW_API_MINIMUM_HOSTS = {
     "ActionReference": "1.2.0",
     "ActionCatalogEntry": "1.2.0",
     "ActionAvailability": "1.2.0",
+    "ActionRisk": "1.2.0",
+    "ActionExecutionCapabilities": "1.2.0",
+    "ActionConfirmation": "1.2.0",
     "ActionInvocation": "1.2.0",
+    "ActionExecutionResult": "1.2.0",
     "ActionExecutionHandle": "1.2.0",
     "PluginActionProviding": "1.2.0",
     "PluginActionExecutionRevisionProviding": "1.2.0",
@@ -50,6 +56,29 @@ NEW_API_MINIMUM_HOSTS = {
     "PluginProcessGroupLease": "1.2.0",
     "PluginSystemImage": "1.2.0",
 }
+
+
+def source_uses_symbol(source: str, symbol: str) -> bool:
+    return re.search(rf"(?<![A-Za-z0-9_]){re.escape(symbol)}(?![A-Za-z0-9_])", source) is not None
+
+
+def public_top_level_type_names(source: str) -> set[str]:
+    return set(re.findall(
+        r"^public\s+(?:final\s+)?(?:struct|enum|protocol|class|actor|typealias)\s+"
+        r"([A-Za-z_][A-Za-z0-9_]*)",
+        source,
+        flags=re.MULTILINE,
+    ))
+
+
+def minimum_host_violations(plugin_id: str, declared: str, source: str) -> list[str]:
+    return [
+        f"{plugin_id} uses {symbol} but declares "
+        f"minHostVersion {declared} (< {required})"
+        for symbol, required in NEW_API_MINIMUM_HOSTS.items()
+        if source_uses_symbol(source, symbol)
+        and version_tuple(declared) < version_tuple(required)
+    ]
 
 
 def version_tuple(value: str) -> tuple[int, ...]:
@@ -84,28 +113,43 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
                 for path in sorted((manifest_path.parent / "Sources").rglob("*.swift"))
             )
             declared = manifest.get("minHostVersion", "0")
-            for symbol, required in NEW_API_MINIMUM_HOSTS.items():
-                if symbol in source and version_tuple(declared) < version_tuple(required):
-                    violations.append(
-                        f"{manifest['id']} uses {symbol} but declares "
-                        f"minHostVersion {declared} (< {required})"
-                    )
+            violations += minimum_host_violations(manifest["id"], declared, source)
 
         self.assertEqual(violations, [], "\n".join(violations))
 
-    def test_new_api_inventory_covers_every_1_2_plugin_kit_type_used_by_plugins(self) -> None:
-        required_symbols = {
-            "PluginActionProviding",
-            "ActionGridHostContextConsuming",
-            "TrackpadActionHostContextConsuming",
-            "PluginPortablePreferencesRestorationReporting",
-            "PluginInputGestureClaimProviding",
-            "PluginPresentationSafety",
-            "PluginCallbackContext",
-            "PluginProcessGroupLease",
-            "PluginSystemImage",
+    def test_action_model_inventory_covers_every_public_type_used_by_plugins(self) -> None:
+        action_model_symbols = public_top_level_type_names(
+            ACTION_MODELS.read_text(encoding="utf-8")
+        )
+        plugin_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(PLUGINS_ROOT.glob("*/Sources/**/*.swift"))
+        )
+        used_symbols = {
+            symbol
+            for symbol in action_model_symbols
+            if source_uses_symbol(plugin_source, symbol)
         }
-        self.assertTrue(required_symbols <= NEW_API_MINIMUM_HOSTS.keys())
+        self.assertEqual(
+            used_symbols - NEW_API_MINIMUM_HOSTS.keys(),
+            set(),
+            "Public ActionModels types used by plugins must declare their minimum host",
+        )
+
+    def test_symbol_matching_rejects_legacy_consumer_without_substring_false_positive(self) -> None:
+        self.assertTrue(source_uses_symbol("let risk: ActionRisk = .safe", "ActionRisk"))
+        self.assertFalse(source_uses_symbol("struct MyActionRiskWrapper {}", "ActionRisk"))
+        self.assertEqual(
+            minimum_host_violations(
+                "synthetic-legacy-plugin",
+                "1.1.6",
+                "let risk: ActionRisk = .safe",
+            ),
+            [
+                "synthetic-legacy-plugin uses ActionRisk but declares "
+                "minHostVersion 1.1.6 (< 1.2.0)"
+            ],
+        )
 
 
 if __name__ == "__main__":

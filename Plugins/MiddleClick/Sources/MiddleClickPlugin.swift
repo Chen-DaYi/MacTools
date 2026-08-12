@@ -204,10 +204,7 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
     }
 
     func inputGestureConflictsDidChange(_ conflicts: [PluginInputGestureConflict]) {
-        let previousMessage = activeConflictMessage
         externalGestureConflicts = conflicts
-        let currentMessage = activeConflictMessage
-        guard previousMessage != currentMessage else { return }
         applyCurrentConfiguration()
     }
 
@@ -313,7 +310,7 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
             }
 
             store.setRequiredFingerCount(count)
-            session?.requiredFingerCount = store.requiredFingerCount
+            applyCurrentConfiguration()
             onStateChange?()
 
         default:
