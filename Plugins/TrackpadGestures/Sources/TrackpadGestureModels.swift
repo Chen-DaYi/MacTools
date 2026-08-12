@@ -102,6 +102,18 @@ enum TrackpadGesture: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The contact count that can also satisfy the standalone Middle Click plugin's
+    /// short-tap recognizer. Long touches are intentionally excluded because their
+    /// minimum duration is longer than Middle Click's maximum tap duration.
+    var middleClickOverlapFingerCount: Int? {
+        let count = fingerTapCount
+            ?? doubleFingerTapCount
+            ?? physicalClickFingerCount
+            ?? tipTapConfiguration.map { $0.fixedFingerCount + 1 }
+        guard let count, (3...5).contains(count) else { return nil }
+        return count
+    }
+
     static func fingerTap(count: Int) -> TrackpadGesture {
         switch count {
         case 4: .fourFingerTap

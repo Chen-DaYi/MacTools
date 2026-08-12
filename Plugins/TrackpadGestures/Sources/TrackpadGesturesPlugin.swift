@@ -64,14 +64,11 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     let store: TrackpadGestureStore
 
     var activeInputGestureClaims: [PluginInputGestureClaim] {
-        var claimedFingerCounts: Set<Int> = []
-        return store.mappings.compactMap { mapping -> PluginInputGestureClaim? in
-            guard mapping.isEnabled,
-                  let count = mapping.gesture.fingerTapCount
-                    ?? mapping.gesture.doubleFingerTapCount,
-                  claimedFingerCounts.insert(count).inserted else {
-                return nil
-            }
+        let gestures = store.isTesting
+            ? TrackpadGesture.allCases
+            : store.mappings.filter(\.isEnabled).map(\.gesture)
+        let claimedFingerCounts = Set(gestures.compactMap(\.middleClickOverlapFingerCount))
+        return claimedFingerCounts.sorted().map { count in
             return PluginInputGestureClaim(
                 id: "trackpad.tap.\(count)",
                 title: TrackpadGesture.fingerTap(count: count).title(localization: localization)

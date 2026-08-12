@@ -430,6 +430,17 @@ final class TrackpadGestureStoreTests: XCTestCase {
         XCTAssertEqual(TrackpadGesture.threeFingerClick.settingsOrder, 12)
     }
 
+    func testMiddleClickOverlapFingerCountsCoverShortContactFamilies() {
+        XCTAssertEqual(TrackpadGesture.threeFingerTap.middleClickOverlapFingerCount, 3)
+        XCTAssertEqual(TrackpadGesture.fourFingerDoubleTap.middleClickOverlapFingerCount, 4)
+        XCTAssertEqual(TrackpadGesture.threeFingerClick.middleClickOverlapFingerCount, 3)
+        XCTAssertEqual(TrackpadGesture.tipTapLeftTwoFixed.middleClickOverlapFingerCount, 3)
+
+        XCTAssertNil(TrackpadGesture.twoFingerClick.middleClickOverlapFingerCount)
+        XCTAssertNil(TrackpadGesture.tipTapLeftOneFixed.middleClickOverlapFingerCount)
+        XCTAssertNil(TrackpadGesture.threeFingerLongTouch.middleClickOverlapFingerCount)
+    }
+
     func testMappingViewPreferencesPersistWithoutChangingMappingOrder() throws {
         let storage = TrackpadGestureMemoryStorage()
         let store = TrackpadGestureStore(storage: storage, legacyMiddleClick: nil)
@@ -1154,7 +1165,7 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(plugin.permissionRequirements.map(\.id), ["accessibility", "input-monitoring"])
     }
 
-    func testEnabledFingerTapMappingsPublishSharedGestureClaims() {
+    func testEnabledOverlappingMappingsPublishDeduplicatedSharedGestureClaims() {
         let fixture = makePlugin()
         XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
             gesture: .threeFingerTap,
@@ -1176,12 +1187,39 @@ final class TrackpadGesturesPluginTests: XCTestCase {
             gesture: .threeFingerDoubleTap,
             action: .middleClick
         )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .threeFingerClick,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .tipTapLeftTwoFixed,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .twoFingerClick,
+            action: .middleClick
+        )))
+        XCTAssertTrue(fixture.plugin.store.save(TrackpadGestureMapping(
+            gesture: .tipTapLeftOneFixed,
+            action: .middleClick
+        )))
 
         XCTAssertEqual(
-            Set(fixture.plugin.activeInputGestureClaims.map(\.id)),
+            fixture.plugin.activeInputGestureClaims.map(\.id),
             ["trackpad.tap.3", "trackpad.tap.4", "trackpad.tap.5"]
         )
         XCTAssertEqual(fixture.plugin.activeInputGestureClaims.count, 3)
+    }
+
+    func testTestingPublishesEveryOverlappingSharedGestureClaim() {
+        let fixture = makePlugin()
+
+        fixture.plugin.store.setTesting(true)
+
+        XCTAssertEqual(
+            fixture.plugin.activeInputGestureClaims.map(\.id),
+            ["trackpad.tap.3", "trackpad.tap.4", "trackpad.tap.5"]
+        )
     }
 
     func testEnabledMappingExecutesEveryRepeatedRecognizedAction() {
