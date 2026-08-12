@@ -1,0 +1,37 @@
+{
+  "id": "dock-lock",
+  "displayName": "锁定程序坞",
+  "summary": "防止程序坞在多显示器之间意外移动",
+  "localizedMetadata": {
+    "en": {
+      "displayName": "Dock Lock",
+      "summary": "Prevent the Dock from moving between displays accidentally."
+    },
+    "fr": {
+      "displayName": "Verrouillage du Dock",
+      "summary": "Empêche le Dock de passer accidentellement d’un écran à l’autre."
+    },
+    "zh-Hans": {
+      "displayName": "锁定程序坞",
+      "summary": "防止程序坞在多显示器之间意外移动"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.1.6",
+  "pluginKitVersion": 4,
+  "bundleRelativePath": "DockLock.bundle",
+  "factoryClass": "DockLockPlugin.DockLockPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "DockLockPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "settings": "none"
+  },
+  "permissions": [
+    "accessibility"
+  ],
+  "category": "display"
+}
