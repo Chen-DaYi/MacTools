@@ -322,6 +322,8 @@ final class AppURLRouter {
     private struct PendingRoute {
         let route: AppURLRoute
         let actionAncestry: Set<ActionExecutionIdentity>
+        var reservedActionIdentity: ActionExecutionIdentity?
+        var actionResolution: Result<ActionReference, ActionRunLinkResolutionError>?
     }
 
     private struct ActiveActionLease {
@@ -331,9 +333,14 @@ final class AppURLRouter {
     private let acceptedURLSchemes: Set<String>
     private let maximumPendingRoutes: Int
     private let rightClickHandler: (URL) -> Void
+    private let deferredActionRejectionHandler: (
+        ActionRunLinkRequest,
+        AppURLRoutingError
+    ) -> Void
     private let logger: Logger
 
     private var pendingRoutes: [PendingRoute] = []
+    private var pendingActionIdentities: Set<ActionExecutionIdentity> = []
     private var presentationHandler: ((AppPresentationRequest) -> Void)?
     private var isPluginConfigurationAvailable: ((String) -> Bool)?
     private var actionHandler: (
@@ -355,12 +362,17 @@ final class AppURLRouter {
         acceptedURLSchemes: Set<String> = RightClickURLRouter.bundleURLSchemes(),
         maximumPendingDeepLinks: Int = 32,
         rightClickHandler: @escaping (URL) -> Void = { RightClickURLRouter.shared.handle($0) },
+        deferredActionRejectionHandler: @escaping (
+            ActionRunLinkRequest,
+            AppURLRoutingError
+        ) -> Void = { _, _ in },
         logger: Logger = AppLog.appURLRouter
     ) {
         precondition(maximumPendingDeepLinks > 0)
         self.acceptedURLSchemes = Set(acceptedURLSchemes.map { $0.lowercased() })
         self.maximumPendingRoutes = maximumPendingDeepLinks
         self.rightClickHandler = rightClickHandler
+        self.deferredActionRejectionHandler = deferredActionRejectionHandler
         self.logger = logger
     }
 
@@ -389,34 +401,39 @@ final class AppURLRouter {
         case let .failure(error):
             return reject(error, url: url)
         case let .success(route):
-            guard presentationHandler != nil else {
-                guard enqueue(route) else {
-                    return reject(.pendingQueueFull, url: url)
-                }
-                return queuedResult(for: route)
-            }
-
             switch route {
-            case let .navigation(deepLink) where pendingRoutes.isEmpty && !isDraining:
-                return deliver(deepLink)
             case let .run(request):
-                let identity = actionIdentity(for: request)
+                let resolution = actionIdentityResolver?(request)
+                let identity = actionIdentity(for: request, resolution: resolution)
                 if isRecursiveActionRequest(identity) {
                     return reject(.recursiveActionInvocation, url: url)
                 }
-                if isActionAlreadyRunning(identity) {
+                if isActionAlreadyRunning(identity) || pendingActionIdentities.contains(identity) {
                     return reject(.actionAlreadyRunning, url: url)
                 }
-                guard enqueue(route) else {
+                guard enqueue(
+                    route,
+                    reservedActionIdentity: identity,
+                    actionResolution: resolution
+                ) else {
                     return reject(.pendingQueueFull, url: url)
                 }
-                startDrainIfNeeded()
+                if presentationHandler != nil {
+                    startDrainIfNeeded()
+                }
                 return queuedResult(for: route)
+            case let .navigation(deepLink)
+                where presentationHandler != nil
+                    && pendingRoutes.isEmpty
+                    && !isDraining:
+                return deliver(deepLink)
             default:
                 guard enqueue(route) else {
                     return reject(.pendingQueueFull, url: url)
                 }
-                startDrainIfNeeded()
+                if presentationHandler != nil {
+                    startDrainIfNeeded()
+                }
                 return queuedResult(for: route)
             }
         }
@@ -448,7 +465,7 @@ final class AppURLRouter {
             guard case let .navigation(deepLink) = first.route else {
                 break
             }
-            pendingRoutes.removeFirst()
+            _ = dequeueFirstPendingRoute()
             synchronousResults.append(deliver(deepLink))
         }
         startDrainIfNeeded()
@@ -461,7 +478,11 @@ final class AppURLRouter {
         }
     }
 
-    private func enqueue(_ route: AppURLRoute) -> Bool {
+    private func enqueue(
+        _ route: AppURLRoute,
+        reservedActionIdentity: ActionExecutionIdentity? = nil,
+        actionResolution: Result<ActionReference, ActionRunLinkResolutionError>? = nil
+    ) -> Bool {
         guard pendingRoutes.count < maximumPendingRoutes else {
             return false
         }
@@ -469,9 +490,26 @@ final class AppURLRouter {
         actionAncestry.formUnion(dispatchingActionAncestry)
         pendingRoutes.append(PendingRoute(
             route: route,
-            actionAncestry: actionAncestry
+            actionAncestry: actionAncestry,
+            reservedActionIdentity: reservedActionIdentity,
+            actionResolution: actionResolution
         ))
+        if let reservedActionIdentity {
+            let inserted = pendingActionIdentities.insert(reservedActionIdentity).inserted
+            precondition(
+                inserted,
+                "Duplicate pending action identity must be rejected before enqueue"
+            )
+        }
         return true
+    }
+
+    private func dequeueFirstPendingRoute() -> PendingRoute {
+        let pendingRoute = pendingRoutes.removeFirst()
+        if let identity = pendingRoute.reservedActionIdentity {
+            pendingActionIdentities.remove(identity)
+        }
+        return pendingRoute
     }
 
     private func queuedResult(for route: AppURLRoute) -> AppURLHandlingResult {
@@ -495,18 +533,28 @@ final class AppURLRouter {
         drainTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !pendingRoutes.isEmpty {
-                let pendingRoute = pendingRoutes.removeFirst()
+                refreshPendingActionReservations()
+                guard !pendingRoutes.isEmpty else { break }
+                let pendingRoute = dequeueFirstPendingRoute()
                 let route = pendingRoute.route
                 switch route {
                 case let .navigation(deepLink):
                     _ = deliver(deepLink)
                 case let .run(request):
-                    // Presets are mutable while they wait behind another route. Resolve again
-                    // immediately before leasing and dispatching so the recursion guard and the
-                    // executor use one immutable reference.
-                    let resolution = actionIdentityResolver?(request)
+                    // Reservation refresh resolves mutable presets immediately before leasing.
+                    // Dispatch that same immutable reference so the guard and executor agree.
+                    let resolution = pendingRoute.actionResolution
                     let identity = actionIdentity(for: request, resolution: resolution)
-                    if isRecursiveActionRequest(identity) || isActionAlreadyRunning(identity) {
+                    if pendingRoute.actionAncestry.contains(identity)
+                        || isRecursiveActionRequest(identity) {
+                        reportDeferredActionRejection(
+                            .recursiveActionInvocation,
+                            request: request
+                        )
+                        continue
+                    }
+                    if isActionAlreadyRunning(identity) {
+                        reportDeferredActionRejection(.actionAlreadyRunning, request: request)
                         continue
                     }
                     let ancestry = pendingRoute.actionAncestry.union([identity])
@@ -536,6 +584,45 @@ final class AppURLRouter {
         }
     }
 
+    /// Re-resolves mutable presets in arrival order and reserves their current canonical
+    /// identities. Earlier accepted routes win; later aliases receive an explicit deferred
+    /// rejection instead of disappearing silently during the drain.
+    private func refreshPendingActionReservations() {
+        pendingActionIdentities.removeAll(keepingCapacity: true)
+        var refreshedRoutes: [PendingRoute] = []
+        refreshedRoutes.reserveCapacity(pendingRoutes.count)
+
+        for var pendingRoute in pendingRoutes {
+            guard case let .run(request) = pendingRoute.route else {
+                pendingRoute.reservedActionIdentity = nil
+                pendingRoute.actionResolution = nil
+                refreshedRoutes.append(pendingRoute)
+                continue
+            }
+
+            let resolution = actionIdentityResolver?(request)
+            let identity = actionIdentity(for: request, resolution: resolution)
+            let isRecursive = pendingRoute.actionAncestry.contains(identity)
+                || isRecursiveActionRequest(identity)
+            if isRecursive {
+                reportDeferredActionRejection(.recursiveActionInvocation, request: request)
+                continue
+            }
+            if isActionAlreadyRunning(identity)
+                || pendingActionIdentities.contains(identity) {
+                reportDeferredActionRejection(.actionAlreadyRunning, request: request)
+                continue
+            }
+
+            pendingRoute.reservedActionIdentity = identity
+            pendingRoute.actionResolution = resolution
+            pendingActionIdentities.insert(identity)
+            refreshedRoutes.append(pendingRoute)
+        }
+
+        pendingRoutes = refreshedRoutes
+    }
+
     private func actionIdentity(for request: ActionRunLinkRequest) -> ActionExecutionIdentity {
         actionIdentity(
             for: request,
@@ -563,6 +650,16 @@ final class AppURLRouter {
 
     private func isActionAlreadyRunning(_ identity: ActionExecutionIdentity) -> Bool {
         activeActionLeases.values.contains { $0.identity == identity }
+    }
+
+    private func reportDeferredActionRejection(
+        _ error: AppURLRoutingError,
+        request: ActionRunLinkRequest
+    ) {
+        logger.error(
+            "Rejected queued action route: \(error.diagnosticCode, privacy: .public)"
+        )
+        deferredActionRejectionHandler(request, error)
     }
 
     private func deliver(_ deepLink: AppDeepLink) -> AppURLHandlingResult {

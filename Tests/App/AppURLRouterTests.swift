@@ -421,6 +421,156 @@ final class AppURLRouterTests: XCTestCase {
         )
     }
 
+    func testDuplicateActionIsRejectedWhileFirstRequestIsStillPending() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in }
+        )
+        let action = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/pending")
+        )
+        let reference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "pending")
+        )
+        var handledRequests: [ActionRunLinkRequest] = []
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionIdentityResolver: { _ in .success(reference) },
+            actionHandler: { request, _ in
+                handledRequests.append(request)
+                return .completed
+            }
+        )
+
+        XCTAssertEqual(router.handle(action), .queuedAction(.direct(reference.key)))
+        XCTAssertEqual(router.handle(action), .rejected(.actionAlreadyRunning))
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(handledRequests, [.direct(reference.key)])
+    }
+
+    func testPendingDirectActionAndPresetAliasShareCanonicalIdentity() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in }
+        )
+        let presetID = UUID(uuidString: "7B420000-0000-4000-8000-000000000010")!
+        let direct = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/aliased")
+        )
+        let preset = try XCTUnwrap(
+            URL(string: "mactools://app/presets/\(presetID.uuidString)")
+        )
+        let reference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "aliased")
+        )
+        var handledRequests: [ActionRunLinkRequest] = []
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionIdentityResolver: { _ in .success(reference) },
+            actionHandler: { request, _ in
+                handledRequests.append(request)
+                return .completed
+            }
+        )
+
+        XCTAssertEqual(router.handle(direct), .queuedAction(.direct(reference.key)))
+        XCTAssertEqual(router.handle(preset), .rejected(.actionAlreadyRunning))
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(handledRequests, [.direct(reference.key)])
+    }
+
+    func testMutablePresetCollisionReportsDeferredRejectionInsteadOfSilentDrop() async throws {
+        let firstPresetID = UUID(uuidString: "7B420000-0000-4000-8000-000000000011")!
+        let secondPresetID = UUID(uuidString: "7B420000-0000-4000-8000-000000000012")!
+        let firstPreset = try XCTUnwrap(
+            URL(string: "mactools://app/presets/\(firstPresetID.uuidString)")
+        )
+        let secondPreset = try XCTUnwrap(
+            URL(string: "mactools://app/presets/\(secondPresetID.uuidString)")
+        )
+        let firstReference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "first")
+        )
+        let secondReference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "second")
+        )
+        var referencesByPreset = [
+            firstPresetID: firstReference,
+            secondPresetID: secondReference,
+        ]
+        var deferredRejections: [(ActionRunLinkRequest, AppURLRoutingError)] = []
+        var handledRequests: [ActionRunLinkRequest] = []
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in },
+            deferredActionRejectionHandler: { request, error in
+                deferredRejections.append((request, error))
+            }
+        )
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionIdentityResolver: { request in
+                guard case let .preset(presetID) = request,
+                      let reference = referencesByPreset[presetID] else {
+                    return nil
+                }
+                return .success(reference)
+            },
+            actionHandler: { request, _ in
+                handledRequests.append(request)
+                return .completed
+            }
+        )
+
+        XCTAssertEqual(router.handle(firstPreset), .queuedAction(.preset(firstPresetID)))
+        XCTAssertEqual(router.handle(secondPreset), .queuedAction(.preset(secondPresetID)))
+        referencesByPreset[secondPresetID] = firstReference
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(handledRequests, [.preset(firstPresetID)])
+        XCTAssertEqual(deferredRejections.count, 1)
+        XCTAssertEqual(deferredRejections.first?.0, .preset(secondPresetID))
+        XCTAssertEqual(deferredRejections.first?.1, .actionAlreadyRunning)
+    }
+
+    func testQueueOverflowDoesNotReserveRejectedActionIdentity() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            maximumPendingDeepLinks: 1,
+            rightClickHandler: { _ in }
+        )
+        let navigation = try XCTUnwrap(URL(string: "mactools://app/settings/general"))
+        let action = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/retry")
+        )
+        let reference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "retry")
+        )
+        var handledRequests: [ActionRunLinkRequest] = []
+
+        XCTAssertEqual(router.handle(navigation), .queued(.settings(.general)))
+        XCTAssertEqual(router.handle(action), .rejected(.pendingQueueFull))
+
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionIdentityResolver: { _ in .success(reference) },
+            actionHandler: { request, _ in
+                handledRequests.append(request)
+                return .completed
+            }
+        )
+        XCTAssertEqual(router.handle(action), .queuedAction(.direct(reference.key)))
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(handledRequests, [.direct(reference.key)])
+    }
+
     func testActiveActionCannotRecursivelyQueueItself() async throws {
         let router = AppURLRouter(
             acceptedURLSchemes: ["mactools"],
