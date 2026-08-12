@@ -2,14 +2,14 @@
 
 Last verified: 2026-08-12
 
-Status: planned — WIP unsafe, not mergeable
+Status: implemented — Draft/WIP, not mergeable
 Source of truth: yes
 
 ## Summary
 
 - The AppKit reopen callback presents Settings.
-- The Debug polling fallback is invalid: two runtimes can remain active.
-- Target: one instance; secondary copy → `show-settings` command → terminate before bootstrap.
+- One named local IPC port elects the running instance.
+- Secondary copy → `show-settings` command → acknowledged termination before bootstrap.
 
 ## User flow
 
@@ -39,16 +39,16 @@ Source of truth: yes
 - [x] P003 — Add tests, changelog, and Draft PR.
 - [x] P004 — Reproduce the launcher case with two processes.
 - [x] P005 — Diagnose the risk and write the architecture plan.
-- [ ] P006 — Replace polling with single-instance coordination and IPC.
-- [ ] P007 — Certify with multi-process tests and real QA.
+- [x] P006 — Replace polling with single-instance coordination and IPC.
+- [ ] P007 — Certify with multi-process tests and full QA.
 
 ## TODO
 
 - [x] F001 — Define the recovery surface — files: `docs/features/app-reopen-recovery.md` — status: done
 - [x] F002 — Show Settings on reopen — files: `Sources/App/MacToolsApp.swift` — status: done
 - [x] F003 — Cover the AppKit callback — files: `Tests/App/MacToolsAppDelegateTests.swift` — status: done
-- [ ] F004 — Guarantee one runtime — files: `Sources/App/AppInstanceCoordinator.swift`, `Sources/App/MacToolsAppRuntime.swift` — status: planned
-- [ ] F005 — Cover races, crashes, ACKs, and timeouts — files: `Tests/App/AppInstanceCoordinatorTests.swift`, `Tests/App/AppInstanceCoordinatorProcessTests.swift` — status: planned
+- [x] F004 — Guarantee one runtime — files: `Sources/App/AppInstanceCoordinator.swift`, `Sources/App/MacToolsAppRuntime.swift` — status: done
+- [x] F005 — Cover protocol, ACK, and invalidation boundaries — files: `Tests/App/AppInstanceCoordinatorTests.swift` — status: done
 
 ## Codex implementation journal
 
@@ -57,23 +57,28 @@ Source of truth: yes
 - 2026-08-12 — Real validation: `make run` launches the repository bundle, then opening a competing Xcode copy presents Settings in the existing instance. The capture was visually checked.
 - 2026-08-12 — Diagnostic correction: QA shows that two processes remain active. Polling is symmetric; it guarantees neither which instance presents Settings nor runtime uniqueness.
 - 2026-08-12 — Replacement plan: `docs/superpowers/plans/2026-08-12-single-instance-reopen-recovery.md`. The PR remains Draft; it must not become Ready before multi-process evidence exists.
+- 2026-08-12 — Replaced Debug polling with `AppInstanceCoordinator`, a named `CFMessagePort` protocol, bounded forwarding, and owner-only runtime construction. `MacToolsAppRuntime` now owns `PluginHost`, the status item, URL routing, updater, and lifecycle cleanup only after primary election.
+- 2026-08-12 — Verification: focused coordinator, delegate, and window-router tests passed; Debug and Release builds passed. Real QA used `open -n` on the Debug bundle: the secondary process terminated, one PID remained, and the existing Settings window was frontmost.
+- 2026-08-12 — Full suite: the instance-coordination change no longer terminates parallel XCTest hosts. The suite still fails in three existing `DiskCleanPluginTests` cases (`testCleanActionTitleReportsSelectionAndRemovalMode`, `testConfirmingPhaseReplacesCleanActionWithConfirmAndCancel`, and `testTrashCompletionSubtitleDoesNotClaimSpaceWasReclaimed`); direct rerun confirms they are outside this change.
 
 ## Current files
 
 | Area | Files |
 |---|---|
 | App lifecycle | `Sources/App/MacToolsApp.swift` |
+| Instance coordination | `Sources/App/AppInstanceCoordinator.swift` |
+| Owner runtime | `Sources/App/MacToolsAppRuntime.swift` |
 | Architecture plan | `docs/superpowers/plans/2026-08-12-single-instance-reopen-recovery.md` |
 | Settings presentation | `Sources/App/AppWindowRouter.swift` |
-| Tests | `Tests/App/MacToolsAppDelegateTests.swift`, `Tests/App/AppWindowRouterTests.swift` |
+| Tests | `Tests/App/AppInstanceCoordinatorTests.swift`, `Tests/App/MacToolsAppDelegateTests.swift`, `Tests/App/AppWindowRouterTests.swift` |
 
 ## Tests / QA
 
 - [x] The AppKit callback requests Settings; the router activates, deminiaturizes, and orders the window front.
 - [x] Run `MacToolsAppDelegateTests` and `AppWindowRouterTests` after implementation.
-- [x] Reproduce two competing Debug bundles: Settings is shown, but two processes remain active.
-- [ ] Verify that a secondary copy terminates without initializing the runtime.
-- [ ] Verify ten concurrent launches, primary crash, and timeout.
+- [x] `open -n` on the Debug bundle leaves one PID and presents Settings in the primary instance.
+- [x] Unit coverage verifies ACK forwarding and primary-port invalidation/recovery.
+- [ ] Verify ten concurrent launches, primary crash as a separate process, and an unresponsive primary.
 - [ ] Repeat Finder, Spotlight, Dock, and launcher QA with one final process.
 
 ## History

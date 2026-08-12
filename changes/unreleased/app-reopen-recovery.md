@@ -4,4 +4,4 @@ type: fixed
 area: Menu Bar
 ---
 
-Reopening MacTools now brings its Settings window forward, providing a recovery path if the menu bar icon is unavailable.
+Relaunching MacTools now brings Settings forward in the single running instance, providing a recovery path if the menu bar icon is unavailable.

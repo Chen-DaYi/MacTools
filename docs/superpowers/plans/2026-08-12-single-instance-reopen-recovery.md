@@ -84,7 +84,7 @@ Create `AppInstanceCoordinator`, without an AppKit dependency or persistent stat
 - `CFMessagePortCreateLocal` attempts atomic registration.
 - A newly created port gives role `.primary`.
 - An already registered name gives role `.secondary`.
-- Attach the callback immediately to a dedicated serial queue.
+- Attach the callback immediately to the main queue so presentation stays on the `MainActor`.
 - Explicitly invalidate at termination.
 - On crash, the system invalidates the Mach port; the next copy can become owner.
 
