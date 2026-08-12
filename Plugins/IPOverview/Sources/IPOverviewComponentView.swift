@@ -119,6 +119,8 @@ struct IPOverviewComponentView: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             if showsDetailHeader {
                 detailHeader
+            } else {
+                detailToolbar
             }
 
             if managesScrolling {
@@ -162,6 +164,19 @@ struct IPOverviewComponentView: View {
 
             Spacer(minLength: 8)
 
+            detailActions
+        }
+    }
+
+    private var detailToolbar: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            Spacer(minLength: 0)
+            detailActions
+        }
+    }
+
+    private var detailActions: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
             if viewModel.snapshot.isRefreshing {
                 ProgressView()
                     .controlSize(.small)
