@@ -354,11 +354,6 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
             return .succeeded()
         }
 
-        if let activeConflictMessage {
-            onStateChange?()
-            return .failed(message: activeConflictMessage)
-        }
-
         isAccessibilityGranted = accessibilityTrusted()
         if !isAccessibilityGranted, promptForPermission {
             isAccessibilityGranted = requestAccessibilityTrust(true)
@@ -372,6 +367,12 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
         }
 
         store.setEnabled(true)
+        if let activeConflictMessage {
+            stopSession()
+            onStateChange?()
+            return .failed(message: activeConflictMessage)
+        }
+
         startSession()
         onStateChange?()
         return .succeeded()
