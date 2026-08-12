@@ -327,6 +327,7 @@ final class ActionExecutor {
             return .rejected(Self.rejection(for: error))
         }
         guard revalidated.providerGeneration == initial.providerGeneration,
+              revalidated.providerExecutionRevision == initial.providerExecutionRevision,
               revalidated.definition == initial.definition else {
             return .rejected(.providerChanged)
         }
@@ -345,7 +346,8 @@ final class ActionExecutor {
         let handle: ActionExecutionHandle
         switch registry.begin(
             invocation,
-            expectedProviderGeneration: revalidated.providerGeneration
+            expectedProviderGeneration: revalidated.providerGeneration,
+            expectedProviderExecutionRevision: revalidated.providerExecutionRevision
         ) {
         case let .success(value):
             handle = value

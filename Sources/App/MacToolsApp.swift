@@ -175,8 +175,15 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             isPluginConfigurationAvailable: { [weak self] pluginID in
                 self?.pluginHost.hasPluginSettings(pluginID: pluginID) == true
             },
-            actionHandler: { [weak self] request in
-                await self?.runLinkExecutionCoordinator.execute(request) ?? .completed
+            actionIdentityResolver: { [weak self] request in
+                self?.pluginHost.actionRunLinkService.resolve(request)
+            },
+            actionHandler: { [weak self] request, resolution in
+                guard let self else { return .completed }
+                if let resolution {
+                    return await self.runLinkExecutionCoordinator.execute(resolution)
+                }
+                return await self.runLinkExecutionCoordinator.execute(request)
             }
         )
     }

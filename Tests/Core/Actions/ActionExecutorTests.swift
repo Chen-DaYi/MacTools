@@ -96,6 +96,36 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(provider.beginCount, 0)
     }
 
+    func testExecutorConfirmsThenRejectsChangedProviderExecutionRevision() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            risk: .confirmationRequired,
+            confirmation: ActionConfirmation(
+                title: "Confirm",
+                message: "Run this payload?",
+                confirmButtonTitle: "Run"
+            )
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+        let confirmation = ActionExecutorConfirmationService {
+            provider.executionRevision &+= 1
+            return true
+        }
+
+        let outcome = await ActionExecutor(
+            registry: registry,
+            confirmationService: confirmation
+        ).execute(ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .actionGrid,
+            mode: .foreground
+        ))
+
+        XCTAssertEqual(outcome, .rejected(.providerChanged))
+        XCTAssertEqual(provider.beginCount, 0)
+    }
+
     func testAppIntentExecutionEnforcesProviderExposurePolicy() async {
         let registry = ActionRegistry()
         let provider = ActionExecutorTestProvider()
@@ -560,6 +590,7 @@ final class ActionExecutorTestProvider {
     var exposurePolicy: ActionExposurePolicy = .automatic
     var operation: @MainActor @Sendable () async -> ActionExecutionResult = { .succeeded() }
     var beginCount = 0
+    var executionRevision: UInt64 = 0
     var didCancel = false
     var onBegin: (() -> Void)?
 
@@ -574,6 +605,7 @@ final class ActionExecutorTestProvider {
                     title: definition.title
                 ),
             ],
+            executionRevision: { [weak self] in self?.executionRevision ?? .max },
             availability: { [weak self] _ in
                 self?.availability ?? .unavailable("missing")
             },

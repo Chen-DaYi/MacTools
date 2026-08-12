@@ -522,6 +522,14 @@ public protocol PluginActionProviding: AnyObject {
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle
 }
 
+/// Optional live revision for provider-owned execution state that is not represented by an
+/// `ActionDefinition` or `ActionCatalogEntry`. The host revalidates this value after confirmation
+/// and immediately before execution so mutable payloads cannot be substituted after approval.
+@MainActor
+public protocol PluginActionExecutionRevisionProviding: AnyObject {
+    var actionExecutionRevision: UInt64 { get }
+}
+
 /// Optional provider-owned veto for system surfaces that discover canonical actions.
 /// Providers that do not implement this contract use `.automatic`; the host surface
 /// remains responsible for applying its own conservative eligibility policy.

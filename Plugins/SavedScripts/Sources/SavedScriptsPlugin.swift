@@ -24,6 +24,7 @@ final class SavedScriptsPlugin:
     MacToolsPlugin,
     PluginPrimaryPanel,
     PluginActionProviding,
+    PluginActionExecutionRevisionProviding,
     PluginSettingsPresenting,
     PluginPrimaryPanelIndicatorProviding,
     PluginPortablePreferencesProviding,
@@ -63,6 +64,8 @@ final class SavedScriptsPlugin:
     private var indicatorExpirationTask: Task<Void, Never>?
     private let indicatorNow: () -> Date
     private static let completionIndicatorVisibility: TimeInterval = 8
+
+    var actionExecutionRevision: UInt64 { store.revision }
 
     init(
         context: PluginRuntimeContext,

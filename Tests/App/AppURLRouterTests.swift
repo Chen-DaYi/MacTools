@@ -355,7 +355,7 @@ final class AppURLRouterTests: XCTestCase {
         let synchronous = router.activate(
             presentationHandler: { request in events.append(.navigation(request)) },
             isPluginConfigurationAvailable: { _ in true },
-            actionHandler: { request in
+            actionHandler: { request, _ in
                 events.append(.action(request))
                 return .completed
             }
@@ -387,7 +387,7 @@ final class AppURLRouterTests: XCTestCase {
         router.activate(
             presentationHandler: { _ in },
             isPluginConfigurationAvailable: { _ in true },
-            actionHandler: { request in
+            actionHandler: { request, _ in
                 activeCount += 1
                 maximumActiveCount = max(maximumActiveCount, activeCount)
                 delivered.append(request)
@@ -431,7 +431,7 @@ final class AppURLRouterTests: XCTestCase {
         router.activate(
             presentationHandler: { _ in },
             isPluginConfigurationAvailable: { _ in true },
-            actionHandler: { _ in
+            actionHandler: { _, _ in
                 recursiveResult = router.handle(url)
                 return .completed
             }
@@ -446,6 +446,105 @@ final class AppURLRouterTests: XCTestCase {
         XCTAssertEqual(recursiveResult, .rejected(.recursiveActionInvocation))
     }
 
+    func testAliasesShareCanonicalActiveExecutionIdentity() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in }
+        )
+        let presetID = UUID(uuidString: "7B420000-0000-4000-8000-000000000001")!
+        let direct = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/continuing")
+        )
+        let preset = try XCTUnwrap(
+            URL(string: "mactools://app/presets/\(presetID.uuidString)")
+        )
+        let canonical = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "continuing")
+        )
+        var duplicateResult: AppURLHandlingResult?
+        var completion: Task<Void, Never>?
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionIdentityResolver: { _ in .success(canonical) },
+            actionHandler: { _, _ in
+                let task = Task<Void, Never> {
+                    try? await Task.sleep(for: .seconds(60))
+                }
+                completion = task
+                duplicateResult = router.handle(preset)
+                return .continuing(until: task)
+            }
+        )
+
+        XCTAssertEqual(
+            router.handle(direct),
+            .queuedAction(.direct(canonical.key))
+        )
+        await router.waitUntilIdle()
+        completion?.cancel()
+        XCTAssertEqual(duplicateResult, .rejected(.recursiveActionInvocation))
+    }
+
+    func testQueuedPresetUsesOneFreshResolutionForGuardAndDispatch() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in }
+        )
+        let presetID = UUID(uuidString: "7B420000-0000-4000-8000-000000000002")!
+        let blocker = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/blocker")
+        )
+        let preset = try XCTUnwrap(
+            URL(string: "mactools://app/presets/\(presetID.uuidString)")
+        )
+        let secondDirect = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/second")
+        )
+        let firstReference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "first")
+        )
+        let secondReference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "second")
+        )
+        let blockerReference = ActionReference(
+            key: ActionKey(providerID: "test-provider", actionID: "blocker")
+        )
+        var presetReference = firstReference
+        var dispatchedPresetReference: ActionReference?
+        var recursiveResult: AppURLHandlingResult?
+
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionIdentityResolver: { request in
+                switch request {
+                case let .direct(key):
+                    return .success(ActionReference(key: key))
+                case .preset:
+                    return .success(presetReference)
+                }
+            },
+            actionHandler: { request, resolution in
+                guard case .preset = request,
+                      case let .success(reference)? = resolution else {
+                    return .completed
+                }
+                dispatchedPresetReference = reference
+                recursiveResult = router.handle(secondDirect)
+                return .completed
+            }
+        )
+
+        XCTAssertEqual(router.handle(blocker), .queuedAction(.direct(blockerReference.key)))
+        XCTAssertEqual(router.handle(preset), .queuedAction(.preset(presetID)))
+        presetReference = secondReference
+        await router.waitUntilIdle()
+
+        XCTAssertEqual(dispatchedPresetReference, secondReference)
+        XCTAssertEqual(recursiveResult, .rejected(.recursiveActionInvocation))
+    }
+
     func testMutuallyRecursiveActionsAreRejectedUsingQueueAncestry() async throws {
         let router = AppURLRouter(
             acceptedURLSchemes: ["mactools"],
@@ -457,7 +556,7 @@ final class AppURLRouterTests: XCTestCase {
         router.activate(
             presentationHandler: { _ in },
             isPluginConfigurationAvailable: { _ in true },
-            actionHandler: { request in
+            actionHandler: { request, _ in
                 switch request {
                 case let .direct(key) where key.providerID == "test-provider"
                     && key.actionID == "first":
@@ -508,7 +607,7 @@ final class AppURLRouterTests: XCTestCase {
         router.activate(
             presentationHandler: { requests.append($0) },
             isPluginConfigurationAvailable: { _ in true },
-            actionHandler: { _ in
+            actionHandler: { _, _ in
                 let completion = Task<Void, Never> {
                     try? await Task.sleep(for: .seconds(60))
                 }
@@ -554,7 +653,7 @@ final class AppURLRouterTests: XCTestCase {
         router.activate(
             presentationHandler: { _ in },
             isPluginConfigurationAvailable: { _ in true },
-            actionHandler: { request in
+            actionHandler: { request, _ in
                 guard case let .direct(key) = request else { return .completed }
                 handledActionIDs.append(key.actionID)
                 if key.actionID == "first" && handledActionIDs.count == 1 {

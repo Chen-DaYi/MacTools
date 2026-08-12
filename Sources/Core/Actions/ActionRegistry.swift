@@ -25,6 +25,7 @@ struct RegisteredAction: Equatable {
     let definition: ActionDefinition
     let catalogEntry: ActionCatalogEntry?
     let providerGeneration: UInt64
+    let providerExecutionRevision: UInt64
 }
 
 enum ActionReferencePortability: Equatable {
@@ -39,6 +40,7 @@ struct ActionProviderRegistration {
     let identity: ObjectIdentifier
     let definitions: [ActionDefinition]
     let catalogEntries: [ActionCatalogEntry]
+    let executionRevision: () -> UInt64
     let availability: (ActionReference) -> ActionAvailability
     let exposurePolicy: (ActionReference, ActionExposureSurface) -> ActionExposurePolicy
     let migrate: (ActionReference, Int) -> ActionReference?
@@ -49,6 +51,7 @@ struct ActionProviderRegistration {
         identity: ObjectIdentifier,
         definitions: [ActionDefinition],
         catalogEntries: [ActionCatalogEntry],
+        executionRevision: @escaping () -> UInt64 = { 0 },
         availability: @escaping (ActionReference) -> ActionAvailability,
         exposurePolicy: @escaping (
             ActionReference,
@@ -63,6 +66,7 @@ struct ActionProviderRegistration {
         self.identity = identity
         self.definitions = definitions
         self.catalogEntries = catalogEntries
+        self.executionRevision = executionRevision
         self.availability = availability
         self.exposurePolicy = exposurePolicy
         self.migrate = migrate
@@ -173,6 +177,7 @@ final class ActionRegistry: ObservableObject {
                     identity: registration.identity,
                     definitions: acceptedDefinitions,
                     catalogEntries: acceptedCatalog,
+                    executionRevision: registration.executionRevision,
                     availability: registration.availability,
                     exposurePolicy: registration.exposurePolicy,
                     migrate: registration.migrate,
@@ -214,7 +219,8 @@ final class ActionRegistry: ObservableObject {
             RegisteredAction(
                 definition: definition,
                 catalogEntry: catalogByReference[reference],
-                providerGeneration: provider.generation
+                providerGeneration: provider.generation,
+                providerExecutionRevision: provider.registration.executionRevision()
             )
         )
     }
@@ -304,13 +310,15 @@ final class ActionRegistry: ObservableObject {
 
     func begin(
         _ invocation: ActionInvocation,
-        expectedProviderGeneration: UInt64
+        expectedProviderGeneration: UInt64,
+        expectedProviderExecutionRevision: UInt64
     ) -> Result<ActionExecutionHandle, ActionRegistryError> {
         guard case let .success(action) = registeredAction(for: invocation.reference),
               let provider = providers[invocation.reference.key.providerID] else {
             return .failure(.unknownAction(invocation.reference.key))
         }
-        guard action.providerGeneration == expectedProviderGeneration else {
+        guard action.providerGeneration == expectedProviderGeneration,
+              action.providerExecutionRevision == expectedProviderExecutionRevision else {
             return .failure(.providerChanged)
         }
         return provider.registration.begin(invocation)

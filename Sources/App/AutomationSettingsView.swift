@@ -604,10 +604,16 @@ private struct WorkflowActionPickerGroup: Identifiable {
 struct WorkflowActionPickerAccessibility: Equatable {
     let value: String
 
-    init(availability: ActionAvailability) {
-        value = availability.isAvailable
+    init(availability: ActionAvailability, requiresConfirmation: Bool = false) {
+        let availabilityValue = availability.isAvailable
             ? FeatureL10n.string("可用")
             : (availability.reason ?? FeatureL10n.string("不可用"))
+        value = requiresConfirmation
+            ? FeatureL10n.joined([
+                availabilityValue,
+                FeatureL10n.string("执行前需要确认。"),
+            ])
+            : availabilityValue
     }
 }
 
@@ -668,7 +674,8 @@ private struct WorkflowActionPicker: View {
 
                                 ForEach(group.items) { item in
                                     let accessibility = WorkflowActionPickerAccessibility(
-                                        availability: item.availability
+                                        availability: item.availability,
+                                        requiresConfirmation: item.requiresConfirmation
                                     )
                                     Button {
                                         select(item.entry.reference)
@@ -703,6 +710,7 @@ private struct WorkflowActionPicker: View {
                                                 Image(systemName: "exclamationmark.shield")
                                                     .foregroundStyle(.orange)
                                                     .help(FeatureL10n.string("执行前需要确认。"))
+                                                    .accessibilityHidden(true)
                                             }
 
                                             if !item.availability.isAvailable {
@@ -1356,16 +1364,22 @@ private struct WorkflowStepEditor: View {
                     Button { automation.moveStep(workflowID: workflow.id, stepID: step.id, offset: -1) } label: {
                         Image(systemName: "chevron.up")
                     }
+                    .accessibilityLabel(FeatureL10n.string("上移"))
+                    .help(FeatureL10n.string("上移"))
                     .disabled(!canMoveUp)
                     Button { automation.moveStep(workflowID: workflow.id, stepID: step.id, offset: 1) } label: {
                         Image(systemName: "chevron.down")
                     }
+                    .accessibilityLabel(FeatureL10n.string("下移"))
+                    .help(FeatureL10n.string("下移"))
                     .disabled(!canMoveDown)
                     Button(role: .destructive) {
                         automation.removeStep(workflowID: workflow.id, stepID: step.id)
                     } label: {
                         Image(systemName: "trash")
                     }
+                    .accessibilityLabel(FeatureL10n.string("删除"))
+                    .help(FeatureL10n.string("删除"))
                 }
                 .controlSize(.small)
             }

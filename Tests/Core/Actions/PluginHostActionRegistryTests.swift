@@ -72,6 +72,41 @@ final class PluginHostActionRegistryTests: XCTestCase {
         XCTAssertTrue(host.actionRegistryIssues.isEmpty)
     }
 
+    func testSavedScriptSourceChangeDuringConfirmationIsRejectedBeforeExecution() async throws {
+        let suiteName = "PluginHostActionRegistryTests.saved-scripts-revision.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let plugin = SavedScriptsPlugin(context: PluginRuntimeContext(
+            pluginID: "saved-scripts",
+            storage: UserDefaultsPluginStorage(
+                pluginID: "saved-scripts",
+                userDefaults: defaults
+            )
+        ))
+        var script = try plugin.saveScript(SavedScript(
+            name: "Mutable Script",
+            kind: .zsh,
+            source: "echo original"
+        )).get()
+        let host = makePluginHostForTests(plugins: [plugin])
+        host.actionConfirmationService.setHandler { _ in
+            script.source = "echo substituted"
+            _ = plugin.saveScript(script)
+            return true
+        }
+
+        let outcome = await host.actionExecutor.execute(ActionInvocation(
+            reference: ActionReference(
+                key: ActionKey(providerID: plugin.metadata.id, actionID: script.actionID)
+            ),
+            source: .actionGrid,
+            mode: .foreground
+        ))
+
+        XCTAssertEqual(outcome, .rejected(.providerChanged))
+        XCTAssertNil(plugin.executionStore.record(for: script.id))
+    }
+
     func testHostPublishesNativeLegacyAndApplicationActionsThroughOneRegistry() async {
         let native = NativeActionTestPlugin()
         let legacy = LegacyActionTestPlugin()

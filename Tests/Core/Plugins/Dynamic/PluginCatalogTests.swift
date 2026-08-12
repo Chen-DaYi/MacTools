@@ -18,10 +18,33 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
-    func testPluginKit4UsesVersionedProductionCatalogURL() throws {
+    func testPluginKit4LegacyHostKeepsImmutableVersionedCatalogURL() throws {
         XCTAssertEqual(
-            PluginCatalogProviderConfiguration.productionCatalogURL(for: 4),
+            PluginCatalogProviderConfiguration.productionCatalogURL(
+                for: 4,
+                hostVersion: "1.1.6"
+            ),
             URL(string: "https://mactools.ggbond.app/plugins/v4/catalog.json")
+        )
+    }
+
+    func testPluginKit4CurrentHostUsesMixedHostCompatibleCatalogURL() throws {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.productionCatalogURL(
+                for: 4,
+                hostVersion: "1.2.0"
+            ),
+            URL(string: "https://mactools.ggbond.app/plugins/v4/host-1.2/catalog.json")
+        )
+    }
+
+    func testPluginKit4FutureHostKeepsHostCompatibleCatalogURL() throws {
+        XCTAssertEqual(
+            PluginCatalogProviderConfiguration.productionCatalogURL(
+                for: 4,
+                hostVersion: "1.3.0"
+            ),
+            URL(string: "https://mactools.ggbond.app/plugins/v4/host-1.2/catalog.json")
         )
     }
 
@@ -111,6 +134,16 @@ final class PluginCatalogTests: XCTestCase {
         }
     }
 
+    func testAcceptsCatalogContainingEntriesForNewerHosts() throws {
+        let futureEntry = makeEntry(minimumHostVersion: "2.0.0")
+        let catalog = makeCatalog(plugins: [futureEntry])
+        let verifier = PluginCatalogVerifier.localDevelopment(hostVersion: "1.0.0")
+
+        XCTAssertNoThrow(
+            try verifier.verify(catalog, sourceKind: .localDevelopment)
+        )
+    }
+
     func testRejectsRevokedCatalogEntry() throws {
         let catalog = makeCatalog(
             revoked: [
@@ -166,13 +199,16 @@ final class PluginCatalogTests: XCTestCase {
         )
     }
 
-    private func makeEntry(id: String = "com.example.demo") -> PluginCatalogEntry {
+    private func makeEntry(
+        id: String = "com.example.demo",
+        minimumHostVersion: String = "0.1.0"
+    ) -> PluginCatalogEntry {
         PluginCatalogEntry(
             id: id,
             displayName: "Demo",
             summary: "示例插件",
             version: "1.0.0",
-            minimumHostVersion: "0.1.0",
+            minimumHostVersion: minimumHostVersion,
             package: PluginCatalogPackage(
                 url: URL(fileURLWithPath: "/tmp/Demo.mactoolsplugin"),
                 sha256: String(repeating: "a", count: 64),

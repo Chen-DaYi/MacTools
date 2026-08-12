@@ -63,6 +63,48 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertNil(ActionSurfaceExecutionSupport.feedback(for: .completed(.succeeded())))
     }
 
+    func testConfirmationSheetKeepsActionGridAliveWhilePanelResignsKey() {
+        XCTAssertFalse(ActionGridPanelDismissalPolicy.shouldCloseWhenResigningKey(
+            isPresentingConfirmation: true
+        ))
+        XCTAssertTrue(ActionGridPanelDismissalPolicy.shouldCloseWhenResigningKey(
+            isPresentingConfirmation: false
+        ))
+    }
+
+    func testConfirmationRequiredActionUsesGridAnchoredPresenter() async throws {
+        let plugin = ConfirmationActionGridTestPlugin()
+        let host = makePluginHostForTests(plugins: [plugin])
+        var requests: [ActionConfirmationRequest] = []
+        let controller = ActionGridOverlayController(
+            pluginHost: host,
+            confirmationPresenter: { request, window in
+                requests.append(request)
+                XCTAssertEqual(
+                    window.identifier,
+                    ActionGridOverlayController.panelIdentifier
+                )
+                return true
+            }
+        )
+        defer { controller.close(restoringFocus: false) }
+
+        XCTAssertTrue(controller.present(entries: [
+            ActionGridPresentationEntry(
+                id: "confirmed",
+                reference: plugin.actionReference
+            ),
+        ]))
+        XCTAssertTrue(controller.processKeyEvent(try keyEvent(keyCode: 36, characters: "\r")))
+
+        for _ in 0 ..< 100 where plugin.executionCount == 0 {
+            await Task.yield()
+        }
+        XCTAssertEqual(plugin.executionCount, 1)
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.source, .actionGrid)
+    }
+
     func testGeometryClampsGridToPointerDisplayVisibleFrame() {
         let visible = CGRect(x: 1_000, y: 200, width: 700, height: 500)
         let frame = ActionGridOverlayGeometry.targetFrame(
@@ -1289,5 +1331,48 @@ private final class StatefulActionGridTestPlugin: MacToolsPlugin, PluginActionPr
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
         ActionExecutionHandle { .succeeded() }
+    }
+}
+
+@MainActor
+private final class ConfirmationActionGridTestPlugin: MacToolsPlugin, PluginActionProviding {
+    let metadata = PluginMetadata(
+        id: "confirmation-action-grid-test",
+        title: "Confirmation Test",
+        iconName: "checkmark.shield",
+        iconTint: Color.accentColor,
+        order: 0,
+        defaultDescription: "Tests grid-anchored confirmation."
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var executionCount = 0
+
+    var actionReference: ActionReference {
+        ActionReference(key: actionDefinitions[0].key)
+    }
+
+    var actionDefinitions: [ActionDefinition] {
+        [
+            ActionDefinition(
+                key: ActionKey(providerID: metadata.id, actionID: "run"),
+                title: "Run Confirmed Action",
+                description: "Run after approval.",
+                systemImage: metadata.iconName,
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: "Run Action?",
+                    message: "Confirm the action.",
+                    confirmButtonTitle: "Run"
+                ),
+                capabilities: [.background]
+            ),
+        ]
+    }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        executionCount += 1
+        return ActionExecutionHandle { .succeeded() }
     }
 }

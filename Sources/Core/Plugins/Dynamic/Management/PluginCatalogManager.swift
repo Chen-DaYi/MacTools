@@ -220,7 +220,7 @@ final class PluginCatalogManager {
             return
         }
 
-        let entry = try catalogEntry(id: id)
+        let entry = try compatibleCatalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
         try dynamicPluginManager.installPluginPackage(
             from: packageURL,
@@ -255,7 +255,7 @@ final class PluginCatalogManager {
             }
         }
 
-        let entry = try catalogEntry(id: id)
+        let entry = try compatibleCatalogEntry(id: id)
         let packageURL = try await packageResolver.resolvePackage(for: entry)
         guard dynamicPluginManager.isInstalledPlugin(id) else {
             return
@@ -752,6 +752,7 @@ final class PluginCatalogManager {
 
     private func usableCatalogEntry(id: String) -> PluginCatalogEntry? {
         guard let entry = snapshot?.catalog.plugins.first(where: { $0.id == id }),
+              isCompatibleWithCurrentHost(entry),
               snapshot?.catalog.revoked.contains(where: {
                   $0.matches(pluginID: entry.id, version: entry.version)
               }) != true
@@ -787,6 +788,7 @@ final class PluginCatalogManager {
                 throw PluginCatalogManagerError.catalogEntryNotFound(id)
             }
 
+            guard isCompatibleWithCurrentHost(entry) else { return nil }
             return shouldDeferSourceUpdateForExtraction(
                 entry,
                 installedVersions: installedVersions
@@ -798,6 +800,7 @@ final class PluginCatalogManager {
         let installedVersionsByID = dynamicPluginManager.installedPackageVersionsByID()
 
         return (snapshot?.catalog.plugins ?? []).filter { entry in
+            guard isCompatibleWithCurrentHost(entry) else { return false }
             guard let installedVersion = installedVersionsByID[entry.id] else {
                 return false
             }
@@ -814,6 +817,24 @@ final class PluginCatalogManager {
 
             return PluginVersionComparator.isVersion(entry.version, newerThan: installedVersion)
         }
+    }
+
+    private func compatibleCatalogEntry(id: String) throws -> PluginCatalogEntry {
+        let entry = try catalogEntry(id: id)
+        guard isCompatibleWithCurrentHost(entry) else {
+            throw PluginPackageManifestError.incompatibleHostVersion(
+                required: entry.minimumHostVersion,
+                current: dynamicPluginManager.hostVersion
+            )
+        }
+        return entry
+    }
+
+    private func isCompatibleWithCurrentHost(_ entry: PluginCatalogEntry) -> Bool {
+        PluginVersionComparator.isVersion(
+            dynamicPluginManager.hostVersion,
+            atLeast: entry.minimumHostVersion
+        )
     }
 
     private func shouldDeferSourceUpdateForExtraction(

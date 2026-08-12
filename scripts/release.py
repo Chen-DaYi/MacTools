@@ -412,6 +412,8 @@ def read_plugins() -> dict[str, PluginInfo]:
 def plugin_catalog_path(plugin_kit_version: int) -> Path:
     if plugin_kit_version == 2:
         return LEGACY_PLUGIN_CATALOG
+    if plugin_kit_version == 4:
+        return ROOT_DIR / "docs" / "plugins" / "v4" / "host-1.2" / "catalog.json"
     return ROOT_DIR / "docs" / "plugins" / f"v{plugin_kit_version}" / "catalog.json"
 
 
@@ -420,6 +422,14 @@ def previous_plugin_catalog_path() -> Path:
     preferred_path = plugin_catalog_path(plugin_kit_version)
     if preferred_path.exists() or preferred_path == LEGACY_PLUGIN_CATALOG:
         return preferred_path
+
+    # PluginKit v4 remains ABI-compatible, but the shipped 1.1.6 verifier
+    # cannot consume catalogs containing 1.2-only entries. The first 1.2
+    # release uses the immutable legacy v4 catalog as its version baseline.
+    if plugin_kit_version == 4:
+        legacy_v4_path = ROOT_DIR / "docs" / "plugins" / "v4" / "catalog.json"
+        if legacy_v4_path.exists():
+            return legacy_v4_path
 
     previous_versioned_catalogs = []
     for candidate in (ROOT_DIR / "docs" / "plugins").glob("v*/catalog.json"):

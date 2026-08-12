@@ -46,6 +46,12 @@ enum ActionSurfaceExecutionSupport {
     }
 }
 
+enum ActionGridPanelDismissalPolicy {
+    static func shouldCloseWhenResigningKey(isPresentingConfirmation: Bool) -> Bool {
+        !isPresentingConfirmation
+    }
+}
+
 enum ActionGridExecutionOutcome: Equatable {
     case terminal(ActionExecutionOutcome)
     case handedOff
@@ -676,9 +682,15 @@ enum ActionGridResizeScreenSelection {
 
 @MainActor
 final class ActionGridOverlayController: NSObject, NSWindowDelegate {
+    typealias ConfirmationPresenter = @MainActor (
+        ActionConfirmationRequest,
+        NSWindow
+    ) async -> Bool
+
     static let panelIdentifier = NSUserInterfaceItemIdentifier("mactools.action-grid.overlay")
     private let pluginHost: PluginHost
     private let model: ActionGridOverlayModel
+    private let confirmationRouter: ActionConfirmationRouter
     private let tokens = ActionGridDismissTokens()
     private var panel: ActionGridOverlayPanel?
     private var previousApplication: NSRunningApplication?
@@ -687,9 +699,17 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
     private var presentationPointer: CGPoint?
     private var presentationVisibleFrame: CGRect?
     private var presentationGeneration: UInt = 0
+    private var isPresentingConfirmation = false
+    private let confirmationPresenter: ConfirmationPresenter?
 
-    init(pluginHost: PluginHost) {
+    init(
+        pluginHost: PluginHost,
+        confirmationPresenter: ConfirmationPresenter? = nil
+    ) {
         self.pluginHost = pluginHost
+        self.confirmationPresenter = confirmationPresenter
+        let confirmationRouter = ActionConfirmationRouter()
+        self.confirmationRouter = confirmationRouter
         self.model = ActionGridOverlayModel(
             resolver: { [weak pluginHost] entry in
                 if let children = entry.children {
@@ -760,7 +780,8 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
                 ) {
                     switch await pluginHost.actionExecutor.startContinuing(
                         invocation,
-                        expectedDefinition: action.definition
+                        expectedDefinition: action.definition,
+                        confirmationService: confirmationRouter
                     ) {
                     case .started:
                         return .handedOff
@@ -770,10 +791,16 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
                         return .terminal(.rejected(rejection))
                     }
                 }
-                return .terminal(await pluginHost.actionExecutor.execute(invocation))
+                return .terminal(await pluginHost.actionExecutor.execute(
+                    invocation,
+                    confirmationService: confirmationRouter
+                ))
             }
         )
         super.init()
+        confirmationRouter.setHandler { [weak self] request in
+            await self?.confirmAction(request) ?? false
+        }
         model.onSuccessfulExecution = { [weak self] in
             self?.closeAfterSuccessfulExecution()
         }
@@ -784,6 +811,17 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
                 includesFeedback: includesFeedback
             )
         }
+    }
+
+    private func confirmAction(_ request: ActionConfirmationRequest) async -> Bool {
+        guard let panel, panel.isVisible else { return false }
+        isPresentingConfirmation = true
+        defer { isPresentingConfirmation = false }
+        if let confirmationPresenter {
+            return await confirmationPresenter(request, panel)
+        }
+        let service = AppActionConfirmationService { [weak panel] in panel }
+        return await service.confirm(request)
     }
 
     private static func compactTitle(
@@ -989,6 +1027,7 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         previousApplication = nil
         presentationPointer = nil
         presentationVisibleFrame = nil
+        isPresentingConfirmation = false
     }
 
     private func closeAfterSuccessfulExecution() {
@@ -1078,7 +1117,8 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
                ) {
                 return nil
             }
-            if event.window !== panel { self.close(restoringFocus: false) }
+            let belongsToOverlay = event.window === panel || panel.attachedSheet === event.window
+            if !belongsToOverlay { self.close(restoringFocus: false) }
             return event
         }
         tokens.globalMouse = NSEvent.addGlobalMonitorForEvents(matching: mouseMask) { [weak self] _ in
@@ -1093,7 +1133,11 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
             queue: .main
         ) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.close(restoringFocus: false)
+                guard let self,
+                      ActionGridPanelDismissalPolicy.shouldCloseWhenResigningKey(
+                          isPresentingConfirmation: self.isPresentingConfirmation
+                      ) else { return }
+                self.close(restoringFocus: false)
             }
         }
     }

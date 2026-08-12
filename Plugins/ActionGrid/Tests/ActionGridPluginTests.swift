@@ -154,6 +154,55 @@ final class ActionGridPluginTests: XCTestCase {
         XCTAssertNil(explicitPresentation.badge)
     }
 
+    func testActionPickerAccessibilityExposesConfirmationRequirement() {
+        XCTAssertNil(ActionGridActionPickerAccessibility(
+            isSafe: true,
+            confirmationRequiredText: "Confirmation is required before running."
+        ).confirmationValue)
+        XCTAssertEqual(
+            ActionGridActionPickerAccessibility(
+                isSafe: false,
+                confirmationRequiredText: "Confirmation is required before running."
+            ).confirmationValue,
+            "Confirmation is required before running."
+        )
+    }
+
+    func testActionSelectionMustRemainVisibleAfterFiltering() {
+        let first = ActionSurfaceCatalogItem(
+            reference: ActionReference(
+                key: ActionKey(providerID: "one", actionID: "run")
+            ),
+            title: "First",
+            subtitle: nil,
+            ownerTitle: "One",
+            systemImage: "1.circle",
+            availability: .available,
+            isSafe: true
+        )
+        let second = ActionSurfaceCatalogItem(
+            reference: ActionReference(
+                key: ActionKey(providerID: "two", actionID: "run")
+            ),
+            title: "Second",
+            subtitle: nil,
+            ownerTitle: "Two",
+            systemImage: "2.circle",
+            availability: .available,
+            isSafe: true
+        )
+
+        XCTAssertTrue(ActionGridActionSelectionPolicy.contains(
+            first.reference,
+            in: [first, second]
+        ))
+        XCTAssertFalse(ActionGridActionSelectionPolicy.contains(
+            first.reference,
+            in: [second]
+        ))
+        XCTAssertFalse(ActionGridActionSelectionPolicy.contains(nil, in: [first]))
+    }
+
     func testNativeSettingsControlsExposeDistinctOperableAccessibilityElements() throws {
         let accessibility = ActionGridEntryAccessibility(
             title: "锁定屏幕",

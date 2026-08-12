@@ -312,15 +312,20 @@ enum AppDeepLinkParser {
 
 @MainActor
 final class AppURLRouter {
-    @TaskLocal private static var currentActionAncestry: Set<ActionRunLinkRequest> = []
+    private enum ActionExecutionIdentity: Hashable {
+        case canonical(ActionReference)
+        case raw(ActionRunLinkRequest)
+    }
+
+    @TaskLocal private static var currentActionAncestry: Set<ActionExecutionIdentity> = []
 
     private struct PendingRoute {
         let route: AppURLRoute
-        let actionAncestry: Set<ActionRunLinkRequest>
+        let actionAncestry: Set<ActionExecutionIdentity>
     }
 
     private struct ActiveActionLease {
-        let request: ActionRunLinkRequest
+        let identity: ActionExecutionIdentity
     }
 
     private let acceptedURLSchemes: Set<String>
@@ -332,11 +337,17 @@ final class AppURLRouter {
     private var presentationHandler: ((AppPresentationRequest) -> Void)?
     private var isPluginConfigurationAvailable: ((String) -> Bool)?
     private var actionHandler: (
-        (ActionRunLinkRequest) async -> AppURLActionHandlingDisposition
+        (
+            ActionRunLinkRequest,
+            Result<ActionReference, ActionRunLinkResolutionError>?
+        ) async -> AppURLActionHandlingDisposition
+    )?
+    private var actionIdentityResolver: (
+        (ActionRunLinkRequest) -> Result<ActionReference, ActionRunLinkResolutionError>?
     )?
     private var activeActionLeases: [UUID: ActiveActionLease] = [:]
-    private var dispatchingActionRequest: ActionRunLinkRequest?
-    private var dispatchingActionAncestry: Set<ActionRunLinkRequest> = []
+    private var dispatchingActionIdentity: ActionExecutionIdentity?
+    private var dispatchingActionAncestry: Set<ActionExecutionIdentity> = []
     private var drainTask: Task<Void, Never>?
     private var isDraining = false
 
@@ -389,10 +400,11 @@ final class AppURLRouter {
             case let .navigation(deepLink) where pendingRoutes.isEmpty && !isDraining:
                 return deliver(deepLink)
             case let .run(request):
-                if isRecursiveActionRequest(request) {
+                let identity = actionIdentity(for: request)
+                if isRecursiveActionRequest(identity) {
                     return reject(.recursiveActionInvocation, url: url)
                 }
-                if isActionAlreadyRunning(request) {
+                if isActionAlreadyRunning(identity) {
                     return reject(.actionAlreadyRunning, url: url)
                 }
                 guard enqueue(route) else {
@@ -414,9 +426,13 @@ final class AppURLRouter {
     func activate(
         presentationHandler: @escaping (AppPresentationRequest) -> Void,
         isPluginConfigurationAvailable: @escaping (String) -> Bool,
-        actionHandler: @escaping (
+        actionIdentityResolver: @escaping (
             ActionRunLinkRequest
-        ) async -> AppURLActionHandlingDisposition = { _ in .completed }
+        ) -> Result<ActionReference, ActionRunLinkResolutionError>? = { _ in nil },
+        actionHandler: @escaping (
+            ActionRunLinkRequest,
+            Result<ActionReference, ActionRunLinkResolutionError>?
+        ) async -> AppURLActionHandlingDisposition = { _, _ in .completed }
     ) -> [AppURLHandlingResult] {
         guard self.presentationHandler == nil else {
             return []
@@ -424,6 +440,7 @@ final class AppURLRouter {
 
         self.presentationHandler = presentationHandler
         self.isPluginConfigurationAvailable = isPluginConfigurationAvailable
+        self.actionIdentityResolver = actionIdentityResolver
         self.actionHandler = actionHandler
 
         var synchronousResults: [AppURLHandlingResult] = []
@@ -484,17 +501,25 @@ final class AppURLRouter {
                 case let .navigation(deepLink):
                     _ = deliver(deepLink)
                 case let .run(request):
-                    let ancestry = pendingRoute.actionAncestry.union([request])
+                    // Presets are mutable while they wait behind another route. Resolve again
+                    // immediately before leasing and dispatching so the recursion guard and the
+                    // executor use one immutable reference.
+                    let resolution = actionIdentityResolver?(request)
+                    let identity = actionIdentity(for: request, resolution: resolution)
+                    if isRecursiveActionRequest(identity) || isActionAlreadyRunning(identity) {
+                        continue
+                    }
+                    let ancestry = pendingRoute.actionAncestry.union([identity])
                     let leaseID = UUID()
                     activeActionLeases[leaseID] = ActiveActionLease(
-                        request: request
+                        identity: identity
                     )
-                    dispatchingActionRequest = request
+                    dispatchingActionIdentity = identity
                     dispatchingActionAncestry = ancestry
                     let disposition = await Self.$currentActionAncestry.withValue(ancestry) {
-                        await actionHandler?(request) ?? .completed
+                        await actionHandler?(request, resolution) ?? .completed
                     }
-                    dispatchingActionRequest = nil
+                    dispatchingActionIdentity = nil
                     dispatchingActionAncestry = []
                     if let completion = disposition.completion {
                         Task { @MainActor [weak self] in
@@ -511,16 +536,33 @@ final class AppURLRouter {
         }
     }
 
-    private func isRecursiveActionRequest(_ request: ActionRunLinkRequest) -> Bool {
-        Self.currentActionAncestry.contains(request)
+    private func actionIdentity(for request: ActionRunLinkRequest) -> ActionExecutionIdentity {
+        actionIdentity(
+            for: request,
+            resolution: actionIdentityResolver?(request)
+        )
+    }
+
+    private func actionIdentity(
+        for request: ActionRunLinkRequest,
+        resolution: Result<ActionReference, ActionRunLinkResolutionError>?
+    ) -> ActionExecutionIdentity {
+        guard case let .success(reference)? = resolution else {
+            return .raw(request)
+        }
+        return .canonical(reference)
+    }
+
+    private func isRecursiveActionRequest(_ identity: ActionExecutionIdentity) -> Bool {
+        Self.currentActionAncestry.contains(identity)
             || (
-                dispatchingActionRequest != request
-                    && dispatchingActionAncestry.contains(request)
+                dispatchingActionIdentity != identity
+                    && dispatchingActionAncestry.contains(identity)
             )
     }
 
-    private func isActionAlreadyRunning(_ request: ActionRunLinkRequest) -> Bool {
-        activeActionLeases.values.contains { $0.request == request }
+    private func isActionAlreadyRunning(_ identity: ActionExecutionIdentity) -> Bool {
+        activeActionLeases.values.contains { $0.identity == identity }
     }
 
     private func deliver(_ deepLink: AppDeepLink) -> AppURLHandlingResult {

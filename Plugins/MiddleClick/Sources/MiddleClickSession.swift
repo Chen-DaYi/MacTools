@@ -261,7 +261,8 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     private var touchCallbackContext: UnsafeMutableRawPointer?
     private var wakeObserver: NSObjectProtocol?
     private var ioNotificationPort: IONotificationPortRef?
-    private var ioIterator: io_iterator_t = 0
+    private var ioArrivalIterator: io_iterator_t = 0
+    private var ioTerminationIterator: io_iterator_t = 0
     private var ioCallbackPointer: UnsafeMutableRawPointer?
     private var displayCallbackRegistered = false
     private var displayCallbackPointer: UnsafeMutableRawPointer?
@@ -275,6 +276,7 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     /// re-enumeration vary across hardware, and 2-3 second delays reproduced "MiddleClick stopped
     /// working" in testing. Users rarely need middle-click in the first few seconds after unlock.
     private static let wakeRestartDelay: TimeInterval = 10
+    private static let deviceChangeRestartDelay: TimeInterval = 0.5
 
     // MARK: - Singleton Reference
 
@@ -474,8 +476,8 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
 
         let context = CallbackContext(owner: self)
         let callbackPointer = Unmanaged.passRetained(context).toOpaque()
-        var iterator: io_iterator_t = 0
-        let result = IOServiceAddMatchingNotification(
+        var arrivalIterator: io_iterator_t = 0
+        let arrivalResult = IOServiceAddMatchingNotification(
             port,
             kIOFirstMatchNotification,
             IOServiceMatching("AppleMultitouchDevice"),
@@ -488,35 +490,76 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
                     .takeUnretainedValue()
                 context.withOwner { session in
                     DispatchQueue.main.async { [weak session] in
-                        session?.scheduleRestart(after: 2, reason: "multitouchDeviceArrived")
+                        session?.scheduleRestart(
+                            after: MiddleClickSession.deviceChangeRestartDelay,
+                            reason: "multitouchDeviceArrived"
+                        )
                     }
                 }
             },
             callbackPointer,
-            &iterator
+            &arrivalIterator
         )
 
-        guard result == KERN_SUCCESS else {
-            logger.error("IOServiceAddMatchingNotification failed result=\(result, privacy: .public)")
+        guard arrivalResult == KERN_SUCCESS else {
+            logger.error("IOServiceAddMatchingNotification failed result=\(arrivalResult, privacy: .public)")
             context.invalidate()
             Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
             IONotificationPortDestroy(port)
             return
         }
 
-        // Initial registration must drain once to arm notifications.
-        Self.drainIterator(iterator)
+        var terminationIterator: io_iterator_t = 0
+        let terminationResult = IOServiceAddMatchingNotification(
+            port,
+            kIOTerminatedNotification,
+            IOServiceMatching("AppleMultitouchDevice"),
+            { userData, iterator in
+                MiddleClickSession.drainIterator(iterator)
+                guard let userData else { return }
+                let context = Unmanaged<CallbackContext>
+                    .fromOpaque(userData)
+                    .takeUnretainedValue()
+                context.withOwner { session in
+                    DispatchQueue.main.async { [weak session] in
+                        session?.scheduleRestart(
+                            after: MiddleClickSession.deviceChangeRestartDelay,
+                            reason: "multitouchDeviceRemoved"
+                        )
+                    }
+                }
+            },
+            callbackPointer,
+            &terminationIterator
+        )
+
+        guard terminationResult == KERN_SUCCESS else {
+            logger.error("IOServiceAddMatchingNotification termination failed result=\(terminationResult, privacy: .public)")
+            context.invalidate()
+            IOObjectRelease(arrivalIterator)
+            Unmanaged<CallbackContext>.fromOpaque(callbackPointer).release()
+            IONotificationPortDestroy(port)
+            return
+        }
+
+        Self.drainIterator(arrivalIterator)
+        Self.drainIterator(terminationIterator)
 
         ioNotificationPort = port
-        ioIterator = iterator
+        ioArrivalIterator = arrivalIterator
+        ioTerminationIterator = terminationIterator
         ioCallbackPointer = callbackPointer
     }
 
     private func removeMultitouchDeviceObserver() {
         callbackContext(from: ioCallbackPointer)?.invalidate()
-        if ioIterator != 0 {
-            IOObjectRelease(ioIterator)
-            ioIterator = 0
+        if ioArrivalIterator != 0 {
+            IOObjectRelease(ioArrivalIterator)
+            ioArrivalIterator = 0
+        }
+        if ioTerminationIterator != 0 {
+            IOObjectRelease(ioTerminationIterator)
+            ioTerminationIterator = 0
         }
         if let port = ioNotificationPort {
             IONotificationPortDestroy(port)

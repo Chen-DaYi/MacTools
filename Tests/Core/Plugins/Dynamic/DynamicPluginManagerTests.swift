@@ -46,6 +46,44 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertTrue(plugin.deactivationReasons.isEmpty)
     }
 
+    func testFutureHostCatalogEntryIsVisibleButCannotBeInstalled() throws {
+        let store = makeStore()
+        let manager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        let entry = PluginCatalogEntry(
+            id: "com.example.future",
+            displayName: "Future",
+            summary: "Future host only",
+            version: "1.0.0",
+            minimumHostVersion: "2.0.0",
+            package: PluginCatalogPackage(
+                url: URL(fileURLWithPath: "/tmp/Future.mactoolsplugin"),
+                sha256: String(repeating: "a", count: 64),
+                size: 42
+            )
+        )
+        manager.rebuildManagementItems(catalogSnapshot: PluginCatalogSnapshot(
+            catalog: PluginCatalog(
+                catalogID: "com.example.catalog",
+                generatedAt: Date(timeIntervalSince1970: 0),
+                minimumHostVersion: "1.0.0",
+                plugins: [entry]
+            ),
+            sourceURL: URL(fileURLWithPath: "/tmp/catalog.json"),
+            sourceKind: .production,
+            loadedAt: Date(timeIntervalSince1970: 0)
+        ))
+
+        let item = try XCTUnwrap(manager.pluginManagementItems.first)
+        XCTAssertFalse(item.canInstall)
+        guard case let .incompatible(reason) = item.state else {
+            return XCTFail("Expected incompatible marketplace entry")
+        }
+        XCTAssertTrue(reason.contains("2.0.0"))
+    }
+
     func testUpdatingLoadedPluginInstallsFilesButDoesNotReloadNativeCodeUntilRestart() throws {
         let firstPackageURL = try makePackage(id: "com.example.demo", version: "1.0.0")
         let updatePackageURL = try makePackage(id: "com.example.demo", version: "2.0.0")

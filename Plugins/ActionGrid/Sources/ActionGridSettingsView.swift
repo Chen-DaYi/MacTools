@@ -41,6 +41,27 @@ struct ActionGridAccessibilityMoveActions: Equatable {
     }
 }
 
+struct ActionGridActionPickerAccessibility: Equatable {
+    let confirmationValue: String?
+
+    init(isSafe: Bool, confirmationRequiredText: String) {
+        confirmationValue = isSafe ? nil : confirmationRequiredText
+    }
+}
+
+private struct ActionGridConfirmationAccessibilityModifier: ViewModifier {
+    let value: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let value {
+            content.accessibilityValue(Text(value))
+        } else {
+            content
+        }
+    }
+}
+
 private struct ActionGridConditionalAccessibilityActionModifier: ViewModifier {
     let isEnabled: Bool
     let name: String
@@ -240,7 +261,7 @@ struct ActionGridSettingsView: View {
             }
         } label: {
             VStack(spacing: 7) {
-                Image(systemName: image)
+                Image(systemName: PluginSystemImage.resolvedName(image))
                     .font(.title2)
                 Text(title)
                     .font(PluginSettingsTheme.Typography.rowTitle)
@@ -418,7 +439,7 @@ struct ActionGridSettingsView: View {
 
     private func dragPreview(title: String, image: String, isFolder: Bool) -> some View {
         VStack(spacing: 7) {
-            Image(systemName: image)
+            Image(systemName: PluginSystemImage.resolvedName(image))
                 .font(.title2)
             Text(title)
                 .font(PluginSettingsTheme.Typography.rowTitle)
@@ -523,6 +544,16 @@ private enum ActionGridAddKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum ActionGridActionSelectionPolicy {
+    static func contains(
+        _ reference: ActionReference?,
+        in items: [ActionSurfaceCatalogItem]
+    ) -> Bool {
+        guard let reference else { return false }
+        return items.contains { $0.reference == reference }
+    }
+}
+
 struct ActionGridActionPickerPresentation: Equatable {
     let title: String
     let detail: String
@@ -605,6 +636,10 @@ private struct ActionGridActionEditorSheet: View {
 
                 List(filteredItems, selection: $selectedReference) { item in
                     let presentation = pickerPresentation(for: item)
+                    let accessibility = ActionGridActionPickerAccessibility(
+                        isSafe: item.isSafe,
+                        confirmationRequiredText: plugin.localized("执行前需要确认。")
+                    )
                     HStack(spacing: 10) {
                         Image(systemName: PluginSystemImage.resolvedName(item.systemImage))
                             .frame(width: 22)
@@ -628,8 +663,12 @@ private struct ActionGridActionEditorSheet: View {
                         if !item.isSafe {
                             Image(systemName: "exclamationmark.shield")
                                 .foregroundStyle(.orange)
+                                .accessibilityHidden(true)
                         }
                     }
+                    .modifier(ActionGridConfirmationAccessibilityModifier(
+                        value: accessibility.confirmationValue
+                    ))
                     .tag(item.reference)
                 }
                 .frame(minHeight: 300)
@@ -672,6 +711,9 @@ private struct ActionGridActionEditorSheet: View {
         }
         .onChange(of: addKind) { _, kind in
             focusedField = kind == .action ? .search : .title
+        }
+        .onChange(of: query) { _, _ in
+            clearHiddenSelection()
         }
     }
 
@@ -717,9 +759,23 @@ private struct ActionGridActionEditorSheet: View {
 
     private var canSave: Bool {
         if request.entryID != nil || addKind == .action {
-            return selectedReference != nil
+            return ActionGridActionSelectionPolicy.contains(
+                selectedReference,
+                in: filteredItems
+            )
         }
         return !customTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func clearHiddenSelection() {
+        guard selectedReference != nil,
+              !ActionGridActionSelectionPolicy.contains(
+                  selectedReference,
+                  in: filteredItems
+              ) else {
+            return
+        }
+        self.selectedReference = nil
     }
 
     private func save() {

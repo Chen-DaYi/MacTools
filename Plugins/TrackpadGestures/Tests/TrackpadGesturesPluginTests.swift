@@ -956,6 +956,20 @@ final class TrackpadGestureStoreTests: XCTestCase {
 
 @MainActor
 final class TrackpadGesturesPluginTests: XCTestCase {
+    func testActionPickerAccessibilityExposesConfirmationRequirement() {
+        XCTAssertNil(TrackpadActionPickerAccessibility(
+            isSafe: true,
+            confirmationRequiredText: "Confirmation is required before running."
+        ).confirmationValue)
+        XCTAssertEqual(
+            TrackpadActionPickerAccessibility(
+                isSafe: false,
+                confirmationRequiredText: "Confirmation is required before running."
+            ).confirmationValue,
+            "Confirmation is required before running."
+        )
+    }
+
     func testGestureRawValuesRemainCompatibleWithExistingMappingsAndBackups() {
         XCTAssertEqual(TrackpadGesture.allCases.map(\.rawValue), [
             "tipTapLeftOneFixed",

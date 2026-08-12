@@ -54,6 +54,59 @@ final class PluginCatalogManagerTests: XCTestCase {
         )
     }
 
+    func testNewerHostEntryStaysVisibleButCannotInstallOrAutomaticallyUpdate() async throws {
+        let store = makeStore()
+        _ = try store.installPackage(from: makePackage(
+            id: "com.example.installed",
+            version: "1.0.0"
+        ))
+        let futurePackage = try makePackage(
+            id: "com.example.future",
+            version: "1.0.0"
+        )
+        let dynamicManager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        dynamicManager.prepareInstalledPluginsWithoutLoading()
+        let snapshot = makeCatalogSnapshot(entries: [
+            makeCatalogEntry(
+                id: "com.example.installed",
+                version: "2.0.0",
+                minimumHostVersion: "2.0.0"
+            ),
+            makeCatalogEntry(
+                id: "com.example.future",
+                version: "1.0.0",
+                minimumHostVersion: "2.0.0"
+            ),
+        ])
+        let manager = PluginCatalogManager(
+            catalogProvider: StubPluginCatalogProvider(snapshot: snapshot),
+            packageResolver: StubPluginPackageResolver(packagesByID: [
+                "com.example.future": futurePackage,
+            ]),
+            dynamicPluginManager: dynamicManager,
+            source: .production(snapshot.sourceURL)
+        )
+
+        await manager.refreshCatalog()
+
+        XCTAssertTrue(
+            manager.automaticUpdatePlanForInstalledPlugins()
+                .updateableInstalledPluginIDs.isEmpty
+        )
+        do {
+            try await manager.installPlugin(id: "com.example.future")
+            XCTFail("Expected the future-host package to be rejected")
+        } catch let error as PluginPackageManifestError {
+            XCTAssertEqual(error, .incompatibleHostVersion(
+                required: "2.0.0",
+                current: "1.0.0"
+            ))
+        }
+    }
+
     func testAutomaticUpdateBeforeLoadingInstallsLatestPackageWithoutCallingLoader() async throws {
         let store = makeStore()
         _ = try store.installPackage(from: makePackage(id: "com.example.demo", version: "1.0.0"))
@@ -1807,13 +1860,17 @@ final class PluginCatalogManagerTests: XCTestCase {
         return packageURL
     }
 
-    private func makeCatalogEntry(id: String, version: String) -> PluginCatalogEntry {
+    private func makeCatalogEntry(
+        id: String,
+        version: String,
+        minimumHostVersion: String = "0.1.0"
+    ) -> PluginCatalogEntry {
         PluginCatalogEntry(
             id: id,
             displayName: "Demo",
             summary: "示例插件",
             version: version,
-            minimumHostVersion: "0.1.0",
+            minimumHostVersion: minimumHostVersion,
             package: PluginCatalogPackage(
                 url: URL(fileURLWithPath: "/tmp/\(id).mactoolsplugin"),
                 sha256: String(repeating: "a", count: 64),

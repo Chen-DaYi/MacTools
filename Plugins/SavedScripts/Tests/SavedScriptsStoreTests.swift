@@ -30,6 +30,28 @@ final class SavedScriptsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.script(id: firstID)?.actionID, "run.\(firstID.uuidString.lowercased())")
     }
 
+    func testExecutionRevisionAdvancesOnlyWhenPublishedStateChanges() throws {
+        let storage = SavedScriptsTestStorage()
+        let store = SavedScriptsStore(storage: storage)
+        XCTAssertEqual(store.revision, 0)
+
+        var script = try store.save(SavedScript(
+            name: "Mutable",
+            kind: .zsh,
+            source: "echo first"
+        )).get()
+        XCTAssertEqual(store.revision, 1)
+
+        script.source = "echo second"
+        _ = try store.save(script).get()
+        XCTAssertEqual(store.revision, 2)
+
+        storage.blocksWrites = true
+        script.source = "echo rejected"
+        XCTAssertThrowsError(try store.save(script).get())
+        XCTAssertEqual(store.revision, 2)
+    }
+
     func testPortableBackupIncludesOnlyOptedInSourceAndRemovesWorkingDirectory() throws {
         let source = SavedScriptsStore(storage: SavedScriptsTestStorage())
         let included = try source.save(SavedScript(

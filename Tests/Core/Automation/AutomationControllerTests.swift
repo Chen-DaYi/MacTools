@@ -22,6 +22,16 @@ final class AutomationControllerTests: XCTestCase {
             ).value,
             FeatureL10n.string("不可用")
         )
+        XCTAssertEqual(
+            WorkflowActionPickerAccessibility(
+                availability: .available,
+                requiresConfirmation: true
+            ).value,
+            FeatureL10n.joined([
+                FeatureL10n.string("可用"),
+                FeatureL10n.string("执行前需要确认。"),
+            ])
+        )
     }
 
     func testRuleSummariesUseCompleteMessagesAcrossLocales() {

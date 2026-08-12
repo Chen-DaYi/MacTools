@@ -3611,6 +3611,17 @@ final class PluginHost: ObservableObject {
             identity: ObjectIdentifier(plugin),
             definitions: definitions,
             catalogEntries: catalogEntries,
+            executionRevision: { [weak self, weak plugin] in
+                guard let self, let plugin else { return .max }
+                guard let provider = plugin as? any PluginActionExecutionRevisionProviding else {
+                    return 0
+                }
+                return self.guardedValue(
+                    for: plugin,
+                    operation: "read action execution revision",
+                    provider.actionExecutionRevision
+                ) ?? .max
+            },
             availability: { [weak self, weak plugin] reference in
                 guard let self,
                       let plugin,

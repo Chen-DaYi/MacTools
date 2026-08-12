@@ -2,6 +2,27 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
+struct TrackpadActionPickerAccessibility: Equatable {
+    let confirmationValue: String?
+
+    init(isSafe: Bool, confirmationRequiredText: String) {
+        confirmationValue = isSafe ? nil : confirmationRequiredText
+    }
+}
+
+private struct TrackpadConfirmationAccessibilityModifier: ViewModifier {
+    let value: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let value {
+            content.accessibilityValue(Text(value))
+        } else {
+            content
+        }
+    }
+}
+
 struct TrackpadGesturesSettingsView: View {
     enum SectionKind {
         case mappings
@@ -1392,7 +1413,7 @@ private struct TrackpadUnifiedActionPickerControl: View {
             isPresented.toggle()
         } label: {
             HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Image(systemName: selectedSystemImage)
+                Image(systemName: PluginSystemImage.resolvedName(selectedSystemImage))
                     .font(.system(size: 19, weight: .medium))
                     .foregroundStyle(actionKind == .none ? Color.secondary : Color.accentColor)
                     .frame(width: 30, height: 30)
@@ -1622,7 +1643,14 @@ private struct TrackpadUnifiedActionPickerControl: View {
         isSafe: Bool,
         isSelected: Bool
     ) -> some View {
-        HStack(spacing: 9) {
+        let accessibility = TrackpadActionPickerAccessibility(
+            isSafe: isSafe,
+            confirmationRequiredText: localization.string(
+                "editor.action.confirmationRequired",
+                defaultValue: "执行前需要确认。"
+            )
+        )
+        return HStack(spacing: 9) {
             Image(systemName: PluginSystemImage.resolvedName(systemImage))
                 .frame(width: 20)
                 .foregroundStyle(Color.accentColor)
@@ -1639,6 +1667,7 @@ private struct TrackpadUnifiedActionPickerControl: View {
             if !isSafe {
                 Image(systemName: "exclamationmark.shield")
                     .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
             }
             if isSelected {
                 Image(systemName: "checkmark")
@@ -1647,6 +1676,9 @@ private struct TrackpadUnifiedActionPickerControl: View {
         }
         .padding(.vertical, 5)
         .contentShape(Rectangle())
+        .modifier(TrackpadConfirmationAccessibilityModifier(
+            value: accessibility.confirmationValue
+        ))
     }
 
     private func isSelected(_ choice: TrackpadInputActionChoice) -> Bool {

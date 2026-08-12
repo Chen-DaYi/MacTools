@@ -119,7 +119,15 @@ struct PluginCatalogVerifier {
                 permissions: entry.permissions,
                 releaseChannel: entry.releaseChannel
             )
-            try PluginPackageManifestLoader.validate(manifest, hostVersion: hostVersion)
+            // A catalog may advertise packages for newer hosts. Validate the
+            // package identity and PluginKit ABI here, then enforce each
+            // entry's minimum host version when presenting/installing it.
+            try PluginPackageManifestLoader.validatePackageIdentity(manifest)
+            guard manifest.pluginKitVersion == supportedPluginKitVersion else {
+                throw PluginCatalogVerifierError.unsupportedPluginKitVersion(
+                    manifest.pluginKitVersion
+                )
+            }
 
             guard seenIDs.insert(entry.id).inserted else {
                 throw PluginCatalogVerifierError.duplicatePluginID(entry.id)

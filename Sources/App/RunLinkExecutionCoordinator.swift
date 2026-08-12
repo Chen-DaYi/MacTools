@@ -257,8 +257,15 @@ final class RunLinkExecutionCoordinator {
 
     @discardableResult
     func execute(_ request: ActionRunLinkRequest) async -> AppURLActionHandlingDisposition {
+        await execute(runLinkService.resolve(request))
+    }
+
+    @discardableResult
+    func execute(
+        _ resolution: Result<ActionReference, ActionRunLinkResolutionError>
+    ) async -> AppURLActionHandlingDisposition {
         let reference: ActionReference
-        switch runLinkService.resolve(request) {
+        switch resolution {
         case let .success(value):
             reference = value
         case let .failure(error):

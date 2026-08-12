@@ -16,6 +16,7 @@ final class SavedScriptsStore: ObservableObject {
 
     @Published private(set) var scripts: [SavedScript] = []
     @Published private(set) var loadError: String?
+    private(set) var revision: UInt64 = 0
 
     var onMutation: (() -> Void)?
 
@@ -34,6 +35,8 @@ final class SavedScriptsStore: ObservableObject {
 
     @discardableResult
     func save(_ candidate: SavedScript) -> Result<SavedScript, Error> {
+        let previousScripts = scripts
+        let previousLoadError = loadError
         do {
             guard loadError == nil else {
                 throw SavedScriptValidationError.recoveryRequired
@@ -52,9 +55,13 @@ final class SavedScriptsStore: ObservableObject {
             try persist(updated)
             scripts = updated
             loadError = nil
-            onMutation?()
+            recordMutation()
             return .success(normalized)
         } catch {
+            recordMutationIfStateChanged(
+                previousScripts: previousScripts,
+                previousLoadError: previousLoadError
+            )
             return .failure(error)
         }
     }
@@ -62,6 +69,8 @@ final class SavedScriptsStore: ObservableObject {
     @discardableResult
     func remove(id: UUID) -> Bool {
         guard loadError == nil else { return false }
+        let previousScripts = scripts
+        let previousLoadError = loadError
         var updated = scripts
         guard let index = updated.firstIndex(where: { $0.id == id }) else { return false }
         updated.remove(at: index)
@@ -69,9 +78,13 @@ final class SavedScriptsStore: ObservableObject {
             try persist(updated)
             scripts = updated
             loadError = nil
-            onMutation?()
+            recordMutation()
             return true
         } catch {
+            recordMutationIfStateChanged(
+                previousScripts: previousScripts,
+                previousLoadError: previousLoadError
+            )
             return false
         }
     }
@@ -127,15 +140,34 @@ final class SavedScriptsStore: ObservableObject {
 
         let updated = restored.sorted(by: Self.scriptOrder)
         guard updated.count <= Self.maximumScriptCount else { return false }
+        let previousScripts = scripts
+        let previousLoadError = loadError
         do {
             try persist(updated)
             scripts = updated
             loadError = nil
-            onMutation?()
+            recordMutation()
             return true
         } catch {
+            recordMutationIfStateChanged(
+                previousScripts: previousScripts,
+                previousLoadError: previousLoadError
+            )
             return false
         }
+    }
+
+    private func recordMutation() {
+        revision &+= 1
+        onMutation?()
+    }
+
+    private func recordMutationIfStateChanged(
+        previousScripts: [SavedScript],
+        previousLoadError: String?
+    ) {
+        guard scripts != previousScripts || loadError != previousLoadError else { return }
+        recordMutation()
     }
 
     private func reload() {

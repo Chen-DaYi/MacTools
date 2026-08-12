@@ -6,7 +6,7 @@
 - `Prepare Release`：在 GitHub Actions 页面手动触发。输入发布类型、目标版本和是否继续发布；它会检查、bump、提交版本变更、创建 tag，并在需要时显式触发 `Release` 或 `Plugin Release`。
 - `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release；稳定版会明确标记为 GitHub Latest，并更新官网使用的 `docs/app-release.json`，预发布不会覆盖稳定版下载元数据。
 - `Homebrew Cask Update`：手动输入版本时运行；未输入版本则从稳定 `v*` App Release 中查找同时包含 `MacTools.dmg` 与 `MacTools.sha256` 的最新版，通过 `brew bump-cask-pr` 向官方 `Homebrew/homebrew-cask` 提交 cask bump PR。
-- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。它按 PluginKit 版本选择 catalog：v2 保留使用 `docs/plugins/catalog.json`，v3 及以后使用 `docs/plugins/vN/catalog.json`；首次 ABI 升级默认全量构建、签名并提交新版本 catalog。插件批次明确使用 `--latest=false`，不会覆盖 App 的 GitHub Latest。
+- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。它按 PluginKit 和宿主兼容线选择 catalog：v2 保留使用 `docs/plugins/catalog.json`，v3 使用 `docs/plugins/v3/catalog.json`，v4 的 1.2+ 宿主使用 `docs/plugins/v4/host-1.2/catalog.json`，而 `docs/plugins/v4/catalog.json` 保持为 1.1.6 旧宿主的不可变兼容基线；首次 ABI 升级默认全量构建、签名并提交新版本 catalog。插件批次明确使用 `--latest=false`，不会覆盖 App 的 GitHub Latest。
 - `Deploy Pages`：在 `site/**` 或 `docs/app-release.json` 合入 `main`、`Release` / `Plugin Release` 成功完成，或手动触发时运行。它先构建 `site/` 下的 Astro 官网，再合并 `docs/` 中的 App 发布元数据、appcast、插件 catalog、图标库等静态发布资源并发布到 GitHub Pages；PR 不会触发这条流水线。
 
 ## 需要配置的 Secrets
@@ -172,7 +172,7 @@ make release ARGS="--type plugin --version 1.1.0 --plugin-mode all --yes"
 
 应用内是否显示“可更新”只比较插件版本，不比较 batch tag 或 asset URL。因此只有实际变化的插件需要递增各自 `plugin.json.version`；未变化插件不会因为新批次 tag 而显示可更新或无效。
 
-`pluginKitVersion` 是插件 ABI 边界。升级 PluginKit 时必须全量重建插件包并递增每个插件自己的 `plugin.json.version`。发布脚本会在 ABI 变化时自动使用 `plugin_mode=all`，并将完整 catalog 写入 `docs/plugins/vN/catalog.json`；它禁止把不同 `pluginKitVersion` 的插件混进同一个 catalog，避免新宿主加载旧 ABI 插件导致启动崩溃。
+`pluginKitVersion` 是插件 ABI 边界。升级 PluginKit 时必须全量重建插件包并递增每个插件自己的 `plugin.json.version`。发布脚本会在 ABI 变化时自动使用 `plugin_mode=all`，并将完整 catalog 写入当前宿主兼容线的路径；v4 的 1.2+ 发布写入 `docs/plugins/v4/host-1.2/catalog.json`，不会修改 1.1.6 使用的 `docs/plugins/v4/catalog.json`。它禁止把不同 `pluginKitVersion` 的插件混进同一个 catalog，避免新宿主加载旧 ABI 插件导致启动崩溃。
 
 推送插件批次 tag：
 
@@ -183,14 +183,14 @@ git push origin plugins-1.0.1
 
 `Plugin Release` 工作流会：
 
-1. 从 `origin/main` 读取当前 PluginKit 版本的 catalog 作为基线；首次 v3 发布时回退到旧 `docs/plugins/catalog.json`，仅用于版本比较。
+1. 从 `origin/main` 读取当前 PluginKit 与宿主兼容线的 catalog 作为基线；首次 v3 发布时回退到旧 `docs/plugins/catalog.json`，首次 v4 1.2+ 发布时以不可变的 `docs/plugins/v4/catalog.json` 旧宿主基线做版本比较。
 2. 生成增量发布计划。`auto` 模式会选择新插件和 `plugin.json.version` 高于上一版 catalog 的插件。
 3. 如果插件自身源码、资源或 `pluginKitVersion` 有包相关变化，但插件版本没有递增，工作流会失败并提示需要 bump 对应 `plugin.json.version`。`MacToolsPluginKit` ABI 变化会自动切换到 `mode=all` 全量重发；展示或宿主侧改动如果也需要重发，可使用 `mode=all` 或传入特定 `--shared-path`。
 4. 只以 Release 配置构建计划中的插件 target。
 5. 用 Developer ID 重新签名这些插件 bundle，并打包为 `*.mactoolsplugin.zip`。
 6. 创建或更新对应的 `plugins-*` GitHub Release，并只上传本批变化插件的 zip。catalog-only 变化可以创建没有 zip asset 的插件 Release。
 7. 相同 ABI 内生成本批 delta catalog 并合并进该 ABI 的 catalog；ABI 首次升级则生成包含全部插件的完整 catalog。
-8. 使用 `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` 签名 catalog，并写入 `docs/plugins/catalog.json`（v2）或 `docs/plugins/vN/catalog.json`（v3+）。
+8. 使用 `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` 签名 catalog，并写入 `docs/plugins/catalog.json`（v2）、`docs/plugins/v3/catalog.json`（v3）或 `docs/plugins/v4/host-1.2/catalog.json`（v4、宿主 1.2+）；不会覆盖 v4 的 1.1.6 兼容基线。
 9. 将对应版本化 catalog 提交回 `main`，再由 `Deploy Pages` 发布到 GitHub Pages。
 
 如果 `auto` 模式没有发现插件包或 catalog 变化，工作流会成功结束，不创建或更新 GitHub Release。
@@ -278,7 +278,7 @@ Finder right-click menu items now stay hidden when the plugin is disabled.
 
 - PR 构建不读取发布 Secrets，只执行未签名构建和测试。
 - Release 工作流只使用 `contents: write` 创建或更新 GitHub Release，并把 `docs/appcast.xml` 与 `docs/app-release.json` 提交回 `main`；普通 Build 工作流只有 `contents: read`。
-- Plugin Release 工作流只使用 `contents: write` 创建或更新插件批次 Release，并把当前 PluginKit 版本的签名 catalog 提交回 `main`；v2 仍写入旧 `docs/plugins/catalog.json`，v3+ 写入版本化路径。
+- Plugin Release 工作流只使用 `contents: write` 创建或更新插件批次 Release，并把当前 PluginKit 与宿主兼容线的签名 catalog 提交回 `main`；v2 写入 `docs/plugins/catalog.json`，v3 写入 `docs/plugins/v3/catalog.json`，v4 的 1.2+ 发布写入 `docs/plugins/v4/host-1.2/catalog.json`，并保留 `docs/plugins/v4/catalog.json` 给 1.1.6 旧宿主。
 - Deploy Pages 工作流在官网源码或 App 下载元数据合入 `main`、Release / Plugin Release 成功后发布站点，使用 `contents: read`、`pages: write` 和 `id-token: write`。
 - 签名证书导入临时 keychain，任务结束后清理。
 - App Store Connect `.p8`、Sparkle 私钥和插件 catalog 私钥只写入 runner 临时目录或进程环境，使用后删除。
