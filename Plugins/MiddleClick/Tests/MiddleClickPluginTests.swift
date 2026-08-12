@@ -95,22 +95,20 @@ final class MiddleClickPluginTests: XCTestCase {
         XCTAssertFalse(sequentialRecognizer.process(frame(at: 2.08, contacts: [])))
     }
 
-    func testNativeClickRewriteSuppressesSyntheticClickForSameEpisode() {
+    func testTapPipelineTracksMultipleDevicesIndependently() {
         let pipeline = MiddleClickTapPipeline(fingerCount: 3)
         XCTAssertFalse(pipeline.process(frame(
+            deviceID: 1,
             at: 1.00,
             contacts: [contact(1), contact(2), contact(3)]
         )))
-
-        XCTAssertEqual(
-            pipeline.handleNativeMouseEvent(.down(.left)),
-            .rewriteAsMiddle
-        )
-        XCTAssertEqual(
-            pipeline.handleNativeMouseEvent(.up(.left)),
-            .rewriteAsMiddle
-        )
-        XCTAssertFalse(pipeline.process(frame(at: 1.10, contacts: [])))
+        XCTAssertFalse(pipeline.process(frame(
+            deviceID: 2,
+            at: 1.01,
+            contacts: [contact(1), contact(2), contact(3)]
+        )))
+        XCTAssertTrue(pipeline.process(frame(deviceID: 1, at: 1.10, contacts: [])))
+        XCTAssertTrue(pipeline.process(frame(deviceID: 2, at: 1.11, contacts: [])))
     }
 
     func testTapPipelineRequestsSyntheticClickWithoutNativeClick() {

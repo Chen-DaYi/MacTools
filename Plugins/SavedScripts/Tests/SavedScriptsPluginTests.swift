@@ -28,6 +28,7 @@ final class SavedScriptsPluginTests: XCTestCase {
         XCTAssertNotNil(definition.confirmation)
         XCTAssertEqual(definition.externalInvocationPolicy, .unavailable)
         XCTAssertTrue(definition.capabilities.contains(.cancellable))
+        XCTAssertTrue(definition.capabilities.contains(.reportsProgress))
 
         let catalogEntry = try XCTUnwrap(plugin.actionCatalogEntries.first)
         XCTAssertEqual(catalogEntry.reference.key.actionID, script.actionID)

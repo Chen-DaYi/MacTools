@@ -1397,6 +1397,8 @@ private struct WorkflowStepEditor: View {
             )
             .textFieldStyle(.roundedBorder)
             .frame(width: 64)
+            .accessibilityLabel(Text(FeatureL10n.string("步骤前等待")))
+            .accessibilityIdentifier("mactools.workflow.step.\(step.id.uuidString).delay")
             Text(FeatureL10n.string("秒"))
         }
 

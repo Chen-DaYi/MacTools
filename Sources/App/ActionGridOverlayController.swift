@@ -35,6 +35,7 @@ enum ActionSurfaceExecutionSupport {
         case .backgroundExecutionUnsupported: FeatureL10n.string("操作不能在后台运行。")
         case .foregroundExecutionUnsupported: FeatureL10n.string("操作不能以交互方式运行。")
         case .externalInvocationUnavailable: FeatureL10n.string("此操作不允许从外部调用。")
+        case .systemExposureUnavailable: FeatureL10n.string("操作不可用。")
         case .confirmationUnavailable: FeatureL10n.string("无法显示操作确认。")
         case .confirmationDenied: FeatureL10n.string("操作已取消。")
         case .confirmationTimedOut: FeatureL10n.string("确认已超时。")

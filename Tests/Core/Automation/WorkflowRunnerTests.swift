@@ -75,6 +75,23 @@ final class WorkflowRunnerTests: XCTestCase {
         XCTAssertEqual(events, ["wait 1.0", "run first", "wait 2.0", "run second"])
     }
 
+    func testPublishedWorkflowPreservesAppIntentSourceForLeafActions() async throws {
+        let harness = try makeHarness(actionIDs: ["first"])
+        let workflow = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: harness.reference("first"))]
+        )
+
+        let execution = try harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .publishedAction(.appIntent),
+            mode: .foreground
+        ).get()
+        _ = await execution.actionHandle.result()
+
+        XCTAssertEqual(harness.provider.invocations.map(\.source), [.appIntent])
+    }
+
     func testExecutedSensitiveParametersAreRedactedFromPersistedHistory() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)

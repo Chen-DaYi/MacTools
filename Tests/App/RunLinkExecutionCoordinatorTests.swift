@@ -24,7 +24,7 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
         let setup = try makeSetup()
         setup.provider.operation = { .succeeded(message: "private provider detail") }
 
-        await setup.coordinator.execute(.direct(setup.reference.key))
+        _ = await setup.coordinator.execute(.direct(setup.reference.key))
 
         XCTAssertEqual(setup.provider.beginCount, 1)
         XCTAssertEqual(
@@ -47,16 +47,17 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
             await withCheckedContinuation { completion = $0 }
         }
 
-        await setup.coordinator.execute(.direct(setup.reference.key))
+        let disposition = await setup.coordinator.execute(.direct(setup.reference.key))
 
         XCTAssertEqual(setup.provider.beginCount, 1)
+        XCTAssertNotNil(disposition.completion)
         XCTAssertEqual(
             setup.feedback.values,
             [
                 RunLinkExecutionFeedback(
                     tone: .progress,
                     title: "Action Started",
-                    message: "View run progress in Automation."
+                    message: "The action will continue running in the background."
                 ),
             ]
         )
@@ -64,7 +65,7 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
             await Task.yield()
         }
         completion?.resume(returning: .succeeded())
-        await Task.yield()
+        await disposition.completion?.value
     }
 
     func testConfirmAlwaysUsesInjectedConfirmationAndHonorsDenial() async throws {
@@ -74,7 +75,7 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
             confirmationResult: false
         )
 
-        await denied.coordinator.execute(.direct(denied.reference.key))
+        _ = await denied.coordinator.execute(.direct(denied.reference.key))
 
         XCTAssertEqual(denied.confirmation.requests.count, 1)
         XCTAssertEqual(denied.provider.beginCount, 0)
@@ -86,8 +87,8 @@ final class RunLinkExecutionCoordinatorTests: XCTestCase {
         let setup = try makeSetup()
         setup.provider.operation = { .failed(message: "secret-token-123") }
 
-        await setup.coordinator.execute(.direct(setup.reference.key))
-        await setup.coordinator.execute(
+        _ = await setup.coordinator.execute(.direct(setup.reference.key))
+        _ = await setup.coordinator.execute(
             .direct(ActionKey(providerID: "missing-provider", actionID: "missing-action"))
         )
 

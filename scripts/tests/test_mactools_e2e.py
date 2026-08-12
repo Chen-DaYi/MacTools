@@ -1196,6 +1196,12 @@ print(json.dumps({
         self.assertIn("six injected Trackpad Gestures test classes", result.stdout)
         self.assertNotIn("Test Suite", result.stdout)
 
+        harness = E2E_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn(
+            "-only-testing:MacToolsTests/MiddleClickPluginTests",
+            harness,
+        )
+
     def test_privacy_helper_is_deterministic_and_does_not_read_user_data(self):
         source = PRIVACY_HELPER_TOOL.read_text(encoding="utf-8")
         self.assertIn("No user files, account data, or clipboard content", source)

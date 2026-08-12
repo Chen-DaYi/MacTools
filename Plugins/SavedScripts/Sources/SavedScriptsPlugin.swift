@@ -204,7 +204,12 @@ final class SavedScriptsPlugin:
                     )
                     : nil,
                 externalInvocationPolicy: script.allowExternalInvocation ? .confirmAlways : .unavailable,
-                capabilities: [.background, .foregroundInteractive, .cancellable],
+                capabilities: [
+                    .background,
+                    .foregroundInteractive,
+                    .cancellable,
+                    .reportsProgress,
+                ],
                 executionTimeoutSeconds: Double(script.timeoutSeconds)
                     + ProcessSavedScriptRunner.actionExecutionTimeoutGraceSeconds
             )

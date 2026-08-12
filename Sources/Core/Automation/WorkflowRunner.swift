@@ -346,8 +346,8 @@ final class WorkflowRunner {
     }
 
     private func actionExecutionSource(for source: WorkflowRunSource) -> ActionExecutionSource {
-        if case .publishedAction(.runLink) = source {
-            return .runLink
+        if case let .publishedAction(actionSource) = source {
+            return actionSource
         }
         return .workflow
     }

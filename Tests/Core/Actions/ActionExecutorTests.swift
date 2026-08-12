@@ -96,6 +96,57 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(provider.beginCount, 0)
     }
 
+    func testAppIntentExecutionEnforcesProviderExposurePolicy() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        provider.exposurePolicy = .excluded
+        let definition = makeActionDefinition()
+        registry.synchronize([provider.registration(definition: definition)])
+
+        let outcome = await ActionExecutor(registry: registry).execute(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .appIntent,
+                mode: .foreground
+            )
+        )
+
+        XCTAssertEqual(outcome, .rejected(.systemExposureUnavailable))
+        XCTAssertEqual(provider.beginCount, 0)
+    }
+
+    func testAppIntentExecutionRechecksExposurePolicyAfterConfirmation() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            risk: .confirmationRequired,
+            confirmation: ActionConfirmation(
+                title: "Confirm",
+                message: "Continue?",
+                confirmButtonTitle: "Continue"
+            )
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+        let confirmation = ActionExecutorConfirmationService {
+            provider.exposurePolicy = .excluded
+            return true
+        }
+
+        let outcome = await ActionExecutor(
+            registry: registry,
+            confirmationService: confirmation
+        ).execute(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .appIntent,
+                mode: .foreground
+            )
+        )
+
+        XCTAssertEqual(outcome, .rejected(.systemExposureUnavailable))
+        XCTAssertEqual(provider.beginCount, 0)
+    }
+
     func testConfirmationAndExecutionUseIndependentTimeouts() async {
         let registry = ActionRegistry()
         let provider = ActionExecutorTestProvider()
@@ -506,6 +557,7 @@ final class ActionExecutorConfirmationService: ActionConfirmationRequesting {
 @MainActor
 final class ActionExecutorTestProvider {
     var availability: ActionAvailability = .available
+    var exposurePolicy: ActionExposurePolicy = .automatic
     var operation: @MainActor @Sendable () async -> ActionExecutionResult = { .succeeded() }
     var beginCount = 0
     var didCancel = false
@@ -524,6 +576,9 @@ final class ActionExecutorTestProvider {
             ],
             availability: { [weak self] _ in
                 self?.availability ?? .unavailable("missing")
+            },
+            exposurePolicy: { [weak self] _, _ in
+                self?.exposurePolicy ?? .excluded
             },
             begin: { [weak self] _ in
                 guard let self else {

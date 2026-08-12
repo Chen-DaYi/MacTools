@@ -176,7 +176,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
                 self?.pluginHost.hasPluginSettings(pluginID: pluginID) == true
             },
             actionHandler: { [weak self] request in
-                await self?.runLinkExecutionCoordinator.execute(request)
+                await self?.runLinkExecutionCoordinator.execute(request) ?? .completed
             }
         )
     }

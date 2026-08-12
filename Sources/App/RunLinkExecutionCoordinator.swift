@@ -255,7 +255,8 @@ final class RunLinkExecutionCoordinator {
         self.feedbackPresenter = feedbackPresenter
     }
 
-    func execute(_ request: ActionRunLinkRequest) async {
+    @discardableResult
+    func execute(_ request: ActionRunLinkRequest) async -> AppURLActionHandlingDisposition {
         let reference: ActionReference
         switch runLinkService.resolve(request) {
         case let .success(value):
@@ -268,7 +269,7 @@ final class RunLinkExecutionCoordinator {
                     message: message(for: error)
                 )
             )
-            return
+            return .completed
         }
 
         guard case let .success(action) = registry.registeredAction(for: reference) else {
@@ -279,24 +280,29 @@ final class RunLinkExecutionCoordinator {
                     message: FeatureL10n.string("操作提供方当前不可用。")
                 )
             )
-            return
+            return .completed
         }
         let mode: ActionExecutionMode = action.definition.capabilities
             .contains(.foregroundInteractive) ? .foreground : .background
         let invocation = ActionInvocation(reference: reference, source: .runLink, mode: mode)
         if action.definition.capabilities.contains(.reportsProgress) {
-            let outcome = await executor.startContinuing(
+            let start = await executor.startContinuingTrackingCompletion(
                 invocation,
                 expectedDefinition: action.definition,
                 confirmationService: confirmationService
             )
-            feedbackPresenter.present(feedback(for: outcome))
+            feedbackPresenter.present(feedback(for: start.outcome))
+            if let completion = start.completion {
+                return .continuing(until: completion)
+            }
+            return .completed
         } else {
             let outcome = await executor.execute(
                 invocation,
                 confirmationService: confirmationService
             )
             feedbackPresenter.present(feedback(for: outcome))
+            return .completed
         }
     }
 
@@ -306,7 +312,7 @@ final class RunLinkExecutionCoordinator {
             RunLinkExecutionFeedback(
                 tone: .progress,
                 title: FeatureL10n.string("操作已开始"),
-                message: FeatureL10n.string("可在自动化中查看运行进度。")
+                message: FeatureL10n.string("操作将在后台继续运行。")
             )
         case .cancelled:
             RunLinkExecutionFeedback(
@@ -381,6 +387,8 @@ final class RunLinkExecutionCoordinator {
             FeatureL10n.string("操作不支持当前执行方式。")
         case .externalInvocationUnavailable:
             FeatureL10n.string("此操作不允许从外部调用。")
+        case .systemExposureUnavailable:
+            FeatureL10n.string("操作不可用。")
         case .confirmationUnavailable:
             FeatureL10n.string("此操作需要确认，但无法显示确认界面。")
         case .confirmationDenied:

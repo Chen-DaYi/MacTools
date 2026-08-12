@@ -144,31 +144,11 @@ struct MiddleClickTapRecognizer: Sendable {
 
 }
 
-enum MiddleClickNativeButton: Equatable, Sendable {
-    case left
-    case right
-}
-
-enum MiddleClickNativeMouseEvent: Equatable, Sendable {
-    case down(MiddleClickNativeButton)
-    case up(MiddleClickNativeButton)
-}
-
-enum MiddleClickNativeEventDecision: Equatable, Sendable {
-    case passThrough
-    case rewriteAsMiddle
-}
-
-/// Serializes raw contact recognition and native click conversion across callback threads.
-/// A physical click converted while the fingers are down suppresses the synthetic click that the
-/// same contact episode would otherwise produce on release.
+/// Serializes raw contact recognition across callbacks from multiple trackpads.
 final class MiddleClickTapPipeline: @unchecked Sendable {
     private let lock = NSLock()
     private var fingerCount: Int
     private var recognizersByDevice: [UInt64: MiddleClickTapRecognizer] = [:]
-    private var exactContactDeviceIDs = Set<UInt64>()
-    private var nativeConvertedDeviceIDs = Set<UInt64>()
-    private var convertedButton: MiddleClickNativeButton?
 
     init(fingerCount: Int) {
         self.fingerCount = fingerCount
@@ -185,41 +165,15 @@ final class MiddleClickTapPipeline: @unchecked Sendable {
     /// Returns true when the frame completes a tap that still needs a synthesized middle click.
     func process(_ frame: MiddleClickContactFrame) -> Bool {
         lock.withLock {
-            if frame.contacts.count == fingerCount {
-                exactContactDeviceIDs.insert(frame.deviceID)
-            } else {
-                exactContactDeviceIDs.remove(frame.deviceID)
-            }
-
             var recognizer = recognizersByDevice[frame.deviceID]
                 ?? MiddleClickTapRecognizer(fingerCount: fingerCount)
             let recognized = recognizer.process(frame)
-            recognizersByDevice[frame.deviceID] = recognizer
-
-            guard frame.contacts.isEmpty else { return false }
-            let wasConvertedNatively = nativeConvertedDeviceIDs.remove(frame.deviceID) != nil
-            return recognized && !wasConvertedNatively
-        }
-    }
-
-    func handleNativeMouseEvent(
-        _ event: MiddleClickNativeMouseEvent
-    ) -> MiddleClickNativeEventDecision {
-        lock.withLock {
-            switch event {
-            case let .down(button):
-                guard convertedButton == nil, !exactContactDeviceIDs.isEmpty else {
-                    return .passThrough
-                }
-                convertedButton = button
-                nativeConvertedDeviceIDs.formUnion(exactContactDeviceIDs)
-                return .rewriteAsMiddle
-
-            case let .up(button):
-                guard convertedButton == button else { return .passThrough }
-                convertedButton = nil
-                return .rewriteAsMiddle
+            if frame.contacts.isEmpty {
+                recognizersByDevice[frame.deviceID] = nil
+            } else {
+                recognizersByDevice[frame.deviceID] = recognizer
             }
+            return recognized
         }
     }
 
@@ -229,8 +183,5 @@ final class MiddleClickTapPipeline: @unchecked Sendable {
 
     private func clearState() {
         recognizersByDevice.removeAll()
-        exactContactDeviceIDs.removeAll()
-        nativeConvertedDeviceIDs.removeAll()
-        convertedButton = nil
     }
 }

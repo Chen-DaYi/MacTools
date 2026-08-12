@@ -64,6 +64,7 @@ enum ActionExecutionRejection: Error, Equatable {
     case backgroundExecutionUnsupported
     case foregroundExecutionUnsupported
     case externalInvocationUnavailable
+    case systemExposureUnavailable
     case confirmationUnavailable
     case confirmationDenied
     case confirmationTimedOut
@@ -81,6 +82,11 @@ enum ContinuingActionStartOutcome: Equatable {
     case started
     case cancelled
     case rejected(ActionExecutionRejection)
+}
+
+struct ContinuingActionStartResult {
+    let outcome: ContinuingActionStartOutcome
+    let completion: Task<Void, Never>?
 }
 
 @MainActor
@@ -193,8 +199,25 @@ final class ActionExecutor {
         expectedDefinition: ActionDefinition,
         confirmationService overrideConfirmationService: (any ActionConfirmationRequesting)? = nil
     ) async -> ContinuingActionStartOutcome {
+        await startContinuingTrackingCompletion(
+            invocation,
+            expectedDefinition: expectedDefinition,
+            confirmationService: overrideConfirmationService
+        ).outcome
+    }
+
+    /// Starts a durable action and also returns a task that completes when the provider does.
+    /// Callers may use that task to retain recursion/capacity bookkeeping without awaiting it.
+    func startContinuingTrackingCompletion(
+        _ invocation: ActionInvocation,
+        expectedDefinition: ActionDefinition,
+        confirmationService overrideConfirmationService: (any ActionConfirmationRequesting)? = nil
+    ) async -> ContinuingActionStartResult {
         guard expectedDefinition.capabilities.contains(.reportsProgress) else {
-            return .rejected(.providerChanged)
+            return ContinuingActionStartResult(
+                outcome: .rejected(.providerChanged),
+                completion: nil
+            )
         }
         switch await prepare(
             invocation,
@@ -204,7 +227,10 @@ final class ActionExecutor {
         case let .prepared(execution):
             guard execution.definition.capabilities.contains(.reportsProgress) else {
                 execution.handle.cancel()
-                return .rejected(.providerChanged)
+                return ContinuingActionStartResult(
+                    outcome: .rejected(.providerChanged),
+                    completion: nil
+                )
             }
             let executionID = UUID()
             let task = Task { @MainActor [weak self] in
@@ -216,13 +242,16 @@ final class ActionExecutor {
                 continuingExecutionTasks[executionID] = nil
             }
             continuingExecutionTasks[executionID] = task
-            return .started
+            return ContinuingActionStartResult(outcome: .started, completion: task)
         case .completed(.cancelled):
-            return .cancelled
+            return ContinuingActionStartResult(outcome: .cancelled, completion: nil)
         case .completed:
-            return .cancelled
+            return ContinuingActionStartResult(outcome: .cancelled, completion: nil)
         case let .rejected(rejection):
-            return .rejected(rejection)
+            return ContinuingActionStartResult(
+                outcome: .rejected(rejection),
+                completion: nil
+            )
         }
     }
 
@@ -250,6 +279,9 @@ final class ActionExecutor {
         }
 
         if let rejection = policyRejection(for: initial.definition, invocation: invocation) {
+            return .rejected(rejection)
+        }
+        if let rejection = exposureRejection(for: invocation) {
             return .rejected(rejection)
         }
         let availability = registry.availability(for: invocation.reference)
@@ -301,6 +333,9 @@ final class ActionExecutor {
         let currentAvailability = registry.availability(for: invocation.reference)
         guard currentAvailability.isAvailable else {
             return .rejected(.unavailable(currentAvailability.reason))
+        }
+        if let rejection = exposureRejection(for: invocation) {
+            return .rejected(rejection)
         }
 
         if revalidated.definition.capabilities.contains(.changesDisplayConfiguration) {
@@ -365,6 +400,23 @@ final class ActionExecutor {
                   ) else {
                 return .externalInvocationUnavailable
             }
+        }
+        return nil
+    }
+
+    private func exposureRejection(
+        for invocation: ActionInvocation
+    ) -> ActionExecutionRejection? {
+        let surface: ActionExposureSurface
+        switch invocation.source {
+        case .appIntent:
+            surface = .appIntents
+        default:
+            return nil
+        }
+
+        guard registry.exposurePolicy(for: invocation.reference, on: surface) != .excluded else {
+            return .systemExposureUnavailable
         }
         return nil
     }

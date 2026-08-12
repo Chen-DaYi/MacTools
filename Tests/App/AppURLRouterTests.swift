@@ -355,7 +355,10 @@ final class AppURLRouterTests: XCTestCase {
         let synchronous = router.activate(
             presentationHandler: { request in events.append(.navigation(request)) },
             isPluginConfigurationAvailable: { _ in true },
-            actionHandler: { request in events.append(.action(request)) }
+            actionHandler: { request in
+                events.append(.action(request))
+                return .completed
+            }
         )
         XCTAssertEqual(synchronous, [.handled(.settings(.general))])
         await router.waitUntilIdle()
@@ -390,6 +393,7 @@ final class AppURLRouterTests: XCTestCase {
                 delivered.append(request)
                 try? await Task.sleep(for: .milliseconds(10))
                 activeCount -= 1
+                return .completed
             }
         )
         let first = try XCTUnwrap(URL(string: "mactools://app/actions/test-provider/first"))
@@ -429,6 +433,7 @@ final class AppURLRouterTests: XCTestCase {
             isPluginConfigurationAvailable: { _ in true },
             actionHandler: { _ in
                 recursiveResult = router.handle(url)
+                return .completed
             }
         )
 
@@ -456,13 +461,22 @@ final class AppURLRouterTests: XCTestCase {
                 switch request {
                 case let .direct(key) where key.providerID == "test-provider"
                     && key.actionID == "first":
-                    nestedResults.append(router.handle(second))
+                    await Task.detached {
+                        await MainActor.run {
+                            nestedResults.append(router.handle(second))
+                        }
+                    }.value
                 case let .direct(key) where key.providerID == "test-provider"
                     && key.actionID == "second":
-                    nestedResults.append(router.handle(first))
+                    await Task.detached {
+                        await MainActor.run {
+                            nestedResults.append(router.handle(first))
+                        }
+                    }.value
                 default:
                     break
                 }
+                return .completed
             }
         )
 
@@ -490,14 +504,21 @@ final class AppURLRouterTests: XCTestCase {
         var requests: [AppPresentationRequest] = []
         var recursiveResult: AppURLHandlingResult?
         var continuingTask: Task<Void, Never>?
+        var executionCompletion: Task<Void, Never>?
         router.activate(
             presentationHandler: { requests.append($0) },
             isPluginConfigurationAvailable: { _ in true },
             actionHandler: { _ in
-                continuingTask = Task { @MainActor in
-                    await Task.yield()
-                    recursiveResult = router.handle(action)
+                let completion = Task<Void, Never> {
+                    try? await Task.sleep(for: .seconds(60))
                 }
+                executionCompletion = completion
+                continuingTask = Task.detached {
+                    await MainActor.run {
+                        recursiveResult = router.handle(action)
+                    }
+                }
+                return .continuing(until: completion)
             }
         )
 
@@ -511,6 +532,7 @@ final class AppURLRouterTests: XCTestCase {
 
         XCTAssertEqual(router.handle(settings), .handled(.settings(.general)))
         await continuingTask?.value
+        executionCompletion?.cancel()
         XCTAssertEqual(requests, [.settings(.general)])
         XCTAssertEqual(recursiveResult, .rejected(.recursiveActionInvocation))
     }

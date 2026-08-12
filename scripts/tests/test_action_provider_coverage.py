@@ -6,6 +6,7 @@ import unittest
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 COVERAGE_DOCUMENT = REPO_ROOT / "docs" / "plugins" / "action-provider-coverage.md"
 PLUGINS_ROOT = REPO_ROOT / "Plugins"
+E2E_SCRIPT = REPO_ROOT / "scripts" / "e2e" / "mactools-e2e.sh"
 
 
 class ActionProviderCoverageTests(unittest.TestCase):
@@ -27,6 +28,30 @@ class ActionProviderCoverageTests(unittest.TestCase):
 
         self.assertFalse(providers & exclusions)
         self.assertEqual(providers | exclusions, manifest_directories)
+
+    def test_every_documented_provider_is_in_the_e2e_registry_checkpoint(self):
+        document = COVERAGE_DOCUMENT.read_text(encoding="utf-8")
+        providers = self.directory_names(
+            document,
+            "## Migrated providers",
+            "Parameterized actions publish",
+        )
+        suite_overrides = {
+            "AutoInput": "AutoInputPluginPanelTests",
+            "KeepAwake": "KeepAwakePreferenceTests",
+            "LaunchControl": "LaunchControlCanonicalActionTests",
+            "Launchpad": "LaunchpadPluginActionTests",
+        }
+        harness = E2E_SCRIPT.read_text(encoding="utf-8")
+
+        missing = []
+        for provider in sorted(providers):
+            suite = suite_overrides.get(provider, f"{provider}PluginTests")
+            selector = f"-only-testing:MacToolsTests/{suite}"
+            if selector not in harness:
+                missing.append((provider, suite))
+
+        self.assertEqual(missing, [])
 
     @staticmethod
     def directory_names(document: str, start: str, end: str):
