@@ -1223,13 +1223,17 @@ struct ActivityBarComponentView: View {
     private func visibleCodingAggregateStats(in day: ActivityBarCodingDailyStats) -> ActivityBarProjectStats {
         let visibleToolStats = Self.visibleCodingTools.map { toolStats($0, in: day) }
         if visibleToolStats.contains(where: { hasCodingStats($0) }) {
-            return visibleToolStats.reduce(ActivityBarProjectStats()) { result, stats in
+            let counts = visibleToolStats.reduce(ActivityBarProjectStats()) { result, stats in
                 ActivityBarProjectStats(
-                    durationSeconds: result.durationSeconds + stats.durationSeconds,
                     wordCount: result.wordCount + stats.wordCount,
                     toolCallCount: result.toolCallCount + stats.toolCallCount
                 )
             }
+            return ActivityBarProjectStats(
+                durationSeconds: day.durationSeconds,
+                wordCount: counts.wordCount,
+                toolCallCount: counts.toolCallCount
+            )
         }
 
         guard day.perTool.isEmpty else {
