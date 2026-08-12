@@ -6,22 +6,112 @@ import XCTest
 @MainActor
 final class DockLockPluginTests: XCTestCase {
     func testCursorAtBottomIsClampedWithoutChangingHorizontalPosition() {
-        let location = CGPoint(x: 400, y: 1_000)
+        let location = CGPoint(x: 1_800, y: 1_000)
 
         let result = DockLockCursorBoundary.clampedQuartzLocation(
             for: location,
             primaryDisplayHeight: 1_000,
-            screenFrames: [CGRect(x: 0, y: 0, width: 1_440, height: 1_000)]
+            screens: [
+                screen(
+                    frame: CGRect(x: 0, y: 0, width: 1_440, height: 1_000),
+                    bottomDockInset: 80
+                ),
+                screen(frame: CGRect(x: 1_440, y: 0, width: 1_000, height: 800)),
+            ]
         )
 
-        XCTAssertEqual(result, CGPoint(x: 400, y: 996))
+        XCTAssertEqual(result, CGPoint(x: 1_800, y: 996))
     }
 
     func testCursorOutsideBottomInsetIsNotClamped() {
         let result = DockLockCursorBoundary.clampedQuartzLocation(
-            for: CGPoint(x: 400, y: 990),
+            for: CGPoint(x: 1_800, y: 990),
             primaryDisplayHeight: 1_000,
-            screenFrames: [CGRect(x: 0, y: 0, width: 1_440, height: 1_000)]
+            screens: [
+                screen(
+                    frame: CGRect(x: 0, y: 0, width: 1_440, height: 1_000),
+                    bottomDockInset: 80
+                ),
+                screen(frame: CGRect(x: 1_440, y: 0, width: 1_000, height: 800)),
+            ]
+        )
+
+        XCTAssertNil(result)
+    }
+
+    func testSingleDisplayIsNeverClamped() {
+        let result = DockLockCursorBoundary.clampedQuartzLocation(
+            for: CGPoint(x: 400, y: 1_000),
+            primaryDisplayHeight: 1_000,
+            screens: [
+                screen(
+                    frame: CGRect(x: 0, y: 0, width: 1_440, height: 1_000),
+                    bottomDockInset: 80
+                ),
+            ]
+        )
+
+        XCTAssertNil(result)
+    }
+
+    func testCurrentDockDisplayIsNeverClamped() {
+        let result = DockLockCursorBoundary.clampedQuartzLocation(
+            for: CGPoint(x: 400, y: 1_000),
+            primaryDisplayHeight: 1_000,
+            screens: [
+                screen(
+                    frame: CGRect(x: 0, y: 0, width: 1_440, height: 1_000),
+                    bottomDockInset: 80
+                ),
+                screen(frame: CGRect(x: 1_440, y: 0, width: 1_000, height: 800)),
+            ]
+        )
+
+        XCTAssertNil(result)
+    }
+
+    func testSharedEdgeWithDisplayBelowIsNotClamped() {
+        let result = DockLockCursorBoundary.clampedQuartzLocation(
+            for: CGPoint(x: 1_800, y: 1_000),
+            primaryDisplayHeight: 1_000,
+            screens: [
+                screen(
+                    frame: CGRect(x: 0, y: 0, width: 1_440, height: 1_000),
+                    bottomDockInset: 80
+                ),
+                screen(frame: CGRect(x: 1_440, y: 0, width: 1_000, height: 800)),
+                screen(frame: CGRect(x: 1_440, y: -800, width: 1_000, height: 800)),
+            ]
+        )
+
+        XCTAssertNil(result)
+    }
+
+    func testExposedPartOfPartiallySharedBottomEdgeIsStillClamped() {
+        let result = DockLockCursorBoundary.clampedQuartzLocation(
+            for: CGPoint(x: 2_200, y: 1_000),
+            primaryDisplayHeight: 1_000,
+            screens: [
+                screen(
+                    frame: CGRect(x: 0, y: 0, width: 1_440, height: 1_000),
+                    bottomDockInset: 80
+                ),
+                screen(frame: CGRect(x: 1_440, y: 0, width: 1_000, height: 800)),
+                screen(frame: CGRect(x: 1_440, y: -800, width: 500, height: 800)),
+            ]
+        )
+
+        XCTAssertEqual(result, CGPoint(x: 2_200, y: 996))
+    }
+
+    func testUnknownDockDisplayFailsOpen() {
+        let result = DockLockCursorBoundary.clampedQuartzLocation(
+            for: CGPoint(x: 1_800, y: 1_000),
+            primaryDisplayHeight: 1_000,
+            screens: [
+                screen(frame: CGRect(x: 0, y: 0, width: 1_440, height: 1_000)),
+                screen(frame: CGRect(x: 1_440, y: 0, width: 1_000, height: 800)),
+            ]
         )
 
         XCTAssertNil(result)
@@ -33,6 +123,21 @@ final class DockLockPluginTests: XCTestCase {
         XCTAssertFalse(DockLockDockOrientation.isBottom(preferenceValue: nil))
         XCTAssertFalse(DockLockDockOrientation.isBottom(preferenceValue: 1))
         XCTAssertTrue(DockLockDockOrientation.isBottom(preferenceValue: "bottom"))
+    }
+
+    func testAutoHiddenDockDisablesCursorClamping() {
+        XCTAssertTrue(
+            DockLockDockPreferences.shouldClamp(
+                orientationValue: "bottom",
+                autoHideValue: false
+            )
+        )
+        XCTAssertFalse(
+            DockLockDockPreferences.shouldClamp(
+                orientationValue: "bottom",
+                autoHideValue: true
+            )
+        )
     }
 
     func testActivationStartsMonitorWhenPermissionIsGranted() {
@@ -103,6 +208,21 @@ final class DockLockPluginTests: XCTestCase {
             storage.set(isEnabled, forKey: "dock-lock.enabled")
         }
         return PluginRuntimeContext(pluginID: "dock-lock", storage: storage)
+    }
+
+    private func screen(
+        frame: CGRect,
+        bottomDockInset: CGFloat = 0
+    ) -> DockLockCursorBoundary.ScreenGeometry {
+        DockLockCursorBoundary.ScreenGeometry(
+            frame: frame,
+            visibleFrame: CGRect(
+                x: frame.minX,
+                y: frame.minY + bottomDockInset,
+                width: frame.width,
+                height: frame.height - bottomDockInset
+            )
+        )
     }
 }
 

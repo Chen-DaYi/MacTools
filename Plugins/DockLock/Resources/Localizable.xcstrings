@@ -45,9 +45,9 @@
     },
     "permission.accessibility.description" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Intercepts pointer movement at the bottom of screens to stop the Dock jumping between displays." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Intercepte le pointeur au bas des écrans afin d’empêcher le Dock de changer d’écran." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于在屏幕底部拦截鼠标移动，防止程序坞跳到其他显示器。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Intercepts exposed bottom edges on other displays to stop the Dock jumping between displays." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Intercepte les bords inférieurs exposés des autres écrans afin d’empêcher le Dock de changer d’écran." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于拦截其他显示器的外露底边，防止程序坞跳到其他显示器。" } }
       }
     },
     "permission.accessibility.footnote" : {

@@ -14,21 +14,50 @@ protocol DockLockMonitoring: AnyObject {
 
 enum DockLockCursorBoundary {
     static let bottomInset: CGFloat = 4
+    private static let adjacentEdgeTolerance: CGFloat = 1
+
+    struct ScreenGeometry: Equatable {
+        let frame: CGRect
+        let visibleFrame: CGRect
+
+        var hostsBottomDock: Bool {
+            visibleFrame.minY - frame.minY > adjacentEdgeTolerance
+        }
+    }
 
     static func clampedQuartzLocation(
         for location: CGPoint,
         primaryDisplayHeight: CGFloat,
-        screenFrames: [CGRect]
+        screens: [ScreenGeometry]
     ) -> CGPoint? {
-        guard primaryDisplayHeight > 0 else {
+        guard primaryDisplayHeight > 0, screens.count > 1 else {
             return nil
         }
 
         let appKitLocation = CGPoint(x: location.x, y: primaryDisplayHeight - location.y)
-        guard let screenFrame = screenFrames.first(where: { $0.contains(appKitLocation) }) else {
+        guard let screenIndex = screens.firstIndex(where: { $0.frame.contains(appKitLocation) }) else {
             return nil
         }
+        let screenFrame = screens[screenIndex].frame
         guard appKitLocation.y - screenFrame.minY < bottomInset else {
+            return nil
+        }
+
+        let dockScreenIndices = screens.indices.filter { screens[$0].hostsBottomDock }
+        // If macOS does not expose a unique visible Dock edge, preserve native pointer behavior.
+        guard !dockScreenIndices.isEmpty, !dockScreenIndices.contains(screenIndex) else {
+            return nil
+        }
+
+        // A touching display below makes this an internal transition rather than a Dock trigger.
+        let hasDisplayBelow = screens.indices.contains { otherIndex in
+            guard otherIndex != screenIndex else { return false }
+            let otherFrame = screens[otherIndex].frame
+            return abs(otherFrame.maxY - screenFrame.minY) <= adjacentEdgeTolerance
+                && appKitLocation.x >= otherFrame.minX
+                && appKitLocation.x < otherFrame.maxX
+        }
+        guard !hasDisplayBelow else {
             return nil
         }
 
@@ -48,6 +77,13 @@ enum DockLockDockOrientation {
     }
 }
 
+enum DockLockDockPreferences {
+    static func shouldClamp(orientationValue: Any?, autoHideValue: Any?) -> Bool {
+        DockLockDockOrientation.isBottom(preferenceValue: orientationValue)
+            && (autoHideValue as? Bool != true)
+    }
+}
+
 final class DockLockMonitor: NSObject, DockLockMonitoring {
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -56,7 +92,7 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var dockPositionTimer: Timer?
-    private var isDockAtBottom = true
+    private var shouldClampPointer = false
 
     @discardableResult
     func start() -> Bool {
@@ -71,7 +107,7 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
             | (1 << CGEventType.otherMouseDragged.rawValue)
 
         guard let eventTap = CGEvent.tapCreate(
-            tap: .cghidEventTap,
+            tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: events,
@@ -88,10 +124,10 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
         }
 
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        CGEvent.tapEnable(tap: eventTap, enable: true)
         self.eventTap = eventTap
         self.runLoopSource = runLoopSource
         refreshDockPosition()
+        CGEvent.tapEnable(tap: eventTap, enable: true)
         startDockPositionPolling()
         return true
     }
@@ -128,17 +164,23 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
             return Unmanaged.passUnretained(event)
         }
 
-        guard isDockAtBottom else {
+        // Auto-hide needs the real screen edge to reveal the Dock, so protection pauses in that mode.
+        guard shouldClampPointer else {
             return Unmanaged.passUnretained(event)
         }
 
         let screens = NSScreen.screens
-        let screenFrames = screens.map(\.frame)
+        let screenGeometries = screens.map {
+            DockLockCursorBoundary.ScreenGeometry(
+                frame: $0.frame,
+                visibleFrame: $0.visibleFrame
+            )
+        }
         let primaryDisplayHeight = screens.first(where: { $0.frame.minX == 0 && $0.frame.minY == 0 })?.frame.height ?? 0
         if let clampedLocation = DockLockCursorBoundary.clampedQuartzLocation(
             for: event.location,
             primaryDisplayHeight: primaryDisplayHeight,
-            screenFrames: screenFrames
+            screens: screenGeometries
         ) {
             event.location = clampedLocation
         }
@@ -159,8 +201,9 @@ final class DockLockMonitor: NSObject, DockLockMonitoring {
 
     @objc private func refreshDockPosition() {
         let dockDefaults = UserDefaults(suiteName: "com.apple.dock")
-        isDockAtBottom = DockLockDockOrientation.isBottom(
-            preferenceValue: dockDefaults?.object(forKey: "orientation")
+        shouldClampPointer = DockLockDockPreferences.shouldClamp(
+            orientationValue: dockDefaults?.object(forKey: "orientation"),
+            autoHideValue: dockDefaults?.object(forKey: "autohide")
         )
     }
 }

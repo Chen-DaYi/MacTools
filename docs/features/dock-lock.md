@@ -8,14 +8,15 @@ Source of truth: yes
 ## Résumé
 
 - Bloque le déplacement accidentel du Dock entre écrans.
-- Uniquement lorsque le Dock est en bas.
+- Uniquement lorsque le Dock est en bas et que le masquage automatique est désactivé.
 - Le curseur reste utilisable horizontalement au bord inférieur.
+- Les passages vers un écran placé en dessous restent accessibles.
 
 ## User flow
 
 - L’utilisateur active « Dock Lock » dans le panneau principal.
 - MacTools demande l’autorisation Accessibilité si elle manque.
-- Le curseur est retenu quelques points avant le bord inférieur de chaque écran.
+- Le curseur est retenu quelques points avant les bords inférieurs exposés des écrans qui n’affichent pas le Dock.
 - L’utilisateur désactive le commutateur pour restaurer le comportement macOS.
 
 ## Règles métier
@@ -55,6 +56,7 @@ Source of truth: yes
 - 2026-08-10 — PR créée : `ggbond268/MacTools#263`.
 - 2026-08-10 — XCTest local : le cas d’autorisation manquante était initialisé désactivé, donc ne pouvait pas produire l’erreur attendue. Le test initialise désormais le plugin activé ; la vérification couvre bien le refus d’autorisation. Le mock de test conserve l’isolation MainActor du scénario.
 - 2026-08-11 — Compatibilité Swift 6 : le polling du Dock utilise un `Timer` cible/sélecteur sur la boucle principale, sans closure `@Sendable` capturant le moniteur.
+- 2026-08-12 — Revue sécurité : le tap utilise la session utilisateur ; seuls les bords extérieurs sans Dock sont retenus. Le mode échoue ouvert pour le masquage automatique, les écrans empilés et une géométrie Dock inconnue.
 
 ## Files actuels
 
