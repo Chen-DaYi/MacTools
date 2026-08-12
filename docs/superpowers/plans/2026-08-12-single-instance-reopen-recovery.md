@@ -1,4 +1,4 @@
-# Plan — Instance unique et récupération des Réglages
+# Plan — Single-Instance Settings Recovery
 
 Plan ID: `arch-06ad3254a8a3-scope-caf01c9e2de7`
 
@@ -8,325 +8,325 @@ Baseline: `06ad3254a8a3b1dcf3bc8b2e4fb7bee01f6c014a`
 
 PR: [#273 — Draft](https://github.com/ggbond268/MacTools/pull/273)
 
-Statut architecture: `ACTION_REQUIRED`
+Architecture status: `ACTION_REQUIRED`
 
-Revue architecture indépendante: `runtime_attestation=gpt-5.6-sol/high` ; paquet `settled`
+Independent architecture review: `runtime_attestation=gpt-5.6-sol/high`; `settled` packet
 
-## Résultat attendu
+## Expected outcome
 
-- Une seule instance fonctionnelle par bundle ID et session utilisateur.
-- Relance Finder, Spotlight, Dock ou launcher : Réglages affichés par l'instance existante.
-- Copie secondaire : commande `show-settings`, accusé de réception borné, puis arrêt.
-- Aucun `PluginHost`, plugin, raccourci, event tap, status item ou updater dans la copie secondaire.
-- Démarrage à froid et lancement à l'ouverture de session : silencieux.
-- Même comportement en Debug et Release.
-- PR conservée en Draft jusqu'à certification complète.
+- One functional instance per bundle ID and user session.
+- Finder, Spotlight, Dock, or launcher relaunch: the existing instance shows Settings.
+- Secondary copy: send `show-settings`, receive a bounded acknowledgement, then terminate.
+- No `PluginHost`, plugin, shortcut, event tap, status item, or updater in the secondary copy.
+- Cold launch and login launch remain silent.
+- Identical behavior in Debug and Release.
+- The PR remains Draft until full certification.
 
-## Diagnostic confirmé
+## Confirmed diagnosis
 
-Le callback AppKit de réouverture est correct. Le fallback Debug ne l'est pas :
+The AppKit reopen callback is correct. The Debug fallback is not:
 
-- polling de `NSWorkspace.runningApplications` chaque seconde ;
-- détection symétrique : chaque processus voit l'autre ;
-- ouverture possible des deux fenêtres Réglages ;
-- deux runtimes complets restent actifs ;
-- portée limitée au Debug ;
-- mémorisation de PID non purgée ;
-- tests limités à une politique bundle/PID, sans preuve multi-processus.
+- it polls `NSWorkspace.runningApplications` every second;
+- detection is symmetric: each process sees the other;
+- both Settings windows may open;
+- two complete runtimes remain active;
+- it is Debug-only;
+- its PID memory is never purged;
+- its tests only exercise a bundle/PID policy, not a multi-process flow.
 
-Risque principal : concurrence sur raccourcis globaux, observers, plugins matériels, préférences et répertoires partagés.
+The main risk is contention over global shortcuts, observers, hardware plugins, preferences, and shared directories.
 
 ## Invariants
 
-| ID | Invariant | Preuve attendue |
+| ID | Invariant | Expected evidence |
 |---|---|---|
-| I-001 | Au plus un runtime fonctionnel | Compteur d'initialisation = 1 sous lancements concurrents |
-| I-002 | Toute copie secondaire transmet `show-settings` puis quitte | ACK reçu ; exit 0 ; aucun runtime secondaire |
-| I-003 | Aucun polling permanent | Absence de `Timer` et de scan `runningApplications` |
-| I-004 | Reopen AppKit et IPC utilisent la même présentation | Même handler central ; tests des deux entrées |
-| I-005 | Une commande précoce n'est pas perdue | Réponse `not-ready`, retry borné, puis ACK après readiness |
-| I-006 | Crash propriétaire récupérable | Le lancement suivant devient propriétaire |
-| I-007 | Timeout borné et sûr | Pas de blocage ; pas de second runtime |
-| I-008 | Debug et Release partagent le même code | Aucun `#if DEBUG` sur le comportement produit |
+| I-001 | At most one functional runtime | Initialization counter = 1 under concurrent launches |
+| I-002 | Every secondary copy sends `show-settings` then terminates | ACK received; exit 0; no secondary runtime |
+| I-003 | No permanent polling | No `Timer` or `runningApplications` scan |
+| I-004 | AppKit reopen and IPC use the same presentation | Same central handler; both entry points tested |
+| I-005 | An early command is not lost | `not-ready` response, bounded retry, then ACK after readiness |
+| I-006 | Primary crash is recoverable | The next launch becomes primary |
+| I-007 | Timeout is bounded and safe | No hang; no second runtime |
+| I-008 | Debug and Release share the same code | No `#if DEBUG` around product behavior |
 
 ## Evidence ledger
 
-| ID | Preuve | Conclusion |
+| ID | Evidence | Conclusion |
 |---|---|---|
-| E-001 | Reproduction réelle du 2026-08-12 : deux PID `MacTools Dev` restent actifs | Le launcher peut démarrer une copie au lieu d'émettre un reopen |
-| E-002 | `MacToolsAppDelegate` construit actuellement `PluginHost` et les stores en propriétés | L'arbitrage actuel arrive trop tard pour protéger les side effects |
-| E-003 | Le polling est symétrique et basé uniquement sur bundle ID + PID | Il ne peut pas désigner l'instance propriétaire |
-| E-004 | `AppWindowRouter.show` active, déminiaturise et met la fenêtre au premier plan | La présentation existante est réutilisable |
-| E-005 | AppKit documente `applicationShouldHandleReopen` pour la réactivation d'une app déjà lancée | Conserver le callback et retourner `false` après traitement custom |
-| E-006 | Core Foundation documente les ports nommés, les réponses et les timeouts | `CFMessagePort` fournit l'IPC local requis sans dépendance |
-| E-007 | Revues Spec et standards indépendantes | Le polling ne doit pas être rendu mergeable |
+| E-001 | Real reproduction on 2026-08-12: two `MacTools Dev` PIDs remain active | The launcher can start a copy instead of emitting a reopen |
+| E-002 | `MacToolsAppDelegate` currently constructs `PluginHost` and stores as properties | Arbitration occurs too late to protect against side effects |
+| E-003 | Polling is symmetric and only uses bundle ID plus PID | It cannot nominate the owner instance |
+| E-004 | `AppWindowRouter.show` activates, deminiaturizes, and orders the window front | Existing presentation can be reused |
+| E-005 | AppKit documents `applicationShouldHandleReopen` for reactivating an already running app | Keep the callback and return `false` after custom handling |
+| E-006 | Core Foundation documents named ports, replies, and timeouts | `CFMessagePort` provides the required local IPC without a dependency |
+| E-007 | Independent Spec and standards reviews | Polling must not become mergeable |
 
-## Classification des surfaces
+## Surface classification
 
-| Surface | Classe | Décision |
+| Surface | Classification | Decision |
 |---|---|---|
-| Callback `applicationShouldHandleReopen` | `NON_RISK` | Conserver ; déléguer au handler central |
-| `AppWindowRouter.showSettings()` | `NON_RISK` | Conserver ; présentation déjà testée |
-| Polling Debug et `AppDuplicateLaunchPolicy` | `ACTION_REQUIRED` | Supprimer entièrement |
-| Initialisation en propriétés du delegate | `ACTION_REQUIRED` | Déplacer derrière l'élection propriétaire |
-| Absence d'IPC/ACK | `ACTION_REQUIRED` | Ajouter un coordinateur d'instance |
-| Cold launch silencieux | `PRESERVE` | Aucun affichage sans reopen ou commande IPC |
-| URL routing et bootstrap plugins | `PRESERVE` | Exécuter uniquement dans le runtime propriétaire |
+| `applicationShouldHandleReopen` callback | `NON_RISK` | Keep; delegate to the central handler |
+| `AppWindowRouter.showSettings()` | `NON_RISK` | Keep; presentation is already tested |
+| Debug polling and `AppDuplicateLaunchPolicy` | `ACTION_REQUIRED` | Remove entirely |
+| Delegate property initialization | `ACTION_REQUIRED` | Move behind owner election |
+| Missing IPC/ACK | `ACTION_REQUIRED` | Add an instance coordinator |
+| Silent cold launch | `PRESERVE` | Do not show a window without reopen or IPC command |
+| URL routing and plugin bootstrap | `PRESERVE` | Run only in the owner runtime |
 
-## Design retenu
+## Chosen design
 
-### 1. Propriétaire atomique via `CFMessagePort`
+### 1. Atomic owner through `CFMessagePort`
 
-Créer `AppInstanceCoordinator`, sans dépendance AppKit ni état persistant.
+Create `AppInstanceCoordinator`, without an AppKit dependency or persistent state.
 
-- Nom de port déterministe : `<bundle-id>.instance-coordination.v1`.
-- Namespace natif de la session utilisateur.
-- `CFMessagePortCreateLocal` tente l'enregistrement atomique.
-- Port réellement créé : rôle `.primary`.
-- Nom déjà enregistré : rôle `.secondary`.
-- Callback attaché immédiatement à une queue série dédiée.
-- Invalidation explicite à la terminaison.
-- Crash : port Mach invalidé par le système ; prochaine copie éligible comme propriétaire.
+- Deterministic port name: `<bundle-id>.instance-coordination.v1`.
+- Native user-session namespace.
+- `CFMessagePortCreateLocal` attempts atomic registration.
+- A newly created port gives role `.primary`.
+- An already registered name gives role `.secondary`.
+- Attach the callback immediately to a dedicated serial queue.
+- Explicitly invalidate at termination.
+- On crash, the system invalidates the Mach port; the next copy can become owner.
 
-Ne pas ajouter `LSMultipleInstancesProhibited` comme solution principale : il ne transporte pas la demande `show-settings` et peut produire une erreur LaunchServices au lieu du flux de récupération.
+Do not use `LSMultipleInstancesProhibited` as the primary solution: it cannot transmit `show-settings` and may produce a LaunchServices error instead of the recovery flow.
 
-### 2. Protocole IPC minimal
+### 2. Minimal IPC protocol
 
-Une seule commande versionnée : `show-settings`.
+One versioned command: `show-settings`.
 
-- Enveloppe : `{version: 1, command: "show-settings", requestID: <UUID>}`.
-- Taille maximale : 1 KiB.
-- Réponses fermées : `accepted`, `not-ready`, `unsupported`, `invalid`.
-- Send timeout : 500 ms maximum par tentative.
-- Receive timeout : 500 ms maximum par tentative.
-- Budget global incluant retries : 2 secondes.
-- Aucune URL, chemin, préférence ou donnée arbitraire transportée.
-- Une copie secondaire ne peut pas initialiser le runtime, quel que soit le résultat.
-- `requestID` rend une commande répétée idempotente.
+- Envelope: `{version: 1, command: "show-settings", requestID: <UUID>}`.
+- Maximum size: 1 KiB.
+- Closed responses: `accepted`, `not-ready`, `unsupported`, `invalid`.
+- Send timeout: at most 500 ms per attempt.
+- Receive timeout: at most 500 ms per attempt.
+- Global retry budget: 2 seconds.
+- No URL, path, preference, or arbitrary data.
+- A secondary copy cannot initialize the runtime, whatever the result.
+- `requestID` makes repeated commands idempotent.
 
-Séquence secondaire :
+Secondary sequence:
 
-1. Détecter le port existant.
-2. Créer le port distant.
-3. Envoyer `show-settings` et attendre l'ACK.
-4. Si `accepted` : demander `NSApp.terminate(nil)`.
-5. Si `not-ready` : réessayer dans le budget global de 2 secondes.
-6. Si port invalide : retenter l'élection atomique.
-7. Si la copie devient propriétaire après crash : démarrer normalement et demander les Réglages.
-8. Si le propriétaire reste présent sans ACK : logger, quitter, ne jamais initialiser un second runtime.
+1. Detect the existing port.
+2. Create the remote port.
+3. Send `show-settings` and wait for an ACK.
+4. On `accepted`, call `NSApp.terminate(nil)`.
+5. On `not-ready`, retry within the 2-second global budget.
+6. On invalid port, retry atomic owner election.
+7. If it becomes owner after a crash, start normally and request Settings.
+8. If an owner remains present without ACK, log and terminate; never initialize a second runtime.
 
-### 3. Runtime créé seulement par le propriétaire
+### 3. Create the runtime only for the owner
 
-Introduire `MacToolsAppRuntime`, construit après élection positive.
+Introduce `MacToolsAppRuntime`, built after successful election.
 
-Responsabilités regroupées :
+It groups:
 
-- `PluginHost` ;
-- updater et stores ;
-- `AppWindowRouter` ;
-- `MenuBarStatusItemController` ;
-- bootstrap plugins ;
-- routeur URL ;
-- cleanup de terminaison.
+- `PluginHost`;
+- updater and stores;
+- `AppWindowRouter`;
+- `MenuBarStatusItemController`;
+- plugin bootstrap;
+- URL router;
+- termination cleanup.
 
-Cycle de vie :
+Lifecycle:
 
-- `MacToolsAppDelegate` ne possède au départ que le coordinateur et un état de présentation léger.
-- `applicationWillFinishLaunching` lance l'élection.
-- `.secondary` transmet puis termine.
-- `.primary` autorise `applicationDidFinishLaunching` à construire `MacToolsAppRuntime`.
-- Tous les callbacks du delegate gardent un `guard` de rôle.
+- `MacToolsAppDelegate` initially owns only the coordinator and lightweight presentation state.
+- `applicationWillFinishLaunching` performs election.
+- `.secondary` sends then terminates.
+- `.primary` allows `applicationDidFinishLaunching` to create `MacToolsAppRuntime`.
+- Every delegate callback guards on the role.
 
-### 4. Handler de récupération unique
+### 4. One recovery handler
 
-Remplacer `showSettingsForReopen` par `requestSettingsRecovery()`.
+Replace `showSettingsForReopen` with `requestSettingsRecovery()`.
 
-Entrées :
+Inputs:
 
-- callback AppKit de reopen ;
-- commande IPC `show-settings`.
+- AppKit reopen callback;
+- `show-settings` IPC command.
 
-États :
+States:
 
-- routeur disponible : dispatcher sur le `MainActor`, appeler `windowRouter.showSettings()`, puis ACK `accepted` ;
-- routeur absent : répondre `not-ready`, sans perdre le port propriétaire ;
-- copie secondaire : retry borné jusqu'à readiness ou expiration des 2 secondes.
+- router available: dispatch on the `MainActor`, call `windowRouter.showSettings()`, then reply `accepted`;
+- router unavailable: reply `not-ready` while retaining the owner port;
+- secondary copy: retry until readiness or 2-second expiry.
 
-Les requêtes successives après démarrage restent honorées. Un `requestID` déjà accepté ne présente pas une seconde fois la fenêtre.
+Repeated requests after startup remain honored. An already accepted `requestID` must not present a second window.
 
-### 5. Observabilité
+### 5. Observability
 
-Ajouter `AppLog.instanceCoordination`.
+Add `AppLog.instanceCoordination`.
 
-Événements structurés :
+Structured events:
 
-- rôle élu ;
-- commande reçue ;
-- commande acceptée/non prête/rejetée ;
-- ACK ;
-- retry après invalidation ;
-- timeout ;
-- arrêt secondaire ;
-- invalidation à la terminaison.
+- elected role;
+- received command;
+- accepted/not-ready/rejected command;
+- ACK;
+- retry after invalidation;
+- timeout;
+- secondary termination;
+- termination invalidation.
 
-Ne pas logger de payload, chemin personnel ou identifiant sensible.
+Do not log payloads, personal paths, or sensitive identifiers.
 
-## Matrice des pannes
+## Failure matrix
 
-| Cas | Comportement requis |
+| Case | Required behavior |
 |---|---|
-| Premier lancement | Propriétaire ; runtime unique ; aucune fenêtre forcée |
-| Reopen AppKit | Propriétaire affiche/active Réglages |
-| Seconde copie, propriétaire prêt | Commande + ACK ; Réglages ; secondaire quitte |
-| Seconde copie pendant bootstrap | `not-ready` ; retry borné ; affichage dès que le routeur existe |
-| Deux lancements exactement simultanés | Un seul port local ; un seul runtime |
-| Propriétaire crash avant connexion | Retry ; secondaire devient propriétaire |
-| Propriétaire vivant mais bloqué | Timeout ; secondaire quitte sans runtime |
-| Message inconnu/version invalide | Rejet ; aucune présentation ; log warning |
-| Debug et Release installés ensemble | Bundle IDs différents ; propriétaires indépendants |
-| Deux copies du même bundle | Une seule propriétaire |
+| First launch | Owner; one runtime; no forced window |
+| AppKit reopen | Owner shows and activates Settings |
+| Secondary copy, owner ready | Command + ACK; Settings; secondary terminates |
+| Secondary copy during bootstrap | `not-ready`; bounded retry; presentation when router exists |
+| Two exactly concurrent launches | One local port; one runtime |
+| Owner crash before connection | Retry; secondary becomes owner |
+| Owner alive but blocked | Timeout; secondary exits without runtime |
+| Unknown/invalid message | Reject; no presentation; warning log |
+| Debug and Release installed together | Different bundle IDs; independent owners |
+| Two copies of the same bundle | One owner |
 
-## Actions et DAG
+## Actions and DAG
 
 ```text
-A-001 Coordinator + protocole IPC
-  -> A-002 Gating du runtime + handler unique
-      -> A-003 Tests multi-processus + QA réelle
-          -> A-004 Revue finale + certification Draft
+A-001 Coordinator + IPC protocol
+  -> A-002 Runtime gating + shared handler
+      -> A-003 Multi-process tests + real QA
+          -> A-004 Final review + Draft certification
 ```
 
-### A-001 — Coordinateur d'instance
+### A-001 — Instance coordinator
 
-But : fournir une élection atomique et une commande IPC bornée.
+Goal: provide atomic election and bounded IPC.
 
-Fichiers prévus :
+Planned files:
 
-- `Sources/App/AppInstanceCoordinator.swift` — nouveau ; rôle, protocole, transport `CFMessagePort`, timeouts, invalidation.
-- `Sources/Core/Diagnostics/AppLog.swift` — catégorie dédiée.
-- `Tests/App/AppInstanceCoordinatorTests.swift` — protocole, rôle, ACK, retry, timeout, invalidation.
+- `Sources/App/AppInstanceCoordinator.swift` — new; role, protocol, `CFMessagePort` transport, timeouts, invalidation.
+- `Sources/Core/Diagnostics/AppLog.swift` — dedicated category.
+- `Tests/App/AppInstanceCoordinatorTests.swift` — protocol, role, ACK, retry, timeout, invalidation.
 
-Contrat de sortie :
+Exit contract:
 
-- API typée : `.primary` ou `.secondary(acknowledged: Bool)`.
-- Aucun AppKit dans le cœur du coordinateur.
-- Transport injectable pour tests déterministes.
-- Aucun polling, PID cache ou fichier de lock.
+- Typed API: `.primary` or `.secondary(acknowledged: Bool)`.
+- No AppKit in the coordinator core.
+- Injectable transport for deterministic tests.
+- No polling, PID cache, or lock file.
 
-### A-002 — Gating du runtime et récupération unique
+### A-002 — Runtime gating and shared recovery
 
-But : empêcher tout side effect secondaire.
+Goal: prevent all secondary side effects.
 
-Fichiers prévus :
+Planned files:
 
-- `Sources/App/MacToolsApp.swift` — élection précoce, delegate minimal, suppression du polling.
-- `Sources/App/MacToolsAppRuntime.swift` — nouveau ; composition du runtime propriétaire.
-- `Tests/App/MacToolsAppDelegateTests.swift` — transitions primary/secondary, readiness/retry, reopen.
+- `Sources/App/MacToolsApp.swift` — early election, minimal delegate, remove polling.
+- `Sources/App/MacToolsAppRuntime.swift` — new; owner runtime composition.
+- `Tests/App/MacToolsAppDelegateTests.swift` — primary/secondary, readiness/retry, reopen transitions.
 
-Contrat de sortie :
+Exit contract:
 
-- `PluginHost` absent du delegate avant élection.
-- Aucun appel de bootstrap, status item ou URL router côté secondaire.
-- AppKit reopen et IPC convergent vers `requestSettingsRecovery()`.
-- Cold launch inchangé.
+- `PluginHost` is absent from the delegate before election.
+- No bootstrap, status item, or URL router call in the secondary process.
+- AppKit reopen and IPC converge on `requestSettingsRecovery()`.
+- Cold launch is unchanged.
 
-### A-003 — Preuve multi-processus
+### A-003 — Multi-process evidence
 
-But : tester les primitives réelles, pas uniquement des fakes.
+Goal: test real primitives, not only fakes.
 
-Fichiers prévus :
+Planned files:
 
-- `Tests/App/AppInstanceCoordinatorProcessTests.swift` — orchestration de sous-processus.
-- `Tests/Support/AppInstanceProbe/` — exécutable de test minimal, sans UI ni données utilisateur.
-- `project.yml` et générateur de config test si nécessaires — cible helper Debug uniquement.
-- `docs/features/app-reopen-recovery.md` — résultats et journal append-only.
-- `README.md` — documenter la voie de récupération utilisateur.
-- `changes/unreleased/app-reopen-recovery.md` — texte final centré utilisateur.
+- `Tests/App/AppInstanceCoordinatorProcessTests.swift` — subprocess orchestration.
+- `Tests/Support/AppInstanceProbe/` — minimal test executable, with no UI or user data.
+- `project.yml` and test configuration generator if needed — Debug-only helper target.
+- `docs/features/app-reopen-recovery.md` — results and append-only journal.
+- `README.md` — document the user recovery path.
+- `changes/unreleased/app-reopen-recovery.md` — final user-facing wording.
 
-Scénarios automatiques :
+Automated scenarios:
 
-- 2 puis 10 processus concurrents : exactement un propriétaire ;
-- une commande par secondaire ; ACK et exit 0 ;
-- commande reçue avant disponibilité du handler ;
-- crash du propriétaire puis promotion ;
-- propriétaire silencieux : timeout, aucun second runtime ;
-- bundle IDs différents : indépendance ;
-- message/version invalide : rejet.
+- two, then ten concurrent processes: exactly one owner;
+- one command per secondary; ACK and exit 0;
+- command received before handler readiness;
+- owner crash then promotion;
+- unresponsive owner: timeout, no second runtime;
+- different bundle IDs: independence;
+- invalid message/version: rejection.
 
-Tous les artefacts utilisent un namespace temporaire de test. Aucun accès aux préférences ou répertoires réels.
+All artifacts use a temporary test namespace. They never access real preferences or directories.
 
 ### A-004 — Certification
 
-But : décider si la PR peut quitter Draft. Ne pas la rendre Ready automatiquement.
+Goal: decide whether the PR may leave Draft. Do not make it Ready automatically.
 
-Gates :
+Gates:
 
-- tests ciblés coordinator, delegate et window router ;
-- test multi-processus vert sans retry flaky ;
-- suite `MacToolsTests` verte ;
-- `make build` Debug ;
-- build Release ;
-- `git diff --check` ;
-- review Spec séparée ;
-- review standards séparée ;
-- QA réelle Finder/Spotlight/Dock/launcher ;
-- après stabilisation : un seul processus actif et Réglages au premier plan ;
-- PR toujours Draft ; passage Ready seulement sur demande explicite.
-- écrire `.Codex/rules/architecture-stability.md` seulement après tous les gates verts ; baseline = HEAD précédant le commit de certification.
+- focused coordinator, delegate, and window-router tests;
+- green multi-process test with no flaky retries;
+- green `MacToolsTests` suite;
+- Debug `make build`;
+- Release build;
+- `git diff --check`;
+- separate Spec review;
+- separate standards review;
+- real Finder, Spotlight, Dock, and launcher QA;
+- after stabilization: one active process and Settings in front;
+- PR stays Draft; Ready status requires an explicit request;
+- write `.Codex/rules/architecture-stability.md` only after all gates pass; baseline is the HEAD before the certification commit.
 
-## Tests d'acceptance
+## Acceptance tests
 
 | ID | Given | When | Then |
 |---|---|---|---|
-| AT-001 | Aucun MacTools actif | L'app démarre | Un runtime ; aucune fenêtre forcée |
-| AT-002 | MacTools actif, aucune fenêtre visible | Relance via launcher | Réglages visibles et actifs ; un seul runtime final |
-| AT-003 | MacTools actif, Réglages miniaturisés | Relance | Même fenêtre déminiaturisée et au premier plan |
-| AT-004 | MacTools actif, autre fenêtre visible | Reopen AppKit | Réglages affichés malgré `hasVisibleWindows = true` |
-| AT-005 | Propriétaire en bootstrap | Une copie secondaire démarre | Demande non perdue ; affichage après readiness |
-| AT-006 | 10 copies démarrent simultanément | Coordination | Un propriétaire ; neuf secondaires sans runtime |
-| AT-007 | Propriétaire crash | Nouvelle copie démarre | Promotion ; démarrage normal |
-| AT-008 | Propriétaire ne répond pas | Secondaire démarre | Arrêt borné ; aucun double runtime |
-| AT-009 | MacTools Dev et MacTools Release | Les deux démarrent | Indépendance par bundle ID |
+| AT-001 | No MacTools process | The app starts | One runtime; no forced window |
+| AT-002 | MacTools running without visible window | Relaunch through launcher | Settings visible and active; one final runtime |
+| AT-003 | MacTools running with minimized Settings | Relaunch | Same window deminiaturized and frontmost |
+| AT-004 | MacTools running with another visible window | AppKit reopen | Settings shown even when `hasVisibleWindows = true` |
+| AT-005 | Owner is bootstrapping | Secondary starts | Request is not lost; presentation after readiness |
+| AT-006 | Ten copies start simultaneously | Coordination | One owner; nine secondaries without runtime |
+| AT-007 | Owner crashes | New copy starts | Promotion; normal launch |
+| AT-008 | Owner does not respond | Secondary starts | Bounded termination; no duplicate runtime |
+| AT-009 | MacTools Dev and MacTools Release | Both start | Independence by bundle ID |
 
 ## Fitness functions
 
-- Recherche statique : aucune référence à `duplicateLaunchPollTimer`, `handledDuplicateProcessIdentifiers`, `runningApplications` ou `AppDuplicateLaunchPolicy`.
-- Construction : `PluginHost(` uniquement dans le runtime propriétaire/composition autorisée.
-- Test concurrence : propriété `owners == 1` pour chaque groupe d'un même namespace.
-- Test secondaire : propriété `runtimeInitializations == 0`.
-- Test timeout : durée totale inférieure à 2 secondes.
-- Test reopen : une seule invocation de présentation par événement.
-- Aucun branchement produit `#if DEBUG` dans le coordinateur.
+- Static search finds no `duplicateLaunchPollTimer`, `handledDuplicateProcessIdentifiers`, `runningApplications`, or `AppDuplicateLaunchPolicy`.
+- `PluginHost(` is constructed only by approved owner-runtime composition.
+- Concurrency test property: `owners == 1` for every same-namespace group.
+- Secondary test property: `runtimeInitializations == 0`.
+- Timeout test: total duration is below 2 seconds.
+- Reopen test: exactly one presentation invocation per event.
+- No product `#if DEBUG` branch in the coordinator.
 
 ## Stability envelope
 
-- Changements absorbés : plusieurs DerivedData, Finder/Spotlight, upgrade de bundle, crash primaire, future commande locale idempotente.
-- Seuils : un runtime ; zéro bootstrap secondaire ; présentation en moins de 2 secondes ; zéro polling au repos.
-- Contraintes : macOS 14+, Swift 6, Apple-native, UI `MainActor`, aucune dépendance.
-- Invalidation du design : commande IPC non idempotente, sandbox bloquant `CFMessagePort`, besoin inter-session, timeout observé sur 100 relances QA.
-- Compatibilité inter-version : arrêt/redémarrage requis si l'ancienne version ne publie aucun port ; coexistence non promise.
+- Absorbed changes: multiple DerivedData directories, Finder/Spotlight, bundle upgrade, primary crash, future idempotent local command.
+- Thresholds: one runtime; zero secondary bootstrap; presentation in less than 2 seconds; zero idle polling.
+- Constraints: macOS 14+, Swift 6, Apple-native, `MainActor` UI, no dependency.
+- Design invalidation: non-idempotent IPC command, sandbox blocking `CFMessagePort`, inter-session requirement, timeout observed during 100 QA relaunches.
+- Inter-version compatibility: stop/restart is required if an older version publishes no port; coexistence is not promised.
 
 ## Rollback
 
-- Revert isolé de `AppInstanceCoordinator` et `MacToolsAppRuntime`.
-- Restaurer uniquement le callback AppKit de reopen, sans réintroduire le polling.
-- Aucun format de préférence ni donnée utilisateur à migrer.
-- Aucun lock ou socket persistant à nettoyer.
-- Garder la PR Draft si un gate échoue.
+- Isolated revert of `AppInstanceCoordinator` and `MacToolsAppRuntime`.
+- Restore only the AppKit reopen callback; do not restore polling.
+- No user-preference format or user data migration.
+- No persistent lock or socket to clean up.
+- Keep the PR Draft if a gate fails.
 
-## Hors périmètre
+## Out of scope
 
-- Modifier le comportement du plugin qui masque la barre de menus.
-- Ajouter un raccourci global de secours.
-- Changer Finder, Spotlight ou le launcher.
-- Ajouter une restauration automatique de préférences.
-- Ajouter une dépendance tierce ou un service XPC.
-- Fusionner ou rendre la PR Ready.
+- Change the plugin behavior that hides the menu bar.
+- Add a global recovery shortcut.
+- Change Finder, Spotlight, or the launcher.
+- Add automatic preference restoration.
+- Add a third-party dependency or XPC service.
+- Merge or make the PR Ready.
 
-## Décisions fermées
+## Closed decisions
 
-- IPC : `CFMessagePort`, pas polling ni notification sans ACK.
-- Unicité : enregistrement atomique du port nommé, pas PID.
-- Échec : fail closed ; jamais de second runtime.
-- Présentation : handler central vers `AppWindowRouter.showSettings()`.
-- Portée : même code Debug/Release, isolation par bundle ID.
-- Livraison : PR Draft jusqu'à demande explicite et certification.
+- IPC: `CFMessagePort`, not polling or notification without ACK.
+- Uniqueness: atomic named-port registration, not PID.
+- Failure: fail closed; never run a second runtime.
+- Presentation: central handler to `AppWindowRouter.showSettings()`.
+- Scope: same Debug/Release code, isolated by bundle ID.
+- Delivery: Draft until explicit request and certification.
