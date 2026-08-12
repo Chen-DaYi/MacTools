@@ -67,6 +67,7 @@ enum AppURLRoutingError: Error, Equatable {
     case unexpectedActionParameters
     case unavailablePlugin(String)
     case pendingQueueFull
+    case actionAlreadyRunning
     case recursiveActionInvocation
 
     var diagnosticCode: String {
@@ -97,6 +98,8 @@ enum AppURLRoutingError: Error, Equatable {
             return "unavailable-plugin"
         case .pendingQueueFull:
             return "pending-queue-full"
+        case .actionAlreadyRunning:
+            return "action-already-running"
         case .recursiveActionInvocation:
             return "recursive-action-invocation"
         }
@@ -317,7 +320,7 @@ final class AppURLRouter {
     }
 
     private struct ActiveActionLease {
-        let ancestry: Set<ActionRunLinkRequest>
+        let request: ActionRunLinkRequest
     }
 
     private let acceptedURLSchemes: Set<String>
@@ -332,6 +335,8 @@ final class AppURLRouter {
         (ActionRunLinkRequest) async -> AppURLActionHandlingDisposition
     )?
     private var activeActionLeases: [UUID: ActiveActionLease] = [:]
+    private var dispatchingActionRequest: ActionRunLinkRequest?
+    private var dispatchingActionAncestry: Set<ActionRunLinkRequest> = []
     private var drainTask: Task<Void, Never>?
     private var isDraining = false
 
@@ -383,8 +388,18 @@ final class AppURLRouter {
             switch route {
             case let .navigation(deepLink) where pendingRoutes.isEmpty && !isDraining:
                 return deliver(deepLink)
-            case let .run(request) where isRecursiveActionRequest(request):
-                return reject(.recursiveActionInvocation, url: url)
+            case let .run(request):
+                if isRecursiveActionRequest(request) {
+                    return reject(.recursiveActionInvocation, url: url)
+                }
+                if isActionAlreadyRunning(request) {
+                    return reject(.actionAlreadyRunning, url: url)
+                }
+                guard enqueue(route) else {
+                    return reject(.pendingQueueFull, url: url)
+                }
+                startDrainIfNeeded()
+                return queuedResult(for: route)
             default:
                 guard enqueue(route) else {
                     return reject(.pendingQueueFull, url: url)
@@ -434,7 +449,7 @@ final class AppURLRouter {
             return false
         }
         var actionAncestry = Self.currentActionAncestry
-        activeActionLeases.values.forEach { actionAncestry.formUnion($0.ancestry) }
+        actionAncestry.formUnion(dispatchingActionAncestry)
         pendingRoutes.append(PendingRoute(
             route: route,
             actionAncestry: actionAncestry
@@ -472,11 +487,15 @@ final class AppURLRouter {
                     let ancestry = pendingRoute.actionAncestry.union([request])
                     let leaseID = UUID()
                     activeActionLeases[leaseID] = ActiveActionLease(
-                        ancestry: ancestry
+                        request: request
                     )
+                    dispatchingActionRequest = request
+                    dispatchingActionAncestry = ancestry
                     let disposition = await Self.$currentActionAncestry.withValue(ancestry) {
                         await actionHandler?(request) ?? .completed
                     }
+                    dispatchingActionRequest = nil
+                    dispatchingActionAncestry = []
                     if let completion = disposition.completion {
                         Task { @MainActor [weak self] in
                             await completion.value
@@ -494,7 +513,14 @@ final class AppURLRouter {
 
     private func isRecursiveActionRequest(_ request: ActionRunLinkRequest) -> Bool {
         Self.currentActionAncestry.contains(request)
-            || activeActionLeases.values.contains { $0.ancestry.contains(request) }
+            || (
+                dispatchingActionRequest != request
+                    && dispatchingActionAncestry.contains(request)
+            )
+    }
+
+    private func isActionAlreadyRunning(_ request: ActionRunLinkRequest) -> Bool {
+        activeActionLeases.values.contains { $0.request == request }
     }
 
     private func deliver(_ deepLink: AppDeepLink) -> AppURLHandlingResult {

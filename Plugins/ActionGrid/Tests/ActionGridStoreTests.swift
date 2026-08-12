@@ -11,6 +11,10 @@ final class ActionGridStoreTests: XCTestCase {
         )
         XCTAssertFalse(first.canMoveUp)
         XCTAssertTrue(first.canMoveDown)
+        XCTAssertEqual(
+            ActionGridAccessibilityMoveActions(availability: first).actions,
+            [.down]
+        )
 
         let middle = ActionGridEntryMoveAvailability(
             slot: 4,
@@ -18,6 +22,10 @@ final class ActionGridStoreTests: XCTestCase {
         )
         XCTAssertTrue(middle.canMoveUp)
         XCTAssertTrue(middle.canMoveDown)
+        XCTAssertEqual(
+            ActionGridAccessibilityMoveActions(availability: middle).actions,
+            [.up, .down]
+        )
 
         let last = ActionGridEntryMoveAvailability(
             slot: ActionGridStore.maximumEntryCount - 1,
@@ -25,6 +33,10 @@ final class ActionGridStoreTests: XCTestCase {
         )
         XCTAssertTrue(last.canMoveUp)
         XCTAssertFalse(last.canMoveDown)
+        XCTAssertEqual(
+            ActionGridAccessibilityMoveActions(availability: last).actions,
+            [.up]
+        )
     }
 
     func testDragPayloadRoundTripsOnlyNamespacedEntryIdentifiers() {

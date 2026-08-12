@@ -25,6 +25,37 @@ struct ActionGridEntryMoveAvailability: Equatable {
     }
 }
 
+enum ActionGridAccessibilityMoveAction: Equatable {
+    case up
+    case down
+}
+
+struct ActionGridAccessibilityMoveActions: Equatable {
+    let actions: [ActionGridAccessibilityMoveAction]
+
+    init(availability: ActionGridEntryMoveAvailability) {
+        actions = [
+            availability.canMoveUp ? .up : nil,
+            availability.canMoveDown ? .down : nil,
+        ].compactMap { $0 }
+    }
+}
+
+private struct ActionGridConditionalAccessibilityActionModifier: ViewModifier {
+    let isEnabled: Bool
+    let name: String
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.accessibilityAction(named: name, action)
+        } else {
+            content
+        }
+    }
+}
+
 private struct ActionGridKeyboardMoveModifier: ViewModifier {
     let availability: ActionGridEntryMoveAvailability
     let moveUp: () -> Void
@@ -183,6 +214,9 @@ struct ActionGridSettingsView: View {
             slot: index,
             maximumEntryCount: ActionGridStore.maximumEntryCount
         )
+        let accessibilityMoveActions = ActionGridAccessibilityMoveActions(
+            availability: moveAvailability
+        )
         let item = entry.folder == nil ? plugin.item(for: entry.reference) : nil
         let title = entry.customTitle
             ?? item?.title
@@ -275,12 +309,16 @@ struct ActionGridSettingsView: View {
         }
         .accessibilityLabel(title)
         .accessibilityHint(entry.folder != nil ? plugin.localized("打开文件夹") : plugin.localized("编辑操作"))
-        .accessibilityAction(named: plugin.localized("上移")) {
-            moveEntry(at: index, offset: -1)
-        }
-        .accessibilityAction(named: plugin.localized("下移")) {
-            moveEntry(at: index, offset: 1)
-        }
+        .modifier(ActionGridConditionalAccessibilityActionModifier(
+            isEnabled: accessibilityMoveActions.actions.contains(.up),
+            name: plugin.localized("上移"),
+            action: { moveEntry(at: index, offset: -1) }
+        ))
+        .modifier(ActionGridConditionalAccessibilityActionModifier(
+            isEnabled: accessibilityMoveActions.actions.contains(.down),
+            name: plugin.localized("下移"),
+            action: { moveEntry(at: index, offset: 1) }
+        ))
     }
 
     private func emptyCell(index: Int) -> some View {

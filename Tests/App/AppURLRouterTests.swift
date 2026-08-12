@@ -492,7 +492,7 @@ final class AppURLRouterTests: XCTestCase {
         )
     }
 
-    func testHandedOffActionInheritsAncestryWithoutBlockingNavigation() async throws {
+    func testHandedOffActionRejectsDuplicateAsAlreadyRunningWithoutBlockingNavigation() async throws {
         let router = AppURLRouter(
             acceptedURLSchemes: ["mactools"],
             rightClickHandler: { _ in }
@@ -502,7 +502,7 @@ final class AppURLRouterTests: XCTestCase {
         )
         let settings = try XCTUnwrap(URL(string: "mactools://app/settings/general"))
         var requests: [AppPresentationRequest] = []
-        var recursiveResult: AppURLHandlingResult?
+        var duplicateResult: AppURLHandlingResult?
         var continuingTask: Task<Void, Never>?
         var executionCompletion: Task<Void, Never>?
         router.activate(
@@ -515,7 +515,7 @@ final class AppURLRouterTests: XCTestCase {
                 executionCompletion = completion
                 continuingTask = Task.detached {
                     await MainActor.run {
-                        recursiveResult = router.handle(action)
+                        duplicateResult = router.handle(action)
                     }
                 }
                 return .continuing(until: completion)
@@ -534,6 +534,65 @@ final class AppURLRouterTests: XCTestCase {
         await continuingTask?.value
         executionCompletion?.cancel()
         XCTAssertEqual(requests, [.settings(.general)])
-        XCTAssertEqual(recursiveResult, .rejected(.recursiveActionInvocation))
+        XCTAssertEqual(duplicateResult, .rejected(.actionAlreadyRunning))
+    }
+
+    func testOverlappingIndependentContinuingActionsDoNotInheritEachOthersAncestry() async throws {
+        let router = AppURLRouter(
+            acceptedURLSchemes: ["mactools"],
+            rightClickHandler: { _ in }
+        )
+        let first = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/first")
+        )
+        let second = try XCTUnwrap(
+            URL(string: "mactools://app/actions/test-provider/second")
+        )
+        var completions: [Task<Void, Never>] = []
+        var handledActionIDs: [String] = []
+        var nestedSecondResult: AppURLHandlingResult?
+        router.activate(
+            presentationHandler: { _ in },
+            isPluginConfigurationAvailable: { _ in true },
+            actionHandler: { request in
+                guard case let .direct(key) = request else { return .completed }
+                handledActionIDs.append(key.actionID)
+                if key.actionID == "first" && handledActionIDs.count == 1 {
+                    nestedSecondResult = router.handle(second)
+                }
+                let completion = Task<Void, Never> {
+                    try? await Task.sleep(for: .seconds(60))
+                }
+                completions.append(completion)
+                return .continuing(until: completion)
+            }
+        )
+
+        XCTAssertEqual(
+            router.handle(first),
+            .queuedAction(.direct(ActionKey(providerID: "test-provider", actionID: "first")))
+        )
+        await router.waitUntilIdle()
+        XCTAssertEqual(
+            nestedSecondResult,
+            .queuedAction(.direct(ActionKey(providerID: "test-provider", actionID: "second")))
+        )
+        XCTAssertEqual(handledActionIDs, ["first", "second"])
+
+        completions[0].cancel()
+        await completions[0].value
+        try await Task.sleep(for: .milliseconds(10))
+
+        XCTAssertEqual(
+            router.handle(first),
+            .queuedAction(.direct(ActionKey(providerID: "test-provider", actionID: "first")))
+        )
+        await router.waitUntilIdle()
+        XCTAssertEqual(handledActionIDs, ["first", "second", "first"])
+
+        for completion in completions.dropFirst() {
+            completion.cancel()
+            await completion.value
+        }
     }
 }

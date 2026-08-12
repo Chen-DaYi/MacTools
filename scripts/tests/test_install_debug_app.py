@@ -140,8 +140,10 @@ class InstallDebugAppTests(unittest.TestCase):
             decoy_executable = root / "decoy/MacTools Test"
             installed_executable.parent.mkdir(parents=True)
             decoy_executable.parent.mkdir(parents=True)
-            installed_executable.symlink_to("/bin/sleep")
-            decoy_executable.symlink_to("/bin/sleep")
+            shutil.copyfile("/bin/sleep", installed_executable)
+            shutil.copyfile("/bin/sleep", decoy_executable)
+            installed_executable.chmod(0o755)
+            decoy_executable.chmod(0o755)
             installed_process = subprocess.Popen([str(installed_executable), "30"])
             decoy_process = subprocess.Popen([str(decoy_executable), "30"])
             installed_waiter = threading.Thread(target=installed_process.wait, daemon=True)

@@ -592,8 +592,8 @@ final class MultitouchDeviceDriver: MultitouchFrameListening, @unchecked Sendabl
     private var deviceCollection: MultitouchDeviceCollection?
     private var devices: [MultitouchDeviceEntry] = []
     private var callbackContext: UnsafeMutableRawPointer?
+    private var callbackGate: MultitouchFrameCallbackGate?
     private let runtime: (any MultitouchRuntimeProviding)?
-    nonisolated private let callbackGate = MultitouchFrameCallbackGate()
     nonisolated private let diagnosticsTracker = MultitouchDeviceDiagnosticsTracker()
 
     nonisolated private let logger = Logger(
@@ -673,6 +673,7 @@ final class MultitouchDeviceDriver: MultitouchFrameListening, @unchecked Sendabl
         diagnosticsTracker.configure(devices.map(\.descriptor))
         let diagnosticsTracker = diagnosticsTracker
         let logger = logger
+        let callbackGate = MultitouchFrameCallbackGate()
         callbackGate.activate(
             deviceIDsByCallbackSource: deviceIDsByCallbackSource
         ) { frame in
@@ -682,6 +683,7 @@ final class MultitouchDeviceDriver: MultitouchFrameListening, @unchecked Sendabl
             handler(frame)
         }
         let callbackContext = MultitouchCallbackContextRegistry.shared.insert(callbackGate)
+        self.callbackGate = callbackGate
         self.callbackContext = callbackContext
         Self.setActiveDriver(self)
         for entry in devices {
@@ -699,7 +701,7 @@ final class MultitouchDeviceDriver: MultitouchFrameListening, @unchecked Sendabl
     }
 
     func stop() {
-        callbackGate.invalidate()
+        callbackGate?.invalidate()
         MultitouchCallbackContextRegistry.shared.remove(callbackContext)
         callbackContext = nil
         Self.activeDriverLock.withLock {
@@ -713,6 +715,7 @@ final class MultitouchDeviceDriver: MultitouchFrameListening, @unchecked Sendabl
         }
         devices.removeAll()
         deviceCollection = nil
+        callbackGate = nil
         diagnosticsTracker.reset()
     }
 

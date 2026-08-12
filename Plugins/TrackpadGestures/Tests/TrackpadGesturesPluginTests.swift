@@ -181,6 +181,19 @@ private final class FakeMultitouchRuntime: MultitouchRuntimeProviding {
         registration?.callback(device, nil, 0, timestamp, 0, registration?.refcon)
     }
 
+    func resolvedCallbackGate(
+        deviceIndex: Int,
+        registrationOrdinal: Int
+    ) -> MultitouchFrameCallbackGate? {
+        let device = unsafeBitCast(retainedDevices[deviceIndex], to: MTDevice.self)
+        let sourceID = callbackSourceID(device)
+        let matchingRegistrations = registrations.filter { $0.deviceSourceID == sourceID }
+        guard matchingRegistrations.indices.contains(registrationOrdinal) else { return nil }
+        return MultitouchCallbackContextRegistry.shared.gate(
+            for: matchingRegistrations[registrationOrdinal].refcon
+        )
+    }
+
     private func callbackSourceID(_ device: MTDevice) -> UInt {
         UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
     }
@@ -1093,6 +1106,30 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(recorder.snapshot.map(\.timestamp), [1, 3])
         XCTAssertEqual(runtime.registerCount, 2)
         XCTAssertEqual(runtime.unregisterCount, 1)
+        driver.stop()
+    }
+
+    func testMultitouchDriverDoesNotReactivateGateResolvedBeforeRestart() throws {
+        let runtime = FakeMultitouchRuntime(deviceCount: 1)
+        let driver = MultitouchDeviceDriver(runtime: runtime)
+        let recorder = LockedFrameRecorder()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        let oldGate = try XCTUnwrap(runtime.resolvedCallbackGate(
+            deviceIndex: 0,
+            registrationOrdinal: 0
+        ))
+        driver.stop()
+
+        XCTAssertTrue(driver.start { recorder.append($0) })
+        XCTAssertFalse(oldGate.deliver(TrackpadContactFrame(
+            deviceID: 1,
+            timestamp: 1,
+            contacts: []
+        )))
+        runtime.emitFrame(deviceIndex: 0, timestamp: 2, registrationOrdinal: 1)
+
+        XCTAssertEqual(recorder.snapshot.map(\.timestamp), [2])
         driver.stop()
     }
 
