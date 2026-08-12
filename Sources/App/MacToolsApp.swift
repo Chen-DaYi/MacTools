@@ -38,6 +38,11 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
+    private var showSettingsForReopen: (() -> Void)?
+    #if DEBUG
+    private var duplicateLaunchPollTimer: Timer?
+    private var handledDuplicateProcessIdentifiers = Set<pid_t>()
+    #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppAppearancePreference.applyStoredPreference(userDefaults: appearanceUserDefaults)
@@ -54,6 +59,10 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             appearanceUserDefaults: appearanceUserDefaults
         )
         self.windowRouter = windowRouter
+        showSettingsForReopen = { [weak windowRouter] in
+            windowRouter?.showSettings()
+        }
+        startDuplicateLaunchPollingIfNeeded()
         statusItemController = MenuBarStatusItemController(
             pluginHost: pluginHost,
             windowRouter: windowRouter,
@@ -69,7 +78,19 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         appURLRouter.handle(urls)
     }
 
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows _: Bool
+    ) -> Bool {
+        showSettingsForReopen?()
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        #if DEBUG
+        duplicateLaunchPollTimer?.invalidate()
+        duplicateLaunchPollTimer = nil
+        #endif
         statusItemController?.dismissPanels()
         pluginHost.deactivateAllPlugins()
     }
@@ -125,5 +146,62 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
                 self?.pluginHost.hasPluginSettings(pluginID: pluginID) == true
             }
         )
+    }
+
+    #if DEBUG
+    private func startDuplicateLaunchPollingIfNeeded() {
+        guard duplicateLaunchPollTimer == nil else { return }
+        duplicateLaunchPollTimer = Timer.scheduledTimer(
+            withTimeInterval: 1,
+            repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.showSettingsAfterDuplicateLaunchIfNeeded()
+            }
+        }
+    }
+
+    private func showSettingsAfterDuplicateLaunchIfNeeded() {
+        let duplicateProcessIdentifiers = NSWorkspace.shared.runningApplications.compactMap { application in
+            let processIdentifier = application.processIdentifier
+            return AppDuplicateLaunchPolicy.shouldShowSettings(
+                launchedBundleIdentifier: application.bundleIdentifier,
+                launchedProcessIdentifier: processIdentifier,
+                currentBundleIdentifier: Bundle.main.bundleIdentifier,
+                currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier
+            ) ? processIdentifier : nil
+        }
+        let newDuplicateProcessIdentifiers = Set(duplicateProcessIdentifiers)
+            .subtracting(handledDuplicateProcessIdentifiers)
+        guard !newDuplicateProcessIdentifiers.isEmpty else { return }
+
+        handledDuplicateProcessIdentifiers.formUnion(newDuplicateProcessIdentifiers)
+        showSettingsForReopen?()
+    }
+    #endif
+
+    #if DEBUG
+    func setShowSettingsForReopenForTesting(_ action: @escaping () -> Void) {
+        showSettingsForReopen = action
+    }
+    #endif
+}
+
+enum AppDuplicateLaunchPolicy {
+    static func shouldShowSettings(
+        launchedBundleIdentifier: String?,
+        launchedProcessIdentifier: pid_t,
+        currentBundleIdentifier: String?,
+        currentProcessIdentifier: pid_t
+    ) -> Bool {
+        guard
+            let launchedBundleIdentifier,
+            let currentBundleIdentifier,
+            launchedBundleIdentifier == currentBundleIdentifier
+        else {
+            return false
+        }
+
+        return launchedProcessIdentifier != currentProcessIdentifier
     }
 }
