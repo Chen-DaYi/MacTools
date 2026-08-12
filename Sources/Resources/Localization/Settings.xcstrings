@@ -1,6 +1,131 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "panelTheme.title": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Theme" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題" } }
+    } },
+    "panelTheme.help": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Choose colors for menu bar panels" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择菜单栏面板的颜色主题" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇選單列面板的色彩主題" } }
+    } },
+    "panelTheme.summary.auto": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Light: %@ · Dark: %@" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "浅色：%@ · 深色：%@" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "淺色：%@ · 深色：%@" } }
+    } },
+    "panelTheme.alert.title": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Theme" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題" } }
+    } },
+    "panelTheme.delete.title": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Delete Imported Theme?" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "删除导入的主题？" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "刪除匯入的主題？" } }
+    } },
+    "panelTheme.delete.action": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Delete Theme" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "删除主题" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "刪除主題" } }
+    } },
+    "panelTheme.picker.title": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Theme" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題" } }
+    } },
+    "panelTheme.picker.description": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Themes update menu bar panel colors live. Layout, typography, calendar event colors, and brand colors stay unchanged." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题会实时调整菜单栏面板的界面色彩；布局、字体、日历事件色和品牌色保持不变。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題會即時調整選單列面板的介面色彩；佈局、字體、行事曆事件色和品牌色保持不變。" } }
+    } },
+    "panelTheme.close": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Close" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "关闭" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "關閉" } }
+    } },
+    "panelTheme.import": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Import Base16/Base24…" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "导入 Base16/Base24…" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "匯入 Base16/Base24…" } }
+    } },
+    "panelTheme.findMore": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Find More Themes" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "寻找更多主题" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "尋找更多主題" } }
+    } },
+    "panelTheme.findMore.description": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Download a Base16/Base24 YAML file from the official Tinted Theming schemes repository, then import it directly." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "从 Tinted Theming 官方主题仓库下载 Base16/Base24 YAML 文件后，可直接导入。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "從 Tinted Theming 官方主題倉庫下載 Base16/Base24 YAML 檔案後，可直接匯入。" } }
+    } },
+    "panelTheme.systemDefault": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "System Default" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "系统默认" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "系統預設" } }
+    } },
+    "panelTheme.system.description": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Uses macOS semantic colors" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "跟随 macOS 语义颜色" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "跟隨 macOS 語意色彩" } }
+    } },
+    "panelTheme.imported": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Imported" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "已导入" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "已匯入" } }
+    } },
+    "panelTheme.import.prompt": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "Choose a Base16 or Base24 YAML/JSON theme file." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择 Base16 或 Base24 YAML/JSON 主题文件。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇 Base16 或 Base24 YAML/JSON 主題檔案。" } }
+    } },
+    "panelTheme.import.darkMismatch": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The theme was imported, but it is a dark theme. Switch the app appearance to select it." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题已导入，但它属于深色主题。请切换应用外观后选择。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題已匯入，但它屬於深色主題。請切換 App 外觀後選擇。" } }
+    } },
+    "panelTheme.import.lightMismatch": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The theme was imported, but it is a light theme. Switch the app appearance to select it." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题已导入，但它属于浅色主题。请切换应用外观后选择。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題已匯入，但它屬於淺色主題。請切換 App 外觀後選擇。" } }
+    } },
+    "panelTheme.error.fileTooLarge": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The theme file is too large." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题文件过大。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題檔案過大。" } }
+    } },
+    "panelTheme.error.unreadableFile": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The theme file could not be read." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法读取主题文件。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法讀取主題檔案。" } }
+    } },
+    "panelTheme.error.unsupportedDocument": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "This is not a supported Base16/Base24 YAML or JSON theme." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题文件不是受支持的 Base16/Base24 YAML 或 JSON。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題檔案不是支援的 Base16/Base24 YAML 或 JSON。" } }
+    } },
+    "panelTheme.error.missingName": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The theme file is missing a name or scheme." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题文件缺少 name 或 scheme 名称。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題檔案缺少 name 或 scheme 名稱。" } }
+    } },
+    "panelTheme.error.missingColor": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The theme file is missing the required color %@." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题文件缺少必要颜色 %@。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題檔案缺少必要色彩 %@。" } }
+    } },
+    "panelTheme.error.invalidColor": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The theme contains an invalid color: %@" } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题包含无效颜色：%@" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題包含無效色彩：%@" } }
+    } },
+    "panelTheme.error.insufficientContrast": { "extractionState": "manual", "localizations": {
+      "en": { "stringUnit": { "state": "translated", "value": "The theme foreground contrast is %.2f:1; at least 4.5:1 is required." } },
+      "zh-Hans": { "stringUnit": { "state": "translated", "value": "主题前景与背景对比度只有 %.2f:1，至少需要 4.5:1。" } },
+      "zh-Hant": { "stringUnit": { "state": "translated", "value": "主題前景與背景對比度只有 %.2f:1，至少需要 4.5:1。" } }
+    } },
     "plugins.dashboard.hiddenSectionFormat": {
       "extractionState": "manual",
       "localizations": {

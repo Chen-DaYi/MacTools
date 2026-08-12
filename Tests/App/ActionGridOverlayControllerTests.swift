@@ -229,6 +229,22 @@ final class ActionGridOverlayControllerTests: XCTestCase {
         XCTAssertEqual(ActionGridKeyCommand.resolve(keyCode: 53, characters: nil), .dismiss)
         XCTAssertEqual(ActionGridKeyCommand.resolve(keyCode: 36, characters: nil), .activateSelected)
         XCTAssertEqual(ActionGridKeyCommand.resolve(keyCode: 123, characters: nil), .move(.left))
+        XCTAssertEqual(
+            ActionGridKeyCommand.resolve(
+                keyCode: 123,
+                characters: nil,
+                layoutDirection: .rightToLeft
+            ),
+            .move(.right)
+        )
+        XCTAssertEqual(
+            ActionGridKeyCommand.resolve(
+                keyCode: 124,
+                characters: nil,
+                layoutDirection: .rightToLeft
+            ),
+            .move(.left)
+        )
         XCTAssertEqual(ActionGridKeyCommand.resolve(keyCode: 0, characters: "7"), .select(7))
         XCTAssertNil(ActionGridKeyCommand.resolve(keyCode: 0, characters: "0"))
         XCTAssertNil(ActionGridKeyCommand.resolve(

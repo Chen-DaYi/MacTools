@@ -82,6 +82,7 @@ private struct CalendarHeaderView: View {
     let onPrevious: () -> Void
     let onToday: () -> Void
     let onNext: () -> Void
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         HStack(spacing: 6) {
@@ -98,7 +99,7 @@ private struct CalendarHeaderView: View {
             Button(action: onToday) {
                 Text(localization.string("header.today.button", defaultValue: "今天"))
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.text.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.horizontal, Layout.todayButtonHorizontalPadding)
@@ -126,12 +127,13 @@ private struct CalendarIconButton: View {
     let systemName: String
     let help: String
     let action: () -> Void
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.text.secondary)
                 .frame(width: 20, height: 20)
                 .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
@@ -144,13 +146,14 @@ private struct CalendarWeekdayRow: View {
     let symbols: [String]
     let dayCellSize: CGFloat
     let gridSpacing: CGFloat
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         HStack(spacing: gridSpacing) {
             ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.text.secondary)
                     .frame(width: dayCellSize)
             }
         }
@@ -259,11 +262,11 @@ private struct CalendarDayCell: View {
 
     private var backgroundColor: Color {
         if isSelected {
-            return theme.interaction.selection(.accentColor)
+            return theme.interaction.selection(theme.dataSeries.primary)
         }
 
         if day.isToday {
-            return theme.interaction.emphasis(.accentColor)
+            return theme.interaction.emphasis(theme.dataSeries.primary)
         }
 
         return day.isInDisplayedMonth
@@ -272,19 +275,19 @@ private struct CalendarDayCell: View {
     }
 
     private var borderColor: Color {
-        day.isToday ? Color.accentColor.opacity(0.95) : .clear
+        day.isToday ? theme.dataSeries.primary.opacity(0.95) : .clear
     }
 
-    private var primaryTextStyle: HierarchicalShapeStyle {
+    private var primaryTextStyle: Color {
         if day.isInDisplayedMonth {
-            return day.isWeekend ? .secondary : .primary
+            return day.isWeekend ? theme.text.secondary : theme.text.primary
         }
 
-        return .tertiary
+        return theme.text.tertiary
     }
 
-    private var secondaryTextStyle: HierarchicalShapeStyle {
-        day.isInDisplayedMonth ? .secondary : .tertiary
+    private var secondaryTextStyle: Color {
+        day.isInDisplayedMonth ? theme.text.secondary : theme.text.tertiary
     }
 
     private var accessibilityLabel: String {
@@ -316,16 +319,20 @@ private struct CalendarDayCell: View {
 private struct CalendarHolidayBadge: View {
     let kind: CalendarHolidayKind
     let localization: PluginLocalization
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         Text(kind.badgeText(localization: localization))
             .font(.system(size: 7, weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(theme.text.primary)
             .frame(width: 14, height: 14)
             .background(
                 Circle()
-                    .fill(kind == .holiday ? Color(nsColor: .systemTeal) : Color(nsColor: .systemOrange))
-                    .shadow(color: .black.opacity(0.12), radius: 1, y: 0.5)
+                    .fill(
+                        theme.interaction.selection(
+                            kind == .holiday ? theme.dataSeries.tertiary : theme.dataSeries.secondary
+                        )
+                    )
             )
     }
 }
@@ -359,6 +366,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
     let events: [CalendarEventSummary]
     let localization: PluginLocalization
     let isPresented: Bool
+    @Environment(\.pluginComponentTheme) private var theme
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -374,6 +382,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
             subtitle: subtitle,
             events: events,
             localization: localization,
+            theme: theme,
             isPresented: isPresented,
             sourceView: nsView
         )
@@ -392,6 +401,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
             subtitle: String,
             events: [CalendarEventSummary],
             localization: PluginLocalization,
+            theme: PluginComponentTheme,
             isPresented: Bool,
             sourceView: NSView
         ) {
@@ -407,6 +417,9 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
                 events: events,
                 localization: localization
             )
+            .foregroundStyle(theme.text.primary)
+            .background(theme.surfaces.card)
+            .environment(\.pluginComponentTheme, theme)
             let hostingController = NSHostingController(rootView: content)
             CalendarAppearancePreference.stored().apply(to: hostingController.view)
             popover.contentViewController = hostingController
@@ -443,6 +456,7 @@ private struct CalendarFloatingEventPopoverContent: View {
     let subtitle: String
     let events: [CalendarEventSummary]
     let localization: PluginLocalization
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -453,11 +467,13 @@ private struct CalendarFloatingEventPopoverContent: View {
 
                 Text(subtitle)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.text.secondary)
                     .lineLimit(1)
             }
 
-            Divider()
+            Rectangle()
+                .fill(theme.surfaces.track)
+                .frame(height: 1)
 
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(Array(events.prefix(6))) { event in
@@ -473,7 +489,7 @@ private struct CalendarFloatingEventPopoverContent: View {
                         )
                     )
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.text.secondary)
                 }
             }
         }
@@ -531,6 +547,7 @@ private enum CalendarDayPresentation {
 
 private struct CalendarEventRow: View {
     let event: CalendarEventSummary
+    @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
         HStack(spacing: 6) {
@@ -545,7 +562,7 @@ private struct CalendarEventRow: View {
 
             Text(event.timeText)
                 .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.text.secondary)
                 .lineLimit(1)
         }
     }

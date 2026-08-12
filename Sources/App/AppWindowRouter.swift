@@ -326,6 +326,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private let menuBarIconSettings: MenuBarIconSettings
     private let menuBarIconGallery: MenuBarIconGalleryLibrary
     private let launchAtLoginController: LaunchAtLoginController
+    private let menuBarPanelThemeStore: MenuBarPanelThemeStore
     private let appearanceUserDefaults: UserDefaults
     private let commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration
     private(set) var settingsWindow: NSWindow?
@@ -352,6 +353,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         menuBarIconSettings: MenuBarIconSettings,
         menuBarIconGallery: MenuBarIconGalleryLibrary,
         launchAtLoginController: LaunchAtLoginController,
+        menuBarPanelThemeStore: MenuBarPanelThemeStore = .shared,
         appearanceUserDefaults: UserDefaults = .standard,
         commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration = .init()
     ) {
@@ -360,6 +362,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         self.menuBarIconSettings = menuBarIconSettings
         self.menuBarIconGallery = menuBarIconGallery
         self.launchAtLoginController = launchAtLoginController
+        self.menuBarPanelThemeStore = menuBarPanelThemeStore
         self.appearanceUserDefaults = appearanceUserDefaults
         self.commandPaletteFocusRestoration = commandPaletteFocusRestoration
         super.init()
@@ -537,6 +540,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 menuBarIconSettings: menuBarIconSettings,
                 menuBarIconGallery: menuBarIconGallery,
                 launchAtLoginController: launchAtLoginController,
+                menuBarPanelThemeStore: menuBarPanelThemeStore,
                 appearanceUserDefaults: appearanceUserDefaults,
                 showDashboard: { [weak self] in
                     self?.panelPresentationActions.present(.dashboard)

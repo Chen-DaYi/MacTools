@@ -1767,6 +1767,7 @@ verify_code_session() {
         -only-testing:MacToolsTests/DisplayResolutionPluginTests \
         -only-testing:MacToolsTests/DisplaySleepPluginTests \
         -only-testing:MacToolsTests/DisplayTrueColorPluginTests \
+        -only-testing:MacToolsTests/DockLockPluginTests \
         -only-testing:MacToolsTests/EjectDiskPluginTests \
         -only-testing:MacToolsTests/EmptyTrashPluginTests \
         -only-testing:MacToolsTests/FanControlPluginTests \

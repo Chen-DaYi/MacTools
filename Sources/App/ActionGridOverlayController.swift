@@ -228,15 +228,16 @@ enum ActionGridKeyCommand: Equatable {
     static func resolve(
         keyCode: UInt16,
         characters: String?,
-        modifierFlags: NSEvent.ModifierFlags = []
+        modifierFlags: NSEvent.ModifierFlags = [],
+        layoutDirection: LayoutDirection = .leftToRight
     ) -> ActionGridKeyCommand? {
         guard modifierFlags.intersection(disallowedModifiers).isEmpty else {
             return nil
         }
         return switch keyCode {
         case 53: .dismiss
-        case 123: .move(.left)
-        case 124: .move(.right)
+        case 123: .move(layoutDirection == .rightToLeft ? .right : .left)
+        case 124: .move(layoutDirection == .rightToLeft ? .left : .right)
         case 125: .move(.down)
         case 126: .move(.up)
         case 36, 76: .activateSelected
@@ -1074,7 +1075,10 @@ final class ActionGridOverlayController: NSObject, NSWindowDelegate {
         guard let command = ActionGridKeyCommand.resolve(
             keyCode: event.keyCode,
             characters: event.charactersIgnoringModifiers,
-            modifierFlags: event.modifierFlags
+            modifierFlags: event.modifierFlags,
+            layoutDirection: ActionGridOverlayRootView.layoutDirection(
+                for: PluginRuntimeLocalization.locale
+            )
         ) else {
             return false
         }

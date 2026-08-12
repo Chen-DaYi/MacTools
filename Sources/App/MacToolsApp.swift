@@ -37,6 +37,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     private let menuBarIconGallery = MenuBarIconGalleryLibrary()
     private let launchAtLoginController = LaunchAtLoginController()
     private let appearanceUserDefaults = UserDefaults.standard
+    private let menuBarPanelThemeStore = MenuBarPanelThemeStore()
     private let pluginAutomaticUpdateVersionStore = PluginAutomaticUpdateVersionStore()
     private let appURLRouter = AppURLRouter()
     private var windowRouter: AppWindowRouter?
@@ -79,6 +80,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             menuBarIconSettings: menuBarIconSettings,
             menuBarIconGallery: menuBarIconGallery,
             launchAtLoginController: launchAtLoginController,
+            menuBarPanelThemeStore: menuBarPanelThemeStore,
             appearanceUserDefaults: appearanceUserDefaults
         )
         self.windowRouter = windowRouter
@@ -97,7 +99,8 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
             pluginHost: pluginHost,
             windowRouter: windowRouter,
             appUpdater: appUpdater,
-            iconSettings: menuBarIconSettings
+            iconSettings: menuBarIconSettings,
+            menuBarPanelThemeStore: menuBarPanelThemeStore
         )
 
         bootstrapDynamicPlugins()

@@ -136,6 +136,10 @@ Plugin settings are hosted by MacTools. PluginKit 4 exposes one `settingsPage` e
 
 The manifest must declare the matching `capabilities.settings` value: `none`, `form`, or `workspace`. The host does not read an undeclared page and rejects a runtime layout that differs from the manifest. This capability is an ABI contract, not a styling preference.
 
+## Pointer-intercepting plugins
+
+Plugins that use a `CGEvent` tap must declare `accessibility` in `plugin.json.permissions` and expose the matching `PluginPermissionRequirement`. Start the tap only after authorization, stop and invalidate it during deactivation, and re-enable it after `.tapDisabledByTimeout` or `.tapDisabledByUserInput`. Keep callback work bounded; never perform I/O, scanning, or blocking operations there.
+
 Settings changes use typed `PluginSettingsAction` values (`setBoolean`, `setSelection`, `setNumber`, `setText`, and `invoke`) instead of string-only callbacks. Text and numeric controls distinguish `.changed` from `.committed`, allowing live updates without rebuilding the entire settings hierarchy for every keystroke or slider tick.
 
 Custom sections and workspaces provide only plugin-specific content. The settings window title, plugin icon, description, permission cards, shortcut cards, scrolling shell, and system background are derived by the host; do not repeat a page title inside custom content. Form sections must not draw their own outer card or section header: use `presentation: .standard` for normal custom content, or `.edgeToEdge` for an AppKit table or an internally padded row collection. Add/Refresh-style actions belong in `.headerAccessory`.

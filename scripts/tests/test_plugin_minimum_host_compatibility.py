@@ -11,8 +11,43 @@ PLUGINS_ROOT = REPO_ROOT / "Plugins"
 LEGACY_V4_CATALOG = REPO_ROOT / "docs/plugins/v4/catalog.json"
 PLUGIN_RELEASE_WORKFLOW = REPO_ROOT / ".github/workflows/plugin-release.yml"
 NEW_API_MINIMUM_HOSTS = {
+    # Canonical action registry, execution, discovery, and surface bridges.
+    "ActionKey": "1.2.0",
+    "ActionParameterSet": "1.2.0",
+    "ActionParameterDefinition": "1.2.0",
+    "ActionDefinition": "1.2.0",
+    "ActionReference": "1.2.0",
+    "ActionCatalogEntry": "1.2.0",
+    "ActionAvailability": "1.2.0",
+    "ActionInvocation": "1.2.0",
+    "ActionExecutionHandle": "1.2.0",
+    "PluginActionProviding": "1.2.0",
+    "PluginActionExecutionRevisionProviding": "1.2.0",
+    "PluginActionExposureProviding": "1.2.0",
+    "PluginActionPermissionProviding": "1.2.0",
+    "LegacyActionShortcutAssignment": "1.2.0",
+    "PluginLegacyActionShortcutProviding": "1.2.0",
+    "ActionSurfaceCatalogItem": "1.2.0",
+    "ActionGridPresentationEntry": "1.2.0",
+    "ActionGridHostContext": "1.2.0",
+    "ActionGridHostContextConsuming": "1.2.0",
+    "TrackpadActionHostContext": "1.2.0",
+    "TrackpadActionHostContextConsuming": "1.2.0",
+    "ActionSurfaceAssignmentSummary": "1.2.0",
+    "ActionSurfaceAssignmentSummarizing": "1.2.0",
+    # Portable preferences and input ownership added with the shared surfaces.
+    "PluginPortablePreferencesRestorationReporting": "1.2.0",
+    "PluginPortablePreferencesActionReferencesProviding": "1.2.0",
+    "PluginActionReferenceBackupDisposition": "1.2.0",
+    "PluginActionReferenceBackupProviding": "1.2.0",
+    "PluginInputGestureClaim": "1.2.0",
+    "PluginInputGestureConflict": "1.2.0",
+    "PluginInputGestureClaimProviding": "1.2.0",
+    "PluginInputGestureConflictConsuming": "1.2.0",
+    # Shared lifecycle and presentation helpers introduced in host 1.2.
     "PluginCallbackContext": "1.2.0",
     "PluginPresentationSafety": "1.2.0",
+    "PluginProcessGroupLease": "1.2.0",
     "PluginSystemImage": "1.2.0",
 }
 
@@ -57,6 +92,20 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
                     )
 
         self.assertEqual(violations, [], "\n".join(violations))
+
+    def test_new_api_inventory_covers_every_1_2_plugin_kit_type_used_by_plugins(self) -> None:
+        required_symbols = {
+            "PluginActionProviding",
+            "ActionGridHostContextConsuming",
+            "TrackpadActionHostContextConsuming",
+            "PluginPortablePreferencesRestorationReporting",
+            "PluginInputGestureClaimProviding",
+            "PluginPresentationSafety",
+            "PluginCallbackContext",
+            "PluginProcessGroupLease",
+            "PluginSystemImage",
+        }
+        self.assertTrue(required_symbols <= NEW_API_MINIMUM_HOSTS.keys())
 
 
 if __name__ == "__main__":

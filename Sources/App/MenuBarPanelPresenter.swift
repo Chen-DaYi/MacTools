@@ -121,13 +121,16 @@ final class MenuBarPanelHostingController<Content: View>: NSHostingController<Co
 @MainActor
 final class MenuBarPanelContainerController<Content: View>: NSViewController {
     private let hostingController: MenuBarPanelHostingController<Content>
+    private let themeStore: MenuBarPanelThemeStore
     private let onUnhandledEscape: () -> Void
 
     init(
         hostingController: MenuBarPanelHostingController<Content>,
+        themeStore: MenuBarPanelThemeStore,
         onUnhandledEscape: @escaping () -> Void
     ) {
         self.hostingController = hostingController
+        self.themeStore = themeStore
         self.onUnhandledEscape = onUnhandledEscape
         super.init(nibName: nil, bundle: nil)
     }
@@ -138,7 +141,12 @@ final class MenuBarPanelContainerController<Content: View>: NSViewController {
     }
 
     override func loadView() {
-        view = MenuBarPanelBackgroundView()
+        view = MenuBarPanelBackgroundView(themeStore: themeStore)
+    }
+
+    func refreshBackground() {
+        guard isViewLoaded else { return }
+        view.needsDisplay = true
     }
 
     override func viewDidLoad() {
@@ -173,10 +181,31 @@ final class MenuBarPanelContainerController<Content: View>: NSViewController {
 }
 
 private final class MenuBarPanelBackgroundView: NSView {
+    private let themeStore: MenuBarPanelThemeStore
+
+    init(themeStore: MenuBarPanelThemeStore) {
+        self.themeStore = themeStore
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     override var isOpaque: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.setFill()
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let appearance: MenuBarPanelThemeAppearance = isDark ? .dark : .light
+        let style = MenuBarPanelThemeResolver.resolve(
+            definition: themeStore.selectedDefinition(for: appearance),
+            colorScheme: isDark ? .dark : .light,
+            contrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+                ? .increased
+                : .standard
+        )
+        NSColor(style.surfaces.panel).setFill()
         NSBezierPath.fill(dirtyRect)
     }
 
@@ -224,6 +253,7 @@ final class MenuBarPanelPresenter: NSObject {
 
     private let pluginHost: PluginHost
     private let appUpdater: AppUpdater
+    private let menuBarPanelThemeStore: MenuBarPanelThemeStore
     private let onDismiss: () -> Void
     private let onOpenUpdate: () -> Void
     private let onOpenSettings: () -> Void
@@ -237,6 +267,7 @@ final class MenuBarPanelPresenter: NSObject {
     private let hostingController: MenuBarPanelHostingController<MenuBarUnifiedPanelContent>
     private let containerController: MenuBarPanelContainerController<MenuBarUnifiedPanelContent>
     private var appearanceObserver: NSObjectProtocol?
+    private var themeObserver: NSObjectProtocol?
     private var runtimeLocaleCancellable: AnyCancellable?
     private var heightRefreshCancellables: Set<AnyCancellable> = []
     private var keyboardShortcutMonitor: Any?
@@ -250,6 +281,7 @@ final class MenuBarPanelPresenter: NSObject {
     init(
         pluginHost: PluginHost,
         appUpdater: AppUpdater,
+        menuBarPanelThemeStore: MenuBarPanelThemeStore = .shared,
         onDismiss: @escaping () -> Void,
         onOpenUpdate: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
@@ -260,6 +292,7 @@ final class MenuBarPanelPresenter: NSObject {
     ) {
         self.pluginHost = pluginHost
         self.appUpdater = appUpdater
+        self.menuBarPanelThemeStore = menuBarPanelThemeStore
         self.onDismiss = onDismiss
         self.onOpenUpdate = onOpenUpdate
         self.onOpenSettings = onOpenSettings
@@ -279,6 +312,7 @@ final class MenuBarPanelPresenter: NSObject {
             rootView: MenuBarUnifiedPanelContent(
                 pluginHost: pluginHost,
                 appUpdater: appUpdater,
+                menuBarPanelThemeStore: menuBarPanelThemeStore,
                 model: panelModel,
                 onDismiss: onDismiss,
                 onOpenUpdate: onOpenUpdate,
@@ -291,6 +325,7 @@ final class MenuBarPanelPresenter: NSObject {
         self.hostingController = hostingController
         self.containerController = MenuBarPanelContainerController(
             hostingController: hostingController,
+            themeStore: menuBarPanelThemeStore,
             onUnhandledEscape: onDismiss
         )
 
@@ -301,6 +336,7 @@ final class MenuBarPanelPresenter: NSObject {
         }
         configure(popover)
         observeAppearancePreference()
+        observeThemePreference()
         runtimeLocaleCancellable = PluginRuntimeLocalization.source.$revision
             .dropFirst()
             .sink { [weak self] _ in
@@ -318,6 +354,9 @@ final class MenuBarPanelPresenter: NSObject {
         if let appearanceObserver {
             NotificationCenter.default.removeObserver(appearanceObserver)
         }
+        if let themeObserver {
+            NotificationCenter.default.removeObserver(themeObserver)
+        }
         removeKeyboardShortcutMonitorIfNeeded()
         runtimeLocaleCancellable?.cancel()
     }
@@ -330,6 +369,7 @@ final class MenuBarPanelPresenter: NSObject {
         hostingController.rootView = MenuBarUnifiedPanelContent(
             pluginHost: pluginHost,
             appUpdater: appUpdater,
+            menuBarPanelThemeStore: menuBarPanelThemeStore,
             model: panelModel,
             onDismiss: onDismiss,
             onOpenUpdate: onOpenUpdate,
@@ -577,6 +617,18 @@ final class MenuBarPanelPresenter: NSObject {
         }
     }
 
+    private func observeThemePreference() {
+        themeObserver = NotificationCenter.default.addObserver(
+            forName: MenuBarPanelThemeStore.didChangeNotification,
+            object: menuBarPanelThemeStore,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.containerController.refreshBackground()
+            }
+        }
+    }
+
     private func observePanelItemChanges() {
         pluginHost.$panelItems
             .dropFirst()
@@ -603,6 +655,7 @@ final class MenuBarPanelPresenter: NSObject {
         let preference = AppAppearancePreference.stored()
         preference.apply(to: hostingController.view)
         preference.apply(to: popover)
+        containerController.refreshBackground()
     }
 
     private func setPopoverHeight(_ height: CGFloat) {
@@ -891,8 +944,11 @@ final class MenuBarUnifiedPanelModel: ObservableObject {
 struct MenuBarUnifiedPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var appUpdater: AppUpdater
+    @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
     @ObservedObject var model: MenuBarUnifiedPanelModel
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     let onDismiss: () -> Void
     let onOpenUpdate: () -> Void
     let onOpenSettings: () -> Void
@@ -901,6 +957,12 @@ struct MenuBarUnifiedPanelContent: View {
 
     var body: some View {
         let _ = runtimeLocale.revision
+        let appearance = MenuBarPanelThemeResolver.appearance(for: colorScheme)
+        let theme = MenuBarPanelThemeResolver.resolve(
+            definition: menuBarPanelThemeStore.selectedDefinition(for: appearance),
+            colorScheme: colorScheme,
+            contrast: colorSchemeContrast
+        )
         let contentBodyHeight = MenuBarPanelLayout.contentBodyHeight(
             forContentHeight: model.contentHeight
         )
@@ -930,9 +992,13 @@ struct MenuBarUnifiedPanelContent: View {
             alignment: .topLeading
         )
         .background {
-            MenuBarPanelBackground()
+            theme.surfaces.panel
         }
+        .foregroundStyle(theme.text.primary)
+        .tint(theme.accent)
         .id(runtimeLocale.revision)
+        .environment(\.menuBarPanelTheme, theme)
+        .environment(\.pluginComponentTheme, theme.componentTheme)
         .environment(\.locale, PluginRuntimeLocalization.locale)
         .environment(\.layoutDirection, layoutDirection)
     }
@@ -988,12 +1054,6 @@ struct MenuBarUnifiedPanelContent: View {
         model.selectTab(tab)
     }
 
-}
-
-struct MenuBarPanelBackground: View {
-    var body: some View {
-        Color(nsColor: .windowBackgroundColor)
-    }
 }
 
 private struct MenuBarPanelContentSurface<Content: View>: View {
@@ -1083,6 +1143,7 @@ private struct MenuBarPanelToolbar: View {
 private struct MenuBarPanelTabSwitcher: View {
     let selectedTab: MenuBarPanelTab
     let onTabSelection: (MenuBarPanelTab) -> Void
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         HStack(spacing: 2) {
@@ -1096,7 +1157,7 @@ private struct MenuBarPanelTabSwitcher: View {
                 } label: {
                     Image(systemName: PluginSystemImage.resolvedName(tab.systemImage))
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(selectedTab == tab ? Color.primary : Color.secondary)
+                        .foregroundStyle(selectedTab == tab ? theme.text.primary : theme.text.secondary)
                         .frame(width: 28, height: 24)
                         .contentShape(Rectangle())
                 }
@@ -1105,14 +1166,14 @@ private struct MenuBarPanelTabSwitcher: View {
                 .accessibilityLabel(tab.accessibilityTitle)
                 .background {
                     Capsule()
-                        .fill(selectedTab == tab ? Color.primary.opacity(0.10) : Color.clear)
+                        .fill(selectedTab == tab ? theme.surfaces.tabSelection : Color.clear)
                 }
             }
         }
         .padding(3)
         .background {
             Capsule()
-                .fill(Color.primary.opacity(0.06))
+                .fill(theme.surfaces.control)
         }
     }
 }
@@ -1123,23 +1184,21 @@ private struct MenuBarPanelIconButton: View {
     var showsNotificationDot = false
     let action: () -> Void
     @State private var isHovered = false
+    @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
         Button(action: action) {
             Image(systemName: PluginSystemImage.resolvedName(systemImage))
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(theme.text.secondary)
                 .overlay(alignment: .bottomTrailing) {
                     if showsNotificationDot {
                         Circle()
-                            .fill(Color.orange)
+                            .fill(theme.status.warning)
                             .frame(width: 6, height: 6)
                             .overlay {
                                 Circle()
-                                    .stroke(
-                                        Color(nsColor: .windowBackgroundColor),
-                                        lineWidth: 1
-                                    )
+                                    .stroke(theme.surfaces.panel, lineWidth: 1)
                             }
                             .offset(x: 3, y: 3)
                     }
@@ -1147,7 +1206,7 @@ private struct MenuBarPanelIconButton: View {
                 .frame(width: 28, height: 24)
                 .background {
                     Capsule()
-                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+                        .fill(isHovered ? theme.surfaces.hover : Color.clear)
                 }
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())

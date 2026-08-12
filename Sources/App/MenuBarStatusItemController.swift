@@ -95,7 +95,8 @@ final class MenuBarStatusItemController: NSObject {
         pluginHost: PluginHost,
         windowRouter: AppWindowRouter,
         appUpdater: AppUpdater,
-        iconSettings: MenuBarIconSettings
+        iconSettings: MenuBarIconSettings,
+        menuBarPanelThemeStore: MenuBarPanelThemeStore = .shared
     ) {
         self.pluginHost = pluginHost
         self.windowRouter = windowRouter
@@ -108,6 +109,7 @@ final class MenuBarStatusItemController: NSObject {
         panelPresenter = MenuBarPanelPresenter(
             pluginHost: pluginHost,
             appUpdater: appUpdater,
+            menuBarPanelThemeStore: menuBarPanelThemeStore,
             onDismiss: { [weak self] in
                 self?.requestPanelClose()
             },

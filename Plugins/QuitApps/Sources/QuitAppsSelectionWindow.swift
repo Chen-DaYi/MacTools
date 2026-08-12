@@ -92,10 +92,10 @@ final class QuitAppsSelectionWindow: NSPanel {
     private var launchObserver: (any NSObjectProtocol)?
     private var terminateObserver: (any NSObjectProtocol)?
     private var onDismiss: (() -> Void)?
+    private var isDismissing = false
 
     override func cancelOperation(_ sender: Any?) {
-        orderOut(nil)
-        onDismiss?()
+        dismiss()
     }
 
     init(
@@ -131,8 +131,7 @@ final class QuitAppsSelectionWindow: NSPanel {
             viewModel: viewModel,
             localization: localization,
             onDismiss: { [weak self] in
-                self?.orderOut(nil)
-                onDismiss()
+                self?.dismiss()
             }
         )
         let hostingView = NSHostingView(rootView: rootView)
@@ -148,6 +147,27 @@ final class QuitAppsSelectionWindow: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func resignKey() {
+        super.resignKey()
+
+        guard isVisible else { return }
+        dismiss()
+    }
+
+    func dismiss(notifyingOwner: Bool = true) {
+        guard !isDismissing else { return }
+        isDismissing = true
+
+        cleanup()
+        orderOut(nil)
+
+        let dismissalHandler = onDismiss
+        onDismiss = nil
+        if notifyingOwner {
+            dismissalHandler?()
+        }
+    }
 
     private func setupAppObservers() {
         let nc = NSWorkspace.shared.notificationCenter
@@ -165,7 +185,7 @@ final class QuitAppsSelectionWindow: NSPanel {
         }
     }
 
-    func cleanup() {
+    private func cleanup() {
         let nc = NSWorkspace.shared.notificationCenter
         if let obs = launchObserver { nc.removeObserver(obs); launchObserver = nil }
         if let obs = terminateObserver { nc.removeObserver(obs); terminateObserver = nil }

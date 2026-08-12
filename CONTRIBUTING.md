@@ -50,6 +50,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - New plugins should provide localization whenever practical, at minimum for panel copy, settings copy, permission text, and plugin metadata.
 - Prefer Apple native frameworks. When adding system frameworks, private include paths, or helper executables inside a plugin bundle, declare the smallest necessary differences in the plugin's own `project.yml`. Bundle resource executables that need separate signing should be listed in `plugin.json.package.signPaths`.
 - Plugins that use private Apple frameworks must load them dynamically at runtime and validate the required classes and selectors. Do not statically link private frameworks, and surface unsupported-system errors instead of crashing.
+- Plugins that intercept pointer events must declare Accessibility permission, stop their event tap on deactivation, and re-enable a tap disabled by macOS.
 
 ## Testing
 - Behavioral changes should add or update adjacent XCTest coverage. Test files should be named `<TypeName>Tests.swift`.
