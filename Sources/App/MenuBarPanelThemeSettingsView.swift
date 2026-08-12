@@ -462,6 +462,7 @@ private struct MenuBarPanelThemePickerSheet: View {
             defaultValue: "选择 Base16 或 Base24 YAML/JSON 主题文件。"
         )
 
+        PluginPresentationSafety.prepareForWindowOrdering()
         guard panel.runModal() == .OK, let url = panel.url else {
             return
         }
