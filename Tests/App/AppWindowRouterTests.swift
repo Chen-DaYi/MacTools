@@ -487,6 +487,17 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertEqual(state.shortcutHint, "⌃⌥P")
     }
 
+    func testStandalonePaletteDismissalExplicitlyCancelsOnlyPendingSurfaceWork() {
+        let state = StandaloneCommandPaletteState()
+        var cancellationCount = 0
+        state.setPendingExecutionCancellation { cancellationCount += 1 }
+
+        state.prepareForDismissal()
+        state.prepareForDismissal()
+
+        XCTAssertEqual(cancellationCount, 1)
+    }
+
     func testAppDeactivationDismissesStandalonePalette() async throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

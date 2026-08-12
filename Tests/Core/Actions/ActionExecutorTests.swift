@@ -177,6 +177,39 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertEqual(provider.beginCount, 0)
     }
 
+    func testAutomaticRuleRejectsInteractiveConfirmationWithoutRequestingIt() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            risk: .confirmationRequired,
+            confirmation: ActionConfirmation(
+                title: "Confirm",
+                message: "Continue?",
+                confirmButtonTitle: "Continue"
+            ),
+            capabilities: [.background]
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+        var confirmationCount = 0
+        let confirmation = ActionExecutorConfirmationService {
+            confirmationCount += 1
+            return true
+        }
+
+        let outcome = await ActionExecutor(
+            registry: registry,
+            confirmationService: confirmation
+        ).execute(ActionInvocation(
+            reference: ActionReference(key: definition.key),
+            source: .automaticRule,
+            mode: .background
+        ))
+
+        XCTAssertEqual(outcome, .rejected(.confirmationRequiredForAutomaticExecution))
+        XCTAssertEqual(confirmationCount, 0)
+        XCTAssertEqual(provider.beginCount, 0)
+    }
+
     func testConfirmationAndExecutionUseIndependentTimeouts() async {
         let registry = ActionRegistry()
         let provider = ActionExecutorTestProvider()
@@ -479,6 +512,100 @@ final class ActionExecutorTests: XCTestCase {
 
         XCTAssertEqual(executor.continuingExecutionCountForTests, 0)
         XCTAssertFalse(provider.didCancel)
+    }
+
+    func testSurfaceIndependentExecutionOutlivesCompletionObserverCancellation() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            capabilities: [.background, .foregroundInteractive, .cancellable],
+            timeout: nil
+        )
+        var continuation: CheckedContinuation<ActionExecutionResult, Never>?
+        provider.operation = {
+            await withCheckedContinuation { continuation = $0 }
+        }
+        registry.synchronize([provider.registration(definition: definition)])
+        let executor = ActionExecutor(registry: registry)
+
+        let start = await executor.startSurfaceIndependentTrackingCompletion(
+            ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .unifiedSearch,
+                mode: .foreground
+            ),
+            expectedDefinition: definition
+        )
+        let observer = Task { @MainActor () -> ActionExecutionOutcome? in
+            guard let completion = start.completion else { return nil }
+            for await outcome in completion {
+                return outcome
+            }
+            return nil
+        }
+        observer.cancel()
+        _ = await observer.value
+
+        XCTAssertEqual(start.outcome, .started)
+        XCTAssertEqual(executor.surfaceIndependentExecutionCountForTests, 1)
+        XCTAssertFalse(provider.didCancel)
+
+        for _ in 0 ..< 100 where continuation == nil {
+            await Task.yield()
+        }
+        continuation?.resume(returning: .succeeded())
+        for _ in 0 ..< 100 where executor.surfaceIndependentExecutionCountForTests != 0 {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(executor.surfaceIndependentExecutionCountForTests, 0)
+        XCTAssertFalse(provider.didCancel)
+    }
+
+    func testSurfaceIndependentPreparationCancelsBeforeProviderStart() async {
+        let registry = ActionRegistry()
+        let provider = ActionExecutorTestProvider()
+        let definition = makeActionDefinition(
+            risk: .confirmationRequired,
+            confirmation: ActionConfirmation(
+                title: "Confirm",
+                message: "Continue?",
+                confirmButtonTitle: "Continue"
+            ),
+            capabilities: [.foregroundInteractive]
+        )
+        registry.synchronize([provider.registration(definition: definition)])
+        var confirmationStarted = false
+        let confirmation = ActionExecutorConfirmationService {
+            confirmationStarted = true
+            do {
+                try await Task.sleep(for: .seconds(60))
+            } catch {}
+            return true
+        }
+        let executor = ActionExecutor(registry: registry, confirmationService: confirmation)
+        let caller = Task { @MainActor in
+            await executor.startSurfaceIndependentTrackingCompletion(
+                ActionInvocation(
+                    reference: ActionReference(key: definition.key),
+                    source: .unifiedSearch,
+                    mode: .foreground
+                ),
+                expectedDefinition: definition
+            )
+        }
+        for _ in 0 ..< 100 where !confirmationStarted {
+            await Task.yield()
+        }
+
+        caller.cancel()
+        let start = await caller.value
+
+        XCTAssertTrue(confirmationStarted)
+        XCTAssertEqual(start.outcome, .cancelled)
+        XCTAssertNil(start.completion)
+        XCTAssertEqual(provider.beginCount, 0)
+        XCTAssertEqual(executor.surfaceIndependentExecutionCountForTests, 0)
     }
 
     func testContinuingExecutionCompletesConfirmationBeforeStarting() async {

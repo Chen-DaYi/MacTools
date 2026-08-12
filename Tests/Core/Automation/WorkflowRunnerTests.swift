@@ -92,6 +92,54 @@ final class WorkflowRunnerTests: XCTestCase {
         XCTAssertEqual(harness.provider.invocations.map(\.source), [.appIntent])
     }
 
+    func testAutomaticRunPreservesUnattendedSourceForLeafActions() async throws {
+        let harness = try makeHarness(actionIDs: ["first"])
+        let workflow = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: harness.reference("first"))]
+        )
+
+        let execution = try harness.runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .automatic(ruleID: UUID(), triggerKind: "schedule"),
+            mode: .background
+        ).get()
+        _ = await execution.actionHandle.result()
+
+        XCTAssertEqual(harness.provider.invocations.map(\.source), [.automaticRule])
+    }
+
+    func testAutomaticRunPreservesUnattendedSourceThroughNestedWorkflows() async throws {
+        let harness = try makeHarness(actionIDs: ["first"])
+        let child = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: harness.reference("first"))]
+        )
+        let parent = try saveWorkflow(
+            in: harness.store,
+            steps: [WorkflowStep(reference: child.actionReference)]
+        )
+        let controller = AutomationController(
+            store: harness.store,
+            registry: harness.registry,
+            executor: harness.executor,
+            runner: harness.runner
+        )
+        harness.registry.synchronize([
+            harness.provider.registration(),
+            controller.actionRegistration(),
+        ])
+
+        let execution = try harness.runner.makeExecutionHandle(
+            workflowID: parent.id,
+            source: .automatic(ruleID: UUID(), triggerKind: "schedule"),
+            mode: .background
+        ).get()
+        _ = await execution.actionHandle.result()
+
+        XCTAssertEqual(harness.provider.invocations.map(\.source), [.automaticRule])
+    }
+
     func testExecutedSensitiveParametersAreRedactedFromPersistedHistory() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)
@@ -564,6 +612,86 @@ final class WorkflowRunnerTests: XCTestCase {
         let manualResult = await manual.actionHandle.result()
         XCTAssertEqual(manualResult, .succeeded())
         XCTAssertEqual(invocationCount, 1)
+    }
+
+    func testAutomaticRunRejectsActionThatBecomesInteractiveAfterPreflight() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let registry = ActionRegistry()
+        let provider = WorkflowRunnerTestProvider(actionIDs: ["slow"], timeout: 30)
+        provider.nonCooperativeActionIDs.insert("slow")
+        let changingKey = ActionKey(providerID: "changing-confirmation", actionID: "run")
+        var changingBeginCount = 0
+
+        func changingRegistration(risk: ActionRisk) -> ActionProviderRegistration {
+            ActionProviderRegistration(
+                providerID: changingKey.providerID,
+                identity: ObjectIdentifier(provider),
+                definitions: [ActionDefinition(
+                    key: changingKey,
+                    title: "Changing action",
+                    description: "",
+                    systemImage: "exclamationmark.shield",
+                    risk: risk,
+                    confirmation: risk == .confirmationRequired
+                        ? ActionConfirmation(
+                            title: "Confirm",
+                            message: "Confirm action",
+                            confirmButtonTitle: "Run"
+                        )
+                        : nil,
+                    capabilities: [.background]
+                )],
+                catalogEntries: [],
+                availability: { _ in .available },
+                begin: { _ in
+                    changingBeginCount += 1
+                    return .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
+            )
+        }
+
+        registry.synchronize([provider.registration(), changingRegistration(risk: .safe)])
+        let workflow = try saveWorkflow(
+            in: store,
+            steps: [
+                WorkflowStep(reference: ActionReference(key: provider.definitions[0].key)),
+                WorkflowStep(reference: ActionReference(key: changingKey)),
+            ]
+        )
+        var confirmationCount = 0
+        let executor = ActionExecutor(
+            registry: registry,
+            confirmationService: ActionExecutorConfirmationService {
+                confirmationCount += 1
+                return true
+            }
+        )
+        let runner = WorkflowRunner(store: store, registry: registry, executor: executor)
+        let execution = try runner.makeExecutionHandle(
+            workflowID: workflow.id,
+            source: .automatic(ruleID: UUID(), triggerKind: "schedule"),
+            mode: .background
+        ).get()
+        let resultTask = Task { @MainActor in
+            await execution.actionHandle.result()
+        }
+        await provider.waitUntilNonCooperativeActionStarts()
+
+        registry.synchronize([
+            provider.registration(),
+            changingRegistration(risk: .confirmationRequired),
+        ])
+        provider.resumeNonCooperativeActions(with: .succeeded())
+        let result = await resultTask.value
+
+        XCTAssertEqual(
+            result,
+            .failed(message: FeatureL10n.string("工作流在失败步骤处停止。"))
+        )
+        XCTAssertEqual(confirmationCount, 0)
+        XCTAssertEqual(changingBeginCount, 0)
+        XCTAssertEqual(provider.invocations.map(\.source), [.automaticRule])
     }
 
     func testRunLinkSourceRemainsExternalThroughNestedWorkflows() async throws {

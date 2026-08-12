@@ -57,12 +57,13 @@ final class ActionConfirmationRouter: ActionConfirmationRequesting {
     }
 }
 
-enum ActionExecutionRejection: Error, Equatable {
+enum ActionExecutionRejection: Error, Equatable, Sendable {
     case unknownAction(ActionKey)
     case invalidParameters(String)
     case unavailable(String?)
     case backgroundExecutionUnsupported
     case foregroundExecutionUnsupported
+    case confirmationRequiredForAutomaticExecution
     case externalInvocationUnavailable
     case systemExposureUnavailable
     case confirmationUnavailable
@@ -73,12 +74,12 @@ enum ActionExecutionRejection: Error, Equatable {
     case executionTimedOut
 }
 
-enum ActionExecutionOutcome: Equatable {
+enum ActionExecutionOutcome: Equatable, Sendable {
     case completed(ActionExecutionResult)
     case rejected(ActionExecutionRejection)
 }
 
-enum ContinuingActionStartOutcome: Equatable {
+enum ContinuingActionStartOutcome: Equatable, Sendable {
     case started
     case cancelled
     case rejected(ActionExecutionRejection)
@@ -87,6 +88,11 @@ enum ContinuingActionStartOutcome: Equatable {
 struct ContinuingActionStartResult {
     let outcome: ContinuingActionStartOutcome
     let completion: Task<Void, Never>?
+}
+
+struct SurfaceIndependentActionStartResult {
+    let outcome: ContinuingActionStartOutcome
+    let completion: AsyncStream<ActionExecutionOutcome>?
 }
 
 @MainActor
@@ -158,6 +164,7 @@ final class ActionExecutor {
     private let confirmationTimeout: Duration
     private let presentationPreparation: @MainActor @Sendable () -> Void
     private var continuingExecutionTasks: [UUID: Task<Void, Never>] = [:]
+    private var surfaceIndependentExecutionTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         registry: ActionRegistry,
@@ -257,6 +264,58 @@ final class ActionExecutor {
 
     var continuingExecutionCountForTests: Int {
         continuingExecutionTasks.count
+    }
+
+    /// Completes validation and confirmation in the caller's task, then transfers
+    /// ownership to the executor once the provider has accepted the action.
+    /// Cancelling a surface's completion observer never cancels the accepted action.
+    func startSurfaceIndependentTrackingCompletion(
+        _ invocation: ActionInvocation,
+        expectedDefinition: ActionDefinition,
+        confirmationService overrideConfirmationService: (any ActionConfirmationRequesting)? = nil
+    ) async -> SurfaceIndependentActionStartResult {
+        switch await prepare(
+            invocation,
+            confirmationService: overrideConfirmationService,
+            expectedDefinition: expectedDefinition
+        ) {
+        case let .prepared(execution):
+            let executionID = UUID()
+            let (stream, continuation) = AsyncStream.makeStream(
+                of: ActionExecutionOutcome.self,
+                bufferingPolicy: .bufferingNewest(1)
+            )
+            let task = Task { @MainActor [weak self] in
+                guard let self else {
+                    execution.handle.cancel()
+                    continuation.yield(.completed(.cancelled))
+                    continuation.finish()
+                    return
+                }
+                let outcome = await executionOutcome(for: execution)
+                continuation.yield(outcome)
+                continuation.finish()
+                surfaceIndependentExecutionTasks[executionID] = nil
+            }
+            surfaceIndependentExecutionTasks[executionID] = task
+            return SurfaceIndependentActionStartResult(
+                outcome: .started,
+                completion: stream
+            )
+        case .completed(.cancelled):
+            return SurfaceIndependentActionStartResult(outcome: .cancelled, completion: nil)
+        case .completed:
+            return SurfaceIndependentActionStartResult(outcome: .cancelled, completion: nil)
+        case let .rejected(rejection):
+            return SurfaceIndependentActionStartResult(
+                outcome: .rejected(rejection),
+                completion: nil
+            )
+        }
+    }
+
+    var surfaceIndependentExecutionCountForTests: Int {
+        surfaceIndependentExecutionTasks.count
     }
 
     private func prepare(
@@ -392,6 +451,11 @@ final class ActionExecutor {
             return .foregroundExecutionUnsupported
         default:
             break
+        }
+
+        if invocation.source == .automaticRule,
+           definition.risk == .confirmationRequired {
+            return .confirmationRequiredForAutomaticExecution
         }
 
         if invocation.source == .runLink {

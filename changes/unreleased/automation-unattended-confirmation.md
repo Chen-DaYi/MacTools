@@ -4,4 +4,4 @@ type: fixed
 area: Automation
 ---
 
-Automatic rules now reject workflows that require interactive confirmation instead of unexpectedly opening MacTools or failing when a trigger fires.
+Automatic rules now preserve unattended execution through nested and delayed steps, rejecting newly interactive actions instead of unexpectedly opening MacTools.

@@ -82,6 +82,15 @@ enum WorkflowRunSource: Codable, Equatable, Sendable {
     case test
     case publishedAction(ActionExecutionSource)
     case automatic(ruleID: UUID, triggerKind: String)
+
+    var requiresUnattendedExecution: Bool {
+        switch self {
+        case .automatic, .publishedAction(.automaticRule):
+            true
+        case .manual, .test, .publishedAction:
+            false
+        }
+    }
 }
 
 enum WorkflowRunStatus: String, Codable, Equatable, Sendable {

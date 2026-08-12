@@ -311,7 +311,8 @@ struct UnifiedSearchPresentationView: View {
                         dismiss: navigationCoordinator.dismissUnifiedSearch,
                         dismissAfterSuccessfulExecution: navigationCoordinator.dismissUnifiedSearch,
                         navigate: navigationCoordinator.navigateFromSearch,
-                        consumeQuickSelection: navigationCoordinator.consumeUnifiedSearchQuickSelectionRequest
+                        consumeQuickSelection: navigationCoordinator.consumeUnifiedSearchQuickSelectionRequest,
+                        setPendingExecutionCancellation: { _ in }
                     )
                 )
                 .padding(24)
@@ -325,6 +326,7 @@ struct UnifiedSearchPaletteActions {
     let dismissAfterSuccessfulExecution: () -> Void
     let navigate: (SettingsNavigationDestination, SettingsSearchRevealTarget?) -> Bool
     let consumeQuickSelection: (UnifiedSearchQuickSelectionRequest) -> Bool
+    let setPendingExecutionCancellation: ((() -> Void)?) -> Void
 }
 
 private struct UnifiedSearchPaletteShadowModifier: ViewModifier {
@@ -1028,6 +1030,7 @@ struct UnifiedSearchPaletteView: View {
                     for: action.definition
                 ) else {
                     guard generation == executionGeneration else { return }
+                    actions.setPendingExecutionCancellation(nil)
                     executionTask = nil
                     executionFeedback = FeatureL10n.string("找不到对应操作。")
                     model.refresh()
@@ -1061,6 +1064,7 @@ struct UnifiedSearchPaletteView: View {
                         confirmationService: confirmationService
                     )
                     guard generation == executionGeneration else { return }
+                    actions.setPendingExecutionCancellation(nil)
                     executionTask = nil
                     switch startOutcome {
                     case .started:
@@ -1074,18 +1078,49 @@ struct UnifiedSearchPaletteView: View {
                     }
                     return
                 }
-                let outcome = await pluginHost.actionExecutor.execute(
+                let start = await pluginHost.actionExecutor
+                    .startSurfaceIndependentTrackingCompletion(
                     invocation,
+                    expectedDefinition: action.definition,
                     confirmationService: confirmationService
                 )
                 guard generation == executionGeneration else { return }
-                executionTask = nil
-                if case .completed(.succeeded) = outcome {
-                    actions.dismissAfterSuccessfulExecution()
-                } else {
-                    executionFeedback = ActionSurfaceExecutionSupport.feedback(for: outcome)
+                actions.setPendingExecutionCancellation(nil)
+                switch start.outcome {
+                case .started:
+                    guard let completion = start.completion else {
+                        executionTask = nil
+                        executionFeedback = FeatureL10n.string("操作未能开始。")
+                        model.refresh()
+                        return
+                    }
+                    executionTask = Task { @MainActor in
+                        var iterator = completion.makeAsyncIterator()
+                        guard let outcome = await iterator.next(),
+                              !Task.isCancelled,
+                              generation == executionGeneration else {
+                            return
+                        }
+                        executionTask = nil
+                        if case .completed(.succeeded) = outcome {
+                            actions.dismissAfterSuccessfulExecution()
+                        } else {
+                            executionFeedback = ActionSurfaceExecutionSupport.feedback(for: outcome)
+                            model.refresh()
+                        }
+                    }
+                case .cancelled:
+                    executionTask = nil
+                    executionFeedback = FeatureL10n.string("操作已取消。")
+                    model.refresh()
+                case let .rejected(rejection):
+                    executionTask = nil
+                    executionFeedback = ActionSurfaceExecutionSupport.message(for: rejection)
                     model.refresh()
                 }
+            }
+            actions.setPendingExecutionCancellation {
+                invalidateExecution()
             }
         case let .pluginCommand(pluginID, expectedDefinition):
             if pluginHost.performCommand(
@@ -1122,6 +1157,7 @@ struct UnifiedSearchPaletteView: View {
 
     private func invalidateExecution() {
         executionGeneration &+= 1
+        actions.setPendingExecutionCancellation(nil)
         executionTask?.cancel()
         executionTask = nil
     }

@@ -151,6 +151,7 @@ final class StandaloneCommandPaletteState: ObservableObject {
     @Published private(set) var localizationRevision: UInt = 0
 
     private var nextQuickSelectionRequestID: UInt = 0
+    private var pendingExecutionCancellation: (() -> Void)?
 
     func prepareForPresentation(shortcutLabel: String) {
         presentationOrigin = .globalShortcut(shortcutLabel)
@@ -158,6 +159,16 @@ final class StandaloneCommandPaletteState: ObservableObject {
         quickSelectionRequest = nil
         resetRequestID &+= 1
         focusRequestID &+= 1
+    }
+
+    func prepareForDismissal() {
+        let cancellation = pendingExecutionCancellation
+        pendingExecutionCancellation = nil
+        cancellation?()
+    }
+
+    func setPendingExecutionCancellation(_ cancellation: (() -> Void)?) {
+        pendingExecutionCancellation = cancellation
     }
 
     @discardableResult
@@ -479,6 +490,9 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
 
     func dismissCommandPalette(restoringFocus: Bool = true) {
         let wasVisible = commandPalettePanel?.isVisible == true
+        if wasVisible {
+            commandPaletteState?.prepareForDismissal()
+        }
         commandPalettePanel?.orderOut(nil)
         commandPaletteFocusRestoration.dismiss(
             wasVisible: wasVisible,
@@ -582,7 +596,10 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
             navigate: { [weak self] destination, target in
                 self?.navigateFromStandaloneSearch(to: destination, target: target) ?? false
             },
-            consumeQuickSelection: state.consumeQuickSelectionRequest
+            consumeQuickSelection: state.consumeQuickSelectionRequest,
+            setPendingExecutionCancellation: { [weak state] cancellation in
+                state?.setPendingExecutionCancellation(cancellation)
+            }
         )
         let hostingView = NSHostingView(
             rootView: StandaloneCommandPaletteRootView(

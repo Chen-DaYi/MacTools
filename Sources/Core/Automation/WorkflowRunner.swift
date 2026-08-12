@@ -74,7 +74,7 @@ final class WorkflowRunner {
             guard analysis.supportsBackground else {
                 return .failure(.backgroundExecutionUnsupported)
             }
-            if case .automatic = source,
+            if source.requiresUnattendedExecution,
                !analysis.supportsUnattendedExecution {
                 return .failure(.confirmationRequiredForAutomaticExecution)
             }
@@ -353,6 +353,9 @@ final class WorkflowRunner {
         if case let .publishedAction(actionSource) = source {
             return actionSource
         }
+        if case .automatic = source {
+            return .automaticRule
+        }
         return .workflow
     }
 
@@ -388,6 +391,7 @@ final class WorkflowRunner {
         case .rejected(.unknownAction), .rejected(.unavailable),
              .rejected(.backgroundExecutionUnsupported),
              .rejected(.foregroundExecutionUnsupported),
+             .rejected(.confirmationRequiredForAutomaticExecution),
              .rejected(.externalInvocationUnavailable),
              .rejected(.providerChanged):
             return stepResult(

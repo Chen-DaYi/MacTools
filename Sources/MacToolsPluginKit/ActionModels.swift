@@ -434,6 +434,7 @@ public enum ActionExecutionSource: String, Hashable, Codable, Sendable {
     case globalShortcut
     case runLink
     case workflow
+    case automaticRule
     case actionGrid
     case trackpadGesture
     case appIntent

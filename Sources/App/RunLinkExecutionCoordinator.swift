@@ -392,6 +392,8 @@ final class RunLinkExecutionCoordinator {
             reason ?? FeatureL10n.string("操作当前不可用。")
         case .backgroundExecutionUnsupported, .foregroundExecutionUnsupported:
             FeatureL10n.string("操作不支持当前执行方式。")
+        case .confirmationRequiredForAutomaticExecution:
+            FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
         case .externalInvocationUnavailable:
             FeatureL10n.string("此操作不允许从外部调用。")
         case .systemExposureUnavailable:

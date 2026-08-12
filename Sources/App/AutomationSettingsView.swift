@@ -1666,6 +1666,7 @@ enum WorkflowRunPresentation {
             case .trackpadGesture: FeatureL10n.string("触控板手势")
             case .unifiedSearch: FeatureL10n.string("统一搜索")
             case .workflow: FeatureL10n.string("工作流")
+            case .automaticRule: FeatureL10n.string("自动规则")
             case .appIntent: FeatureL10n.string("App Intent")
             case .manual: FeatureL10n.string("手动")
             case .test: FeatureL10n.string("测试")

@@ -34,6 +34,8 @@ enum ActionSurfaceExecutionSupport {
         case let .unavailable(reason): reason ?? FeatureL10n.string("操作不可用。")
         case .backgroundExecutionUnsupported: FeatureL10n.string("操作不能在后台运行。")
         case .foregroundExecutionUnsupported: FeatureL10n.string("操作不能以交互方式运行。")
+        case .confirmationRequiredForAutomaticExecution:
+            FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
         case .externalInvocationUnavailable: FeatureL10n.string("此操作不允许从外部调用。")
         case .systemExposureUnavailable: FeatureL10n.string("操作不可用。")
         case .confirmationUnavailable: FeatureL10n.string("无法显示操作确认。")
