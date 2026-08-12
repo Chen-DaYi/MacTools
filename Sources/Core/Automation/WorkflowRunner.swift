@@ -74,6 +74,10 @@ final class WorkflowRunner {
             guard analysis.supportsBackground else {
                 return .failure(.backgroundExecutionUnsupported)
             }
+            if case .automatic = source,
+               !analysis.supportsUnattendedExecution {
+                return .failure(.confirmationRequiredForAutomaticExecution)
+            }
         }
 
         let runID = UUID()

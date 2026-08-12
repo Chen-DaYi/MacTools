@@ -486,6 +486,86 @@ final class WorkflowRunnerTests: XCTestCase {
         XCTAssertTrue(store.history().isEmpty)
     }
 
+    func testAutomaticRunRejectsNestedConfirmationRequiredActionBeforeStarting() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let store = WorkflowStore(userDefaults: defaults)
+        let registry = ActionRegistry()
+        let provider = WorkflowRunnerTestProvider(actionIDs: [], timeout: 30)
+        let key = ActionKey(providerID: "confirmation-required", actionID: "run")
+        var invocationCount = 0
+        let confirmationRegistration = ActionProviderRegistration(
+            providerID: key.providerID,
+            identity: ObjectIdentifier(provider),
+            definitions: [ActionDefinition(
+                key: key,
+                title: "Confirm",
+                description: "",
+                systemImage: "exclamationmark.shield",
+                risk: .confirmationRequired,
+                confirmation: ActionConfirmation(
+                    title: "Confirm",
+                    message: "Confirm action",
+                    confirmButtonTitle: "Run"
+                ),
+                capabilities: [.background, .foregroundInteractive]
+            )],
+            catalogEntries: [],
+            availability: { _ in .available },
+            begin: { _ in
+                invocationCount += 1
+                return .success(ActionExecutionHandle(operation: { .succeeded() }))
+            }
+        )
+        registry.synchronize([confirmationRegistration])
+        let child = try saveWorkflow(
+            in: store,
+            steps: [WorkflowStep(reference: ActionReference(key: key))]
+        )
+        let parent = try store.upsert(WorkflowDefinition(
+            name: "Parent",
+            steps: [WorkflowStep(reference: child.actionReference)]
+        )).get()
+        let executor = ActionExecutor(
+            registry: registry,
+            confirmationService: ApprovedActionConfirmationService()
+        )
+        let runner = WorkflowRunner(
+            store: store,
+            registry: registry,
+            executor: executor
+        )
+        let controller = AutomationController(
+            store: store,
+            registry: registry,
+            executor: executor,
+            runner: runner
+        )
+        registry.synchronize([
+            confirmationRegistration,
+            controller.actionRegistration(),
+        ])
+
+        guard case let .failure(error) = runner.makeExecutionHandle(
+            workflowID: parent.id,
+            source: .automatic(ruleID: UUID(), triggerKind: "schedule"),
+            mode: .background
+        ) else {
+            return XCTFail("Expected unattended preflight rejection")
+        }
+        XCTAssertEqual(error, .confirmationRequiredForAutomaticExecution)
+        XCTAssertEqual(invocationCount, 0)
+        XCTAssertTrue(store.history().isEmpty)
+
+        let manual = try runner.makeExecutionHandle(
+            workflowID: parent.id,
+            source: .manual,
+            mode: .background
+        ).get()
+        let manualResult = await manual.actionHandle.result()
+        XCTAssertEqual(manualResult, .succeeded())
+        XCTAssertEqual(invocationCount, 1)
+    }
+
     func testRunLinkSourceRemainsExternalThroughNestedWorkflows() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         let store = WorkflowStore(userDefaults: defaults)

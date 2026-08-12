@@ -542,6 +542,11 @@ final class AutomationController: ObservableObject {
                 "此工作流包含需要交互的操作，不能由自动规则在后台运行。"
             ))
         }
+        guard analysis.supportsUnattendedExecution else {
+            return .unavailable(FeatureL10n.string(
+                "工作流包含需要确认的操作，无法自动运行。"
+            ))
+        }
         return .available
     }
 
@@ -603,6 +608,8 @@ final class AutomationController: ObservableObject {
         case .maximumDepthExceeded: FeatureL10n.string("工作流嵌套层级已达上限。")
         case .backgroundExecutionUnsupported:
             FeatureL10n.string("工作流包含只能交互运行的操作。")
+        case .confirmationRequiredForAutomaticExecution:
+            FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
         }
     }
 }

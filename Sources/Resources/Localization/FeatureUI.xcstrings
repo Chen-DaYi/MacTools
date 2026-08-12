@@ -5817,6 +5817,77 @@
         }
       }
     },
+    "工作流包含需要确认的操作，无法自动运行。": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يحتوي سير العمل على إجراءات تتطلب التأكيد ولا يمكن تشغيله تلقائيًا."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Workflow enthält Aktionen, die bestätigt werden müssen, und kann nicht automatisch ausgeführt werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The workflow contains actions that require confirmation and cannot run automatically."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El flujo de trabajo contiene acciones que requieren confirmación y no se puede ejecutar automáticamente."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le workflow contient des actions qui nécessitent une confirmation et ne peut pas s’exécuter automatiquement."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフローには確認が必要な操作が含まれるため、自動実行できません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "워크플로에 확인이 필요한 동작이 포함되어 자동으로 실행할 수 없습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O fluxo de trabalho contém ações que exigem confirmação e não pode ser executado automaticamente."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рабочий процесс содержит действия, требующие подтверждения, и не может выполняться автоматически."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流包含需要确认的操作，无法自动运行。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流程包含需要確認的操作，無法自動執行。"
+          }
+        }
+      }
+    },
     "工作流包含只能交互运行的操作。": {
       "extractionState": "manual",
       "localizations": {

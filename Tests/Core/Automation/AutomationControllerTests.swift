@@ -116,6 +116,37 @@ final class AutomationControllerTests: XCTestCase {
         XCTAssertEqual(controller.lastErrorMessage, "لا يمكن العثور على سير العمل.")
     }
 
+    func testConfirmationRequiredAutomaticRuleReasonIsLocalized() {
+        let originalPreference = UserDefaults.standard.string(
+            forKey: PluginRuntimeLocalization.preferenceUserDefaultsKey
+        )
+        defer { PluginRuntimeLocalization.source.setPreference(originalPreference) }
+        let expectations: [(String, String)] = [
+            (
+                "en",
+                "The workflow contains actions that require confirmation and cannot run automatically."
+            ),
+            (
+                "zh-Hans",
+                "工作流包含需要确认的操作，无法自动运行。"
+            ),
+            (
+                "ar",
+                "يحتوي سير العمل على إجراءات تتطلب التأكيد ولا يمكن تشغيله تلقائيًا."
+            ),
+        ]
+
+        for (language, expected) in expectations {
+            PluginRuntimeLocalization.source.setPreference(language)
+            XCTAssertEqual(
+                AutomationRunSkipReason
+                    .confirmationRequiredForAutomaticExecution
+                    .localizedText,
+                expected
+            )
+        }
+    }
+
     func testEnabledWorkflowPublishesStableOrdinaryActionAndDisabledWorkflowDisappears() throws {
         let suite = "AutomationControllerTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -310,7 +341,16 @@ final class AutomationControllerTests: XCTestCase {
             actionID: "foreground",
             capabilities: [.foregroundInteractive]
         )
-        registry.synchronize([background.registration, foreground.registration])
+        let confirmation = AutomationControllerTestProvider(
+            providerID: "automation-controller-confirmation-tests",
+            actionID: "confirm",
+            risk: .confirmationRequired
+        )
+        registry.synchronize([
+            background.registration,
+            foreground.registration,
+            confirmation.registration,
+        ])
         let controller = AutomationController(
             store: WorkflowStore(userDefaults: defaults),
             registry: registry,
@@ -337,6 +377,26 @@ final class AutomationControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.automaticRuleAvailability(workflowID: interactive.id).reason,
             FeatureL10n.string("此工作流包含需要交互的操作，不能由自动规则在后台运行。")
+        )
+
+        let confirmationRequired = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(
+            workflowID: confirmationRequired.id,
+            reference: confirmation.reference
+        )
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: confirmationRequired.id).reason,
+            FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
+        )
+
+        let nestedConfirmation = try XCTUnwrap(controller.createWorkflow())
+        controller.addStep(
+            workflowID: nestedConfirmation.id,
+            reference: confirmationRequired.actionReference
+        )
+        XCTAssertEqual(
+            controller.automaticRuleAvailability(workflowID: nestedConfirmation.id).reason,
+            FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
         )
 
         let missing = try XCTUnwrap(controller.createWorkflow())
@@ -614,19 +674,22 @@ private final class AutomationControllerTestProvider {
     private(set) var invocationCount = 0
     let capabilities: ActionExecutionCapabilities
     let externalInvocationPolicy: ActionExternalInvocationPolicy
+    let risk: ActionRisk
     var availability: ActionAvailability = .available
 
     init(
         providerID: String = "automation-controller-tests",
         actionID: String = "run",
         capabilities: ActionExecutionCapabilities = [.background, .foregroundInteractive],
-        externalInvocationPolicy: ActionExternalInvocationPolicy = .allowed
+        externalInvocationPolicy: ActionExternalInvocationPolicy = .allowed,
+        risk: ActionRisk = .safe
     ) {
         self.reference = ActionReference(
             key: ActionKey(providerID: providerID, actionID: actionID)
         )
         self.capabilities = capabilities
         self.externalInvocationPolicy = externalInvocationPolicy
+        self.risk = risk
     }
 
     var registration: ActionProviderRegistration {
@@ -635,6 +698,14 @@ private final class AutomationControllerTestProvider {
             title: "运行",
             description: "",
             systemImage: "bolt",
+            risk: risk,
+            confirmation: risk == .confirmationRequired
+                ? ActionConfirmation(
+                    title: "Confirm",
+                    message: "Confirm action",
+                    confirmButtonTitle: "Run"
+                )
+                : nil,
             externalInvocationPolicy: externalInvocationPolicy,
             capabilities: capabilities
         )

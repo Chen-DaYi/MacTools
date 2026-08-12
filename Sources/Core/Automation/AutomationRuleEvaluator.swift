@@ -20,6 +20,7 @@ enum AutomationRunSkipReason: String, Codable, Equatable, Sendable {
     case recursiveInvocation = "检测到递归工作流调用。"
     case maximumDepthExceeded = "工作流嵌套层级已达上限。"
     case backgroundExecutionUnsupported = "工作流包含只能交互运行的操作。"
+    case confirmationRequiredForAutomaticExecution = "工作流包含需要确认的操作，无法自动运行。"
 
     var localizedText: String {
         switch self {
@@ -61,6 +62,8 @@ enum AutomationRunSkipReason: String, Codable, Equatable, Sendable {
             FeatureL10n.string("工作流嵌套层级已达上限。")
         case .backgroundExecutionUnsupported:
             FeatureL10n.string("工作流包含只能交互运行的操作。")
+        case .confirmationRequiredForAutomaticExecution:
+            FeatureL10n.string("工作流包含需要确认的操作，无法自动运行。")
         }
     }
 }

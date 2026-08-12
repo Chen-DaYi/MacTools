@@ -4,6 +4,7 @@ import MacToolsPluginKit
 struct WorkflowExecutionAnalysisResult: Equatable {
     let availability: ActionAvailability
     let supportsBackground: Bool
+    let supportsUnattendedExecution: Bool
     let allowsExternalInvocation: Bool
 }
 
@@ -76,6 +77,7 @@ enum WorkflowExecutionAnalysis {
         var nextVisiting = visiting
         nextVisiting.insert(workflowID)
         var supportsBackground = true
+        var supportsUnattendedExecution = true
         var allowsExternalInvocation = true
 
         for step in workflow.steps {
@@ -90,6 +92,8 @@ enum WorkflowExecutionAnalysis {
                 )
                 guard nested.availability.isAvailable else { return nested }
                 supportsBackground = supportsBackground && nested.supportsBackground
+                supportsUnattendedExecution = supportsUnattendedExecution
+                    && nested.supportsUnattendedExecution
                 allowsExternalInvocation = allowsExternalInvocation
                     && nested.allowsExternalInvocation
                 continue
@@ -108,6 +112,8 @@ enum WorkflowExecutionAnalysis {
             }
             supportsBackground = supportsBackground
                 && actionDefinition.capabilities.contains(.background)
+            supportsUnattendedExecution = supportsUnattendedExecution
+                && actionDefinition.risk != .confirmationRequired
             allowsExternalInvocation = allowsExternalInvocation
                 && actionDefinition.externalInvocationPolicy != .unavailable
                 && !ActionRegistry.containsSensitiveParameters(
@@ -119,6 +125,7 @@ enum WorkflowExecutionAnalysis {
         return WorkflowExecutionAnalysisResult(
             availability: .available,
             supportsBackground: supportsBackground,
+            supportsUnattendedExecution: supportsUnattendedExecution,
             allowsExternalInvocation: allowsExternalInvocation
         )
     }
@@ -161,6 +168,7 @@ enum WorkflowExecutionAnalysis {
         WorkflowExecutionAnalysisResult(
             availability: .unavailable(reason),
             supportsBackground: false,
+            supportsUnattendedExecution: false,
             allowsExternalInvocation: false
         )
     }

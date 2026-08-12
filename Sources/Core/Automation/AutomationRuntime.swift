@@ -241,6 +241,8 @@ final class AutomationRuntime {
         case .recursiveInvocation: .recursiveInvocation
         case .maximumDepthExceeded: .maximumDepthExceeded
         case .backgroundExecutionUnsupported: .backgroundExecutionUnsupported
+        case .confirmationRequiredForAutomaticExecution:
+            .confirmationRequiredForAutomaticExecution
         }
     }
 }

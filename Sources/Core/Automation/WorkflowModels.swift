@@ -270,6 +270,7 @@ enum WorkflowStartError: Error, Equatable {
     case recursiveInvocation
     case maximumDepthExceeded
     case backgroundExecutionUnsupported
+    case confirmationRequiredForAutomaticExecution
 }
 
 struct WorkflowExecutionHandle {

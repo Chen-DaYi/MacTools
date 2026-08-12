@@ -287,6 +287,26 @@ final class AutomationRuntimeTests: XCTestCase {
         )
     }
 
+    func testConfirmationRequiredWorkflowRecordsSpecificSkipReason() throws {
+        let fixture = try makeFixture(startError: .confirmationRequiredForAutomaticExecution)
+        let rule = try fixture.ruleStore.upsert(AutomationRule(
+            workflowID: fixture.workflow.id,
+            trigger: .network(NetworkAutomationTrigger(status: .available))
+        )).get()
+        fixture.runtime.start()
+
+        fixture.providers[.network]?.emit(
+            .network(status: .available, interface: .any, date: fixture.date)
+        )
+
+        let run = try XCTUnwrap(fixture.workflowStore.history().first)
+        XCTAssertEqual(run.source, .automatic(ruleID: rule.id, triggerKind: "network"))
+        XCTAssertEqual(
+            run.automationSkippedSummary?.reason,
+            .confirmationRequiredForAutomaticExecution
+        )
+    }
+
     private func makeFixture(
         completesImmediately: Bool = true,
         startError: WorkflowStartError? = nil
