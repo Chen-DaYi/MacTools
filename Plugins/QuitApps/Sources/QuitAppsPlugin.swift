@@ -191,9 +191,9 @@ final class QuitAppsPlugin: MacToolsPlugin, PluginPrimaryPanel, DropZoneAnchorPr
     }
 
     private func closeSelectionWindow() {
-        selectionWindow?.cleanup()
-        selectionWindow?.orderOut(nil)
+        guard let window = selectionWindow else { return }
         selectionWindow = nil
+        window.dismiss(notifyingOwner: false)
     }
 
     private func positionWindow(_ window: NSWindow) {

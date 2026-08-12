@@ -157,6 +157,19 @@ final class QuitAppsPluginTests: XCTestCase {
         )
     }
 
+    func testSelectionWindowDismissalNotifiesOwnerOnlyOnce() {
+        var dismissalCount = 0
+        let window = QuitAppsSelectionWindow {
+            dismissalCount += 1
+        }
+
+        window.dismiss()
+        window.dismiss()
+
+        XCTAssertEqual(dismissalCount, 1)
+        XCTAssertFalse(window.isVisible)
+    }
+
     private func makeEntry(id: String, isSelected: Bool) -> QuitAppEntry {
         QuitAppEntry(
             group: QuitAppGroup(
