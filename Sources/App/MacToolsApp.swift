@@ -38,7 +38,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         guard !isRunningTests else {
-            launchDisposition = .primary
+            launchDisposition = .primary(recoveryRequested: false)
             return
         }
 
@@ -56,11 +56,14 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        guard case .primary = launchDisposition else { return }
+        guard case let .primary(recoveryRequested) = launchDisposition else { return }
 
         let runtime = MacToolsAppRuntime()
         self.runtime = runtime
         runtime.start(notificationDelegate: self)
+        if recoveryRequested {
+            _ = requestSettingsRecovery()
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

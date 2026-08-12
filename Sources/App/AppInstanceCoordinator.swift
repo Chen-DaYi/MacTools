@@ -2,7 +2,7 @@ import CoreFoundation
 import Foundation
 
 enum AppInstanceLaunchDisposition: Equatable {
-    case primary
+    case primary(recoveryRequested: Bool)
     case secondary(AppInstanceForwardingResult)
 }
 
@@ -69,23 +69,24 @@ final class AppInstanceCoordinator {
     func acquireOrForwardSettingsRequest() -> AppInstanceLaunchDisposition {
         if registerLocalPortIfPossible() {
             AppLog.instanceCoordination.debug("Elected primary instance")
-            return .primary
+            return .primary(recoveryRequested: false)
         }
 
         let deadline = Date().addingTimeInterval(Self.forwardingTimeout)
+        let command = AppInstanceCommand.showSettingsRequest()
         var lastResult: AppInstanceForwardingResult = .timedOut
 
         while Date() < deadline {
-            switch forwardSettingsRequest() {
+            switch forwardSettingsRequest(command, deadline: deadline) {
             case .accepted:
                 AppLog.instanceCoordination.debug("Forwarded settings recovery request")
                 return .secondary(.acknowledged)
-            case .notReady:
+            case .notReady, .timedOut:
                 lastResult = .timedOut
             case .invalidPort:
                 if registerLocalPortIfPossible() {
                     AppLog.instanceCoordination.notice("Recovered primary ownership after an invalid port")
-                    return .primary
+                    return .primary(recoveryRequested: true)
                 }
                 lastResult = .timedOut
             case .rejected:
@@ -93,7 +94,7 @@ final class AppInstanceCoordinator {
                 return .secondary(.rejected)
             }
 
-            RunLoop.current.run(until: Date().addingTimeInterval(Self.retryDelay))
+            RunLoop.current.run(until: min(Date().addingTimeInterval(Self.retryDelay), deadline))
         }
 
         AppLog.instanceCoordination.error("Timed out forwarding settings recovery request")
@@ -146,27 +147,36 @@ final class AppInstanceCoordinator {
         return true
     }
 
-    private func forwardSettingsRequest() -> ForwardingAttempt {
+    private func forwardSettingsRequest(
+        _ command: AppInstanceCommand,
+        deadline: Date
+    ) -> ForwardingAttempt {
         guard let remotePort = CFMessagePortCreateRemote(kCFAllocatorDefault, portName as CFString) else {
             return .invalidPort
         }
 
-        let command = AppInstanceCommand.showSettingsRequest()
         guard let data = try? JSONEncoder().encode(command) else {
             return .rejected
         }
+
+        let remainingTime = deadline.timeIntervalSinceNow
+        guard remainingTime > 0 else { return .timedOut }
+        let timeout = min(Self.sendTimeout, remainingTime)
 
         var returnedData: Unmanaged<CFData>?
         let result = CFMessagePortSendRequest(
             remotePort,
             Self.messageID,
             data as CFData,
-            Self.sendTimeout,
-            Self.receiveTimeout,
+            timeout,
+            min(Self.receiveTimeout, remainingTime),
             CFRunLoopMode.defaultMode.rawValue,
             &returnedData
         )
 
+        guard result != kCFMessagePortReceiveTimeout, result != kCFMessagePortSendTimeout else {
+            return .timedOut
+        }
         guard result == kCFMessagePortSuccess else {
             return .invalidPort
         }
@@ -209,6 +219,7 @@ private enum ForwardingAttempt {
     case notReady
     case invalidPort
     case rejected
+    case timedOut
 }
 
 private final class CallbackBox {
@@ -225,10 +236,15 @@ private final class CallbackBox {
     func response(for data: Data) -> AppInstanceResponse {
         guard
             data.count <= AppInstanceCommand.maximumPayloadSize,
-            let command = try? JSONDecoder().decode(AppInstanceCommand.self, from: data),
-            command.isSupported
+            let command = try? JSONDecoder().decode(AppInstanceCommand.self, from: data)
         else {
             return .invalid
+        }
+
+        guard command.version == AppInstanceCommand.currentVersion,
+              command.command == AppInstanceCommand.showSettings
+        else {
+            return .unsupported
         }
 
         lock.lock()

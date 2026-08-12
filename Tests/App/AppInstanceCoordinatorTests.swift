@@ -44,7 +44,7 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         }
         defer { primary.invalidate() }
 
-        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary)
+        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary(recoveryRequested: false))
 
         let secondary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
         XCTAssertEqual(
@@ -64,7 +64,7 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         }
         defer { primary.invalidate() }
 
-        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary)
+        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary(recoveryRequested: false))
 
         let secondary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
         XCTAssertEqual(
@@ -78,11 +78,11 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         let bundleIdentifier = "com.example.mactools.instance-test.\(UUID().uuidString)"
         let primary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
 
-        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary)
+        XCTAssertEqual(primary.acquireOrForwardSettingsRequest(), .primary(recoveryRequested: false))
         primary.invalidate()
 
         let replacement = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
         defer { replacement.invalidate() }
-        XCTAssertEqual(replacement.acquireOrForwardSettingsRequest(), .primary)
+        XCTAssertEqual(replacement.acquireOrForwardSettingsRequest(), .primary(recoveryRequested: false))
     }
 }
