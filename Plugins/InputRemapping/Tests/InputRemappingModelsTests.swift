@@ -294,6 +294,13 @@ final class InputRemappingModelsTests: XCTestCase {
         ))
     }
 
+    func testSyntheticEventMarkerIsRecognizedBeforeCapture() {
+        let event = CGEvent(keyboardEventSource: nil, virtualKey: 21, keyDown: true)!
+        event.setIntegerValueField(.eventSourceUserData, value: InputRemappingEventTap.syntheticMarker)
+
+        XCTAssertTrue(InputRemappingEventTap.isMarkedSynthetic(event))
+    }
+
     func testSystemDefinedMediaEventEncodesDownAndUpStateOnce() {
         let keyType: Int32 = 16
 

@@ -28,7 +28,7 @@ enum InputRemappingSystemDefinedEvent {
 }
 
 final class InputRemappingEventTap: InputRemappingEventTapping {
-    private static let syntheticMarker: Int64 = 0x4D_54_49_52
+    static let syntheticMarker: Int64 = 0x4D_54_49_52
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -144,6 +144,10 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
             return Unmanaged.passUnretained(event)
         }
 
+        guard !Self.isMarkedSynthetic(event) else {
+            return Unmanaged.passUnretained(event)
+        }
+
         if type == .keyDown, let shortcut = shortcutCapture(from: event) {
             rulesLock.lock()
             let handler = shortcutCaptureHandler
@@ -187,7 +191,7 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
                 isKeyDown: type == .keyDown,
                 keyCode: keyCode,
                 flags: event.flags,
-                isMarkedSynthetic: event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker,
+                isMarkedSynthetic: false,
                 rules: rules,
                 execute: execute
             )
@@ -196,8 +200,7 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
 
         if type == .scrollWheel, let direction = scrollDirection(from: event) {
             let rules = rulesSnapshot()
-            let shouldConsume = event.getIntegerValueField(.eventSourceUserData) != Self.syntheticMarker
-                && InputRemappingRuleMatcher.scrollRule(for: direction, flags: event.flags, in: rules).map { execute($0.action) } == true
+            let shouldConsume = InputRemappingRuleMatcher.scrollRule(for: direction, flags: event.flags, in: rules).map { execute($0.action) } == true
             return shouldConsume ? nil : Unmanaged.passUnretained(event)
         }
 
@@ -221,13 +224,16 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
             phase: phase,
             buttonNumber: buttonNumber,
             flags: event.flags,
-            isMarkedSynthetic:
-                event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker,
+            isMarkedSynthetic: false,
             rules: rules,
             timestamp: TimeInterval(event.timestamp) / 1_000_000_000,
             execute: execute
         )
         return shouldConsume ? nil : Unmanaged.passUnretained(event)
+    }
+
+    static func isMarkedSynthetic(_ event: CGEvent) -> Bool {
+        event.getIntegerValueField(.eventSourceUserData) == syntheticMarker
     }
 
     private func shortcutCapture(from event: CGEvent) -> ShortcutBinding? {

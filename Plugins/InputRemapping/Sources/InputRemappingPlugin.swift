@@ -461,7 +461,7 @@ private struct InputRemappingSettingsView: View {
             if store.rules.isEmpty {
                 VStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                     Image(systemName: "arrow.up.right.circle")
-                        .font(.system(size: 34))
+                        .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon))
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
                     Text(localization.string("settings.empty.title", defaultValue: "Create your first mapping"))

@@ -142,6 +142,7 @@ Source of truth: yes
 - 2026-08-13 — Replaced the empty-state sentence with a centered first-mapping prompt that explicitly directs users to Add Mapping.
 - 2026-08-13 — Added all supported MacTools locales to the plugin string catalog and package metadata.
 - 2026-08-13 — Corrected the Run column label in every locale to mean execute an action rather than physical running.
+- 2026-08-13 — Kept Input Remapping-generated events out of both input recorders, declared its system frameworks locally, and added the feature to the Simplified Chinese README.
 - 2026-08-13 — Reworked the mappings list into individual cards matching the approved When I press → Run → Where flow. The page subtitle is “Create shortcuts from keyboard/trackpad/mouse”; enablement and destructive actions moved to the card header/footer.
 - 2026-08-13 — Removed the enclosing Form section card. The settings page now uses its task-oriented workspace shell, leaving only the individual mapping cards visible.
 - 2026-08-13 — Aligned mapping cards with the approved reference: bordered control fields, one shortcut value field rather than duplicated output controls, and the exact conditional Run presentation for shortcuts versus predefined actions.
