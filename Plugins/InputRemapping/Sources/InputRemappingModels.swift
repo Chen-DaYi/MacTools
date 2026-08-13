@@ -5,6 +5,7 @@ import MacToolsPluginKit
 import OSLog
 
 enum InputRemappingRulePolicy {
+    /// CoreGraphics numbers the primary button as 0; all physical buttons through 32 are supported.
     static let minimumButtonNumber: Int64 = 0
     static let maximumButtonNumber: Int64 = 32
     static let eligibleButtonNumbers = minimumButtonNumber...maximumButtonNumber
@@ -100,7 +101,7 @@ enum InputRemappingCapturedInput: Equatable, Sendable {
 struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, isEnabled, trigger, buttonNumber, modifiers, action
-        case isInputConfigured, isOutputConfigured, outputConfigurationState
+        case isInputConfigured, isOutputConfigured, outputConfigurationState, isUnmodifiedKeyboardConfirmed
     }
 
     enum Action: Codable, Equatable, Hashable, Sendable, CaseIterable {
@@ -176,6 +177,7 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
     var action: Action
     var isInputConfigured: Bool
     var outputConfigurationState: InputRemappingOutputConfigurationState
+    var isUnmodifiedKeyboardConfirmed: Bool
 
     var isOutputConfigured: Bool {
         get { outputConfigurationState == .configured }
@@ -209,11 +211,13 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
         trigger: InputRemappingTrigger = .mouseButton(number: 3, modifiers: [], interaction: .click),
         action: Action = .mouseBack,
         isInputConfigured: Bool = true,
-        outputConfigurationState: InputRemappingOutputConfigurationState = .configured
+        outputConfigurationState: InputRemappingOutputConfigurationState = .configured,
+        isUnmodifiedKeyboardConfirmed: Bool = false
     ) {
         self.id = id
         self.trigger = trigger.normalized()
-        self.isEnabled = isEnabled && !Self.requiresExplicitConfirmation(for: self.trigger)
+        self.isUnmodifiedKeyboardConfirmed = isUnmodifiedKeyboardConfirmed
+        self.isEnabled = isEnabled && (!Self.requiresExplicitConfirmation(for: self.trigger) || isUnmodifiedKeyboardConfirmed)
         self.action = action
         self.isInputConfigured = isInputConfigured
         self.outputConfigurationState = outputConfigurationState
@@ -241,24 +245,26 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
         let isInputConfigured = try c.decodeIfPresent(Bool.self, forKey: .isInputConfigured) ?? true
         let outputConfigurationState = try c.decodeIfPresent(InputRemappingOutputConfigurationState.self, forKey: .outputConfigurationState)
             ?? ((try c.decodeIfPresent(Bool.self, forKey: .isOutputConfigured)) == false ? .needsSelection : .configured)
+        let isUnmodifiedKeyboardConfirmed = try c.decodeIfPresent(Bool.self, forKey: .isUnmodifiedKeyboardConfirmed) ?? false
         if let trigger = try c.decodeIfPresent(InputRemappingTrigger.self, forKey: .trigger) {
-            self.init(id: id, isEnabled: enabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState)
+            self.init(id: id, isEnabled: enabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnmodifiedKeyboardConfirmed: isUnmodifiedKeyboardConfirmed)
         } else {
-            self.init(id: id, isEnabled: enabled, trigger: .mouseButton(number: try c.decode(Int64.self, forKey: .buttonNumber), modifiers: try c.decode(ShortcutModifiers.self, forKey: .modifiers), interaction: .click), action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState)
+            self.init(id: id, isEnabled: enabled, trigger: .mouseButton(number: try c.decode(Int64.self, forKey: .buttonNumber), modifiers: try c.decode(ShortcutModifiers.self, forKey: .modifiers), interaction: .click), action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnmodifiedKeyboardConfirmed: isUnmodifiedKeyboardConfirmed)
         }
     }
 
     func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id); try c.encode(isEnabled, forKey: .isEnabled); try c.encode(trigger.normalized(), forKey: .trigger); try c.encode(action, forKey: .action)
-        try c.encode(isInputConfigured, forKey: .isInputConfigured); try c.encode(outputConfigurationState, forKey: .outputConfigurationState)
+        try c.encode(isInputConfigured, forKey: .isInputConfigured); try c.encode(outputConfigurationState, forKey: .outputConfigurationState); try c.encode(isUnmodifiedKeyboardConfirmed, forKey: .isUnmodifiedKeyboardConfirmed)
     }
     func normalized() -> InputRemappingRule {
-        InputRemappingRule(id: id, isEnabled: isEnabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState)
+        InputRemappingRule(id: id, isEnabled: isEnabled, trigger: trigger, action: action, isInputConfigured: isInputConfigured, outputConfigurationState: outputConfigurationState, isUnmodifiedKeyboardConfirmed: isUnmodifiedKeyboardConfirmed)
     }
 
     mutating func replaceTrigger(_ newTrigger: InputRemappingTrigger) {
         trigger = newTrigger.normalized()
+        isUnmodifiedKeyboardConfirmed = false
         if Self.requiresExplicitConfirmation(for: trigger) {
             isEnabled = false
         }

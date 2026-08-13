@@ -135,6 +135,23 @@ final class InputRemappingModelsTests: XCTestCase {
         XCTAssertTrue(decoded.isOutputConfigured)
     }
 
+    func testConfirmedUnmodifiedKeyboardRuleStaysEnabledAfterReload() throws {
+        let rule = InputRemappingRule(
+            isEnabled: true,
+            trigger: .keyboard(keyCode: 12, modifiers: []),
+            action: .mouseBack,
+            isUnmodifiedKeyboardConfirmed: true
+        )
+
+        let decoded = try JSONDecoder().decode(
+            InputRemappingRule.self,
+            from: JSONEncoder().encode(rule)
+        )
+
+        XCTAssertTrue(decoded.isEnabled)
+        XCTAssertTrue(decoded.isUnmodifiedKeyboardConfirmed)
+    }
+
     func testSuccessfulDownConsumesMatchingUpWithoutExecutingTwice() {
         let rule = InputRemappingRule(buttonNumber: 4, action: .mouseBack)
         var processor = InputRemappingEventProcessor()

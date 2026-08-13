@@ -50,13 +50,13 @@ Source of truth: yes
 | 2026-08-13 | Permission checks are injected behind plugin seams | Cards and activation use the same real OS state and remain testable | Accessibility and Input Monitoring |
 | 2026-08-13 | Synthetic-event protection is limited to the private Input Remapping marker | Public CoreGraphics source fields describe state tables or process metadata, not a reliable physical-versus-generated category | Unmarked third-party generated events can match a rule |
 | 2026-08-13 | Modifier-free keyboard triggers are allowed after a warning | User requires full flexibility while being informed of global typing risk | Rule remains disabled until confirmation |
-| 2026-08-13 | Trackpad gesture ownership is exclusive | A single Multitouch listener must arbitrate gestures | New Input Remapping claim removes the Trackpad Gestures mapping |
+| 2026-08-13 | Trackpad gesture ownership is exclusive | A single Multitouch listener must arbitrate gestures | A claim removes the conflicting mapping, whichever plugin is edited last |
 
 ## Known limitation
 
 - Input Remapping-generated events carry a private marker and cannot loop back into remapping.
 - macOS exposes no reliable public category for every generated event.
-- A third-party generated, unmarked mouse event in the 3...32 range can match and execute a rule.
+- A third-party generated, unmarked mouse event in the 0...32 range can match and execute a rule.
 
 ## Plan
 
@@ -85,7 +85,7 @@ Source of truth: yes
 ## Acceptance / DoD
 
 - [x] Rules can be enabled, edited, removed, and persisted.
-- [x] Trigger requires button 3 through 32 and the exact optional modifier set.
+- [x] Trigger supports physical button 0 through 32 and the exact optional modifier set.
 - [x] Actions: shortcut, back/forward/middle, Mission Control, left/right space, media, and volume up/down.
 - [x] Media and volume actions emit auxiliary system events, not ordinary F8/F11/F12 keystrokes.
 - [x] Accessibility and Input Monitoring cards report real state and expose working actions.
@@ -116,7 +116,7 @@ Source of truth: yes
 - 2026-08-13 — Review P2 fixed: play/pause and volume actions now post `NX_KEYTYPE_*` auxiliary system events; rule bounds are centralized; storage decode/encode failures are logged; all user-facing plugin strings use plugin localization; settings use the host form/theme conventions.
 - 2026-08-13 — Tests expanded for matching, bounds, down/up lifecycle, fail-open and synthetic events, persistence, permissions, activation, deactivation, and settings validation.
 - 2026-08-13 — Checks passed: Swift parse for plugin sources and tests, string catalog JSON parse, and scoped `git diff --check`. Targeted XCTest could not run because the generated local Xcode project does not yet contain the `InputRemappingPlugin` scheme; generating project files is outside this agent's assigned files.
-- 2026-08-13 — Review 2 fixed: auxiliary event data encodes down/up state once; persisted and copied button values normalize to 3...32; matching uses typed `CGEventFlags`; application activation revalidates both permissions with observer cleanup on deactivation; the Add action moved to the host section header and editor rows use edge-to-edge list chrome.
+- 2026-08-13 — Review 2 fixed: auxiliary event data encodes down/up state once; persisted and copied button values normalize to 0...32; matching uses typed `CGEventFlags`; application activation revalidates both permissions with observer cleanup on deactivation; the Add action moved to the host section header and editor rows use edge-to-edge list chrome.
 - 2026-08-13 — Synthetic-event contract narrowed to Input Remapping-marked events after checking the public CoreGraphics event-source APIs; unmarked third-party generated events remain a documented risk.
 - 2026-08-13 — Review 2 checks passed: Swift parse, source module emission, test typecheck, both JSON parses, tracked `git diff --check`, and whitespace checks for untracked feature files. No project lint command or user pre-commit hook is configured. Targeted XCTest remains unavailable because the generated local Xcode project has no `InputRemappingPlugin` scheme.
 - 2026-08-13 — UX refined: each rule now records the physical extra mouse button directly. The recorder has an explicit cancel action and lets the captured click pass through, avoiding accidental remapping during selection.
@@ -145,11 +145,13 @@ Source of truth: yes
 - 2026-08-13 — Kept Input Remapping-generated events out of both input recorders, declared its system frameworks locally, and added the feature to the Simplified Chinese README.
 - 2026-08-13 — Renamed the user-facing feature to Custom Shortcuts and harmonized its creation, deletion, and empty-state copy in every supported locale.
 - 2026-08-13 — Refresh the plugin title and subtitle whenever the app language changes, matching the localized editor controls.
+- 2026-08-13 — Confirmed modifier-free keyboard rules persist their acknowledgement; external trackpad claims remove conflicting local gestures in either editing order.
 - 2026-08-13 — Reworked the mappings list into individual cards matching the approved When I press → Run → Where flow. The page subtitle is “Create shortcuts from keyboard/trackpad/mouse”; enablement and destructive actions moved to the card header/footer.
 - 2026-08-13 — Removed the enclosing Form section card. The settings page now uses its task-oriented workspace shell, leaving only the individual mapping cards visible.
 - 2026-08-13 — Aligned mapping cards with the approved reference: bordered control fields, one shortcut value field rather than duplicated output controls, and the exact conditional Run presentation for shortcuts versus predefined actions.
 - 2026-08-13 — Fixed the empty settings page: the dynamic-plugin manifest now declares the workspace layout used at runtime; its localized marketplace summary now matches the multi-device mapping scope.
 - 2026-08-13 — Refined the approved card layout: full-width native menu buttons for Input, interaction, Run, and Where; recording moved into the Input menu; shortcut output uses one selectable value field plus a full-width recording action; secondary modifier controls are hidden from the primary scan path.
+- 2026-08-13 — Review 3 fixed: confirmed modifier-free keyboard rules persist their acknowledgement; the Core trackpad bridge owns routing and removes conflicting local mappings in either editing order; its provider/consumer seam is covered by an adjacent integration test.
 
 ## Files
 

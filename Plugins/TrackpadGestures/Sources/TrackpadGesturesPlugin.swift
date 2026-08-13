@@ -496,9 +496,11 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
         _ gestures: Set<TrackpadGesture>,
         handler: @escaping (TrackpadGesture, UInt64) -> Void
     ) {
+        let conflictingMappingIDs = gestures.compactMap { store.mapping(for: $0)?.id }
+        conflictingMappingIDs.forEach { store.delete(id: $0) }
         externalGestureClaims = gestures
         externalGestureHandler = handler
-        refreshPermissionsAndApply()
+        configurationDidChange()
     }
 
     func removeLocalMapping(for gesture: TrackpadGesture) {

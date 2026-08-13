@@ -1631,25 +1631,11 @@ final class PluginHost: ObservableObject {
         configureTrackpadGestureBridge()
     }
 
-    private func configureTrackpadGestureBridge() {
-        let providers = activePlugins.compactMap { $0 as? any TrackpadGestureEventProviding }
-        let consumers = activePlugins.compactMap { $0 as? any TrackpadGestureEventConsuming }
-        let claims = consumers.reduce(into: Set<TrackpadGesture>()) { $0.formUnion($1.claimedTrackpadGestures) }
+    private let trackpadGestureBridge = TrackpadGestureBridge()
 
-        for consumer in consumers {
-            consumer.onTrackpadGestureClaimsChange = { [weak self] in
-                self?.configureTrackpadGestureBridge()
-            }
-            consumer.requestTrackpadGestureOwnership = { [weak self] gesture in
-                self?.activePlugins.compactMap { $0 as? any TrackpadGestureEventProviding }
-                    .forEach { $0.removeLocalMapping(for: gesture) }
-            }
-        }
-        for provider in providers {
-            provider.setExternalGestureClaims(claims) { gesture, deviceID in
-                consumers.first(where: { $0.claimedTrackpadGestures.contains(gesture) })?
-                    .receiveTrackpadGesture(gesture, deviceID: deviceID)
-            }
+    private func configureTrackpadGestureBridge() {
+        trackpadGestureBridge.connect(plugins: activePlugins) { [weak self] in
+            self?.configureTrackpadGestureBridge()
         }
     }
 

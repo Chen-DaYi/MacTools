@@ -589,6 +589,7 @@ private struct InputRemappingRuleEditor: View {
             isPresented: $requiresKeyboardConfirmation
         ) {
             Button(localization.string("settings.keyboard.confirmation.enable", defaultValue: "Enable")) {
+                draft.isUnmodifiedKeyboardConfirmed = true
                 draft.isEnabled = true
                 save()
             }
