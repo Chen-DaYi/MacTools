@@ -80,6 +80,7 @@ Source of truth: yes
 - [x] P018 — Start new mappings with direct input recording and output selection.
 - [x] P019 — Keep recorded shortcut labels compact in the Run selector.
 - [x] P020 — Guide users from the empty state to the Add Mapping control.
+- [x] P021 — Localize all Input Remapping copy in every MacTools-supported language.
 
 ## Acceptance / DoD
 
@@ -139,6 +140,8 @@ Source of truth: yes
 - 2026-08-13 — New mappings persist as disabled drafts. Input recording is direct; Run first asks the user to choose an action, and Shortcut then reveals its recorder. Legacy rules decode as fully configured.
 - 2026-08-13 — Removed the redundant command icon before a recorded shortcut in the Run selector; system-action icons remain visible.
 - 2026-08-13 — Replaced the empty-state sentence with a centered first-mapping prompt that explicitly directs users to Add Mapping.
+- 2026-08-13 — Added all supported MacTools locales to the plugin string catalog and package metadata.
+- 2026-08-13 — Corrected the Run column label in every locale to mean execute an action rather than physical running.
 - 2026-08-13 — Reworked the mappings list into individual cards matching the approved When I press → Run → Where flow. The page subtitle is “Create shortcuts from keyboard/trackpad/mouse”; enablement and destructive actions moved to the card header/footer.
 - 2026-08-13 — Removed the enclosing Form section card. The settings page now uses its task-oriented workspace shell, leaving only the individual mapping cards visible.
 - 2026-08-13 — Aligned mapping cards with the approved reference: bordered control fields, one shortcut value field rather than duplicated output controls, and the exact conditional Run presentation for shortcuts versus predefined actions.
