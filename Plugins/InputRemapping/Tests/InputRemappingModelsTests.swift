@@ -26,7 +26,9 @@ private final class InputRemappingTapSpy: InputRemappingEventTapping {
     private(set) var stopCallCount = 0
     private(set) var cancelCaptureCallCount = 0
     var startResult = true
-    var captureHandler: (@Sendable (Int64) -> Void)?
+    var captureHandler: (@Sendable (InputRemappingCapturedInput) -> Void)?
+    var shortcutCaptureHandler: (@Sendable (ShortcutBinding) -> Void)?
+    private(set) var executedActions: [InputRemappingRule.Action] = []
 
     func update(rules: [InputRemappingRule]) {
         self.rules = rules
@@ -41,18 +43,33 @@ private final class InputRemappingTapSpy: InputRemappingEventTapping {
         stopCallCount += 1
     }
 
-    func beginButtonCapture(_ handler: @escaping @Sendable (Int64) -> Void) -> Bool {
+    func beginInputCapture(_ handler: @escaping @Sendable (InputRemappingCapturedInput) -> Void) -> Bool {
         captureHandler = handler
+        return startResult
+    }
+
+    func beginShortcutCapture(_ handler: @escaping @Sendable (ShortcutBinding) -> Void) -> Bool {
+        shortcutCaptureHandler = handler
         return startResult
     }
 
     func cancelButtonCapture() {
         cancelCaptureCallCount += 1
         captureHandler = nil
+        shortcutCaptureHandler = nil
     }
 
-    func capture(buttonNumber: Int64) {
-        captureHandler?(buttonNumber)
+    func execute(_ action: InputRemappingRule.Action) -> Bool {
+        executedActions.append(action)
+        return true
+    }
+
+    func capture(_ input: InputRemappingCapturedInput) {
+        captureHandler?(input)
+    }
+
+    func capture(shortcut: ShortcutBinding) {
+        shortcutCaptureHandler?(shortcut)
     }
 }
 
@@ -81,7 +98,7 @@ final class InputRemappingModelsTests: XCTestCase {
 
     func testRuleNormalizesButtonNumberUsingSharedPolicy() {
         XCTAssertEqual(
-            InputRemappingRule(buttonNumber: 1).buttonNumber,
+            InputRemappingRule(buttonNumber: -1).buttonNumber,
             InputRemappingRulePolicy.minimumButtonNumber
         )
         XCTAssertEqual(
@@ -115,6 +132,91 @@ final class InputRemappingModelsTests: XCTestCase {
             execute: { _ in XCTFail("Mouse-up must not execute an action"); return true }
         ))
         XCTAssertEqual(executions, [.mouseBack])
+    }
+
+    func testSuccessfulKeyboardDownConsumesMatchingUpWithoutExecutingTwice() {
+        let rule = InputRemappingRule(
+            trigger: .keyboard(keyCode: 12, modifiers: [.command]),
+            action: .mouseBack
+        )
+        var processor = InputRemappingEventProcessor()
+        var executions = 0
+
+        XCTAssertTrue(processor.shouldConsumeKeyboard(
+            isKeyDown: true,
+            keyCode: 12,
+            flags: [.maskCommand],
+            isMarkedSynthetic: false,
+            rules: [rule],
+            execute: { _ in executions += 1; return true }
+        ))
+        XCTAssertTrue(processor.shouldConsumeKeyboard(
+            isKeyDown: false,
+            keyCode: 12,
+            flags: [.maskCommand],
+            isMarkedSynthetic: false,
+            rules: [rule],
+            execute: { _ in XCTFail("Key-up must not execute an action"); return true }
+        ))
+        XCTAssertEqual(executions, 1)
+    }
+
+    func testUnmodifiedKeyboardTriggerStartsDisabledUntilConfirmed() {
+        let rule = InputRemappingRule(
+            isEnabled: true,
+            trigger: .keyboard(keyCode: 12, modifiers: []),
+            action: .mouseBack
+        )
+        XCTAssertFalse(rule.isEnabled)
+
+        var editedRule = InputRemappingRule(buttonNumber: 4)
+        editedRule.replaceTrigger(.keyboard(keyCode: 12, modifiers: []))
+        XCTAssertFalse(editedRule.isEnabled)
+    }
+
+    func testDoubleClickExecutesWithoutConsumingTheNativeClickPair() {
+        let rule = InputRemappingRule(
+            trigger: .mouseButton(number: 4, modifiers: [], interaction: .doubleClick),
+            action: .mouseBack
+        )
+        var processor = InputRemappingEventProcessor()
+        var executions = 0
+
+        XCTAssertFalse(processor.shouldConsume(phase: .down, buttonNumber: 4, flags: [], isMarkedSynthetic: false, rules: [rule], timestamp: 1, execute: { _ in executions += 1; return true }))
+        XCTAssertFalse(processor.shouldConsume(phase: .up, buttonNumber: 4, flags: [], isMarkedSynthetic: false, rules: [rule], timestamp: 1.01, execute: { _ in executions += 1; return true }))
+        XCTAssertFalse(processor.shouldConsume(phase: .down, buttonNumber: 4, flags: [], isMarkedSynthetic: false, rules: [rule], timestamp: 1.1, execute: { _ in executions += 1; return true }))
+        XCTAssertFalse(processor.shouldConsume(phase: .up, buttonNumber: 4, flags: [], isMarkedSynthetic: false, rules: [rule], timestamp: 1.11, execute: { _ in executions += 1; return true }))
+        XCTAssertEqual(executions, 1)
+    }
+
+    func testScrollRuleMatchesOnlyItsDirectionAndModifiers() {
+        let rule = InputRemappingRule(
+            trigger: .scroll(direction: .up, modifiers: [.command]),
+            action: .mouseBack
+        )
+        XCTAssertEqual(InputRemappingRuleMatcher.scrollRule(for: .up, flags: [.maskCommand], in: [rule])?.id, rule.id)
+        XCTAssertNil(InputRemappingRuleMatcher.scrollRule(for: .down, flags: [.maskCommand], in: [rule]))
+        XCTAssertNil(InputRemappingRuleMatcher.scrollRule(for: .up, flags: [], in: [rule]))
+    }
+
+    @MainActor
+    func testTrackpadGestureClaimExecutesOnlyItsMappedAction() throws {
+        let tap = InputRemappingTapSpy()
+        let plugin = InputRemappingPlugin(
+            context: PluginRuntimeContext(pluginID: "input-remapping", storage: InputRemappingMemoryStorage()),
+            tap: tap,
+            accessibilityTrusted: { true },
+            inputMonitoringStatus: { .granted }
+        )
+        plugin.store.addRule()
+        var rule = try XCTUnwrap(plugin.store.rules.first)
+        rule.replaceTrigger(.trackpadGesture(.threeFingerTap))
+        rule.action = .mouseBack
+        plugin.store.replace(rule)
+
+        XCTAssertEqual(plugin.claimedTrackpadGestures, [.threeFingerTap])
+        plugin.receiveTrackpadGesture(.threeFingerTap, deviceID: 1)
+        XCTAssertEqual(tap.executedActions, [.mouseBack])
     }
 
     func testFailedOrInapplicableDownAndUnpairedUpFailOpen() {
@@ -208,7 +310,9 @@ final class InputRemappingModelsTests: XCTestCase {
 
         let data = try XCTUnwrap(storage.data(forKey: "input-remapping.rules.v1"))
         var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
-        payload[0]["buttonNumber"] = 1
+        var trigger = try XCTUnwrap(payload[0]["trigger"] as? [String: Any])
+        trigger["number"] = -1
+        payload[0]["trigger"] = trigger
         storage.set(try JSONSerialization.data(withJSONObject: payload), forKey: "input-remapping.rules.v1")
 
         let reloadedStore = InputRemappingStore(storage: storage)
@@ -336,21 +440,64 @@ final class InputRemappingModelsTests: XCTestCase {
     @MainActor
     func testButtonCaptureRecordsAnEligibleButtonAndCanBeCancelled() async {
         let tap = InputRemappingTapSpy()
-        let coordinator = InputRemappingButtonCaptureCoordinator(tap: tap)
-        var capturedButtonNumber: Int64?
+        let coordinator = InputRemappingButtonCaptureCoordinator(
+            tap: tap,
+            scheduleArming: { $0() }
+        )
+        var capturedInput: InputRemappingCapturedInput?
 
         XCTAssertTrue(coordinator.start(ruleID: UUID()) {
-            capturedButtonNumber = $0
+            capturedInput = $0
         })
-        tap.capture(buttonNumber: 4)
+        tap.capture(.mouseButton(number: 4, modifiers: []))
         await Task.yield()
 
-        XCTAssertEqual(capturedButtonNumber, 4)
+        XCTAssertEqual(capturedInput, .mouseButton(number: 4, modifiers: []))
         XCTAssertNil(coordinator.recordingRuleID)
 
         XCTAssertTrue(coordinator.start(ruleID: UUID()) { _ in })
         coordinator.cancel()
         XCTAssertNil(coordinator.recordingRuleID)
         XCTAssertEqual(tap.cancelCaptureCallCount, 1)
+    }
+
+    @MainActor
+    func testShortcutCaptureRecordsAKeyboardBinding() async {
+        let tap = InputRemappingTapSpy()
+        let coordinator = InputRemappingButtonCaptureCoordinator(
+            tap: tap,
+            scheduleArming: { $0() }
+        )
+        var captured: ShortcutBinding?
+
+        XCTAssertTrue(coordinator.startShortcut(ruleID: UUID()) { captured = $0 })
+        tap.capture(shortcut: ShortcutBinding(keyCode: 12, modifiers: [.command]))
+        await Task.yield()
+
+        XCTAssertEqual(captured, ShortcutBinding(keyCode: 12, modifiers: [.command]))
+        XCTAssertNil(coordinator.recordingShortcutRuleID)
+    }
+
+    @MainActor
+    func testInputCaptureIgnoresTheClickThatOpenedRecording() async throws {
+        let tap = InputRemappingTapSpy()
+        var pendingArming: (@MainActor () -> Void)?
+        let coordinator = InputRemappingButtonCaptureCoordinator(
+            tap: tap,
+            scheduleArming: { pendingArming = $0 }
+        )
+        var captured: InputRemappingCapturedInput?
+
+        XCTAssertTrue(coordinator.start(ruleID: UUID()) { captured = $0 })
+        XCTAssertNotNil(coordinator.preparingRuleID)
+        tap.capture(.mouseButton(number: 0, modifiers: []))
+        await Task.yield()
+        XCTAssertNil(captured)
+
+        let arm = try XCTUnwrap(pendingArming)
+        arm()
+        tap.capture(.mouseButton(number: 4, modifiers: []))
+        await Task.yield()
+        XCTAssertEqual(captured, .mouseButton(number: 4, modifiers: []))
     }
 }

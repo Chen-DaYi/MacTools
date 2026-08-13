@@ -2,33 +2,41 @@
 
 Last verified: 2026-08-13
 
-Status: implemented
+Status: in-progress
 Source of truth: yes
 
 ## Summary
 
-- Separate plugin for remapping extra mouse buttons.
-- Scope: buttons 3 through 32, with optional exact modifiers.
-- Out of scope: primary clicks, trackpad, shell commands, macros, profiles, per-app or per-device conditions.
+- Separate plugin for remapping keyboard, mouse, and precise trackpad gestures.
+- Scope: keyboard keys, mouse click/double-click/long-press, scroll wheel, and the precise gestures already recognized by Trackpad Gestures.
+- Out of scope: shell commands, macros, profiles, per-app or per-device conditions.
 
 ## User flow
 
 - User grants Accessibility and Input Monitoring.
 - User adds, enables, edits, or removes a persisted rule.
-- To select a trigger, the user starts recording and presses the extra mouse button to use; the capture passes through without executing a rule.
-- A matching button-down executes the action and consumes the original down/up pair.
+- To select a trigger, the user starts recording and presses a key, a mouse button, or scrolls; the recorded event and its matching key-up or mouse-up are consumed without executing a rule.
+- Recording first shows a brief preparation state so the click that opened the recorder cannot become the trigger; it then shows an explicit listening state.
+- A matching click, key, or scroll executes the action. Mouse double-click and long-press keep the original click available to avoid unsafe event replay.
+- When the action is a shortcut, the user can record the output combination directly; the recorded key-down and key-up are consumed.
+- Each rule presents its Input, Output, and Context in three stable columns. Context is currently global; per-app and per-device conditions remain out of scope.
 - A missing rule, failed action, or event carrying the Input Remapping marker passes through unchanged.
 
 ## Business rules
 
 | Rule | Markdown | Centralized code | Consumers |
 |---|---|---|---|
-| Eligible buttons: 3 through 32; primary clicks and trackpad excluded | This document | `InputRemappingRulePolicy` | Rule model, matcher, button recorder |
-| Button capture is explicit, cancellable, and passes through | This document | `InputRemappingButtonCaptureCoordinator` | Settings editor, CGEvent tap |
+| Physical mouse buttons: 0 through 32 | This document | `InputRemappingRulePolicy` | Rule model, matcher, recorder |
+| Capture accepts keyboard, mouse buttons, and scroll and consumes the recorded event | This document | `InputRemappingCapturedInput` | Settings editor, CGEvent tap |
+| Recording arms after its opening click and distinguishes preparation from active listening | This document | `InputRemappingButtonCaptureCoordinator` | Input and shortcut recorders |
+| Shortcut output can be recorded directly and consumes its key pair | This document | `InputRemappingButtonCaptureCoordinator` | Shortcut action editor, CGEvent tap |
 | Exact modifier set required | This document | `InputRemappingRule.matches` | Event processor |
 | A consumed down consumes its matching up | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | Events carrying the Input Remapping synthetic marker always pass through | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | Failed or inapplicable actions fail open | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
+| A keyboard trigger with no modifier is saved disabled and requires explicit confirmation before it can be enabled | This document | `InputRemappingRule` | Rule editor, event processor |
+| A precise trackpad gesture belongs to either Trackpad Gestures or Input Remapping, never both | This document | Shared trackpad gesture broker | Plugin host, both plugins |
+| Rule context is global only | This document | Rule editor layout | Context column |
 
 ## Decisions
 
@@ -39,6 +47,8 @@ Source of truth: yes
 | 2026-08-13 | Failed or inapplicable rule keeps the original event | Preserve native mouse behavior | Fail-open behavior |
 | 2026-08-13 | Permission checks are injected behind plugin seams | Cards and activation use the same real OS state and remain testable | Accessibility and Input Monitoring |
 | 2026-08-13 | Synthetic-event protection is limited to the private Input Remapping marker | Public CoreGraphics source fields describe state tables or process metadata, not a reliable physical-versus-generated category | Unmarked third-party generated events can match a rule |
+| 2026-08-13 | Modifier-free keyboard triggers are allowed after a warning | User requires full flexibility while being informed of global typing risk | Rule remains disabled until confirmation |
+| 2026-08-13 | Trackpad gesture ownership is exclusive | A single Multitouch listener must arbitrate gestures | New Input Remapping claim removes the Trackpad Gestures mapping |
 
 ## Known limitation
 
@@ -55,6 +65,9 @@ Source of truth: yes
 - [x] P005 — Address first review findings.
 - [x] P006 — Address second review findings and narrow unsupported synthetic-event claims.
 - [x] P007 — Replace numeric trigger selection with a direct mouse-button recorder.
+- [x] P008 — Generalize triggers to keyboard, mouse click/double-click/long-press, scroll, and precise trackpad gestures.
+- [x] P009 — Add shared trackpad gesture arbitration and migration from Trackpad Gestures.
+- [x] P010 — Redesign the rule editor around Input, Output, and Context columns.
 
 ## Acceptance / DoD
 
@@ -71,6 +84,13 @@ Source of truth: yes
 - [x] Settings use a validated `.form`, theme tokens, labels, and explicit control sizing.
 - [x] Trigger selection uses a cancellable direct button recorder instead of a numeric stepper.
 - [x] Adjacent targeted tests cover the behavioral seams.
+- [x] Keyboard keys, mouse buttons, and scroll can be recorded as a trigger from the rule editor.
+- [x] Modifier-free keyboard triggers show a warning and require confirmation before activation.
+- [x] A trackpad gesture cannot remain active in both plugins.
+- [x] The rule editor separates Input, Output, and global Context into three columns.
+- [x] Unmodified keyboard triggers persist disabled until their explicit confirmation.
+- [x] Mouse double-click actions preserve the native click pair.
+- [x] Shortcut recording exposes preparation and active-listening states.
 
 ## Implementation journal
 
@@ -86,6 +106,17 @@ Source of truth: yes
 - 2026-08-13 — Review 2 checks passed: Swift parse, source module emission, test typecheck, both JSON parses, tracked `git diff --check`, and whitespace checks for untracked feature files. No project lint command or user pre-commit hook is configured. Targeted XCTest remains unavailable because the generated local Xcode project has no `InputRemappingPlugin` scheme.
 - 2026-08-13 — UX refined: each rule now records the physical extra mouse button directly. The recorder has an explicit cancel action and lets the captured click pass through, avoiding accidental remapping during selection.
 - 2026-08-13 — Verification: generated the project, built `InputRemappingPlugin`, and passed `MacToolsTests/InputRemappingModelsTests`. Existing DiskClean Swift-concurrency warnings remain outside this feature.
+- 2026-08-13 — User expanded the contract to keyboard, mouse click/double-click/long-press, scroll, and the precise Trackpad Gestures catalog. Modifier-free keys require confirmation; trackpad ownership is exclusive and must be brokered through the host.
+- 2026-08-13 — Implemented universal capture and persisted keyboard, mouse, scroll, and trackpad triggers. Double-click executes on the second down; long-press executes on release; both retain the source click to avoid buffering and replaying native input.
+- 2026-08-13 — Added a PluginKit trackpad gesture catalog and host broker. Trackpad Gestures remains the sole Multitouch listener; a new Input Remapping claim removes the conflicting local mapping and receives subsequent recognition.
+- 2026-08-13 — Recording now consumes the captured event and matching key-up or mouse-up; a successful keyboard remap also consumes both key-down and matching key-up. macOS no longer receives the source input after capture or remapping.
+- 2026-08-13 — Added a dedicated shortcut-output recorder. It captures the next keyboard combination and consumes its full key pair.
+- 2026-08-13 — Redesigned the rule editor into stable Input, Output, and Context columns. The input column reveals only source-specific controls; Output keeps action and shortcut recording together; Context contains scope, enablement, safety guidance, and deletion. Global scope is explicit while conditional contexts remain out of scope.
+- 2026-08-13 — Fixed accidental input capture: the recorder waits briefly after the Record button action before arming. The UI communicates “Preparing recording” then “Listening for an input”; regression coverage proves the opening mouse click is ignored.
+- 2026-08-13 — Replaced repeated rule cards with a master-detail workspace: a compact selectable `Input → Output` rule list on the left and one three-column selected-rule editor on the right. Selection safely falls back to the first rule after additions or deletions.
+- 2026-08-13 — Reverted the master-detail workspace at user request. Rules again render directly in the settings list; the three-column Input, Output, and Context editor remains for each rule.
+- 2026-08-13 — Review fixes: unmodified keyboard triggers now centrally persist disabled until confirmation; double-click actions preserve their native click pair; shortcut recording renders preparation and listening states; universal matcher, interaction, and trackpad-claim paths have targeted coverage; universal copy and human-readable localized trackpad gesture titles replace stale button-only and raw identifiers.
+- 2026-08-13 — Checks passed: generated project, `InputRemappingPlugin`, `TrackpadGesturesPlugin`, and `MacTools` Debug builds; targeted Input Remapping XCTest passed through the MacTools scheme; localization JSON parse and `git diff --check` passed. The plugin scheme has no test action.
 
 ## Files
 

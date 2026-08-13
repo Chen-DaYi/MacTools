@@ -1,4 +1,5 @@
 import XCTest
+import MacToolsPluginKit
 @testable import TrackpadGesturesPlugin
 
 final class TrackpadGestureRecognizerTests: XCTestCase {

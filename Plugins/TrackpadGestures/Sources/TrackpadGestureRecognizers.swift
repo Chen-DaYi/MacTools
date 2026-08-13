@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct TrackpadContactSnapshot: Equatable, Sendable {
     let identifier: Int

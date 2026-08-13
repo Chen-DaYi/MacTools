@@ -11,8 +11,10 @@ protocol InputRemappingEventTapping: AnyObject {
     func update(rules: [InputRemappingRule])
     func start() -> Bool
     func stop()
-    func beginButtonCapture(_ handler: @escaping @Sendable (Int64) -> Void) -> Bool
+    func beginInputCapture(_ handler: @escaping @Sendable (InputRemappingCapturedInput) -> Void) -> Bool
+    func beginShortcutCapture(_ handler: @escaping @Sendable (ShortcutBinding) -> Void) -> Bool
     func cancelButtonCapture()
+    func execute(_ action: InputRemappingRule.Action) -> Bool
 }
 
 enum InputRemappingSystemDefinedEvent {
@@ -35,7 +37,10 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
     private let rulesLock = NSLock()
 
     private var currentRules: [InputRemappingRule] = []
-    private var buttonCaptureHandler: (@Sendable (Int64) -> Void)?
+    private var inputCaptureHandler: (@Sendable (InputRemappingCapturedInput) -> Void)?
+    private var shortcutCaptureHandler: (@Sendable (ShortcutBinding) -> Void)?
+    private var capturedKeyAwaitingUp: UInt16?
+    private var capturedMouseButtonAwaitingUp: Int64?
     private var eventProcessor = InputRemappingEventProcessor()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -49,8 +54,15 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
     func start() -> Bool {
         guard tap == nil else { return true }
 
-        let mask = (CGEventMask(1) << CGEventType.otherMouseDown.rawValue)
+        let mask = (CGEventMask(1) << CGEventType.leftMouseDown.rawValue)
+            | (CGEventMask(1) << CGEventType.leftMouseUp.rawValue)
+            | (CGEventMask(1) << CGEventType.rightMouseDown.rawValue)
+            | (CGEventMask(1) << CGEventType.rightMouseUp.rawValue)
+            | (CGEventMask(1) << CGEventType.otherMouseDown.rawValue)
             | (CGEventMask(1) << CGEventType.otherMouseUp.rawValue)
+            | (CGEventMask(1) << CGEventType.keyDown.rawValue)
+            | (CGEventMask(1) << CGEventType.keyUp.rawValue)
+            | (CGEventMask(1) << CGEventType.scrollWheel.rawValue)
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -84,9 +96,9 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
         source = nil
     }
 
-    func beginButtonCapture(_ handler: @escaping @Sendable (Int64) -> Void) -> Bool {
+    func beginInputCapture(_ handler: @escaping @Sendable (InputRemappingCapturedInput) -> Void) -> Bool {
         rulesLock.lock()
-        buttonCaptureHandler = handler
+        inputCaptureHandler = handler
         rulesLock.unlock()
 
         guard start() else {
@@ -96,9 +108,23 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
         return true
     }
 
+    func beginShortcutCapture(_ handler: @escaping @Sendable (ShortcutBinding) -> Void) -> Bool {
+        rulesLock.lock()
+        shortcutCaptureHandler = handler
+        rulesLock.unlock()
+        guard start() else {
+            cancelButtonCapture()
+            return false
+        }
+        return true
+    }
+
     func cancelButtonCapture() {
         rulesLock.lock()
-        buttonCaptureHandler = nil
+        inputCaptureHandler = nil
+        shortcutCaptureHandler = nil
+        capturedKeyAwaitingUp = nil
+        capturedMouseButtonAwaitingUp = nil
         rulesLock.unlock()
     }
 
@@ -118,32 +144,78 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
             return Unmanaged.passUnretained(event)
         }
 
+        if type == .keyDown, let shortcut = shortcutCapture(from: event) {
+            rulesLock.lock()
+            let handler = shortcutCaptureHandler
+            shortcutCaptureHandler = nil
+            if handler != nil { capturedKeyAwaitingUp = shortcut.keyCode }
+            rulesLock.unlock()
+            if let handler {
+                handler(shortcut)
+                return nil
+            }
+        }
+
+        if let capturedInput = capturedInput(from: event, type: type) {
+            rulesLock.lock()
+            let handler = inputCaptureHandler
+            inputCaptureHandler = nil
+            if handler != nil {
+                switch capturedInput {
+                case let .keyboard(keyCode, _):
+                    capturedKeyAwaitingUp = keyCode
+                case let .mouseButton(number, _):
+                    capturedMouseButtonAwaitingUp = number
+                case .scroll:
+                    break
+                }
+            }
+            rulesLock.unlock()
+            if let handler {
+                handler(capturedInput)
+                return nil
+            }
+        }
+
+        if type == .keyDown || type == .keyUp {
+            let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+            if type == .keyUp, consumeCapturedKeyUp(keyCode) {
+                return nil
+            }
+            let rules = rulesSnapshot()
+            let shouldConsume = eventProcessor.shouldConsumeKeyboard(
+                isKeyDown: type == .keyDown,
+                keyCode: keyCode,
+                flags: event.flags,
+                isMarkedSynthetic: event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker,
+                rules: rules,
+                execute: execute
+            )
+            return shouldConsume ? nil : Unmanaged.passUnretained(event)
+        }
+
+        if type == .scrollWheel, let direction = scrollDirection(from: event) {
+            let rules = rulesSnapshot()
+            let shouldConsume = event.getIntegerValueField(.eventSourceUserData) != Self.syntheticMarker
+                && InputRemappingRuleMatcher.scrollRule(for: direction, flags: event.flags, in: rules).map { execute($0.action) } == true
+            return shouldConsume ? nil : Unmanaged.passUnretained(event)
+        }
+
         let phase: InputRemappingMouseEventPhase
         switch type {
-        case .otherMouseDown:
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             phase = .down
-        case .otherMouseUp:
+        case .leftMouseUp, .rightMouseUp, .otherMouseUp:
             phase = .up
         default:
             return Unmanaged.passUnretained(event)
         }
 
-        let buttonNumber = event.getIntegerValueField(.mouseEventButtonNumber)
-        let isEligibleCapture = phase == .down
-            && InputRemappingRulePolicy.isEligible(buttonNumber: buttonNumber)
-
-        rulesLock.lock()
-        let rules = currentRules
-        let buttonCaptureHandler = self.buttonCaptureHandler
-        if isEligibleCapture, buttonCaptureHandler != nil {
-            self.buttonCaptureHandler = nil
+        let buttonNumber = mouseButtonNumber(for: type, event: event)
+        if phase == .up, consumeCapturedMouseUp(buttonNumber) {
+            return nil
         }
-        rulesLock.unlock()
-
-        if isEligibleCapture, let buttonCaptureHandler {
-            buttonCaptureHandler(buttonNumber)
-            return Unmanaged.passUnretained(event)
-        }
+        let rules = rulesSnapshot()
 
         let shouldConsume = eventProcessor.shouldConsume(
             phase: phase,
@@ -152,12 +224,75 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
             isMarkedSynthetic:
                 event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker,
             rules: rules,
+            timestamp: TimeInterval(event.timestamp) / 1_000_000_000,
             execute: execute
         )
         return shouldConsume ? nil : Unmanaged.passUnretained(event)
     }
 
-    private func execute(_ action: InputRemappingRule.Action) -> Bool {
+    private func shortcutCapture(from event: CGEvent) -> ShortcutBinding? {
+        ShortcutBinding(
+            keyCode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
+            modifiers: InputRemappingRule.modifiers(from: event.flags)
+        )
+    }
+
+    private func rulesSnapshot() -> [InputRemappingRule] {
+        rulesLock.lock()
+        defer { rulesLock.unlock() }
+        return currentRules
+    }
+
+    private func consumeCapturedKeyUp(_ keyCode: UInt16) -> Bool {
+        rulesLock.lock()
+        defer { rulesLock.unlock() }
+        guard capturedKeyAwaitingUp == keyCode else { return false }
+        capturedKeyAwaitingUp = nil
+        return true
+    }
+
+    private func consumeCapturedMouseUp(_ buttonNumber: Int64) -> Bool {
+        rulesLock.lock()
+        defer { rulesLock.unlock() }
+        guard capturedMouseButtonAwaitingUp == buttonNumber else { return false }
+        capturedMouseButtonAwaitingUp = nil
+        return true
+    }
+
+    private func capturedInput(from event: CGEvent, type: CGEventType) -> InputRemappingCapturedInput? {
+        let modifiers = InputRemappingRule.modifiers(from: event.flags)
+        switch type {
+        case .keyDown:
+            return .keyboard(keyCode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)), modifiers: modifiers)
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            return .mouseButton(number: mouseButtonNumber(for: type, event: event), modifiers: modifiers)
+        case .scrollWheel:
+            guard let direction = scrollDirection(from: event) else { return nil }
+            return .scroll(direction: direction, modifiers: modifiers)
+        default:
+            return nil
+        }
+    }
+
+    private func mouseButtonNumber(for type: CGEventType, event: CGEvent) -> Int64 {
+        switch type {
+        case .leftMouseDown, .leftMouseUp: 0
+        case .rightMouseDown, .rightMouseUp: 1
+        default: event.getIntegerValueField(.mouseEventButtonNumber)
+        }
+    }
+
+    private func scrollDirection(from event: CGEvent) -> InputRemappingScrollDirection? {
+        let vertical = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+        if vertical > 0 { return .up }
+        if vertical < 0 { return .down }
+        let horizontal = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
+        if horizontal > 0 { return .right }
+        if horizontal < 0 { return .left }
+        return nil
+    }
+
+    func execute(_ action: InputRemappingRule.Action) -> Bool {
         switch action {
         case let .shortcut(binding):
             post(keyCode: binding.keyCode, modifiers: binding.modifiers)

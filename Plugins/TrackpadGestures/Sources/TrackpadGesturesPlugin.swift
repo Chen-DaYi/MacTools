@@ -38,7 +38,7 @@ private struct TrackpadGestureReadinessError: LocalizedError {
 @MainActor
 final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     AccessibilityPermissionRefreshing, PluginSettingsPresenting,
-    PluginFeatureExtractionReadinessProviding {
+    PluginFeatureExtractionReadinessProviding, TrackpadGestureEventProviding {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -66,6 +66,8 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     private var lastErrorMessage: String?
     private var listenerActivationFailed = false
     private var applicationActivationObserver: NSObjectProtocol?
+    private var externalGestureClaims: Set<TrackpadGesture> = []
+    private var externalGestureHandler: ((TrackpadGesture, UInt64) -> Void)?
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -355,6 +357,10 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
             store.recordTestGesture(gesture)
             return
         }
+        if externalGestureClaims.contains(gesture) {
+            externalGestureHandler?(gesture, deviceID)
+            return
+        }
         guard let mapping = store.mapping(for: gesture), mapping.isEnabled else {
             return
         }
@@ -434,7 +440,9 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
 
     private func applyConfiguration() {
         listenerActivationFailed = false
-        let gestures = store.isTesting ? Set(TrackpadGesture.allCases) : store.enabledGestures
+        let gestures = store.isTesting
+            ? Set(TrackpadGesture.allCases)
+            : store.enabledGestures.union(externalGestureClaims)
         let clickResolutions: [TrackpadGesture: TrackpadNativeClickResolution]
         if store.isTesting {
             clickResolutions = [:]
@@ -481,7 +489,22 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     }
 
     private var recognitionNeeded: Bool {
-        store.isTesting || !store.enabledGestures.isEmpty
+        store.isTesting || !store.enabledGestures.isEmpty || !externalGestureClaims.isEmpty
+    }
+
+    func setExternalGestureClaims(
+        _ gestures: Set<TrackpadGesture>,
+        handler: @escaping (TrackpadGesture, UInt64) -> Void
+    ) {
+        externalGestureClaims = gestures
+        externalGestureHandler = handler
+        refreshPermissionsAndApply()
+    }
+
+    func removeLocalMapping(for gesture: TrackpadGesture) {
+        guard let mapping = store.mapping(for: gesture) else { return }
+        store.delete(id: mapping.id)
+        configurationDidChange()
     }
 
     private var permissionErrorMessage: String {

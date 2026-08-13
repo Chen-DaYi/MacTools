@@ -34,43 +34,88 @@ enum InputRemappingInputMonitoringStatus: Equatable {
 @MainActor
 final class InputRemappingButtonCaptureCoordinator: ObservableObject {
     @Published private(set) var recordingRuleID: UUID?
+    @Published private(set) var recordingShortcutRuleID: UUID?
+    @Published private(set) var preparingRuleID: UUID?
+    @Published private(set) var preparingShortcutRuleID: UUID?
 
     private let tap: any InputRemappingEventTapping
+    private let scheduleArming: (@escaping @MainActor () -> Void) -> Void
 
-    init(tap: any InputRemappingEventTapping) {
+    init(
+        tap: any InputRemappingEventTapping,
+        scheduleArming: @escaping (@escaping @MainActor () -> Void) -> Void = { operation in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                Task { @MainActor in operation() }
+            }
+        }
+    ) {
         self.tap = tap
+        self.scheduleArming = scheduleArming
     }
 
     func start(
         ruleID: UUID,
-        onCapture: @escaping @MainActor (Int64) -> Void
+        onCapture: @escaping @MainActor (InputRemappingCapturedInput) -> Void
     ) -> Bool {
         cancel()
-        recordingRuleID = ruleID
-
-        guard tap.beginButtonCapture({ [weak self] buttonNumber in
-            Task { @MainActor [weak self] in
-                guard let self, self.recordingRuleID == ruleID else { return }
+        preparingRuleID = ruleID
+        scheduleArming { [weak self] in
+            guard let self, self.preparingRuleID == ruleID else { return }
+            self.preparingRuleID = nil
+            self.recordingRuleID = ruleID
+            guard self.tap.beginInputCapture({ [weak self] input in
+                Task { @MainActor [weak self] in
+                    guard let self, self.recordingRuleID == ruleID else { return }
+                    self.recordingRuleID = nil
+                    onCapture(input)
+                }
+            }) else {
                 self.recordingRuleID = nil
-                onCapture(buttonNumber)
+                return
             }
-        }) else {
-            recordingRuleID = nil
-            return false
         }
         return true
     }
 
     func cancel() {
-        guard recordingRuleID != nil else { return }
+        guard recordingRuleID != nil || recordingShortcutRuleID != nil
+            || preparingRuleID != nil || preparingShortcutRuleID != nil
+        else { return }
         recordingRuleID = nil
+        recordingShortcutRuleID = nil
+        preparingRuleID = nil
+        preparingShortcutRuleID = nil
         tap.cancelButtonCapture()
+    }
+
+    func startShortcut(
+        ruleID: UUID,
+        onCapture: @escaping @MainActor (ShortcutBinding) -> Void
+    ) -> Bool {
+        cancel()
+        preparingShortcutRuleID = ruleID
+        scheduleArming { [weak self] in
+            guard let self, self.preparingShortcutRuleID == ruleID else { return }
+            self.preparingShortcutRuleID = nil
+            self.recordingShortcutRuleID = ruleID
+            guard self.tap.beginShortcutCapture({ [weak self] shortcut in
+                Task { @MainActor [weak self] in
+                    guard let self, self.recordingShortcutRuleID == ruleID else { return }
+                    self.recordingShortcutRuleID = nil
+                    onCapture(shortcut)
+                }
+            }) else {
+                self.recordingShortcutRuleID = nil
+                return
+            }
+        }
+        return true
     }
 }
 
 @MainActor
 final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
-    AccessibilityPermissionRefreshing, PluginSettingsPresenting {
+    AccessibilityPermissionRefreshing, PluginSettingsPresenting, TrackpadGestureEventConsuming {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -87,6 +132,8 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
+    var onTrackpadGestureClaimsChange: (() -> Void)?
+    var requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
 
     let store: InputRemappingStore
 
@@ -160,6 +207,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         self.tap.update(rules: store.rules)
         store.onRulesChange = { [weak self] in
             self?.applyConfiguration()
+            self?.onTrackpadGestureClaimsChange?()
         }
     }
 
@@ -185,6 +233,20 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     func refreshAccessibilityPermission() {
         refreshPermissionState()
         applyConfiguration()
+    }
+
+    var claimedTrackpadGestures: Set<TrackpadGesture> {
+        Set(store.rules.compactMap { rule in
+            guard rule.isEnabled, case let .trackpadGesture(gesture) = rule.trigger else { return nil }
+            return gesture
+        })
+    }
+
+    func receiveTrackpadGesture(_ gesture: TrackpadGesture, deviceID: UInt64) {
+        guard isAccessibilityGranted,
+              let rule = store.rules.first(where: { $0.isEnabled && $0.trigger == .trackpadGesture(gesture) })
+        else { return }
+        _ = tap.execute(rule.action)
     }
 
     var primaryPanelState: PluginPanelState {
@@ -251,7 +313,8 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
                     InputRemappingSettingsView(
                         store: self.store,
                         localization: self.localization,
-                        buttonCapture: self.buttonCapture
+                        buttonCapture: self.buttonCapture,
+                        requestTrackpadGestureOwnership: self.requestTrackpadGestureOwnership
                     )
                 }
             }
@@ -395,6 +458,7 @@ private struct InputRemappingSettingsView: View {
     @ObservedObject var store: InputRemappingStore
     let localization: PluginLocalization
     @ObservedObject var buttonCapture: InputRemappingButtonCaptureCoordinator
+    let requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -402,11 +466,9 @@ private struct InputRemappingSettingsView: View {
                 HStack {
                     Spacer()
                     Text(
-                        localization.format(
+                        localization.string(
                             "settings.empty",
-                            defaultValue: "为额外鼠标按键（按键 %d 至 %d）添加规则。",
-                            InputRemappingRulePolicy.minimumButtonNumber,
-                            InputRemappingRulePolicy.maximumButtonNumber
+                            defaultValue: "Record a keyboard key, mouse button, or scroll direction to add a rule."
                         )
                     )
                     .font(PluginSettingsTheme.Typography.pageDescription)
@@ -420,7 +482,8 @@ private struct InputRemappingSettingsView: View {
                         rule: rule,
                         store: store,
                         localization: localization,
-                        buttonCapture: buttonCapture
+                        buttonCapture: buttonCapture,
+                        requestTrackpadGestureOwnership: requestTrackpadGestureOwnership
                     )
                     if index < store.rules.count - 1 {
                         PluginSettingsListDivider()
@@ -431,95 +494,193 @@ private struct InputRemappingSettingsView: View {
     }
 }
 
+private enum InputRemappingInputKind: String, CaseIterable, Identifiable {
+    case keyboard
+    case mouse
+    case trackpad
+    case scroll
+
+    var id: Self { self }
+    var symbolName: String {
+        switch self {
+        case .keyboard: "keyboard"
+        case .mouse: "computermouse"
+        case .trackpad: "hand.tap"
+        case .scroll: "scroll"
+        }
+    }
+}
+
 private struct InputRemappingRuleEditor: View {
     let rule: InputRemappingRule
     @ObservedObject var store: InputRemappingStore
     let localization: PluginLocalization
     @ObservedObject var buttonCapture: InputRemappingButtonCaptureCoordinator
+    let requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
 
     @State private var draft: InputRemappingRule
+    @State private var requiresKeyboardConfirmation = false
 
     init(
         rule: InputRemappingRule,
         store: InputRemappingStore,
         localization: PluginLocalization,
-        buttonCapture: InputRemappingButtonCaptureCoordinator
+        buttonCapture: InputRemappingButtonCaptureCoordinator,
+        requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)? = nil
     ) {
         self.rule = rule
         self.store = store
         self.localization = localization
         self.buttonCapture = buttonCapture
+        self.requestTrackpadGestureOwnership = requestTrackpadGestureOwnership
         _draft = State(initialValue: rule)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Toggle(
-                    localization.string("settings.enabled", defaultValue: "启用"),
-                    isOn: binding(\.isEnabled)
-                )
-                .toggleStyle(.switch)
-                .font(PluginSettingsTheme.Typography.rowTitle)
-
-                Spacer()
-
-                Button(role: .destructive) {
-                    store.delete(rule)
-                } label: {
-                    Label(
-                        localization.string("settings.delete", defaultValue: "删除"),
-                        systemImage: "trash"
-                    )
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
-            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                buttonCaptureControl
-
-                Picker(
-                    localization.string("settings.action", defaultValue: "操作"),
-                    selection: actionBinding
-                ) {
-                    ForEach(InputRemappingRule.Action.allCases, id: \.self) { action in
-                        Text(action.title(localization: localization)).tag(action)
-                    }
-                }
-                .frame(minWidth: 190, idealWidth: 220, maxWidth: 260)
-            }
-
-            HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                modifierToggle("⇧", .shift)
-                modifierToggle("⌥", .option)
-                modifierToggle("⌃", .control)
-                modifierToggle("⌘", .command)
-            }
-
-            if case let .shortcut(shortcut) = draft.action {
-                HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                    Stepper(
-                        localization.format(
-                            "settings.shortcutKeyCode.format",
-                            defaultValue: "快捷键代码 %d",
-                            shortcut.keyCode
-                        ),
-                        value: shortcutKeyCodeBinding,
-                        in: 0...127
-                    )
-                    .frame(minWidth: 180, idealWidth: 210, maxWidth: 240)
-
-                    shortcutModifierToggle("⇧", .shift)
-                    shortcutModifierToggle("⌥", .option)
-                    shortcutModifierToggle("⌃", .control)
-                    shortcutModifierToggle("⌘", .command)
-                }
-            }
+        HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.section) {
+            inputColumn
+            Divider()
+            outputColumn
+            Divider()
+            contextColumn
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
         .pluginSettingsListRowPadding(interactive: true)
+        .alert(
+            localization.string("settings.keyboard.confirmation.title", defaultValue: "Enable unmodified key?"),
+            isPresented: $requiresKeyboardConfirmation
+        ) {
+            Button(localization.string("settings.keyboard.confirmation.enable", defaultValue: "Enable")) {
+                draft.isEnabled = true
+                save()
+            }
+            Button(localization.string("settings.cancel", defaultValue: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(localization.string("settings.keyboard.confirmation.message", defaultValue: "This rule captures normal typing system-wide. You can disable it at any time."))
+        }
+    }
+
+    private var inputColumn: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Text(localization.string("settings.column.input", defaultValue: "Input"))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+            Picker(localization.string("settings.input.kind", defaultValue: "Input type"), selection: inputKindBinding) {
+                ForEach(InputRemappingInputKind.allCases) { kind in
+                    Text(inputKindTitle(kind)).tag(kind)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if inputKind != .trackpad {
+                inputCaptureControl
+            }
+
+            if inputKind == .trackpad {
+                Picker(localization.string("settings.trackpadGesture", defaultValue: "Trackpad gesture"), selection: trackpadGestureBinding) {
+                    ForEach(TrackpadGesture.configurableCases) { gesture in
+                        Text(trackpadGestureTitle(gesture)).tag(Optional(gesture))
+                    }
+                }
+                .labelsHidden()
+            }
+
+            if inputKind != .trackpad {
+                Label(triggerTitle, systemImage: inputKind.symbolName)
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+                HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                    modifierToggle("⇧", .shift)
+                    modifierToggle("⌥", .option)
+                    modifierToggle("⌃", .control)
+                    modifierToggle("⌘", .command)
+                }
+            }
+
+            if case .mouseButton = draft.trigger {
+                Picker(localization.string("settings.mouseInteraction", defaultValue: "Mouse interaction"), selection: mouseInteractionBinding) {
+                    ForEach(InputRemappingMouseInteraction.allCases, id: \.self) { interaction in
+                        Text(mouseInteractionTitle(interaction)).tag(interaction)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var outputColumn: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Text(localization.string("settings.column.output", defaultValue: "Output"))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+            Picker(localization.string("settings.action", defaultValue: "Action"), selection: actionBinding) {
+                ForEach(InputRemappingRule.Action.allCases, id: \.self) { action in
+                    Text(action.title(localization: localization)).tag(action)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if case let .shortcut(shortcut) = draft.action {
+                if buttonCapture.preparingShortcutRuleID == rule.id {
+                    Label(localization.string("settings.shortcut.preparing", defaultValue: "Preparing shortcut recording…"), systemImage: "hourglass")
+                        .foregroundStyle(.tint)
+                    Text(localization.string("settings.shortcut.preparing.detail", defaultValue: "Release the Record Shortcut button; listening starts next."))
+                        .foregroundStyle(.secondary)
+                    Button(localization.string("settings.cancel", defaultValue: "Cancel")) { buttonCapture.cancel() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                } else if buttonCapture.recordingShortcutRuleID == rule.id {
+                    Label(localization.string("settings.shortcut.recording", defaultValue: "Press the shortcut"), systemImage: "record.circle")
+                        .foregroundStyle(.tint)
+                    Button(localization.string("settings.cancel", defaultValue: "Cancel")) { buttonCapture.cancel() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                } else {
+                    Button(localization.string("settings.shortcut.record", defaultValue: "Record shortcut")) {
+                        _ = buttonCapture.startShortcut(ruleID: rule.id) { binding in
+                            draft.action = .shortcut(binding)
+                            save()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                Label(localization.format("settings.shortcut.current", defaultValue: "Current: %@%d", shortcut.modifiers.symbolString, shortcut.keyCode), systemImage: "command")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var contextColumn: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Text(localization.string("settings.column.context", defaultValue: "Context"))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+            Label(localization.string("settings.context.global", defaultValue: "Everywhere"), systemImage: "globe")
+                .font(PluginSettingsTheme.Typography.rowTitle)
+            Text(localization.string("settings.context.global.detail", defaultValue: "This rule applies in every app."))
+                .foregroundStyle(.secondary)
+
+            Toggle(localization.string("settings.enabled", defaultValue: "Enabled"), isOn: enabledBinding)
+                .toggleStyle(.switch)
+
+            if case let .keyboard(_, modifiers) = draft.trigger, modifiers.isEmpty {
+                Text(localization.string("settings.keyboard.warning", defaultValue: "A key without modifiers overrides normal typing while the rule is enabled."))
+                    .foregroundStyle(.orange)
+            }
+            if case .mouseButton = draft.trigger, draft.mouseInteraction != .click {
+                Text(localization.string("settings.mouseInteraction.warning", defaultValue: "Double-click and long-press keep the original click available to avoid delaying or replaying input."))
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(role: .destructive) { store.delete(rule) } label: {
+                Label(localization.string("settings.delete", defaultValue: "Delete"), systemImage: "trash")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
     }
 
     private var actionBinding: Binding<InputRemappingRule.Action> {
@@ -532,41 +693,88 @@ private struct InputRemappingRuleEditor: View {
         )
     }
 
-    @ViewBuilder
-    private var buttonCaptureControl: some View {
-        if buttonCapture.recordingRuleID == rule.id {
-            HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                Label(
-                    localization.string(
-                        "settings.button.recording",
-                        defaultValue: "按下要使用的额外鼠标按键"
-                    ),
-                    systemImage: "record.circle"
-                )
-                .font(PluginSettingsTheme.Typography.rowTitle)
-                .foregroundStyle(.tint)
+    private var inputKind: InputRemappingInputKind {
+        switch draft.trigger {
+        case .keyboard: .keyboard
+        case .mouseButton: .mouse
+        case .trackpadGesture: .trackpad
+        case .scroll: .scroll
+        }
+    }
 
-                Button(localization.string("settings.cancel", defaultValue: "取消")) {
-                    buttonCapture.cancel()
+    private var inputKindBinding: Binding<InputRemappingInputKind> {
+        Binding(
+            get: { inputKind },
+            set: { kind in
+                switch kind {
+                case .keyboard:
+                    draft.replaceTrigger(.keyboard(keyCode: 0, modifiers: []))
+                case .mouse:
+                    draft.replaceTrigger(.mouseButton(number: 0, modifiers: [], interaction: .click))
+                case .trackpad:
+                    let gesture = TrackpadGesture.threeFingerTap
+                    requestTrackpadGestureOwnership?(gesture)
+                    draft.replaceTrigger(.trackpadGesture(gesture))
+                case .scroll:
+                    draft.replaceTrigger(.scroll(direction: .up, modifiers: []))
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                save()
             }
+        )
+    }
+
+    private func inputKindTitle(_ kind: InputRemappingInputKind) -> String {
+        switch kind {
+        case .keyboard: localization.string("settings.input.kind.keyboard", defaultValue: "Keyboard")
+        case .mouse: localization.string("settings.input.kind.mouse", defaultValue: "Mouse")
+        case .trackpad: localization.string("settings.input.kind.trackpad", defaultValue: "Trackpad")
+        case .scroll: localization.string("settings.input.kind.scroll", defaultValue: "Scroll")
+        }
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { draft.isEnabled },
+            set: { enabled in
+                guard enabled, case let .keyboard(_, modifiers) = draft.trigger, modifiers.isEmpty else {
+                    draft.isEnabled = enabled
+                    save()
+                    return
+                }
+                requiresKeyboardConfirmation = true
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var inputCaptureControl: some View {
+        if buttonCapture.preparingRuleID == rule.id {
+            captureStatus(
+                title: localization.string("settings.input.preparing", defaultValue: "Preparing recording…"),
+                detail: localization.string("settings.input.preparing.detail", defaultValue: "Release the Record Input button; listening starts next."),
+                isPreparing: true
+            )
+        } else if buttonCapture.recordingRuleID == rule.id {
+            captureStatus(
+                title: localization.string("settings.input.recording", defaultValue: "Listening for an input"),
+                detail: localization.string("settings.input.recording.detail", defaultValue: "Press a key, mouse button, or scroll once."),
+                isPreparing: false
+            )
         } else {
             HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                 Label(
                     localization.format(
-                        "settings.button.format",
-                        defaultValue: "按键 %d",
-                        draft.buttonNumber
+                        "settings.input.format",
+                        defaultValue: "%@",
+                        triggerTitle
                     ),
                     systemImage: "computermouse"
                 )
                 .font(PluginSettingsTheme.Typography.rowTitle)
 
-                Button(localization.string("settings.button.record", defaultValue: "录制")) {
-                    _ = buttonCapture.start(ruleID: rule.id) { buttonNumber in
-                        draft.buttonNumber = buttonNumber
+                Button(localization.string("settings.input.record", defaultValue: "Record input")) {
+                    _ = buttonCapture.start(ruleID: rule.id) { input in
+                        draft.replaceTrigger(input.trigger(interaction: draft.mouseInteraction))
                         save()
                     }
                 }
@@ -574,11 +782,82 @@ private struct InputRemappingRuleEditor: View {
                 .controlSize(.small)
                 .help(
                     localization.string(
-                        "settings.button.record.help",
-                        defaultValue: "按下鼠标侧键或其他额外按键来选择它。"
+                        "settings.input.record.help",
+                        defaultValue: "The next keyboard key, mouse button, or scroll direction becomes this trigger."
                     )
                 )
             }
+        }
+    }
+
+    private func captureStatus(title: String, detail: String, isPreparing: Bool) -> some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+            Label(title, systemImage: isPreparing ? "hourglass" : "record.circle")
+                .font(PluginSettingsTheme.Typography.rowTitle)
+                .foregroundStyle(.tint)
+            Text(detail).foregroundStyle(.secondary)
+            Button(localization.string("settings.cancel", defaultValue: "Cancel")) { buttonCapture.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+    }
+
+    private var mouseInteractionBinding: Binding<InputRemappingMouseInteraction> {
+        Binding(
+            get: { draft.mouseInteraction },
+            set: { interaction in
+                draft.mouseInteraction = interaction
+                save()
+            }
+        )
+    }
+
+    private var trackpadGestureBinding: Binding<TrackpadGesture?> {
+        Binding(
+            get: { if case let .trackpadGesture(gesture) = draft.trigger { gesture } else { nil } },
+            set: { gesture in
+                guard let gesture else { return }
+                requestTrackpadGestureOwnership?(gesture)
+                draft.replaceTrigger(.trackpadGesture(gesture))
+                save()
+            }
+        )
+    }
+
+    private var triggerTitle: String {
+        switch draft.trigger {
+        case let .keyboard(keyCode, modifiers):
+            return localization.format("settings.trigger.keyboard.format", defaultValue: "Key %@%d", modifiers.symbolString, keyCode)
+        case let .mouseButton(number, modifiers, _):
+            return localization.format("settings.trigger.mouse.format", defaultValue: "Mouse button %@%d", modifiers.symbolString, number)
+        case let .scroll(direction, modifiers):
+            return localization.format("settings.trigger.scroll.format", defaultValue: "Scroll %@%@", modifiers.symbolString, scrollTitle(direction))
+        case let .trackpadGesture(gesture):
+            return localization.format("settings.trigger.trackpad.format", defaultValue: "Trackpad %@", trackpadGestureTitle(gesture))
+        }
+    }
+
+    private func trackpadGestureTitle(_ gesture: TrackpadGesture) -> String {
+        localization.string(
+            "settings.trackpadGesture.\(gesture.rawValue)",
+            defaultValue: gesture.displayTitle
+        )
+    }
+
+    private func mouseInteractionTitle(_ interaction: InputRemappingMouseInteraction) -> String {
+        switch interaction {
+        case .click: localization.string("settings.mouseInteraction.click", defaultValue: "Click")
+        case .doubleClick: localization.string("settings.mouseInteraction.doubleClick", defaultValue: "Double-click")
+        case .longPress: localization.string("settings.mouseInteraction.longPress", defaultValue: "Long press")
+        }
+    }
+
+    private func scrollTitle(_ direction: InputRemappingScrollDirection) -> String {
+        switch direction {
+        case .up: localization.string("settings.scroll.up", defaultValue: "up")
+        case .down: localization.string("settings.scroll.down", defaultValue: "down")
+        case .left: localization.string("settings.scroll.left", defaultValue: "left")
+        case .right: localization.string("settings.scroll.right", defaultValue: "right")
         }
     }
 
