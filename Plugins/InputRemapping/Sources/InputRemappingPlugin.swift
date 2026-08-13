@@ -115,7 +115,8 @@ final class InputRemappingButtonCaptureCoordinator: ObservableObject {
 
 @MainActor
 final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
-    AccessibilityPermissionRefreshing, PluginSettingsPresenting, TrackpadGestureEventConsuming {
+    AccessibilityPermissionRefreshing, PluginSettingsPresenting, PluginRuntimeLocalizationRefreshing,
+    TrackpadGestureEventConsuming {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -125,7 +126,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         static let rules = "rules"
     }
 
-    let metadata: PluginMetadata
+    private(set) var metadata: PluginMetadata
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     var onStateChange: (() -> Void)?
@@ -192,17 +193,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
                 resolvedLocalization.string("panel.button.settings", defaultValue: "设置")
             }
         )
-        self.metadata = PluginMetadata(
-            id: "input-remapping",
-            title: resolvedLocalization.string("metadata.title", defaultValue: "输入重映射"),
-            iconName: "arrow.triangle.2.circlepath",
-            iconTint: .purple,
-            order: 57,
-            defaultDescription: resolvedLocalization.string(
-                "metadata.description",
-                defaultValue: "使用额外鼠标按键触发快捷操作"
-            )
-        )
+        self.metadata = Self.localizedMetadata(using: resolvedLocalization)
 
         self.tap.update(rules: store.rules)
         store.onRulesChange = { [weak self] in
@@ -217,11 +208,30 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         applyConfiguration()
     }
 
+    func refreshLocalization() {
+        metadata = Self.localizedMetadata(using: localization)
+        onStateChange?()
+    }
+
     func deactivate(reason: PluginDeactivationReason) {
         buttonCapture.cancel()
         removeApplicationActivationObserver()
         tap.stop()
         onStateChange?()
+    }
+
+    private static func localizedMetadata(using localization: PluginLocalization) -> PluginMetadata {
+        PluginMetadata(
+            id: "input-remapping",
+            title: localization.string("metadata.title", defaultValue: "Custom Shortcuts"),
+            iconName: "arrow.triangle.2.circlepath",
+            iconTint: .purple,
+            order: 57,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "Create shortcuts from keyboard, trackpad, and mouse."
+            )
+        )
     }
 
     func refresh() {
