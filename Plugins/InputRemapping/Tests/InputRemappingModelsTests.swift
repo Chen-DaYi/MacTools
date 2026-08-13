@@ -234,6 +234,35 @@ final class InputRemappingModelsTests: XCTestCase {
         XCTAssertEqual(executions, 1)
     }
 
+    func testDoubleClickRequiresTheSameModifiersAcrossBothClicks() {
+        let rule = InputRemappingRule(
+            trigger: .mouseButton(number: 4, modifiers: [.command], interaction: .doubleClick),
+            action: .mouseBack
+        )
+        var processor = InputRemappingEventProcessor()
+        var executions = 0
+
+        XCTAssertFalse(processor.shouldConsume(phase: .down, buttonNumber: 4, flags: [.maskAlternate], isMarkedSynthetic: false, rules: [rule], timestamp: 1, execute: { _ in executions += 1; return true }))
+        XCTAssertFalse(processor.shouldConsume(phase: .up, buttonNumber: 4, flags: [.maskAlternate], isMarkedSynthetic: false, rules: [rule], timestamp: 1.01, execute: { _ in executions += 1; return true }))
+        XCTAssertFalse(processor.shouldConsume(phase: .down, buttonNumber: 4, flags: [.maskCommand], isMarkedSynthetic: false, rules: [rule], timestamp: 1.1, execute: { _ in executions += 1; return true }))
+
+        XCTAssertEqual(executions, 0)
+    }
+
+    func testLongPressRequiresTheSameModifiersFromDownThroughUp() {
+        let rule = InputRemappingRule(
+            trigger: .mouseButton(number: 4, modifiers: [.command], interaction: .longPress),
+            action: .mouseBack
+        )
+        var processor = InputRemappingEventProcessor()
+        var executions = 0
+
+        XCTAssertFalse(processor.shouldConsume(phase: .down, buttonNumber: 4, flags: [.maskAlternate], isMarkedSynthetic: false, rules: [rule], timestamp: 1, execute: { _ in executions += 1; return true }))
+        XCTAssertFalse(processor.shouldConsume(phase: .up, buttonNumber: 4, flags: [.maskCommand], isMarkedSynthetic: false, rules: [rule], timestamp: 2, execute: { _ in executions += 1; return true }))
+
+        XCTAssertEqual(executions, 0)
+    }
+
     func testScrollRuleMatchesOnlyItsDirectionAndModifiers() {
         let rule = InputRemappingRule(
             trigger: .scroll(direction: .up, modifiers: [.command]),
@@ -265,6 +294,23 @@ final class InputRemappingModelsTests: XCTestCase {
         XCTAssertEqual(plugin.claimedTrackpadGestures, [.threeFingerTap])
         plugin.receiveTrackpadGesture(.threeFingerTap, deviceID: 1)
         XCTAssertEqual(tap.executedActions, [.mouseBack])
+
+        plugin.removeTrackpadGestureClaim(for: .threeFingerTap)
+        XCTAssertEqual(plugin.claimedTrackpadGestures, [])
+        XCTAssertEqual(plugin.store.rules, [])
+    }
+
+    func testDisabledOrIncompleteTrackpadRuleDoesNotClaimOwnership() {
+        var rule = InputRemappingRule.newDraft()
+        rule.replaceTrigger(.trackpadGesture(.threeFingerTap))
+        rule.isInputConfigured = true
+
+        XCTAssertNil(rule.claimedTrackpadGesture)
+
+        rule.isOutputConfigured = true
+        rule.isEnabled = true
+
+        XCTAssertEqual(rule.claimedTrackpadGesture, .threeFingerTap)
     }
 
     func testFailedOrInapplicableDownAndUnpairedUpFailOpen() {

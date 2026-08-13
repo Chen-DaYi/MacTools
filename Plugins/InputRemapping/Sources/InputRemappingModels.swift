@@ -184,6 +184,13 @@ struct InputRemappingRule: Identifiable, Codable, Equatable, Sendable {
         set { outputConfigurationState = newValue ? .configured : .needsSelection }
     }
 
+    var claimedTrackpadGesture: TrackpadGesture? {
+        guard isEnabled, isInputConfigured, isOutputConfigured,
+              case let .trackpadGesture(gesture) = trigger
+        else { return nil }
+        return gesture
+    }
+
     // Compatibility conveniences for rules saved before universal input support.
     var buttonNumber: Int64 {
         get { if case let .mouseButton(number, _, _) = trigger { number } else { InputRemappingRulePolicy.minimumButtonNumber } }
@@ -299,27 +306,40 @@ enum InputRemappingRuleMatcher {
 enum InputRemappingMouseEventPhase { case down, up }
 
 struct InputRemappingEventProcessor {
+    private struct MouseSequenceState {
+        let timestamp: TimeInterval
+        let modifiers: ShortcutModifiers
+    }
+
     private var buttonsAwaitingConsumedUp: Set<Int64> = []
     private var keysAwaitingConsumedUp: Set<UInt16> = []
-    private var lastClickTime: [Int64: TimeInterval] = [:]
-    private var mouseDownTime: [Int64: TimeInterval] = [:]
+    private var lastClickState: [Int64: MouseSequenceState] = [:]
+    private var mouseDownState: [Int64: MouseSequenceState] = [:]
 
     mutating func shouldConsume(phase: InputRemappingMouseEventPhase, buttonNumber: Int64, flags: CGEventFlags, isMarkedSynthetic: Bool, rules: [InputRemappingRule], timestamp: TimeInterval = ProcessInfo.processInfo.systemUptime, execute: (InputRemappingRule.Action) -> Bool) -> Bool {
         guard !isMarkedSynthetic else { return false }
+        let modifiers = InputRemappingRule.modifiers(from: flags)
         switch phase {
         case .down:
-            mouseDownTime[buttonNumber] = timestamp
+            mouseDownState[buttonNumber] = MouseSequenceState(timestamp: timestamp, modifiers: modifiers)
             if let rule = InputRemappingRuleMatcher.rule(for: buttonNumber, flags: flags, in: rules), execute(rule.action) { buttonsAwaitingConsumedUp.insert(buttonNumber); return true }
-            if let rule = InputRemappingRuleMatcher.rule(for: buttonNumber, flags: flags, in: rules, interaction: .doubleClick), let previous = lastClickTime[buttonNumber], timestamp - previous <= InputRemappingRulePolicy.doubleClickInterval {
+            if let rule = InputRemappingRuleMatcher.rule(for: buttonNumber, flags: flags, in: rules, interaction: .doubleClick),
+               let previous = lastClickState[buttonNumber],
+               previous.modifiers == modifiers,
+               timestamp - previous.timestamp <= InputRemappingRulePolicy.doubleClickInterval {
                 _ = execute(rule.action)
-                lastClickTime[buttonNumber] = nil
+                lastClickState[buttonNumber] = nil
                 return false
             }
-            lastClickTime[buttonNumber] = timestamp
+            lastClickState[buttonNumber] = MouseSequenceState(timestamp: timestamp, modifiers: modifiers)
             return false
         case .up:
             if buttonsAwaitingConsumedUp.remove(buttonNumber) != nil { return true }
-            guard let started = mouseDownTime.removeValue(forKey: buttonNumber), timestamp - started >= InputRemappingRulePolicy.longPressDuration, let rule = InputRemappingRuleMatcher.rule(for: buttonNumber, flags: flags, in: rules, interaction: .longPress) else { return false }
+            guard let started = mouseDownState.removeValue(forKey: buttonNumber),
+                  started.modifiers == modifiers,
+                  timestamp - started.timestamp >= InputRemappingRulePolicy.longPressDuration,
+                  let rule = InputRemappingRuleMatcher.rule(for: buttonNumber, flags: flags, in: rules, interaction: .longPress)
+            else { return false }
             // Long presses intentionally pass through. Consuming them would require buffering/replaying the original click.
             _ = execute(rule.action)
             return false
@@ -350,8 +370,8 @@ struct InputRemappingEventProcessor {
     mutating func reset() {
         buttonsAwaitingConsumedUp.removeAll()
         keysAwaitingConsumedUp.removeAll()
-        lastClickTime.removeAll()
-        mouseDownTime.removeAll()
+        lastClickState.removeAll()
+        mouseDownState.removeAll()
     }
 }
 
@@ -369,6 +389,11 @@ final class InputRemappingStore: ObservableObject {
     }
     func addRule() { update(rules + [.newDraft()]) }
     func delete(_ rule: InputRemappingRule) { update(rules.filter { $0.id != rule.id }) }
+    func removeTrackpadGestureClaim(for gesture: TrackpadGesture) {
+        let remainingRules = rules.filter { $0.claimedTrackpadGesture != gesture }
+        guard remainingRules.count != rules.count else { return }
+        update(remainingRules)
+    }
     func replace(_ rule: InputRemappingRule) { update(rules.map { $0.id == rule.id ? rule : $0 }) }
     private func update(_ rules: [InputRemappingRule]) { let normalizedRules = rules.map { $0.normalized() }; do { storage.set(try JSONEncoder().encode(normalizedRules), forKey: Self.storageKey); self.rules = normalizedRules; onRulesChange?() } catch { logger.error("Failed to encode input remapping rules: \(String(describing: error), privacy: .public)") } }
 }

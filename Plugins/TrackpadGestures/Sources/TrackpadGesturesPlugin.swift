@@ -51,10 +51,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
-    var onTrackpadGestureMappingsChange: (() -> Void)? {
-        get { store.onMappingsChange }
-        set { store.onMappingsChange = newValue }
-    }
+    var requestTrackpadGestureOwnership: ((TrackpadGesture) -> Void)?
 
     let store: TrackpadGestureStore
 
@@ -72,6 +69,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     private var applicationActivationObserver: NSObjectProtocol?
     private var externalGestureClaims: Set<TrackpadGesture> = []
     private var externalGestureHandler: ((TrackpadGesture, UInt64) -> Void)?
+    private var lastKnownEnabledLocalGestures: Set<TrackpadGesture>
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -102,10 +100,12 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     ) {
         let resolvedLocalization = localization ?? PluginLocalization(bundle: context.resourceBundle)
         self.localization = resolvedLocalization
-        self.store = TrackpadGestureStore(
+        let store = TrackpadGestureStore(
             storage: context.storage,
             legacyMiddleClick: legacyMiddleClick
         )
+        self.store = store
+        self.lastKnownEnabledLocalGestures = store.enabledGestures
         self.session = session ?? MultitouchDeviceSession()
         self.actionExecutor = actionExecutor ?? TrackpadGestureActionExecutor()
         self.accessibilityTrusted = accessibilityTrusted
@@ -327,6 +327,11 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, PluginPrimaryPanel,
     }
 
     func configurationDidChange() {
+        let enabledLocalGestures = store.enabledGestures
+        let newlyEnabledGestures = enabledLocalGestures.subtracting(lastKnownEnabledLocalGestures)
+        lastKnownEnabledLocalGestures = enabledLocalGestures
+        newlyEnabledGestures.forEach { requestTrackpadGestureOwnership?($0) }
+
         guard ensurePermissionsIfNeeded() else {
             session.deactivate()
             onStateChange?()

@@ -36,7 +36,7 @@ Source of truth: yes
 | Events carrying the Input Remapping synthetic marker always pass through | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | Failed or inapplicable actions fail open | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | A keyboard trigger with no modifier is saved disabled and requires explicit confirmation before it can be enabled | This document | `InputRemappingRule` | Rule editor, event processor |
-| A precise trackpad gesture belongs to either Trackpad Gestures or Input Remapping, never both | This document | Shared trackpad gesture broker | Plugin host, both plugins |
+| An enabled precise trackpad gesture belongs to the plugin where it was activated most recently, never both | This document | Shared trackpad gesture broker | Plugin host, both plugins |
 | Rule context is global only | This document | Rule editor layout | Context column |
 | New rules remain disabled until input and output are configured | This document | `InputRemappingRule` configuration state | Rule editor, matcher |
 
@@ -50,7 +50,7 @@ Source of truth: yes
 | 2026-08-13 | Permission checks are injected behind plugin seams | Cards and activation use the same real OS state and remain testable | Accessibility and Input Monitoring |
 | 2026-08-13 | Synthetic-event protection is limited to the private Input Remapping marker | Public CoreGraphics source fields describe state tables or process metadata, not a reliable physical-versus-generated category | Unmarked third-party generated events can match a rule |
 | 2026-08-13 | Modifier-free keyboard triggers are allowed after a warning | User requires full flexibility while being informed of global typing risk | Rule remains disabled until confirmation |
-| 2026-08-13 | Trackpad gesture ownership is exclusive | A single Multitouch listener must arbitrate gestures | A claim removes the conflicting mapping, whichever plugin is edited last |
+| 2026-08-13 | Trackpad gesture ownership is exclusive | A single Multitouch listener must arbitrate gestures | Activating a claim removes the conflicting active mapping from the other plugin |
 
 ## Known limitation
 
@@ -94,7 +94,7 @@ Source of truth: yes
 - [x] Every plugin deactivation stops the event tap.
 - [x] Returning to MacTools after System Settings revalidates both permissions and reapplies tap state.
 - [x] User-facing plugin copy resolves through `PluginLocalization` and `Localizable.xcstrings`.
-- [x] Settings use a validated `.form`, theme tokens, labels, and explicit control sizing.
+- [x] Settings use a validated `.workspace`, theme tokens, labels, and explicit control sizing.
 - [x] Trigger selection uses a cancellable direct button recorder instead of a numeric stepper.
 - [x] Adjacent targeted tests cover the behavioral seams.
 - [x] Keyboard keys, mouse buttons, and scroll can be recorded as a trigger from the rule editor.
@@ -153,6 +153,7 @@ Source of truth: yes
 - 2026-08-13 — Refined the approved card layout: full-width native menu buttons for Input, interaction, Run, and Where; recording moved into the Input menu; shortcut output uses one selectable value field plus a full-width recording action; secondary modifier controls are hidden from the primary scan path.
 - 2026-08-13 — Review 3 fixed: confirmed modifier-free keyboard rules persist their acknowledgement; the Core trackpad bridge observes both plugins and removes conflicting local mappings in either editing order; its provider/consumer seam is covered by an adjacent integration test.
 - 2026-08-13 — Review 4 fixed: Trackpad Gestures mapping mutations notify the Core bridge, so adding or re-enabling a gesture already claimed by Custom Shortcuts removes the conflicting local mapping immediately.
+- 2026-08-13 — Review 5 fixed: ownership now follows the most recently activated mapping in either plugin; disabled or incomplete Custom Shortcuts drafts do not claim gestures; double-click and long-press require stable modifiers across their full sequence; the settings contract now records the approved workspace layout. No manifest, registry, or inventory update was required.
 
 ## Files
 

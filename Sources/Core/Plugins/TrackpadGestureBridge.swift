@@ -3,8 +3,6 @@ import MacToolsPluginKit
 /// Coordinates the single precise-trackpad event provider with plugins that claim gestures.
 @MainActor
 final class TrackpadGestureBridge {
-    private var isConnecting = false
-
     func connect(
         plugins: [any MacToolsPlugin],
         onClaimsChanged: @escaping () -> Void
@@ -24,10 +22,6 @@ final class TrackpadGestureBridge {
         consumers: [any TrackpadGestureEventConsuming],
         onClaimsChanged: @escaping () -> Void
     ) {
-        guard !isConnecting else { return }
-        isConnecting = true
-        defer { isConnecting = false }
-
         let claims = consumers.reduce(into: Set<TrackpadGesture>()) { $0.formUnion($1.claimedTrackpadGestures) }
 
         for consumer in consumers {
@@ -37,7 +31,9 @@ final class TrackpadGestureBridge {
             }
         }
         for provider in providers {
-            provider.onTrackpadGestureMappingsChange = onClaimsChanged
+            provider.requestTrackpadGestureOwnership = { gesture in
+                consumers.forEach { $0.removeTrackpadGestureClaim(for: gesture) }
+            }
             provider.setExternalGestureClaims(claims) { gesture, deviceID in
                 consumers.first(where: { $0.claimedTrackpadGestures.contains(gesture) })?
                     .receiveTrackpadGesture(gesture, deviceID: deviceID)

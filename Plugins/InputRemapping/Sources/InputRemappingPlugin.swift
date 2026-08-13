@@ -246,15 +246,16 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     }
 
     var claimedTrackpadGestures: Set<TrackpadGesture> {
-        Set(store.rules.compactMap { rule in
-            guard rule.isEnabled, case let .trackpadGesture(gesture) = rule.trigger else { return nil }
-            return gesture
-        })
+        Set(store.rules.compactMap(\.claimedTrackpadGesture))
+    }
+
+    func removeTrackpadGestureClaim(for gesture: TrackpadGesture) {
+        store.removeTrackpadGestureClaim(for: gesture)
     }
 
     func receiveTrackpadGesture(_ gesture: TrackpadGesture, deviceID: UInt64) {
         guard isAccessibilityGranted,
-              let rule = store.rules.first(where: { $0.isEnabled && $0.trigger == .trackpadGesture(gesture) })
+              let rule = store.rules.first(where: { $0.claimedTrackpadGesture == gesture })
         else { return }
         _ = tap.execute(rule.action)
     }
@@ -828,7 +829,6 @@ private struct InputRemappingRuleEditor: View {
                     draft.replaceTrigger(.mouseButton(number: 0, modifiers: [], interaction: .click))
                 case .trackpad:
                     let gesture = TrackpadGesture.threeFingerTap
-                    requestTrackpadGestureOwnership?(gesture)
                     draft.replaceTrigger(.trackpadGesture(gesture))
                 case .scroll:
                     draft.replaceTrigger(.scroll(direction: .up, modifiers: []))
@@ -956,7 +956,6 @@ private struct InputRemappingRuleEditor: View {
             get: { if case let .trackpadGesture(gesture) = draft.trigger { gesture } else { nil } },
             set: { gesture in
                 guard let gesture else { return }
-                requestTrackpadGestureOwnership?(gesture)
                 draft.replaceTrigger(.trackpadGesture(gesture))
                 save()
             }
@@ -1085,6 +1084,9 @@ private struct InputRemappingRuleEditor: View {
     }
 
     private func save() {
+        if let gesture = draft.claimedTrackpadGesture {
+            requestTrackpadGestureOwnership?(gesture)
+        }
         store.replace(draft)
     }
 }
