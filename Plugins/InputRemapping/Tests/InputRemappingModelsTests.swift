@@ -24,7 +24,9 @@ private final class InputRemappingTapSpy: InputRemappingEventTapping {
     private(set) var rules: [InputRemappingRule] = []
     private(set) var startCallCount = 0
     private(set) var stopCallCount = 0
+    private(set) var cancelCaptureCallCount = 0
     var startResult = true
+    var captureHandler: (@Sendable (Int64) -> Void)?
 
     func update(rules: [InputRemappingRule]) {
         self.rules = rules
@@ -38,6 +40,26 @@ private final class InputRemappingTapSpy: InputRemappingEventTapping {
     func stop() {
         stopCallCount += 1
     }
+
+    func beginButtonCapture(_ handler: @escaping @Sendable (Int64) -> Void) -> Bool {
+        captureHandler = handler
+        return startResult
+    }
+
+    func cancelButtonCapture() {
+        cancelCaptureCallCount += 1
+        captureHandler = nil
+    }
+
+    func capture(buttonNumber: Int64) {
+        captureHandler?(buttonNumber)
+    }
+}
+
+@MainActor
+private final class InputRemappingPermissionState {
+    var accessibilityGranted = false
+    var inputMonitoringStatus: InputRemappingInputMonitoringStatus = .denied
 }
 
 final class InputRemappingModelsTests: XCTestCase {
@@ -233,19 +255,19 @@ final class InputRemappingModelsTests: XCTestCase {
         let store = InputRemappingStore(storage: storage)
         store.addRule()
         let tap = InputRemappingTapSpy()
-        var inputMonitoringStatus = InputRemappingInputMonitoringStatus.denied
+        let permissionState = InputRemappingPermissionState()
         let plugin = InputRemappingPlugin(
             context: PluginRuntimeContext(pluginID: "input-remapping", storage: storage),
             tap: tap,
             accessibilityTrusted: { true },
-            inputMonitoringStatus: { inputMonitoringStatus }
+            inputMonitoringStatus: { permissionState.inputMonitoringStatus }
         )
 
         plugin.activate(context: PluginRuntimeContext(pluginID: "input-remapping"))
         XCTAssertEqual(tap.startCallCount, 0)
         XCTAssertGreaterThan(tap.stopCallCount, 0)
 
-        inputMonitoringStatus = .granted
+        permissionState.inputMonitoringStatus = .granted
         plugin.refresh()
         XCTAssertEqual(tap.startCallCount, 1)
 
@@ -259,33 +281,32 @@ final class InputRemappingModelsTests: XCTestCase {
         InputRemappingStore(storage: storage).addRule()
         let tap = InputRemappingTapSpy()
         let notificationCenter = NotificationCenter()
-        var accessibilityGranted = false
-        var inputMonitoringGranted = false
+        let permissionState = InputRemappingPermissionState()
         let plugin = InputRemappingPlugin(
             context: PluginRuntimeContext(pluginID: "input-remapping", storage: storage),
             tap: tap,
-            accessibilityTrusted: { accessibilityGranted },
-            inputMonitoringStatus: { inputMonitoringGranted ? .granted : .denied },
+            accessibilityTrusted: { permissionState.accessibilityGranted },
+            inputMonitoringStatus: { permissionState.inputMonitoringStatus },
             notificationCenter: notificationCenter
         )
 
         plugin.activate(context: PluginRuntimeContext(pluginID: "input-remapping"))
         XCTAssertEqual(tap.startCallCount, 0)
 
-        accessibilityGranted = true
-        inputMonitoringGranted = true
+        permissionState.accessibilityGranted = true
+        permissionState.inputMonitoringStatus = .granted
         notificationCenter.post(name: NSApplication.didBecomeActiveNotification, object: nil)
         await Task.yield()
         XCTAssertEqual(tap.startCallCount, 1)
 
-        accessibilityGranted = false
+        permissionState.accessibilityGranted = false
         notificationCenter.post(name: NSApplication.didBecomeActiveNotification, object: nil)
         await Task.yield()
         XCTAssertGreaterThan(tap.stopCallCount, 0)
 
         plugin.deactivate(reason: .disabled)
         let startCountAfterDeactivation = tap.startCallCount
-        accessibilityGranted = true
+        permissionState.accessibilityGranted = true
         notificationCenter.post(name: NSApplication.didBecomeActiveNotification, object: nil)
         await Task.yield()
         XCTAssertEqual(tap.startCallCount, startCountAfterDeactivation)
@@ -310,5 +331,26 @@ final class InputRemappingModelsTests: XCTestCase {
         }
         XCTAssertNotNil(sections.first?.headerAccessory)
         XCTAssertNoThrow(try PluginSettingsValidator.validate(page))
+    }
+
+    @MainActor
+    func testButtonCaptureRecordsAnEligibleButtonAndCanBeCancelled() async {
+        let tap = InputRemappingTapSpy()
+        let coordinator = InputRemappingButtonCaptureCoordinator(tap: tap)
+        var capturedButtonNumber: Int64?
+
+        XCTAssertTrue(coordinator.start(ruleID: UUID()) {
+            capturedButtonNumber = $0
+        })
+        tap.capture(buttonNumber: 4)
+        await Task.yield()
+
+        XCTAssertEqual(capturedButtonNumber, 4)
+        XCTAssertNil(coordinator.recordingRuleID)
+
+        XCTAssertTrue(coordinator.start(ruleID: UUID()) { _ in })
+        coordinator.cancel()
+        XCTAssertNil(coordinator.recordingRuleID)
+        XCTAssertEqual(tap.cancelCaptureCallCount, 1)
     }
 }

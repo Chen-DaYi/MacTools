@@ -15,6 +15,7 @@ Source of truth: yes
 
 - User grants Accessibility and Input Monitoring.
 - User adds, enables, edits, or removes a persisted rule.
+- To select a trigger, the user starts recording and presses the extra mouse button to use; the capture passes through without executing a rule.
 - A matching button-down executes the action and consumes the original down/up pair.
 - A missing rule, failed action, or event carrying the Input Remapping marker passes through unchanged.
 
@@ -22,7 +23,8 @@ Source of truth: yes
 
 | Rule | Markdown | Centralized code | Consumers |
 |---|---|---|---|
-| Eligible buttons: 3 through 32; primary clicks and trackpad excluded | This document | `InputRemappingRulePolicy` | Rule model, matcher, settings stepper |
+| Eligible buttons: 3 through 32; primary clicks and trackpad excluded | This document | `InputRemappingRulePolicy` | Rule model, matcher, button recorder |
+| Button capture is explicit, cancellable, and passes through | This document | `InputRemappingButtonCaptureCoordinator` | Settings editor, CGEvent tap |
 | Exact modifier set required | This document | `InputRemappingRule.matches` | Event processor |
 | A consumed down consumes its matching up | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
 | Events carrying the Input Remapping synthetic marker always pass through | This document | `InputRemappingEventProcessor` | CGEvent tap callback |
@@ -52,6 +54,7 @@ Source of truth: yes
 - [x] P004 — Cover matching, down/up lifecycle, fail-open behavior, persistence, and plugin state.
 - [x] P005 — Address first review findings.
 - [x] P006 — Address second review findings and narrow unsupported synthetic-event claims.
+- [x] P007 — Replace numeric trigger selection with a direct mouse-button recorder.
 
 ## Acceptance / DoD
 
@@ -66,6 +69,7 @@ Source of truth: yes
 - [x] Returning to MacTools after System Settings revalidates both permissions and reapplies tap state.
 - [x] User-facing plugin copy resolves through `PluginLocalization` and `Localizable.xcstrings`.
 - [x] Settings use a validated `.form`, theme tokens, labels, and explicit control sizing.
+- [x] Trigger selection uses a cancellable direct button recorder instead of a numeric stepper.
 - [x] Adjacent targeted tests cover the behavioral seams.
 
 ## Implementation journal
@@ -80,6 +84,8 @@ Source of truth: yes
 - 2026-08-13 — Review 2 fixed: auxiliary event data encodes down/up state once; persisted and copied button values normalize to 3...32; matching uses typed `CGEventFlags`; application activation revalidates both permissions with observer cleanup on deactivation; the Add action moved to the host section header and editor rows use edge-to-edge list chrome.
 - 2026-08-13 — Synthetic-event contract narrowed to Input Remapping-marked events after checking the public CoreGraphics event-source APIs; unmarked third-party generated events remain a documented risk.
 - 2026-08-13 — Review 2 checks passed: Swift parse, source module emission, test typecheck, both JSON parses, tracked `git diff --check`, and whitespace checks for untracked feature files. No project lint command or user pre-commit hook is configured. Targeted XCTest remains unavailable because the generated local Xcode project has no `InputRemappingPlugin` scheme.
+- 2026-08-13 — UX refined: each rule now records the physical extra mouse button directly. The recorder has an explicit cancel action and lets the captured click pass through, avoiding accidental remapping during selection.
+- 2026-08-13 — Verification: generated the project, built `InputRemappingPlugin`, and passed `MacToolsTests/InputRemappingModelsTests`. Existing DiskClean Swift-concurrency warnings remain outside this feature.
 
 ## Files
 

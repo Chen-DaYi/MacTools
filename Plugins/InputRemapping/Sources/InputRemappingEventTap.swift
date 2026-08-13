@@ -11,6 +11,8 @@ protocol InputRemappingEventTapping: AnyObject {
     func update(rules: [InputRemappingRule])
     func start() -> Bool
     func stop()
+    func beginButtonCapture(_ handler: @escaping @Sendable (Int64) -> Void) -> Bool
+    func cancelButtonCapture()
 }
 
 enum InputRemappingSystemDefinedEvent {
@@ -33,6 +35,7 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
     private let rulesLock = NSLock()
 
     private var currentRules: [InputRemappingRule] = []
+    private var buttonCaptureHandler: (@Sendable (Int64) -> Void)?
     private var eventProcessor = InputRemappingEventProcessor()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -69,6 +72,7 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
 
     func stop() {
         eventProcessor.reset()
+        cancelButtonCapture()
         guard let tap else { return }
 
         CGEvent.tapEnable(tap: tap, enable: false)
@@ -78,6 +82,24 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
         CFMachPortInvalidate(tap)
         self.tap = nil
         source = nil
+    }
+
+    func beginButtonCapture(_ handler: @escaping @Sendable (Int64) -> Void) -> Bool {
+        rulesLock.lock()
+        buttonCaptureHandler = handler
+        rulesLock.unlock()
+
+        guard start() else {
+            cancelButtonCapture()
+            return false
+        }
+        return true
+    }
+
+    func cancelButtonCapture() {
+        rulesLock.lock()
+        buttonCaptureHandler = nil
+        rulesLock.unlock()
     }
 
     private static let callback: CGEventTapCallBack = { _, type, event, info in
@@ -106,13 +128,26 @@ final class InputRemappingEventTap: InputRemappingEventTapping {
             return Unmanaged.passUnretained(event)
         }
 
+        let buttonNumber = event.getIntegerValueField(.mouseEventButtonNumber)
+        let isEligibleCapture = phase == .down
+            && InputRemappingRulePolicy.isEligible(buttonNumber: buttonNumber)
+
         rulesLock.lock()
         let rules = currentRules
+        let buttonCaptureHandler = self.buttonCaptureHandler
+        if isEligibleCapture, buttonCaptureHandler != nil {
+            self.buttonCaptureHandler = nil
+        }
         rulesLock.unlock()
+
+        if isEligibleCapture, let buttonCaptureHandler {
+            buttonCaptureHandler(buttonNumber)
+            return Unmanaged.passUnretained(event)
+        }
 
         let shouldConsume = eventProcessor.shouldConsume(
             phase: phase,
-            buttonNumber: event.getIntegerValueField(.mouseEventButtonNumber),
+            buttonNumber: buttonNumber,
             flags: event.flags,
             isMarkedSynthetic:
                 event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker,

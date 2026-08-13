@@ -32,6 +32,43 @@ enum InputRemappingInputMonitoringStatus: Equatable {
 }
 
 @MainActor
+final class InputRemappingButtonCaptureCoordinator: ObservableObject {
+    @Published private(set) var recordingRuleID: UUID?
+
+    private let tap: any InputRemappingEventTapping
+
+    init(tap: any InputRemappingEventTapping) {
+        self.tap = tap
+    }
+
+    func start(
+        ruleID: UUID,
+        onCapture: @escaping @MainActor (Int64) -> Void
+    ) -> Bool {
+        cancel()
+        recordingRuleID = ruleID
+
+        guard tap.beginButtonCapture({ [weak self] buttonNumber in
+            Task { @MainActor [weak self] in
+                guard let self, self.recordingRuleID == ruleID else { return }
+                self.recordingRuleID = nil
+                onCapture(buttonNumber)
+            }
+        }) else {
+            recordingRuleID = nil
+            return false
+        }
+        return true
+    }
+
+    func cancel() {
+        guard recordingRuleID != nil else { return }
+        recordingRuleID = nil
+        tap.cancelButtonCapture()
+    }
+}
+
+@MainActor
 final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     AccessibilityPermissionRefreshing, PluginSettingsPresenting {
     private enum PermissionID {
@@ -55,6 +92,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
 
     private let localization: PluginLocalization
     private let tap: any InputRemappingEventTapping
+    private let buttonCapture: InputRemappingButtonCaptureCoordinator
     private let accessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityTrust: @MainActor (Bool) -> Bool
     private let inputMonitoringStatus: @MainActor () -> InputRemappingInputMonitoringStatus
@@ -92,6 +130,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
         self.localization = resolvedLocalization
         self.store = InputRemappingStore(storage: context.storage)
         self.tap = tap ?? InputRemappingEventTap()
+        self.buttonCapture = InputRemappingButtonCaptureCoordinator(tap: self.tap)
         self.accessibilityTrusted = accessibilityTrusted
         self.requestAccessibilityTrust = requestAccessibilityTrust
         self.inputMonitoringStatus = inputMonitoringStatus
@@ -131,6 +170,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
     }
 
     func deactivate(reason: PluginDeactivationReason) {
+        buttonCapture.cancel()
         removeApplicationActivationObserver()
         tap.stop()
         onStateChange?()
@@ -210,7 +250,8 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
                 if let self {
                     InputRemappingSettingsView(
                         store: self.store,
-                        localization: self.localization
+                        localization: self.localization,
+                        buttonCapture: self.buttonCapture
                     )
                 }
             }
@@ -353,6 +394,7 @@ final class InputRemappingPlugin: MacToolsPlugin, PluginPrimaryPanel,
 private struct InputRemappingSettingsView: View {
     @ObservedObject var store: InputRemappingStore
     let localization: PluginLocalization
+    @ObservedObject var buttonCapture: InputRemappingButtonCaptureCoordinator
 
     var body: some View {
         VStack(spacing: 0) {
@@ -377,7 +419,8 @@ private struct InputRemappingSettingsView: View {
                     InputRemappingRuleEditor(
                         rule: rule,
                         store: store,
-                        localization: localization
+                        localization: localization,
+                        buttonCapture: buttonCapture
                     )
                     if index < store.rules.count - 1 {
                         PluginSettingsListDivider()
@@ -392,17 +435,20 @@ private struct InputRemappingRuleEditor: View {
     let rule: InputRemappingRule
     @ObservedObject var store: InputRemappingStore
     let localization: PluginLocalization
+    @ObservedObject var buttonCapture: InputRemappingButtonCaptureCoordinator
 
     @State private var draft: InputRemappingRule
 
     init(
         rule: InputRemappingRule,
         store: InputRemappingStore,
-        localization: PluginLocalization
+        localization: PluginLocalization,
+        buttonCapture: InputRemappingButtonCaptureCoordinator
     ) {
         self.rule = rule
         self.store = store
         self.localization = localization
+        self.buttonCapture = buttonCapture
         _draft = State(initialValue: rule)
     }
 
@@ -432,21 +478,7 @@ private struct InputRemappingRuleEditor: View {
             }
 
             HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Stepper(
-                    value: binding(\.buttonNumber),
-                    in: InputRemappingRulePolicy.eligibleButtonNumbers
-                ) {
-                    Label(
-                        localization.format(
-                            "settings.button.format",
-                            defaultValue: "按键 %d",
-                            draft.buttonNumber
-                        ),
-                        systemImage: "computermouse"
-                    )
-                    .font(PluginSettingsTheme.Typography.rowTitle)
-                }
-                .frame(minWidth: 130, idealWidth: 150, maxWidth: 180)
+                buttonCaptureControl
 
                 Picker(
                     localization.string("settings.action", defaultValue: "操作"),
@@ -498,6 +530,56 @@ private struct InputRemappingRuleEditor: View {
                 save()
             }
         )
+    }
+
+    @ViewBuilder
+    private var buttonCaptureControl: some View {
+        if buttonCapture.recordingRuleID == rule.id {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Label(
+                    localization.string(
+                        "settings.button.recording",
+                        defaultValue: "按下要使用的额外鼠标按键"
+                    ),
+                    systemImage: "record.circle"
+                )
+                .font(PluginSettingsTheme.Typography.rowTitle)
+                .foregroundStyle(.tint)
+
+                Button(localization.string("settings.cancel", defaultValue: "取消")) {
+                    buttonCapture.cancel()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        } else {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Label(
+                    localization.format(
+                        "settings.button.format",
+                        defaultValue: "按键 %d",
+                        draft.buttonNumber
+                    ),
+                    systemImage: "computermouse"
+                )
+                .font(PluginSettingsTheme.Typography.rowTitle)
+
+                Button(localization.string("settings.button.record", defaultValue: "录制")) {
+                    _ = buttonCapture.start(ruleID: rule.id) { buttonNumber in
+                        draft.buttonNumber = buttonNumber
+                        save()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(
+                    localization.string(
+                        "settings.button.record.help",
+                        defaultValue: "按下鼠标侧键或其他额外按键来选择它。"
+                    )
+                )
+            }
+        }
     }
 
     private var shortcutKeyCodeBinding: Binding<UInt16> {
