@@ -34,6 +34,7 @@ private let host12Requirement = CatalogRequirement(
     url: URL(string: "https://mactools.ggbond.app/plugins/v4/host-1.2/catalog.json")!,
     expectedCatalogPath: "docs/plugins/v4/host-1.2/catalog.json"
 )
+private let productionCatalogID = "com.ggbond.mactools.plugins"
 
 private func fail(_ message: String) throws -> Never {
     throw PreflightError.message(message)
@@ -170,6 +171,8 @@ private func normalizedJSON(_ object: [String: Any]) throws -> Data {
 private func validateCatalog(
     _ data: Data,
     label: String,
+    targetAppVersion: String,
+    expectedCatalogID: String,
     expectedPluginKitVersion: Int,
     publicKeyBase64: String
 ) throws -> [String: Any] {
@@ -180,12 +183,20 @@ private func validateCatalog(
     guard catalog["pluginKitVersion"] as? Int == expectedPluginKitVersion else {
         try fail("\(label) does not target PluginKit \(expectedPluginKitVersion).")
     }
-    guard let catalogID = catalog["catalogID"] as? String, !catalogID.isEmpty else {
-        try fail("\(label) has no catalog ID.")
+    guard let catalogID = catalog["catalogID"] as? String,
+          catalogID == expectedCatalogID else {
+        try fail("\(label) must use catalog ID \(expectedCatalogID).")
     }
     guard let minimumHostVersion = catalog["minimumHostVersion"] as? String,
           !minimumHostVersion.isEmpty else {
         try fail("\(label) has no minimum host version.")
+    }
+    _ = try versionComponents(minimumHostVersion)
+    guard try isVersion(targetAppVersion, atLeast: minimumHostVersion) else {
+        try fail(
+            "\(label) requires MacTools \(minimumHostVersion), which is newer than "
+                + "the target app \(targetAppVersion)."
+        )
     }
     guard let plugins = catalog["plugins"] as? [[String: Any]], !plugins.isEmpty else {
         try fail("\(label) contains no plugin packages.")
@@ -245,12 +256,16 @@ do {
     let expected = try validateCatalog(
         expectedData,
         label: "Committed plugin catalog",
+        targetAppVersion: appVersion,
+        expectedCatalogID: productionCatalogID,
         expectedPluginKitVersion: host12Requirement.pluginKitVersion,
         publicKeyBase64: publicKey
     )
     let deployed = try validateCatalog(
         deployedData,
         label: "Deployed plugin catalog",
+        targetAppVersion: appVersion,
+        expectedCatalogID: productionCatalogID,
         expectedPluginKitVersion: host12Requirement.pluginKitVersion,
         publicKeyBase64: publicKey
     )

@@ -94,6 +94,58 @@ class AppPluginCatalogPreflightTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("signature does not match", result.stderr)
 
+    def test_wrong_catalog_id_fails_closed(self) -> None:
+        catalog = json.loads(SIGNED_CATALOG.read_text(encoding="utf-8"))
+        catalog["catalogID"] = "example.wrong.catalog"
+        invalid = Path(self.temporary_directory.name) / "wrong-id.json"
+        invalid.write_text(json.dumps(catalog), encoding="utf-8")
+        result = self.run_preflight(
+            "--app-version",
+            "1.2.0",
+            "--expected-catalog",
+            str(invalid),
+            "--deployed-catalog",
+            str(invalid),
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must use catalog ID com.ggbond.mactools.plugins", result.stderr)
+
+    def test_malformed_minimum_host_version_fails_closed(self) -> None:
+        catalog = json.loads(SIGNED_CATALOG.read_text(encoding="utf-8"))
+        catalog["minimumHostVersion"] = "future"
+        invalid = Path(self.temporary_directory.name) / "malformed-floor.json"
+        invalid.write_text(json.dumps(catalog), encoding="utf-8")
+        result = self.run_preflight(
+            "--app-version",
+            "1.2.0",
+            "--expected-catalog",
+            str(invalid),
+            "--deployed-catalog",
+            str(invalid),
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Invalid app version: future", result.stderr)
+
+    def test_catalog_requiring_newer_host_fails_closed(self) -> None:
+        catalog = json.loads(SIGNED_CATALOG.read_text(encoding="utf-8"))
+        catalog["minimumHostVersion"] = "1.3.0"
+        invalid = Path(self.temporary_directory.name) / "future-floor.json"
+        invalid.write_text(json.dumps(catalog), encoding="utf-8")
+        result = self.run_preflight(
+            "--app-version",
+            "1.2.0",
+            "--expected-catalog",
+            str(invalid),
+            "--deployed-catalog",
+            str(invalid),
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires MacTools 1.3.0", result.stderr)
+        self.assertIn("target app 1.2.0", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

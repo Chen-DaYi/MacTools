@@ -333,7 +333,7 @@ final class AppURLRouter {
     private let acceptedURLSchemes: Set<String>
     private let maximumPendingRoutes: Int
     private let rightClickHandler: (URL) -> Void
-    private let deferredActionRejectionHandler: (
+    private let actionRejectionHandler: (
         ActionRunLinkRequest,
         AppURLRoutingError
     ) -> Void
@@ -362,7 +362,7 @@ final class AppURLRouter {
         acceptedURLSchemes: Set<String> = RightClickURLRouter.bundleURLSchemes(),
         maximumPendingDeepLinks: Int = 32,
         rightClickHandler: @escaping (URL) -> Void = { RightClickURLRouter.shared.handle($0) },
-        deferredActionRejectionHandler: @escaping (
+        actionRejectionHandler: @escaping (
             ActionRunLinkRequest,
             AppURLRoutingError
         ) -> Void = { _, _ in },
@@ -372,7 +372,7 @@ final class AppURLRouter {
         self.acceptedURLSchemes = Set(acceptedURLSchemes.map { $0.lowercased() })
         self.maximumPendingRoutes = maximumPendingDeepLinks
         self.rightClickHandler = rightClickHandler
-        self.deferredActionRejectionHandler = deferredActionRejectionHandler
+        self.actionRejectionHandler = actionRejectionHandler
         self.logger = logger
     }
 
@@ -406,17 +406,21 @@ final class AppURLRouter {
                 let resolution = actionIdentityResolver?(request)
                 let identity = actionIdentity(for: request, resolution: resolution)
                 if isRecursiveActionRequest(identity) {
-                    return reject(.recursiveActionInvocation, url: url)
+                    return rejectAction(
+                        .recursiveActionInvocation,
+                        request: request,
+                        url: url
+                    )
                 }
                 if isActionAlreadyRunning(identity) || pendingActionIdentities.contains(identity) {
-                    return reject(.actionAlreadyRunning, url: url)
+                    return rejectAction(.actionAlreadyRunning, request: request, url: url)
                 }
                 guard enqueue(
                     route,
                     reservedActionIdentity: identity,
                     actionResolution: resolution
                 ) else {
-                    return reject(.pendingQueueFull, url: url)
+                    return rejectAction(.pendingQueueFull, request: request, url: url)
                 }
                 if presentationHandler != nil {
                     startDrainIfNeeded()
@@ -659,7 +663,16 @@ final class AppURLRouter {
         logger.error(
             "Rejected queued action route: \(error.diagnosticCode, privacy: .public)"
         )
-        deferredActionRejectionHandler(request, error)
+        actionRejectionHandler(request, error)
+    }
+
+    private func rejectAction(
+        _ error: AppURLRoutingError,
+        request: ActionRunLinkRequest,
+        url: URL
+    ) -> AppURLHandlingResult {
+        actionRejectionHandler(request, error)
+        return reject(error, url: url)
     }
 
     private func deliver(_ deepLink: AppDeepLink) -> AppURLHandlingResult {

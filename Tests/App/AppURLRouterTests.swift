@@ -376,10 +376,14 @@ final class AppURLRouterTests: XCTestCase {
     }
 
     func testActiveActionDeliveryIsSerializedAndBacklogIsBounded() async throws {
+        var rejections: [(ActionRunLinkRequest, AppURLRoutingError)] = []
         let router = AppURLRouter(
             acceptedURLSchemes: ["mactools"],
             maximumPendingDeepLinks: 2,
-            rightClickHandler: { _ in }
+            rightClickHandler: { _ in },
+            actionRejectionHandler: { request, error in
+                rejections.append((request, error))
+            }
         )
         var activeCount = 0
         var maximumActiveCount = 0
@@ -411,6 +415,12 @@ final class AppURLRouterTests: XCTestCase {
         XCTAssertEqual(router.handle(overflow), .rejected(.pendingQueueFull))
         await router.waitUntilIdle()
 
+        XCTAssertEqual(rejections.count, 1)
+        XCTAssertEqual(
+            rejections.first?.0,
+            .direct(ActionKey(providerID: "test-provider", actionID: "third"))
+        )
+        XCTAssertEqual(rejections.first?.1, .pendingQueueFull)
         XCTAssertEqual(maximumActiveCount, 1)
         XCTAssertEqual(
             delivered,
@@ -422,9 +432,13 @@ final class AppURLRouterTests: XCTestCase {
     }
 
     func testDuplicateActionIsRejectedWhileFirstRequestIsStillPending() async throws {
+        var rejections: [(ActionRunLinkRequest, AppURLRoutingError)] = []
         let router = AppURLRouter(
             acceptedURLSchemes: ["mactools"],
-            rightClickHandler: { _ in }
+            rightClickHandler: { _ in },
+            actionRejectionHandler: { request, error in
+                rejections.append((request, error))
+            }
         )
         let action = try XCTUnwrap(
             URL(string: "mactools://app/actions/test-provider/pending")
@@ -447,6 +461,9 @@ final class AppURLRouterTests: XCTestCase {
         XCTAssertEqual(router.handle(action), .rejected(.actionAlreadyRunning))
         await router.waitUntilIdle()
 
+        XCTAssertEqual(rejections.count, 1)
+        XCTAssertEqual(rejections.first?.0, .direct(reference.key))
+        XCTAssertEqual(rejections.first?.1, .actionAlreadyRunning)
         XCTAssertEqual(handledRequests, [.direct(reference.key)])
     }
 
@@ -507,7 +524,7 @@ final class AppURLRouterTests: XCTestCase {
         let router = AppURLRouter(
             acceptedURLSchemes: ["mactools"],
             rightClickHandler: { _ in },
-            deferredActionRejectionHandler: { request, error in
+            actionRejectionHandler: { request, error in
                 deferredRejections.append((request, error))
             }
         )
@@ -572,9 +589,13 @@ final class AppURLRouterTests: XCTestCase {
     }
 
     func testActiveActionCannotRecursivelyQueueItself() async throws {
+        var rejections: [(ActionRunLinkRequest, AppURLRoutingError)] = []
         let router = AppURLRouter(
             acceptedURLSchemes: ["mactools"],
-            rightClickHandler: { _ in }
+            rightClickHandler: { _ in },
+            actionRejectionHandler: { request, error in
+                rejections.append((request, error))
+            }
         )
         let url = try XCTUnwrap(URL(string: "mactools://app/actions/test-provider/run"))
         var recursiveResult: AppURLHandlingResult?
@@ -594,6 +615,12 @@ final class AppURLRouterTests: XCTestCase {
         await router.waitUntilIdle()
 
         XCTAssertEqual(recursiveResult, .rejected(.recursiveActionInvocation))
+        XCTAssertEqual(rejections.count, 1)
+        XCTAssertEqual(
+            rejections.first?.0,
+            .direct(ActionKey(providerID: "test-provider", actionID: "run"))
+        )
+        XCTAssertEqual(rejections.first?.1, .recursiveActionInvocation)
     }
 
     func testAliasesShareCanonicalActiveExecutionIdentity() async throws {

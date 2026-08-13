@@ -12,6 +12,7 @@ PLUGINS_ROOT = REPO_ROOT / "Plugins"
 LEGACY_V4_CATALOG = REPO_ROOT / "docs/plugins/v4/catalog.json"
 PLUGIN_RELEASE_WORKFLOW = REPO_ROOT / ".github/workflows/plugin-release.yml"
 ACTION_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/ActionModels.swift"
+COMPONENT_THEME_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginComponentTheme.swift"
 NEW_API_MINIMUM_HOSTS = {
     # Canonical action registry, execution, discovery, and surface bridges.
     "ActionKey": "1.2.0",
@@ -55,6 +56,9 @@ NEW_API_MINIMUM_HOSTS = {
     "PluginPresentationSafety": "1.2.0",
     "PluginProcessGroupLease": "1.2.0",
     "PluginSystemImage": "1.2.0",
+    # Shared component-panel theme surfaces introduced in host 1.2.
+    "PluginComponentTheme": "1.2.0",
+    "PluginComponentCardBackground": "1.2.0",
 }
 
 
@@ -134,6 +138,25 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
             used_symbols - NEW_API_MINIMUM_HOSTS.keys(),
             set(),
             "Public ActionModels types used by plugins must declare their minimum host",
+        )
+
+    def test_component_theme_inventory_covers_every_public_type_used_by_plugins(self) -> None:
+        component_theme_symbols = public_top_level_type_names(
+            COMPONENT_THEME_MODELS.read_text(encoding="utf-8")
+        )
+        plugin_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(PLUGINS_ROOT.glob("*/Sources/**/*.swift"))
+        )
+        used_symbols = {
+            symbol
+            for symbol in component_theme_symbols
+            if source_uses_symbol(plugin_source, symbol)
+        }
+        self.assertEqual(
+            used_symbols - NEW_API_MINIMUM_HOSTS.keys(),
+            set(),
+            "Public component-theme types used by plugins must declare their minimum host",
         )
 
     def test_symbol_matching_rejects_legacy_consumer_without_substring_false_positive(self) -> None:

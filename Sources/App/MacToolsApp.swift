@@ -54,7 +54,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         feedbackPresenter: runLinkFeedbackPresenter
     )
     private lazy var appURLRouter = AppURLRouter(
-        deferredActionRejectionHandler: { [weak self] _, error in
+        actionRejectionHandler: { [weak self] _, error in
             self?.runLinkExecutionCoordinator.presentRoutingRejection(error)
         }
     )
