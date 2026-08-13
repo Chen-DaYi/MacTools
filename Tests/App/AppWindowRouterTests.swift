@@ -95,6 +95,17 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertEqual(events, ["activate", "deminiaturize", "orderFront"])
     }
 
+    func testDockVisibilityPolicyUsesRegularActivationOnlyForVisibleSettings() {
+        XCTAssertEqual(
+            AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: true),
+            .regular
+        )
+        XCTAssertEqual(
+            AppDockVisibilityPolicy.activationPolicy(hasVisibleSettingsWindow: false),
+            .accessory
+        )
+    }
+
     func testSettingsPaletteVisibilityPolicyRejectsMiniaturizedAndInactiveSpaceWindows() {
         XCTAssertTrue(
             CommandPaletteTogglePolicy.settingsPaletteIsVisible(

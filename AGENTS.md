@@ -5,6 +5,10 @@
 - If a closer `AGENTS.md` appears in a subdirectory in the future, the closer file takes precedence.
 - `CLAUDE.md` and `GEMINI.md` are compatibility entry points only; shared rules should be maintained here first.
 
+## Language
+- Code, code comments, and Markdown documentation added or modified by Codex must be written in English.
+- User-facing app copy remains subject to the project’s localization guidelines.
+
 ## Project Overview
 - MacTools is a native macOS menu-bar utility collection for frequent, lightweight, non-disruptive system tasks.
 - The stack is Swift 6 with SwiftUI + AppKit, targeting macOS 14.0 or later.
