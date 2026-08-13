@@ -10,6 +10,7 @@ Source of truth: yes
 - The AppKit reopen callback presents Settings.
 - One named local IPC port elects the running instance.
 - Secondary copy → `show-settings` command → acknowledged termination before bootstrap.
+- Up to 32 valid URLs within one aggregate 16 MiB envelope are queued before ownership resolution, then routed by the primary runtime or forwarded within the shared launch budget.
 
 ## User flow
 
@@ -41,6 +42,7 @@ Source of truth: yes
 - [x] P005 — Diagnose the risk and write the architecture plan.
 - [x] P006 — Replace polling with single-instance coordination and IPC.
 - [ ] P007 — Certify with multi-process tests and full QA.
+- [x] P008 — Preserve deep links during cold launch and secondary forwarding.
 
 ## TODO
 
@@ -64,6 +66,8 @@ Source of truth: yes
 - 2026-08-12 — Review fixes: secondary IPC forwarding now runs off the MainActor; its send and reply budgets share the remaining global deadline. Idempotence records expire after 30 seconds, and the coordinator logs command receipt, response, duplicate acknowledgement, and secondary termination. Multi-process certification remains an open Draft gate.
 - 2026-08-13 — Final review fixes: the coordinator is actor-confined, its lifecycle task is owned and cancellation-aware, the CFMessagePort transport is injectable, and invalid protocol messages produce warnings. A dedicated probe validates ten concurrent processes with nine acknowledged commands, crash promotion, an unresponsive owner under two seconds, and independent namespaces. The 1.5-second IPC budget leaves process-launch and termination margin inside the 2-second user-visible target. AppKit reopen and IPC handler convergence is covered directly.
 - 2026-08-13 — Test integration: `project.yml` and the plugin project generator register the process probe as a test dependency without including probe sources in `MacToolsTests`.
+- 2026-08-13 — Review fix: incoming URLs are retained until primary runtime creation. A secondary instance forwards queued URLs through the existing IPC channel before termination; the primary retries until its runtime can route them. Unit tests cover queueing and forwarding.
+- 2026-08-13 — Follow-up review: the primary now ACKs validated URLs into its bounded pre-runtime queue, including Right Click compatibility URLs larger than 1 MiB within a 16 MiB IPC safety limit. One stable IPC command and one launch-wide deadline with a 0.5-second URL reserve prevent action replay and unbounded secondary lifetime. No manifest or inventory changed.
 
 ## Current files
 

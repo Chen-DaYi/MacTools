@@ -10,7 +10,7 @@ struct AppInstanceProbe {
         let namespace = CommandLine.arguments[1]
         let mode = CommandLine.arguments[2]
         let coordinator = AppInstanceCoordinator(bundleIdentifier: namespace)
-        await coordinator.setCommandHandler {
+        await coordinator.setCommandHandler { _ in
             print("command-accepted")
             fflush(stdout)
             if mode == "unresponsive" {

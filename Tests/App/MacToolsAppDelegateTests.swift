@@ -23,7 +23,7 @@ final class MacToolsAppDelegateTests: XCTestCase {
     }
 
     func testAppKitReopenAndInstanceCommandUseTheSameRecoveryHandler() {
-        let delegate = MacToolsAppDelegate()
+        let delegate = MacToolsAppDelegate(acceptedURLSchemes: ["mactools"])
         var showSettingsCount = 0
         delegate.setShowSettingsForRecoveryForTesting { showSettingsCount += 1 }
 
@@ -35,5 +35,46 @@ final class MacToolsAppDelegateTests: XCTestCase {
         )
         XCTAssertEqual(delegate.handleInstanceRecoveryCommandForTesting(), .accepted)
         XCTAssertEqual(showSettingsCount, 2)
+    }
+
+    func testIncomingDeepLinksAreQueuedBeforeRuntimeCreation() {
+        let delegate = MacToolsAppDelegate(acceptedURLSchemes: ["mactools"])
+        let urls = [
+            URL(string: "mactools://app/search")!,
+            URL(string: "mactools://app/settings")!,
+        ]
+
+        delegate.application(NSApplication.shared, open: urls)
+
+        XCTAssertEqual(delegate.pendingURLsForTesting(), urls)
+    }
+
+    func testPrimaryAcceptsForwardedDeepLinksBeforeRuntimeCreation() {
+        let delegate = MacToolsAppDelegate(acceptedURLSchemes: ["mactools"])
+        let urls = [URL(string: "mactools://app/search")!]
+
+        XCTAssertEqual(delegate.handleInstanceURLsCommandForTesting(urls), .accepted)
+        XCTAssertEqual(delegate.pendingURLsForTesting(), urls)
+    }
+
+    func testLaunchQueueRejectsInvalidAndOverflowingDeepLinks() {
+        let delegate = MacToolsAppDelegate(acceptedURLSchemes: ["mactools"])
+        delegate.application(
+            NSApplication.shared,
+            open: [URL(string: "https://example.com")!]
+        )
+        XCTAssertTrue(delegate.pendingURLsForTesting().isEmpty)
+
+        let urls = (0..<33).map { index in
+            URL(string: "mactools://app/search?index=\(index)")!
+        }
+        delegate.application(NSApplication.shared, open: urls)
+        XCTAssertTrue(delegate.pendingURLsForTesting().isEmpty)
+
+        let oversizedURL = URL(
+            string: "mactools://right-click/open-terminal?directory=/tmp/\(String(repeating: "x", count: AppInstanceCommand.maximumPayloadSize))"
+        )!
+        delegate.application(NSApplication.shared, open: [oversizedURL])
+        XCTAssertTrue(delegate.pendingURLsForTesting().isEmpty)
     }
 }

@@ -12,6 +12,13 @@ enum AppInstanceForwardingResult: Equatable {
     case rejected
 }
 
+enum AppInstanceForwardingOutcome: Equatable {
+    case acknowledged
+    case timedOut
+    case rejected
+    case becamePrimary
+}
+
 enum AppInstanceResponse: String, Codable, Equatable {
     case accepted
     case notReady
@@ -22,22 +29,75 @@ enum AppInstanceResponse: String, Codable, Equatable {
 struct AppInstanceCommand: Codable, Equatable {
     let version: Int
     let command: String
+    let urlStrings: [String]
     let requestID: UUID
 
     static let currentVersion = 1
     static let showSettings = "show-settings"
-    static let maximumPayloadSize = 1_024
+    static let openURLs = "open-urls"
+    static let maximumPayloadSize = 16 * 1_024 * 1_024
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case command
+        case urlStrings
+        case requestID
+    }
+
+    init(
+        version: Int,
+        command: String,
+        urlStrings: [String] = [],
+        requestID: UUID
+    ) {
+        self.version = version
+        self.command = command
+        self.urlStrings = urlStrings
+        self.requestID = requestID
+    }
 
     static func showSettingsRequest() -> Self {
         Self(
             version: currentVersion,
             command: showSettings,
+            urlStrings: [],
             requestID: UUID()
         )
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        command = try container.decode(String.self, forKey: .command)
+        urlStrings = try container.decodeIfPresent([String].self, forKey: .urlStrings) ?? []
+        requestID = try container.decode(UUID.self, forKey: .requestID)
+    }
+
+    static func openURLsRequest(_ urls: [URL]) -> Self {
+        Self(
+            version: currentVersion,
+            command: openURLs,
+            urlStrings: urls.map(\.absoluteString),
+            requestID: UUID()
+        )
+    }
+
+    var fitsPayloadSizeLimit: Bool {
+        guard let data = try? JSONEncoder().encode(self) else { return false }
+        return data.count <= Self.maximumPayloadSize
+    }
+
     var isSupported: Bool {
-        version == Self.currentVersion && command == Self.showSettings
+        guard version == Self.currentVersion else { return false }
+
+        switch command {
+        case Self.showSettings:
+            return urlStrings.isEmpty
+        case Self.openURLs:
+            return !urlStrings.isEmpty && urlStrings.allSatisfy { URL(string: $0) != nil }
+        default:
+            return false
+        }
     }
 }
 
@@ -46,11 +106,22 @@ actor AppInstanceCoordinator {
     private static let sendTimeout: CFTimeInterval = 0.5
     private static let receiveTimeout: CFTimeInterval = 0.5
     private static let forwardingTimeout: TimeInterval = 1.5
+    private static let urlForwardingReserve: TimeInterval = 0.5
     private static let retryDelay: TimeInterval = 0.1
 
     private let portName: String
     private let callbackBox: CallbackBox
     private let transport: any AppInstanceTransport
+
+    nonisolated static func makeForwardingDeadline() -> Date {
+        Date().addingTimeInterval(forwardingTimeout)
+    }
+
+    nonisolated static func makeSettingsRecoveryDeadline(
+        forwardingDeadline: Date
+    ) -> Date {
+        forwardingDeadline.addingTimeInterval(-urlForwardingReserve)
+    }
 
     init(
         bundleIdentifier: String? = Bundle.main.bundleIdentifier,
@@ -62,7 +133,7 @@ actor AppInstanceCoordinator {
         self.transport = transport
     }
 
-    func setCommandHandler(_ handler: @escaping @Sendable () -> AppInstanceResponse) {
+    func setCommandHandler(_ handler: @escaping @Sendable (AppInstanceCommand) -> AppInstanceResponse) {
         callbackBox.setHandler(handler)
     }
 
@@ -75,44 +146,74 @@ actor AppInstanceCoordinator {
         return false
     }
 
-    func resolveSecondaryLaunch() async -> AppInstanceLaunchDisposition {
-        let deadline = Date().addingTimeInterval(Self.forwardingTimeout)
+    func resolveSecondaryLaunch(
+        deadline: Date = AppInstanceCoordinator.makeForwardingDeadline()
+    ) async -> AppInstanceLaunchDisposition {
         let command = AppInstanceCommand.showSettingsRequest()
-        var lastResult: AppInstanceForwardingResult = .timedOut
+        let result = await forward(command, operation: "settings recovery", deadline: deadline)
 
+        switch result {
+        case .acknowledged:
+            return .secondary(.acknowledged)
+        case .timedOut:
+            return .secondary(.timedOut)
+        case .rejected:
+            return .secondary(.rejected)
+        case .becamePrimary:
+            return .primary(recoveryRequested: true)
+        }
+    }
+
+    func forwardURLs(
+        _ urls: [URL],
+        deadline: Date = AppInstanceCoordinator.makeForwardingDeadline()
+    ) async -> AppInstanceForwardingOutcome {
+        guard !urls.isEmpty else { return .acknowledged }
+        return await forward(
+            AppInstanceCommand.openURLsRequest(urls),
+            operation: "deep links",
+            deadline: deadline
+        )
+    }
+
+    private func forward(
+        _ command: AppInstanceCommand,
+        operation: String,
+        deadline: Date
+    ) async -> AppInstanceForwardingOutcome {
         while Date() < deadline {
             guard !Task.isCancelled else {
-                AppLog.instanceCoordination.debug("Cancelled settings recovery forwarding")
-                return .secondary(.timedOut)
+                AppLog.instanceCoordination.debug("Cancelled \(operation, privacy: .public) forwarding")
+                return .timedOut
             }
 
-            switch forwardSettingsRequest(command, deadline: deadline) {
+            switch forwardRequest(command, deadline: deadline) {
             case .accepted:
-                AppLog.instanceCoordination.debug("Forwarded settings recovery request")
-                return .secondary(.acknowledged)
+                AppLog.instanceCoordination.debug("Forwarded \(operation, privacy: .public)")
+                return .acknowledged
             case .notReady, .timedOut:
-                lastResult = .timedOut
+                break
             case .invalidPort:
                 if registerLocalPortIfPossible() {
                     AppLog.instanceCoordination.notice("Recovered primary ownership after an invalid port")
-                    return .primary(recoveryRequested: true)
+                    return .becamePrimary
                 }
-                lastResult = .timedOut
+                break
             case .rejected:
-                AppLog.instanceCoordination.error("Settings recovery request was rejected")
-                return .secondary(.rejected)
+                AppLog.instanceCoordination.error("\(operation, privacy: .public) forwarding was rejected")
+                return .rejected
             }
 
             guard !Task.isCancelled else {
-                AppLog.instanceCoordination.debug("Cancelled settings recovery forwarding")
-                return .secondary(.timedOut)
+                AppLog.instanceCoordination.debug("Cancelled \(operation, privacy: .public) forwarding")
+                return .timedOut
             }
             let retryDelay = min(Self.retryDelay, max(0, deadline.timeIntervalSinceNow))
             try? await Task.sleep(for: .seconds(retryDelay))
         }
 
-        AppLog.instanceCoordination.error("Timed out forwarding settings recovery request")
-        return .secondary(lastResult)
+        AppLog.instanceCoordination.error("Timed out forwarding \(operation, privacy: .public)")
+        return .timedOut
     }
 
     func invalidate() {
@@ -124,11 +225,15 @@ actor AppInstanceCoordinator {
         transport.registerLocalPort(name: portName, callbackBox: callbackBox)
     }
 
-    private func forwardSettingsRequest(
+    private func forwardRequest(
         _ command: AppInstanceCommand,
         deadline: Date
     ) -> ForwardingAttempt {
         guard let data = try? JSONEncoder().encode(command) else {
+            return .rejected
+        }
+        guard data.count <= AppInstanceCommand.maximumPayloadSize else {
+            AppLog.instanceCoordination.warning("Rejected oversized outgoing instance coordination message")
             return .rejected
         }
 
@@ -270,10 +375,10 @@ final class CallbackBox {
     private static let acceptedRequestLifetime: TimeInterval = 30
 
     private let lock = NSLock()
-    private var handler: (@Sendable () -> AppInstanceResponse)?
+    private var handler: (@Sendable (AppInstanceCommand) -> AppInstanceResponse)?
     private var acceptedRequestDates = [UUID: Date]()
 
-    func setHandler(_ handler: @escaping @Sendable () -> AppInstanceResponse) {
+    func setHandler(_ handler: @escaping @Sendable (AppInstanceCommand) -> AppInstanceResponse) {
         lock.lock()
         self.handler = handler
         lock.unlock()
@@ -303,16 +408,16 @@ final class CallbackBox {
         }
 
         if acceptedRequestDates[command.requestID] != nil {
-            AppLog.instanceCoordination.debug("Repeated settings recovery request accepted")
+            AppLog.instanceCoordination.debug("Repeated instance coordination command accepted")
             return .accepted
         }
 
-        AppLog.instanceCoordination.debug("Received settings recovery request")
-        let response = handler?() ?? .notReady
+        AppLog.instanceCoordination.debug("Received instance coordination command")
+        let response = handler?(command) ?? .notReady
         if response == .accepted {
             acceptedRequestDates[command.requestID] = now
         }
-        AppLog.instanceCoordination.debug("Settings recovery request response: \(response.rawValue, privacy: .public)")
+        AppLog.instanceCoordination.debug("Instance coordination response: \(response.rawValue, privacy: .public)")
         return response
     }
 }

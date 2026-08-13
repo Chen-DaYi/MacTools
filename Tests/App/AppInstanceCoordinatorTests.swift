@@ -28,10 +28,120 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         )
     }
 
-    func testCommandPayloadRemainsWithinTheProtocolLimit() throws {
+    func testOpenURLsCommandAcceptsOnlyNonEmptyValidURLs() {
+        let command = AppInstanceCommand.openURLsRequest([
+            URL(string: "mactools://app/search")!,
+        ])
+
+        XCTAssertEqual(command.command, AppInstanceCommand.openURLs)
+        XCTAssertTrue(command.isSupported)
+        XCTAssertFalse(
+            AppInstanceCommand(
+                version: AppInstanceCommand.currentVersion,
+                command: AppInstanceCommand.openURLs,
+                urlStrings: [],
+                requestID: UUID()
+            ).isSupported
+        )
+    }
+
+    func testVersionOneSettingsCommandWithoutURLsRemainsDecodable() throws {
+        let legacyPayload = """
+        {"version":1,"command":"show-settings","requestID":"00000000-0000-0000-0000-000000000001"}
+        """.data(using: .utf8)!
+
+        let command = try JSONDecoder().decode(AppInstanceCommand.self, from: legacyPayload)
+
+        XCTAssertTrue(command.isSupported)
+        XCTAssertTrue(command.urlStrings.isEmpty)
+    }
+
+    func testOpenURLsCommandPreservesAURLLargerThanOneMegabyte() throws {
+        let url = try XCTUnwrap(
+            URL(string: "mactools://right-click/open-terminal?directory=/tmp/\(String(repeating: "x", count: 1_100_000))")
+        )
+        let command = AppInstanceCommand.openURLsRequest([url])
+        let data = try JSONEncoder().encode(command)
+        let decoded = try JSONDecoder().decode(AppInstanceCommand.self, from: data)
+
+        XCTAssertEqual(decoded.urlStrings, [url.absoluteString])
+        XCTAssertTrue(decoded.isSupported)
+
+        let callbackBox = CallbackBox()
+        callbackBox.setHandler { _ in .accepted }
+        XCTAssertEqual(callbackBox.response(for: data), .accepted)
+    }
+
+    func testExpiredSharedDeadlineDoesNotStartAnotherForwardingAttempt() async {
+        let transport = FakeAppInstanceTransport(
+            claimsPrimary: false,
+            sendResult: .timedOut
+        )
+        let coordinator = AppInstanceCoordinator(
+            bundleIdentifier: "com.example.mactools.expired-url-forwarding",
+            transport: transport
+        )
+
+        let result = await coordinator.forwardURLs(
+            [URL(string: "mactools://app/search")!],
+            deadline: .distantPast
+        )
+
+        XCTAssertEqual(result, .timedOut)
+        XCTAssertEqual(transport.sendCount, 0)
+    }
+
+    func testSettingsRecoveryDeadlineReservesTimeForURLForwarding() {
+        let forwardingDeadline = Date().addingTimeInterval(10)
+        let settingsDeadline = AppInstanceCoordinator.makeSettingsRecoveryDeadline(
+            forwardingDeadline: forwardingDeadline
+        )
+
+        XCTAssertEqual(
+            forwardingDeadline.timeIntervalSince(settingsDeadline),
+            0.5,
+            accuracy: 0.001
+        )
+    }
+
+    func testCallbackRejectsPayloadAboveSafetyLimit() {
+        let callbackBox = CallbackBox()
+        let oversizedData = Data(count: AppInstanceCommand.maximumPayloadSize + 1)
+
+        XCTAssertEqual(callbackBox.response(for: oversizedData), .invalid)
+    }
+
+    func testSecondaryRejectsOversizedURLsBeforeTransportSend() async throws {
+        let transport = FakeAppInstanceTransport(
+            claimsPrimary: false,
+            sendResult: .timedOut
+        )
+        let coordinator = AppInstanceCoordinator(
+            bundleIdentifier: "com.example.mactools.oversized-url-forwarding",
+            transport: transport
+        )
+        let oversizedURL = try XCTUnwrap(
+            URL(string: "mactools://right-click/open-terminal?directory=/tmp/\(String(repeating: "x", count: AppInstanceCommand.maximumPayloadSize))")
+        )
+
+        let result = await coordinator.forwardURLs([oversizedURL])
+
+        XCTAssertEqual(result, .rejected)
+        XCTAssertEqual(transport.sendCount, 0)
+    }
+
+    func testRepeatedAcceptedCommandDoesNotRunHandlerTwice() throws {
+        let callbackBox = CallbackBox()
+        let receivedRequestCount = LockedCounter()
+        callbackBox.setHandler { _ in
+            receivedRequestCount.increment()
+            return .accepted
+        }
         let data = try JSONEncoder().encode(AppInstanceCommand.showSettingsRequest())
 
-        XCTAssertLessThanOrEqual(data.count, AppInstanceCommand.maximumPayloadSize)
+        XCTAssertEqual(callbackBox.response(for: data), .accepted)
+        XCTAssertEqual(callbackBox.response(for: data), .accepted)
+        XCTAssertEqual(receivedRequestCount.value, 1)
     }
 
     func testTransportIsInjectableForDeterministicOwnershipTests() async {
@@ -89,7 +199,7 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         let bundleIdentifier = "com.example.mactools.instance-test.\(UUID().uuidString)"
         let primary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
         let receivedRequestCount = LockedCounter()
-        await primary.setCommandHandler {
+        await primary.setCommandHandler { _ in
             receivedRequestCount.increment()
             return .accepted
         }
@@ -104,11 +214,55 @@ final class AppInstanceCoordinatorTests: XCTestCase {
         XCTAssertEqual(receivedRequestCount.value, 1)
     }
 
+    func testSecondaryForwardsDeepLinksToThePrimary() async {
+        let bundleIdentifier = "com.example.mactools.instance-test.\(UUID().uuidString)"
+        let primary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
+        let receivedURLs = LockedValue<[String]>([])
+        await primary.setCommandHandler { command in
+            receivedURLs.set(command.urlStrings)
+            return .accepted
+        }
+        defer { Task { await primary.invalidate() } }
+
+        let primaryClaimed = await primary.claimPrimaryPortIfPossible()
+        XCTAssertTrue(primaryClaimed)
+
+        let secondary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
+        let urls = [URL(string: "mactools://app/search")!]
+        let forwardingResult = await secondary.forwardURLs(urls)
+        XCTAssertEqual(forwardingResult, .acknowledged)
+        XCTAssertEqual(receivedURLs.value, urls.map(\.absoluteString))
+    }
+
+    func testSecondaryForwardsLargeURLBatchAsOneIdempotentCommand() async {
+        let bundleIdentifier = "com.example.mactools.instance-test.\(UUID().uuidString)"
+        let primary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
+        let receivedCommands = LockedValue<[AppInstanceCommand]>([])
+        await primary.setCommandHandler { command in
+            receivedCommands.set([command])
+            return .accepted
+        }
+        defer { Task { await primary.invalidate() } }
+
+        let primaryClaimed = await primary.claimPrimaryPortIfPossible()
+        XCTAssertTrue(primaryClaimed)
+
+        let urls = (0..<8).map { index in
+            URL(string: "mactools://app/search?value=\(String(repeating: "x", count: 200_000))\(index)")!
+        }
+        let secondary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
+        let forwardingResult = await secondary.forwardURLs(urls)
+
+        XCTAssertEqual(forwardingResult, .acknowledged)
+        XCTAssertEqual(receivedCommands.value.count, 1)
+        XCTAssertEqual(receivedCommands.value[0].urlStrings, urls.map(\.absoluteString))
+    }
+
     func testSecondaryRetriesUntilThePrimaryIsReady() async {
         let bundleIdentifier = "com.example.mactools.instance-test.\(UUID().uuidString)"
         let primary = AppInstanceCoordinator(bundleIdentifier: bundleIdentifier)
         let receivedRequestCount = LockedCounter()
-        await primary.setCommandHandler {
+        await primary.setCommandHandler { _ in
             receivedRequestCount.increment()
             return receivedRequestCount.value == 1 ? .notReady : .accepted
         }
@@ -148,6 +302,23 @@ private final class LockedCounter: @unchecked Sendable {
 
     func increment() {
         lock.withLock { storage += 1 }
+    }
+}
+
+private final class LockedValue<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Value
+
+    init(_ storage: Value) {
+        self.storage = storage
+    }
+
+    var value: Value {
+        lock.withLock { storage }
+    }
+
+    func set(_ value: Value) {
+        lock.withLock { storage = value }
     }
 }
 

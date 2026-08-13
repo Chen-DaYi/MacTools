@@ -24,17 +24,26 @@ struct MacToolsApp: App {
 
 @MainActor
 final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    private static let maximumPendingURLCount = 32
+
     private let instanceCoordinator: AppInstanceCoordinator
+    private let acceptedURLSchemes: Set<String>
     private var launchDisposition: AppInstanceLaunchDisposition?
     private var didFinishLaunching = false
     private var runtime: MacToolsAppRuntime?
     private var instanceCoordinationTask: Task<Void, Never>?
+    private var pendingURLs = [URL]()
     #if DEBUG
     private var showSettingsForTesting: (() -> Void)?
     #endif
 
-    override init() {
+    override convenience init() {
+        self.init(acceptedURLSchemes: RightClickURLRouter.bundleURLSchemes())
+    }
+
+    init(acceptedURLSchemes: Set<String>) {
         instanceCoordinator = AppInstanceCoordinator()
+        self.acceptedURLSchemes = Set(acceptedURLSchemes.map { $0.lowercased() })
         super.init()
     }
 
@@ -45,17 +54,23 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         }
 
         launchDisposition = .secondary(.timedOut)
-        let recoveryHandler = settingsRecoveryHandler()
-        instanceCoordinationTask = Task { [weak self, instanceCoordinator, recoveryHandler] in
-            await instanceCoordinator.setCommandHandler(recoveryHandler)
+        let commandHandler = instanceCommandHandler()
+        instanceCoordinationTask = Task { [weak self, instanceCoordinator, commandHandler] in
+            let forwardingDeadline = AppInstanceCoordinator.makeForwardingDeadline()
+            let settingsRecoveryDeadline = AppInstanceCoordinator.makeSettingsRecoveryDeadline(
+                forwardingDeadline: forwardingDeadline
+            )
+            await instanceCoordinator.setCommandHandler(commandHandler)
             let disposition: AppInstanceLaunchDisposition
             if await instanceCoordinator.claimPrimaryPortIfPossible() {
                 disposition = .primary(recoveryRequested: false)
             } else {
-                disposition = await instanceCoordinator.resolveSecondaryLaunch()
+                disposition = await instanceCoordinator.resolveSecondaryLaunch(
+                    deadline: settingsRecoveryDeadline
+                )
             }
             guard !Task.isCancelled else { return }
-            self?.completeSecondaryLaunch(disposition)
+            await self?.completeLaunch(disposition, forwardingDeadline: forwardingDeadline)
         }
     }
 
@@ -70,12 +85,18 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         let runtime = MacToolsAppRuntime()
         self.runtime = runtime
         runtime.start(notificationDelegate: self)
+        let urls = pendingURLs
+        pendingURLs.removeAll()
+        runtime.handle(urls: urls)
         if recoveryRequested {
             _ = requestSettingsRecovery()
         }
     }
 
-    private func completeSecondaryLaunch(_ disposition: AppInstanceLaunchDisposition) {
+    private func completeLaunch(
+        _ disposition: AppInstanceLaunchDisposition,
+        forwardingDeadline: Date
+    ) async {
         switch disposition {
         case let .primary(recoveryRequested):
             launchDisposition = disposition
@@ -83,13 +104,35 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
                 startRuntime(recoveryRequested: recoveryRequested)
             }
         case let .secondary(result):
-            AppLog.instanceCoordination.notice("Secondary instance terminating: \(String(describing: result), privacy: .public)")
+            var urlForwardingResult = AppInstanceForwardingOutcome.acknowledged
+            while !pendingURLs.isEmpty && urlForwardingResult == .acknowledged {
+                let urls = pendingURLs
+                pendingURLs.removeAll()
+                urlForwardingResult = await instanceCoordinator.forwardURLs(
+                    urls,
+                    deadline: forwardingDeadline
+                )
+                if urlForwardingResult == .becamePrimary {
+                    pendingURLs.insert(contentsOf: urls, at: 0)
+                    launchDisposition = .primary(recoveryRequested: false)
+                    startRuntime(recoveryRequested: false)
+                    return
+                }
+            }
+
+            AppLog.instanceCoordination.notice(
+                "Secondary instance terminating: \(String(describing: result), privacy: .public), deep links: \(String(describing: urlForwardingResult), privacy: .public)"
+            )
             NSApp.terminate(nil)
         }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        runtime?.handle(urls: urls)
+        guard let runtime else {
+            _ = enqueuePendingURLs(urls)
+            return
+        }
+        runtime.handle(urls: urls)
     }
 
     func applicationShouldHandleReopen(
@@ -128,12 +171,48 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
         return runtime?.showSettings() == true ? .accepted : .notReady
     }
 
-    private func settingsRecoveryHandler() -> @Sendable () -> AppInstanceResponse {
-        { [weak self] in
+    private func instanceCommandHandler() -> @Sendable (AppInstanceCommand) -> AppInstanceResponse {
+        { [weak self] command in
             MainActor.assumeIsolated {
-                self?.requestSettingsRecovery() ?? .notReady
+                self?.handleInstanceCommand(command) ?? .notReady
             }
         }
+    }
+
+    private func handleInstanceCommand(_ command: AppInstanceCommand) -> AppInstanceResponse {
+        switch command.command {
+        case AppInstanceCommand.showSettings:
+            return requestSettingsRecovery()
+        case AppInstanceCommand.openURLs:
+            let urls = command.urlStrings.compactMap(URL.init(string:))
+            guard urls.count == command.urlStrings.count else { return .invalid }
+            if let runtime {
+                runtime.handle(urls: urls)
+                return .accepted
+            }
+            return enqueuePendingURLs(urls) ? .accepted : .invalid
+        default:
+            return .unsupported
+        }
+    }
+
+    private func enqueuePendingURLs(_ urls: [URL]) -> Bool {
+        guard pendingURLs.count + urls.count <= Self.maximumPendingURLCount else {
+            AppLog.instanceCoordination.warning("Rejected deep links because the launch queue is full")
+            return false
+        }
+        guard urls.allSatisfy({
+            AppURLRouter.acceptsDeferredInput($0, acceptedSchemes: acceptedURLSchemes)
+        }) else {
+            AppLog.instanceCoordination.warning("Rejected invalid deep link during launch")
+            return false
+        }
+        guard AppInstanceCommand.openURLsRequest(pendingURLs + urls).fitsPayloadSizeLimit else {
+            AppLog.instanceCoordination.warning("Rejected deep links above the launch payload limit")
+            return false
+        }
+        pendingURLs.append(contentsOf: urls)
+        return true
     }
 
     private var isRunningTests: Bool {
@@ -146,7 +225,15 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotifica
     }
 
     func handleInstanceRecoveryCommandForTesting() -> AppInstanceResponse {
-        settingsRecoveryHandler()()
+        instanceCommandHandler()(AppInstanceCommand.showSettingsRequest())
+    }
+
+    func handleInstanceURLsCommandForTesting(_ urls: [URL]) -> AppInstanceResponse {
+        instanceCommandHandler()(AppInstanceCommand.openURLsRequest(urls))
+    }
+
+    func pendingURLsForTesting() -> [URL] {
+        pendingURLs
     }
     #endif
 }

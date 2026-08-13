@@ -92,15 +92,18 @@ Do not use `LSMultipleInstancesProhibited` as the primary solution: it cannot tr
 
 ### 2. Minimal IPC protocol
 
-One versioned command: `show-settings`.
+Two versioned commands: `show-settings` and `open-urls`.
 
-- Envelope: `{version: 1, command: "show-settings", requestID: <UUID>}`.
-- Maximum size: 1 KiB.
+- Envelope: `{version: 1, command: <command>, urlStrings: <optional URLs>, requestID: <UUID>}`.
+- `urlStrings` is absent or empty for legacy `show-settings` messages.
+- Incoming URLs are validated against the app schemes before queueing.
+- The pre-runtime queue accepts at most 32 URLs and one aggregate 16 MiB IPC envelope.
+- `open-urls` stays one idempotent command; valid Right Click compatibility URLs above 1 MiB are supported within a 16 MiB IPC safety limit.
 - Closed responses: `accepted`, `not-ready`, `unsupported`, `invalid`.
 - Send timeout: at most 500 ms per attempt.
 - Receive timeout: at most 500 ms per attempt.
-- Global retry budget: 1.5 seconds; reserves 0.5 seconds for process launch and orderly termination while keeping the user-visible recovery below 2 seconds.
-- No URL, path, preference, or arbitrary data.
+- One global retry budget of 1.5 seconds covers Settings recovery and URL forwarding; the final 0.5 seconds are reserved for URL forwarding before orderly termination, keeping the user-visible recovery below 2 seconds.
+- URL payloads are accepted only for `open-urls`; preferences and arbitrary data remain unsupported.
 - A secondary copy cannot initialize the runtime, whatever the result.
 - `requestID` makes repeated commands idempotent.
 
@@ -109,11 +112,12 @@ Secondary sequence:
 1. Detect the existing port.
 2. Create the remote port.
 3. Send `show-settings` and wait for an ACK.
-4. On `accepted`, call `NSApp.terminate(nil)`.
-5. On `not-ready`, retry within the 2-second global budget.
-6. On invalid port, retry atomic owner election.
-7. If it becomes owner after a crash, start normally and request Settings.
-8. If an owner remains present without ACK, log and terminate; never initialize a second runtime.
+4. Forward queued URLs with the remaining global budget; the primary accepts them into its bounded launch queue even before runtime creation.
+5. On `accepted`, call `NSApp.terminate(nil)`.
+6. On `not-ready`, retry within the global budget.
+7. On invalid port, retry atomic owner election.
+8. If it becomes owner after a crash, start normally and request Settings.
+9. If an owner remains present without ACK, log and terminate; never initialize a second runtime.
 
 ### 3. Create the runtime only for the owner
 
@@ -179,6 +183,8 @@ Do not log payloads, personal paths, or sensitive identifiers.
 | AppKit reopen | Owner shows and activates Settings |
 | Secondary copy, owner ready | Command + ACK; Settings; secondary terminates |
 | Secondary copy during bootstrap | `not-ready`; bounded retry; presentation when router exists |
+| Deep link during primary bootstrap | Primary queues it before runtime creation, ACKs once, then drains it into `AppURLRouter` |
+| Deep link delivered to secondary | Validate; forward once with stable request ID; terminate within the shared budget |
 | Two exactly concurrent launches | One local port; one runtime |
 | Owner crash before connection | Retry; secondary becomes owner |
 | Owner alive but blocked | Timeout; secondary exits without runtime |
